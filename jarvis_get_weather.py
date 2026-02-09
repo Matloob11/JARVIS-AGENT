@@ -11,16 +11,20 @@ logger = logging.getLogger(__name__)
 
 async def get_current_city():
     try:
+        # Check if city is manually set in .env
+        env_city = os.getenv("USER_CITY")
+        if env_city:
+            return env_city
+
         response = requests.get("https://ipinfo.io", timeout=5)
         data = response.json()
         detected_city = data.get("city", "Lahore")
-        # Default to Lahore if detection fails or returns unknown
         if detected_city.lower() in ["unknown", "", "none"]:
             return "Lahore"
         return detected_city
     except Exception as e:
         logger.error(f"Error getting current city: {e}")
-        return "Lahore"  # Default fallback to Lahore
+        return os.getenv("USER_CITY", "Lahore")
 
 @function_tool
 async def get_weather(city: str = "Lahore") -> str:

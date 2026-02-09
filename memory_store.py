@@ -38,7 +38,14 @@ class ConversationMemory:
     
     def _conversation_exists(self, new_conversation: Dict, existing_conversations: List[Dict]) -> bool:
         """Check if a conversation already exists in memory"""
-        new_conv_data = new_conversation.get('model_dump', lambda: new_conversation)()
+        # Normalize new conversation data
+        if hasattr(new_conversation, 'model_dump'):
+            new_conv_data = new_conversation.model_dump()
+        elif hasattr(new_conversation, 'to_dict'):
+            new_conv_data = new_conversation.to_dict()
+        else:
+            new_conv_data = new_conversation
+
         new_timestamp = new_conv_data.get('timestamp')
         new_messages = new_conv_data.get('messages', [])
         
@@ -84,8 +91,18 @@ class ConversationMemory:
                 memory.append(conversation_dict)
             
             # Save to file
+            # Save to file with custom encoder for non-serializable objects
+            def json_default(obj):
+                if hasattr(obj, 'model_dump'):
+                    return obj.model_dump()
+                if hasattr(obj, 'to_dict'):
+                    return obj.to_dict()
+                if isinstance(obj, datetime):
+                    return obj.isoformat()
+                return str(obj)
+
             with open(self.memory_file, 'w', encoding='utf-8') as f:
-                json.dump(memory, f, indent=2, ensure_ascii=False)
+                json.dump(memory, f, indent=2, ensure_ascii=False, default=json_default)
             
             logger.info(f"Successfully saved conversation for user {self.user_id}")
             logger.info(f"File saved at: {os.path.abspath(self.memory_file)}")

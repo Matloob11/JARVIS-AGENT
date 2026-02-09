@@ -9,7 +9,13 @@ try:
 except ImportError:
     gw = None
 
-from langchain.tools import tool
+try:
+    from livekit.agents import function_tool
+except ImportError:
+    def function_tool(func):
+        return func
+
+from langchain.tools import tool # Keeping this for compatibility if needed elsewhere
 
 sys.stdout.reconfigure(encoding='utf-8')
 
@@ -83,7 +89,7 @@ async def handle_command(command, index):
         logger.warning("❌ File nahi mili.")
         return "❌ File nahi mili."
 
-@tool
+@function_tool
 async def Play_file(name: str) -> str:
 
     """

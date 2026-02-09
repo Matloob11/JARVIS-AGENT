@@ -5,6 +5,9 @@ import os
 from datetime import datetime
 from pynput.keyboard import Key, Controller as KeyboardController
 from pynput.mouse import Button, Controller as MouseController
+from ctypes import cast, POINTER
+from comtypes import CLSCTX_ALL
+from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
 from typing import List
 from livekit.agents import function_tool
 # from langchain.tools import tool
@@ -29,6 +32,28 @@ class SafeController:
             "home": Key.home, "end": Key.end,
             "page_up": Key.page_up, "page_down": Key.page_down
         }
+
+    async def _get_volume_interface(self):
+        try:
+            from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+            from comtypes import CLSCTX_ALL
+            from ctypes import cast, POINTER
+
+            devices = AudioUtilities.GetSpeakers()
+            if hasattr(devices, 'volume'):
+                return devices.volume
+            
+            interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+            return cast(interface, POINTER(IAudioEndpointVolume))
+        except Exception:
+            try:
+                device_enumerator = AudioUtilities.GetDeviceEnumerator()
+                default_device = device_enumerator.GetDefaultAudioEndpoint(0, 1)
+                interface = default_device.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+                return cast(interface, POINTER(IAudioEndpointVolume))
+            except Exception as e:
+                self.log(f"Volume interface error: {e}")
+                return None
 
     def resolve_key(self, key):
         return self.special_keys.get(key.lower(), key)
@@ -143,12 +168,45 @@ class SafeController:
 
     async def control_volume(self, action: str):
         if not self.is_active(): return "🛑 Controller is inactive."
+        
+        volume = await self._get_volume_interface()
+        if volume:
+            try:
+                if action == "mute":
+                    volume.SetMute(1, None)
+                    self.log("Volume muted")
+                    return "🔊 Volume mute kar diya gaya hai."
+                elif action == "unmute":
+                    volume.SetMute(0, None)
+                    self.log("Volume unmuted")
+                    return "🔊 Volume unmute kar diya gaya hai."
+            except Exception as e:
+                self.log(f"Volume action error: {e}")
+
+        # Up/Down or fallback
         if action == "up": pyautogui.press("volumeup")
         elif action == "down": pyautogui.press("volumedown")
         elif action == "mute": pyautogui.press("volumemute")
+        
         await asyncio.sleep(0.2)
         self.log(f"Volume control: {action}")
         return f"🔊 Volume {action}."
+
+    async def set_volume_percentage(self, percentage: int):
+        if not self.is_active(): return "🛑 Controller is inactive."
+        
+        volume = await self._get_volume_interface()
+        if not volume:
+            return "❌ Volume control interface nahi mila."
+
+        try:
+            percentage = max(0, min(100, percentage))
+            volume.SetMasterVolumeLevelScalar(percentage / 100, None)
+            self.log(f"Volume set to {percentage}%")
+            return f"🔊 Volume {percentage} percent par set kar diya gaya hai."
+        except Exception as e:
+            self.log(f"Volume set error: {e}")
+            return f"❌ Volume set nahi ho paaya: {e}"
 
     async def swipe_gesture(self, direction: str):
         if not self.is_active(): return "🛑 Controller is inactive."
@@ -312,6 +370,16 @@ async def control_volume_tool(action: str):
 
 
     return await with_temporary_activation(controller.control_volume, action)
+
+@function_tool
+async def set_volume_tool(percentage: int):
+    """
+    Sets the system volume to a specific percentage.
+    
+    Args:
+        percentage (int): The volume level to set (0 to 100).
+    """
+    return await with_temporary_activation(controller.set_volume_percentage, percentage)
 
 @function_tool
 async def swipe_gesture_tool(direction: str):

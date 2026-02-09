@@ -1,15 +1,21 @@
 from jarvis_search import get_formatted_datetime
 from jarvis_get_weather import get_weather
 import requests
+import os
 
 async def get_current_city():
     try:
+        # Check if city is manually set in .env
+        env_city = os.getenv("USER_CITY")
+        if env_city:
+            return env_city
+
         response = requests.get("https://ipinfo.io", timeout=5)
         data = response.json()
         return data.get("city", "Unknown")
     except Exception as e:
         print(f"Error getting current city: {e}")
-        return "Unknown"
+        return os.getenv("USER_CITY", "Unknown")
 
 from google.genai.types import Behavior
 
@@ -36,11 +42,11 @@ Lekin Hindi hamesha Latin script mein likhi jaani chahiye.
 ---------------------------------------
 🌟 CONTEXT AWARENESS
 ---------------------------------------
-- Aaj ki tarikh: {{current_date}}
-- User ka current sheher: {{current_city}}
+- Aaj ki tarikh: {current_date}
+- User ka current sheher: {current_city}
 - In dono ko batchit mein subtle tarike se use karein.
   Example:
-    "{{current_city}} mein aaj ka din kaafi accha lag raha hai."
+    "{current_city} mein aaj ka din kaafi accha lag raha hai."
 
 ---------------------------------------
 🌟 PERSONALITY TRAITS
@@ -54,13 +60,14 @@ Lekin Hindi hamesha Latin script mein likhi jaani chahiye.
 🌟 ACTION & TOOLS USAGE RULES
 ---------------------------------------
 Aapke paas kai tools hain — jaise:
-- System control (apps open/close/run)
+- System control (apps open/close/run, minimize/maximize windows)
 - Search tools
 - Weather tool
 - Music / media tools
 - Messaging tools (WhatsApp etc.)
 - Memory tools
-- Date/Time tools  
+- Date/Time tools
+- Laptop info (battery, charging status)
 
 **Rule:**  
 Agar koi request kisi tool se solve ho sakti hai →  

@@ -53,8 +53,8 @@ APP_MAPPINGS = {
     # Browsers
     "chrome": "chrome",
     "google chrome": "chrome",
-    "edge": "msedge",
-    "microsoft edge": "msedge",
+    "edge": r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe',
+    "microsoft edge": r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe',
 
     # Store Apps (Found on System)
     "whatsapp": "shell:AppsFolder\\5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App",
@@ -88,7 +88,7 @@ FOCUS_TITLES = {
     "notepad": "Notepad",
     "calc": "Calculator",
     "chrome": "Google Chrome",
-    "edge": "Edge",
+    "edge": "Microsoft Edge",
     "vlc": "VLC",
     "cmd": "Command Prompt",
     "youtube": "YouTube",
@@ -107,17 +107,17 @@ def normalize_command(text: str) -> str:
     Removes Hindi/English open keywords safely and extracts the app name
     """
     REMOVE_WORDS = [
-        "open", "opening", "opened",
-        "kholo", "khol", "open", "opening", "karo",
-        "aur", "usmein", "likh", "do", "hello", "jarvis", "what", "are", "you", "doing"
+        "open", "opening", "opened", "run", "launch", "start",
+        "kholo", "khol", "open", "opening", "karo", "chalao", "chalana",
+        "aur", "usmein", "likh", "do", "hello", "jarvis", "what", "are", "you", "doing",
+        "browser", "app", "application"
     ]
     text = text.lower()
     for w in REMOVE_WORDS:
         text = text.replace(w, "")
-    # Take the first meaningful word
-    words = text.strip().split()
-    if words:
-        return words[0]
+    
+    # Return the full cleaned text instead of just the first word
+    # This allows matching multi-word apps like "microsoft edge" or "control panel"
     return text.strip()
 
 async def focus_window(title: str):
@@ -217,26 +217,189 @@ async def open(full_command: str) -> str:
         logger.error(e)
         return f"❌ App open nahi ho paaya: {e}"
 
+@function_tool
+async def save_notepad(file_path: str = r"D:\jarvis_notes.txt") -> str:
+    """
+    Saves the content of an open Notepad window.
+    """
+    try:
+        import pygetwindow as gw
+        # Try to find Notepad window
+        notepad_windows = [w for w in gw.getWindowsWithTitle('Notepad')]
+        if not notepad_windows:
+            return "❌ Notepad window nahi mili."
+        
+        notepad = notepad_windows[0]
+        notepad.activate()
+        await asyncio.sleep(1)
+        
+        # Ctrl+S
+        pyautogui.hotkey('ctrl', 's')
+        await asyncio.sleep(1.5) # Wait for Save As dialog
+        
+        # Type path
+        pyautogui.write(file_path, interval=0.01)
+        await asyncio.sleep(0.5)
+        pyautogui.press('enter')
+        
+        # Overwrite check - ONLY if file exists
+        if os.path.exists(file_path):
+            await asyncio.sleep(1)
+            pyautogui.press('left')
+            pyautogui.press('enter')
+        else:
+            await asyncio.sleep(0.5)
+        
+        return f"💾 Notepad file ko '{file_path}' par save kar diya gaya hai."
+    except Exception as e:
+        logger.error(f"Save Notepad Error: {e}")
+        return f"❌ Save karne mein error: {e}"
+
+@function_tool
+async def open_notepad_file(file_path: str) -> str:
+    """
+    Opens a specific text file in Notepad.
+    """
+    if not os.path.exists(file_path):
+        return f"❌ File nahi mili: {file_path}"
+    
+    try:
+        # Use full path to notepad if possible
+        subprocess.Popen([r"C:\Windows\System32\notepad.exe", file_path])
+        return f"📂 {file_path} ko Notepad mein open kar diya gaya hai."
+    except Exception as e:
+        return f"❌ File open karne mein error: {e}"
+
 # ===================== CLOSE WINDOW ===================== #
 @function_tool
 async def close(window_name: str) -> str:
+    """
+    Closes a window by its name.
+    """
     if not win32gui:
         return "❌ win32gui available nahi hai"
 
+    original_name = window_name
     window_name = window_name.lower()
 
     if "whatsapp" in window_name:
         if await whatsapp_bot.close_whatsapp():
             return "🗑️ WhatsApp band kar diya gaya hai"
 
+    # Fuzzy matching for common apps
+    matched_key = fuzzy_match_app(window_name)
+    search_title = FOCUS_TITLES.get(matched_key, window_name).lower()
+    
+    logger.info(f"CLOSE → target='{original_name}' search_title='{search_title}'")
+
+    hwnds_to_close = []
+
     def enum_handler(hwnd, _):
         if win32gui.IsWindowVisible(hwnd):
             title = win32gui.GetWindowText(hwnd).lower()
-            if window_name in title:
-                win32gui.PostMessage(hwnd, win32con.WM_CLOSE, 0, 0)
+            # Specific logic for common apps to avoid broad matches
+            is_match = False
+            
+            if matched_key == "notepad":
+                # Notepad windows usually end with " - Notepad" or are just "Notepad"
+                if title.endswith(" - notepad") or title == "notepad":
+                    is_match = True
+            elif matched_key == "edge":
+                if "edge" in title or "msedge" in title:
+                    is_match = True
+            elif matched_key == "chrome":
+                if "google chrome" in title:
+                    is_match = True
+            else:
+                # Fallback to substring match for other apps
+                if search_title in title:
+                    is_match = True
+
+            # Safeguard: Don't close the current script or the IDE if they just happen to have the name in the title
+            # and it wasn't an exact match.
+            if is_match:
+                # If we matched "notepad" but the title also contains ".py", it's likely a script file open in an IDE
+                # unless the search_title was very specific.
+                if ".py" in title and search_title == "notepad":
+                    is_match = False
+                    
+                if is_match:
+                    hwnds_to_close.append(hwnd)
 
     win32gui.EnumWindows(enum_handler, None)
-    return f"🗑️ {window_name} band kar diya gaya hai"
+
+    if not hwnds_to_close:
+        return f"❌ '{original_name}' naam ki koi window nahi mili."
+
+    # Send close messages
+    for hwnd in hwnds_to_close:
+        win32gui.PostMessage(hwnd, win32con.WM_CLOSE, 0, 0)
+
+    # Verification loop
+    await asyncio.sleep(2)
+    
+    still_open_count = 0
+    def verify_handler(hwnd, _):
+        nonlocal still_open_count
+        if hwnd in hwnds_to_close and win32gui.IsWindow(hwnd):
+            still_open_count += 1
+
+    win32gui.EnumWindows(verify_handler, None)
+
+    if still_open_count == 0:
+        return f"🗑️ {original_name} band kar diya gaya hai aur maine verify kar liya hai."
+    else:
+        return f"⚠ {original_name} ko band karne ki command bhej di gayi hai, lekin {still_open_count} window(s) abhi bhi open lag rahi hain."
+
+@function_tool
+async def minimize_window(window_name: str = "active") -> str:
+    """
+    Minimizes a window. If window_name is 'active', it minimizes the currently focused window.
+    """
+    if not gw:
+        return "❌ pygetwindow available nahi hai"
+    
+    try:
+        if window_name.lower() == "active":
+            window = gw.getActiveWindow()
+            if window:
+                window.minimize()
+                return "📉 Active window minimize kar di gayi hai"
+            return "❌ Koi active window nahi mili"
+        
+        # Search for window by name
+        windows = gw.getWindowsWithTitle(window_name)
+        if windows:
+            windows[0].minimize()
+            return f"📉 '{window_name}' minimize kar di gayi hai"
+        return f"❌ '{window_name}' naam ki koi window nahi mili"
+    except Exception as e:
+        return f"❌ Window minimize nahi ho paayi: {e}"
+
+@function_tool
+async def maximize_window(window_name: str = "active") -> str:
+    """
+    Maximizes or restores a window. If window_name is 'active', it maximizes the currently focused window.
+    """
+    if not gw:
+        return "❌ pygetwindow available nahi hai"
+    
+    try:
+        if window_name.lower() == "active":
+            window = gw.getActiveWindow()
+            if window:
+                window.maximize()
+                return "📈 Active window maximize kar di gayi hai"
+            return "❌ Koi active window nahi mili"
+        
+        # Search for window by name
+        windows = gw.getWindowsWithTitle(window_name)
+        if windows:
+            windows[0].maximize()
+            return f"📈 '{window_name}' maximize kar di gayi hai"
+        return f"❌ '{window_name}' naam ki koi window nahi mili"
+    except Exception as e:
+        return f"❌ Window maximize nahi ho paayi: {e}"
 
 @function_tool
 async def folder_file(path: str) -> str:

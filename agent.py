@@ -17,13 +17,17 @@ from jarvis_notepad_automation import (
 )
 from Jarvis_window_CTRL import (
     shutdown_system, restart_system, sleep_system, lock_screen, create_folder,
-    open, close
+    open, close, minimize_window, maximize_window, save_notepad, open_notepad_file
 )
+from Jarvis_file_opener import Play_file
+from jarvis_system_info import get_laptop_info
 from jarvis_whatsapp_automation import automate_whatsapp
 from keyboard_mouse_CTRL import (
     move_cursor_tool, mouse_click_tool, scroll_cursor_tool, type_text_tool,
     press_key_tool, press_hotkey_tool, control_volume_tool, swipe_gesture_tool,
+    set_volume_tool,
 )
+from jarvis_youtube_automation import automate_youtube
 
 # Import memory and reasoning modules
 from memory_store import ConversationMemory
@@ -110,6 +114,12 @@ class BrainAssistant(Agent):
                 create_folder,
                 open,
                 close,
+                minimize_window,
+                maximize_window,
+                save_notepad,
+                open_notepad_file,
+                Play_file,
+                get_laptop_info,
                 automate_whatsapp,
 
                 # Keyboard & Mouse Control - WORKING TOOLS
@@ -120,7 +130,9 @@ class BrainAssistant(Agent):
                 press_key_tool,
                 press_hotkey_tool,
                 control_volume_tool,
+                set_volume_tool,
                 swipe_gesture_tool,
+                automate_youtube,
             ]
         )
         
@@ -165,8 +177,8 @@ async def entrypoint(ctx: agents.JobContext):
         current_city = await get_current_city()
 
         session = AgentSession(
-            llm=google.realtime.RealtimeModel(voice="charon"),
-            preemptive_generation=True,
+            llm=google.realtime.RealtimeModel(voice="charon", model="gemini-2.5-flash-native-audio-latest"),
+            preemptive_generation=False,
             allow_interruptions=True,
         )
 
@@ -179,9 +191,6 @@ async def entrypoint(ctx: agents.JobContext):
                 chat_ctx=current_ctx,
                 current_date=current_date,
                 current_city=current_city
-            ),
-            room_input_options=RoomInputOptions(
-                noise_cancellation=noise_cancellation.BVC(),
             ),
         )
 
@@ -196,8 +205,8 @@ async def entrypoint(ctx: agents.JobContext):
             intro = f"{greeting}\n{Reply_prompts}\n🧠 Brain mode activated - Advanced reasoning enabled!"
             await session.generate_reply(instructions=intro)
 
-        # Initialize memory extraction
-        memory_extractor = MemoryExtractor()
+        # Use existing memory extractor from agent
+        memory_extractor = ctx.agent.memory_extractor if hasattr(ctx, 'agent') and hasattr(ctx.agent, 'memory_extractor') else MemoryExtractor()
         
         # Continuous memory extraction loop
         async def memory_loop():
@@ -234,6 +243,10 @@ async def entrypoint(ctx: agents.JobContext):
 # MAIN RUNNER
 # ==============================================================================
 if __name__ == "__main__":
+    # If no command is provided, default to 'dev'
+    if len(sys.argv) <= 1:
+        sys.argv.append("dev")
+        
     try:
         opts = agents.WorkerOptions(entrypoint=entrypoint)
     except TypeError:

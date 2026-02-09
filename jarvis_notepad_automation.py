@@ -39,13 +39,20 @@ class NotepadAutomation:
         
         while time.time() - start_time < timeout:
             try:
-                # Find windows with "Notepad" in title
-                windows = gw.getWindowsWithTitle('Notepad')
+                # Find windows with "Notepad" in title but filter for actual Notepad app
+                all_windows = gw.getWindowsWithTitle('Notepad')
+                windows = []
+                for w in all_windows:
+                    title = w.title.lower()
+                    # Only match if it looks like the Notepad app and NOT a script file in an IDE
+                    if (title.endswith(" - notepad") or title == "notepad") and ".py" not in title:
+                        windows.append(w)
+                
                 if not windows:
                     await asyncio.sleep(0.5)
                     continue
                 
-                # Get the mostly likely correct window (usually the last active or just first found)
+                # Get the most likely correct window
                 notepad = windows[0]
                 
                 if notepad.isMinimized:
@@ -66,14 +73,16 @@ class NotepadAutomation:
         logger.error("Timed out waiting for Notepad focus.")
         return False
 
-    async def simulate_typing(self, text: str, delay: float = 0.05):
-        """Simulate typing text line by line for visual effect"""
+    async def simulate_typing(self, text: str, delay: float = 0.0):
+        """Simulate typing text line by line with absolute maximum speed"""
         try:
+            # Absolute minimum pause for maximum speed
+            pyautogui.PAUSE = 0.0
             lines = text.split('\n')
             for line in lines:
-                pyautogui.write(line)
+                # Instant typing of lines
+                pyautogui.write(line, interval=0.0)
                 pyautogui.press('enter')
-                await asyncio.sleep(delay)  # Wait a bit between lines
             return True
         except Exception as e:
             logger.error(f"Typing simulation failed: {e}")
@@ -121,16 +130,28 @@ class NotepadAutomation:
             return False
             
     async def close_active_notepad(self):
-        """Closes the currently active Notepad window."""
+        """Closes the currently active Notepad window safely."""
         try:
-            logger.info("Closing Notepad window...")
-            # Close window using shortcut
-            pyautogui.hotkey('alt', 'f4')
+            logger.info("Closing Notepad window safely...")
+            
+            # Using win32gui to close specific Notepad windows instead of Alt+F4
+            import win32gui
+            import win32con
+            
+            def callback(hwnd, extra):
+                if win32gui.IsWindowVisible(hwnd):
+                    title = win32gui.GetWindowText(hwnd).lower()
+                    # Only match actual Notepad app windows
+                    if (title.endswith(" - notepad") or title == "notepad") and ".py" not in title:
+                        win32gui.PostMessage(hwnd, win32con.WM_CLOSE, 0, 0)
+            
+            win32gui.EnumWindows(callback, None)
             await asyncio.sleep(0.5)
-            logger.info("Notepad closed.")
+            logger.info("Notepad close signal sent.")
             return True
         except Exception as e:
             logger.error(f"Error closing Notepad: {e}")
+            # Fallback to Alt+F4 only if win32gui fails and we really want to try
             return False
 
 # Global instance
@@ -142,52 +163,156 @@ HTML_LOGIN_TEMPLATE = '''<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login Page</title>
+    <title>Jarvis Premium Login</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Outfit', sans-serif;
+        }
+
         body {
-            font-family: 'Arial', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             height: 100vh;
             display: flex;
-            justify-content: center;
             align-items: center;
+            justify-content: center;
+            background: #020617;
+            overflow: hidden;
+            color: #f8fafc;
         }
-        .login-container {
-            background: white;
-            padding: 40px;
-            border-radius: 10px;
-            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+
+        .bg-glow {
+            position: absolute;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(14, 165, 233, 0.15) 0%, transparent 70%);
+            border-radius: 50%;
+            z-index: 0;
+            filter: blur(80px);
+        }
+
+        .login-card {
+            position: relative;
+            z-index: 10;
             width: 400px;
+            padding: 40px;
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 30px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
             text-align: center;
         }
-        .login-container h2 { margin-bottom: 30px; color: #333; }
-        .form-group { margin-bottom: 20px; text-align: left; }
-        .form-group label { display: block; margin-bottom: 5px; color: #555; font-weight: bold; }
-        .form-group input {
-            width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 5px; font-size: 16px;
+
+        .logo-area {
+            margin-bottom: 30px;
         }
-        .login-btn {
-            width: 100%; padding: 12px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer;
+
+        .logo-area h1 {
+            font-size: 2.2rem;
+            font-weight: 600;
+            background: linear-gradient(135deg, #38bdf8, #818cf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -1px;
+        }
+
+        .input-group {
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        .input-group input {
+            width: 100%;
+            height: 55px;
+            background: rgba(30, 41, 59, 0.5) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            border-radius: 16px;
+            padding: 0 20px 0 55px;
+            color: #ffffff !important;
+            font-size: 1rem;
+            outline: none;
+            transition: 0.3s all ease;
+        }
+
+        .input-group input:focus {
+            border-color: #38bdf8 !important;
+            background: rgba(30, 41, 59, 0.8) !important;
+            box-shadow: 0 0 15px rgba(56, 189, 248, 0.2);
+        }
+
+        .input-group i {
+            position: absolute;
+            left: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 1.4rem;
+            color: #64748b;
+            transition: 0.3s;
+        }
+
+        .input-group input:focus + i {
+            color: #38bdf8;
+        }
+
+        .btn-login {
+            width: 100%;
+            height: 55px;
+            background: linear-gradient(135deg, #0ea5e9, #2563eb);
+            border: none;
+            border-radius: 16px;
+            color: white;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.3s;
+            margin-top: 10px;
+        }
+
+        .btn-login:hover {
+            transform: scale(1.02);
+            filter: brightness(1.1);
+            box-shadow: 0 10px 20px rgba(37, 99, 235, 0.3);
+        }
+
+        .footer-text {
+            margin-top: 30px;
+            font-size: 0.8rem;
+            color: #64748b;
+            letter-spacing: 2px;
+        }
+
+        .footer-text span {
+            color: #38bdf8;
+            font-weight: 600;
         }
     </style>
 </head>
 <body>
-    <div class="login-container">
-        <h2>Login</h2>
+    <div class="bg-glow"></div>
+    <div class="login-card">
+        <div class="logo-area">
+            <h1>JARVIS LOGIN</h1>
+            <p style="color: #64748b; font-size: 0.9rem; margin-top: 5px;">Secure Access for Matloob</p>
+        </div>
         <form>
-            <div class="form-group">
-                <label>Username:</label>
-                <input type="text" required>
+            <div class="input-group">
+                <i class="bx bxs-user"></i>
+                <input type="text" placeholder="Username" required>
             </div>
-            <div class="form-group">
-                <label>Password:</label>
-                <input type="password" required>
+            <div class="input-group">
+                <i class="bx bxs-lock-alt"></i>
+                <input type="password" placeholder="Password" required>
             </div>
-            <button type="submit" class="login-btn">Login</button>
+            <button class="btn-login">SIGN IN</button>
         </form>
+        <div class="footer-text">
+            MADE BY <span>JARVIS</span> & <span>MATLOOB</span>
+        </div>
     </div>
 </body>
 </html>'''
@@ -248,7 +373,9 @@ async def create_template_code(code_type: str, filename: str = "", auto_run: boo
                 await asyncio.sleep(0.5)
                 pyautogui.hotkey('ctrl', 's')
                 logger.info("Sent Ctrl+S to save.")
-                await asyncio.sleep(0.5)
+                
+                # GIVE USER TIME TO SEE THE WORK
+                await asyncio.sleep(2)
                 
                 # Close Notepad
                 await notepad_automation.close_active_notepad()
@@ -321,7 +448,9 @@ async def write_custom_code(content: str, filename: str, auto_run: bool = True) 
                 # SAVE
                 await asyncio.sleep(0.5)
                 pyautogui.hotkey('ctrl', 's')
-                await asyncio.sleep(0.5)
+                
+                # GIVE USER TIME TO SEE THE WORK
+                await asyncio.sleep(2)
                 
                 # CLOSE
                 await notepad_automation.close_active_notepad()

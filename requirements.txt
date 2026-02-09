@@ -31,3 +31,7 @@ pywhatkit
 ddgs
 youtube-search
 pyperclip
+psutil
+pycaw
+comtypes
+pygetwindow
