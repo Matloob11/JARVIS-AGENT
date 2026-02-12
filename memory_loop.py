@@ -1,10 +1,12 @@
+"""
+Jarvis Memory Loop Module
+Handles background tasks for conversation memory extraction.
+"""
 import asyncio
-import hashlib
-import json
 import time
 import logging
-from memory_store import ConversationMemory
 from pydantic import BaseModel
+from memory_store import ConversationMemory
 
 # Configure logging
 logging.basicConfig(
@@ -12,10 +14,12 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s"
 )
 
+
 class MemoryExtractor:
     def __init__(self):
         # last_conversation_hash is no longer needed with the new logic
-        self.saved_message_count = 0  # Tracks how many messages have been saved.
+        # Tracks how many messages have been saved.
+        self.saved_message_count = 0
 
     def _serialize_for_hash(self, obj):
         """
@@ -24,12 +28,11 @@ class MemoryExtractor:
         """
         if isinstance(obj, BaseModel):
             return obj.model_dump()
-        elif isinstance(obj, dict):
+        if isinstance(obj, dict):
             return {k: self._serialize_for_hash(v) for k, v in obj.items()}
-        elif isinstance(obj, list):
+        if isinstance(obj, list):
             return [self._serialize_for_hash(item) for item in obj]
-        else:
-            return obj  # primitive types
+        return obj  # primitive types
 
     async def run(self, session):
         """
@@ -44,14 +47,17 @@ class MemoryExtractor:
             # Assuming the conversation history is a list of message objects
             # within the session object. Adjust 'session.chat_history' if needed.
             current_chat_history = session
-            
+
             # This is the core logic: Compare the current count with the saved count.
             if len(current_chat_history) > self.saved_message_count:
-                logging.info(f"{len(current_chat_history) - self.saved_message_count} new message(s) detected. Saving...")
-                
+                logging.info(
+                    "%d new message(s) detected. Saving...",
+                    len(current_chat_history) - self.saved_message_count
+                )
+
                 # Get a "slice" of the new messages that haven't been saved yet.
                 new_messages = current_chat_history[self.saved_message_count:]
-                
+
                 for message in new_messages:
                     # Serialize the single message for saving
                     serialized_message = self._serialize_for_hash(message)
@@ -59,16 +65,18 @@ class MemoryExtractor:
                         "messages": [serialized_message],
                         "timestamp": time.time()
                     }
-                    
+
                     success = memory.save_conversation(conversation_wrapper)
-                    
+
                     if success:
-                        logging.info(f"Saved new message with ID: {message.id}")
+                        logging.info(
+                            "Saved new message with ID: %s", message.id)
                     else:
-                        logging.error(f"Failed to save message with ID: {message.id}")
-                
+                        logging.error(
+                            "Failed to save message with ID: %s", message.id)
+
                 # After successfully saving all new messages, update the counter.
                 self.saved_message_count = len(current_chat_history)
-            
+
             else:
                 pass

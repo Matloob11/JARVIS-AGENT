@@ -1,35 +1,51 @@
+"""
+# Jarvis_window_CTRL.py
+Jarvis Window Control Module
+
+Handles opening, closing, and managing windows (minimize, maximize, restore).
+Also provides system-level controls like shutdown, restart, and sleep.
+"""
+
+import asyncio
+import logging
 import os
 import subprocess
-import logging
 import sys
-import asyncio
 import webbrowser
+
 from fuzzywuzzy import process
 
 try:
     from livekit.agents import function_tool
 except ImportError:
     def function_tool(func):
+        """
+        Placeholder function_tool decorator if livekit is not installed.
+        """
         return func
 
 try:
-    import win32gui
-    import win32con
+    import win32gui as win32_gui
+    import win32con as win32_con
+    import pyautogui as pg
 except ImportError:
-    win32gui = None
-    win32con = None
+    win32_gui = None
+    win32_con = None
+    pg = None
+except Exception:  # pylint: disable=broad-exception-caught
+    win32_gui = None
+    win32_con = None
+    pg = None
 
 try:
     import pygetwindow as gw
+    from pygetwindow import getWindowsWithTitle as get_windows
 except ImportError:
     gw = None
+    get_windows = None
 
-try:
-    import pyautogui
-except Exception:
-    pyautogui = None
 
-from keyboard_mouse_CTRL import type_text_tool
+from keyboard_mouse_ctrl import type_text_tool
 from jarvis_whatsapp_automation import whatsapp_bot
 
 # ===================== LOGGER ===================== #
@@ -49,7 +65,7 @@ APP_MAPPINGS = {
     "camera": "camera",
     "settings": "ms-settings:",
     "explorer": "explorer",
-    
+
     # Browsers
     "chrome": "chrome",
     "google chrome": "chrome",
@@ -70,15 +86,13 @@ APP_MAPPINGS = {
 
     # Installed Desktop Apps
     "vlc": "vlc",
-    "obs": "obs64", 
+    "obs": "obs64",
     "obs studio": "obs64",
 
     # URLs
-    "youtube": "https://www.youtube.com",
     "google": "https://www.google.com",
 
     # Hindi / Varieties
-    "youtub": "https://www.youtube.com", 
     "watsapp": "shell:AppsFolder\\5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App",
     "insta": "shell:AppsFolder\\Facebook.InstagramBeta_8xx8rvfyw5nnt!App",
     "face book": "shell:AppsFolder\\FACEBOOK.FACEBOOK_8xx8rvfyw5nnt!App",
@@ -91,7 +105,6 @@ FOCUS_TITLES = {
     "edge": "Microsoft Edge",
     "vlc": "VLC",
     "cmd": "Command Prompt",
-    "youtube": "YouTube",
     "whatsapp": "WhatsApp",
     "tiktok": "TikTok",
     "instagram": "Instagram",
@@ -102,37 +115,47 @@ FOCUS_TITLES = {
 }
 
 # ===================== UTIL ===================== #
+
+
 def normalize_command(text: str) -> str:
     """
-    Removes Hindi/English open keywords safely and extracts the app name
+    Removes Hindi/English open keywords safely and extracts the app name.
     """
-    REMOVE_WORDS = [
+    remove_words = [
         "open", "opening", "opened", "run", "launch", "start",
-        "kholo", "khol", "open", "opening", "karo", "chalao", "chalana",
+        "kholo", "khol", "karo", "chalao", "chalana",
         "aur", "usmein", "likh", "do", "hello", "jarvis", "what", "are", "you", "doing",
         "browser", "app", "application"
     ]
     text = text.lower()
-    for w in REMOVE_WORDS:
-        text = text.replace(w, "")
-    
+    for word in remove_words:
+        text = text.replace(word, "")
+
     # Return the full cleaned text instead of just the first word
     # This allows matching multi-word apps like "microsoft edge" or "control panel"
     return text.strip()
 
-async def focus_window(title: str):
+
+async def focus_window(target_title: str):
+    """
+    Activates and restores a window by its title.
+    """
     if not gw:
         return False
     await asyncio.sleep(1.2)
     for w in gw.getAllWindows():
-        if title.lower() in w.title.lower():
+        if target_title.lower() in w.title.lower():
             if w.isMinimized:
                 w.restore()
             w.activate()
             return True
     return False
 
+
 def fuzzy_match_app(app_name: str) -> str:
+    """
+    Performs fuzzy matching to find the closest app name in the mapping.
+    """
     keys = list(APP_MAPPINGS.keys())
     match, score = process.extractOne(app_name, keys)
     if score >= 70:
@@ -140,57 +163,37 @@ def fuzzy_match_app(app_name: str) -> str:
     return app_name
 
 # ===================== OPEN APP ===================== #
-@function_tool
-async def open(full_command: str) -> str:
+
+
+@function_tool(name="open")
+async def open_app(full_command: str) -> str:
     try:
         clean = normalize_command(full_command)
         matched_key = fuzzy_match_app(clean)
         app = APP_MAPPINGS.get(matched_key, matched_key)
 
-        logger.info(f"OPEN → raw='{full_command}' clean='{clean}' match='{matched_key}'")
+        logger.info(
+            "OPEN → raw='%s' clean='%s' match='%s'", full_command, clean, matched_key)
 
         # 🌐 URL → browser or desktop app
         if app.startswith("http"):
-            webbrowser.open(app)
+            # Use os.startfile for better handling of browser launches
+            os.startfile(app)
             await asyncio.sleep(3)  # Wait for browser to open
             if "youtube" in matched_key.lower():
                 await focus_window("YouTube")
             elif "whatsapp" in matched_key.lower():
-                # For web WhatsApp, ensure focus
                 await focus_window("WhatsApp")
         elif matched_key == "whatsapp":
             await whatsapp_bot.open_whatsapp()
             await whatsapp_bot.ensure_whatsapp_focus()
         elif app.startswith("whatsapp://"):
-            try:
-                # Try to open desktop app via URI scheme
-                subprocess.Popen([app], shell=True) # Use shell=True for URI schemes on Windows
-                await asyncio.sleep(5)  # Give time for app to open
-                await focus_window("WhatsApp")
-            except Exception as uri_e:
-                logger.warning(f"Failed to open WhatsApp desktop app via URI: {uri_e}. Falling back to web.")
-                webbrowser.open("https://web.whatsapp.com")
-                await asyncio.sleep(5)
-                await focus_window("WhatsApp")
-        else:
-            # 🪟 Try Start Menu (non-blocking)
-            if pyautogui:
-                try:
-                    await asyncio.to_thread(pyautogui.press, "win")
-                    await asyncio.sleep(0.5)
-                    await asyncio.to_thread(pyautogui.write, matched_key, 0.05)
-                    await asyncio.sleep(0.4)
-                    await asyncio.to_thread(pyautogui.press, "enter")
-                except Exception:
-                    pass
-
-            # 🧨 FINAL fallback (NO TIMEOUT)
-            subprocess.Popen(app, shell=True)
-
-            # 🎯 Focus
-            title = FOCUS_TITLES.get(matched_key)
-            if title:
-                await focus_window(title)
+            if app:
+                os.startfile(app)
+        # 🎯 Focus
+        title = FOCUS_TITLES.get(matched_key)
+        if title:
+            await focus_window(title)
 
         # ✍️ Check for writing
         write_text = None
@@ -213,9 +216,10 @@ async def open(full_command: str) -> str:
 
         return f"🚀 {matched_key} khol diya gaya hai"
 
-    except Exception as e:
-        logger.error(e)
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.error("App open error: %s", e)
         return f"❌ App open nahi ho paaya: {e}"
+
 
 @function_tool
 async def save_notepad(file_path: str = r"D:\jarvis_notes.txt") -> str:
@@ -223,37 +227,42 @@ async def save_notepad(file_path: str = r"D:\jarvis_notes.txt") -> str:
     Saves the content of an open Notepad window.
     """
     try:
-        import pygetwindow as gw
+        # Use local import rename to avoid shadowing global gw
+        from pygetwindow import getWindowsWithTitle as get_windows
         # Try to find Notepad window
-        notepad_windows = [w for w in gw.getWindowsWithTitle('Notepad')]
+        notepad_windows = list(get_windows('Notepad'))
         if not notepad_windows:
             return "❌ Notepad window nahi mili."
-        
+
         notepad = notepad_windows[0]
         notepad.activate()
         await asyncio.sleep(1)
-        
+
         # Ctrl+S
-        pyautogui.hotkey('ctrl', 's')
-        await asyncio.sleep(1.5) # Wait for Save As dialog
-        
-        # Type path
-        pyautogui.write(file_path, interval=0.01)
-        await asyncio.sleep(0.5)
-        pyautogui.press('enter')
-        
-        # Overwrite check - ONLY if file exists
-        if os.path.exists(file_path):
-            await asyncio.sleep(1)
-            pyautogui.press('left')
-            pyautogui.press('enter')
-        else:
+        if pg:
+            pg.hotkey('ctrl', 's')
+            await asyncio.sleep(1.5)  # Wait for Save As dialog
+
+            # Type path
+            pg.write(file_path, interval=0.01)
             await asyncio.sleep(0.5)
-        
+            pg.press('enter')
+
+            # Overwrite check - ONLY if file exists
+            if os.path.exists(file_path):
+                await asyncio.sleep(1)
+                pg.press('left')
+                pg.press('enter')
+            else:
+                await asyncio.sleep(0.5)
+        else:
+            return "❌ PyAutoGUI available nahi hai, save nahi kar paaya."
+
         return f"💾 Notepad file ko '{file_path}' par save kar diya gaya hai."
-    except Exception as e:
-        logger.error(f"Save Notepad Error: {e}")
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.error("Save Notepad Error: %s", e)
         return f"❌ Save karne mein error: {e}"
+
 
 @function_tool
 async def open_notepad_file(file_path: str) -> str:
@@ -262,15 +271,17 @@ async def open_notepad_file(file_path: str) -> str:
     """
     if not os.path.exists(file_path):
         return f"❌ File nahi mili: {file_path}"
-    
+
     try:
         # Use full path to notepad if possible
         subprocess.Popen([r"C:\Windows\System32\notepad.exe", file_path])
         return f"📂 {file_path} ko Notepad mein open kar diya gaya hai."
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         return f"❌ File open karne mein error: {e}"
 
 # ===================== CLOSE WINDOW ===================== #
+
+
 @function_tool
 async def close(window_name: str) -> str:
     """
@@ -289,8 +300,9 @@ async def close(window_name: str) -> str:
     # Fuzzy matching for common apps
     matched_key = fuzzy_match_app(window_name)
     search_title = FOCUS_TITLES.get(matched_key, window_name).lower()
-    
-    logger.info(f"CLOSE → target='{original_name}' search_title='{search_title}'")
+
+    logger.info(
+        "CLOSE → target='%s' search_title='%s'", original_name, search_title)
 
     hwnds_to_close = []
 
@@ -298,31 +310,23 @@ async def close(window_name: str) -> str:
         if win32gui.IsWindowVisible(hwnd):
             title = win32gui.GetWindowText(hwnd).lower()
             # Specific logic for common apps to avoid broad matches
-            is_match = False
-            
-            if matched_key == "notepad":
-                # Notepad windows usually end with " - Notepad" or are just "Notepad"
-                if title.endswith(" - notepad") or title == "notepad":
-                    is_match = True
-            elif matched_key == "edge":
-                if "edge" in title or "msedge" in title:
-                    is_match = True
-            elif matched_key == "chrome":
-                if "google chrome" in title:
-                    is_match = True
-            else:
-                # Fallback to substring match for other apps
-                if search_title in title:
-                    is_match = True
+            app_matchers = {
+                "notepad": lambda t: t.endswith(" - notepad") or t == "notepad",
+                "edge": lambda t: "edge" in t or "msedge" in t,
+                "chrome": lambda t: "google chrome" in t
+            }
 
-            # Safeguard: Don't close the current script or the IDE if they just happen to have the name in the title
-            # and it wasn't an exact match.
+            matcher = app_matchers.get(matched_key)
+            if matcher:
+                is_match = matcher(title)
+            else:
+                is_match = search_title in title
+
+            # Safeguard: Don't close the current script or the IDE
             if is_match:
-                # If we matched "notepad" but the title also contains ".py", it's likely a script file open in an IDE
-                # unless the search_title was very specific.
                 if ".py" in title and search_title == "notepad":
                     is_match = False
-                    
+
                 if is_match:
                     hwnds_to_close.append(hwnd)
 
@@ -337,8 +341,9 @@ async def close(window_name: str) -> str:
 
     # Verification loop
     await asyncio.sleep(2)
-    
+
     still_open_count = 0
+
     def verify_handler(hwnd, _):
         nonlocal still_open_count
         if hwnd in hwnds_to_close and win32gui.IsWindow(hwnd):
@@ -348,8 +353,11 @@ async def close(window_name: str) -> str:
 
     if still_open_count == 0:
         return f"🗑️ {original_name} band kar diya gaya hai aur maine verify kar liya hai."
-    else:
-        return f"⚠ {original_name} ko band karne ki command bhej di gayi hai, lekin {still_open_count} window(s) abhi bhi open lag rahi hain."
+
+    msg = (f"⚠ {original_name} ko band karne ki command bhej di gayi hai, "
+           f"lekin {still_open_count} window(s) abhi bhi open lag rahi hain.")
+    return msg
+
 
 @function_tool
 async def minimize_window(window_name: str = "active") -> str:
@@ -358,7 +366,7 @@ async def minimize_window(window_name: str = "active") -> str:
     """
     if not gw:
         return "❌ pygetwindow available nahi hai"
-    
+
     try:
         if window_name.lower() == "active":
             window = gw.getActiveWindow()
@@ -366,24 +374,26 @@ async def minimize_window(window_name: str = "active") -> str:
                 window.minimize()
                 return "📉 Active window minimize kar di gayi hai"
             return "❌ Koi active window nahi mili"
-        
+
         # Search for window by name
         windows = gw.getWindowsWithTitle(window_name)
         if windows:
             windows[0].minimize()
             return f"📉 '{window_name}' minimize kar di gayi hai"
         return f"❌ '{window_name}' naam ki koi window nahi mili"
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         return f"❌ Window minimize nahi ho paayi: {e}"
+
 
 @function_tool
 async def maximize_window(window_name: str = "active") -> str:
     """
-    Maximizes or restores a window. If window_name is 'active', it maximizes the currently focused window.
+    Maximizes or restores a window.
+    If window_name is 'active', it maximizes the currently focused window.
     """
     if not gw:
         return "❌ pygetwindow available nahi hai"
-    
+
     try:
         if window_name.lower() == "active":
             window = gw.getActiveWindow()
@@ -391,22 +401,20 @@ async def maximize_window(window_name: str = "active") -> str:
                 window.maximize()
                 return "📈 Active window maximize kar di gayi hai"
             return "❌ Koi active window nahi mili"
-        
+
         # Search for window by name
         windows = gw.getWindowsWithTitle(window_name)
         if windows:
             windows[0].maximize()
             return f"📈 '{window_name}' maximize kar di gayi hai"
         return f"❌ '{window_name}' naam ki koi window nahi mili"
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         return f"❌ Window maximize nahi ho paayi: {e}"
 
+
 @function_tool
-async def folder_file(path: str) -> str:
+async def folder_file(path: str) -> str:  # pylint: disable=unused-argument
     return "❌ folder_file tool not implemented"
-
-
-
 
 
 # ===================== SYSTEM CONTROL ===================== #
@@ -416,11 +424,13 @@ async def shutdown_system():
     os.system("shutdown /s /t 0")
     return "🔌 System shutting down..."
 
+
 @function_tool
 async def restart_system():
     """Restarts the computer immediately."""
     os.system("shutdown /r /t 0")
     return "🔄 System restarting..."
+
 
 @function_tool
 async def sleep_system():
@@ -428,11 +438,13 @@ async def sleep_system():
     os.system("rundll32.exe powrprof.dll,SetSuspendState 0,1,0")
     return "😴 System going to sleep..."
 
+
 @function_tool
 async def lock_screen():
     """Locks the screen."""
     os.system("rundll32.exe user32.dll,LockWorkStation")
     return "🔒 Screen locked."
+
 
 @function_tool
 async def create_folder(folder_name: str):
@@ -442,5 +454,5 @@ async def create_folder(folder_name: str):
     try:
         os.makedirs(path, exist_ok=True)
         return f"Cc Folder created: {folder_name}"
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         return f"❌ Error creating folder: {e}"
