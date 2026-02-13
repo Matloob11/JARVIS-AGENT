@@ -108,23 +108,26 @@ class WhatsAppAutomation:
 
             # Focus Search Bar (Ctrl + F is standard)
             # Sometimes WhatsApp needs a moment to catch input after focus
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(1.0)
             pyautogui.hotkey('ctrl', 'f')
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(1.0)
 
-            # Clear previous search if any (Ctrl+A, Backspace) just in case
+            # Clear previous search if any (Ctrl+A, Backspace)
             pyautogui.hotkey('ctrl', 'a')
             pyautogui.press('backspace')
+            await asyncio.sleep(0.5)
 
             # Type name
             pyautogui.write(contact_name, interval=0.1)
-            await asyncio.sleep(2.0)  # Wait for search results (Increased)
+            # Wait for search results (Increased significantly)
+            await asyncio.sleep(3.0)
 
-            # Select first result (Down Arrow -> Enter)
+            # Select first result
+            # Sometimes 'down' doesn't land correctly on first result if there's focus delay
             pyautogui.press('down')
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.8)
             pyautogui.press('enter')
-            await asyncio.sleep(2.0)  # Wait for chat to open (Increased)
+            await asyncio.sleep(3.0)  # Wait for chat to open
 
             return True
         except Exception as e:  # pylint: disable=broad-exception-caught

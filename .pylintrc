@@ -1,16 +1,77 @@
 [MASTER]
-extension-pkg-allow-list=pygame,win32gui,win32api,win32con,pygetwindow,psutil,comtypes,pynput,pythoncom
+# Architect-Pro grade configuration
+# Designed for production-grade AI automation agents on Windows
+extension-pkg-allow-list=pygame,win32gui,win32api,win32con,pygetwindow,psutil,comtypes,pynput,pythoncom,mediapipe
+
+# Maximum parallelization
+jobs=0
 
 [MESSAGES CONTROL]
+# Balanced professional settings: Strict on logic, flexible on style
 disable=
+    # --- Tactical (Non-functional/Stylistic) ---
+    C0103, # invalid-name
+    W0511, # fixme
+    R0903, # too-few-public-methods
+
+    # --- Windows/AI Agent Contextual ---
+    R0913, # too-many-arguments (Complex tool inputs)
+    R0914, # too-many-locals (Stateful reasoning loops)
+    C0415, # import-outside-toplevel (Lazy loading dynamically)
+    R1732, # consider-using-with (Sometimes handled by system lifecycle)
+
+enable=
+    # === Quality & Logic Audit ===
+    R0801, # duplicate-code (Critical for maintenance)
     C0114, # missing-module-docstring
     C0115, # missing-class-docstring
     C0116, # missing-function-docstring
-    W0511, # fixme
-    R0903, # too-few-public-methods
-    R0913, # too-many-arguments
-    R0914, # too-many-locals
-    R0915, # too-many-statements
+    W1514, # unspecified-encoding (Critical for UTF-8 safety)
+    W0622, # redefined-builtin (Protects system namespace)
+    C0412, # ungrouped-imports (Maintainability)
+    R1721, # unnecessary-comprehension (Performance)
+    R1725, # super-with-arguments (Modern Python standards)
+    
+    # === Core Logic Hazards ===
+    undefined-variable,
+    unused-import,
+    unused-variable,
+    dangerous-default-value,
+    redefined-builtin,
+    redefined-outer-name,
+    broad-exception-caught
+
+[SIMILARITIES]
+# Minimum lines of a similarity before it is considered a duplicate.
+min-similarity-lines=15
+# Ignore comments when computing similarities.
+ignore-comments=yes
+# Ignore docstrings when computing similarities.
+ignore-docstrings=yes
+# Ignore imports when computing similarities.
+ignore-imports=yes
+
+[DESIGN]
+# Professionally balanced thresholds
+max-branches=20
+max-statements=80
+max-attributes=12
+max-locals=25
+max-returns=10
+max-module-lines=500
 
 [TYPECHECK]
-generated-members=pygame.*,win32gui.*,pythoncom.*,IAudioEndpointVolume.*,devices.*
+# Dynamic member suppression for Windows APIs
+generated-members=pygame.*,win32gui.*,win32api.*,win32con.*,IAudioEndpointVolume.*,devices.*,pygetwindow.getWindowsWithTitle,gw.*,pg.*,pythoncom.*
+
+[BASIC]
+# Allow specific variables to be used freely
+good-names=i,j,k,ex,Run,_,Sir,Jarvis,gw,pg
+
+[FORMAT]
+max-line-length=1100
+expected-line-ending-format=CRLF
+
+[REPORTS]
+output-format=colorized
+score=yes

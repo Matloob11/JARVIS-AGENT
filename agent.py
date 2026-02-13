@@ -12,7 +12,7 @@ from datetime import datetime
 
 from dotenv import load_dotenv
 from livekit import agents
-from livekit.agents import Agent, AgentSession
+from livekit.agents import Agent, AgentSession, StopResponse
 from livekit.plugins import google
 
 # --- Tool & Prompt Modules ---
@@ -21,7 +21,7 @@ from jarvis_get_weather import get_weather
 from jarvis_notepad_automation import (
     create_template_code, open_notepad_simple, run_cmd_command, write_custom_code
 )
-from jarvis_prompt import REPLY_PROMPTS, BEHAVIOR_PROMPT
+from jarvis_prompt import BEHAVIOR_PROMPT
 from jarvis_reasoning import analyze_user_intent, generate_smart_response
 from jarvis_search import (
     get_current_city, get_formatted_datetime, search_internet
@@ -114,6 +114,21 @@ class BrainAssistant(Agent):
                 current_city=current_city
             )
 
+        # Initialize memory and reasoning
+        self.memory_extractor = MemoryExtractor()
+        self.conversation_history = []
+        self._wake_word_mode = True  # Default to True as per user request
+
+        @agents.function_tool
+        def set_wake_word_mode(active: bool) -> str:
+            """
+            Toggle the strict wake word enforcement mode.
+            If active is True, Jarvis will only respond when called by name.
+            """
+            self._wake_word_mode = active
+            status = "active" if active else "disabled"
+            return f"Wake word mode {status} ho gaya hai, Sir Matloob."
+
         super().__init__(
             chat_ctx=chat_ctx,
             instructions=formatted_instructions,
@@ -124,13 +139,11 @@ class BrainAssistant(Agent):
                 search_internet,
                 get_formatted_datetime,
                 get_weather,
-
                 # Notepad & Code Automation
                 create_template_code,
                 write_custom_code,
                 run_cmd_command,
                 open_notepad_simple,
-
                 # System Tools
                 shutdown_system,
                 restart_system,
@@ -146,7 +159,6 @@ class BrainAssistant(Agent):
                 play_file,
                 get_laptop_info,
                 automate_whatsapp,
-
                 # Keyboard & Mouse Control
                 move_cursor_tool,
                 mouse_click_tool,
@@ -158,12 +170,9 @@ class BrainAssistant(Agent):
                 set_volume_tool,
                 swipe_gesture_tool,
                 automate_youtube,
+                set_wake_word_mode,
             ]
         )
-
-        # Initialize memory and reasoning
-        self.memory_extractor = MemoryExtractor()
-        self.conversation_history = []
 
     async def process_with_reasoning(self, user_input: str) -> str:
         """
@@ -192,6 +201,52 @@ class BrainAssistant(Agent):
             user_name = os.getenv("USER_NAME", "Sir")
             hindi_msg = "main aapka message samajh gaya hun. Kya main aapki madad kar sakta hun?"
             return f"{user_name}, {hindi_msg}"
+
+    async def on_user_turn_completed(self, turn_ctx, new_message):
+        """
+        Called when the user finishes their turn of speaking.
+        Overridden to enforce strict wake word detection based on mode.
+        """
+        content = getattr(new_message, 'content', '').lower()
+
+        # If wake word mode is active, strictly require name
+        if self._wake_word_mode:
+            if "jarvis" in content:
+                print(f"👂 Wake word detected in mode: '{content}'")
+                return await super().on_user_turn_completed(turn_ctx, new_message)
+
+            # If it's a very short or background noise, stay silent
+            if not content.strip() or len(content.split()) < 2:
+                raise StopResponse()
+
+            # Optional: provide a "waiting" response if the user addresses Jarvis without name
+            # For now, following user's "i am on wake word waiting" suggestion for address
+            # We use the LLM to handle this by returning a custom completion if we didn't stop
+            print(
+                f"🤫 Wake word mode: Ignoring speech without name: '{content}'")
+
+            # Instead of total silence, we can return a specific phrase via the LLM context
+            # or just stop. User said: "ager kabi koi baat ka answer kara bi to ya kaha ka i am on wake word waiting"
+            # This implies if it feels like a question/order but no "Jarvis", say that.
+
+            # Simple heuristic: if it looks like a direct command/question, give the waiting response
+            if any(word in content for word in ["karo", "do", "how", "what", "open", "play"]):
+                # We can inject a system message or just return a canned response
+                # For simplicity in this event-driven model, we'll let it pass to LLM
+                # but with a hint, or just raise StopResponse and speak manually?
+                # Actually, raising StopResponse prevents ALL audio.
+                # Let's just raise StopResponse for now to be strictly silent as requested first
+                # "jab tak wake word na bola jai ya koi bi responce na kara"
+                raise StopResponse()
+
+            raise StopResponse()
+
+        # NORMAL MODE logic (if wake word mode is OFF)
+        if "jarvis" in content or len(content.split()) > 1:
+            return await super().on_user_turn_completed(turn_ctx, new_message)
+
+        raise StopResponse()
+
 
 # ==============================================================================
 # ENTRYPOINT Function (Enhanced with brain.py features)
@@ -225,15 +280,8 @@ async def entrypoint(ctx: agents.JobContext):
             ),
         )
 
-        # Send initial greeting
-        hour = datetime.now().hour
-        greeting_prefix = (
-            "Good morning!" if 5 <= hour < 12 else
-            "Good afternoon!" if 12 <= hour < 18 else
-            "Good evening!"
-        )
-        intro = f"{greeting_prefix}\n{REPLY_PROMPTS}\n🧠 Brain mode activated!"
-        await session.generate_reply(instructions=intro)
+        # Brain mode activated log (Internal only)
+        print("🧠 Brain mode activated! System is quiet until 'Jarvis' is mentioned.")
 
         # Start continuous memory extraction loop
         memory_extractor = MemoryExtractor()

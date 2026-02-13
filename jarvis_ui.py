@@ -35,6 +35,7 @@ pygame.init()
 
 
 def get_font_path():
+    """Returns the font path based on the operating system."""
     system = platform.system()
     if system == "Darwin":  # macOS
         return "Orbitron-VariableFont_wght.ttf"
@@ -76,6 +77,7 @@ def load_image_safe(path, default_size=(200, 200)):
 
 
 def draw_rounded_rect(target_screen_ptr, color, rect, radius=15):
+    """Draws a rectangle with rounded corners on the given surface."""
     try:
         temp_surface = pygame.Surface(
             (rect.width, rect.height), pygame.SRCALPHA)
@@ -89,6 +91,7 @@ def draw_rounded_rect(target_screen_ptr, color, rect, radius=15):
 
 
 def draw_status_bar(target_screen_ptr):
+    """Draws a status bar at the bottom of the screen."""
     status_rect_area = pygame.Rect(0, screen_height - 30, screen_width, 30)
     draw_rounded_rect(target_screen_ptr, DARK_GRAY, status_rect_area, radius=5)
 
@@ -96,6 +99,7 @@ def draw_status_bar(target_screen_ptr):
 
 
 def load_gif_safe(gif_path, fallback_frames=10):
+    """Safely loads a GIF file into a list of pygame surfaces."""
     print(f"Attempting to load GIF: {gif_path}")
     print(f"File exists: {os.path.exists(gif_path)}")
 
@@ -133,7 +137,7 @@ def load_gif_safe(gif_path, fallback_frames=10):
 
 
 def create_fallback_frames(num_frames=10):
-    """Create animated fallback frames when GIF loading fails"""
+    """Creates animated fallback surfaces if GIF loading fails."""
     frames = []
     size = (200, 200)
 
@@ -171,6 +175,7 @@ STREAM = None
 
 
 def init_audio():
+    """Initializes the PyAudio input stream."""
     global P_AUDIO, STREAM  # pylint: disable=global-statement
     try:
         P_AUDIO = pyaudio.PyAudio()
@@ -186,6 +191,7 @@ AUDIO_AVAILABLE = init_audio()
 
 
 def get_volume(data):
+    """Calculates the RMS volume from raw audio data."""
     if not data:
         return 0
     count = len(data) // 2
@@ -200,6 +206,7 @@ TRACK_LOCK = threading.Lock()
 
 
 def fetch_track():
+    """Fetches the currently playing track info (Spotify/macOS only)."""
     global TRACK  # pylint: disable=global-statement
     try:
         system = platform.system()
@@ -275,6 +282,7 @@ def update_gif_scale(gif_scale):
 
 
 def main():
+    """Main UI loop for the Jarvis Assistant."""
     global screen  # pylint: disable=global-statement
     running = True
     fullscreen = False
