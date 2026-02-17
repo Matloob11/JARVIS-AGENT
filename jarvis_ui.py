@@ -1,8 +1,7 @@
 """
 Jarvis UI Module
-Handles the graphical user interface and visualizations for the AI Assistant.
 """
-# pylint: disable=no-member
+# pylint: disable=broad-exception-caught
 import os
 import sys
 import platform
@@ -15,6 +14,13 @@ import pyaudio
 from PIL import Image
 
 script_dir = os.path.dirname(__file__)
+
+# Set Temporary environment variables to project directory on Drive D
+# This ensures "presior" (temp/cache files) stays on Drive D
+tmp_dir = os.path.join(script_dir, "tmp")
+os.makedirs(tmp_dir, exist_ok=True)
+os.environ["TEMP"] = tmp_dir
+os.environ["TMP"] = tmp_dir
 
 # Global variables
 GRAB_ACTIVE = False
@@ -42,19 +48,27 @@ def get_font_path():
     return None
 
 
-font_path = get_font_path()
-if font_path and os.path.exists(font_path):
-    clock_font = pygame.font.Font(font_path, 72)
-    clock_shadow_font = pygame.font.Font(font_path, 72)
-    description_font = pygame.font.Font(font_path, 16)
-    todo_font = pygame.font.Font(font_path, 28)
-else:
-    # Fallback fonts
-    clock_font = pygame.font.SysFont("Arial", 72, bold=True)
-    clock_shadow_font = pygame.font.SysFont("Arial", 72, bold=True)
-    description_font = pygame.font.SysFont("Arial", 16)
-    todo_font = pygame.font.SysFont("Arial", 28)
-track_font = pygame.font.SysFont("Arial", 26)
+try:
+    font_path = get_font_path()
+    if font_path and os.path.exists(font_path):
+        clock_font = pygame.font.Font(font_path, 72)
+        clock_shadow_font = pygame.font.Font(font_path, 72)
+        description_font = pygame.font.Font(font_path, 16)
+        todo_font = pygame.font.Font(font_path, 28)
+    else:
+        # Fallback fonts
+        clock_font = pygame.font.SysFont("Arial", 72, bold=True)
+        clock_shadow_font = pygame.font.SysFont("Arial", 72, bold=True)
+        description_font = pygame.font.SysFont("Arial", 16)
+        todo_font = pygame.font.SysFont("Arial", 28)
+    track_font = pygame.font.SysFont("Arial", 26)
+except Exception as e:
+    print(f"Font initialization warning: {e}. Using default fonts.")
+    clock_font = pygame.font.SysFont(None, 72)
+    clock_shadow_font = pygame.font.SysFont(None, 72)
+    description_font = pygame.font.SysFont(None, 16)
+    todo_font = pygame.font.SysFont(None, 28)
+    track_font = pygame.font.SysFont(None, 26)
 
 # Screen setup - Fixed size for consistent scaling
 screen_width, screen_height = 1280, 720  # Standard HD resolution
@@ -98,8 +112,8 @@ def draw_status_bar(target_screen_ptr):
 # Load GIFs safely with better error handling
 
 
-def load_gif_safe(gif_path, fallback_frames=10):
-    """Safely loads a GIF file into a list of pygame surfaces."""
+def load_gif_safe(gif_path, target_size=(1280, 720), fallback_frames=10):
+    """Safely loads a GIF file and resizes frames to save memory."""
     print(f"Attempting to load GIF: {gif_path}")
     print(f"File exists: {os.path.exists(gif_path)}")
 
@@ -116,8 +130,10 @@ def load_gif_safe(gif_path, fallback_frames=10):
         frames = []
         for frame_num in range(gif_image.n_frames):
             gif_image.seek(frame_num)
-            # Convert to RGBA
+            # Convert to RGBA and RESIZE HERE to save memory early
             frame = gif_image.copy().convert("RGBA")
+            if target_size:
+                frame = frame.resize(target_size, Image.Resampling.LANCZOS)
 
             # Convert PIL image to pygame surface
             mode = frame.mode
@@ -127,7 +143,8 @@ def load_gif_safe(gif_path, fallback_frames=10):
             pygame_surface = pygame.image.frombuffer(data, size, mode)
             frames.append(pygame_surface)
 
-        print(f"Successfully loaded {len(frames)} frames from {gif_path}")
+        print(
+            f"Successfully loaded and resized {len(frames)} frames from {gif_path}")
         return frames
 
     except Exception as e:  # pylint: disable=broad-exception-caught
@@ -139,16 +156,14 @@ def load_gif_safe(gif_path, fallback_frames=10):
 def create_fallback_frames(num_frames=10):
     """Creates animated fallback surfaces if GIF loading fails."""
     frames = []
-    size = (200, 200)
+    size = (1280, 720)
 
     for i in range(num_frames):
         surf = pygame.Surface(size, pygame.SRCALPHA)
 
         # Create pulsing animation
         pulse = 0.5 + 0.5 * pygame.math.cos(i * 0.5)
-        radius = int(50 + 30 * pulse)
-
-        # Draw pulsing circle
+        radius = int(150 + 50 * pulse)
 
         # Draw pulsing circle
         pygame.draw.circle(surf, CYAN, (size[0]//2, size[1]//2), radius)
@@ -164,8 +179,8 @@ jarvis_ui_gif_path = os.path.join(script_dir, 'jarvis-ui.gif')
 print(f"Script directory: {script_dir}")
 print(f"Looking for JARVIS UI GIF at: {jarvis_ui_gif_path}")
 
-# Load only the main UI GIF
-ui_frame_surfaces = load_gif_safe(jarvis_ui_gif_path)
+# Load and resize to 1280x720 immediately to save 18GB+ of RAM
+ui_frame_surfaces = load_gif_safe(jarvis_ui_gif_path, target_size=(1280, 720))
 
 print(f"Loaded {len(ui_frame_surfaces)} UI frames")
 
@@ -206,7 +221,7 @@ TRACK_LOCK = threading.Lock()
 
 
 def fetch_track():
-    """Fetches the currently playing track info (Spotify/macOS only)."""
+    """Fetches the currently playing track info(Spotify/macOS only)."""
     global TRACK  # pylint: disable=global-statement
     try:
         system = platform.system()
@@ -219,10 +234,10 @@ def fetch_track():
                 new_track = ""
             else:
                 new_track = subprocess.check_output(
-                    """osascript -e 'tell application "Spotify"
-                    set t to current track
-                    return artist of t & " - " & name of t
-                    end tell'""",
+                    "osascript -e 'tell application \"Spotify\"\n"
+                    "set t to current track\n"
+                    "return artist of t & \" - \" & name of t\n"
+                    "end tell'",
                     shell=True, text=True
                 ).strip()
         else:
@@ -281,16 +296,71 @@ def update_gif_scale(gif_scale):
     return gif_scale
 
 
+def render_background():
+    """Renders the pure black background and ambient glow."""
+    screen.fill(BLACK)
+    glow_surface = pygame.Surface(
+        (screen_width, screen_height), pygame.SRCALPHA)
+    center_x, center_y = screen_width // 2, screen_height // 2
+
+    for radius in range(200, 50, -10):
+        alpha = max(0, int(20 * (200 - radius) / 150))
+        pygame.draw.circle(glow_surface, (*DARK_BLUE, alpha),
+                           (center_x, center_y), radius)
+    screen.blit(glow_surface, (0, 0))
+
+
+def render_ui_gif(frame_idx, gif_scale):
+    """Renders the audio-reactive JARVIS UI GIF."""
+    if not ui_frame_surfaces:
+        return
+    ui_frame = ui_frame_surfaces[frame_idx]
+    curr_w, curr_h = screen.get_size()
+    frame_w, frame_h = ui_frame.get_size()
+
+    base_scale = max(screen_width / frame_w, screen_height / frame_h)
+    audio_scale = 1.0 + (gif_scale - 1.0) * 0.02
+    final_scale = base_scale * audio_scale
+
+    scaled_w, scaled_h = int(frame_w * final_scale), int(frame_h * final_scale)
+    ui_scaled = pygame.transform.scale(
+        ui_frame, (scaled_w, scaled_h)).convert_alpha()
+    ui_rect = ui_scaled.get_rect(center=(curr_w // 2, curr_h // 2))
+    screen.blit(ui_scaled, ui_rect)
+
+
+def render_clock():
+    """Renders the modern clock and date display."""
+    now = datetime.datetime.now()
+    curr_time, date_str = now.strftime(
+        "%H:%M:%S"), now.strftime("%A, %B %d, %Y")
+    cx_val = screen.get_width() // 2
+
+    shadow = clock_shadow_font.render(curr_time, True, BLACK)
+    screen.blit(shadow, shadow.get_rect(center=(cx_val + 3, 103)))
+    time_surf = clock_font.render(curr_time, True, CYAN)
+    screen.blit(time_surf, time_surf.get_rect(center=(cx_val, 100)))
+
+    date_surf = pygame.font.SysFont(
+        "Arial", 24, bold=True).render(date_str, True, WHITE)
+    screen.blit(date_surf, date_surf.get_rect(center=(cx_val, 140)))
+
+
+def render_track():
+    """Renders the currently playing track info."""
+    with TRACK_LOCK:
+        current_track = TRACK
+    if current_track:
+        track_surf = track_font.render(f"🎵 {current_track}", True, LIGHT_CYAN)
+        screen.blit(track_surf, (30, screen.get_height() -
+                    track_surf.get_height() - 30))
+
+
 def main():
     """Main UI loop for the Jarvis Assistant."""
     global screen  # pylint: disable=global-statement
-    running = True
-    fullscreen = False
-    ui_frame_idx = 0
-    gif_scale = 1.0
-    clock = pygame.time.Clock()
-    track_update_ms = 3000
-    last_track_ms = 0
+    running, fullscreen, ui_frame_idx, gif_scale = True, False, 0, 1.0
+    clock, last_track_ms = pygame.time.Clock(), 0
 
     while running:
         running, fullscreen, screen = handle_events(
@@ -299,102 +369,20 @@ def main():
             break
 
         gif_scale = update_gif_scale(gif_scale)
-
-        # Update track info
         now_ms = pygame.time.get_ticks()
-        if now_ms - last_track_ms >= track_update_ms:
+        if now_ms - last_track_ms >= 3000:
             threading.Thread(target=fetch_track, daemon=True).start()
             last_track_ms = now_ms
 
-        # **PURE BLACK BACKGROUND with subtle glow effect**
-        screen.fill(BLACK)
-
-        # Add subtle background glow effect
-        glow_surface = pygame.Surface(
-            (screen.get_width(), screen.get_height()), pygame.SRCALPHA)
-        center_x, center_y = screen.get_width() // 2, screen.get_height() // 2
-
-        # Create radial gradient for ambient lighting
-        for radius in range(200, 50, -10):
-            alpha = max(0, int(20 * (200 - radius) / 150))
-            color = (*DARK_BLUE, alpha)
-            pygame.draw.circle(glow_surface, color,
-                               (center_x, center_y), radius)
-
-        screen.blit(glow_surface, (0, 0))
-
-        # Render the new JARVIS UI GIF - PROPERLY FITTED TO SCREEN
-        if ui_frame_surfaces:
-            ui_frame = ui_frame_surfaces[ui_frame_idx]
-
-            # Get current dimensions
-            curr_w, curr_h = screen.get_size()
-            frame_width, frame_height = ui_frame.get_size()
-
-            # Calculate scale to fit screen perfectly (stretch to fill)
-            scale_x = screen_width / frame_width
-            scale_y = screen_height / frame_height
-
-            # Use the larger scale to fill the entire screen
-            base_scale = max(scale_x, scale_y)
-
-            # Apply subtle audio-reactive scaling (much smaller range)
-            audio_scale_range = 0.02  # Very small range (2% max change)
-            audio_multiplier = 1.0 + (gif_scale - 1.0) * audio_scale_range
-            final_scale = base_scale * audio_multiplier
-
-            # Calculate final dimensions
-            scaled_width = int(frame_width * final_scale)
-            scaled_height = int(frame_height * final_scale)
-
-            # Scale the frame
-            ui_scaled = pygame.transform.scale(
-                ui_frame, (scaled_width, scaled_height)).convert_alpha()
-
-            # Center the UI on screen
-            ui_rect = ui_scaled.get_rect(
-                center=(curr_w // 2, curr_h // 2))
-            screen.blit(ui_scaled, ui_rect)
-
-        # MODERN CLOCK DISPLAY
-        now = datetime.datetime.now()
-        current_time = now.strftime("%H:%M:%S")
-        date_str = now.strftime("%A, %B %d, %Y")
-
-        # Time with drop shadow effect
-        time_shadow = clock_shadow_font.render(current_time, True, BLACK)
-        time_shadow_rect = time_shadow.get_rect(
-            center=(screen.get_width() // 2 + 3, 103))
-        screen.blit(time_shadow, time_shadow_rect)
-
-        time_surface = clock_font.render(current_time, True, CYAN)
-        time_rect = time_surface.get_rect(
-            center=(screen.get_width() // 2, 100))
-        screen.blit(time_surface, time_rect)
-
-        # Date below time
-        date_surface = pygame.font.SysFont(
-            "Arial", 24, bold=True).render(date_str, True, WHITE)
-        date_rect = date_surface.get_rect(
-            center=(screen.get_width() // 2, 140))
-        screen.blit(date_surface, date_rect)
-
-        # Current track - bottom left with icon
-        with TRACK_LOCK:
-            current_track = TRACK
-        if current_track:
-            track_icon = "🎵 "
-            track_text = track_icon + current_track
-            track_surface = track_font.render(track_text, True, LIGHT_CYAN)
-            track_pos = (30, screen.get_height() -
-                         track_surface.get_height() - 30)
-            screen.blit(track_surface, track_pos)
+        render_background()
+        render_ui_gif(ui_frame_idx, gif_scale)
+        render_clock()
+        render_track()
 
         pygame.display.flip()
         ui_frame_idx = (ui_frame_idx + 1) % len(ui_frame_surfaces)
         clock.tick(30)
 
-    # Cleanup
     if STREAM:
         STREAM.stop_stream()
         STREAM.close()

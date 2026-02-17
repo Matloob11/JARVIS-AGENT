@@ -15,7 +15,11 @@ logging.basicConfig(
 )
 
 
-class MemoryExtractor:
+class MemoryLoop:
+    """
+    Handles the continuous cycle of memory processing and retrieval.
+    """
+
     def __init__(self):
         # last_conversation_hash is no longer needed with the new logic
         # Tracks how many messages have been saved.

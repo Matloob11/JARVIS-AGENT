@@ -26,6 +26,7 @@ safetensors
 accelerate
 playsound==1.2.2
 gTTS
+requests
 google-generativeai
 pywhatkit
 ddgs
@@ -35,3 +36,5 @@ psutil
 pycaw
 comtypes
 pygetwindow
+pypdf
+python-docx

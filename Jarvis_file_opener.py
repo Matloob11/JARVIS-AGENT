@@ -17,6 +17,9 @@ try:
     from livekit.agents import function_tool
 except ImportError:
     def function_tool(func):
+        """
+        Placeholder decorator for when livekit is not installed.
+        """
         return func
 
 # langchain import removed for stability
@@ -29,6 +32,15 @@ logger = logging.getLogger(__name__)
 
 
 async def focus_window(title_keyword: str) -> bool:
+    """
+    Attempts to find a window by a keyword in its title and bring it to the foreground.
+
+    Args:
+        title_keyword (str): A keyword to search for in window titles.
+
+    Returns:
+        bool: True if a matching window was found and focused, False otherwise.
+    """
     if not gw:
         logger.warning("⚠ pygetwindow")
         return False
@@ -48,6 +60,15 @@ async def focus_window(title_keyword: str) -> bool:
 
 
 async def index_files(search_dirs):
+    """
+    Recursively scans specified directories and indexes all files found.
+
+    Args:
+        search_dirs (list): A list of directory paths to scan.
+
+    Returns:
+        list: A list of dictionaries containing file metadata (name, path, type).
+    """
     file_index = []
     for base_dir in search_dirs:
         for root, _, files in os.walk(base_dir):
@@ -63,6 +84,16 @@ async def index_files(search_dirs):
 
 
 async def search_file(query, index):
+    """
+    Performs a fuzzy search to find the best matching file in the index.
+
+    Args:
+        query (str): The search term.
+        index (list): The list of indexed files.
+
+    Returns:
+        dict: The metadata of the best matching file, or None if no good match is found.
+    """
     choices = [item["name"] for item in index]
     if not choices:
         logger.warning("⚠ Match karne ke liye koi files nahi hain.")
@@ -78,6 +109,15 @@ async def search_file(query, index):
 
 
 async def open_file(item):
+    """
+    Opens a file using the host operating system's default application.
+
+    Args:
+        item (dict): The metadata dictionary for the file to open.
+
+    Returns:
+        str: A status message indicating success or failure.
+    """
     try:
         logger.info("📂 File khol rahe hain: %s", item['path'])
         if os.name == 'nt':
@@ -93,11 +133,37 @@ async def open_file(item):
 
 
 async def handle_command(command, index):
+    """
+    Handles a file opening command by searching for the file and then opening it.
+
+    Args:
+        command (str): The name of the file to search for.
+        index (list): The list of indexed files.
+
+    Returns:
+        str: A message indicating the outcome of the command (file opened or not found).
+    """
     item = await search_file(command, index)
     if item:
         return await open_file(item)
     logger.warning("❌ File nahi mili.")
     return "❌ File nahi mili."
+
+
+@function_tool
+async def play_video(file_path: str) -> str:
+    """
+    Opens and plays a video file.
+    """
+    return await play_file(file_path)
+
+
+@function_tool
+async def play_music(file_path: str) -> str:
+    """
+    Opens and plays a music file.
+    """
+    return await play_file(file_path)
 
 
 @function_tool

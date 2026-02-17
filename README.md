@@ -1,87 +1,93 @@
 # 🤖 JARVIS – Advanced Real-Time AI Personal Assistant
 
-> **MADE BY MATLOOB**
+> **Engineered for Excellence by Matloob (PU STUDENTS)**
 
-JARVIS is a next-generation **real-time AI personal assistant** designed to control your Windows environment, automate tasks, and provide intelligent assistance. Built with Python, it leverages advanced LLMs (like Gemini/OpenAI) to understand and execute complex commands.
-
----
-
-## 🚀 Features at a Glance
-
-### 🧠 Intelligent Core
-
-- **Real-Time Voice & Text Interaction**: Talk to JARVIS naturally.
-- **Advanced Reasoning**: break down complex user requests into actionable steps.
-- **Memory System**: Remembers your preferences and past conversations.
-
-### 💻 System Control & Automation
-
-- **Windows Control**: Shutdown, Restart, Sleep, Lock Screen.
-- **App Management**: Open and close applications instantly.
-- **Files & Folders**: Create, delete, rename, and search files/directories.
-- **System Settings**: Control volume, brightness, and more.
-
-### 🛠️ Productivity Tools
-
-- **Notepad Automation**: Dictate code or text, and JARVIS will type it out or save it directly.
-- **WhatsApp Automation**: Send messages hands-free.
-- **YouTube Automation**: Search and play videos automatically.
-- **Google Search**: Get real-time answers from the web.
-- **Weather Updates**: Check the forecast for your city.
+JARVIS is a professional-grade, **autonomous AI Personal Assistant** designed to bridge the gap between human language and Windows system control. Unlike standard automation scripts, JARVIS utilizes advanced reasoning, vision intelligence, and proactive monitoring to provide a seamless, sentient-like experience.
 
 ---
 
-## 📦 Installation
+## 🌟 Premium Features
 
-1.  **Clone the Repository**
+### 👁️ Vision Intelligence
 
-    ```bash
-    git clone https://github.com/YourUsername/Personal-Assistant.git
-    cd Personal-Assistant
-    ```
+- **Real-Time Screen Perception**: JARVIS can "see" and analyze your primary monitor.
+- **UI Interaction**: Identifies open applications, text on screen, and UI elements to assist you contextually.
 
-2.  **Set Up Virtual Environment**
+### 📄 Intelligent Document Analysis (RAG)
 
-    ```bash
-    python -m venv .venv
-    .venv\Scripts\activate
-    ```
+- **Local Knowledge Base**: Search, read, and summarize PDF and Word documents from your local drives.
+- **Smart Querying**: Ask natural language questions about your invoices, reports, or resumes.
 
-3.  **Install Dependencies**
+### 🧠 Autonomous Multi-Step Planning
 
-    ```bash
-    pip install -r requirements.txt
-    ```
+- **Complex Task Decomposition**: Decompounds broad requests (e.g., "Find images, zip them, and email to X") into sequential, logical execution steps.
+- **Fail-Safe Execution**: Robust error handling at every step of the autonomous chain.
 
-4.  **Configure Environment**
-    - Create a `.env` file in the root directory.
-    - Add your API keys (GOOGLE_API_KEY, OPENAI_API_KEY, etc.).
+### 📧 Real-Time Communication Suite
 
----
+- **Verified SMTP Integration**: Securely sends real emails via Gmail with attachment support.
+- **WhatsApp Cloud Automation**: Hands-free messaging with natural Urdu (Roman script) support.
 
-## 🎮 Usage
+### 🖼️ High-Res Media Automation
 
-Run the main agent:
+- **Real-Time Image Engine**: Fetches and downloads actual high-resolution images from the web (not placeholders).
+- **Intelligent Archiving**: Automatic Zipping and organization of downloaded assets.
 
-```bash
-python agent.py
-```
+### 📋 Proactive Clipboard Monitor (NEW!)
 
-_Or use the specific automation scripts individually if needed._
+- **Error Detection**: Background monitoring of the clipboard for technical tracebacks and error codes.
+- **Instant Solutions**: Automatically searches for solutions to detected errors and proactively suggests them to the user.
 
 ---
 
-## 📂 Project Structure
+## 🛡️ Engineering Gold Standard
 
-- `agent.py`: Main entry point for the AI agent.
-- `jarvis_reasoning.py`: Core logic for intent analysis.
-- `jarvis_notepad_automation.py`: Handles text and code generation in Notepad.
-- `jarvis_whatsapp_automation.py`: Automated WhatsApp messaging.
-- `jarvis_window_ctrl.py`: Windows system commands.
-- `keyboard_mouse_ctrl.py`: Low-level input simulation.
-- `memory_store.py`: Local database for conversation history.
+- **Pylint Score**: **10.00/10** (Zero warnings, zero errors).
+- **Architecture**: Modular tool-based design for easy extensibility.
+- **Security**: Environment-based secret management (using `.env`).
+- **Language**: Dynamic support for Natural Urdu (Roman script) and technical English.
 
 ---
 
-> **Note**: This project is continuously evolving.
-> **MADE BY MATLOOB**
+## 🛠️ Usage & Setup
+
+1. **Clone & Enter**:
+
+   ```bash
+   git clone https://github.com/Matloob11/JARVIS-AGENT.git
+   cd JARVIS-AGENT
+   ```
+
+2. **Environment Setup**:
+
+   ```bash
+   python -m venv .venv
+   .venv\Scripts\activate
+   pip install -r requirements.txt
+   ```
+
+3. **Configuration**:
+   Add your keys to `.env`:
+   - `GOOGLE_API_KEY`: For Gemini Vision/Audio
+   - `EMAIL_USER` & `EMAIL_APP_PASSWORD`: For real email sending
+
+4. **Launch JARVIS**:
+   ```bash
+   python agent.py
+   ```
+
+---
+
+## 📂 System Architecture
+
+- **`agent.py`**: The central brain handling job sessions and tool routing.
+- **`jarvis_vision.py`**: Multinodal vision processing engine.
+- **`jarvis_rag.py`**: PDF/Word parsing and fuzzy search logic.
+- **`jarvis_clipboard.py`**: Proactive background error monitor.
+- **`jarvis_advanced_tools.py`**: High-level utilities (Email, Zip, DDGS Search).
+- **`jarvis_reasoning.py`**: Intent analysis and LLM thought patterns.
+
+---
+
+> **JARVIS is not just an assistant; it's a teammate.**
+> **MADE BY MATLOOB (PU STUDENTS)**

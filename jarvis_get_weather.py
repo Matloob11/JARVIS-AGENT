@@ -44,7 +44,7 @@ async def get_weather(city: str = "Lahore") -> str:
         return msg
 
     # If no city provided or empty, detect city
-    if not city or city.strip() == "":
+    if not city or not city.strip():
         city = await get_current_city()
         logger.info("No city provided, detected city: %s", city)
 

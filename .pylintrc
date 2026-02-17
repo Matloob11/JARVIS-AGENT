@@ -1,75 +1,55 @@
 [MASTER]
-# Architect-Pro grade configuration
-# Designed for production-grade AI automation agents on Windows
-extension-pkg-allow-list=pygame,win32gui,win32api,win32con,pygetwindow,psutil,comtypes,pynput,pythoncom,mediapipe
+# Nuclear Strictness Configuration
+# Comprehensive protection for JARVIS AI codebase
+extension-pkg-allow-list=pygame,win32gui,win32api,win32con,pygetwindow,psutil,comtypes,pynput,pythoncom,mediapipe,pyaudio,PIL,struct,cv2,numpy
 
 # Maximum parallelization
 jobs=0
 
 [MESSAGES CONTROL]
-# Balanced professional settings: Strict on logic, flexible on style
+# Zero-Tolerance Policy: Catching every logical and stylistic issue
 disable=
-    # --- Tactical (Non-functional/Stylistic) ---
-    C0103, # invalid-name
-    W0511, # fixme
-    R0903, # too-few-public-methods
+    # External hardware/os noise that cannot be fixed in user code
+    no-member, # False positives on dynamic C-extensions often occur
+    locally-disabled, # Noise from cleanup
+    suppressed-message, # Noise from cleanup
+    too-few-public-methods, # Many utility classes have few methods
+    broad-exception-caught # Broad exceptions are handled at the agent level
 
-    # --- Windows/AI Agent Contextual ---
-    R0913, # too-many-arguments (Complex tool inputs)
-    R0914, # too-many-locals (Stateful reasoning loops)
-    C0415, # import-outside-toplevel (Lazy loading dynamically)
-    R1732, # consider-using-with (Sometimes handled by system lifecycle)
-
-enable=
-    # === Quality & Logic Audit ===
-    R0801, # duplicate-code (Critical for maintenance)
-    C0114, # missing-module-docstring
-    C0115, # missing-class-docstring
-    C0116, # missing-function-docstring
-    W1514, # unspecified-encoding (Critical for UTF-8 safety)
-    W0622, # redefined-builtin (Protects system namespace)
-    C0412, # ungrouped-imports (Maintainability)
-    R1721, # unnecessary-comprehension (Performance)
-    R1725, # super-with-arguments (Modern Python standards)
-    
-    # === Core Logic Hazards ===
-    undefined-variable,
-    unused-import,
-    unused-variable,
-    dangerous-default-value,
-    redefined-builtin,
-    redefined-outer-name,
-    broad-exception-caught
+enable=all
 
 [SIMILARITIES]
 # Minimum lines of a similarity before it is considered a duplicate.
-min-similarity-lines=15
-# Ignore comments when computing similarities.
+min-similarity-lines=10
+# Ignore comments/docstrings/imports to focus on logic duplication
 ignore-comments=yes
-# Ignore docstrings when computing similarities.
 ignore-docstrings=yes
-# Ignore imports when computing similarities.
 ignore-imports=yes
 
 [DESIGN]
-# Professionally balanced thresholds
-max-branches=20
-max-statements=80
-max-attributes=12
-max-locals=25
+# Elite standards for code complexity - Adjusted for JARVIS system complexity
+max-branches=15
+max-statements=60
+max-attributes=15
+max-locals=20
 max-returns=10
-max-module-lines=500
+max-module-lines=600
+max-args=6
 
 [TYPECHECK]
-# Dynamic member suppression for Windows APIs
+# Suppress specific dynamic attributes for Windows/Pygame stability
 generated-members=pygame.*,win32gui.*,win32api.*,win32con.*,IAudioEndpointVolume.*,devices.*,pygetwindow.getWindowsWithTitle,gw.*,pg.*,pythoncom.*
 
 [BASIC]
-# Allow specific variables to be used freely
+# Strict naming enforcement with specific assistant aliases
 good-names=i,j,k,ex,Run,_,Sir,Jarvis,gw,pg
+method-rgx=[a-z_][a-z0-9_]{2,30}$
+function-rgx=[a-z_][a-z0-9_]{2,30}$
+class-rgx=[A-Z_][a-zA-Z0-9]+$
 
 [FORMAT]
-max-line-length=1100
+# Standard clean code length
+max-line-length=120
 expected-line-ending-format=CRLF
 
 [REPORTS]

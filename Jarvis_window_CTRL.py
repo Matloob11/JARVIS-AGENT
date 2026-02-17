@@ -9,11 +9,13 @@ Also provides system-level controls like shutdown, restart, and sleep.
 import asyncio
 import logging
 import os
+import re
 import subprocess
 import sys
-import webbrowser
 
 from fuzzywuzzy import process
+from jarvis_whatsapp_automation import whatsapp_bot
+from keyboard_mouse_ctrl import type_text_tool
 
 try:
     from livekit.agents import function_tool
@@ -25,16 +27,17 @@ except ImportError:
         return func
 
 try:
-    import win32gui as win32_gui
-    import win32con as win32_con
+    # pylint: disable=invalid-name
+    import win32gui
+    import win32con
     import pyautogui as pg
 except ImportError:
-    win32_gui = None
-    win32_con = None
+    win32gui = None
+    win32con = None
     pg = None
 except Exception:  # pylint: disable=broad-exception-caught
-    win32_gui = None
-    win32_con = None
+    win32gui = None
+    win32con = None
     pg = None
 
 try:
@@ -44,9 +47,6 @@ except ImportError:
     gw = None
     get_windows = None
 
-
-from keyboard_mouse_ctrl import type_text_tool
-from jarvis_whatsapp_automation import whatsapp_bot
 
 # ===================== LOGGER ===================== #
 sys.stdout.reconfigure(encoding="utf-8")
@@ -125,15 +125,16 @@ def normalize_command(text: str) -> str:
         "open", "opening", "opened", "run", "launch", "start",
         "kholo", "khol", "karo", "chalao", "chalana",
         "aur", "usmein", "likh", "do", "hello", "jarvis", "what", "are", "you", "doing",
-        "browser", "app", "application"
+        "browser", "app", "application", "please", "zara"
     ]
     text = text.lower()
-    for word in remove_words:
-        text = text.replace(word, "")
 
-    # Return the full cleaned text instead of just the first word
-    # This allows matching multi-word apps like "microsoft edge" or "control panel"
-    return text.strip()
+    # Use regex with word boundaries to avoid partial word matches (e.g., 'what' in 'whatsapp')
+    pattern = r'\b(' + '|'.join(map(re.escape, remove_words)) + r')\b'
+    # Replace with space instead of empty to keep words separate
+    text = re.sub(pattern, " ", text)
+
+    return " ".join(text.split()).strip()
 
 
 async def focus_window(target_title: str):
@@ -165,8 +166,12 @@ def fuzzy_match_app(app_name: str) -> str:
 # ===================== OPEN APP ===================== #
 
 
-@function_tool(name="open")
+@function_tool
 async def open_app(full_command: str) -> str:
+    """
+    Opens a desktop application or URL based on the user's voice command.
+    Uses fuzzy matching to identify the best application from the APP_MAPPINGS list.
+    """
     try:
         clean = normalize_command(full_command)
         matched_key = fuzzy_match_app(clean)
@@ -190,29 +195,17 @@ async def open_app(full_command: str) -> str:
         elif app.startswith("whatsapp://"):
             if app:
                 os.startfile(app)
-        # 🎯 Focus
-        title = FOCUS_TITLES.get(matched_key)
-        if title:
-            await focus_window(title)
-
-        # ✍️ Check for writing
+        # ✍️ Parse writing action
         write_text = None
         if "write" in full_command.lower():
-            parts = full_command.lower().split("write", 1)
-            if len(parts) > 1:
-                write_text = parts[1].strip()
-        elif "likh" in full_command:
-            parts = full_command.split("likh", 1)
-            if len(parts) > 1:
-                write_text = parts[1].strip()
-                # Remove "do" if present
-                if write_text.startswith("do "):
-                    write_text = write_text[3:].strip()
+            write_text = full_command.lower().split("write", 1)[1].strip()
+        elif "likh" in (low_cmd := full_command.lower()) and "likh" in low_cmd:
+            write_text = low_cmd.split("likh", 1)[1].strip()
+            if write_text.startswith("do "):
+                write_text = write_text[3:].strip()
 
         if write_text:
-            await asyncio.sleep(2)  # Wait for app to open
-            result = await type_text_tool(write_text)
-            return f"🚀 {matched_key} khol diya gaya hai aur {result}"
+            return await _handle_write_after_open(matched_key, write_text)
 
         return f"🚀 {matched_key} khol diya gaya hai"
 
@@ -221,14 +214,22 @@ async def open_app(full_command: str) -> str:
         return f"❌ App open nahi ho paaya: {e}"
 
 
+async def _handle_write_after_open(matched_key: str, write_text: str) -> str:
+    """
+    Helper to handle typing text after opening an app.
+    Wait for the app to initialize before sending keystrokes.
+    """
+    await asyncio.sleep(2)  # Wait for app to open
+    result = await type_text_tool(write_text)
+    return f"🚀 {matched_key} khol diya gaya hai aur {result}"
+
+
 @function_tool
 async def save_notepad(file_path: str = r"D:\jarvis_notes.txt") -> str:
     """
     Saves the content of an open Notepad window.
     """
     try:
-        # Use local import rename to avoid shadowing global gw
-        from pygetwindow import getWindowsWithTitle as get_windows
         # Try to find Notepad window
         notepad_windows = list(get_windows('Notepad'))
         if not notepad_windows:
@@ -273,7 +274,7 @@ async def open_notepad_file(file_path: str) -> str:
         return f"❌ File nahi mili: {file_path}"
 
     try:
-        # Use full path to notepad if possible
+        # pylint: disable=consider-using-with
         subprocess.Popen([r"C:\Windows\System32\notepad.exe", file_path])
         return f"📂 {file_path} ko Notepad mein open kar diya gaya hai."
     except Exception as e:  # pylint: disable=broad-exception-caught
@@ -296,6 +297,10 @@ async def close(window_name: str) -> str:
     if "whatsapp" in window_name:
         if await whatsapp_bot.close_whatsapp():
             return "🗑️ WhatsApp band kar diya gaya hai"
+
+    if "notepad" in window_name:
+        os.system("taskkill /f /im notepad.exe")
+        return "🗑️ Notepad force close kar diya gaya hai (Unsaved changes lost)."
 
     # Fuzzy matching for common apps
     matched_key = fuzzy_match_app(window_name)
@@ -351,7 +356,7 @@ async def close(window_name: str) -> str:
 
     win32gui.EnumWindows(verify_handler, None)
 
-    if still_open_count == 0:
+    if not still_open_count:
         return f"🗑️ {original_name} band kar diya gaya hai aur maine verify kar liya hai."
 
     msg = (f"⚠ {original_name} ko band karne ki command bhej di gayi hai, "
@@ -414,6 +419,9 @@ async def maximize_window(window_name: str = "active") -> str:
 
 @function_tool
 async def folder_file(path: str) -> str:  # pylint: disable=unused-argument
+    """
+    Placeholder for folder/file management capabilities.
+    """
     return "❌ folder_file tool not implemented"
 
 

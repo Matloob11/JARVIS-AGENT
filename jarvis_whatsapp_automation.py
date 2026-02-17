@@ -2,36 +2,30 @@
 Jarvis WhatsApp Automation Module
 Handles sending messages and automating WhatsApp Desktop.
 """
+import os
 import time
-import subprocess
 import asyncio
 import logging
-import pyautogui
+import pyautogui as pg
 import pyperclip
+import pygetwindow as gw
 from livekit.agents import function_tool
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("JARVIS-WHATSAPP")
 
-# Configure pyautogui
-pyautogui.FAILSAFE = True
-
-# Try to import pygetwindow for window focus control
-try:
-    import pygetwindow as gw
-except ImportError:
-    gw = None
-    logger.warning(
-        "pygetwindow not installed. Window focus verification will be limited.")
-
 # WhatsApp App URI (Store App)
 WHATSAPP_URI = r"shell:AppsFolder\5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App"
 
 
 class WhatsAppAutomation:
+    """
+    Automates interactions with the WhatsApp Desktop application.
+    """
+
     def __init__(self):
-        pass
+        """Initialize the WhatsApp automation controller."""
 
     async def ensure_whatsapp_focus(self, timeout: int = 10):
         """
@@ -90,12 +84,11 @@ class WhatsAppAutomation:
         return focused
 
     async def open_whatsapp(self):
-        """Opens WhatsApp Desktop application"""
+        """Opens WhatsApp Desktop application using the Store URI"""
         try:
-            logger.info("Opening WhatsApp...")
-            # Use subprocess to start the store app
-            # pylint: disable=consider-using-with
-            subprocess.Popen('start whatsapp://', shell=True)
+            logger.info("Opening WhatsApp via URI: %s", WHATSAPP_URI)
+            # Use os.startfile for the most reliable way to open Store apps
+            os.startfile(WHATSAPP_URI)
             return True
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger.error("Failed to open WhatsApp: %s", e)
@@ -109,24 +102,24 @@ class WhatsAppAutomation:
             # Focus Search Bar (Ctrl + F is standard)
             # Sometimes WhatsApp needs a moment to catch input after focus
             await asyncio.sleep(1.0)
-            pyautogui.hotkey('ctrl', 'f')
+            pg.hotkey('ctrl', 'f')
             await asyncio.sleep(1.0)
 
             # Clear previous search if any (Ctrl+A, Backspace)
-            pyautogui.hotkey('ctrl', 'a')
-            pyautogui.press('backspace')
+            pg.hotkey('ctrl', 'a')
+            pg.press('backspace')
             await asyncio.sleep(0.5)
 
             # Type name
-            pyautogui.write(contact_name, interval=0.1)
+            pg.write(contact_name, interval=0.1)
             # Wait for search results (Increased significantly)
             await asyncio.sleep(3.0)
 
             # Select first result
             # Sometimes 'down' doesn't land correctly on first result if there's focus delay
-            pyautogui.press('down')
+            pg.press('down')
             await asyncio.sleep(0.8)
-            pyautogui.press('enter')
+            pg.press('enter')
             await asyncio.sleep(3.0)  # Wait for chat to open
 
             return True
@@ -143,16 +136,16 @@ class WhatsAppAutomation:
 
             # Type message
             # Handling newlines by splitting or just raw write?
-            # pyautogui.write handles \n as enter usually, but let's be safe.
+            # pg.write handles \n as enter usually, but let's be safe.
             # WhatsApp sends on Enter by default.
 
             # Use clipboard copy-paste for Unicode support
             pyperclip.copy(message)
             await asyncio.sleep(0.5)
-            pyautogui.hotkey('ctrl', 'v')
+            pg.hotkey('ctrl', 'v')
             await asyncio.sleep(1.0)  # Wait for paste
 
-            pyautogui.press('enter')  # Send
+            pg.press('enter')  # Send
             logger.info("Message sent.")
             return True
         except Exception as e:  # pylint: disable=broad-exception-caught
@@ -163,7 +156,7 @@ class WhatsAppAutomation:
         """Closes the active WhatsApp window"""
         try:
             logger.info("Closing WhatsApp...")
-            pyautogui.hotkey('alt', 'f4')
+            pg.hotkey('alt', 'f4')
             await asyncio.sleep(0.5)
             return True
         except Exception as e:  # pylint: disable=broad-exception-caught

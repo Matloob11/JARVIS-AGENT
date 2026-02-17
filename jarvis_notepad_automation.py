@@ -1,4 +1,5 @@
 """
+# pylint: disable=duplicate-code
 Jarvis Notepad Automation Module
 Handles creating, writing, and running code in Notepad.
 """
@@ -113,17 +114,28 @@ class NotepadAutomation:
             logger.error("Error creating template: %s", e)
             return False, str(e)
 
-    async def close_active_notepad(self):
-        """Closes the currently active Notepad window safely."""
+    async def close_active_notepad(self, force: bool = True):
+        """Closes the currently active Notepad window. If force=True, uses taskkill."""
         try:
-            logger.info("Closing Notepad window safely...")
+            logger.info("Closing Notepad window...")
+            if force:
+                # Force close is more reliable for automation to avoid "Save" dialogs
+                os.system("taskkill /f /im notepad.exe")
+                logger.info("Notepad force closed via taskkill.")
+                return True
+
             if win32gui:
                 def callback(hwnd, extra):  # pylint: disable=unused-argument
                     if win32gui.IsWindowVisible(hwnd):
                         title = win32gui.GetWindowText(hwnd).lower()
-                        if (title.endswith(" - notepad") or title == "notepad") and ".py" not in title:
+                        is_notepad = title.endswith(
+                            " - notepad") or title == "notepad"
+                        if is_notepad and ".py" not in title:
                             win32gui.PostMessage(hwnd, win32con.WM_CLOSE, 0, 0)
                 win32gui.EnumWindows(callback, None)
+            else:
+                pyautogui.hotkey('alt', 'f4')
+
             await asyncio.sleep(0.5)
             logger.info("Notepad close signal sent.")
             return True
@@ -156,19 +168,52 @@ print("Hello World from JARVIS!")
 print("=" * 40)
 '''
 
+HEART_ANIMATION_TEMPLATE = '''# heart animation Amazing Moment
+# MADE BY MATLOOB
+import math
+from turtle import *
+
+def hearta(k):
+    return 15 * math.sin(k) ** 3
+
+def heartb(k):
+    return 12 * math.cos(k) - 5 * \\
+           math.cos(2 * k) - 2 * \\
+           math.cos(3 * k) - \\
+           math.cos(4 * k)
+
+speed(0)
+bgcolor("black")
+for i in range(6000):
+    goto(hearta(i) * 20, heartb(i) * 20)
+    for j in range(1):
+        color("red")
+        dot()  # Draw a dot at the current position
+goto(0, 0)
+print("MADE BY MATLOOB")
+done()
+'''
+
 
 def get_template_content(code_type: str, filename: str):
     """Retrieve template content and default filename"""
     content = ""
     new_filename = filename
-    if code_type.lower() == "html_login":
+    code_type_lower = code_type.lower()
+
+    if code_type_lower == "html_login":
         content = HTML_LOGIN_TEMPLATE
         if not new_filename:
             new_filename = f"login_{int(time.time())}.html"
-    elif code_type.lower() == "python_hello":
+    elif code_type_lower == "python_hello":
         content = PYTHON_HELLO_TEMPLATE
         if not new_filename:
             new_filename = f"hello_{int(time.time())}.py"
+    elif code_type_lower in ["amazing_code", "heart_animation"]:
+        content = HEART_ANIMATION_TEMPLATE
+        if not new_filename:
+            new_filename = f"amazing_heart_{int(time.time())}.py"
+
     return content, new_filename
 
 

@@ -1,3 +1,7 @@
+"""
+# debug_system.py
+Diagnostic utility for checking system state and JARVIS component health.
+"""
 import os
 import win32gui
 from comtypes import COMError
@@ -8,7 +12,9 @@ load_dotenv()
 
 
 def list_windows():
-    """List all currently visible windows"""
+    """
+    Lists all currently visible windows for debugging window focus issues.
+    """
     print("\n--- Visible Windows ---")
     windows = []
 
@@ -23,7 +29,9 @@ def list_windows():
 
 
 def test_pycaw():
-    """Diagnostic for Pycaw volume control"""
+    """
+    Diagnostic for Pycaw volume control interface.
+    """
     print("\n--- Testing Pycaw (Direct CoreAudio) ---")
     try:
         AudioUtilities.GetSpeakers()
@@ -33,7 +41,9 @@ def test_pycaw():
 
 
 def check_edge():
-    """Verify Edge browser executable path"""
+    """
+    Verifies the installation path of the Microsoft Edge browser.
+    """
     print("\n--- Checking Edge Path ---")
     paths = [
         os.path.expandvars(

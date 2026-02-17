@@ -15,6 +15,10 @@ logger = logging.getLogger("JARVIS-YOUTUBE")
 
 
 class YouTubeAutomation:
+    """
+    Automates YouTube interactions in the browser.
+    """
+
     def __init__(self):
         pass
 

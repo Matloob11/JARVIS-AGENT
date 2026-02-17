@@ -45,6 +45,9 @@ class SafeController:
         }
 
     async def _get_volume_interface(self):
+        """
+        Retrieves the Windows IAudioEndpointVolume interface for low-level volume control.
+        """
         try:
             pythoncom.CoInitialize()
 
@@ -68,13 +71,22 @@ class SafeController:
                 return None
 
     def resolve_key(self, key):
+        """
+        Resolves a string key name to a pynput Key object or returns the original character.
+        """
         return self.special_keys.get(key.lower(), key)
 
     def log(self, action: str):
+        """
+        Logs a controller action to 'control_log.txt' with a timestamp.
+        """
         with open("control_log.txt", "a", encoding="utf-8") as f:
             f.write(f"{datetime.now()}: {action}\n")
 
     def activate(self, token=None):
+        """
+        Activates the controller if the provided token matches the environment token.
+        """
         env_token = os.getenv("CONTROLLER_TOKEN")
         if not env_token or token != env_token:
             self.log("Activation attempt failed.")
@@ -84,10 +96,16 @@ class SafeController:
         self.log("Controller auto-activated.")
 
     def deactivate(self):
+        """
+        Deactivates the controller, preventing further inputs.
+        """
         self.active = False
         self.log("Controller auto-deactivated.")
 
     def is_active(self):
+        """
+        Returns True if the controller is currently active.
+        """
         return self.active
 
     async def move_cursor(self, direction: str, distance: int = 100):
@@ -126,6 +144,9 @@ class SafeController:
         return f"🖱️ {button.capitalize()} click."
 
     async def scroll_cursor(self, direction: str, amount: int = 10):
+        """
+        Scrolls the mouse wheel in the specified direction.
+        """
         if not self.is_active():
             return "🛑 Controller is inactive."
         try:
@@ -140,6 +161,10 @@ class SafeController:
         return f"🖱️ Scrolled {direction}"
 
     async def type_text(self, text: str):
+        """
+        Simulates typing text character by character.
+        Uses unicode_escape to handle special characters correctly.
+        """
         if not self.is_active():
             return "🛑 Controller is inactive."
 
@@ -169,6 +194,9 @@ class SafeController:
         return f"⌨️ Typed: {text}"
 
     async def press_key(self, key: str):
+        """
+        Simulates a single key press.
+        """
         if not self.is_active():
             return "🛑 Controller is inactive."
         if key.lower() not in self.special_keys and key.lower() not in self.valid_keys:
@@ -184,6 +212,9 @@ class SafeController:
         return f"⌨️ Key '{key}' pressed."
 
     async def press_hotkey(self, keys: List[str]):
+        """
+        Simulates a hotkey combination (e.g., Ctrl+C).
+        """
         if not self.is_active():
             return "🛑 Controller is inactive."
         resolved = []
@@ -201,6 +232,9 @@ class SafeController:
         return f"⌨️ Hotkey {' + '.join(keys)} pressed."
 
     async def control_volume(self, action: str):
+        """
+        Controls system volume (up, down, mute, unmute).
+        """
         if not self.is_active():
             return "🛑 Controller is inactive."
 
@@ -231,6 +265,9 @@ class SafeController:
         return f"🔊 Volume {action}."
 
     async def set_volume_percentage(self, percentage: int):
+        """
+        Sets system volume to a specific percentage (0-100).
+        """
         if not self.is_active():
             return "🛑 Controller is inactive."
 
@@ -248,6 +285,9 @@ class SafeController:
             return f"❌ Volume set nahi ho paaya: {set_e}"
 
     async def swipe_gesture(self, direction: str):
+        """
+        Simulates a mouse swipe gesture in a given direction.
+        """
         if not self.is_active():
             return "🛑 Controller is inactive."
         screen_width, screen_height = pyautogui.size()
@@ -276,6 +316,9 @@ controller = SafeController()
 
 
 async def with_temporary_activation(fn, *args, **kwargs):
+    """
+    Activates the controller temporarily for the duration of a single function call.
+    """
     print(f"🔍 TEMP ACTIVATION: {fn.__name__} | args: {args}")
     controller.activate(os.getenv("CONTROLLER_TOKEN"))
     result = await fn(*args, **kwargs)

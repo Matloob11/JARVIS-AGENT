@@ -1,3 +1,9 @@
+"""
+# jarvis_reasoning.py
+Jarvis Reasoning Module
+
+Provides advanced intent analysis and smart response generation capabilities using AI.
+"""
 import logging
 import re
 import random
