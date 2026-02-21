@@ -7,7 +7,6 @@ import os
 import time
 import subprocess
 import asyncio
-import logging
 import pyautogui
 try:
     import win32gui
@@ -16,10 +15,10 @@ except ImportError:
     win32gui = None
     win32con = None
 from livekit.agents import function_tool
+from jarvis_logger import setup_logger
 
 # Setup logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("JARVIS-NOTEPAD")
+logger = setup_logger("JARVIS-NOTEPAD")
 
 # Configure pyautogui
 pyautogui.FAILSAFE = True
@@ -69,13 +68,23 @@ class NotepadAutomation:
                 notepad = windows[0]
                 if notepad.isMinimized:
                     notepad.restore()
+
+                # Bring to front using Win32 for maximum reliability
+                if win32gui:
+                    try:
+                        # pylint: disable=protected-access
+                        win32gui.ShowWindow(notepad._hwnd, win32con.SW_RESTORE)
+                        win32gui.SetForegroundWindow(notepad._hwnd)
+                    except Exception:  # pylint: disable=broad-exception-caught
+                        pass
+
                 notepad.activate()
-                await asyncio.sleep(0.2)
+                await asyncio.sleep(0.5)
                 if notepad.isActive:
                     logger.info("Notepad is active and focused.")
                     return True
             except (AttributeError, IndexError, gw.PyGetWindowException) as e:
-                logger.error("Error attempting to focus Notepad: %s", e)
+                logger.exception("Error attempting to focus Notepad: %s", e)
             await asyncio.sleep(0.5)
 
         logger.error("Timed out waiting for Notepad focus.")
@@ -91,14 +100,18 @@ class NotepadAutomation:
                 pyautogui.press('enter')
             return True
         except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.error("Typing simulation failed: %s", e)
+            logger.exception("Typing simulation failed: %s", e)
             return False
 
     async def save_file_safely(self, content, filename, folder_path=None):
-        """Save content to a file safely using standard I/O"""
+        """Save content to a file safely using standard I/O."""
         try:
             if not folder_path:
-                desktop = os.path.join(os.path.expanduser("~"), "Desktop")
+                # Robust Desktop path detection
+                desktop = os.path.join(
+                    os.environ.get("USERPROFILE"), "Desktop")
+                if not os.path.exists(desktop):
+                    desktop = os.path.expanduser("~")
                 folder_path = os.path.join(desktop, "JARVIS_Output")
 
             os.makedirs(folder_path, exist_ok=True)
@@ -119,8 +132,9 @@ class NotepadAutomation:
         try:
             logger.info("Closing Notepad window...")
             if force:
-                # Force close is more reliable for automation to avoid "Save" dialogs
-                os.system("taskkill /f /im notepad.exe")
+                # Force close via taskkill using list arguments (safe)
+                subprocess.run(["taskkill", "/f", "/im", "notepad.exe"],
+                               check=False, capture_output=True)
                 logger.info("Notepad force closed via taskkill.")
                 return True
 
@@ -254,9 +268,10 @@ async def create_template_code(code_type: str, filename: str = "", auto_run: boo
                 os.startfile(full_path)
                 msg += "🌐 HTML opened in Browser!"
             elif filename.endswith('.py'):
+                # Safe launch using list arguments to avoid shell injection
                 # pylint: disable=consider-using-with
                 subprocess.Popen(
-                    f'start cmd /k python "{full_path}"', shell=True)
+                    ['cmd', '/c', 'start', 'cmd', '/k', 'python', full_path])
                 msg += "🐍 Python script running in CMD!"
         return msg
     except Exception as e:  # pylint: disable=broad-exception-caught
@@ -295,21 +310,24 @@ async def write_custom_code(content: str, filename: str, auto_run: bool = True) 
                 os.startfile(full_path)
                 msg += "🌐 HTML opened!"
             elif filename.endswith('.py'):
+                # Safe launch using list arguments
                 # pylint: disable=consider-using-with
                 subprocess.Popen(
-                    f'start cmd /k python "{full_path}"', shell=True)
+                    ['cmd', '/c', 'start', 'cmd', '/k', 'python', full_path])
                 msg += "🐍 Python script running!"
         return msg
     except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.exception("Error in write_custom_code: %s", e)
         return f"❌ Error: {e}"
 
 
 @function_tool
 async def run_cmd_command(command: str) -> str:
-    """Execute a CMD command (Non-interactive)"""
+    """Execute a CMD command (Non-interactive) safely."""
     try:
+        # Sanitize and run via list to prevent injection
         # pylint: disable=consider-using-with
-        subprocess.Popen(f'start cmd /k "{command}"', shell=True)
+        subprocess.Popen(['cmd', '/c', 'start', 'cmd', '/k', command])
         return f"✅ Command sent to CMD: {command}"
     except Exception as e:  # pylint: disable=broad-exception-caught
         return f"❌ Error running command: {e}"

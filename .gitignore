@@ -23,3 +23,7 @@ pip-delete-this-directory.txt
 conversations/
 *.log
 control_log.txt
+Jarvis_Outputs/
+chroma_db/
+generated_images/
+KMS/

@@ -6,18 +6,20 @@ The main entry point for the AI Assistant. Handles job management, session initi
 and routing between different tool modules and the LLM.
 """
 
+import json
 import asyncio
+import socket
+from typing import Optional, Any
 import os
 import re
 from datetime import datetime
-
 from dotenv import load_dotenv
 from livekit import agents
 from livekit.agents import Agent, AgentSession, StopResponse
 from livekit.plugins import google
+from jarvis_logger import setup_logger
 
-# --- Tool & Prompt Modules ---
-from jarvis_file_opener import play_file
+from jarvis_file_opener import play_file, play_video, play_music
 from jarvis_get_weather import get_weather
 from jarvis_notepad_automation import (
     create_template_code, open_notepad_simple, run_cmd_command, write_custom_code
@@ -33,22 +35,48 @@ from jarvis_youtube_automation import automate_youtube
 from jarvis_window_ctrl import (
     close, create_folder, lock_screen, maximize_window, minimize_window,
     open_app, open_notepad_file, restart_system, save_notepad, shutdown_system,
-    sleep_system
+    sleep_system, folder_file, open_outputs_folder
 )
 from jarvis_vision import analyze_screen
 from jarvis_rag import ask_about_document
+from jarvis_image_gen import tool_generate_image
 from jarvis_advanced_tools import download_images, zip_files, send_email
+from jarvis_qr_gen import generate_qr_code
 from keyboard_mouse_ctrl import (
     control_volume_tool, mouse_click_tool, move_cursor_tool, press_hotkey_tool,
     press_key_tool, scroll_cursor_tool, set_volume_tool, swipe_gesture_tool,
     type_text_tool
 )
 from jarvis_clipboard import ClipboardMonitor
-
-# --- Memory System ---
+from jarvis_reminders import list_reminders, set_reminder, check_due_reminders
+from jarvis_researcher import perform_web_research
+from jarvis_self_healing import autonomous_self_repair
 from memory_store import ConversationMemory
 
+# Setup logging
+logger = setup_logger("JARVIS-AGENT")
+
+
+# Load environment variables early for global availability
 load_dotenv()
+
+
+# --- Tool & Prompt Modules ---
+
+# --- Memory System ---
+
+load_dotenv()
+
+
+def notify_ui(status: str):
+    """Sends a UDP packet to the UI to signal speaking status."""
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        message = json.dumps({"status": status})
+        sock.sendto(message.encode(), ("127.0.0.1", 5005))
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.error("Failed to notify UI: %s", e)
+
 
 # ==============================================================================
 # CONFIGURATION
@@ -61,11 +89,12 @@ class MemoryExtractor:
     Handles extracting and saving conversation context to memory store.
     """
 
-    def __init__(self, user_id: str = None):
+    def __init__(self, user_id: Optional[str] = None):
         """
         Initialize the memory extractor with a user ID.
         """
-        self.user_id = user_id or os.getenv("USER_NAME", "User")
+        effective_id = user_id or os.getenv("USER_NAME") or "User"
+        self.user_id: str = effective_id
         self.memory = ConversationMemory(self.user_id)
         self.conversation_count = 0
 
@@ -92,14 +121,14 @@ class MemoryExtractor:
                     }
 
                     # Save to memory
-                    success = self.memory.save_conversation(conversation_data)
+                    success = await self.memory.save_conversation(conversation_data)
                     if success:
-                        print(f"💾 Memory saved: {role} message")
+                        logger.info("💾 Memory saved: %s message", role)
 
                 self.conversation_count = len(chat_ctx)
 
         except Exception as e:  # pylint: disable=broad-exception-caught
-            print(f"❌ Memory extraction error: {e}")
+            logger.exception("❌ Memory extraction error: %s", e)
 
     def clear_context(self):
         """Placeholder to satisfy pylint R0903 (too-few-public-methods)."""
@@ -111,7 +140,7 @@ class BrainAssistant(Agent):
     Enhanced Assistant with reasoning capabilities and integrated tool suite.
     """
 
-    def __init__(self, chat_ctx, current_date: str = None, current_city: str = None) -> None:
+    def __init__(self, chat_ctx: Any, current_date: Optional[str] = None, current_city: Optional[str] = None) -> None:
         """
         Initialize the BRAIN assistant with context, LLM, and tools.
         """
@@ -125,11 +154,11 @@ class BrainAssistant(Agent):
 
         # Initialize memory and reasoning
         self.memory_extractor = MemoryExtractor()
-        self.conversation_history = []
+        self.conversation_history: list[dict] = []
         self._wake_word_mode = True  # Default to True as per user request
 
         @agents.function_tool
-        def set_wake_word_mode(active: bool) -> str:
+        def set_wake_word_mode(active: bool) -> Any:
             """
             Toggle the strict wake word enforcement mode.
             If active is True, Jarvis will only respond when called by name.
@@ -159,6 +188,8 @@ class BrainAssistant(Agent):
                 sleep_system,
                 lock_screen,
                 create_folder,
+                folder_file,
+                open_outputs_folder,
                 open_app,
                 close,
                 minimize_window,
@@ -166,6 +197,8 @@ class BrainAssistant(Agent):
                 save_notepad,
                 open_notepad_file,
                 play_file,
+                play_video,
+                play_music,
                 get_laptop_info,
                 automate_whatsapp,
                 # Keyboard & Mouse Control
@@ -185,6 +218,12 @@ class BrainAssistant(Agent):
                 download_images,
                 zip_files,
                 send_email,
+                set_reminder,
+                list_reminders,
+                perform_web_research,
+                autonomous_self_repair,
+                tool_generate_image,
+                generate_qr_code,
             ]
         )
 
@@ -197,15 +236,22 @@ class BrainAssistant(Agent):
             intent_analysis = await analyze_user_intent(user_input)
             print(f"🧠 Intent Analysis: {intent_analysis}")
 
-            # Get relevant memory context
-            memory_context = self.memory_extractor.memory.get_recent_context(
+            # Get relevant memory context (Recent history + Semantic Long-Term memory)
+            memory_context = await self.memory_extractor.memory.get_recent_context(
                 max_messages=10)
+
+            semantic_memory = await self.memory_extractor.memory.get_semantic_context(
+                query=user_input, n_results=3)
+
+            if semantic_memory:
+                print(f"🧠 Semantic Memory Found: {semantic_memory}")
 
             # Generate smart response with context
             smart_response = await generate_smart_response(
                 user_input,
                 intent_analysis,
-                memory_context
+                memory_context,
+                semantic_memory
             )
 
             return smart_response
@@ -236,21 +282,35 @@ class BrainAssistant(Agent):
 
         # If wake word mode is active, strictly filter and require name
         if self._wake_word_mode:
-            # Split by common sentence delimiters
-            sentences = re.split(r'[.!?;]|\n', text)
-            filtered_sentences = [s.strip()
-                                  for s in sentences if "jarvis" in s]
+            # Use regex to find "jarvis" as a whole word
+            pattern = r"\bjarvis\b"
 
-            if not filtered_sentences:
+            if not re.search(pattern, text, re.IGNORECASE):
                 print(
                     f"🤫 Strict Mode: IGNORING speech (No Wake Word): '{text}'")
                 # Explicitly stop the response and prevent further processing
                 raise StopResponse()
 
-            # Join filtered text back and replace message content
-            filtered_text = ". ".join(filtered_sentences)
-            print(f"👂 Filtered Wake Word Detected: '{filtered_text}'")
-            new_message.content = filtered_text
+            print(f"👂 Wake Word Detected in turn: '{text}'")
+            # We keep the whole turn if Jarvis was mentioned
+            new_message.content = text
+
+            # --- Advanced Reasoning Integration ---
+            try:
+                # Retrieve semantic memory for the filtered text
+                semantic_memory = await self.memory_extractor.memory.get_semantic_context(
+                    query=text, n_results=3)
+
+                if semantic_memory:
+                    logger.info(
+                        "🧠 Injecting Semantic Memory: %d gems found.", len(semantic_memory))
+                    # Inject as a system note so the LLM has context but user doesn't see it as a message
+                    turn_ctx.chat_ctx.append(
+                        role="assistant",
+                        content=f"[CONTEXT: Relevent past information: {'; '.join(semantic_memory)}]"
+                    )
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                logger.exception("⚠️ Reasoning injection error: %s", e)
 
             # Use super() but wrap in try-except for absolute certainty
             try:
@@ -270,13 +330,68 @@ class BrainAssistant(Agent):
 # ==============================================================================
 
 
+async def start_memory_loop(session):
+    """Continuous memory extraction loop."""
+    memory_extractor = MemoryExtractor()
+    while True:
+        try:
+            if session is None or not hasattr(session, 'history'):
+                await asyncio.sleep(5)
+                continue
+
+            history_items = session.history.items
+            filtered_history = []
+            for item in history_items:
+                role = getattr(item, 'role', '').lower()
+                raw_content = getattr(item, 'content', '')
+                if isinstance(raw_content, list):
+                    item_content = " ".join(
+                        [getattr(p, 'text', str(p)) for p in raw_content]).lower()
+                else:
+                    item_content = str(raw_content).lower()
+
+                if role == 'user':
+                    if "jarvis" in item_content:
+                        filtered_history.append(item)
+                else:
+                    filtered_history.append(item)
+
+            await memory_extractor.run(filtered_history)
+            await asyncio.sleep(5)
+        except asyncio.CancelledError:
+            print("Memory loop stopped.")
+            break
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            print(f"Memory loop error: {e}")
+            await asyncio.sleep(10)
+
+
+async def start_reminder_loop(session):
+    """Check for due reminders and trigger proactive responses."""
+    while True:
+        try:
+            # check_due_reminders is blocking (file IO), run in thread
+            due = await asyncio.to_thread(check_due_reminders)
+            for item in due:
+                print(f"🔔 Triggering proactive reminder: {item['message']}")
+                await session.response.create(
+                    instruction=f"Sir ko proactively yaad dilayein (Natural Urdu main): '{item['message']}'"
+                )
+            await asyncio.sleep(30)
+        except asyncio.CancelledError:
+            print("Reminder loop stopped.")
+            break
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            print(f"Reminder loop error: {e}")
+            await asyncio.sleep(60)
+
+
 async def entrypoint(ctx: agents.JobContext):
     """
-    Main job entrypoint. Initializes session, handles greetings, and starts memory loop.
+    Main job entrypoint. Initializes session, handles greetings, and starts loops.
     """
-    session = None
+    session: Optional[AgentSession] = None
     try:
-        # Detect environment context
         current_date = await get_formatted_datetime()
         current_city = await get_current_city()
 
@@ -289,102 +404,88 @@ async def entrypoint(ctx: agents.JobContext):
             room=ctx.room,
             agent=BrainAssistant(
                 chat_ctx=session.history,
-                current_date=current_date,
+                current_date=current_date.get("formatted"),
                 current_city=current_city
             ),
         )
 
-        # Brain mode activated log (Internal only)
-        print("🧠 Brain mode activated! System is quiet until 'Jarvis' is mentioned.")
+        # Register UI Notification Events
+        @session.on("agent_started_speaking")  # type: ignore
+        def _on_agent_speech_start():
+            notify_ui("START")
 
-        # Start continuous memory extraction loop
-        memory_extractor = MemoryExtractor()
+        @session.on("agent_stopped_speaking")  # type: ignore
+        def _on_agent_speech_stop():
+            notify_ui("STOP")
 
-        async def memory_loop():
-            while True:
-                try:
-                    if session is None or not hasattr(session, 'history'):
-                        await asyncio.sleep(5)
-                        continue
+        print("\n" + "="*50)
+        print("🚀 JARVIS SYSTEMS ONLINE")
+        print("🔱 Elite AI Assistant | Sir Matloob Edition")
+        print("🛡️ Security: Enabled | 🧠 Brain: Active")
+        print("🎤 Standing by for wake word: 'Jarvis'")
+        print("="*50 + "\n")
 
-                    history_items = session.history.items
+        memory_task = asyncio.create_task(start_memory_loop(session))
+        reminder_task = asyncio.create_task(start_reminder_loop(session))
 
-                    # Filter history to only include turns that have "Jarvis"
-                    # OR turns where the assistant replied (to keep context consistent)
-                    filtered_history = []
-                    for item in history_items:
-                        role = getattr(item, 'role', '').lower()
-                        # Properly extract text from content (handling parts)
-                        raw_content = getattr(item, 'content', '')
-                        if isinstance(raw_content, list):
-                            item_content = " ".join(
-                                [getattr(p, 'text', str(p)) for p in raw_content]).lower()
-                        else:
-                            item_content = str(raw_content).lower()
-
-                        if role == 'user':
-                            if "jarvis" in item_content:
-                                filtered_history.append(item)
-                        else:
-                            filtered_history.append(item)
-
-                    await memory_extractor.run(filtered_history)
-                    await asyncio.sleep(5)
-                except Exception as e:  # pylint: disable=broad-exception-caught
-                    print(f"Memory loop error: {e}")
-                    await asyncio.sleep(10)
-
-        memory_task = asyncio.create_task(memory_loop())
-
-        # Proactive Clipboard Monitor
         clip_monitor = ClipboardMonitor()
 
         async def on_clipboard_detected(solution):
-            """Callback for clipboard error detection."""
+            """Callback for clipboard error detection. Proactively triggers inference."""
             print(f"📋 Clipboard Detection: {solution}")
-            # Add to history so LLM knows about it
+            # pylint: disable=no-member
             session.history.append(
                 role="assistant",
                 content=f"[SYSTEM NOTIFICATION: CLIPBOARD ERROR DETECTED]\n{solution}"
             )
-            # Proactively speak/suggest if possible (Agent logic)
-            # For now, printing to console and appending to ctx is the safest method
-            # without disrupting active voice turns.
+            # Proactively trigger inference so JARVIS speaks the solution
+            try:
+                # pylint: disable=no-member
+                session.inference()
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                print(f"⚠️ Failed to trigger proactive inference: {e}")
 
         clip_task = asyncio.create_task(
             clip_monitor.start(on_clipboard_detected))
 
-        # Wait until the job is cancelled or room disconnected
         try:
             await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            print("🛑 Agent context cancelled. Cleaning up tasks...")
         finally:
-            memory_task.cancel()
-            clip_task.cancel()
+            # Ensure all background tasks are cancelled properly
+            tasks = [memory_task, clip_task, reminder_task]
+            for t in tasks:
+                t.cancel()
+
+            # Wait for tasks to finish with a timeout to avoid hanging
             try:
-                await asyncio.gather(memory_task, clip_task, return_exceptions=True)
-            except asyncio.CancelledError:
-                pass
+                await asyncio.wait(tasks, timeout=3.0)
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                print(f"⚠️ Error during task wait: {e}")
+
+            # Close clip monitor explicitly if it has a stop method
+            if hasattr(clip_monitor, 'stop'):
+                clip_monitor.stop()
 
     except (asyncio.CancelledError, KeyboardInterrupt):
-        pass
+        print("🛑 Received shutdown signal.")
     except Exception as exc:  # pylint: disable=broad-exception-caught
         print(f"[agent.entrypoint] Exception: {exc}")
     finally:
         if session:
             try:
-                # Check if session is actually still running
-                # session.stop() can error if the loop is already closing
-                await session.stop()
-            except Exception:  # pylint: disable=broad-exception-caught
-                pass
+                # Add check to see if loop is still running before stopping session
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    await session.stop()  # type: ignore # pylint: disable=no-member
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                print(f"⚠️ Session stop error: {e}")
+
 
 # ==============================================================================
 # MAIN RUNNER
 # ==============================================================================
 if __name__ == "__main__":
-    try:
-        # pylint: disable=unexpected-keyword-arg, no-value-for-parameter
-        opts = agents.WorkerOptions(entrypoint_fnc=entrypoint)
-    except TypeError:
-        opts = agents.WorkerOptions(entrypoint=entrypoint)
+    opts = agents.WorkerOptions(entrypoint_fnc=entrypoint)
     agents.cli.run_app(opts)

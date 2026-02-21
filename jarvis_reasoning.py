@@ -4,18 +4,17 @@ Jarvis Reasoning Module
 
 Provides advanced intent analysis and smart response generation capabilities using AI.
 """
-import logging
 import re
 import random
 from datetime import datetime
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
+from jarvis_logger import setup_logger
 
 # Setup logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("JARVIS-REASONING")
+logger = setup_logger("JARVIS-REASONING")
 
 
-class IntentAnalyzer:
+class IntentAnalyzer:  # pylint: disable=too-few-public-methods
     """Advanced intent analysis for user queries"""
 
     def __init__(self):
@@ -73,7 +72,7 @@ class IntentAnalyzer:
 
         # Determine primary intent
         primary_intent = "general" if not detected_intents else max(
-            confidence_scores, key=confidence_scores.get)
+            confidence_scores, key=lambda k: confidence_scores[k])
 
         return {
             "primary_intent": primary_intent,
@@ -85,7 +84,7 @@ class IntentAnalyzer:
         }
 
 
-class ContextAnalyzer:
+class ContextAnalyzer:  # pylint: disable=too-few-public-methods
     """Analyze conversation context and history"""
 
     def __init__(self):
@@ -138,7 +137,7 @@ class ContextAnalyzer:
         return context_info
 
 
-class ResponseGenerator:
+class ResponseGenerator:  # pylint: disable=too-few-public-methods
     """Generate intelligent responses based on analysis"""
 
     def __init__(self):
@@ -229,7 +228,7 @@ async def analyze_user_intent(user_input: str) -> Dict[str, Any]:
         return intent_result
 
     except Exception as e:  # pylint: disable=broad-exception-caught
-        logger.error("Error in intent analysis: %s", e)
+        logger.exception("Error in intent analysis: %s", e)
         return {
             "primary_intent": "general",
             "all_intents": [],
@@ -239,8 +238,8 @@ async def analyze_user_intent(user_input: str) -> Dict[str, Any]:
 
 
 async def generate_smart_response(user_input: str, intent_analysis: Dict,
-                                  memory_context: List) -> str:
-    """Generate intelligent response using reasoning"""
+                                  memory_context: List, semantic_memory: Optional[List[str]] = None) -> str:
+    """Generate intelligent response using reasoning and optional semantic memory"""
     try:
         logger.info("Generating smart response...")
 
@@ -263,16 +262,22 @@ async def generate_smart_response(user_input: str, intent_analysis: Dict,
 
         logger.info("Generated response with reasoning: %s", reasoning_info)
 
+        # If we have semantic memory, we can optionally mention it or use it to refine response
+        # (For now, the LLM in agent.py will see the context, but this function provides the base)
+        if semantic_memory:
+            logger.info("Semantic memories retrieved: %d",
+                        len(semantic_memory))
+
         return response
 
     except Exception as e:  # pylint: disable=broad-exception-caught
-        logger.error("Error in response generation: %s", e)
+        logger.exception("Error in response generation: %s", e)
         return ("Sir Matloob, main aapki baat samajh gaya hun. "
                 "Kaise madad kar sakta hun?")
 
 
 async def process_with_advanced_reasoning(user_input_str: str,
-                                          history: List = None) -> Dict[str, Any]:
+                                          history: Optional[List] = None) -> Dict[str, Any]:
     """Complete reasoning pipeline"""
     try:
         # Step 1: Intent Analysis

@@ -1,396 +1,436 @@
 """
-Jarvis UI Module
+Standalone JARVIS UI with System Metrics and Audio Reactivity
 """
-# pylint: disable=broad-exception-caught
 import os
-import sys
 import platform
 import struct
 import threading
 import datetime
 import subprocess
+import math
+import socket
+import json
 import pygame
 import pyaudio
+import psutil
 from PIL import Image
 
-script_dir = os.path.dirname(__file__)
+# Setup directories
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+TMP_DIR = os.path.join(SCRIPT_DIR, "tmp")
+os.makedirs(TMP_DIR, exist_ok=True)
+os.environ["TEMP"] = TMP_DIR
+os.environ["TMP"] = TMP_DIR
 
-# Set Temporary environment variables to project directory on Drive D
-# This ensures "presior" (temp/cache files) stays on Drive D
-tmp_dir = os.path.join(script_dir, "tmp")
-os.makedirs(tmp_dir, exist_ok=True)
-os.environ["TEMP"] = tmp_dir
-os.environ["TMP"] = tmp_dir
-
-# Global variables
-GRAB_ACTIVE = False
-
-# Color definitions
+# Global Constants
 CYAN = (0, 255, 255)
+DARK_CYAN = (0, 150, 150)
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
-LIGHT_CYAN = (0, 200, 200)
 DARK_BLUE = (10, 20, 40)
-DARK_GRAY = (40, 40, 40)
-HIGHLIGHT_ALPHA = 80
-
-# Initialize pygame
-pygame.init()
-
-# Cross-platform font handling
+DARK_GRAY = (30, 30, 30)
+GLOW_CYAN = (0, 255, 255, 50)
 
 
-def get_font_path():
-    """Returns the font path based on the operating system."""
-    system = platform.system()
-    if system == "Darwin":  # macOS
-        return "Orbitron-VariableFont_wght.ttf"
-    return None
+class JarvisUI:
+    """
+    Standalone JARVIS UI with System Metrics and Audio Reactivity.
+    Manages the graphical interface, animations, and system monitoring.
+    """
 
+    def __init__(self):
+        """Initialize the JARVIS UI components and start background threads."""
+        pygame.init()
+        self.screen_width, self.screen_height = 1280, 720
+        self.screen = pygame.display.set_mode(
+            (self.screen_width, self.screen_height), pygame.RESIZABLE)
+        pygame.display.set_caption("J.A.R.V.I.S")
+        self.clock = pygame.time.Clock()
+        self.running = True
+        self.fullscreen = False
 
-try:
-    font_path = get_font_path()
-    if font_path and os.path.exists(font_path):
-        clock_font = pygame.font.Font(font_path, 72)
-        clock_shadow_font = pygame.font.Font(font_path, 72)
-        description_font = pygame.font.Font(font_path, 16)
-        todo_font = pygame.font.Font(font_path, 28)
-    else:
-        # Fallback fonts
-        clock_font = pygame.font.SysFont("Arial", 72, bold=True)
-        clock_shadow_font = pygame.font.SysFont("Arial", 72, bold=True)
-        description_font = pygame.font.SysFont("Arial", 16)
-        todo_font = pygame.font.SysFont("Arial", 28)
-    track_font = pygame.font.SysFont("Arial", 26)
-except Exception as e:
-    print(f"Font initialization warning: {e}. Using default fonts.")
-    clock_font = pygame.font.SysFont(None, 72)
-    clock_shadow_font = pygame.font.SysFont(None, 72)
-    description_font = pygame.font.SysFont(None, 16)
-    todo_font = pygame.font.SysFont(None, 28)
-    track_font = pygame.font.SysFont(None, 26)
+        # Metrics and Status Group
+        self.metrics = {
+            'cpu': 0,
+            'ram': 0,
+            'track': "",
+            'data_stream': ["SYSTEM_INITIALIZED", "LINK_ESTABLISHED",
+                            "OS_LOADED_OK", "ENCRYPTION_ACTIVE", "CORE_SYNC_READY"],
+            'stream_timer': 0
+        }
 
-# Screen setup - Fixed size for consistent scaling
-screen_width, screen_height = 1280, 720  # Standard HD resolution
-screen = pygame.display.set_mode(
-    (screen_width, screen_height), pygame.RESIZABLE)
-pygame.display.set_caption('J.A.R.V.I.S')
+        # Animation Group
+        self.anim = {
+            'frame_idx': 0,
+            'gif_scale': 1.0,
+            'angle': 0,
+            'is_speaking': False,
+            'pulse_phase': 0.0,
+            'ui_frames': []
+        }
 
+        # Audio setup Group
+        self.audio = {
+            'available': False,
+            'stream': None,
+            'p_audio': None
+        }
 
-def load_image_safe(path, default_size=(200, 200)):
-    """Safely load images with fallback"""
-    if os.path.exists(path):
+        # IPC and Control
+        self.udp_port = 5005
+        self.stop_event = threading.Event()
+
+        self.init_audio()
+        threading.Thread(target=self.udp_listener, daemon=True).start()
+
+        # Load Resources
+        self.fonts = {}
+        self.load_fonts()
+        self.load_assets()
+
+        # Start metric update threads
+        threading.Thread(target=self.update_metrics_loop, daemon=True).start()
+        threading.Thread(target=self.update_track_loop, daemon=True).start()
+
+    def udp_listener(self):
+        """Listens for speech status from the agent."""
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.bind(("127.0.0.1", self.udp_port))
+        print(f"UDP Link established on port {self.udp_port}")
+
+        while not self.stop_event.is_set():
+            try:
+                data, _ = sock.recvfrom(1024)
+                message = json.loads(data.decode())
+                if message.get("status") == "START":
+                    self.anim['is_speaking'] = True
+                elif message.get("status") == "STOP":
+                    self.anim['is_speaking'] = False
+            except (json.JSONDecodeError, socket.error) as e:
+                print(f"IPC Error: {e}")
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                print(f"Unexpected IPC Error: {e}")
+
+    def load_fonts(self):
+        """Loads responsive fonts based on OS."""
         try:
-            img = pygame.image.load(path).convert_alpha()
-            return pygame.transform.scale(img, default_size)
-        except Exception:  # pylint: disable=broad-exception-caught
-            pass
-    surf = pygame.Surface(default_size)
-    surf.fill(CYAN)
-    return surf
+            # Try to find a techy font
+            tech_fonts = ["Orbitron", "Impact", "Segoe UI", "Arial"]
+            # Find the first available font
+            chosen_font = None
+            for font_name in tech_fonts:
+                try:
+                    pygame.font.SysFont(font_name, 10)  # Test if font exists
+                    chosen_font = font_name
+                    break
+                except (pygame.error, ImportError):
+                    continue
 
+            if not chosen_font:
+                chosen_font = None  # Fallback to default SysFont
 
-def draw_rounded_rect(target_screen_ptr, color, rect, radius=15):
-    """Draws a rectangle with rounded corners on the given surface."""
-    try:
-        temp_surface = pygame.Surface(
-            (rect.width, rect.height), pygame.SRCALPHA)
-        pygame.draw.rect(temp_surface, color, (0, 0, rect.width,
-                         rect.height), border_radius=radius)
-        target_screen_ptr.blit(temp_surface, rect.topleft)
-    except Exception as e:  # pylint: disable=broad-exception-caught
-        # Assuming 'logger' is defined elsewhere or will be added.
-        # For now, a simple print can serve as a placeholder.
-        print(f"Error drawing rounded rect: {e}")
+            self.fonts = {
+                'clock': pygame.font.SysFont(chosen_font, 82, bold=True),
+                'date': pygame.font.SysFont(chosen_font, 24, bold=True),
+                'metrics': pygame.font.SysFont(chosen_font, 20),
+                'track': pygame.font.SysFont(chosen_font, 26, italic=True)
+            }
+        except (pygame.error, ImportError) as e:
+            print(f"Font loading error: {e}")
+            fallback = pygame.font.SysFont(None, 24)
+            self.fonts = {'clock': fallback, 'date': fallback,
+                          'metrics': fallback, 'track': fallback}
 
+    def load_assets(self):
+        """Loads the UI gif and other visual assets."""
+        gif_path = os.path.join(SCRIPT_DIR, 'jarvis-ui.gif')
+        self.anim['ui_frames'] = self.load_gif_safe(gif_path, (1280, 720))
 
-def draw_status_bar(target_screen_ptr):
-    """Draws a status bar at the bottom of the screen."""
-    status_rect_area = pygame.Rect(0, screen_height - 30, screen_width, 30)
-    draw_rounded_rect(target_screen_ptr, DARK_GRAY, status_rect_area, radius=5)
+    def load_gif_safe(self, path, target_size):
+        """Safely loads and resizes GIF frames."""
+        if not os.path.exists(path):
+            return self.create_fallback_frames(target_size)
+        try:
+            img = Image.open(path)
+            frames = []
+            for i in range(getattr(img, 'n_frames', 1)):
+                img.seek(i)
+                frame = img.copy().convert("RGBA").resize(
+                    target_size, Image.Resampling.LANCZOS)
+                pygame_surface = pygame.image.frombuffer(
+                    frame.tobytes(), frame.size, "RGBA")
+                frames.append(pygame_surface)
+            return frames
+        except (IOError, ValueError, pygame.error) as e:
+            print(f"GIF Load Error: {e}")
+            return self.create_fallback_frames(target_size)
 
-# Load GIFs safely with better error handling
-
-
-def load_gif_safe(gif_path, target_size=(1280, 720), fallback_frames=10):
-    """Safely loads a GIF file and resizes frames to save memory."""
-    print(f"Attempting to load GIF: {gif_path}")
-    print(f"File exists: {os.path.exists(gif_path)}")
-
-    if not os.path.exists(gif_path):
-        print(f"ERROR: GIF file not found at {gif_path}")
-        return create_fallback_frames(fallback_frames)
-
-    try:
-        # Load GIF using PIL
-        gif_image = Image.open(gif_path)
-        print(
-            f"GIF opened successfully. Size: {gif_image.size}, Frames: {gif_image.n_frames}")
-
+    def create_fallback_frames(self, size):
+        """Standard fallback animation."""
         frames = []
-        for frame_num in range(gif_image.n_frames):
-            gif_image.seek(frame_num)
-            # Convert to RGBA and RESIZE HERE to save memory early
-            frame = gif_image.copy().convert("RGBA")
-            if target_size:
-                frame = frame.resize(target_size, Image.Resampling.LANCZOS)
-
-            # Convert PIL image to pygame surface
-            mode = frame.mode
-            size = frame.size
-            data = frame.tobytes()
-
-            pygame_surface = pygame.image.frombuffer(data, size, mode)
-            frames.append(pygame_surface)
-
-        print(
-            f"Successfully loaded and resized {len(frames)} frames from {gif_path}")
+        for i in range(10):
+            surf = pygame.Surface(size, pygame.SRCALPHA)
+            pygame.draw.circle(
+                surf, CYAN, (size[0]//2, size[1]//2), 150 + int(20 * math.sin(i * 0.6)), 2)
+            frames.append(surf)
         return frames
 
-    except Exception as e:  # pylint: disable=broad-exception-caught
-        print(f"ERROR loading GIF {gif_path}: {str(e)}")
-        print(f"Exception type: {type(e).__name__}")
-        return create_fallback_frames(fallback_frames)
+    def init_audio(self):
+        """Initializes PyAudio stream."""
+        try:
+            self.audio['p_audio'] = pyaudio.PyAudio()
+            self.audio['stream'] = self.audio['p_audio'].open(
+                format=pyaudio.paInt16, channels=1, rate=44100,
+                input=True, frames_per_buffer=1024)
+            self.audio['available'] = True
+        except (pyaudio.PyAudioError, socket.error):  # pylint: disable=no-member
+            self.audio['available'] = False
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            print(f"Unexpected audio init error: {e}")
+            self.audio['available'] = False
 
+    def get_volume(self):
+        """Calculates volume from microphone."""
+        if not self.audio['available'] or not self.audio['stream']:
+            return 0
+        try:
+            data = self.audio['stream'].read(1024, exception_on_overflow=False)
+            count = len(data) // 2
+            shorts = struct.unpack(f"{count}h", data)
+            sum_squares = sum(s**2 for s in shorts)
+            return (sum_squares / count)**0.5
+        except (struct.error, pyaudio.PyAudioError, socket.error):  # pylint: disable=no-member
+            return 0
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            print(f"Unexpected volume error: {e}")
+            return 0
 
-def create_fallback_frames(num_frames=10):
-    """Creates animated fallback surfaces if GIF loading fails."""
-    frames = []
-    size = (1280, 720)
+    def update_metrics_loop(self):
+        """Updates CPU/RAM metrics periodically."""
+        while not self.stop_event.is_set():
+            self.metrics['cpu'] = psutil.cpu_percent(interval=1)
+            self.metrics['ram'] = psutil.virtual_memory().percent
 
-    for i in range(num_frames):
-        surf = pygame.Surface(size, pygame.SRCALPHA)
-
-        # Create pulsing animation
-        pulse = 0.5 + 0.5 * pygame.math.cos(i * 0.5)
-        radius = int(150 + 50 * pulse)
-
-        # Draw pulsing circle
-        pygame.draw.circle(surf, CYAN, (size[0]//2, size[1]//2), radius)
-
-        frames.append(surf)
-
-    return frames
-
-
-# Load the new JARVIS UI GIF
-jarvis_ui_gif_path = os.path.join(script_dir, 'jarvis-ui.gif')
-
-print(f"Script directory: {script_dir}")
-print(f"Looking for JARVIS UI GIF at: {jarvis_ui_gif_path}")
-
-# Load and resize to 1280x720 immediately to save 18GB+ of RAM
-ui_frame_surfaces = load_gif_safe(jarvis_ui_gif_path, target_size=(1280, 720))
-
-print(f"Loaded {len(ui_frame_surfaces)} UI frames")
-
-# PyAudio setup with error handling
-P_AUDIO = None
-STREAM = None
-
-
-def init_audio():
-    """Initializes the PyAudio input stream."""
-    global P_AUDIO, STREAM  # pylint: disable=global-statement
-    try:
-        P_AUDIO = pyaudio.PyAudio()
-        STREAM = P_AUDIO.open(format=pyaudio.paInt16, channels=1, rate=44100,
-                              input=True, frames_per_buffer=512)
-        return True
-    except Exception:  # pylint: disable=broad-exception-caught
-        print("Audio input not available, running without microphone")
-        return False
-
-
-AUDIO_AVAILABLE = init_audio()
-
-
-def get_volume(data):
-    """Calculates the RMS volume from raw audio data."""
-    if not data:
-        return 0
-    count = len(data) // 2
-    format_str = f"{count}h"
-    shorts = struct.unpack(format_str, data)
-    sum_squares = sum(s**2 for s in shorts)
-    return (sum_squares / count)**0.5
-
-
-TRACK = ""
-TRACK_LOCK = threading.Lock()
-
-
-def fetch_track():
-    """Fetches the currently playing track info(Spotify/macOS only)."""
-    global TRACK  # pylint: disable=global-statement
-    try:
-        system = platform.system()
-        if system == "Darwin":
-            running = subprocess.check_output(
-                'ps -ef | grep "MacOS/Spotify" | grep -v "grep" | wc -l',
-                shell=True, text=True
-            ).strip()
-            if running == "0":
-                new_track = ""
-            else:
-                new_track = subprocess.check_output(
-                    "osascript -e 'tell application \"Spotify\"\n"
-                    "set t to current track\n"
-                    "return artist of t & \" - \" & name of t\n"
-                    "end tell'",
-                    shell=True, text=True
-                ).strip()
-        else:
+    def update_track_loop(self):
+        """Updates currently playing track info."""
+        while not self.stop_event.is_set():
             new_track = ""
-    except Exception:  # pylint: disable=broad-exception-caught
-        new_track = ""
+            try:
+                system = platform.system()
+                if system == "Windows":
+                    # Placeholder for Windows track info.
+                    pass
+                elif system == "Darwin":
+                    # macOS logic from original file
+                    running = subprocess.check_output(
+                        'ps -ef | grep "MacOS/Spotify" | grep -v "grep" | wc -l',
+                        shell=True, text=True
+                    ).strip()
+                    if running != "0":
+                        new_track = subprocess.check_output(
+                            "osascript -e 'tell application \"Spotify\"\n"
+                            "set t to current track\n"
+                            "return artist of t & \" - \" & name of t\n"
+                            "end tell'",
+                            shell=True, text=True
+                        ).strip()
+            except (subprocess.SubprocessError, OSError):
+                new_track = ""
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                print(f"Unexpected track update error: {e}")
+                new_track = ""
 
-    with TRACK_LOCK:
-        TRACK = new_track
+            self.metrics['track'] = new_track
+            self.stop_event.wait(5)  # Wait for 5 seconds
 
+    def handle_events(self):
+        """Processes Pygame events like window resizing and exit commands."""
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_RETURN:
+                    self.fullscreen = not self.fullscreen
+                    if self.fullscreen:
+                        info = pygame.display.Info()
+                        self.screen = pygame.display.set_mode(
+                            (info.current_w, info.current_h), pygame.FULLSCREEN)
+                    else:
+                        self.screen = pygame.display.set_mode(
+                            (1280, 720), pygame.RESIZABLE)
+                    self.screen_width, self.screen_height = self.screen.get_size()
+                elif event.key == pygame.K_ESCAPE:
+                    self.running = False
+            elif event.type == pygame.VIDEORESIZE:
+                if not self.fullscreen:
+                    self.screen = pygame.display.set_mode(
+                        (event.w, event.h), pygame.RESIZABLE)
+                    self.screen_width, self.screen_height = event.w, event.h
 
-def toggle_fullscreen(win_ptr):  # pylint: disable=unused-argument
-    """Toggle between windowed and fullscreen mode"""
-    info = pygame.display.Info()
-    fullscreen_width, fullscreen_height = info.current_w, info.current_h
-    new_screen = pygame.display.set_mode(
-        (fullscreen_width, fullscreen_height), pygame.FULLSCREEN)
-    return new_screen
+    def draw_hud_elements(self):
+        """Draws decorative HUD circles and lines."""
+        cx, cy = self.screen_width // 2, self.screen_height // 2
+        self.anim['angle'] = (self.anim['angle'] + 2) % 360
 
+        # 1. Rotating Inner Ring (Dashed appearance)
+        rect_inner = pygame.Rect(0, 0, 450, 450)
+        rect_inner.center = (cx, cy)
+        for i in range(0, 360, 30):
+            start_angle = math.radians(self.anim['angle'] + i)
+            end_angle = math.radians(self.anim['angle'] + i + 15)
+            pygame.draw.arc(self.screen, DARK_CYAN, rect_inner,
+                            start_angle, end_angle, 2)
 
-def toggle_windowed(win_ptr):  # pylint: disable=unused-argument
-    """Return to windowed mode"""
-    new_screen = pygame.display.set_mode((1280, 720), pygame.RESIZABLE)
-    return new_screen
+        # 2. Outer Static HUD (Hexagonal pattern or corners)
+        margin = 30  # Define margin for this section
+        corner_len = 50
+        pygame.draw.lines(self.screen, DARK_CYAN, False, [
+                          # Top Left
+                          (margin, margin + corner_len), (margin, margin), (margin + corner_len, margin)], 2)
+        pygame.draw.lines(self.screen, DARK_CYAN, False, [(self.screen_width - margin, margin + corner_len), (
+            # Top Right
+            self.screen_width - margin, margin), (self.screen_width - margin - corner_len, margin)], 2)
 
+        # 3. Scanning line
+        scan_y = (pygame.time.get_ticks() // 15) % self.screen_height
+        scan_surf = pygame.Surface((self.screen_width, 1), pygame.SRCALPHA)
+        scan_surf.fill((0, 255, 255, 40))
+        self.screen.blit(scan_surf, (0, scan_y))
 
-def handle_events(running, fullscreen, ui_screen):
-    """Handles Pygame events for the UI loop."""
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            return False, fullscreen, ui_screen
-        if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_RETURN:
-                fullscreen = not fullscreen
-                if fullscreen:
-                    ui_screen = toggle_fullscreen(ui_screen)
-                else:
-                    ui_screen = toggle_windowed(ui_screen)
-            elif event.key == pygame.K_ESCAPE:
-                return False, fullscreen, ui_screen
-    return running, fullscreen, ui_screen
+    def draw_data_stream(self):
+        """Draws a 'scrolling' data stream in the bottom right."""
+        now = pygame.time.get_ticks()
+        if now - self.metrics['stream_timer'] > 2000:
+            new_log = f"LOG_{hex(now)[2:].upper()}: {hex(id(self))[2:].upper()} OK"
+            self.metrics['data_stream'].append(new_log)
+            if len(self.metrics['data_stream']) > 8:
+                self.metrics['data_stream'].pop(0)
+            self.metrics['stream_timer'] = now
 
+        for i, line in enumerate(self.metrics['data_stream']):
+            alpha = int(100 + 155 * (i / len(self.metrics['data_stream'])))
+            text_surf = self.fonts['metrics'].render(line, True, CYAN)
+            text_surf.set_alpha(alpha)
+            self.screen.blit(text_surf, (self.screen_width -
+                             250, self.screen_height - 250 + (i * 25)))
 
-def update_gif_scale(gif_scale):
-    """Updates the GIF scale factor based on audio volume."""
-    try:
-        if AUDIO_AVAILABLE and STREAM:
-            audio_data = STREAM.read(2048, exception_on_overflow=False)
-            volume = get_volume(audio_data)
-            scale_factor = 1 + min(volume / 5000, 0.05)
-            gif_scale = 0.95 * gif_scale + 0.05 * scale_factor
+    def draw_metrics(self):
+        """Draws CPU and RAM usage bars."""
+        margin = 30
+        bar_width = 150
+        bar_height = 10
+
+        # CPU
+        cpu_text = self.fonts['metrics'].render(
+            f"CPU: {self.metrics['cpu']}%", True, CYAN)
+        self.screen.blit(cpu_text, (margin, margin))
+        pygame.draw.rect(self.screen, DARK_GRAY,
+                         (margin, margin + 25, bar_width, bar_height))
+        pygame.draw.rect(self.screen, CYAN, (margin, margin + 25,
+                         int(bar_width * (self.metrics['cpu'] / 100)), bar_height))
+
+        # RAM
+        ram_text = self.fonts['metrics'].render(
+            f"RAM: {self.metrics['ram']}%", True, CYAN)
+        self.screen.blit(ram_text, (margin, margin + 50))
+        pygame.draw.rect(self.screen, DARK_GRAY,
+                         (margin, margin + 75, bar_width, bar_height))
+        pygame.draw.rect(self.screen, CYAN, (margin, margin + 75,
+                         int(bar_width * (self.metrics['ram'] / 100)), bar_height))
+
+    def draw_noise_layer(self):
+        """Adds subtle tech noise/grain."""
+        noise_surf = pygame.Surface(
+            (self.screen_width, self.screen_height), pygame.SRCALPHA)
+        for _ in range(200):
+            x = pygame.time.get_ticks() % self.screen_width
+            y = (pygame.time.get_ticks() * 1.5) % self.screen_height
+            pygame.draw.rect(noise_surf, (255, 255, 255, 10), (x, y, 1, 1))
+        self.screen.blit(noise_surf, (0, 0))
+
+    def render(self):
+        """Renders the entire UI frame by frame."""
+        self.screen.fill(BLACK)
+
+        # 1. Background Pulse/Glow
+        vol = self.get_volume()
+        # Only pulse with mic if JARVIS is speaking (Prevents constant vibration)
+        if self.anim['is_speaking']:
+            pulse = 1.0 + min(vol / 8000, 0.1)
         else:
-            gif_scale = gif_scale * 0.99 + 0.01 * 1.0
-    except Exception:  # pylint: disable=broad-exception-caught
-        gif_scale = gif_scale * 0.99 + 0.01 * 1.0
-    return gif_scale
+            pulse = 1.0
 
+        # 2. Main GIF UI
+        if self.anim['ui_frames']:
+            current_frame = self.anim['ui_frames'][self.anim['frame_idx']]
+            sw, sh = self.screen.get_size()
+            fw, fh = current_frame.get_size()
 
-def render_background():
-    """Renders the pure black background and ambient glow."""
-    screen.fill(BLACK)
-    glow_surface = pygame.Surface(
-        (screen_width, screen_height), pygame.SRCALPHA)
-    center_x, center_y = screen_width // 2, screen_height // 2
+            # Apply Speaking Animation (Zoom in/out)
+            zoom_effect = 1.0
+            if self.anim['is_speaking']:
+                self.anim['pulse_phase'] += 0.2  # Speed of zoom
+                zoom_effect = 1.0 + 0.05 * math.sin(self.anim['pulse_phase'])
+            else:
+                self.anim['pulse_phase'] = 0  # Reset phase when not speaking
 
-    for radius in range(200, 50, -10):
-        alpha = max(0, int(20 * (200 - radius) / 150))
-        pygame.draw.circle(glow_surface, (*DARK_BLUE, alpha),
-                           (center_x, center_y), radius)
-    screen.blit(glow_surface, (0, 0))
+            scale = max(sw/fw, sh/fh) * pulse * zoom_effect
+            scaled_frame = pygame.transform.smoothscale(
+                current_frame, (int(fw * scale), int(fh * scale)))
+            rect = scaled_frame.get_rect(center=(sw//2, sh//2))
+            self.screen.blit(scaled_frame, rect)
 
+        # 3. HUD and Effects
+        self.draw_hud_elements()
+        self.draw_metrics()
+        self.draw_data_stream()
+        self.draw_noise_layer()
 
-def render_ui_gif(frame_idx, gif_scale):
-    """Renders the audio-reactive JARVIS UI GIF."""
-    if not ui_frame_surfaces:
-        return
-    ui_frame = ui_frame_surfaces[frame_idx]
-    curr_w, curr_h = screen.get_size()
-    frame_w, frame_h = ui_frame.get_size()
+        # 4. Clock
+        now = datetime.datetime.now()
+        time_str = now.strftime("%H:%M:%S")
+        date_str = now.strftime("%A, %B %d")
 
-    base_scale = max(screen_width / frame_w, screen_height / frame_h)
-    audio_scale = 1.0 + (gif_scale - 1.0) * 0.02
-    final_scale = base_scale * audio_scale
+        time_surf = self.fonts['clock'].render(time_str, True, CYAN)
+        time_rect = time_surf.get_rect(center=(self.screen_width // 2, 100))
+        self.screen.blit(time_surf, time_rect)
 
-    scaled_w, scaled_h = int(frame_w * final_scale), int(frame_h * final_scale)
-    ui_scaled = pygame.transform.scale(
-        ui_frame, (scaled_w, scaled_h)).convert_alpha()
-    ui_rect = ui_scaled.get_rect(center=(curr_w // 2, curr_h // 2))
-    screen.blit(ui_scaled, ui_rect)
+        date_surf = self.fonts['date'].render(date_str, True, WHITE)
+        date_rect = date_surf.get_rect(center=(self.screen_width // 2, 160))
+        self.screen.blit(date_surf, date_rect)
 
+        # 5. Track Info
+        if self.metrics['track']:
+            track_surf = self.fonts['track'].render(
+                f"🎵 {self.metrics['track']}", True, DARK_CYAN)
+            self.screen.blit(
+                track_surf, (30, self.screen_height - track_surf.get_height() - 30))
 
-def render_clock():
-    """Renders the modern clock and date display."""
-    now = datetime.datetime.now()
-    curr_time, date_str = now.strftime(
-        "%H:%M:%S"), now.strftime("%A, %B %d, %Y")
-    cx_val = screen.get_width() // 2
-
-    shadow = clock_shadow_font.render(curr_time, True, BLACK)
-    screen.blit(shadow, shadow.get_rect(center=(cx_val + 3, 103)))
-    time_surf = clock_font.render(curr_time, True, CYAN)
-    screen.blit(time_surf, time_surf.get_rect(center=(cx_val, 100)))
-
-    date_surf = pygame.font.SysFont(
-        "Arial", 24, bold=True).render(date_str, True, WHITE)
-    screen.blit(date_surf, date_surf.get_rect(center=(cx_val, 140)))
-
-
-def render_track():
-    """Renders the currently playing track info."""
-    with TRACK_LOCK:
-        current_track = TRACK
-    if current_track:
-        track_surf = track_font.render(f"🎵 {current_track}", True, LIGHT_CYAN)
-        screen.blit(track_surf, (30, screen.get_height() -
-                    track_surf.get_height() - 30))
-
-
-def main():
-    """Main UI loop for the Jarvis Assistant."""
-    global screen  # pylint: disable=global-statement
-    running, fullscreen, ui_frame_idx, gif_scale = True, False, 0, 1.0
-    clock, last_track_ms = pygame.time.Clock(), 0
-
-    while running:
-        running, fullscreen, screen = handle_events(
-            running, fullscreen, screen)
-        if not running:
-            break
-
-        gif_scale = update_gif_scale(gif_scale)
-        now_ms = pygame.time.get_ticks()
-        if now_ms - last_track_ms >= 3000:
-            threading.Thread(target=fetch_track, daemon=True).start()
-            last_track_ms = now_ms
-
-        render_background()
-        render_ui_gif(ui_frame_idx, gif_scale)
-        render_clock()
-        render_track()
+        # Update frame index
+        self.anim['frame_idx'] = (
+            self.anim['frame_idx'] + 1) % len(self.anim['ui_frames'])
 
         pygame.display.flip()
-        ui_frame_idx = (ui_frame_idx + 1) % len(ui_frame_surfaces)
-        clock.tick(30)
 
-    if STREAM:
-        STREAM.stop_stream()
-        STREAM.close()
-    if P_AUDIO:
-        P_AUDIO.terminate()
-    pygame.quit()
-    sys.exit()
+    def cleanup(self):
+        """Stops all threads and cleans up resources before exit."""
+        self.stop_event.set()
+        if self.audio['stream']:
+            self.audio['stream'].stop_stream()
+            self.audio['stream'].close()
+        if self.audio['p_audio']:
+            self.audio['p_audio'].terminate()
+        pygame.quit()
+
+    def run(self):
+        """Main application loop."""
+        while self.running:
+            self.handle_events()
+            self.render()
+            self.clock.tick(30)
+        self.cleanup()
 
 
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    app = JarvisUI()
+    app.run()

@@ -5,13 +5,14 @@ Persistent storage for conversation history and user context.
 
 import json
 import os
-import logging
+import asyncio
 from datetime import datetime
 from typing import List, Dict, Union
+from jarvis_vector_memory import jarvis_vector_db
+from jarvis_logger import setup_logger
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = setup_logger("JARVIS-MEMORY-STORE")
 
 
 class ConversationMemory:
@@ -21,28 +22,33 @@ class ConversationMemory:
         self.user_id = user_id
         self.storage_path = storage_path
         self.memory_file = os.path.join(storage_path, f"{user_id}_memory.json")
+        self.lock = asyncio.Lock()
 
         # Create storage directory if it doesn't exist
         os.makedirs(storage_path, exist_ok=True)
         logger.info("ConversationMemory initialized for user: %s", user_id)
         logger.info("Memory file path: %s", os.path.abspath(self.memory_file))
 
-    def load_memory(self) -> List[Dict]:
-        """Load all past conversations for this user"""
-        if os.path.exists(self.memory_file):
+    async def load_memory(self) -> List[Dict]:
+        """Load all past conversations with corruption detection."""
+        if await asyncio.to_thread(os.path.exists, self.memory_file):
             try:
-                with open(self.memory_file, 'r', encoding="utf-8") as f:
-                    data = json.load(f)
-                    logger.info(
-                        "Loaded %d conversations from memory for user %s", len(data), self.user_id)
-                    return data
-            except (json.JSONDecodeError, FileNotFoundError) as e:
-                logger.error("Error loading memory file: %s", e)
+                def _read_json():
+                    with open(self.memory_file, 'r', encoding="utf-8") as f:
+                        return json.load(f)
+
+                return await asyncio.to_thread(_read_json)
+            except (json.JSONDecodeError, FileNotFoundError, IOError) as e:
+                logger.exception(
+                    "Omega Corruption in User Memory %s: %s", self.user_id, e)
+                # Backup corrupted file
+                if await asyncio.to_thread(os.path.exists, self.memory_file):
+                    timestamp = int(datetime.now().timestamp())
+                    await asyncio.to_thread(
+                        os.rename, self.memory_file, f"{self.memory_file}.corrupted_{timestamp}"
+                    )
                 return []
-        else:
-            logger.info(
-                "No existing memory file found for user %s", self.user_id)
-            return []
+        return []
 
     def _conversation_exists(
             self, new_conversation: Dict, existing_conversations: List[Dict]) -> bool:
@@ -69,61 +75,73 @@ class ConversationMemory:
 
         return False
 
-    def save_conversation(self, conversation: Union[Dict, object]) -> bool:
-        """Save a conversation to memory - returns True if successful"""
-        logger.info("save_conversation called for user %s", self.user_id)
+    async def save_conversation(self, conversation: Union[Dict, object]) -> bool:
+        """Atomic save - returns True if successful"""
+        async with self.lock:
+            try:
+                memory = await self.load_memory()
+                if hasattr(conversation, 'model_dump'):
+                    conversation_dict = conversation.model_dump()
+                else:
+                    conversation_dict = conversation
 
-        try:
-            memory = self.load_memory()
+                if 'timestamp' not in conversation_dict:
+                    conversation_dict['timestamp'] = datetime.now().isoformat()
 
-            # Convert conversation to dict if it's an object with model_dump method
-            if hasattr(conversation, 'model_dump'):
-                conversation_dict = conversation.model_dump()
-            else:
-                conversation_dict = conversation
+                if self._conversation_exists(conversation_dict, memory):
+                    return True
 
-            # Add timestamp if not present
-            if 'timestamp' not in conversation_dict:
-                conversation_dict['timestamp'] = datetime.now().isoformat()
+                if memory and self._is_conversation_update(conversation_dict, memory[-1]):
+                    memory[-1] = conversation_dict
+                else:
+                    memory.append(conversation_dict)
 
-            # Check if this conversation already exists
-            if self._conversation_exists(conversation_dict, memory):
-                logger.info(
-                    "Conversation already exists in memory, skipping save")
+                def json_default(obj):
+                    if hasattr(obj, 'model_dump'):
+                        return obj.model_dump()
+                    if hasattr(obj, 'to_dict'):
+                        return obj.to_dict()
+                    if isinstance(obj, datetime):
+                        return obj.isoformat()
+                    return str(obj)
+
+                # Save to disk (Atomic & Async)
+                def _write_json():
+                    temp_file = f"{self.memory_file}.tmp"
+                    with open(temp_file, 'w', encoding='utf-8') as f:
+                        json.dump(memory, f, indent=2,
+                                  ensure_ascii=False, default=json_default)
+                    os.replace(temp_file, self.memory_file)
+
+                await asyncio.to_thread(_write_json)
+
+                # Vector DB Sync (Background task to avoid blocking)
+                asyncio.create_task(self._sync_to_vector_db(conversation_dict))
                 return True
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                logger.error("Error saving memory: %s", e)
+                return False
 
-            # If this is an update to the last conversation, replace it instead of adding
-            if memory and self._is_conversation_update(conversation_dict, memory[-1]):
-                logger.info(
-                    "Updating last conversation instead of adding new one")
-                memory[-1] = conversation_dict
-            else:
-                # Add new conversation
-                memory.append(conversation_dict)
-
-            # Save to file
-            # Save to file with custom encoder for non-serializable objects
-            def json_default(obj):
-                if hasattr(obj, 'model_dump'):
-                    return obj.model_dump()
-                if hasattr(obj, 'to_dict'):
-                    return obj.to_dict()
-                if isinstance(obj, datetime):
-                    return obj.isoformat()
-                return str(obj)
-
-            with open(self.memory_file, 'w', encoding='utf-8') as f:
-                json.dump(memory, f, indent=2, ensure_ascii=False,
-                          default=json_default)
-
-            logger.info(
-                "Successfully saved conversation for user %s", self.user_id)
-            logger.info("File saved at: %s", os.path.abspath(self.memory_file))
-            return True
-
-        except (IOError, ValueError, TypeError) as e:
-            logger.error("Error saving conversation: %s", e)
-            return False
+    async def _sync_to_vector_db(self, conversation_dict: Dict):
+        """Sync messages to Vector DB in background thread."""
+        try:
+            if 'messages' in conversation_dict and conversation_dict['messages']:
+                for msg in conversation_dict['messages']:
+                    content = msg.get('content', '')
+                    role = msg.get('role', 'user')
+                    if content and len(content) > 5:  # Skip very short filler words
+                        # Run blocking vector DB call in thread
+                        await asyncio.to_thread(
+                            jarvis_vector_db.add_memory,
+                            text=content,
+                            metadata={
+                                "user_id": self.user_id,
+                                "role": role,
+                                "timestamp": conversation_dict.get('timestamp')
+                            }
+                        )
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.error("Vector DB sync failed: %s", e)
 
     def _is_conversation_update(self, new_conv: Dict, last_conv: Dict) -> bool:
         """Check if new conversation is an update to the last one"""
@@ -144,9 +162,9 @@ class ConversationMemory:
         except (ValueError, TypeError, KeyError):
             return False
 
-    def get_recent_context(self, max_messages: int = 30) -> List[Dict]:
+    async def get_recent_context(self, max_messages: int = 30) -> List[Dict]:
         """Get recent conversation context for the agent"""
-        memory = self.load_memory()
+        memory = await self.load_memory()
         all_messages = []
 
         # Flatten all conversations into a single message list
@@ -160,14 +178,14 @@ class ConversationMemory:
             "Retrieved %d recent messages for user %s", len(recent_messages), self.user_id)
         return recent_messages
 
-    def get_conversation_count(self) -> int:
+    async def get_conversation_count(self) -> int:
         """Get total number of saved conversations"""
-        memory = self.load_memory()
+        memory = await self.load_memory()
         return len(memory)
 
-    def clear_duplicates(self) -> int:
+    async def clear_duplicates(self) -> int:
         """Remove duplicate conversations and return count of removed duplicates"""
-        memory = self.load_memory()
+        memory = await self.load_memory()
         unique_conversations = []
         removed_count = 0
 
@@ -178,9 +196,18 @@ class ConversationMemory:
                 removed_count += 1
 
         if removed_count > 0:
-            with open(self.memory_file, 'w', encoding='utf-8') as f:
-                json.dump(unique_conversations, f,
-                          indent=2, ensure_ascii=False)
+            def _write_unique():
+                with open(self.memory_file, 'w', encoding='utf-8') as f:
+                    json.dump(unique_conversations, f,
+                              indent=2, ensure_ascii=False)
+
+            await asyncio.to_thread(_write_unique)
             logger.info("Removed %d duplicate conversations", removed_count)
 
         return removed_count
+
+    async def get_semantic_context(self, query: str, n_results: int = 3) -> List[str]:
+        """Search Long-Term Memory for semantically relevant information"""
+        logger.info("Semantic search initiated for query: %s", query)
+        # ChromaDB query is blocking, run in thread
+        return await asyncio.to_thread(jarvis_vector_db.query_memory, query, n_results)

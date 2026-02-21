@@ -27,7 +27,7 @@ accelerate
 playsound==1.2.2
 gTTS
 requests
-google-generativeai
+google-genai
 pywhatkit
 ddgs
 youtube-search
@@ -38,3 +38,5 @@ comtypes
 pygetwindow
 pypdf
 python-docx
+chromadb
+sentence-transformers

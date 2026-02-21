@@ -7,7 +7,6 @@ Also provides system-level controls like shutdown, restart, and sleep.
 """
 
 import asyncio
-import logging
 import os
 import re
 import subprocess
@@ -46,12 +45,11 @@ try:
 except ImportError:
     gw = None
     get_windows = None
-
+from jarvis_logger import setup_logger
 
 # ===================== LOGGER ===================== #
 sys.stdout.reconfigure(encoding="utf-8")
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("JARVIS-WINDOW")
+logger = setup_logger("JARVIS-WINDOW")
 
 # ===================== APP MAP ===================== #
 APP_MAPPINGS = {
@@ -210,7 +208,7 @@ async def open_app(full_command: str) -> str:
         return f"🚀 {matched_key} khol diya gaya hai"
 
     except Exception as e:  # pylint: disable=broad-exception-caught
-        logger.error("App open error: %s", e)
+        logger.exception("App open error: %s", e)
         return f"❌ App open nahi ho paaya: {e}"
 
 
@@ -261,7 +259,7 @@ async def save_notepad(file_path: str = r"D:\jarvis_notes.txt") -> str:
 
         return f"💾 Notepad file ko '{file_path}' par save kar diya gaya hai."
     except Exception as e:  # pylint: disable=broad-exception-caught
-        logger.error("Save Notepad Error: %s", e)
+        logger.exception("Save Notepad Error: %s", e)
         return f"❌ Save karne mein error: {e}"
 
 
@@ -456,11 +454,50 @@ async def lock_screen():
 
 @function_tool
 async def create_folder(folder_name: str):
-    """Creates a new folder on the Desktop."""
-    desktop = os.path.join(os.path.expanduser("~"), "Desktop")
-    path = os.path.join(desktop, folder_name)
+    """Creates a new folder on the Desktop (handles localized paths)."""
     try:
+        # Robust Desktop path detection using environment variables or fallback
+        desktop = os.path.join(os.environ.get("USERPROFILE"), "Desktop")
+        if not os.path.exists(desktop):
+            # Fallback to home folder if desktop is moved
+            desktop = os.path.expanduser("~")
+
+        path = os.path.join(desktop, folder_name)
         os.makedirs(path, exist_ok=True)
-        return f"Cc Folder created: {folder_name}"
+        return f"✅ Folder '{folder_name}' Desktop par create kar diya gaya hai."
     except Exception as e:  # pylint: disable=broad-exception-caught
         return f"❌ Error creating folder: {e}"
+
+
+@function_tool
+async def open_outputs_folder(subfolder: str = "") -> str:
+    """
+    Opens the Jarvis_Outputs folder or a specific subfolder (e.g., 'QR_Codes', 'Generated_Images', 'Downloads').
+    Use this when the user asks to open the generated files, downloads, or specific output folders.
+    """
+    try:
+        base_dir = os.path.join(os.getcwd(), "Jarvis_Outputs")
+        target_path = base_dir
+
+        if subfolder:
+            # Try to match subfolder name flexibly
+            subfolders = {
+                "qr": "QR_Codes",
+                "image": "Generated_Images",
+                "download": "Downloads"
+            }
+            for key, folder in subfolders.items():
+                if key in subfolder.lower():
+                    target_path = os.path.join(base_dir, folder)
+                    break
+
+        if not os.path.exists(target_path):
+            os.makedirs(target_path, exist_ok=True)
+
+        os.startfile(target_path)
+        folder_name = os.path.basename(
+            target_path) if subfolder else "Jarvis_Outputs"
+        return f"📂 {folder_name} folder open kar diya gaya hai, Sir Matloob."
+    except Exception as e:
+        logger.exception("Error opening outputs folder: %s", e)
+        return f"❌ Folder open karne mein error aaya: {str(e)}"

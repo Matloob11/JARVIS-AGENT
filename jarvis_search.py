@@ -7,19 +7,15 @@ and utility functions for location and time detection.
 """
 
 import asyncio
-import logging
 import os
 from datetime import datetime
-
-import requests
+import requests  # type: ignore
 from dotenv import load_dotenv
 from livekit.agents import function_tool
+from jarvis_logger import setup_logger
 
-# Setup logging for console output
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - [%(levelname)s] %(message)s"
-)
+# Setup logging
+logger = setup_logger("JARVIS-SEARCH")
 
 load_dotenv()
 
@@ -47,58 +43,80 @@ async def get_current_city() -> str:
         if detected_city.lower() in ["unknown", "", "none"]:
             return "Lahore"
         return detected_city
-    except requests.exceptions.RequestException as e:
-        logging.error("Error getting current city: %s", e)
+    except (requests.exceptions.RequestException, asyncio.TimeoutError) as e:
+        logger.exception("Error getting current city: %s", e)
         return os.getenv("USER_CITY", "Lahore")
 
 
 @function_tool
-async def search_internet(query: str) -> str:
+async def search_internet(query: str) -> dict:
     """
     Perform a Google Custom Search for the given query and return the top 3 results.
     """
     if not GOOGLE_SEARCH_API_KEY or not SEARCH_ENGINE_ID:
-        logging.error("Google Search API credentials not found in .env")
-        return "Google Search API credentials not found in .env"
+        logger.error("Google Search API credentials not found in .env")
+        return {"status": "error", "message": "Google Search API credentials not found in .env"}
 
     url = (
         f"https://www.googleapis.com/customsearch/v1"
         f"?key={GOOGLE_SEARCH_API_KEY}&cx={SEARCH_ENGINE_ID}&q={query}"
     )
 
-    try:
-        # Run blocking requests.get() safely in async mode
-        response = await asyncio.to_thread(requests.get, url, timeout=10)
-        data = response.json()
+    for attempt in range(2):
+        try:
+            # Run blocking requests.get() safely in async mode
+            response = await asyncio.to_thread(requests.get, url, timeout=10)
+            response.raise_for_status()
+            data = response.json()
 
-        if "items" not in data:
-            logging.warning("No results found for query: %s", query)
-            return f"No results found for: {query}"
+            if "items" not in data:
+                logger.warning("No results found for query: %s", query)
+                return {"status": "not_found", "message": f"No results found for: {query}"}
 
-        results = []
-        for item in data["items"][:3]:
-            title = item.get("title", "No title")
-            snippet = item.get("snippet", "")
-            link = item.get("link", "")
-            results.append(f"{title}\n{snippet}\n{link}\n")
+            results = []
+            for item in data["items"][:3]:
+                results.append({
+                    "title": item.get("title", "No title"),
+                    "snippet": item.get("snippet", ""),
+                    "link": item.get("link", "")
+                })
 
-        # Print results in console
-        logging.info("Search results for '%s':\n%s", query, "\n".join(results))
+            logger.info(
+                "Search results for '%s' returned %d items", query, len(results))
 
-        return "\n\n".join(results)
+            # Create a user-readable summary for the voice interface
+            summary = "\n\n".join(
+                [f"{r['title']}\n{r['snippet']}\n{r['link']}" for r in results])
 
-    except requests.exceptions.RequestException as e:
-        logging.error("Error performing search: %s", e)
-        return f"Error performing search: {e}"
+            return {
+                "status": "success",
+                "query": query,
+                "results": results,
+                "message": summary
+            }
+
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            if attempt == 1:
+                logger.exception("Error performing search: %s", e)
+                return {
+                    "status": "error",
+                    "message": f"Maaf Sir, search fail ho gaye (Network issue): {e}",
+                    "error": str(e)
+                }
+            await asyncio.sleep(1)
+    return {"status": "error", "message": "Error performing search after retries."}
 
 
 @function_tool
-async def get_formatted_datetime() -> str:
+async def get_formatted_datetime() -> dict:
     """
     Get the current date and time in a human-readable formatted string.
     Example: "Thursday, November 13, 2025 - 07:25 PM"
     """
     now = datetime.now()
-    formatted = now.strftime("%A, %B %d, %Y - %I:%M %p")
-
-    return formatted
+    return {
+        "formatted": now.strftime("%A, %B %d, %Y - %I:%M %p"),
+        "day": now.strftime("%A"),
+        "date": now.strftime("%B %d, %Y"),
+        "time": now.strftime("%I:%M %p")
+    }

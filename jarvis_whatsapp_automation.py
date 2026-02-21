@@ -5,15 +5,20 @@ Handles sending messages and automating WhatsApp Desktop.
 import os
 import time
 import asyncio
-import logging
 import pyautogui as pg
 import pyperclip
 import pygetwindow as gw
+try:
+    import win32gui
+    import win32con
+except ImportError:
+    win32gui = None
+    win32con = None
 from livekit.agents import function_tool
+from jarvis_logger import setup_logger
 
 # Setup logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("JARVIS-WHATSAPP")
+logger = setup_logger("JARVIS-WHATSAPP")
 
 # WhatsApp App URI (Store App)
 WHATSAPP_URI = r"shell:AppsFolder\5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App"
@@ -27,7 +32,7 @@ class WhatsAppAutomation:
     def __init__(self):
         """Initialize the WhatsApp automation controller."""
 
-    async def ensure_whatsapp_focus(self, timeout: int = 10):
+    async def ensure_whatsapp_focus(self, timeout: int = 15):
         """
         Waits for WhatsApp to verify it is the active window.
         Returns True if WhatsApp is focused, False otherwise.
@@ -51,7 +56,7 @@ class WhatsAppAutomation:
                 ]
 
                 if not valid_windows:
-                    await asyncio.sleep(0.5)
+                    await asyncio.sleep(1.0)
                     continue
 
                 # Get the first match
@@ -60,14 +65,23 @@ class WhatsAppAutomation:
                 if whatsapp_win.isMinimized:
                     whatsapp_win.restore()
 
+                # Explicitly try to bring to front using Win32 if available
+                if win32gui:
+                    try:
+                        # pylint: disable=protected-access
+                        win32gui.ShowWindow(
+                            whatsapp_win._hwnd, win32con.SW_RESTORE)
+                        win32gui.SetForegroundWindow(whatsapp_win._hwnd)
+                    except Exception:  # pylint: disable=broad-exception-caught
+                        pass
+
                 # Try to activate
                 try:
                     whatsapp_win.activate()
                 except Exception:  # pylint: disable=broad-exception-caught
-                    # sometimes activate fails if another window is aggressively on top
                     pass
 
-                await asyncio.sleep(0.2)
+                await asyncio.sleep(1.0)  # Give it more time to settle
 
                 if whatsapp_win.isActive:
                     logger.info("WhatsApp is active and focused.")
@@ -87,8 +101,8 @@ class WhatsAppAutomation:
         """Opens WhatsApp Desktop application using the Store URI"""
         try:
             logger.info("Opening WhatsApp via URI: %s", WHATSAPP_URI)
-            # Use os.startfile for the most reliable way to open Store apps
             os.startfile(WHATSAPP_URI)
+            await asyncio.sleep(2.0)  # Initial wait for launch
             return True
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger.error("Failed to open WhatsApp: %s", e)
@@ -101,24 +115,27 @@ class WhatsAppAutomation:
 
             # Focus Search Bar (Ctrl + F is standard)
             # Sometimes WhatsApp needs a moment to catch input after focus
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(2.0)
             pg.hotkey('ctrl', 'f')
             await asyncio.sleep(1.0)
 
-            # Clear previous search if any (Ctrl+A, Backspace)
+            # Clear previous search if any
             pg.hotkey('ctrl', 'a')
             pg.press('backspace')
             await asyncio.sleep(0.5)
 
-            # Type name
-            pg.write(contact_name, interval=0.1)
+            # Type name slowly to let UI catch up
+            for char in contact_name:
+                pg.write(char)
+                await asyncio.sleep(0.05)
+
             # Wait for search results (Increased significantly)
-            await asyncio.sleep(3.0)
+            await asyncio.sleep(4.0)
 
             # Select first result
-            # Sometimes 'down' doesn't land correctly on first result if there's focus delay
+            # Try pressing Down then Enter
             pg.press('down')
-            await asyncio.sleep(0.8)
+            await asyncio.sleep(1.0)
             pg.press('enter')
             await asyncio.sleep(3.0)  # Wait for chat to open
 

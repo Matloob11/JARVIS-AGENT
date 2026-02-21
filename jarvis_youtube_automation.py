@@ -2,16 +2,17 @@
 Jarvis YouTube Automation Module
 Handles searching and playing videos on YouTube.
 """
-import logging
 import asyncio
 import subprocess
 import shutil
+import os
+import webbrowser
 from livekit.agents import function_tool
 from youtube_search import YoutubeSearch
+from jarvis_logger import setup_logger
 
 # Setup logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("JARVIS-YOUTUBE")
+logger = setup_logger("JARVIS-YOUTUBE")
 
 
 class YouTubeAutomation:
@@ -53,17 +54,36 @@ class YouTubeAutomation:
             return None
 
     async def open_url_in_app(self, url: str):
-        """Opens a URL in Edge App mode (PWA style)"""
+        """Opens a URL in Edge App mode (PWA style) safely."""
         try:
             logger.info("Opening URL in App Mode: %s", url)
 
             # Determine browser command
-            # Edge is preferred on Windows
-            browser_cmd = "msedge" if shutil.which("msedge") else "chrome"
+            edge_path = shutil.which("msedge")
 
-            # Construct command
-            # pylint: disable=consider-using-with
-            subprocess.Popen(f'start {browser_cmd} --app="{url}"', shell=True)
+            # Common Edge paths on Windows if not in PATH
+            if not edge_path and os.name == 'nt':
+                common_paths = [
+                    r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+                    r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+                    os.path.expandvars(
+                        r"%LOCALAPPDATA%\Microsoft\Edge\Application\msedge.exe")
+                ]
+                for path in common_paths:
+                    if os.path.exists(path):
+                        edge_path = path
+                        break
+
+            if os.name == 'nt' and edge_path:
+                logger.info("Launching Edge in App Mode on Windows")
+                # Using --app flag for the "Desktop App" look
+                subprocess.Popen([edge_path, f"--app={url}"], shell=False)
+                return True
+
+            # Fallback to default browser if Edge is not found or not on Windows
+            logger.info(
+                "Edge not found or non-Windows, falling back to default browser")
+            webbrowser.open(url)
             return True
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger.error("Failed to open URL: %s", e)

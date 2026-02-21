@@ -5,14 +5,13 @@ Detects errors and technical terms in the clipboard and suggests solutions.
 """
 
 import asyncio
-import logging
 import re
 import pyperclip
 from duckduckgo_search import DDGS
+from jarvis_logger import setup_logger
 
 # Setup logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("JARVIS-CLIPBOARD")
+logger = setup_logger("JARVIS-CLIPBOARD")
 
 
 class ClipboardMonitor:
@@ -57,19 +56,18 @@ class ClipboardMonitor:
             query = f"{lines[-1]} solution" if len(
                 lines) > 0 else "technical error solution"
 
-            logger.info("Searching for solution to: %s", query)
-            with DDGS() as ddgs:
-                # Use a specific region or shorter timeout if possible
-                # DDGS internally uses primp/httpx, sometimes Bing/Google backends fail
-                # Let's add a list conversion with a custom timeout or just catch and provide a fallback.
-                results = list(ddgs.text(query, max_results=3))
+            def _ddgs_search():
+                with DDGS() as ddgs:
+                    return list(ddgs.text(query, max_results=3))
+
+            results = await asyncio.to_thread(_ddgs_search)
 
             if not results:
                 return "Maazrat Sir, is error ka koi fori solution nahi mila."
 
             best_match = results[0]['body']
             return f"Sir, maine clipboard par ye error dekha hai. Iska aik mumkina solution ye hai: {best_match}"
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             logger.error("Error searching for clipboard solution: %s", e)
             err_str = str(e).lower()
             if "timeout" in err_str or "timed out" in err_str:
@@ -88,7 +86,8 @@ class ClipboardMonitor:
 
         while self.is_running:
             try:
-                current_paste = pyperclip.paste()
+                # pyperclip.paste() is blocking, run in thread
+                current_paste = await asyncio.to_thread(pyperclip.paste)
 
                 if current_paste != self.last_content:
                     self.last_content = current_paste
@@ -99,7 +98,11 @@ class ClipboardMonitor:
                         await on_detection_callback(solution)
 
                 await asyncio.sleep(self.check_interval)
-            except Exception as e:
+            except asyncio.CancelledError:
+                logger.info("Clipboard monitoring loop cancelled.")
+                self.is_running = False
+                break
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 logger.error("Clipboard loop error: %s", e)
                 await asyncio.sleep(5)
 

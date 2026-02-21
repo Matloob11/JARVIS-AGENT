@@ -5,19 +5,19 @@ Jarvis Weather Module
 Retrieves current weather information for a specified city (or automatic detection).
 """
 
-import logging
+import asyncio
 import os
-
 import requests
 from dotenv import load_dotenv
 from livekit.agents import function_tool
+from jarvis_logger import setup_logger
 
 from jarvis_search import get_current_city
 
 load_dotenv()
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Setup logging
+logger = setup_logger("JARVIS-WEATHER")
 
 
 @function_tool
@@ -61,7 +61,8 @@ async def get_weather(city: str = "Lahore") -> str:
     }
 
     try:
-        response = requests.get(url, params=params, timeout=10)
+        # Move blocking requests.get to a thread
+        response = await asyncio.to_thread(requests.get, url, params=params, timeout=10)
         if response.status_code != 200:
             logger.error(
                 "Weather error: %s - %s", response.status_code, response.text)
@@ -80,12 +81,27 @@ async def get_weather(city: str = "Lahore") -> str:
                   f"• Humidity: {humidity}%\n"
                   f"• Hawa ki speed: {wind_speed} m/s")
 
-        logger.info("Weather result: \n%s", result)
-        return result
+        return {
+            "status": "success",
+            "city": city,
+            "weather": weather,
+            "temperature": temperature,
+            "humidity": humidity,
+            "wind_speed": wind_speed,
+            "message": result
+        }
 
     except requests.exceptions.RequestException as e:
-        logger.error("Weather API request failed: %s", e)
-        return f"Error: {city} ke liye weather fetch nahi kar paaye. Network issue."
+        logger.exception("Weather API request failed: %s", e)
+        return {
+            "status": "error",
+            "message": f"Error: {city} ke liye weather fetch nahi kar paaye. Network issue.",
+            "error": str(e)
+        }
     except Exception as e:  # pylint: disable=broad-exception-caught
         logger.exception("Weather fetch karte samay exception aaya: %s", e)
-        return "Weather fetch karte samay ek error aaya. Kripaya thodi der baad try karein."
+        return {
+            "status": "error",
+            "message": "Weather fetch karte samay ek error aaya. Kripaya thodi der baad try karein.",
+            "error": str(e)
+        }

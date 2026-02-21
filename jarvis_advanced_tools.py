@@ -6,42 +6,49 @@ Handles image downloading, file compression, and mock email simulation.
 
 import os
 import shutil
-import logging
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
+import asyncio
 import requests
 from duckduckgo_search import DDGS
 from livekit.agents import function_tool
+from jarvis_logger import setup_logger
 
 # Setup logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("JARVIS-ADVANCED")
+logger = setup_logger("JARVIS-ADVANCED")
 
 
 @function_tool
-async def download_images(query: str, count: int = 5, folder_name: str = "Downloaded_Images") -> str:
+async def download_images(query: str, count: int = 5, folder_name: str = "Downloaded_Images") -> dict:
     """
     Simulates searching and downloading images from the internet into a local folder.
     Use this when the user asks to download pictures or photos.
     """
     try:
-        base_path = "D:/Jarvis_Downloads"
-        target_dir = os.path.join(base_path, folder_name)
+        base_path = os.path.join(os.getcwd(), "Jarvis_Outputs", "Downloads")
+        target_dir = os.path.abspath(os.path.join(base_path, folder_name))
         os.makedirs(target_dir, exist_ok=True)
 
         logger.info("Searching for %d images for query: '%s'...", count, query)
 
-        results = []
-        with DDGS() as ddgs:
-            ddgs_results = ddgs.images(query, max_results=count)
-            for r in ddgs_results:
-                results.append(r['image'])
+        def search_images():
+            results = []
+            with DDGS() as ddgs:
+                ddgs_results = ddgs.images(query, max_results=count)
+                for r in ddgs_results:
+                    results.append(r['image'])
+            return results
+
+        results = await asyncio.to_thread(search_images)
 
         if not results:
-            return f"❌ Maazrat, '{query}' ke liye koi images nahi mileen."
+            return {
+                "status": "error",
+                "message": f"❌ Maazrat, '{query}' ke liye koi images nahi mileen."
+            }
 
         logger.info("Downloading %d images to %s", len(results), target_dir)
 
@@ -55,23 +62,35 @@ async def download_images(query: str, count: int = 5, folder_name: str = "Downlo
                 file_name = f"{query.replace(' ', '_')}_{i}.{ext}"
                 file_path = os.path.join(target_dir, file_name)
 
-                response = requests.get(url, timeout=10)
+                response = await asyncio.to_thread(requests.get, url, timeout=10)
                 if response.status_code == 200:
                     with open(file_path, 'wb') as f:
                         f.write(response.content)
                     downloaded_count += 1
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 logger.warning("Failed to download image %d: %s", i, e)
 
-        return (f"✅ Done! {downloaded_count} real images for '{query}' download karke "
-                f"'{target_dir}' mein save kar di hain, Sir Matloob.")
-    except Exception as e:
-        logger.error("Error in download_images: %s", e)
-        return f"❌ Error downloading images: {str(e)}"
+        return {
+            "status": "success",
+            "query": query,
+            "downloaded_count": downloaded_count,
+            "target_directory": target_dir,
+            "message": (
+                f"✅ Done! {downloaded_count} images for '{query}' download "
+                f"karke '{target_dir}' mein save kar di hain, Sir Matloob."
+            )
+        }
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.exception("Error in download_images: %s", e)
+        return {
+            "status": "error",
+            "message": f"❌ Error downloading images: {str(e)}",
+            "error": str(e)
+        }
 
 
 @function_tool
-async def zip_files(folder_path: str, zip_name: str = "Archive.zip") -> str:
+async def zip_files(folder_path: str, zip_name: str = "Archive.zip") -> dict:
     """
     Compresses a folder or directory into a .zip archive.
     Use this when the user wants to zip or compress files.
@@ -83,22 +102,31 @@ async def zip_files(folder_path: str, zip_name: str = "Archive.zip") -> str:
         # Resolve path - if folder_path is just a name, look in common locations
         if not os.path.isabs(folder_path):
             # Try D:/Jarvis_Downloads first
-            base_dir = "D:/Jarvis_Downloads"
-            actual_path = os.path.join(base_dir, folder_path)
+            base_dir = os.path.join(os.getcwd(), "Jarvis_Outputs")
+            actual_path = os.path.abspath(os.path.join(base_dir, folder_path))
             if not os.path.exists(actual_path):
                 return f"❌ Folder '{folder_path}' nahi mila."
             folder_path = actual_path
 
-        shutil.make_archive(folder_path, 'zip', folder_path)
+        await asyncio.to_thread(shutil.make_archive, folder_path, 'zip', folder_path)
         logger.info("Folder '%s' zipped successfully.", folder_path)
-        return f"✅ Folder ko successfully zip kar diya gaya hai: {folder_path}.zip"
-    except Exception as e:
-        logger.error("Error in zip_files: %s", e)
-        return f"❌ Error zipping files: {str(e)}"
+        zip_path = f"{folder_path}.zip"
+        return {
+            "status": "success",
+            "zip_path": zip_path,
+            "message": f"✅ Folder ko successfully zip kar diya gaya hai: {zip_path}"
+        }
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.exception("Error in zip_files: %s", e)
+        return {
+            "status": "error",
+            "message": f"❌ Error zipping files: {str(e)}",
+            "error": str(e)
+        }
 
 
 @function_tool
-async def send_email(recipient: str, subject: str, body: str, attachment_path: str = "") -> str:
+async def send_email(recipient: str, subject: str, body: str, attachment_path: str = "") -> dict:
     """
     Sends a real email using Gmail SMTP and an App Password.
     Use this when the user asks to email something.
@@ -128,17 +156,30 @@ async def send_email(recipient: str, subject: str, body: str, attachment_path: s
                                 f"attachment; filename= {filename}")
                 msg.attach(part)
 
-        # Connect and send
-        logger.info("Connecting to Gmail SMTP server...")
-        server = smtplib.SMTP('smtp.gmail.com', 587)
-        server.starttls()
-        server.login(user_email, password)
-        text = msg.as_string()
-        server.sendmail(user_email, recipient, text)
-        server.quit()
+        # Connect and send in a separate thread
+        def do_send():
+            logger.info("Connecting to Gmail SMTP server...")
+            server = smtplib.SMTP('smtp.gmail.com', 587)
+            server.starttls()
+            server.login(user_email, password)
+            text = msg.as_string()
+            server.sendmail(user_email, recipient, text)
+            server.quit()
+
+        await asyncio.to_thread(do_send)
 
         logger.info("Real Email sent to %s successfully.", recipient)
-        return f"📧 Email successfully bhej diya gaya hai '{recipient}' ko, Sir Matloob."
-    except Exception as e:
-        logger.error("Error in send_email: %s", e)
-        return f"❌ Error sending email: {str(e)}"
+        return {
+            "status": "success",
+            "recipient": recipient,
+            "subject": subject,
+            "message": f"📧 Email successfully bhej diya gaya hai '{recipient}' ko, Sir Matloob."
+        }
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.exception("Error in send_email: %s", e)
+        return {
+            "status": "error",
+            "recipient": recipient,
+            "message": f"❌ Error sending email: {str(e)}",
+            "error": str(e)
+        }

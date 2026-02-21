@@ -2,11 +2,12 @@
 Jarvis System Info Module
 Retrieves laptop information such as battery and charging status.
 """
-import logging
 import psutil
 from livekit.agents import function_tool
+from jarvis_logger import setup_logger
 
-logger = logging.getLogger("JARVIS-SYSTEM-INFO")
+# Setup logging
+logger = setup_logger("JARVIS-SYSTEM-INFO")
 
 
 @function_tool
@@ -34,5 +35,5 @@ async def get_laptop_info() -> str:
         return reply
 
     except Exception as e:  # pylint: disable=broad-exception-caught
-        logger.error("Error getting laptop info: %s", e)
+        logger.exception("Error getting laptop info: %s", e)
         return f"❌ Error retrieving laptop info: {e}"

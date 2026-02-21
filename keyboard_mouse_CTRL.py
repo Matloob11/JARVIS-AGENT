@@ -14,8 +14,13 @@ from comtypes import CLSCTX_ALL
 import pyautogui
 from pynput.keyboard import Key, Controller as KeyboardController
 from pynput.mouse import Button, Controller as MouseController
+import pyperclip
 from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
 from livekit.agents import function_tool
+from jarvis_logger import setup_logger
+
+# Setup logging
+logger = setup_logger("JARVIS-KEYBOARD-MOUSE")
 
 # ---------------------
 # SafeController Class
@@ -49,13 +54,13 @@ class SafeController:
         Retrieves the Windows IAudioEndpointVolume interface for low-level volume control.
         """
         try:
-            pythoncom.CoInitialize()
+            pythoncom.CoInitialize()  # pylint: disable=no-member
 
             devices = AudioUtilities.GetSpeakers()
             if hasattr(devices, 'volume'):
                 return devices.volume
 
-            interface = devices.Activate(
+            interface = devices.Activate(  # pylint: disable=no-member
                 IAudioEndpointVolume._iid_, CLSCTX_ALL, None)  # pylint: disable=protected-access
             return cast(interface, POINTER(IAudioEndpointVolume))
         except Exception:  # pylint: disable=broad-exception-caught
@@ -67,7 +72,7 @@ class SafeController:
                     IAudioEndpointVolume._iid_, CLSCTX_ALL, None)  # pylint: disable=protected-access
                 return cast(interface, POINTER(IAudioEndpointVolume))
             except Exception as e:  # pylint: disable=broad-exception-caught
-                self.log(f"Volume interface error: {e}")
+                logger.exception("Volume interface error: %s", e)
                 return None
 
     def resolve_key(self, key):
@@ -78,8 +83,10 @@ class SafeController:
 
     def log(self, action: str):
         """
-        Logs a controller action to 'control_log.txt' with a timestamp.
+        Logs a controller action.
         """
+        logger.info("Controller Action: %s", action)
+        # Keep control_log.txt for backward compatibility or separate record if needed
         with open("control_log.txt", "a", encoding="utf-8") as f:
             f.write(f"{datetime.now()}: {action}\n")
 
@@ -162,8 +169,7 @@ class SafeController:
 
     async def type_text(self, text: str):
         """
-        Simulates typing text character by character.
-        Uses unicode_escape to handle special characters correctly.
+        Simulates typing text. For long strings (> 50 chars), uses clipboard (Ctrl+V) for speed.
         """
         if not self.is_active():
             return "🛑 Controller is inactive."
@@ -171,6 +177,23 @@ class SafeController:
         # Fix: convert escaped sequences into real ones
         text = codecs.decode(text, "unicode_escape")
 
+        if len(text) > 50:
+            # Use clipboard for fast entry of long text/code
+            try:
+                pyperclip.copy(text)
+                await asyncio.sleep(0.1)
+                self.keyboard.press(Key.ctrl)
+                self.keyboard.press('v')
+                self.keyboard.release('v')
+                self.keyboard.release(Key.ctrl)
+                await asyncio.sleep(0.1)
+                self.log(f"Fast-typed (clipboard) {len(text)} chars.")
+                return f"⌨️ Fast-typed {len(text)} characters using clipboard."
+            except ImportError:
+                # Fallback if pyperclip is somehow missing
+                pass
+
+        # Traditional typing for short strings or if clipboard fails
         for char in text:
             try:
                 if char == "\n":
@@ -182,11 +205,7 @@ class SafeController:
                 elif char.isprintable():
                     self.keyboard.press(char)
                     self.keyboard.release(char)
-                else:
-                    continue
-
-                await asyncio.sleep(0.05)
-
+                await asyncio.sleep(0.01)  # Faster interval
             except Exception:  # pylint: disable=broad-exception-caught
                 continue
 
@@ -318,13 +337,16 @@ controller = SafeController()
 async def with_temporary_activation(fn, *args, **kwargs):
     """
     Activates the controller temporarily for the duration of a single function call.
+    Fixed: Removed the 2-second sleep to improve responsiveness.
     """
     print(f"🔍 TEMP ACTIVATION: {fn.__name__} | args: {args}")
     controller.activate(os.getenv("CONTROLLER_TOKEN"))
-    result = await fn(*args, **kwargs)
-    await asyncio.sleep(2)
-    controller.deactivate()
-    return result
+    try:
+        result = await fn(*args, **kwargs)
+        return result
+    finally:
+        # Ensure deactivation even on failure
+        controller.deactivate()
 
 
 @function_tool
