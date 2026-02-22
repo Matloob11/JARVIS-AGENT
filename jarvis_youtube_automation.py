@@ -2,6 +2,7 @@
 Jarvis YouTube Automation Module
 Handles searching and playing videos on YouTube.
 """
+# pylint: disable=consider-using-with
 import asyncio
 import subprocess
 import shutil
@@ -95,7 +96,7 @@ yt_bot = YouTubeAutomation()
 
 
 @function_tool
-async def automate_youtube(action: str, query: str = "") -> str:
+async def automate_youtube(action: str, query: str = "") -> dict:
     """
     Automates YouTube to play videos, search, or just open the homepage.
 
@@ -116,10 +117,17 @@ async def automate_youtube(action: str, query: str = "") -> str:
         if action == "open":
             homepage_url = "https://www.youtube.com"
             await yt_bot.open_url_in_app(homepage_url)
-            return "✅ YouTube homepage khol di gayi hai."
+            return {
+                "status": "success",
+                "action": "open",
+                "message": "✅ YouTube homepage khol di gayi hai."
+            }
 
         if not query:
-            return "❌ Error: Query is required for play/search actions."
+            return {
+                "status": "error",
+                "message": "❌ Error: Query is required for play/search actions."
+            }
 
         if action == "play":
             # 1. Find the direct video URL
@@ -128,17 +136,38 @@ async def automate_youtube(action: str, query: str = "") -> str:
             if video_url:
                 # 2. Open directly
                 await yt_bot.open_url_in_app(video_url)
-                return f"✅ Playing '{query}' on YouTube Desktop."
-            return f"❌ Could not find a video for '{query}'."
+                return {
+                    "status": "success",
+                    "action": "play",
+                    "query": query,
+                    "url": video_url,
+                    "message": f"✅ Playing '{query}' on YouTube Desktop."
+                }
+            return {
+                "status": "error",
+                "message": f"❌ Could not find a video for '{query}'."
+            }
 
         if action == "search":
             search_url = f"https://www.youtube.com/results?search_query={query}"
             await yt_bot.open_url_in_app(search_url)
-            return f"✅ Searching '{query}' on YouTube Desktop."
+            return {
+                "status": "success",
+                "action": "search",
+                "query": query,
+                "url": search_url,
+                "message": f"✅ Searching '{query}' on YouTube Desktop."
+            }
 
-        msg = f"❌ Unknown action: {action}. Use 'play', 'search', or 'open'."
-        return msg
+        return {
+            "status": "error",
+            "message": f"❌ Unknown action: {action}. Use 'play', 'search', or 'open'."
+        }
 
     except Exception as e:  # pylint: disable=broad-exception-caught
-        logger.error("Error in YouTube automation: %s", e)
-        return f"❌ Error in YouTube automation: {e}"
+        logger.exception("YouTube automation error: %s", e)
+        return {
+            "status": "error",
+            "message": f"❌ Error in YouTube automation: {str(e)}",
+            "error": str(e)
+        }

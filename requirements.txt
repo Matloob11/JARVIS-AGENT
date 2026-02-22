@@ -40,3 +40,6 @@ pypdf
 python-docx
 chromadb
 sentence-transformers
+yt-dlp
+huggingface_hub
+python-vlc

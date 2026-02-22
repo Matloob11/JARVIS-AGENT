@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 from livekit.agents import function_tool
 from jarvis_logger import setup_logger
 
-from jarvis_search import get_current_city
+from jarvis_search import get_current_city, search_internet
 
 load_dotenv()
 
@@ -91,17 +91,30 @@ async def get_weather(city: str = "Lahore") -> str:
             "message": result
         }
 
-    except requests.exceptions.RequestException as e:
-        logger.exception("Weather API request failed: %s", e)
+    except (requests.exceptions.RequestException, ValueError, KeyError, RuntimeError) as e:
+        logger.warning(
+            "Weather API failure: %s. Attempting search fallback.", e)
+        return await get_weather_via_search(city)
+
+
+async def get_weather_via_search(city: str) -> dict:
+    """
+    Fallback method to get weather via internet search.
+    """
+    logger.info("Attempting weather fallback via search for: %s", city)
+    query = f"current weather in {city} temperature condition"
+    search_result = await search_internet(query)
+
+    if search_result.get("status") == "success":
+        summary = search_result.get("message", "No details found.")
         return {
-            "status": "error",
-            "message": f"Error: {city} ke liye weather fetch nahi kar paaye. Network issue.",
-            "error": str(e)
+            "status": "success",
+            "city": city,
+            "provider": "search_fallback",
+            "message": f"🌤️ {city} ka weather (via Search):\n{summary}"
         }
-    except Exception as e:  # pylint: disable=broad-exception-caught
-        logger.exception("Weather fetch karte samay exception aaya: %s", e)
-        return {
-            "status": "error",
-            "message": "Weather fetch karte samay ek error aaya. Kripaya thodi der baad try karein.",
-            "error": str(e)
-        }
+
+    return {
+        "status": "error",
+        "message": f"Error: {city} ke liye weather fetch nahi kar paaye (API and Search failed)."
+    }

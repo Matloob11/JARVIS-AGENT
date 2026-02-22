@@ -113,7 +113,7 @@ async def set_reminder(time_str: str, message: str) -> str:
             f"({target_time.strftime('%Y-%m-%d %H:%M:%S')}): {message}"
         )
 
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except (ValueError, TypeError, KeyError, OSError, json.JSONDecodeError) as e:
         logger.error("Error in set_reminder: %s", e)
         return f"Error setting reminder: {str(e)}"
 

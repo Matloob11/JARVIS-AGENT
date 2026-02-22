@@ -8,6 +8,7 @@ import os
 import traceback
 import subprocess
 import re
+import asyncio
 from livekit.agents import function_tool
 from jarvis_logger import setup_logger
 
@@ -29,7 +30,7 @@ def get_pylint_score(file_path: str) -> float:
             r"Your code has been rated at ([\d\.]+)/10", result.stdout)
         if match:
             return float(match.group(1))
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except (OSError, ValueError, subprocess.SubprocessError) as e:
         logger.error("Error getting pylint score: %s", e)
     return 0.0
 
@@ -48,14 +49,15 @@ async def autonomous_self_repair(error_details: str, file_path: str) -> str:
             _ = f.read()  # Verify file is readable
 
         logger.info("Analyzing error: %s", error_details)
+        pylint_score = await asyncio.to_thread(get_pylint_score, file_path)
         return (
             f"[SELF-HEALING SYSTEM]: File {file_path} ready for repair.\n"
-            f"Original Score: {get_pylint_score(file_path)}/10\n"
+            f"Original Score: {pylint_score}/10\n"
             "Please provide the corrected code block using 'write_custom_code' or "
             "simply confirm the fix strategy."
         )
 
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except (OSError, IOError, ValueError, AttributeError) as e:
         logger.error("Self-repair failed: %s", e)
         return f"Self-repair failed: {str(e)}"
 

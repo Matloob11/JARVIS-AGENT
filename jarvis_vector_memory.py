@@ -69,7 +69,7 @@ class VectorMemory:
                 ids=[memory_id]
             )
             return True
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (ValueError, KeyError, RuntimeError, OSError) as e:
             logger.error("Error adding to Vector Memory: %s", e)
             return False
 
@@ -88,7 +88,7 @@ class VectorMemory:
 
             # Extract documents from the result dictionary
             return results.get("documents", [[]])[0]
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (ValueError, KeyError, RuntimeError, OSError) as e:
             logger.error("Error querying Vector Memory: %s", e)
             return []
 
@@ -104,7 +104,7 @@ class VectorMemory:
             )
             print(f"🧹 Collection '{COLLECTION_NAME}' cleared.")
             return True
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (ValueError, KeyError, RuntimeError, OSError) as e:
             logger.error("Error clearing Vector Memory: %s", e)
             return False
 
@@ -114,7 +114,7 @@ class VectorMemory:
         """
         try:
             return self.collection.count()
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (ValueError, KeyError, RuntimeError, OSError) as e:
             logger.error("Error adding to DB: %s", e)
             return 0
 

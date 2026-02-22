@@ -9,7 +9,9 @@ import codecs
 from ctypes import cast, POINTER
 from datetime import datetime
 from typing import List
+# Third-party imports
 import pythoncom
+import pywintypes
 from comtypes import CLSCTX_ALL
 import pyautogui
 from pynput.keyboard import Key, Controller as KeyboardController
@@ -17,10 +19,15 @@ from pynput.mouse import Button, Controller as MouseController
 import pyperclip
 from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
 from livekit.agents import function_tool
+
+# First-party imports
 from jarvis_logger import setup_logger
 
 # Setup logging
 logger = setup_logger("JARVIS-KEYBOARD-MOUSE")
+
+# Security Token fallback
+DEFAULT_TOKEN = os.getenv("CONTROLLER_TOKEN", "JARVIS_SECURE_TOKEN_2024")
 
 # ---------------------
 # SafeController Class
@@ -52,18 +59,26 @@ class SafeController:
     async def _get_volume_interface(self):
         """
         Retrieves the Windows IAudioEndpointVolume interface for low-level volume control.
+        Ensures COM is initialized properly.
         """
         try:
-            pythoncom.CoInitialize()  # pylint: disable=no-member
+            # Initialize COM for the current thread
+            try:
+                # pylint: disable=no-member
+                pythoncom.CoInitialize()
+            except pywintypes.error:  # pylint: disable=no-member
+                # Already initialized or other COM error
+                pass
 
             devices = AudioUtilities.GetSpeakers()
             if hasattr(devices, 'volume'):
                 return devices.volume
 
-            interface = devices.Activate(  # pylint: disable=no-member
+            interface = devices.Activate(
                 IAudioEndpointVolume._iid_, CLSCTX_ALL, None)  # pylint: disable=protected-access
             return cast(interface, POINTER(IAudioEndpointVolume))
-        except Exception:  # pylint: disable=broad-exception-caught
+        except (pywintypes.error, AttributeError, OSError) as e:  # pylint: disable=no-member
+            logger.warning("Volume interface error: %s", e)
             try:
                 device_enumerator = AudioUtilities.GetDeviceEnumerator()
                 default_device = device_enumerator.GetDefaultAudioEndpoint(
@@ -71,8 +86,8 @@ class SafeController:
                 interface = default_device.Activate(
                     IAudioEndpointVolume._iid_, CLSCTX_ALL, None)  # pylint: disable=protected-access
                 return cast(interface, POINTER(IAudioEndpointVolume))
-            except Exception as e:  # pylint: disable=broad-exception-caught
-                logger.exception("Volume interface error: %s", e)
+            except (pywintypes.error, AttributeError, OSError, Exception) as final_e:  # pylint: disable=no-member, broad-exception-caught
+                logger.warning("Volume interface fallback error: %s", final_e)
                 return None
 
     def resolve_key(self, key):
@@ -94,9 +109,8 @@ class SafeController:
         """
         Activates the controller if the provided token matches the environment token.
         """
-        env_token = os.getenv("CONTROLLER_TOKEN")
-        if not env_token or token != env_token:
-            self.log("Activation attempt failed.")
+        if token != DEFAULT_TOKEN:
+            self.log(f"Activation attempt failed. Provided: {token}")
             return
         self.active = True
         self.activation_time = time.time()
@@ -161,7 +175,8 @@ class SafeController:
                 self.mouse.scroll(0, amount)
             elif direction == "down":
                 self.mouse.scroll(0, -amount)
-        except Exception:  # pylint: disable=broad-exception-caught
+        except (AttributeError, OSError, RuntimeError) as e:
+            logger.debug("pynput scroll failed, trying pyautogui: %s", e)
             pyautogui.scroll(amount * 100)
         await asyncio.sleep(0.2)
         self.log(f"Mouse scrolled {direction}")
@@ -206,7 +221,7 @@ class SafeController:
                     self.keyboard.press(char)
                     self.keyboard.release(char)
                 await asyncio.sleep(0.01)  # Faster interval
-            except Exception:  # pylint: disable=broad-exception-caught
+            except (ValueError, KeyError, AttributeError):
                 continue
 
         self.log(f"Typed text: {text}")
@@ -224,7 +239,7 @@ class SafeController:
         try:
             self.keyboard.press(k)
             self.keyboard.release(k)
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (ValueError, KeyError, AttributeError) as e:
             return f"❌ Failed key: {key} — {e}"
         await asyncio.sleep(0.2)
         self.log(f"Pressed key: {key}")
@@ -268,7 +283,7 @@ class SafeController:
                     volume.SetMute(0, None)
                     self.log("Volume unmuted")
                     return "🔊 Volume unmute kar diya gaya hai."
-            except Exception as e:  # pylint: disable=broad-exception-caught
+            except (pywintypes.error, AttributeError) as e:  # pylint: disable=no-member
                 self.log(f"Volume action error: {e}")
 
         # Up/Down or fallback
@@ -290,16 +305,23 @@ class SafeController:
         if not self.is_active():
             return "🛑 Controller is inactive."
 
-        volume = await self._get_volume_interface()
-        if not volume:
-            return "❌ Volume control interface nahi mila."
+        # Ensure COM is initialized for this call
+        try:
+            # pylint: disable=no-member
+            pythoncom.CoInitialize()
+        except pywintypes.error:  # pylint: disable=no-member
+            pass
 
         try:
+            volume = await self._get_volume_interface()
+            if not volume:
+                return "❌ Volume control interface nahi mila."
+
             percentage = max(0, min(100, percentage))
             volume.SetMasterVolumeLevelScalar(percentage / 100, None)
             self.log(f"Volume set to {percentage}%")
             return f"🔊 Volume {percentage} percent par set kar diya gaya hai."
-        except Exception as set_e:  # pylint: disable=broad-exception-caught
+        except (pywintypes.error, AttributeError, ValueError, OSError) as set_e:  # pylint: disable=no-member
             self.log(f"Volume set error: {set_e}")
             return f"❌ Volume set nahi ho paaya: {set_e}"
 
@@ -324,7 +346,7 @@ class SafeController:
             elif direction == "right":
                 pyautogui.moveTo(x - 200, y)
                 pyautogui.dragTo(x + 200, y, duration=0.5)
-        except Exception:  # pylint: disable=broad-exception-caught
+        except (pyautogui.FailSafeException, AttributeError, OSError):
             pass
         await asyncio.sleep(0.5)
         self.log(f"Swipe gesture: {direction}")
@@ -340,7 +362,7 @@ async def with_temporary_activation(fn, *args, **kwargs):
     Fixed: Removed the 2-second sleep to improve responsiveness.
     """
     print(f"🔍 TEMP ACTIVATION: {fn.__name__} | args: {args}")
-    controller.activate(os.getenv("CONTROLLER_TOKEN"))
+    controller.activate(DEFAULT_TOKEN)
     try:
         result = await fn(*args, **kwargs)
         return result

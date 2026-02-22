@@ -6,10 +6,11 @@ Fallback: Pollinations.ai (Synchronous)
 """
 
 import os
-import requests
 import re
 from datetime import datetime
+import requests
 from dotenv import load_dotenv
+from huggingface_hub import InferenceClient
 from jarvis_logger import setup_logger
 
 # Setup logging
@@ -27,7 +28,6 @@ def generate_via_hf(prompt: str) -> str:
         return None
 
     try:
-        from huggingface_hub import InferenceClient
         client = InferenceClient(api_key=token)
         # Using FLUX.1-schnell for top-tier quality and speed
         model_id = "black-forest-labs/FLUX.1-schnell"
@@ -45,9 +45,9 @@ def generate_via_hf(prompt: str) -> str:
         os.startfile(filepath)
         logger.info("HF Image saved and opened: %s", filepath)
         return f"Success: Image generated via Hugging Face and saved to {filepath}"
-    except Exception as e:
+    except (ImportError, ValueError, OSError, requests.exceptions.RequestException) as e:
         logger.warning("Hugging Face attempt failed: %s", str(e))
-    return None
+        return None
 
 
 def generate_via_pollinations(prompt: str) -> str:
@@ -62,7 +62,9 @@ def generate_via_pollinations(prompt: str) -> str:
     safe_prompt = requests.utils.quote(short_prompt)
     url = f"https://image.pollinations.ai/prompt/{safe_prompt}?nologo=true"
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                       "AppleWebKit/537.36 (KHTML, like Gecko) "
+                       "Chrome/121.0.0.0 Safari/537.36"),
         "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
         "Referer": "https://pollinations.ai/"
     }
@@ -82,8 +84,9 @@ def generate_via_pollinations(prompt: str) -> str:
             os.startfile(filepath)
             logger.info(
                 "Pollinations Image saved and opened: %s", filepath)
-            return f"Success: Image generated via Pollinations for '{short_prompt}'. Saved to {filepath}"
-    except Exception as e:
+            return (f"Success: Image generated via Pollinations for "
+                    f"'{short_prompt}'. Saved to {filepath}")
+    except (requests.RequestException, OSError) as e:
         logger.warning("Pollinations fallback failed: %s", str(e))
     return None
 
@@ -95,14 +98,23 @@ def generate_image(prompt: str) -> str:
     # 1. Try Hugging Face (FLUX) - Best quality
     result = generate_via_hf(prompt)
     if result:
-        return result
+        return {
+            "status": "success",
+            "message": result
+        }
 
     # 2. Try Pollinations (Synchronous Fallback)
     result = generate_via_pollinations(prompt)
     if result:
-        return result
+        return {
+            "status": "success",
+            "message": result
+        }
 
-    return "Error: Image generation failed on all available free providers. Please try again later."
+    return {
+        "status": "error",
+        "message": "Error: Image generation failed on all available free providers. Please try again later."
+    }
 
 
 # Tool integration for JARVIS agent
@@ -110,9 +122,9 @@ try:
     from livekit.agents import function_tool
 
     @function_tool
-    def tool_generate_image(prompt: str) -> str:
+    async def tool_generate_image(prompt: str) -> dict:
         """
-        Generates an image based on a description. Use this when the user asks to 'draw', 'generate an image', or 'show an image of'.
+        Generates an image via description. Use for 'draw' or 'generate an image'.
         """
         return generate_image(prompt)
 except ImportError:

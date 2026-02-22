@@ -140,7 +140,7 @@ class ConversationMemory:
                                 "timestamp": conversation_dict.get('timestamp')
                             }
                         )
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (ValueError, KeyError, AttributeError, OSError) as e:
             logger.error("Vector DB sync failed: %s", e)
 
     def _is_conversation_update(self, new_conv: Dict, last_conv: Dict) -> bool:

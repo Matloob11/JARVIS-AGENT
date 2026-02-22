@@ -67,12 +67,12 @@ class ClipboardMonitor:
 
             best_match = results[0]['body']
             return f"Sir, maine clipboard par ye error dekha hai. Iska aik mumkina solution ye hai: {best_match}"
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (asyncio.TimeoutError, ConnectionError) as e:
             logger.error("Error searching for clipboard solution: %s", e)
-            err_str = str(e).lower()
-            if "timeout" in err_str or "timed out" in err_str:
-                return ("Sir, maine clipboard par error toh dekha hai lekin internet "
-                        "connection slow honay ki wajah se solution nahi mil paaya.")
+            return ("Sir, maine clipboard par error toh dekha hai lekin internet "
+                    "connection slow honay ki wajah se solution nahi mil paaya.")
+        except (AttributeError, ValueError, KeyError, RuntimeError) as e:
+            logger.error("Data parsing error in clipboard solution: %s", e)
             return f"Error finding solution: {str(e)}"
 
     async def start(self, on_detection_callback):
@@ -102,9 +102,12 @@ class ClipboardMonitor:
                 logger.info("Clipboard monitoring loop cancelled.")
                 self.is_running = False
                 break
-            except Exception as e:  # pylint: disable=broad-exception-caught
-                logger.error("Clipboard loop error: %s", e)
+            except (RuntimeError, AttributeError) as e:
+                logger.error("Clipboard loop logic error: %s", e)
                 await asyncio.sleep(5)
+            except (IOError, OSError) as e:
+                logger.error("Clipboard loop IO error: %s", e)
+                await asyncio.sleep(10)
 
     def stop(self):
         """Stops the monitoring loop."""

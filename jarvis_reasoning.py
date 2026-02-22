@@ -50,6 +50,10 @@ class IntentAnalyzer:  # pylint: disable=too-few-public-methods
             "question": [
                 r"kya.*hai", r"what.*is", r"how.*to", r"kaise.*kar",
                 r"why.*", r"kyun.*", r"kab.*", r"when.*"
+            ],
+            "complex_workflow": [
+                r"research.*report", r"dhund.*file.*save", r"find.*email",
+                r"search.*summarize", r"analyze.*write"
             ]
         }
 
@@ -137,6 +141,42 @@ class ContextAnalyzer:  # pylint: disable=too-few-public-methods
         return context_info
 
 
+class WorkflowPlanner:  # pylint: disable=too-few-public-methods
+    """Decomposes complex tasks into sequential steps."""
+
+    def __init__(self):
+        self.common_workflows = {
+            "research_and_report": ["search_internet", "scrape_url", "write_custom_code"],
+            "search_and_email": ["search_internet", "send_email"],
+            "code_and_run": ["write_custom_code", "run_cmd_command"]
+        }
+
+    def create_plan(self, intent: str, user_input: str) -> List[Dict[str, str]]:
+        """Creates a step-by-step execution plan."""
+        plan = []
+        user_input_lower = user_input.lower()
+
+        if intent == "complex_workflow" or "research" in user_input_lower:
+            plan.append({"step": 1, "action": "research",
+                        "description": "Performing deep web research"})
+            plan.append({"step": 2, "action": "summarize",
+                        "description": "Synthesizing information into a report"})
+            if "email" in user_input_lower:
+                plan.append({"step": 3, "action": "email",
+                            "description": "Sending the report via email"})
+            else:
+                plan.append({"step": 3, "action": "save",
+                            "description": "Saving report to a file"})
+
+        elif intent == "code_creation":
+            plan.append({"step": 1, "action": "write",
+                        "description": "Writing the requested code"})
+            plan.append({"step": 2, "action": "run",
+                        "description": "Executing the code for verification"})
+
+        return plan
+
+
 class ResponseGenerator:  # pylint: disable=too-few-public-methods
     """Generate intelligent responses based on analysis"""
 
@@ -213,6 +253,7 @@ class ResponseGenerator:  # pylint: disable=too-few-public-methods
 intent_analyzer = IntentAnalyzer()
 context_analyzer = ContextAnalyzer()
 response_generator = ResponseGenerator()
+workflow_planner = WorkflowPlanner()
 
 
 async def analyze_user_intent(user_input: str) -> Dict[str, Any]:
@@ -278,10 +319,11 @@ async def generate_smart_response(user_input: str, intent_analysis: Dict,
 
 async def process_with_advanced_reasoning(user_input_str: str,
                                           history: Optional[List] = None) -> Dict[str, Any]:
-    """Complete reasoning pipeline"""
+    """Complete reasoning pipeline with agentic planning"""
     try:
         # Step 1: Intent Analysis
         intent_result = await analyze_user_intent(user_input_str)
+        primary_intent = intent_result.get("primary_intent", "general")
 
         # Step 2: Context Analysis
         context_info = context_analyzer.analyze_context(
@@ -289,24 +331,28 @@ async def process_with_advanced_reasoning(user_input_str: str,
             history or []
         )
 
-        # Step 3: Response Generation
+        # Step 3: Workflow Planning
+        plan = workflow_planner.create_plan(primary_intent, user_input_str)
+
+        # Step 4: Response Generation
         smart_response = await generate_smart_response(
             user_input_str,
             intent_result,
             history or []
         )
 
-        # Step 4: Compile complete reasoning result
+        # Step 5: Compile complete reasoning result
         reasoning_result = {
             "user_input": user_input_str,
             "intent_analysis": intent_result,
             "context_analysis": context_info,
+            "plan": plan,
+            "is_agentic": len(plan) > 0,
             "generated_response": smart_response,
-            "processing_timestamp": datetime.now().isoformat(),
-            "reasoning_confidence": intent_result.get("confidence_scores", {})
+            "processing_timestamp": datetime.now().isoformat()
         }
 
-        logger.info("Advanced reasoning completed successfully")
+        logger.info("Advanced reasoning completed with plan: %s", plan)
         return reasoning_result
 
     except Exception as e:  # pylint: disable=broad-exception-caught

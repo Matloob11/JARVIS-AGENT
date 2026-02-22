@@ -12,6 +12,7 @@ import base64
 from io import BytesIO
 import pyautogui
 from PIL import Image
+import requests
 from google import genai
 from livekit.agents import function_tool
 from dotenv import load_dotenv
@@ -31,7 +32,7 @@ class ScreenPerceiver:
     Handles capturing and analyzing screen content.
     """
 
-    def __init__(self, model_name="gemini-2.0-flash"):
+    def __init__(self, model_name="models/gemini-2.5-flash-native-audio-latest"):
         self.model_name = model_name
 
     async def capture_screen(self) -> bytes:
@@ -95,14 +96,13 @@ class ScreenPerceiver:
                 }]
             }
 
-            import requests
             response = requests.post(
                 url, headers=headers, json=payload, timeout=60)
             if response.status_code == 200:
                 result = response.json()
                 return result['choices'][0]['message']['content']
             return f"OpenRouter Error: {response.text}"
-        except Exception as e:
+        except (requests.RequestException, ValueError, KeyError) as e:
             return f"Fallback failed: {str(e)}"
 
     async def analyze_content(self, prompt: str = "What is on my screen?") -> str:
@@ -135,16 +135,27 @@ vision_system = ScreenPerceiver()
 
 
 @function_tool
-async def analyze_screen(query: str = "Describe what you see on my screen in detail.") -> str:
+async def analyze_screen(query: str = "Describe what you see on my screen in detail.") -> dict:
     """
     Captures a screenshot of your primary monitor and uses AI to describe or analyze it.
     Use this to ask questions about currently open windows, visible text, or graphical content.
-
-    Example queries:
-    - 'Meri screen par kya hai?'
-    - 'What is the error message on my screen?'
-    - 'Is there a WhatsApp window visible?'
-    - 'Summarize the code visible in my editor.'
     """
-    result = await vision_system.analyze_content(query)
-    return f"👁️ Screen Analysis:\n{result}"
+    try:
+        result = await vision_system.analyze_content(query)
+        if result.startswith("Error"):
+            return {
+                "status": "error",
+                "message": f"👁️ Vision analysis failed: {result}"
+            }
+        return {
+            "status": "success",
+            "query": query,
+            "message": f"👁️ Screen Analysis:\n{result}"
+        }
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.exception("Vision tool error: %s", e)
+        return {
+            "status": "error",
+            "message": f"👁️ Vision analysis failed: {str(e)}",
+            "error": str(e)
+        }

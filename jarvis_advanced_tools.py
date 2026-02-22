@@ -67,7 +67,7 @@ async def download_images(query: str, count: int = 5, folder_name: str = "Downlo
                     with open(file_path, 'wb') as f:
                         f.write(response.content)
                     downloaded_count += 1
-            except Exception as e:  # pylint: disable=broad-exception-caught
+            except (requests.RequestException, IOError, OSError) as e:
                 logger.warning("Failed to download image %d: %s", i, e)
 
         return {
@@ -97,15 +97,16 @@ async def zip_files(folder_path: str, zip_name: str = "Archive.zip") -> dict:
     """
     _ = zip_name  # Suppress unused argument warning
     try:
-        # Use zip_name to avoid unused argument warning
-        _ = zip_name
         # Resolve path - if folder_path is just a name, look in common locations
         if not os.path.isabs(folder_path):
-            # Try D:/Jarvis_Downloads first
+            # Try Jarvis_Outputs first
             base_dir = os.path.join(os.getcwd(), "Jarvis_Outputs")
             actual_path = os.path.abspath(os.path.join(base_dir, folder_path))
             if not os.path.exists(actual_path):
-                return f"❌ Folder '{folder_path}' nahi mila."
+                return {
+                    "status": "error",
+                    "message": f"❌ Folder '{folder_path}' nahi mila."
+                }
             folder_path = actual_path
 
         await asyncio.to_thread(shutil.make_archive, folder_path, 'zip', folder_path)
@@ -116,12 +117,11 @@ async def zip_files(folder_path: str, zip_name: str = "Archive.zip") -> dict:
             "zip_path": zip_path,
             "message": f"✅ Folder ko successfully zip kar diya gaya hai: {zip_path}"
         }
-    except Exception as e:  # pylint: disable=broad-exception-caught
-        logger.exception("Error in zip_files: %s", e)
+    except (FileNotFoundError, PermissionError, OSError) as e:
+        logger.error("Zip error: %s", e)
         return {
             "status": "error",
-            "message": f"❌ Error zipping files: {str(e)}",
-            "error": str(e)
+            "message": f"❌ Error zipping files: {str(e)}"
         }
 
 
@@ -135,7 +135,10 @@ async def send_email(recipient: str, subject: str, body: str, attachment_path: s
     password = os.getenv("EMAIL_APP_PASSWORD")
 
     if not user_email or not password:
-        return "❌ Error: Email credentials (.env mein EMAIL_USER ya EMAIL_APP_PASSWORD) nahi mile."
+        return {
+            "status": "error",
+            "message": "❌ Error: Email credentials (.env mein EMAIL_USER ya EMAIL_APP_PASSWORD) nahi mile."
+        }
 
     try:
         # Create message
@@ -175,11 +178,10 @@ async def send_email(recipient: str, subject: str, body: str, attachment_path: s
             "subject": subject,
             "message": f"📧 Email successfully bhej diya gaya hai '{recipient}' ko, Sir Matloob."
         }
-    except Exception as e:  # pylint: disable=broad-exception-caught
-        logger.exception("Error in send_email: %s", e)
+    except (smtplib.SMTPException, ConnectionError, OSError) as e:
+        logger.error("Email send error: %s", e)
         return {
             "status": "error",
             "recipient": recipient,
-            "message": f"❌ Error sending email: {str(e)}",
-            "error": str(e)
+            "message": f"❌ Error sending email: {str(e)}"
         }

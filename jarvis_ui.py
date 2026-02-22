@@ -78,6 +78,8 @@ class JarvisUI:
 
         # IPC and Control
         self.udp_port = 5005
+        self.agent_cmd_port = 5006
+        self.muted = False
         self.stop_event = threading.Event()
 
         self.init_audio()
@@ -133,7 +135,8 @@ class JarvisUI:
                 'clock': pygame.font.SysFont(chosen_font, 82, bold=True),
                 'date': pygame.font.SysFont(chosen_font, 24, bold=True),
                 'metrics': pygame.font.SysFont(chosen_font, 20),
-                'track': pygame.font.SysFont(chosen_font, 26, italic=True)
+                'track': pygame.font.SysFont(chosen_font, 23, italic=True),
+                'button': pygame.font.SysFont(chosen_font, 18, bold=True)
             }
         except (pygame.error, ImportError) as e:
             print(f"Font loading error: {e}")
@@ -261,11 +264,33 @@ class JarvisUI:
                     self.screen_width, self.screen_height = self.screen.get_size()
                 elif event.key == pygame.K_ESCAPE:
                     self.running = False
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:  # Left click
+                    self.handle_clicks(event.pos)
             elif event.type == pygame.VIDEORESIZE:
                 if not self.fullscreen:
                     self.screen = pygame.display.set_mode(
                         (event.w, event.h), pygame.RESIZABLE)
                     self.screen_width, self.screen_height = event.w, event.h
+
+    def send_agent_command(self, command: str):
+        """Sends a UDP command to the Agent (MUTE/UNMUTE)."""
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            message = json.dumps({"command": command})
+            sock.sendto(message.encode(), ("127.0.0.1", self.agent_cmd_port))
+            print(f"Sent command to agent: {command}")
+        except socket.error as e:
+            print(f"Command Error: {e}")
+
+    def handle_clicks(self, pos):
+        """Handles mouse clicks on UI elements like buttons."""
+        # Check Mute Button Area (Top Right)
+        btn_rect = pygame.Rect(self.screen_width - 160, 30, 130, 40)
+        if btn_rect.collidepoint(pos):
+            self.muted = not self.muted
+            cmd = "MUTE" if self.muted else "UNMUTE"
+            self.send_agent_command(cmd)
 
     def draw_hud_elements(self):
         """Draws decorative HUD circles and lines."""
@@ -348,6 +373,32 @@ class JarvisUI:
             pygame.draw.rect(noise_surf, (255, 255, 255, 10), (x, y, 1, 1))
         self.screen.blit(noise_surf, (0, 0))
 
+    def draw_mute_button(self):
+        """Draws a techy Mute/Unmute button in the top right."""
+        btn_x = self.screen_width - 160
+        btn_y = 30
+        btn_w = 130
+        btn_h = 40
+
+        color = (255, 50, 50) if self.muted else CYAN
+        label = "MUTED" if self.muted else "MICROPHONE"
+
+        # Glow Effect
+        glow_rect = pygame.Rect(btn_x - 2, btn_y - 2, btn_w + 4, btn_h + 4)
+        pygame.draw.rect(self.screen, (*color, 50), glow_rect, border_radius=5)
+
+        # Main Button
+        pygame.draw.rect(self.screen, BLACK, (btn_x, btn_y,
+                         btn_w, btn_h), border_radius=5)
+        pygame.draw.rect(self.screen, color, (btn_x, btn_y,
+                         btn_w, btn_h), 2, border_radius=5)
+
+        # Label
+        text = self.fonts['button'].render(label, True, color)
+        text_rect = text.get_rect(
+            center=(btn_x + btn_w // 2, btn_y + btn_h // 2))
+        self.screen.blit(text, text_rect)
+
     def render(self):
         """Renders the entire UI frame by frame."""
         self.screen.fill(BLACK)
@@ -384,6 +435,7 @@ class JarvisUI:
         self.draw_hud_elements()
         self.draw_metrics()
         self.draw_data_stream()
+        self.draw_mute_button()
         self.draw_noise_layer()
 
         # 4. Clock

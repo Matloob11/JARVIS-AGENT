@@ -10,6 +10,7 @@ import requests
 from bs4 import BeautifulSoup
 from livekit.agents import function_tool
 from jarvis_search import GOOGLE_SEARCH_API_KEY, SEARCH_ENGINE_ID
+from jarvis_advanced_tools import send_email
 from jarvis_logger import setup_logger
 
 # Configure logging
@@ -54,7 +55,7 @@ async def scrape_url(url: str, timeout: int = 10) -> str:
 
         # Limit to first 4000 characters to keep context manageable
         return text[:4000]
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except (requests.RequestException, ValueError, AttributeError, KeyError) as e:
         logger.error("Error scraping %s: %s", url, e)
         return ""
 
@@ -79,7 +80,7 @@ async def get_search_urls(query: str, count: int = 5) -> List[str]:
                 item.get("link") for item in data.get("items", [])[:count]
                 if item.get("link")
             ]
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (requests.RequestException, ValueError, KeyError) as e:
             if attempt == 1:
                 logger.error("Error getting search URLs: %s", e)
                 return []
@@ -119,3 +120,40 @@ async def perform_web_research(query: str) -> str:
         "(Natural Urdu main)."
     )
     return msg
+
+
+@function_tool
+async def autonomous_research_and_email(query: str, recipient: str, subject: str = "Research Report") -> dict:
+    """
+    Performs deep research on a topic, synthesizes it, and sends it via email.
+    This is a multi-step agentic tool for complex requests.
+    """
+    logger.info("Starting Agentic Workflow: Research + Email for %s", query)
+
+    # Step 1: Research
+    research_summary = await perform_web_research(query)
+
+    if "[RESEARCH DATA RETRIEVED]" not in research_summary:
+        return {
+            "status": "error",
+            "message": "❌ Research fail ho gayi, email nahi bheji ja saki."
+        }
+
+    # Step 2: Email sending (Normally we'd synthesize first, but for now we send the raw synthesis)
+    # The Agent usually calls this. If we want it truly autonomous, we send the response.
+    email_body = f"Sir Matloob,\n\nAapke topic '{query}' par research report hazir hai:\n\n{research_summary}"
+
+    email_result = await send_email(recipient, subject, email_body)
+
+    if email_result.get("status") == "success":
+        return {
+            "status": "success",
+            "query": query,
+            "recipient": recipient,
+            "message": f"✅ Agentic task complete: Research karke report '{recipient}' ko bhej di gayi hai."
+        }
+
+    return {
+        "status": "partial_success",
+        "message": f"⚠️ Research to ho gayi, par email bhejne mein masla aaya: {email_result.get('message')}"
+    }

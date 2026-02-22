@@ -102,9 +102,9 @@ class WhatsAppAutomation:
         try:
             logger.info("Opening WhatsApp via URI: %s", WHATSAPP_URI)
             os.startfile(WHATSAPP_URI)
-            await asyncio.sleep(2.0)  # Initial wait for launch
+            await asyncio.sleep(3.0)  # Initial wait for launch
             return True
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (OSError, ValueError) as e:
             logger.error("Failed to open WhatsApp: %s", e)
             return False
 
@@ -114,58 +114,53 @@ class WhatsAppAutomation:
             logger.info("Searching for contact: %s", contact_name)
 
             # Focus Search Bar (Ctrl + F is standard)
-            # Sometimes WhatsApp needs a moment to catch input after focus
             await asyncio.sleep(2.0)
             pg.hotkey('ctrl', 'f')
             await asyncio.sleep(1.0)
 
-            # Clear previous search if any
+            # Clear previous search
             pg.hotkey('ctrl', 'a')
             pg.press('backspace')
             await asyncio.sleep(0.5)
 
-            # Type name slowly to let UI catch up
+            # Type name slowly
             for char in contact_name:
                 pg.write(char)
                 await asyncio.sleep(0.05)
 
-            # Wait for search results (Increased significantly)
+            # Polling for search results (Max 7 seconds)
+            logger.info("Waiting for search results...")
             await asyncio.sleep(4.0)
 
-            # Select first result
-            # Try pressing Down then Enter
+            # Select result
             pg.press('down')
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(0.5)
             pg.press('enter')
-            await asyncio.sleep(3.0)  # Wait for chat to open
 
+            # Wait for chat UI to load
+            await asyncio.sleep(1.5)
             return True
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (pg.FailSafeException, AttributeError, OSError) as e:
             logger.error("Error searching contact: %s", e)
             return False
 
     async def send_text_message(self, message: str):
         """Types and sends a message"""
         try:
-            logger.info("Sending message: %s", message)
             if not message:
                 return False
-
-            # Type message
-            # Handling newlines by splitting or just raw write?
-            # pg.write handles \n as enter usually, but let's be safe.
-            # WhatsApp sends on Enter by default.
+            logger.info("Sending message: %s", message[:20] + "...")
 
             # Use clipboard copy-paste for Unicode support
             pyperclip.copy(message)
             await asyncio.sleep(0.5)
             pg.hotkey('ctrl', 'v')
-            await asyncio.sleep(1.0)  # Wait for paste
+            await asyncio.sleep(0.8)
 
-            pg.press('enter')  # Send
+            pg.press('enter')
             logger.info("Message sent.")
             return True
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (pg.FailSafeException, AttributeError, OSError) as e:
             logger.error("Error sending message: %s", e)
             return False
 
@@ -186,7 +181,7 @@ whatsapp_bot = WhatsAppAutomation()
 
 
 @function_tool
-async def automate_whatsapp(contact_name: str, message: str, close_after: bool = True) -> str:
+async def automate_whatsapp(contact_name: str, message: str, close_after: bool = True) -> dict:
     """
     Automates WhatsApp Desktop to send a message.
 
@@ -207,7 +202,10 @@ async def automate_whatsapp(contact_name: str, message: str, close_after: bool =
         # 2. Wait for Focus (Give it time to load if cold start)
         is_focused = await whatsapp_bot.ensure_whatsapp_focus(timeout=15)
         if not is_focused:
-            return "❌ Failed to open or focus WhatsApp. Is it installed?"
+            return {
+                "status": "error",
+                "message": "❌ Failed to open or focus WhatsApp. Is it installed?"
+            }
 
         # 3. Search Contact
         await whatsapp_bot.search_and_select_contact(contact_name)
@@ -220,8 +218,21 @@ async def automate_whatsapp(contact_name: str, message: str, close_after: bool =
             # wait a bit before closing to ensure send
             await asyncio.sleep(3.0)
             await whatsapp_bot.close_whatsapp()
-            return f"✅ Message sent to '{contact_name}' and WhatsApp closed."
-        return f"✅ Message sent to '{contact_name}'. WhatsApp left open."
+            return {
+                "status": "success",
+                "contact": contact_name,
+                "message": f"✅ Message sent to '{contact_name}' and WhatsApp closed."
+            }
+        return {
+            "status": "success",
+            "contact": contact_name,
+            "message": f"✅ Message sent to '{contact_name}'. WhatsApp left open."
+        }
 
     except Exception as e:  # pylint: disable=broad-exception-caught
-        return f"❌ Error in WhatsApp automation: {str(e)}"
+        logger.exception("WhatsApp automation error: %s", e)
+        return {
+            "status": "error",
+            "message": f"❌ Error in WhatsApp automation: {str(e)}",
+            "error": str(e)
+        }

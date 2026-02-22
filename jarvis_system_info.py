@@ -34,6 +34,6 @@ async def get_laptop_info() -> str:
 
         return reply
 
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except (AttributeError, RuntimeError, OSError) as e:
         logger.exception("Error getting laptop info: %s", e)
         return f"❌ Error retrieving laptop info: {e}"

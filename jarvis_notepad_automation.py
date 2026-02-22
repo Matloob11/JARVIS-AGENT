@@ -232,18 +232,24 @@ def get_template_content(code_type: str, filename: str):
 
 
 @function_tool
-async def create_template_code(code_type: str, filename: str = "", auto_run: bool = True) -> str:
+async def create_template_code(code_type: str, filename: str = "", auto_run: bool = True) -> dict:
     """
     Create code file, visually type it in Notepad, and optionally Run it.
     """
     try:
         content, filename = get_template_content(code_type, filename)
         if not content:
-            return "❌ Unsupported code type"
+            return {
+                "status": "error",
+                "message": "❌ Unsupported code type"
+            }
 
         success, full_path = await notepad_automation.save_file_safely("", filename)
         if not success:
-            return f"❌ Failed to initialize file: {full_path}"
+            return {
+                "status": "error",
+                "message": f"❌ Failed to initialize file: {full_path}"
+            }
 
         msg = f"✅ File initialized: {filename}\n"
         try:
@@ -259,8 +265,8 @@ async def create_template_code(code_type: str, filename: str = "", auto_run: boo
             else:
                 msg += "⚠️ Notepad focus failed. Writing manually.\n"
                 await notepad_automation.save_file_safely(content, filename)
-        except Exception:  # pylint: disable=broad-exception-caught
-            msg += "⚠️ GUI automation failed. File saved programmatically.\n"
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            msg += f"⚠️ GUI automation failed: {str(e)}. File saved programmatically.\n"
             await notepad_automation.save_file_safely(content, filename)
 
         if auto_run:
@@ -273,20 +279,36 @@ async def create_template_code(code_type: str, filename: str = "", auto_run: boo
                 subprocess.Popen(
                     ['cmd', '/c', 'start', 'cmd', '/k', 'python', full_path])
                 msg += "🐍 Python script running in CMD!"
-        return msg
+
+        return {
+            "status": "success",
+            "filename": filename,
+            "path": full_path,
+            "message": msg
+        }
     except Exception as e:  # pylint: disable=broad-exception-caught
-        return f"❌ Error: {str(e)}"
+        logger.exception("create_template_code error: %s", e)
+        return {
+            "status": "error",
+            "message": f"❌ Error: {str(e)}"
+        }
 
 
 @function_tool
-async def write_custom_code(content: str, filename: str, auto_run: bool = True) -> str:
+async def write_custom_code(content: str, filename: str, auto_run: bool = True) -> dict:
     """Writes custom code based on user request."""
     try:
         if not filename:
-            return "❌ Filename is required"
+            return {
+                "status": "error",
+                "message": "❌ Filename is required"
+            }
         success, full_path = await notepad_automation.save_file_safely("", filename)
         if not success:
-            return f"❌ Failed to initialize file: {full_path}"
+            return {
+                "status": "error",
+                "message": f"❌ Failed to initialize file: {full_path}"
+            }
 
         msg = f"✅ File initialized: {filename}\n"
         try:
@@ -302,8 +324,10 @@ async def write_custom_code(content: str, filename: str, auto_run: bool = True) 
             else:
                 await notepad_automation.save_file_safely(content, filename)
                 msg += "⚠️ Focus failed. Saved programmatically.\n"
-        except Exception:  # pylint: disable=broad-exception-caught
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.warning("GUI automation for custom code failed: %s", e)
             await notepad_automation.save_file_safely(content, filename)
+            msg += "⚠️ GUI automation failed. File saved programmatically.\n"
 
         if auto_run:
             if filename.endswith('.html'):
@@ -315,30 +339,54 @@ async def write_custom_code(content: str, filename: str, auto_run: bool = True) 
                 subprocess.Popen(
                     ['cmd', '/c', 'start', 'cmd', '/k', 'python', full_path])
                 msg += "🐍 Python script running!"
-        return msg
+
+        return {
+            "status": "success",
+            "filename": filename,
+            "path": full_path,
+            "message": msg
+        }
     except Exception as e:  # pylint: disable=broad-exception-caught
         logger.exception("Error in write_custom_code: %s", e)
-        return f"❌ Error: {e}"
+        return {
+            "status": "error",
+            "message": f"❌ Error: {e}"
+        }
 
 
 @function_tool
-async def run_cmd_command(command: str) -> str:
+async def run_cmd_command(command: str) -> dict:
     """Execute a CMD command (Non-interactive) safely."""
     try:
         # Sanitize and run via list to prevent injection
         # pylint: disable=consider-using-with
         subprocess.Popen(['cmd', '/c', 'start', 'cmd', '/k', command])
-        return f"✅ Command sent to CMD: {command}"
+        return {
+            "status": "success",
+            "command": command,
+            "message": f"✅ Command sent to CMD: {command}"
+        }
     except Exception as e:  # pylint: disable=broad-exception-caught
-        return f"❌ Error running command: {e}"
+        logger.exception("run_cmd_command error: %s", e)
+        return {
+            "status": "error",
+            "message": f"❌ Error running command: {e}"
+        }
 
 
 @function_tool
-async def open_notepad_simple() -> str:
+async def open_notepad_simple() -> dict:
     """Open a blank Notepad instance"""
     try:
         # pylint: disable=consider-using-with
         subprocess.Popen(['notepad.exe'])
-        return "✅ Notepad opened"
+        return {
+            "status": "success",
+            "message": "✅ Notepad opened"
+        }
     except Exception as e:  # pylint: disable=broad-exception-caught
-        return f"❌ Error: {str(e)}"
+        logger.exception("open_notepad_simple error: %s", e)
+        return {
+            "status": "error",
+            "message": f"❌ Error: {str(e)}"
+        }

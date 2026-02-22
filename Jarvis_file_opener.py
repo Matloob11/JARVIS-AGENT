@@ -200,6 +200,11 @@ async def play_file(name: str) -> dict:
     """
     Searches for and opens a file by name from the D:/ drive.
     """
+    # If 'name' is already a direct path, skip indexing
+    if os.path.isabs(name) and os.path.exists(name):
+        logger.info("⚡ Direct path detected, skipping indexing: %s", name)
+        return await open_file({"name": os.path.basename(name), "path": name})
+
     # Specific folders to index for better performance (can add more)
     folders_to_index = ["D:/"]
     index = await index_files(folders_to_index)
