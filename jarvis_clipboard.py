@@ -86,6 +86,8 @@ class ClipboardMonitor:
 
         while self.is_running:
             try:
+                if not self.is_running:
+                    break
                 # pyperclip.paste() is blocking, run in thread
                 current_paste = await asyncio.to_thread(pyperclip.paste)
 

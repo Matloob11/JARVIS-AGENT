@@ -509,18 +509,39 @@ async def maximize_window(window_name: str = "active") -> str:
 
 
 @function_tool
-async def folder_file(path: str) -> str:  # pylint: disable=unused-argument
+async def folder_file(path: str) -> dict:
     """
-    Placeholder for folder/file management capabilities.
+    Opens a specified folder or file on the system.
     """
-    return "❌ folder_file tool not implemented"
+    try:
+        if not path:
+            return {"status": "error", "message": "❌ Path empty hai."}
+
+        # Resolve path
+        abs_path = os.path.abspath(path)
+        if not await asyncio.to_thread(os.path.exists, abs_path):
+            return {"status": "error", "message": f"❌ Path nahi mila: {path}"}
+
+        # Open via startfile in thread
+        await asyncio.to_thread(os.startfile, abs_path)
+        return {
+            "status": "success",
+            "path": abs_path,
+            "message": f"📂 '{os.path.basename(abs_path)}' ko open kar diya gaya hai."
+        }
+    except (OSError, ValueError, AttributeError) as e:
+        logger.error("folder_file error: %s", e)
+        return {
+            "status": "error",
+            "message": f"❌ Open karne mein error: {str(e)}"
+        }
 
 
 # ===================== SYSTEM CONTROL ===================== #
 @function_tool
 async def shutdown_system() -> dict:
     """Shuts down the computer immediately."""
-    os.system("shutdown /s /t 0")
+    await asyncio.to_thread(os.system, "shutdown /s /t 0")
     return {
         "status": "success",
         "message": "🔌 System shutting down..."
@@ -530,7 +551,7 @@ async def shutdown_system() -> dict:
 @function_tool
 async def restart_system() -> dict:
     """Restarts the computer immediately."""
-    os.system("shutdown /r /t 0")
+    await asyncio.to_thread(os.system, "shutdown /r /t 0")
     return {
         "status": "success",
         "message": "🔄 System restarting..."
@@ -540,7 +561,7 @@ async def restart_system() -> dict:
 @function_tool
 async def sleep_system() -> dict:
     """Puts the computer to sleep."""
-    os.system("rundll32.exe powrprof.dll,SetSuspendState 0,1,0")
+    await asyncio.to_thread(os.system, "rundll32.exe powrprof.dll,SetSuspendState 0,1,0")
     return {
         "status": "success",
         "message": "😴 System going to sleep..."
@@ -550,7 +571,7 @@ async def sleep_system() -> dict:
 @function_tool
 async def lock_screen() -> dict:
     """Locks the screen."""
-    os.system("rundll32.exe user32.dll,LockWorkStation")
+    await asyncio.to_thread(os.system, "rundll32.exe user32.dll,LockWorkStation")
     return {
         "status": "success",
         "message": "🔒 Screen locked."
@@ -562,13 +583,13 @@ async def create_folder(folder_name: str):
     """Creates a new folder on the Desktop (handles localized paths)."""
     try:
         # Robust Desktop path detection using environment variables or fallback
-        desktop = os.path.join(os.environ.get("USERPROFILE"), "Desktop")
-        if not os.path.exists(desktop):
+        desktop = os.path.join(os.environ.get("USERPROFILE", ""), "Desktop")
+        if not await asyncio.to_thread(os.path.exists, desktop):
             # Fallback to home folder if desktop is moved
             desktop = os.path.expanduser("~")
 
         path = os.path.join(desktop, folder_name)
-        os.makedirs(path, exist_ok=True)
+        await asyncio.to_thread(os.makedirs, path, exist_ok=True)
         return f"✅ Folder '{folder_name}' Desktop par create kar diya gaya hai."
     except OSError as e:
         logger.error("Create folder error: %s", e)
@@ -580,7 +601,7 @@ async def create_folder(folder_name: str):
 
 
 @function_tool
-async def open_outputs_folder(subfolder: str = "") -> str:
+async def open_outputs_folder(subfolder: str = "") -> dict:
     """
     Opens the Jarvis_Outputs folder or a specific subfolder (e.g., 'QR_Codes', 'Generated_Images', 'Downloads').
     Use this when the user asks to open the generated files, downloads, or specific output folders.

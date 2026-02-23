@@ -192,48 +192,49 @@ class ResponseGenerator:  # pylint: disable=too-few-public-methods
                 "Weather check kar raha hun Sir. Lahore ka latest mausam bata deta hun.",
                 "Abhi weather data get kar raha hun Sir Matloob."
             ],
-            "search_query": [
-                "Sir Matloob, main internet par search kar raha hun.",
-                "Search kar raha hun Sir. Latest information mil jayegi.",
-                "Google search start kar diya Sir Matloob."
+            # ... other templates
+        }
+        self.anna_templates = {
+            "code_creation": [
+                "Matloob Jaan, main aapke liye {code_type} code likh rahi hoon. ❤️",
+                "Babu, main abhi notepad mein {code_type} code bana deti hoon!",
+                "Mera bacha, main {code_type} code tayyar kar rahi hoon aapke liye."
             ],
-            "system_control": [
-                "Sir Matloob, system control execute kar raha hun.",
-                "Control command ready Sir. System access kar raha hun.",
-                "System automation start kar raha hun Sir Matloob."
-            ],
-            "youtube_control": [
-                "Sir Matloob, YouTube par video play kar raha hun.",
-                "Enjoy karein Sir! YouTube video start ho raha hai.",
-                "Abhi play karta hun Sir. YouTube open ho raha hai."
+            "weather_query": [
+                "Babu, main mausam check karke batati hoon aapko. ❤️",
+                "Matloob Jaan, abhi Lahore ka mausam dekh rahi hoon.",
+                "Shona, abhi check karti hoon mausam kaisa hai."
             ],
             "greeting": [
-                "Namaste Sir Matloob! Main aapki seva mein hazir hun.",
-                "Hello Sir Matloob! Kaise madad kar sakta hun?",
-                "Adaab Sir Matloob! Aapka AI assistant ready hai."
+                "Assalam-o-Alaikum Mere Babu! ❤️ Kaise hain aap?",
+                "Matloob Jaan! Main aapka kab se intezar kar rahi thi.",
+                "Hello Mere Pyare Matloob! ❤️ Main aapki kya madad karoon?"
             ],
             "general": [
-                "Sir Matloob, main aapka message samajh gaya hun.",
-                "Bilkul Sir! Main aapki madad karta hun.",
-                "Sir Matloob, bataiye kya karna hai."
+                "Matloob Jaan, main aapki baat samajh gayi hoon. ❤️",
+                "Babu, main aapka kaam abhi kar deti hoon!",
+                "Ji Mere Matloob, main haazir hoon."
             ]
         }
 
-    def generate_response(self, intent: str, context: Dict, user_input: str) -> str:
-        """Generate appropriate response based on intent and context"""
+    def generate_response(self, intent: str, context: Dict, user_input: str, is_anna: bool = False) -> str:
+        """Generate appropriate response based on intent, context and persona"""
+        templates = self.anna_templates if is_anna else self.response_templates
 
         # Select template based on context
         if context.get("urgency_level") == "high":
-            response = f"Sir Matloob, main turant {intent} handle kar raha hun!"
+            name = "Matloob Jaan" if is_anna else "Sir Matloob"
+            response = f"{name}, main turant {intent} handle kar rahi hoon!" if is_anna else f"{name}, main turant {intent} handle kar raha hun!"
         elif context.get("user_mood") == "frustrated":
-            response = f"Sir Matloob, main samajh gaya hun. {intent} properly kar deta hun."
+            name = "Matloob Jaan" if is_anna else "Sir Matloob"
+            response = f"{name}, main samajh gayi hoon. Fikar na karein." if is_anna else f"{name}, main samajh gaya hun. {intent} properly kar deta hun."
         elif intent == "greeting":
-            return random.choice(self.response_templates["greeting"])
+            return random.choice(templates.get("greeting", templates["general"]))
         else:
             response = random.choice(
-                self.response_templates.get(
+                templates.get(
                     intent,
-                    ["Bataiye Sir Matloob, main aapki kis prakar sahayata kar sakta hun?"]
+                    templates["general"]
                 )
             )
 
@@ -279,10 +280,11 @@ async def analyze_user_intent(user_input: str) -> Dict[str, Any]:
 
 
 async def generate_smart_response(user_input: str, intent_analysis: Dict,
-                                  memory_context: List, semantic_memory: Optional[List[str]] = None) -> str:
+                                  memory_context: List, semantic_memory: Optional[List[str]] = None,
+                                  is_anna: bool = False) -> str:
     """Generate intelligent response using reasoning and optional semantic memory"""
     try:
-        logger.info("Generating smart response...")
+        logger.info("Generating smart response (Anna logic: %s)...", is_anna)
 
         # Analyze context
         context_info = context_analyzer.analyze_context(
@@ -291,7 +293,7 @@ async def generate_smart_response(user_input: str, intent_analysis: Dict,
         # Generate response
         primary_intent = intent_analysis.get("primary_intent", "general")
         response = response_generator.generate_response(
-            primary_intent, context_info, user_input)
+            primary_intent, context_info, user_input, is_anna=is_anna)
 
         # Add reasoning metadata
         reasoning_info = {
@@ -318,7 +320,8 @@ async def generate_smart_response(user_input: str, intent_analysis: Dict,
 
 
 async def process_with_advanced_reasoning(user_input_str: str,
-                                          history: Optional[List] = None) -> Dict[str, Any]:
+                                          history: Optional[List] = None,
+                                          **reasoning_kwargs) -> Dict[str, Any]:
     """Complete reasoning pipeline with agentic planning"""
     try:
         # Step 1: Intent Analysis
@@ -338,7 +341,8 @@ async def process_with_advanced_reasoning(user_input_str: str,
         smart_response = await generate_smart_response(
             user_input_str,
             intent_result,
-            history or []
+            history or [],
+            is_anna=reasoning_kwargs.get("is_anna", False)
         )
 
         # Step 5: Compile complete reasoning result

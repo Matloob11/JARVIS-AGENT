@@ -16,9 +16,11 @@ class IdentityManager:
 
     def __init__(self, storage_path: str = "conversations/identity.json"):
         self.storage_path = storage_path
-        self.data: Dict[str, str] = {
+        self.data: Dict[str, Any] = {
             "user_background": "User background not set yet.",
-            "sir_background": "Sir's background not set yet."
+            "sir_background": "Sir's background not set yet.",
+            "anna_mood": "loving",
+            "is_upset": False
         }
         self.lock = asyncio.Lock()
         self._load_sync()
@@ -70,6 +72,20 @@ class IdentityManager:
         await self.save()
         return "Aapke Sir ka background update ho gaya hai."
 
+    async def set_anna_mood(self, mood: str, is_upset: bool = False) -> str:
+        """Updates Anna's emotional state."""
+        self.data["anna_mood"] = mood
+        self.data["is_upset"] = is_upset
+        await self.save()
+        return f"Anna's mood updated to {mood}. Upset status: {is_upset}"
+
+    def get_anna_state(self) -> dict:
+        """Returns Anna's current emotional state."""
+        return {
+            "mood": self.data.get("anna_mood", "loving"),
+            "is_upset": self.data.get("is_upset", False)
+        }
+
 
 # Global instance
 jarvis_id = IdentityManager()
@@ -93,6 +109,15 @@ try:
         Use this when the user says 'Mere Sir ke bare mein ye yaaad rakho' or describes his Sir's background.
         """
         msg = await jarvis_id.update_sir_background(background_info)
+        return {"status": "success", "message": msg}
+
+    @function_tool
+    async def tool_set_anna_state(mood: str, is_upset: bool) -> dict:
+        """
+        Explicitly sets Anna's emotional mood and upset status.
+        Moods: 'loving', 'angry', 'sad', 'playful'.
+        """
+        msg = await jarvis_id.set_anna_mood(mood, is_upset)
         return {"status": "success", "message": msg}
 
 except ImportError:

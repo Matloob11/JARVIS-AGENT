@@ -145,22 +145,22 @@ class WhatsAppAutomation:
             return False
 
     async def send_text_message(self, message: str):
-        """Types and sends a message"""
+        """Types and sends a message using the standardized type_text_tool."""
         try:
             if not message:
                 return False
-            logger.info("Sending message: %s", message[:20] + "...")
+            logger.info("Sending message via type_text_tool: %s",
+                        message[:20] + "...")
 
-            # Use clipboard copy-paste for Unicode support
-            pyperclip.copy(message)
-            await asyncio.sleep(0.5)
-            pg.hotkey('ctrl', 'v')
+            # Use the robust tool from keyboard_mouse_ctrl
+            from keyboard_mouse_ctrl import type_text_tool
+            await type_text_tool(message)
+
             await asyncio.sleep(0.8)
-
             pg.press('enter')
             logger.info("Message sent.")
             return True
-        except (pg.FailSafeException, AttributeError, OSError) as e:
+        except (pg.FailSafeException, AttributeError, OSError, ImportError) as e:
             logger.error("Error sending message: %s", e)
             return False
 

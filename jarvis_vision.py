@@ -40,8 +40,8 @@ class ScreenPerceiver:
         Captures the current primary screen and returns it as PNG bytes.
         """
         try:
-            # Capture using pyautogui
-            screenshot = pyautogui.screenshot()
+            # Capture using pyautogui in a thread to avoid blocking
+            screenshot = await asyncio.to_thread(pyautogui.screenshot)
 
             # Save to BytesIO to avoid disk I/O if possible,
             # but we need it in a format Gemini accepts (PIL or bytes)
@@ -96,8 +96,8 @@ class ScreenPerceiver:
                 }]
             }
 
-            response = requests.post(
-                url, headers=headers, json=payload, timeout=60)
+            response = await asyncio.to_thread(
+                requests.post, url, headers=headers, json=payload, timeout=60)
             if response.status_code == 200:
                 result = response.json()
                 return result['choices'][0]['message']['content']

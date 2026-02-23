@@ -192,8 +192,11 @@ class SafeController:
         # Fix: convert escaped sequences into real ones
         text = codecs.decode(text, "unicode_escape")
 
-        if len(text) > 50:
-            # Use clipboard for fast entry of long text/code
+        # Check for non-ASCII (Unicode/Urdu) characters
+        is_unicode = any(ord(char) > 127 for char in text)
+
+        if len(text) > 50 or is_unicode:
+            # Use clipboard for fast entry of long text or reliable Unicode support
             try:
                 pyperclip.copy(text)
                 await asyncio.sleep(0.1)
@@ -202,10 +205,12 @@ class SafeController:
                 self.keyboard.release('v')
                 self.keyboard.release(Key.ctrl)
                 await asyncio.sleep(0.1)
-                self.log(f"Fast-typed (clipboard) {len(text)} chars.")
-                return f"⌨️ Fast-typed {len(text)} characters using clipboard."
-            except ImportError:
-                # Fallback if pyperclip is somehow missing
+                reason = "Unicode" if is_unicode else "length"
+                self.log(
+                    f"Fast-typed (clipboard) due to {reason}: {len(text)} chars.")
+                return f"⌨️ Fast-typed {len(text)} characters using clipboard ({reason})."
+            except (ImportError, OSError):
+                # Fallback if pyperclip is somehow missing or fails
                 pass
 
         # Traditional typing for short strings or if clipboard fails
