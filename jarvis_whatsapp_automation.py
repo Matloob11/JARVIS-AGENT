@@ -6,15 +6,15 @@ import os
 import time
 import asyncio
 import pyautogui as pg
-import pyperclip
 import pygetwindow as gw
+from livekit.agents import function_tool
+from keyboard_mouse_ctrl import type_text_tool
 try:
     import win32gui
     import win32con
 except ImportError:
     win32gui = None
     win32con = None
-from livekit.agents import function_tool
 from jarvis_logger import setup_logger
 
 # Setup logging
@@ -81,11 +81,16 @@ class WhatsAppAutomation:
                 except Exception:  # pylint: disable=broad-exception-caught
                     pass
 
-                await asyncio.sleep(1.0)  # Give it more time to settle
+                # Polling for active state
+                poll_start = time.time()
+                while time.time() - poll_start < 3.0:  # Poll for max 3 seconds
+                    if whatsapp_win.isActive:
+                        logger.info("WhatsApp is active and focused.")
+                        focused = True
+                        break
+                    await asyncio.sleep(0.1)
 
-                if whatsapp_win.isActive:
-                    logger.info("WhatsApp is active and focused.")
-                    focused = True
+                if focused:
                     break
 
             except Exception as e:  # pylint: disable=broad-exception-caught
@@ -153,7 +158,6 @@ class WhatsAppAutomation:
                         message[:20] + "...")
 
             # Use the robust tool from keyboard_mouse_ctrl
-            from keyboard_mouse_ctrl import type_text_tool
             await type_text_tool(message)
 
             await asyncio.sleep(0.8)
@@ -204,7 +208,7 @@ async def automate_whatsapp(contact_name: str, message: str, close_after: bool =
         if not is_focused:
             return {
                 "status": "error",
-                "message": "❌ Failed to open or focus WhatsApp. Is it installed?"
+                "message": "❌ Maazrat Sir, WhatsApp open ya focus nahi ho paaya. Kya ye installed hai?"
             }
 
         # 3. Search Contact
@@ -233,6 +237,6 @@ async def automate_whatsapp(contact_name: str, message: str, close_after: bool =
         logger.exception("WhatsApp automation error: %s", e)
         return {
             "status": "error",
-            "message": f"❌ Error in WhatsApp automation: {str(e)}",
+            "message": f"❌ WhatsApp automation mein masla aaya: {str(e)}",
             "error": str(e)
         }

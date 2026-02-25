@@ -19,6 +19,7 @@ import pygetwindow as gw
 import pywintypes
 import win32gui
 import win32con
+import pyperclip
 import pyautogui as pg
 
 # First-party imports
@@ -298,14 +299,17 @@ async def save_notepad(file_path: str = r"D:\jarvis_notes.txt") -> dict:
         pg.hotkey('ctrl', 's')
         await asyncio.sleep(1.5)  # Wait for Save As dialog
 
-        # Type path
-        pg.write(file_path, interval=0.01)
+        # Type path using clipboard (safer than pg.write for long/special paths)
+        pyperclip.copy(file_path)
+        await asyncio.sleep(0.5)
+        pg.hotkey('ctrl', 'v')
         await asyncio.sleep(0.5)
         pg.press('enter')
 
         # Overwrite check - ONLY if file exists
         if os.path.exists(file_path):
-            await asyncio.sleep(1)
+            await asyncio.sleep(1.2)
+            # Find the "Confirm Save As" sub-window if possible, or just press Left/Enter as fallback
             pg.press('left')
             pg.press('enter')
         else:
@@ -458,15 +462,15 @@ async def minimize_window(window_name: str = "active") -> str:
             window = gw.getActiveWindow()
             if window:
                 window.minimize()
-                return "📉 Active window minimize kar di gayi hai"
-            return "❌ Koi active window nahi mili"
+                return "📉 Active window minimize kar di gayi hai, Sir."
+            return "❌ Koi active window nahi mili."
 
         # Search for window by name
         windows = gw.getWindowsWithTitle(window_name)
         if windows:
             windows[0].minimize()
-            return f"📉 '{window_name}' minimize kar di gayi hai"
-        return f"❌ '{window_name}' naam ki koi window nahi mili"
+            return f"📉 '{window_name}' minimize kar di gayi hai, Sir."
+        return f"❌ '{window_name}' naam ki koi window nahi mili."
     except (pywintypes.error, AttributeError) as e:  # pylint: disable=no-member
         logger.error("Minimize Error: %s", e)
         return {
@@ -490,15 +494,15 @@ async def maximize_window(window_name: str = "active") -> str:
             window = gw.getActiveWindow()
             if window:
                 window.maximize()
-                return "📈 Active window maximize kar di gayi hai"
-            return "❌ Koi active window nahi mili"
+                return "📈 Active window maximize kar di gayi hai, Sir."
+            return "❌ Koi active window nahi mili."
 
         # Search for window by name
         windows = gw.getWindowsWithTitle(window_name)
         if windows:
             windows[0].maximize()
-            return f"📈 '{window_name}' maximize kar di gayi hai"
-        return f"❌ '{window_name}' naam ki koi window nahi mili"
+            return f"📈 '{window_name}' maximize kar di gayi hai, Sir."
+        return f"❌ '{window_name}' naam ki koi window nahi mili."
     except (pywintypes.error, AttributeError) as e:  # pylint: disable=no-member
         logger.error("Maximize Error: %s", e)
         return {
@@ -544,7 +548,7 @@ async def shutdown_system() -> dict:
     await asyncio.to_thread(os.system, "shutdown /s /t 0")
     return {
         "status": "success",
-        "message": "🔌 System shutting down..."
+        "message": "🔌 System shutdown ho raha hai, Sir. Allah Hafiz."
     }
 
 
@@ -554,7 +558,7 @@ async def restart_system() -> dict:
     await asyncio.to_thread(os.system, "shutdown /r /t 0")
     return {
         "status": "success",
-        "message": "🔄 System restarting..."
+        "message": "🔄 System restart ho raha hai, Sir."
     }
 
 
@@ -564,7 +568,7 @@ async def sleep_system() -> dict:
     await asyncio.to_thread(os.system, "rundll32.exe powrprof.dll,SetSuspendState 0,1,0")
     return {
         "status": "success",
-        "message": "😴 System going to sleep..."
+        "message": "😴 System sleep mode par jaa raha hai, Sir."
     }
 
 
@@ -574,7 +578,7 @@ async def lock_screen() -> dict:
     await asyncio.to_thread(os.system, "rundll32.exe user32.dll,LockWorkStation")
     return {
         "status": "success",
-        "message": "🔒 Screen locked."
+        "message": "🔒 Screen lock kar di gayi hai, Sir."
     }
 
 

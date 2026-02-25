@@ -3,10 +3,10 @@ Jarvis AI Bug Hunter
 This module monitors logs for errors and uses AI to analyze tracebacks and suggest fixes.
 """
 
-from livekit.agents import function_tool
 import os
 import asyncio
 from typing import List
+from livekit.agents import function_tool
 from jarvis_logger import setup_logger
 
 # Configure logging

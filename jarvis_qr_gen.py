@@ -70,10 +70,11 @@ async def generate_qr_code(data: str, filename: str = "my_stylish_qr.png") -> di
             "status": "success",
             "data": data,
             "file_path": file_path,
-            "message": f"✅ Sir Matloob, aapka stylish dots wala QR code '{filename}' ke naam se save kar diya gaya hai. Path: {file_path}"
+            "message": (f"✅ Sir Matloob, aapka stylish dots wala QR code '{filename}' "
+                        f"ke naam se save kar diya gaya hai. Path: {file_path}")
         }
 
-    except Exception as e:
+    except (OSError, ValueError, RuntimeError) as e:
         logger.exception("Error in generate_qr_code: %s", e)
         return {
             "status": "error",

@@ -141,11 +141,11 @@ async def automate_youtube(action: str, query: str = "") -> dict:
                     "action": "play",
                     "query": query,
                     "url": video_url,
-                    "message": f"✅ Playing '{query}' on YouTube Desktop."
+                    "message": f"✅ YouTube par '{query}' play kar raha hoon, Sir."
                 }
             return {
                 "status": "error",
-                "message": f"❌ Could not find a video for '{query}'."
+                "message": f"❌ Maazrat Sir, '{query}' ke liye koi video nahi mili."
             }
 
         if action == "search":
@@ -156,7 +156,7 @@ async def automate_youtube(action: str, query: str = "") -> dict:
                 "action": "search",
                 "query": query,
                 "url": search_url,
-                "message": f"✅ Searching '{query}' on YouTube Desktop."
+                "message": f"✅ YouTube par '{query}' search kar raha hoon, Sir."
             }
 
         return {

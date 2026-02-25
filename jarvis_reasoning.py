@@ -132,8 +132,14 @@ class ContextAnalyzer:  # pylint: disable=too-few-public-methods
         # Detect mood
         positive_words = ["accha", "good", "great", "perfect", "excellent"]
         negative_words = ["problem", "issue", "error", "galat", "wrong"]
+        upset_words = [
+            "naraz", "gussa", "baat nahi", "chup", "mood kharab",
+            "angry", "upset", "don't talk", "leave me", "shutup", "hate"
+        ]
 
-        if any(word in current_lower for word in positive_words):
+        if any(word in current_lower for word in upset_words):
+            context_info["user_mood"] = "upset"
+        elif any(word in current_lower for word in positive_words):
             context_info["user_mood"] = "positive"
         elif any(word in current_lower for word in negative_words):
             context_info["user_mood"] = "frustrated"
@@ -224,10 +230,17 @@ class ResponseGenerator:  # pylint: disable=too-few-public-methods
         # Select template based on context
         if context.get("urgency_level") == "high":
             name = "Matloob Jaan" if is_anna else "Sir Matloob"
-            response = f"{name}, main turant {intent} handle kar rahi hoon!" if is_anna else f"{name}, main turant {intent} handle kar raha hun!"
+            if is_anna:
+                response = f"{name}, main turant {intent} handle kar rahi hoon!"
+            else:
+                response = f"{name}, main turant {intent} handle kar raha hun!"
         elif context.get("user_mood") == "frustrated":
             name = "Matloob Jaan" if is_anna else "Sir Matloob"
-            response = f"{name}, main samajh gayi hoon. Fikar na karein." if is_anna else f"{name}, main samajh gaya hun. {intent} properly kar deta hun."
+            if is_anna:
+                response = f"{name}, main samajh gayi hoon. Fikar na karein."
+            else:
+                response = (f"{name}, main samajh gaya hun. "
+                            f"{intent} properly kar deta hun.")
         elif intent == "greeting":
             return random.choice(templates.get("greeting", templates["general"]))
         else:

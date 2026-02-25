@@ -5,7 +5,7 @@ Manages persistent identity and background context for the User and their "Sir".
 import json
 import os
 import asyncio
-from typing import Dict
+from typing import Dict, Any
 from jarvis_logger import setup_logger
 
 logger = setup_logger("JARVIS-IDENTITY")
@@ -43,8 +43,11 @@ class IdentityManager:
                 os.makedirs(os.path.dirname(self.storage_path), exist_ok=True)
 
                 def _write():
-                    with open(self.storage_path, 'w', encoding='utf-8') as f:
+                    temp_path = self.storage_path + ".tmp"
+                    with open(temp_path, 'w', encoding='utf-8') as f:
                         json.dump(self.data, f, indent=4, ensure_ascii=False)
+                    # Use os_replace for atomic operation
+                    os.replace(temp_path, self.storage_path)
                 await asyncio.to_thread(_write)
                 logger.info("Identity context saved.")
             except IOError as e:

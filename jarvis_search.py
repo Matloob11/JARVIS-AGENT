@@ -100,7 +100,7 @@ async def search_tavily(query: str) -> dict:
             "results": results,
             "message": f"[TAVILY SEARCH]\n{summary}"
         }
-    except Exception as e:
+    except (requests.exceptions.RequestException, ValueError, KeyError) as e:
         logger.warning("Tavily Search failed: %s", e)
         return {"status": "error", "message": str(e)}
 
@@ -137,7 +137,7 @@ async def search_google(query: str) -> dict:
             "results": results,
             "message": f"[GOOGLE SEARCH]\n{summary}"
         }
-    except Exception as e:
+    except (requests.exceptions.RequestException, ValueError, KeyError) as e:
         logger.warning("Google Search failed: %s", e)
         return {"status": "error", "message": str(e)}
 

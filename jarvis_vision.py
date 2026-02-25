@@ -150,7 +150,7 @@ async def analyze_screen(query: str = "Describe what you see on my screen in det
         return {
             "status": "success",
             "query": query,
-            "message": f"👁️ Screen Analysis:\n{result}"
+            "message": f"👁️ Screen Analysis report taiyyar hai, Sir:\n{result}"
         }
     except Exception as e:  # pylint: disable=broad-exception-caught
         logger.exception("Vision tool error: %s", e)

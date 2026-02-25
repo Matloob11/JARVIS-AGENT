@@ -148,5 +148,5 @@ async def ask_about_document(doc_name: str, question: str = "Summarize this docu
         "document_path": file_path,
         "content": content,
         "question": question,
-        "message": f"📄 Document Found: {os.path.basename(file_path)}. Preparing to answer your question."
+        "message": f"📄 Document mil gaya hai: {os.path.basename(file_path)}. Main abhi aapka sawal analyze kar raha hoon."
     }

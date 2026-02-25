@@ -156,7 +156,7 @@ async def open_file(item):
             "file_path": item['path'],
             "file_name": item['name']
         }
-    except Exception as open_e:  # pylint: disable=broad-exception-caught
+    except (OSError, ValueError, subprocess.SubprocessError) as open_e:
         logger.exception("❌ File open karne mein error aaya: %s", open_e)
         return {
             "status": "error",

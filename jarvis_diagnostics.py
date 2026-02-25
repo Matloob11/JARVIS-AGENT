@@ -130,7 +130,7 @@ def format_health_report(report: Dict[str, Any]) -> str:
     for name, status in report['api_connectivity'].items():
         msg += f"- {name}: {status}\n"
 
-    return msg  # This specific line has a small bug to test self-healing later
+    return msg
 
 
 try:

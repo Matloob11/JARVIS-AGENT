@@ -1,7 +1,10 @@
 """
-Keyboard and Mouse Control Module for Jarvis
-Handles low-level system input and volume control.
+# keyboard_mouse_ctrl.py
+Keyboard and mouse control tools for the JARVIS agent.
 """
+
+# pylint: disable=no-member, protected-access, broad-exception-caught
+
 import asyncio
 import time
 import os
@@ -64,9 +67,8 @@ class SafeController:
         try:
             # Initialize COM for the current thread
             try:
-                # pylint: disable=no-member
                 pythoncom.CoInitialize()
-            except pywintypes.error:  # pylint: disable=no-member
+            except pywintypes.error:
                 # Already initialized or other COM error
                 pass
 
@@ -75,18 +77,18 @@ class SafeController:
                 return devices.volume
 
             interface = devices.Activate(
-                IAudioEndpointVolume._iid_, CLSCTX_ALL, None)  # pylint: disable=protected-access
+                IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
             return cast(interface, POINTER(IAudioEndpointVolume))
-        except (pywintypes.error, AttributeError, OSError) as e:  # pylint: disable=no-member
+        except (pywintypes.error, AttributeError, OSError) as e:
             logger.warning("Volume interface error: %s", e)
             try:
                 device_enumerator = AudioUtilities.GetDeviceEnumerator()
                 default_device = device_enumerator.GetDefaultAudioEndpoint(
                     0, 1)
                 interface = default_device.Activate(
-                    IAudioEndpointVolume._iid_, CLSCTX_ALL, None)  # pylint: disable=protected-access
+                    IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
                 return cast(interface, POINTER(IAudioEndpointVolume))
-            except (pywintypes.error, AttributeError, OSError, Exception) as final_e:  # pylint: disable=no-member, broad-exception-caught
+            except (pywintypes.error, AttributeError, OSError, Exception) as final_e:
                 logger.warning("Volume interface fallback error: %s", final_e)
                 return None
 
@@ -136,14 +138,20 @@ class SafeController:
         if not self.is_active():
             return "🛑 Controller is inactive."
         x, y = self.mouse.position
+        # Get screen size to clamp coordinates
+        screen_width, screen_height = pyautogui.size()
+        target_x, target_y = x, y
+
         if direction == "left":
-            self.mouse.position = (x - distance, y)
+            target_x = max(0, x - distance)
         elif direction == "right":
-            self.mouse.position = (x + distance, y)
+            target_x = min(screen_width - 1, x + distance)
         elif direction == "up":
-            self.mouse.position = (x, y - distance)
+            target_y = max(0, y - distance)
         elif direction == "down":
-            self.mouse.position = (x, y + distance)
+            target_y = min(screen_height - 1, y + distance)
+
+        self.mouse.position = (target_x, target_y)
         await asyncio.sleep(0.2)
         self.log(f"Mouse moved {direction}")
         return f"🖱️ Moved mouse {direction}."
@@ -288,7 +296,7 @@ class SafeController:
                     volume.SetMute(0, None)
                     self.log("Volume unmuted")
                     return "🔊 Volume unmute kar diya gaya hai."
-            except (pywintypes.error, AttributeError) as e:  # pylint: disable=no-member
+            except (pywintypes.error, AttributeError) as e:
                 self.log(f"Volume action error: {e}")
 
         # Up/Down or fallback
@@ -312,9 +320,8 @@ class SafeController:
 
         # Ensure COM is initialized for this call
         try:
-            # pylint: disable=no-member
             pythoncom.CoInitialize()
-        except pywintypes.error:  # pylint: disable=no-member
+        except pywintypes.error:
             pass
 
         try:
@@ -326,7 +333,7 @@ class SafeController:
             volume.SetMasterVolumeLevelScalar(percentage / 100, None)
             self.log(f"Volume set to {percentage}%")
             return f"🔊 Volume {percentage} percent par set kar diya gaya hai."
-        except (pywintypes.error, AttributeError, ValueError, OSError) as set_e:  # pylint: disable=no-member
+        except (pywintypes.error, AttributeError, ValueError, OSError) as set_e:
             self.log(f"Volume set error: {set_e}")
             return f"❌ Volume set nahi ho paaya: {set_e}"
 

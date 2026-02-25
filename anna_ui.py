@@ -217,12 +217,13 @@ class AnnaUI:
             self.screen.blit(scaled_frame, rect)
 
         # 2. Transparent Top Header (Clock/Date)
+        sw, sh = self.screen.get_size()
         now = datetime.datetime.now()
         time_str = now.strftime("%I:%M:%S %p")
         date_str = now.strftime("%A, %B %d, %Y")
 
         time_surf = self.fonts['clock'].render(time_str, True, WHITE)
-        time_rect = time_surf.get_rect(center=(self.screen_width // 2, 80))
+        time_rect = time_surf.get_rect(center=(sw // 2, 80))
         # Subtle glow for time
         glow_surf = self.fonts['clock'].render(time_str, True, SOFT_GOLD)
         glow_surf.set_alpha(100)
@@ -230,11 +231,11 @@ class AnnaUI:
         self.screen.blit(time_surf, time_rect)
 
         date_surf = self.fonts['date'].render(date_str, True, ROSE_GOLD)
-        date_rect = date_surf.get_rect(center=(self.screen_width // 2, 140))
+        date_rect = date_surf.get_rect(center=(sw // 2, 140))
         self.screen.blit(date_surf, date_rect)
 
         # 3. Glassmorphic Metrics (Bottom Left)
-        panel_rect = pygame.Rect(30, self.screen_height - 130, 220, 100)
+        panel_rect = pygame.Rect(30, sh - 130, 220, 100)
         self.draw_glass_panel(
             panel_rect, (255, 182, 193, 40), (255, 255, 255, 150))
 
@@ -246,7 +247,7 @@ class AnnaUI:
         self.screen.blit(ram_text, (panel_rect.x + 15, panel_rect.y + 55))
 
         # 4. Mute Button (Bottom Right)
-        btn_x, btn_y = self.screen_width - 180, self.screen_height - 70
+        btn_x, btn_y = sw - 180, sh - 70
         btn_w, btn_h = 150, 40
         btn_color = (200, 50, 50, 180) if self.muted else (212, 175, 55, 180)
         self.draw_glass_panel((btn_x, btn_y, btn_w, btn_h), btn_color, WHITE)
@@ -261,7 +262,7 @@ class AnnaUI:
                 h = 10 + (vol / 500) * \
                     math.sin(self.anim['pulse_phase'] + i * 0.5)
                 bar_rect = pygame.Rect(
-                    self.screen_width//2 - 75 + i*10, self.screen_height-100, 5, -abs(h))
+                    sw//2 - 75 + i*10, sh-100, 5, -abs(h))
                 pygame.draw.rect(self.screen, SOFT_GOLD,
                                  bar_rect, border_radius=2)
 
@@ -276,8 +277,9 @@ class AnnaUI:
                 self.running = False
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:
+                    sw, sh = self.screen.get_size()
                     btn_rect = pygame.Rect(
-                        self.screen_width - 180, self.screen_height - 70, 150, 40)
+                        sw - 180, sh - 70, 150, 40)
                     if btn_rect.collidepoint(event.pos):
                         self.muted = not self.muted
                         cmd = "MUTE" if self.muted else "UNMUTE"

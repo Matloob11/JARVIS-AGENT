@@ -1,19 +1,20 @@
 """
 # agent_loops.py
-Background execution loops for the JARVIS agent.
+Background loops for reminders, bug hunting, and UI communication.
 """
+
+# pylint: disable=broad-exception-caught
 
 import asyncio
 import json
 import socket
-import os
 from typing import TYPE_CHECKING
 from jarvis_logger import setup_logger
 from jarvis_reminders import check_due_reminders
 from jarvis_bug_hunter import monitor_logs
 
 if TYPE_CHECKING:
-    from agent import BrainAssistant
+    from agent_core import BrainAssistant
     from livekit.agents import AgentSession
 
 # Setup logger
@@ -108,7 +109,7 @@ async def start_ui_command_listener(assistant: "BrainAssistant"):
             await asyncio.sleep(1)
         except asyncio.CancelledError:
             break
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.exception("UI command loop error: %s", e)
+        except Exception as e:
+            logger.error("UI Listener error: %s", e)
             await asyncio.sleep(2)
     sock.close()
