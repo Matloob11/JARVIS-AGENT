@@ -1,93 +1,138 @@
-# 🤖 JARVIS – Advanced Real-Time AI Personal Assistant
+# 🔱 J.A.R.V.I.S Agent: Advanced Multimodal AI Assistant
 
-> **Engineered for Excellence by Matloob (PU STUDENTS)**
-
-JARVIS is a professional-grade, **autonomous AI Personal Assistant** designed to bridge the gap between human language and Windows system control. Unlike standard automation scripts, JARVIS utilizes advanced reasoning, vision intelligence, and proactive monitoring to provide a seamless, sentient-like experience.
+> **The Elite Personal Assistant Ecosystem | Engineered by Sir Matloob**
 
 ---
 
-## 🌟 Premium Features
-
-### 👁️ Vision Intelligence
-
-- **Real-Time Screen Perception**: JARVIS can "see" and analyze your primary monitor.
-- **UI Interaction**: Identifies open applications, text on screen, and UI elements to assist you contextually.
-
-### 📄 Intelligent Document Analysis (RAG)
-
-- **Local Knowledge Base**: Search, read, and summarize PDF and Word documents from your local drives.
-- **Smart Querying**: Ask natural language questions about your invoices, reports, or resumes.
-
-### 🧠 Autonomous Multi-Step Planning
-
-- **Complex Task Decomposition**: Decompounds broad requests (e.g., "Find images, zip them, and email to X") into sequential, logical execution steps.
-- **Fail-Safe Execution**: Robust error handling at every step of the autonomous chain.
-
-### 📧 Real-Time Communication Suite
-
-- **Verified SMTP Integration**: Securely sends real emails via Gmail with attachment support.
-- **WhatsApp Cloud Automation**: Hands-free messaging with natural Urdu (Roman script) support.
-
-### 🖼️ High-Res Media Automation
-
-- **Real-Time Image Engine**: Fetches and downloads actual high-resolution images from the web (not placeholders).
-- **Intelligent Archiving**: Automatic Zipping and organization of downloaded assets.
-
-### 📋 Proactive Clipboard Monitor (NEW!)
-
-- **Error Detection**: Background monitoring of the clipboard for technical tracebacks and error codes.
-- **Instant Solutions**: Automatically searches for solutions to detected errors and proactively suggests them to the user.
+<div align="center">
+  <img src="access/jarvis_ui.png" width="800" alt="JARVIS Interface">
+  <br>
+  <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/Gemini-2.5%20Flash-4285F4?style=for-the-badge&logo=google&logoColor=white" alt="Gemini">
+  <img src="https://img.shields.io/badge/LiveKit-Multimodal-FF0000?style=for-the-badge&logo=livekit&logoColor=white" alt="LiveKit">
+  <img src="https://img.shields.io/badge/Status-Operational-00FF00?style=for-the-badge" alt="Status">
+</div>
 
 ---
 
-## 🛡️ Engineering Gold Standard
+## 🌌 Project Vision
 
-- **Pylint Score**: **10.00/10** (Zero warnings, zero errors).
-- **Architecture**: Modular tool-based design for easy extensibility.
-- **Security**: Environment-based secret management (using `.env`).
-- **Language**: Dynamic support for Natural Urdu (Roman script) and technical English.
+J.A.R.V.I.S (Just A Rather Very Intelligent System) is not just a chatbot; it's a **Multimodal Live Assistant** designed for professional automation, deep reasoning, and personalized emotional intelligence. Built on the **Google Gemini 2.5 Flash Native Audio** model and **LiveKit** infrastructure, it offers real-time voice, vision, and tool-augmented intelligence.
 
 ---
 
-## 🛠️ Usage & Setup
+## 🎨 Dual-Persona Interface Analysis
 
-1. **Clone & Enter**:
+| **JARVIS Mode**                                    | **ANNA Mode**                                         |
+| :------------------------------------------------- | :---------------------------------------------------- |
+| ![Jarvis HUD](ui_gifs/jarvis-ui.gif)               | ![Anna HUD](ui_gifs/anna_ui.gif)                      |
+| **Persona**: Professional, Elite, Loyal Assistant. | **Persona**: Affectionate, Romantic, Protective "GF". |
+| **Voice**: Charon (Deep, Professional Male).       | **Voice**: Aoede (Soft, Warm Female).                 |
+| **Language**: Roman Urdu / English Mirroring.      | **Language**: Caring Roman Urdu (Natural).            |
+| **UI Aesthetics**: Blue Tech HUD / 3D Analysis.    | **UI Aesthetics**: Cosmic Heart / Circuit Soul.       |
+
+---
+
+## 🧠 Brain Structure & Intelligence
+
+### 1. 🧬 Multimodal Core
+
+- **Gemini 2.5 Flash**: Native audio processing for near-zero latency, recognizing emotional nuances in voice.
+- **Autonomous Reasoning**: Uses a dedicated logic engine to plan multi-step workflows before execution.
+- **Self-Healing Protocol**: Automatically detects tool failures and attempts to repair its own codebase.
+
+### 2. 🗃️ Advanced Memory System
+
+- **Vector Memory (ChromaDB)**: Long-term archival of conversations with semantic search retrieval.
+- **Identity Manager**: Persistently remembers facts about "Sir Matloob" and his background.
+- **Context Extraction**: Proactively saves important snippets (reminders, preferences) from live conversation.
+
+---
+
+## 🛠️ Elite Tool Arsenal
+
+| Feature              | Description                                                                   |
+| :------------------- | :---------------------------------------------------------------------------- |
+| 🌍 **Global Search** | Real-time internet research via Google Search and Perplexity-style synthesis. |
+| 💻 **Code Forge**    | Generates, runs, and debugs Python/CMD scripts on the fly.                    |
+| 📱 **Automation**    | Full control over WhatsApp, Notepad, and System Windows.                      |
+| ☁️ **Weather AI**    | Real-time weather analytics with location awareness.                          |
+| 📁 **File Engine**   | Folder management, file creation, zipping, and image downloading.             |
+| 📧 **Messenger**     | Sends real-time emails via SMTP with attachments.                             |
+| 🎥 **Media Suite**   | YouTube downloading, Media playback, and CLIPBOARD monitoring.                |
+| 🧹 **Diagnostics**   | Pre-flight system health checks to ensure 100% operational status.            |
+
+---
+
+## 🚀 Professional Setup (A to Z)
+
+### 📋 Prerequisites
+
+- **Python 3.10 or 3.11** (recommended).
+- **LiveKit Cloud** account (for real-time audio/RTC).
+- **Google AI Studio** API Key (Gemini Flash).
+- **System Dependencies**: OS-level audio drivers (PyAudio).
+
+### ⚙️ Installation
+
+1. **Clone the Forge**:
 
    ```bash
    git clone https://github.com/Matloob11/JARVIS-AGENT.git
    cd JARVIS-AGENT
    ```
 
-2. **Environment Setup**:
+2. **Establish Environment**:
 
    ```bash
    python -m venv .venv
-   .venv\Scripts\activate
+   source .venv/bin/activate  # Windows: .venv\Scripts\activate
    pip install -r requirements.txt
    ```
 
-3. **Configuration**:
-   Add your keys to `.env`:
-   - `GOOGLE_API_KEY`: For Gemini Vision/Audio
-   - `EMAIL_USER` & `EMAIL_APP_PASSWORD`: For real email sending
-
-4. **Launch JARVIS**:
-   ```bash
-   python agent.py
+3. **Configure the Core**:
+   Create a `.env` file from `.env.example`:
+   ```env
+   LIVEKIT_URL=wss://your-project.livekit.cloud
+   LIVEKIT_API_KEY=your_key
+   LIVEKIT_API_SECRET=your_secret
+   GOOGLE_API_KEY=your_gemini_key
+   WEATHER_API_KEY=your_openweather_key
    ```
 
+### 🔱 Activation
+
+Run the worker and the agent simultaneously:
+
+```bash
+python agent.py dev
+```
+
+_Wait for the "SYSTEM ONLINE" banner and the HUD to initialize._
+
 ---
 
-## 📂 System Architecture
+## 🖼️ Visual Analytics (From `access/` Collection)
 
-- **`agent.py`**: The central brain handling job sessions and tool routing.
-- **`jarvis_vision.py`**: Multinodal vision processing engine.
-- **`jarvis_rag.py`**: PDF/Word parsing and fuzzy search logic.
-- **`jarvis_clipboard.py`**: Proactive background error monitor.
-- **`jarvis_advanced_tools.py`**: High-level utilities (Email, Zip, DDGS Search).
-- **`jarvis_reasoning.py`**: Intent analysis and LLM thought patterns.
+### [Technical Workspace](access/coding.png)
+
+The heart of the development, showing the `agent_core.py` logic where tools and personas converge. Built with highly modular, object-oriented principles.
+
+### [Visual HUD Architecture](access/jarvis_ui.png)
+
+A breakdown of the Jarvis HUD, featuring real-time CPU/RAM metrics, system logging streams, and audio-reactive animations.
 
 ---
 
-> **JARVIS is not just an assistant; it's a teammate.**
-> **MADE BY MATLOOB (PU STUDENTS)**
+## 🛡️ Security & Integrity
+
+- **Restricted Access**: Enforces wake-word protocols ("Jarvis" / "Anna").
+- **Encrypted Local Storage**: Identity and memories are stored in structured JSON formats with atomic write protection.
+- **Diagnostic Guard**: Automated monitoring for memory leaks or socket hangs.
+
+---
+
+<p align="center">
+  <b>Designed with ❤️ for Sir Matloob</b><br>
+  <i>"Excellence is not an act, but a habit."</i>
+</p>

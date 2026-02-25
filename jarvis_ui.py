@@ -146,7 +146,7 @@ class JarvisUI:
 
     def load_assets(self):
         """Loads the UI gif and other visual assets."""
-        gif_path = os.path.join(SCRIPT_DIR, 'jarvis-ui.gif')
+        gif_path = os.path.join(SCRIPT_DIR, 'ui_gifs', 'jarvis-ui.gif')
         self.anim['ui_frames'] = self.load_gif_safe(gif_path, (1280, 720))
 
     def load_gif_safe(self, path, target_size):

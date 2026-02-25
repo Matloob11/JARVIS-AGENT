@@ -132,7 +132,7 @@ class AnnaUI:
 
     def load_assets(self):
         """Loads the Anna UI gif."""
-        gif_path = os.path.join(SCRIPT_DIR, 'anna_ui.gif')
+        gif_path = os.path.join(SCRIPT_DIR, 'ui_gifs', 'anna_ui.gif')
         if os.path.exists(gif_path):
             self.anim['ui_frames'] = self.load_gif_safe(gif_path, (1280, 720))
         else:
