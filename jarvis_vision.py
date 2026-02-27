@@ -48,7 +48,7 @@ class ScreenPerceiver:
             buffered = BytesIO()
             screenshot.save(buffered, format="PNG")
             return buffered.getvalue()
-        except Exception as e:
+        except (pyautogui.ImageNotFoundException, OSError, IOError) as e:
             logger.error("Error capturing screen: %s", e)
             raise
 
@@ -117,7 +117,7 @@ class ScreenPerceiver:
             # Try Primary: Gemini
             try:
                 return await self.analyze_via_google(prompt, image)
-            except Exception as e:
+            except (ValueError, RuntimeError, AttributeError) as e:
                 # Catch Quota or Rate Limit errors specifically if possible
                 if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
                     logger.warning(
@@ -125,7 +125,7 @@ class ScreenPerceiver:
                     return await self.analyze_via_openrouter(prompt, image)
                 raise e
 
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (OSError, IOError, ValueError) as e:  # pylint: disable=broad-exception-caught
             logger.error("Error in vision system: %s", e)
             return f"Error: Vision analysis failed: {str(e)}"
 
@@ -152,7 +152,7 @@ async def analyze_screen(query: str = "Describe what you see on my screen in det
             "query": query,
             "message": f"👁️ Screen Analysis report taiyyar hai, Sir:\n{result}"
         }
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except (OSError, IOError, RuntimeError) as e:  # pylint: disable=broad-exception-caught
         logger.exception("Vision tool error: %s", e)
         return {
             "status": "error",

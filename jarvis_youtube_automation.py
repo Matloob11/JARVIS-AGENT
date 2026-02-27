@@ -8,6 +8,7 @@ import subprocess
 import shutil
 import os
 import webbrowser
+from urllib.parse import quote
 from livekit.agents import function_tool
 from youtube_search import YoutubeSearch
 from jarvis_logger import setup_logger
@@ -50,7 +51,7 @@ class YouTubeAutomation:
 
             return None
 
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (AttributeError, KeyError, RuntimeError) as e:  # pylint: disable=broad-exception-caught
             logger.error("Error finding video URL: %s", e)
             return None
 
@@ -86,7 +87,7 @@ class YouTubeAutomation:
                 "Edge not found or non-Windows, falling back to default browser")
             webbrowser.open(url)
             return True
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (subprocess.SubprocessError, OSError, AttributeError) as e:
             logger.error("Failed to open URL: %s", e)
             return False
 
@@ -149,7 +150,7 @@ async def automate_youtube(action: str, query: str = "") -> dict:
             }
 
         if action == "search":
-            search_url = f"https://www.youtube.com/results?search_query={query}"
+            search_url = f"https://www.youtube.com/results?search_query={quote(query)}"
             await yt_bot.open_url_in_app(search_url)
             return {
                 "status": "success",
@@ -164,7 +165,7 @@ async def automate_youtube(action: str, query: str = "") -> dict:
             "message": f"❌ Unknown action: {action}. Use 'play', 'search', or 'open'."
         }
 
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except (AttributeError, KeyError, RuntimeError, ValueError) as e:
         logger.exception("YouTube automation error: %s", e)
         return {
             "status": "error",

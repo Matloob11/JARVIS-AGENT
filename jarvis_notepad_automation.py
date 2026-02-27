@@ -11,9 +11,11 @@ import pyautogui
 try:
     import win32gui
     import win32con
+    import pywintypes
 except ImportError:
     win32gui = None
     win32con = None
+    pywintypes = None
 from livekit.agents import function_tool
 from jarvis_logger import setup_logger
 
@@ -70,13 +72,14 @@ class NotepadAutomation:
                     notepad.restore()
 
                 # Bring to front using Win32 for maximum reliability
-                if win32gui:
+                if win32gui and pywintypes:
                     try:
                         # pylint: disable=protected-access
                         win32gui.ShowWindow(notepad._hwnd, win32con.SW_RESTORE)
                         win32gui.SetForegroundWindow(notepad._hwnd)
-                    except Exception:  # pylint: disable=broad-exception-caught
-                        pass
+                    except (pywintypes.error, AttributeError) as e:  # pylint: disable=broad-exception-caught, no-member
+                        logger.debug(
+                            "Minor Win32 focus error for Notepad: %s", e)
 
                 notepad.activate()
                 await asyncio.sleep(0.5)
@@ -99,7 +102,7 @@ class NotepadAutomation:
                 pyautogui.write(line, interval=0.0)
                 pyautogui.press('enter')
             return True
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (pyautogui.FailSafeException, RuntimeError, AttributeError) as e:
             logger.exception("Typing simulation failed: %s", e)
             return False
 
@@ -153,7 +156,7 @@ class NotepadAutomation:
             await asyncio.sleep(0.5)
             logger.info("Notepad close signal sent.")
             return True
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (subprocess.SubprocessError, OSError, AttributeError) as e:
             logger.error("Error closing Notepad: %s", e)
             return False
 
@@ -265,7 +268,7 @@ async def create_template_code(code_type: str, filename: str = "", auto_run: boo
             else:
                 msg += "⚠️ Notepad focus failed. Writing manually.\n"
                 await notepad_automation.save_file_safely(content, filename)
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (OSError, IOError, pyautogui.FailSafeException, RuntimeError) as e:
             msg += f"⚠️ GUI automation failed: {str(e)}. File saved programmatically.\n"
             await notepad_automation.save_file_safely(content, filename)
 
@@ -286,7 +289,7 @@ async def create_template_code(code_type: str, filename: str = "", auto_run: boo
             "path": full_path,
             "message": msg
         }
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except (OSError, IOError, ValueError, RuntimeError) as e:
         logger.exception("create_template_code error: %s", e)
         return {
             "status": "error",
@@ -324,7 +327,7 @@ async def write_custom_code(content: str, filename: str, auto_run: bool = True) 
             else:
                 await notepad_automation.save_file_safely(content, filename)
                 msg += "⚠️ Focus failed. Saved programmatically.\n"
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (pyautogui.FailSafeException, OSError, IOError, RuntimeError) as e:
             logger.warning("GUI automation for custom code failed: %s", e)
             await notepad_automation.save_file_safely(content, filename)
             msg += "⚠️ GUI automation failed. File saved programmatically.\n"
@@ -346,7 +349,7 @@ async def write_custom_code(content: str, filename: str, auto_run: bool = True) 
             "path": full_path,
             "message": msg
         }
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except (OSError, IOError, ValueError, RuntimeError) as e:
         logger.exception("Error in write_custom_code: %s", e)
         return {
             "status": "error",
@@ -359,14 +362,16 @@ async def run_cmd_command(command: str) -> dict:
     """Execute a CMD command (Non-interactive) safely."""
     try:
         # Sanitize and run via list to prevent injection
-        # pylint: disable=consider-using-with
-        subprocess.Popen(['cmd', '/c', 'start', 'cmd', '/k', command])
+        # Use shlex to split if the command is a complex string
+        import shlex
+        cmd_list = ["cmd", "/c", "start", "cmd", "/k"] + shlex.split(command)
+        subprocess.Popen(cmd_list)
         return {
             "status": "success",
             "command": command,
             "message": f"✅ Command sent to CMD: {command}"
         }
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except (subprocess.SubprocessError, OSError, ValueError) as e:
         logger.exception("run_cmd_command error: %s", e)
         return {
             "status": "error",
@@ -384,7 +389,7 @@ async def open_notepad_simple() -> dict:
             "status": "success",
             "message": "✅ Notepad opened"
         }
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except (subprocess.SubprocessError, OSError) as e:
         logger.exception("open_notepad_simple error: %s", e)
         return {
             "status": "error",

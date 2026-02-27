@@ -80,7 +80,7 @@ async def download_images(query: str, count: int = 5, folder_name: str = "Downlo
                 f"karke '{target_dir}' mein save kar di hain, Sir Matloob."
             )
         }
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except (requests.RequestException, IOError, OSError, ValueError, RuntimeError) as e:  # pylint: disable=broad-exception-caught
         logger.exception("Error in download_images: %s", e)
         return {
             "status": "error",

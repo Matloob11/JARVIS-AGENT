@@ -126,6 +126,7 @@ try:
         """
         Generates an image via description. Use for 'draw' or 'generate an image'.
         """
-        return generate_image(prompt)
+        import asyncio
+        return await asyncio.to_thread(generate_image, prompt)
 except ImportError:
     pass

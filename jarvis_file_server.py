@@ -33,10 +33,13 @@ class DDriveHandler(SimpleHTTPRequestHandler):
         words = path.split(os.sep)
         words = [w for w in words if w and w != '..']
 
-        # Base drive
-        root = "D:\\"
+        # Base drive restricted to a specific folder for security
+        # Ensure this folder exists or use a default like 'Jarvis_Shared'
+        root = os.path.join("D:\\", "Jarvis_Shared")
+        if not os.path.exists(root):
+            os.makedirs(root, exist_ok=True)
 
-        # Construct physical path: D:\path
+        # Construct physical path: D:\Jarvis_Shared\path
         return os.path.join(root, *words)
 
     def log_message(self, format, *args):  # pylint: disable=redefined-builtin

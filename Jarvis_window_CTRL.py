@@ -12,6 +12,7 @@ import os
 import re
 import subprocess
 import sys
+import shlex
 
 # Third-party imports
 from fuzzywuzzy import process
@@ -23,6 +24,7 @@ import pyperclip
 import pyautogui as pg
 
 # First-party imports
+from jarvis_config import APP_MAPPINGS, FOCUS_TITLES
 from jarvis_whatsapp_automation import whatsapp_bot
 from keyboard_mouse_ctrl import type_text_tool
 from jarvis_logger import setup_logger
@@ -42,66 +44,6 @@ logger = setup_logger("JARVIS-WINDOW")
 
 get_windows = gw.getWindowsWithTitle
 
-# ===================== APP MAP ===================== #
-APP_MAPPINGS = {
-    # System & Common
-    "notepad": "notepad",
-    "calculator": "calc",
-    "calc": "calc",
-    "command prompt": "cmd",
-    "cmd": "cmd",
-    "paint": "mspaint",
-    "camera": "camera",
-    "settings": "ms-settings:",
-    "explorer": "explorer",
-
-    # Browsers
-    "chrome": "chrome",
-    "google chrome": "chrome",
-    "edge": r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe',
-    "microsoft edge": r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe',
-
-    # Store Apps (Found on System)
-    "whatsapp": "shell:AppsFolder\\5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App",
-    "tiktok": "shell:AppsFolder\\BytedancePte.Ltd.TikTok_6yccndn6064se!App",
-    "instagram": "shell:AppsFolder\\Facebook.InstagramBeta_8xx8rvfyw5nnt!App",
-    "facebook": "shell:AppsFolder\\FACEBOOK.FACEBOOK_8xx8rvfyw5nnt!App",
-    "media player": "shell:AppsFolder\\Microsoft.ZuneMusic_8wekyb3d8bbwe!Microsoft.ZuneMusic",
-    "films": "shell:AppsFolder\\Microsoft.ZuneVideo_8wekyb3d8bbwe!Microsoft.ZuneVideo",
-    "movies": "shell:AppsFolder\\Microsoft.ZuneVideo_8wekyb3d8bbwe!Microsoft.ZuneVideo",
-    "store": "shell:AppsFolder\\Microsoft.WindowsStore_8wekyb3d8bbwe!App",
-    "clock": "shell:AppsFolder\\Microsoft.WindowsAlarms_8wekyb3d8bbwe!App",
-    "alarms": "shell:AppsFolder\\Microsoft.WindowsAlarms_8wekyb3d8bbwe!App",
-
-    # Installed Desktop Apps
-    "vlc": "vlc",
-    "obs": "obs64",
-    "obs studio": "obs64",
-
-    # URLs
-    "google": "https://www.google.com",
-
-    # Hindi / Varieties
-    "watsapp": "shell:AppsFolder\\5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App",
-    "insta": "shell:AppsFolder\\Facebook.InstagramBeta_8xx8rvfyw5nnt!App",
-    "face book": "shell:AppsFolder\\FACEBOOK.FACEBOOK_8xx8rvfyw5nnt!App",
-}
-
-FOCUS_TITLES = {
-    "notepad": "Notepad",
-    "calc": "Calculator",
-    "chrome": "Google Chrome",
-    "edge": "Microsoft Edge",
-    "vlc": "VLC",
-    "cmd": "Command Prompt",
-    "whatsapp": "WhatsApp",
-    "tiktok": "TikTok",
-    "instagram": "Instagram",
-    "facebook": "Facebook",
-    "obs": "OBS",
-    "store": "Microsoft Store",
-    "settings": "Settings",
-}
 
 # ===================== UTIL ===================== #
 
@@ -215,14 +157,13 @@ async def open_app(full_command: str) -> dict:  # pylint: disable=too-many-branc
             # 🖥️ Generic Desktop App launch
             try:
                 os.startfile(app)
-                await asyncio.sleep(2)  # Wait for process to start
             except OSError as e:
                 # Fallback to subprocess if startfile fails
-                # pylint: disable=consider-using-with
-                subprocess.Popen(app, shell=True)
+                cmd_list = shlex.split(app)
+                subprocess.Popen(cmd_list)
                 await asyncio.sleep(2)
                 logger.warning(
-                    "startfile failed, tried subprocess fallback: %s", e)
+                    "startfile failed, tried subprocess fallback safely: %s", e)
 
         # ✍️ Parse writing action
         write_text = None
@@ -373,8 +314,12 @@ async def close(window_name: str) -> str:
             return "🗑️ WhatsApp band kar diya gaya hai"
 
     if "notepad" in window_name:
-        os.system("taskkill /f /im notepad.exe")
-        return "🗑️ Notepad force close kar diya gaya hai (Unsaved changes lost)."
+        try:
+            subprocess.run(["taskkill", "/f", "/im", "notepad.exe"], check=False, capture_output=True)
+            return "🗑️ Notepad force close kar diya gaya hai (Unsaved changes lost)."
+        except (subprocess.SubprocessError, OSError) as e:
+            logger.error("Error closing notepad: %s", e)
+            return f"❌ Notepad band karne mein error aaya: {e}"
 
     # Fuzzy matching for common apps
     matched_key = fuzzy_match_app(window_name)
@@ -541,45 +486,10 @@ async def folder_file(path: str) -> dict:
         }
 
 
-# ===================== SYSTEM CONTROL ===================== #
-@function_tool
-async def shutdown_system() -> dict:
-    """Shuts down the computer immediately."""
-    await asyncio.to_thread(os.system, "shutdown /s /t 0")
-    return {
-        "status": "success",
-        "message": "🔌 System shutdown ho raha hai, Sir. Allah Hafiz."
-    }
-
-
-@function_tool
-async def restart_system() -> dict:
-    """Restarts the computer immediately."""
-    await asyncio.to_thread(os.system, "shutdown /r /t 0")
-    return {
-        "status": "success",
-        "message": "🔄 System restart ho raha hai, Sir."
-    }
-
-
-@function_tool
-async def sleep_system() -> dict:
-    """Puts the computer to sleep."""
-    await asyncio.to_thread(os.system, "rundll32.exe powrprof.dll,SetSuspendState 0,1,0")
-    return {
-        "status": "success",
-        "message": "😴 System sleep mode par jaa raha hai, Sir."
-    }
-
-
-@function_tool
-async def lock_screen() -> dict:
-    """Locks the screen."""
-    await asyncio.to_thread(os.system, "rundll32.exe user32.dll,LockWorkStation")
-    return {
-        "status": "success",
-        "message": "🔒 Screen lock kar di gayi hai, Sir."
-    }
+# System control tools moved to jarvis_system_ctrl.py
+from jarvis_system_ctrl import (
+    shutdown_system, restart_system, sleep_system, lock_screen
+)
 
 
 @function_tool

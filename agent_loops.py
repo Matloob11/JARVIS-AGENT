@@ -109,7 +109,7 @@ async def start_ui_command_listener(assistant: "BrainAssistant"):
             await asyncio.sleep(1)
         except asyncio.CancelledError:
             break
-        except Exception as e:
+        except (AttributeError, TypeError, KeyError, RuntimeError) as e:
             logger.error("UI Listener error: %s", e)
             await asyncio.sleep(2)
     sock.close()

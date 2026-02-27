@@ -20,8 +20,8 @@ class IntentAnalyzer:  # pylint: disable=too-few-public-methods
     def __init__(self):
         self.intent_patterns = {
             "code_creation": [
-                r"code.*likh", r"program.*bana", r"html.*create", r"python.*write",
-                r"notepad.*code", r"file.*create", r"script.*bana"
+                r"code.*likh", r"program.*bana", r"html.*create", r"python",
+                r"notepad.*code", r"file.*create", r"script.*bana", r"coding"
             ],
             "weather_query": [
                 r"mausam", r"weather", r"temperature", r"barish", r"rain",
@@ -198,7 +198,16 @@ class ResponseGenerator:  # pylint: disable=too-few-public-methods
                 "Weather check kar raha hun Sir. Lahore ka latest mausam bata deta hun.",
                 "Abhi weather data get kar raha hun Sir Matloob."
             ],
-            # ... other templates
+            "search_query": [
+                "Sir Matloob, main aapke liye search kar raha hun.",
+                "Internet par information find kar raha hun Sir.",
+                "Sir, searching initiate kar di hai."
+            ],
+            "general": [
+                "Sir Matloob, main aapki baat samajh gaya hun.",
+                "Bilkul Sir, main haazir hun.",
+                "Ji Sir, kaise madad kar sakta hun?"
+            ]
         }
         self.anna_templates = {
             "code_creation": [
@@ -282,7 +291,7 @@ async def analyze_user_intent(user_input: str) -> Dict[str, Any]:
             "Primary intent detected: %s", intent_result['primary_intent'])
         return intent_result
 
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except (AttributeError, TypeError, ValueError) as e:  # pylint: disable=broad-exception-caught
         logger.exception("Error in intent analysis: %s", e)
         return {
             "primary_intent": "general",
@@ -326,7 +335,7 @@ async def generate_smart_response(user_input: str, intent_analysis: Dict,
 
         return response
 
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except (KeyError, AttributeError, TypeError) as e:  # pylint: disable=broad-exception-caught
         logger.exception("Error in response generation: %s", e)
         return ("Sir Matloob, main aapki baat samajh gaya hun. "
                 "Kaise madad kar sakta hun?")
@@ -372,7 +381,7 @@ async def process_with_advanced_reasoning(user_input_str: str,
         logger.info("Advanced reasoning completed with plan: %s", plan)
         return reasoning_result
 
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except (KeyError, AttributeError, TypeError, RuntimeError) as e:  # pylint: disable=broad-exception-caught
         logger.error("Error in advanced reasoning: %s", e)
         return {
             "user_input": user_input_str,

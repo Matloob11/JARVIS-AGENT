@@ -2,7 +2,6 @@
 Standalone Anna UI with Warm Aesthetics and Glassmorphism
 """
 import os
-import platform
 import struct
 import threading
 import datetime
@@ -103,7 +102,7 @@ class AnnaUI:
                     self.anim['is_speaking'] = True
                 elif message.get("status") == "STOP":
                     self.anim['is_speaking'] = False
-            except (json.JSONDecodeError, socket.error):
+            except (json.JSONDecodeError, socket.error, TypeError, ValueError):
                 pass
 
     def load_fonts(self):
@@ -116,7 +115,7 @@ class AnnaUI:
                     pygame.font.SysFont(f, 10)
                     chosen = f
                     break
-                except:
+                except (pygame.error, ImportError, AttributeError):
                     continue
 
             self.fonts = {
@@ -125,7 +124,7 @@ class AnnaUI:
                 'metrics': pygame.font.SysFont(chosen, 22),
                 'button': pygame.font.SysFont(chosen, 20, bold=True)
             }
-        except:
+        except (pygame.error, ImportError, AttributeError):
             fallback = pygame.font.SysFont(None, 24)
             self.fonts = {'clock': fallback, 'date': fallback,
                           'metrics': fallback, 'button': fallback}
@@ -167,7 +166,7 @@ class AnnaUI:
                 format=pyaudio.paInt16, channels=1, rate=44100,
                 input=True, frames_per_buffer=1024)
             self.audio['available'] = True
-        except:
+        except (socket.error, OSError):
             self.audio['available'] = False
 
     def get_volume(self):
@@ -179,7 +178,7 @@ class AnnaUI:
             shorts = struct.unpack(f"{count}h", data)
             sum_squares = sum(s**2 for s in shorts)
             return (sum_squares / count)**0.5
-        except:
+        except (struct.error, socket.error, IOError, OSError):
             return 0
 
     def update_metrics_loop(self):
@@ -290,7 +289,7 @@ class AnnaUI:
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             message = json.dumps({"command": command})
             sock.sendto(message.encode(), ("127.0.0.1", self.agent_cmd_port))
-        except:
+        except socket.error:
             pass
 
     def run(self):

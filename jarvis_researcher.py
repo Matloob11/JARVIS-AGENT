@@ -7,6 +7,7 @@ Extracts and synthesizes information from multiple websites.
 import asyncio
 from typing import List
 import requests
+from urllib.parse import quote
 from bs4 import BeautifulSoup
 from livekit.agents import function_tool
 from jarvis_search import GOOGLE_SEARCH_API_KEY, SEARCH_ENGINE_ID
@@ -55,7 +56,7 @@ async def scrape_url(url: str, timeout: int = 10) -> str:
 
         # Limit to first 4000 characters to keep context manageable
         return text[:4000]
-    except (requests.RequestException, ValueError, AttributeError, KeyError) as e:
+    except (requests.RequestException, ValueError, AttributeError, KeyError, OSError, RuntimeError) as e:
         logger.error("Error scraping %s: %s", url, e)
         return ""
 
@@ -68,7 +69,7 @@ async def get_search_urls(query: str, count: int = 5) -> List[str]:
 
     url = (
         f"https://www.googleapis.com/customsearch/v1"
-        f"?key={GOOGLE_SEARCH_API_KEY}&cx={SEARCH_ENGINE_ID}&q={query}"
+        f"?key={GOOGLE_SEARCH_API_KEY}&cx={SEARCH_ENGINE_ID}&q={quote(query)}"
     )
 
     for attempt in range(2):
@@ -80,7 +81,7 @@ async def get_search_urls(query: str, count: int = 5) -> List[str]:
                 item.get("link") for item in data.get("items", [])[:count]
                 if item.get("link")
             ]
-        except (requests.RequestException, ValueError, KeyError) as e:
+        except (requests.RequestException, ValueError, KeyError, RuntimeError) as e:
             if attempt == 1:
                 logger.error("Error getting search URLs: %s", e)
                 return []

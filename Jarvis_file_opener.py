@@ -53,12 +53,15 @@ async def focus_window(title_keyword: str) -> bool:
     title_keyword = title_keyword.lower().strip()
 
     for window in gw.getAllWindows():
-        if title_keyword in window.title.lower():
-            if window.isMinimized:
-                window.restore()
-            window.activate()
-            logger.info("🪟 window focus mein hai: %s", window.title)
-            return True
+        try:
+            if title_keyword in window.title.lower():
+                if window.isMinimized:
+                    window.restore()
+                window.activate()
+                logger.info("🪟 window focus mein hai: %s", window.title)
+                return True
+        except (AttributeError, RuntimeError) as e:
+            logger.debug("Window focus error for %s: %s", window.title, e)
     logger.warning("⚠ Focus karne ke liye window nahi mili.")
     return False
 

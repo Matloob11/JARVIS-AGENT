@@ -148,7 +148,7 @@ class YouTubeDownloader:
                         "status": "success",
                         "message": msg
                     }
-                except Exception as ex:  # pylint: disable=broad-exception-caught
+                except (subprocess.SubprocessError, OSError, ValueError) as ex:
                     logger.error("Fallback failed: %s", ex)
                     return {
                         "status": "error",
@@ -162,11 +162,12 @@ class YouTubeDownloader:
                 "status": "success",
                 "message": msg + " ✅ Browser mein play kar diya gaya hai."
             }
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (AttributeError, KeyError, RuntimeError, ValueError) as e:
             logger.error("Unexpected error in downloader: %s", e)
             msg = f"❌ Unexpected Error: {str(e)}. Browser mein play karne ki koshish kar raha hoon..."
             logger.error(msg)
-            await yt_bot.open_url_in_app(url)
+            if 'url' in locals():
+                await yt_bot.open_url_in_app(url)
             return {
                 "status": "success",
                 "message": f"{msg} ✅ Browser mein play kar diya gaya hai."

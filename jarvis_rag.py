@@ -91,7 +91,7 @@ class DocumentRAG:
             for page in reader.pages:
                 text += page.extract_text() + "\n"
             return text
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (AttributeError, TypeError, ValueError, KeyError, RuntimeError) as e:
             logger.error("Error reading PDF %s: %s", file_path, e)
             return f"Error reading PDF: {e}"
 
@@ -100,7 +100,7 @@ class DocumentRAG:
         try:
             doc = Document(file_path)
             return "\n".join([para.text for para in doc.paragraphs])
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (AttributeError, TypeError, ValueError, KeyError, RuntimeError) as e:
             logger.error("Error reading DOCX %s: %s", file_path, e)
             return f"Error reading DOCX: {e}"
 

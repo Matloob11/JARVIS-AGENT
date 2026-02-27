@@ -11,6 +11,7 @@ import os
 from datetime import datetime
 import requests  # type: ignore
 from dotenv import load_dotenv
+from urllib.parse import quote
 from duckduckgo_search import DDGS
 from livekit.agents import function_tool
 from jarvis_logger import setup_logger
@@ -45,7 +46,7 @@ async def get_current_city() -> str:
         if detected_city.lower() in ["unknown", "", "none"]:
             return "Lahore"
         return detected_city
-    except (requests.exceptions.RequestException, asyncio.TimeoutError) as e:
+    except Exception as e:
         logger.warning("Error getting current city: %s", e)
         return os.getenv("USER_CITY", "Lahore")
 
@@ -110,7 +111,7 @@ async def search_google(query: str) -> dict:
     logger.info("Searching Google for: '%s'", query)
     url = (
         f"https://www.googleapis.com/customsearch/v1"
-        f"?key={GOOGLE_SEARCH_API_KEY}&cx={SEARCH_ENGINE_ID}&q={query}"
+        f"?key={GOOGLE_SEARCH_API_KEY}&cx={SEARCH_ENGINE_ID}&q={quote(query)}"
     )
 
     try:
@@ -137,7 +138,7 @@ async def search_google(query: str) -> dict:
             "results": results,
             "message": f"[GOOGLE SEARCH]\n{summary}"
         }
-    except (requests.exceptions.RequestException, ValueError, KeyError) as e:
+    except (requests.RequestException, ValueError, KeyError, RuntimeError) as e:
         logger.warning("Google Search failed: %s", e)
         return {"status": "error", "message": str(e)}
 

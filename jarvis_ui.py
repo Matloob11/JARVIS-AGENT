@@ -2,7 +2,6 @@
 Standalone JARVIS UI with System Metrics and Audio Reactivity
 """
 import os
-import platform
 import struct
 import threading
 import datetime
@@ -14,6 +13,7 @@ import pygame
 import pyaudio
 import psutil
 from PIL import Image
+from jarvis_metrics import MetricsCollector
 
 # Setup directories
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -50,6 +50,8 @@ class JarvisUI:
         self.fullscreen = False
 
         # Metrics and Status Group
+        self.metrics_collector = MetricsCollector()
+        self.metrics_collector.start()
         self.metrics = {
             'cpu': 0,
             'ram': 0,
@@ -90,9 +92,9 @@ class JarvisUI:
         self.load_fonts()
         self.load_assets()
 
-        # Start metric update threads
-        threading.Thread(target=self.update_metrics_loop, daemon=True).start()
-        threading.Thread(target=self.update_track_loop, daemon=True).start()
+        # Start metric update task in main loop instead of thread for UI sync
+        # threading.Thread(target=self.update_metrics_loop, daemon=True).start()
+        # threading.Thread(target=self.update_track_loop, daemon=True).start()
 
     def udp_listener(self):
         """Listens for speech status from the agent."""
@@ -108,10 +110,8 @@ class JarvisUI:
                     self.anim['is_speaking'] = True
                 elif message.get("status") == "STOP":
                     self.anim['is_speaking'] = False
-            except (json.JSONDecodeError, socket.error) as e:
+            except (json.JSONDecodeError, socket.error, TypeError, ValueError) as e:
                 print(f"IPC Error: {e}")
-            except Exception as e:  # pylint: disable=broad-exception-caught
-                print(f"Unexpected IPC Error: {e}")
 
     def load_fonts(self):
         """Loads responsive fonts based on OS."""
@@ -186,10 +186,8 @@ class JarvisUI:
                 format=pyaudio.paInt16, channels=1, rate=44100,
                 input=True, frames_per_buffer=1024)
             self.audio['available'] = True
-        except (pyaudio.PyAudioError, socket.error):  # pylint: disable=no-member
-            self.audio['available'] = False
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            print(f"Unexpected audio init error: {e}")
+        except (pyaudio.PyAudioError, socket.error, OSError) as e:  # pylint: disable=no-member
+            print(f"Audio init error: {e}")
             self.audio['available'] = False
 
     def get_volume(self):
@@ -202,49 +200,11 @@ class JarvisUI:
             shorts = struct.unpack(f"{count}h", data)
             sum_squares = sum(s**2 for s in shorts)
             return (sum_squares / count)**0.5
-        except (struct.error, pyaudio.PyAudioError, socket.error):  # pylint: disable=no-member
-            return 0
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            print(f"Unexpected volume error: {e}")
+        except (struct.error, socket.error, IOError, OSError) as e:  # pylint: disable=no-member
+            print(f"Volume error: {e}")
             return 0
 
-    def update_metrics_loop(self):
-        """Updates CPU/RAM metrics periodically."""
-        while not self.stop_event.is_set():
-            self.metrics['cpu'] = psutil.cpu_percent(interval=1)
-            self.metrics['ram'] = psutil.virtual_memory().percent
-
-    def update_track_loop(self):
-        """Updates currently playing track info."""
-        while not self.stop_event.is_set():
-            new_track = ""
-            try:
-                system = platform.system()
-                if system == "Windows":
-                    # Placeholder for Windows track info.
-                    pass
-                elif system == "Darwin":
-                    # macOS logic from original file
-                    running = subprocess.check_output(
-                        'ps -ef | grep "MacOS/Spotify" | grep -v "grep" | wc -l',
-                        shell=True, text=True
-                    ).strip()
-                    if running != "0":
-                        new_track = subprocess.check_output(
-                            "osascript -e 'tell application \"Spotify\"\n"
-                            "set t to current track\n"
-                            "return artist of t & \" - \" & name of t\n"
-                            "end tell'",
-                            shell=True, text=True
-                        ).strip()
-            except (subprocess.SubprocessError, OSError):
-                new_track = ""
-            except Exception as e:  # pylint: disable=broad-exception-caught
-                print(f"Unexpected track update error: {e}")
-                new_track = ""
-
-            self.metrics['track'] = new_track
-            self.stop_event.wait(5)  # Wait for 5 seconds
+    # Removed local metrics loops - handled by jarvis_metrics.py
 
     def handle_events(self):
         """Processes Pygame events like window resizing and exit commands."""
@@ -467,6 +427,7 @@ class JarvisUI:
     def cleanup(self):
         """Stops all threads and cleans up resources before exit."""
         self.stop_event.set()
+        self.metrics_collector.stop()
         if self.audio['stream']:
             self.audio['stream'].stop_stream()
             self.audio['stream'].close()
@@ -478,6 +439,12 @@ class JarvisUI:
         """Main application loop."""
         while self.running:
             self.handle_events()
+            # Sync metrics from collector
+            m = self.metrics_collector.get_metrics_dict()
+            self.metrics['cpu'] = m['cpu']
+            self.metrics['ram'] = m['ram']
+            self.metrics['track'] = m['track']
+            
             self.render()
             self.clock.tick(30)
         self.cleanup()

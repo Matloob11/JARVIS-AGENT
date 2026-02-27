@@ -12,9 +12,11 @@ from keyboard_mouse_ctrl import type_text_tool
 try:
     import win32gui
     import win32con
+    import pywintypes
 except ImportError:
     win32gui = None
     win32con = None
+    pywintypes = None
 from jarvis_logger import setup_logger
 
 # Setup logging
@@ -72,14 +74,14 @@ class WhatsAppAutomation:
                         win32gui.ShowWindow(
                             whatsapp_win._hwnd, win32con.SW_RESTORE)
                         win32gui.SetForegroundWindow(whatsapp_win._hwnd)
-                    except Exception:  # pylint: disable=broad-exception-caught
-                        pass
+                    except (pywintypes.error, AttributeError) as e:  # pylint: disable=no-member
+                        logger.debug("Minor Win32 focus error: %s", e)
 
                 # Try to activate
                 try:
                     whatsapp_win.activate()
-                except Exception:  # pylint: disable=broad-exception-caught
-                    pass
+                except (pywintypes.error, AttributeError) as e:  # pylint: disable=no-member
+                    logger.debug("Minor pygetwindow activate error: %s", e)
 
                 # Polling for active state
                 poll_start = time.time()
@@ -93,7 +95,7 @@ class WhatsAppAutomation:
                 if focused:
                     break
 
-            except Exception as e:  # pylint: disable=broad-exception-caught
+            except (OSError, AttributeError, RuntimeError, pywintypes.error) as e:  # pylint: disable=no-member
                 logger.error("Error attempting to focus WhatsApp: %s", e)
 
             await asyncio.sleep(0.5)
@@ -175,7 +177,7 @@ class WhatsAppAutomation:
             pg.hotkey('alt', 'f4')
             await asyncio.sleep(0.5)
             return True
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (OSError, AttributeError) as e:
             logger.error("Error closing WhatsApp: %s", e)
             return False
 
@@ -233,7 +235,7 @@ async def automate_whatsapp(contact_name: str, message: str, close_after: bool =
             "message": f"✅ Message sent to '{contact_name}'. WhatsApp left open."
         }
 
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except (OSError, AttributeError, RuntimeError) as e:  # pylint: disable=broad-exception-caught
         logger.exception("WhatsApp automation error: %s", e)
         return {
             "status": "error",

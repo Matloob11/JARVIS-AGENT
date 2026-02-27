@@ -27,7 +27,8 @@ def get_px():
     except ImportError:
         _px_cached = False  # Use False to avoid repeated import attempts
         return None
-    except Exception:
+    except (ImportError, AttributeError, RuntimeError) as e:
+        logger.debug("Phoenix load skipped: %s", e)
         _px_cached = False
         return None
 
@@ -77,7 +78,7 @@ class VectorMemory:
                     name=COLLECTION_NAME,
                     embedding_function=self.embedding_func
                 )
-            except Exception as e:
+            except (ImportError, ValueError, RuntimeError, OSError, AttributeError) as e:
                 logger.error("Failed to initialize Vector Memory: %s", e)
                 # Keep client/collection as None so we can try again or fail gracefully
                 self.client = None

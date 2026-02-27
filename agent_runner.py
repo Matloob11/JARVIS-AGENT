@@ -20,6 +20,9 @@ from agent_loops import (
     start_reminder_loop, start_bug_hunter_loop, start_ui_command_listener
 )
 from agent_core import BrainAssistant
+from jarvis_window_ctrl import (
+    maximize_window, minimize_window
+)
 from jarvis_instrumentation import setup_instrumentation
 
 # Initialize instrumentation for next-level debugging
@@ -199,6 +202,17 @@ async def entrypoint(ctx: agents.JobContext):
             @session.on("agent_started_speaking")
             def _on_start():
                 notify_ui("START")
+                # Auto-focus the current persona UI
+                try:
+                    active_ui = "A.N.N.A - Core Interface" if assistant._gf_mode_active else "J.A.R.V.I.S"
+                    inactive_ui = "J.A.R.V.I.S" if assistant._gf_mode_active else "A.N.N.A - Core Interface"
+
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        loop.create_task(maximize_window(active_ui))
+                        loop.create_task(minimize_window(inactive_ui))
+                except Exception as e:
+                    logger.warning("Focus on speak failed: %s", e)
 
             @session.on("agent_stopped_speaking")
             def _on_stop():

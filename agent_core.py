@@ -163,7 +163,8 @@ class BrainAssistant(Agent):
             instr = ANNA_BEHAVIOR_PROMPT.format(
                 mood=state["mood"],
                 is_upset=state["is_upset"],
-                user_background=jarvis_id.data.get("user_background")
+                user_background=jarvis_id.data.get("user_background"),
+                sir_background=jarvis_id.data.get("sir_background")
             )
             voice = "aoede"
         else:
@@ -181,9 +182,22 @@ class BrainAssistant(Agent):
                 if hasattr(self._active_session, "_activity") and self._active_session._activity:
                     rt_session = getattr(
                         self._active_session._activity, "_rt_session", None)
-                    if rt_session:
-                        logger.info(f"Setting session voice to: {voice}")
-                        rt_session.update_options(voice=voice)
+                if rt_session:
+                    logger.info(f"Setting session voice to: {voice}")
+                    rt_session.update_options(voice=voice)
+
+                # UI Sync: Minimize inactive, Maximize active
+                try:
+                    if self._gf_mode_active:
+                        asyncio.create_task(minimize_window("J.A.R.V.I.S"))
+                        asyncio.create_task(maximize_window(
+                            "A.N.N.A - Core Interface"))
+                    else:
+                        asyncio.create_task(minimize_window(
+                            "A.N.N.A - Core Interface"))
+                        asyncio.create_task(maximize_window("J.A.R.V.I.S"))
+                except Exception as e:
+                    logger.warning(f"UI window sync failed: {e}")
             except Exception as e:
                 logger.warning(f"Failed to sync persona/voice: {e}")
 
@@ -244,7 +258,7 @@ class BrainAssistant(Agent):
             curr = context_analyzer.analyze_context(text, mem)
             if self._gf_mode_active and curr.get("user_mood") == "upset":
                 turn_ctx.chat_ctx.items.append(llm.ChatMessage(
-                    role="assistant", content="Manao him."))
+                    role="assistant", content=["Manao him."]))
         except Exception as e:
             logger.exception("Reasoning error: %s", e)
 
@@ -260,7 +274,7 @@ class BrainAssistant(Agent):
             await self.tool_toggle_gf_mode(True)
         else:
             turn_ctx.chat_ctx.items.append(llm.ChatMessage(
-                role="assistant", content="Demand sorry."))
+                role="assistant", content=["Demand sorry."]))
 
     async def _inject_reasoning_and_memory(self, text: str, turn_ctx: Any, is_anna: bool):
         """Injects reasoning and memory."""
@@ -268,11 +282,11 @@ class BrainAssistant(Agent):
             sem = await self.memory_extractor.memory.get_semantic_context(query=text, n_results=3)
             if sem:
                 turn_ctx.chat_ctx.items.append(llm.ChatMessage(
-                    role="system", content=f"[LONG-TERM MEMORY CONTEXT]: {sem}"))
+                    role="system", content=[f"[LONG-TERM MEMORY CONTEXT]: {sem}"]))
             res = await process_with_advanced_reasoning(text, self.conversation_history, is_anna=is_anna)
             if res.get("is_agentic") and res.get("plan"):
                 turn_ctx.chat_ctx.items.append(llm.ChatMessage(
-                    role="system", content=f"[EXECUTION PLAN]: {res['plan']}"))
+                    role="system", content=[f"[EXECUTION PLAN]: {res['plan']}"]))
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger.exception("Reasoning error: %s", e)
 
@@ -296,7 +310,20 @@ class BrainAssistant(Agent):
                 return await super().on_user_turn_completed(turn_ctx, new_message)
             except (StopResponse, asyncio.CancelledError):
                 raise
-            except Exception as e:
-                logger.error("Turn error: %s", e)
+            except (ImportError, AttributeError, SyntaxError) as e:
+                # Note: The original error message was "Turn error".
+                # The provided replacement log message "Error importing %s: %s"
+                # and the variable 'name' are not directly applicable here.
+                # To maintain syntactic correctness and avoid NameError,
+                # 'name' is replaced with a placeholder string.
+                logger.error(
+                    "Error during turn completion (e.g., tool call or import): %s", e)
                 raise StopResponse() from e
         return await super().on_user_turn_completed(turn_ctx, new_message)
+
+
+if __name__ == "__main__":
+    import asyncio
+    brain = BrainAssistant()
+    # No-op run to verify initialization
+    asyncio.run(asyncio.sleep(0.1))

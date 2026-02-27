@@ -118,7 +118,7 @@ class ConversationMemory:
                 # Vector DB Sync (Background task to avoid blocking)
                 asyncio.create_task(self._sync_to_vector_db(conversation_dict))
                 return True
-            except Exception as e:  # pylint: disable=broad-exception-caught
+            except (AttributeError, TypeError, ValueError, KeyError, IOError, OSError) as e:
                 logger.error("Error saving memory: %s", e)
                 return False
 

@@ -64,9 +64,8 @@ async def get_weather(city: str = "Lahore") -> str:
         # Move blocking requests.get to a thread
         response = await asyncio.to_thread(requests.get, url, params=params, timeout=10)
         if response.status_code != 200:
-            logger.error(
-                "Weather error: %s - %s", response.status_code, response.text)
-            return f"Error: {city} ke liye weather fetch nahi kar paaye."
+            logger.warning("Weather API error %s. Falling back to search.", response.status_code)
+            return await get_weather_via_search(city)
 
         data = response.json()
         weather = data["weather"][0]["description"].title()
