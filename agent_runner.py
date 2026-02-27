@@ -102,7 +102,8 @@ async def _start_background_tasks(session: AgentSession, assistant: Any):
         asyncio.create_task(start_memory_loop(session)),
         asyncio.create_task(start_reminder_loop(session)),
         asyncio.create_task(start_bug_hunter_loop(session)),
-        asyncio.create_task(start_ui_command_listener(assistant))
+        asyncio.create_task(start_ui_command_listener(assistant)),
+        asyncio.create_task(perform_startup_diagnostics())
     ]
 
     clip_monitor = ClipboardMonitor()
@@ -127,25 +128,26 @@ async def _start_background_tasks(session: AgentSession, assistant: Any):
 
 async def _cleanup_session_resources(session: Optional[AgentSession], tasks: list):
     """Cancels tasks and stops the session safely."""
-    if tasks:
-        logger.info("🛑 Cleaning up session tasks...")
-        for task in tasks:
-            if task and not task.done():
-                try:
-                    task.cancel()
-                except (RuntimeError, ValueError) as e:
-                    logger.warning("Task cancel error: %s", e)
-        # Use wait_for to prevent hanging during cleanup
-        try:
-            await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=5.0)
-        except asyncio.TimeoutError:
-            logger.warning("Cleanup gathering timed out.")
-
+    # 1. Stop the session first to signal generators to close
     if session:
         try:
-            await session.stop()
-        except (AttributeError, RuntimeError, ValueError) as e:
+            logger.info("🛑 Stopping AgentSession...")
+            await asyncio.wait_for(session.stop(), timeout=3.0)
+        except (AttributeError, RuntimeError, ValueError, asyncio.TimeoutError) as e:
             logger.debug("Session stop error: %s", e)
+
+    # 2. Cancel and gather background tasks
+    if tasks:
+        logger.info("🛑 Cleaning up background tasks...")
+        for task in tasks:
+            if task and not task.done():
+                task.cancel()
+
+        try:
+            # More aggressive timeout for background tasks
+            await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=2.0)
+        except asyncio.TimeoutError:
+            logger.warning("Background task cleanup timed out.")
 
 
 def _print_startup_banner():
@@ -173,8 +175,12 @@ async def entrypoint(ctx: agents.JobContext):
             logger.info(
                 "Attempting to start session (Attempt %d/%d)...", attempt + 1, max_retries)
 
-            current_dt = await get_formatted_datetime()
-            city = await get_current_city()
+            # 1. Parallelize initial data gathering (Date/Time + City)
+            current_dt_task = asyncio.create_task(get_formatted_datetime())
+            city_task = asyncio.create_task(get_current_city())
+
+            # Wait for both together
+            current_dt_result, city = await asyncio.gather(current_dt_task, city_task)
 
             session = AgentSession(
                 preemptive_generation=False,
@@ -184,7 +190,7 @@ async def entrypoint(ctx: agents.JobContext):
             if ctx.room.connection_state != rtc.ConnectionState.CONN_CONNECTED:
                 await ctx.connect()
 
-            await perform_startup_diagnostics()
+            # Diagnostics moved to background tasks to speed up startup
 
             chat_ctx = llm.ChatContext()
             for item in session.history.items:
@@ -192,7 +198,7 @@ async def entrypoint(ctx: agents.JobContext):
 
             assistant = BrainAssistant(
                 chat_ctx=chat_ctx,
-                current_date=current_dt.get("formatted"),
+                current_date=current_dt_result.get("formatted"),
                 current_city=city
             )
 

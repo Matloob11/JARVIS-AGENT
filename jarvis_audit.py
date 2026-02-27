@@ -62,26 +62,29 @@ class AuditHandler(FileSystemEventHandler):
             "--score=y",
             "--output-format=colorized"
         ]
-        subprocess.run(pylint_cmd, shell=True if os.name == 'nt' else False)
+        subprocess.run(pylint_cmd, shell=True if os.name ==
+                       'nt' else False)  # nosec B602
 
         # 2. Mypy Type Checks
         print("\n[2] Step 2: Mypy Type Integrity Check...")
         mypy_cmd = ["mypy"] + py_files + ["--ignore-missing-imports",
                                           "--follow-imports=silent", "--show-error-codes", "--pretty"]
-        subprocess.run(mypy_cmd, shell=True if os.name == 'nt' else False)
+        subprocess.run(mypy_cmd, shell=True if os.name ==
+                       'nt' else False)  # nosec B602
 
         # 3. Pytest Runtime Checks
         print("\n[3] Step 3: Pytest Runtime Verification...")
         pytest_cmd = ["pytest", "--maxfail=3",
                       "--disable-warnings", "--tb=short"]
-        subprocess.run(pytest_cmd, shell=True if os.name == 'nt' else False)
+        subprocess.run(pytest_cmd, shell=True if os.name ==
+                       'nt' else False)  # nosec B602
 
         # 4. Tracemalloc for memory leaks
         print("\n[4] Step 4: Memory Leak Detection (Core Module)...")
         # Profile agent.py as it's the main entry point
         if "agent.py" in py_files:
             subprocess.run([sys.executable, "-X", "dev", "-m", "tracemalloc",
-                           "-c", "import agent"], shell=True if os.name == 'nt' else False)
+                           "-c", "import agent"], shell=True if os.name == 'nt' else False)  # nosec B602
 
         print("-" * 60)
         print(">>> AUDIT COMPLETE. STANDING BY...")

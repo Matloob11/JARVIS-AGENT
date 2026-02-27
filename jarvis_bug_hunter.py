@@ -65,9 +65,12 @@ async def monitor_logs(callback):
                 if "ERROR" in error_block or "TRACEBACK" in error_block.upper():
                     await callback(error_block)
             await asyncio.sleep(10)
-        except (IOError, ValueError, asyncio.CancelledError) as e:
+        except asyncio.CancelledError:
+            logger.info("Bug Hunter monitoring stopping...")
+            break
+        except (IOError, ValueError) as e:
             logger.error("Bug Hunter loop error: %s", e)
-            await asyncio.sleep(30)
+            await asyncio.sleep(10)
 
 
 @function_tool

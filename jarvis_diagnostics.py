@@ -60,33 +60,40 @@ class SystemCheck:
         return dep_status
 
     async def check_api_connectivity(self) -> Dict[str, str]:
-        """Mock test connectivity to core API endpoints."""
+        """Test connectivity to core API endpoints in parallel."""
         endpoints = {
             "Google Gemini": "https://generativelanguage.googleapis.com",
             "Hugging Face": "https://api-inference.huggingface.co",
             "OpenRouter": "https://openrouter.ai/api/v1",
             "OpenWeatherMap": "https://api.openweathermap.org"
         }
-        conn_status = {}
-        for name, url in endpoints.items():
+
+        async def _check_endpoint(name: str, url: str) -> tuple:
             try:
                 # Simple HEAD request to verify endpoint is reachable
                 response = await asyncio.to_thread(requests.head, url, timeout=5)
                 if response.status_code < 500:
-                    conn_status[name] = "✅ Reachable"
+                    return name, "✅ Reachable"
                 else:
-                    conn_status[name] = f"⚠️ Server Error ({response.status_code})"
+                    return name, f"⚠️ Server Error ({response.status_code})"
             except (requests.RequestException, asyncio.TimeoutError):
-                conn_status[name] = "❌ Unreachable (Check Internet)"
-        return conn_status
+                return name, "❌ Unreachable (Check Internet)"
+
+        tasks = [_check_endpoint(name, url) for name, url in endpoints.items()]
+        results = await asyncio.gather(*tasks)
+        return dict(results)
 
     async def run_full_diagnostics(self) -> Dict[str, Any]:
         """Perform all checks and compile a health report."""
         logger.info("Starting comprehensive system diagnostics...")
 
-        env_results = await self.check_env_vars()
-        dep_results = await self.check_external_dependencies()
-        api_results = await self.check_api_connectivity()
+        # Run all three check types in parallel
+        results = await asyncio.gather(
+            self.check_env_vars(),
+            self.check_external_dependencies(),
+            self.check_api_connectivity()
+        )
+        env_results, dep_results, api_results = results
 
         # Calculate health percentage
         total_checks = len(env_results) + len(dep_results) + len(api_results)

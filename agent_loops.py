@@ -81,11 +81,13 @@ async def start_ui_command_listener(assistant: "BrainAssistant"):
     server_address = ("127.0.0.1", 5006)
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.settimeout(1.0)
     try:
         sock.bind(server_address)
         logger.info("UI Command Listener active on port 5006")
     except socket.error as e:
         logger.error("Could not bind UI listener: %s", e)
+        sock.close()
         return
 
     while True:
@@ -96,18 +98,20 @@ async def start_ui_command_listener(assistant: "BrainAssistant"):
             command = message.get("command")
 
             if command == "MUTE":
-                # pylint: disable=protected-access
                 assistant._muted = True
                 logger.info("🔇 Agent MUTED via UI.")
             elif command == "UNMUTE":
-                # pylint: disable=protected-access
                 assistant._muted = False
                 logger.info("🔊 Agent UNMUTED via UI.")
 
+        except (socket.timeout, asyncio.TimeoutError):
+            continue
         except (json.JSONDecodeError, socket.error) as e:
-            logger.error("UI Command IPC error: %s", e)
+            if not isinstance(e, socket.timeout):
+                logger.error("UI Command IPC error: %s", e)
             await asyncio.sleep(1)
         except asyncio.CancelledError:
+            logger.info("UI Command listener stopping...")
             break
         except (AttributeError, TypeError, KeyError, RuntimeError) as e:
             logger.error("UI Listener error: %s", e)

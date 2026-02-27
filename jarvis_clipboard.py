@@ -104,8 +104,16 @@ class ClipboardMonitor:
                 logger.info("Clipboard monitoring loop cancelled.")
                 self.is_running = False
                 break
-            except (RuntimeError, AttributeError) as e:
-                logger.error("Clipboard loop logic error: %s", e)
+            except RuntimeError as e:
+                if "Executor shutdown" in str(e):
+                    logger.info(
+                        "Clipboard executor shutdown detected. Stopping loop.")
+                    self.is_running = False
+                    break
+                logger.error("Clipboard loop runtime error: %s", e)
+                await asyncio.sleep(5)
+            except AttributeError as e:
+                logger.error("Clipboard loop attribute error: %s", e)
                 await asyncio.sleep(5)
             except (IOError, OSError) as e:
                 logger.error("Clipboard loop IO error: %s", e)

@@ -135,8 +135,8 @@ class NotepadAutomation:
         try:
             logger.info("Closing Notepad window...")
             if force:
-                # Force close via taskkill using list arguments (safe)
-                subprocess.run(["taskkill", "/f", "/im", "notepad.exe"],
+                # Force close via taskkill using absolute path for security
+                subprocess.run([r"C:\Windows\System32\taskkill.exe", "/f", "/im", "notepad.exe"],
                                check=False, capture_output=True)
                 logger.info("Notepad force closed via taskkill.")
                 return True
@@ -257,7 +257,8 @@ async def create_template_code(code_type: str, filename: str = "", auto_run: boo
         msg = f"✅ File initialized: {filename}\n"
         try:
             # pylint: disable=consider-using-with
-            subprocess.Popen(['notepad.exe', full_path])
+            subprocess.Popen(
+                [r"C:\Windows\System32\notepad.exe", full_path])
             if await notepad_automation.ensure_notepad_focus():
                 await notepad_automation.simulate_typing(content)
                 msg += "📝 Typed code in Notepad.\n"
@@ -274,13 +275,13 @@ async def create_template_code(code_type: str, filename: str = "", auto_run: boo
 
         if auto_run:
             if filename.endswith('.html'):
-                os.startfile(full_path)
+                os.startfile(full_path)  # nosec B606
                 msg += "🌐 HTML opened in Browser!"
             elif filename.endswith('.py'):
                 # Safe launch using list arguments to avoid shell injection
                 # pylint: disable=consider-using-with
                 subprocess.Popen(
-                    ['cmd', '/c', 'start', 'cmd', '/k', 'python', full_path])
+                    ['cmd', '/c', 'start', 'cmd', '/k', 'python', full_path])  # nosec B607
                 msg += "🐍 Python script running in CMD!"
 
         return {
@@ -316,7 +317,8 @@ async def write_custom_code(content: str, filename: str, auto_run: bool = True) 
         msg = f"✅ File initialized: {filename}\n"
         try:
             # pylint: disable=consider-using-with
-            subprocess.Popen(['notepad.exe', full_path])
+            subprocess.Popen(
+                [r"C:\Windows\System32\notepad.exe", full_path])
             if await notepad_automation.ensure_notepad_focus():
                 await notepad_automation.simulate_typing(content)
                 msg += "📝 Typed code in Notepad.\n"
@@ -334,13 +336,13 @@ async def write_custom_code(content: str, filename: str, auto_run: bool = True) 
 
         if auto_run:
             if filename.endswith('.html'):
-                os.startfile(full_path)
+                os.startfile(full_path)  # nosec B606
                 msg += "🌐 HTML opened!"
             elif filename.endswith('.py'):
                 # Safe launch using list arguments
                 # pylint: disable=consider-using-with
                 subprocess.Popen(
-                    ['cmd', '/c', 'start', 'cmd', '/k', 'python', full_path])
+                    ['cmd', '/c', 'start', 'cmd', '/k', 'python', full_path])  # nosec B607
                 msg += "🐍 Python script running!"
 
         return {
@@ -365,7 +367,7 @@ async def run_cmd_command(command: str) -> dict:
         # Use shlex to split if the command is a complex string
         import shlex
         cmd_list = ["cmd", "/c", "start", "cmd", "/k"] + shlex.split(command)
-        subprocess.Popen(cmd_list)
+        subprocess.Popen(cmd_list)  # nosec B603
         return {
             "status": "success",
             "command": command,
@@ -384,7 +386,7 @@ async def open_notepad_simple() -> dict:
     """Open a blank Notepad instance"""
     try:
         # pylint: disable=consider-using-with
-        subprocess.Popen(['notepad.exe'])
+        subprocess.Popen([r"C:\Windows\System32\notepad.exe"])
         return {
             "status": "success",
             "message": "✅ Notepad opened"

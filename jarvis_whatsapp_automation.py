@@ -108,7 +108,7 @@ class WhatsAppAutomation:
         """Opens WhatsApp Desktop application using the Store URI"""
         try:
             logger.info("Opening WhatsApp via URI: %s", WHATSAPP_URI)
-            os.startfile(WHATSAPP_URI)
+            os.startfile(WHATSAPP_URI)  # nosec B606
             await asyncio.sleep(3.0)  # Initial wait for launch
             return True
         except (OSError, ValueError) as e:

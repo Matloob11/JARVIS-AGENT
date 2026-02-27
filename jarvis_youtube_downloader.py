@@ -108,9 +108,9 @@ class YouTubeDownloader:
 
             # 4. Open the specific file directly
             if os.path.exists(final_path):
-                os.startfile(final_path)
+                os.startfile(final_path)  # nosec B606
             else:
-                os.startfile(self.base_dir)
+                os.startfile(self.base_dir)  # nosec B606
 
             type_str = "Video" if download_type == "video" else "Audio (MP3)"
             msg = (f"✅ {type_str} download ho gaya hai aur play kar diya hai. "
@@ -141,7 +141,7 @@ class YouTubeDownloader:
                         lambda: subprocess.run(
                             fallback_cmd, capture_output=True, text=True, check=True)
                     )
-                    os.startfile(self.base_dir)
+                    os.startfile(self.base_dir)  # nosec B606
                     msg = ("✅ Audio (Original Format) download kar liya gaya hai kyunki 'ffmpeg' missing tha. "
                            "MP3 conversion possible nahi thi.")
                     return {

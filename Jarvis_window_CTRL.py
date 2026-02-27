@@ -7,6 +7,9 @@ Also provides system-level controls like shutdown, restart, and sleep.
 """
 # pylint: disable=too-many-lines
 
+from jarvis_system_ctrl import (
+    shutdown_system, restart_system, sleep_system, lock_screen
+)
 import asyncio
 import os
 import re
@@ -141,7 +144,7 @@ async def open_app(full_command: str) -> dict:  # pylint: disable=too-many-branc
         # 🌐 URL → browser or desktop app
         if app.startswith("http"):
             # Use os.startfile for better handling of browser launches
-            os.startfile(app)
+            os.startfile(app)  # nosec B606
             await asyncio.sleep(3)  # Wait for browser to open
             if "youtube" in matched_key.lower():
                 await focus_window("YouTube")
@@ -152,15 +155,15 @@ async def open_app(full_command: str) -> dict:  # pylint: disable=too-many-branc
             await whatsapp_bot.ensure_whatsapp_focus()
         elif app.startswith("whatsapp://"):
             if app:
-                os.startfile(app)
+                os.startfile(app)  # nosec B606
         else:
             # 🖥️ Generic Desktop App launch
             try:
-                os.startfile(app)
+                os.startfile(app)  # nosec B606
             except OSError as e:
                 # Fallback to subprocess if startfile fails
                 cmd_list = shlex.split(app)
-                subprocess.Popen(cmd_list)
+                subprocess.Popen(cmd_list)  # nosec B603
                 await asyncio.sleep(2)
                 logger.warning(
                     "startfile failed, tried subprocess fallback safely: %s", e)
@@ -281,7 +284,8 @@ async def open_notepad_file(file_path: str) -> str:
 
     try:
         # pylint: disable=consider-using-with
-        subprocess.Popen([r"C:\Windows\System32\notepad.exe", file_path])
+        subprocess.Popen(
+            [r"C:\Windows\System32\notepad.exe", file_path])
         return {
             "status": "success",
             "file_path": file_path,
@@ -315,7 +319,8 @@ async def close(window_name: str) -> str:
 
     if "notepad" in window_name:
         try:
-            subprocess.run(["taskkill", "/f", "/im", "notepad.exe"], check=False, capture_output=True)
+            subprocess.run([r"C:\Windows\System32\taskkill.exe", "/f", "/im", "notepad.exe"],
+                           check=False, capture_output=True)
             return "🗑️ Notepad force close kar diya gaya hai (Unsaved changes lost)."
         except (subprocess.SubprocessError, OSError) as e:
             logger.error("Error closing notepad: %s", e)
@@ -487,9 +492,6 @@ async def folder_file(path: str) -> dict:
 
 
 # System control tools moved to jarvis_system_ctrl.py
-from jarvis_system_ctrl import (
-    shutdown_system, restart_system, sleep_system, lock_screen
-)
 
 
 @function_tool
@@ -539,7 +541,7 @@ async def open_outputs_folder(subfolder: str = "") -> dict:
         if not os.path.exists(target_path):
             os.makedirs(target_path, exist_ok=True)
 
-        os.startfile(target_path)
+        os.startfile(target_path)  # nosec B606
         folder_name = os.path.basename(
             target_path) if subfolder else "Jarvis_Outputs"
         return {

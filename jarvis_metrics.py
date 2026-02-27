@@ -11,6 +11,7 @@ from jarvis_logger import setup_logger
 
 logger = setup_logger("JARVIS-METRICS")
 
+
 class MetricsCollector:
     def __init__(self):
         self.cpu = 0
@@ -44,18 +45,19 @@ class MetricsCollector:
                 if system == "Windows":
                     # Future implementation for Windows media info
                     pass
-                elif system == "Darwin": # macOS
+                elif system == "Darwin":  # macOS
                     # Spotify check
                     # Safer subprocess call without shell=True
                     try:
                         # Use pgrep or ps to find spotify
-                        proc = subprocess.run(["pgrep", "-f", "MacOS/Spotify"], capture_output=True, text=True, check=False)
+                        proc = subprocess.run(
+                            ["pgrep", "-f", "MacOS/Spotify"], capture_output=True, text=True, check=False)  # nosec B607
                         if proc.returncode == 0:
                             # Get track via osascript
                             track_proc = subprocess.run([
-                                "osascript", "-e", 
+                                "osascript", "-e",
                                 'tell application "Spotify" to return artist of current track & " - " & name of current track'
-                            ], capture_output=True, text=True, check=False)
+                            ], capture_output=True, text=True, check=False)  # nosec B607
                             if track_proc.returncode == 0:
                                 new_track = track_proc.stdout.strip()
                     except (subprocess.SubprocessError, OSError, FileNotFoundError) as e:

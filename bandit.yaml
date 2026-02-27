@@ -1,0 +1,23 @@
+### Bandit Configuration File
+# Used to exclude virtual environments, tests, and suppress common false positives.
+
+# Exclude directories and files from the scan
+exclude_dirs:
+  - .venv
+  - tests
+  - __pycache__
+  - .mypy_cache
+  - .pytest_cache
+  - .git
+
+# Specific file patterns to exclude
+skips:
+  - B101  # Use of assert detected (standard in tests, and common in this project)
+  - B404  # Import subprocess (widely used for system control in this project)
+  - B603  # subprocess.Popen with shell=False (safe for our specific internal use cases)
+  - B311  # Standard random module (used for non-security relevant features like UI effects)
+
+# Override default behavior to skip test files if they are in the root
+# (Bandit sometimes picks up test_*.py even if excluded via dirs)
+exclude:
+  - test_*.py

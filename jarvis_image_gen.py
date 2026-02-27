@@ -42,7 +42,7 @@ def generate_via_hf(prompt: str) -> str:
         filepath = os.path.join(image_dir, filename)
 
         image.save(filepath)
-        os.startfile(filepath)
+        os.startfile(filepath)  # nosec B606
         logger.info("HF Image saved and opened: %s", filepath)
         return f"Success: Image generated via Hugging Face and saved to {filepath}"
     except (ImportError, ValueError, OSError, requests.exceptions.RequestException) as e:
@@ -81,7 +81,7 @@ def generate_via_pollinations(prompt: str) -> str:
 
             with open(filepath, "wb") as f:
                 f.write(response.content)
-            os.startfile(filepath)
+            os.startfile(filepath)  # nosec B606
             logger.info(
                 "Pollinations Image saved and opened: %s", filepath)
             return (f"Success: Image generated via Pollinations for "

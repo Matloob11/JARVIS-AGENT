@@ -146,7 +146,7 @@ async def open_file(item):
 
         def start_file():
             if os.name == 'nt':
-                os.startfile(item["path"])
+                os.startfile(item["path"])  # nosec B606
             else:
                 subprocess.call(['open' if sys.platform ==
                                 'darwin' else 'xdg-open', item["path"]])

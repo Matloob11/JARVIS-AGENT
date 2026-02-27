@@ -20,7 +20,7 @@ def get_pylint_score(file_path: str) -> float:
     """Run pylint and extract the score."""
     try:
         result = subprocess.run(
-            ["pylint", file_path],
+            ["pylint", file_path],  # nosec B607
             capture_output=True,
             text=True,
             check=False

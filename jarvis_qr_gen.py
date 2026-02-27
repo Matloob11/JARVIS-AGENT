@@ -59,7 +59,7 @@ async def generate_qr_code(data: str, filename: str = "my_stylish_qr.png") -> di
                 color_mask=color_mask
             )
             img.save(file_path)
-            os.startfile(file_path)
+            os.startfile(file_path)  # nosec B606
             return file_path
 
         await asyncio.to_thread(make_qr)
