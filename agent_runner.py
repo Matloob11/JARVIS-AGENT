@@ -5,6 +5,7 @@ Entrypoint and session management for the JARVIS agent.
 
 # pylint: disable=broad-exception-caught
 
+import httpx
 import asyncio
 import socket
 import json
@@ -31,14 +32,32 @@ setup_instrumentation()
 logger = setup_logger("JARVIS-RUNNER")
 
 
-def notify_ui(status: str):
-    """Sends a UDP packet to the UI to signal speaking status."""
+async def notify_ui(status: str):
+    """Sends a notification to the STONIX UI Bridge."""
     try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        message = json.dumps({"status": status})
-        sock.sendto(message.encode(), ("127.0.0.1", 5005))
-    except (socket.error, json.JSONDecodeError) as e:
-        logger.warning("UI Notification failed: %s", e)
+        async with httpx.AsyncClient() as client:
+            await client.post("http://127.0.0.1:5001/notify", json={
+                "type": "status",
+                "payload": status
+            }, timeout=0.1)
+    except Exception as e:
+        logger.debug("Bridge Notification failed: %s", e)
+
+
+async def notify_transcription(role: str, text: str):
+    """Sends a transcription update to the STONIX UI Bridge."""
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.post("http://127.0.0.1:5001/notify", json={
+                "type": "transcription",
+                "payload": {
+                    "role": role,
+                    "text": text,
+                    "timestamp": get_formatted_datetime().get("formatted", "").split(" ")[-1]
+                }
+            }, timeout=0.2)
+    except Exception as e:
+        logger.debug("Transcription Notification failed: %s", e)
 
 
 async def start_memory_loop(session: AgentSession):
@@ -207,7 +226,7 @@ async def entrypoint(ctx: agents.JobContext):
 
             @session.on("agent_started_speaking")
             def _on_start():
-                notify_ui("START")
+                asyncio.create_task(notify_ui("START"))
                 # Auto-focus the current persona UI
                 try:
                     active_ui = "A.N.N.A - Core Interface" if assistant._gf_mode_active else "J.A.R.V.I.S"
@@ -222,7 +241,19 @@ async def entrypoint(ctx: agents.JobContext):
 
             @session.on("agent_stopped_speaking")
             def _on_stop():
-                notify_ui("STOP")
+                asyncio.create_task(notify_ui("STOP"))
+
+            @session.on("user_transcription")
+            def _on_user_transcript(transcript):
+                if transcript and transcript.text:
+                    asyncio.create_task(
+                        notify_transcription("user", transcript.text))
+
+            @session.on("agent_transcription")
+            def _on_agent_transcript(transcript):
+                if transcript and transcript.text:
+                    asyncio.create_task(
+                        notify_transcription("agent", transcript.text))
 
             _print_startup_banner()
             tasks = await _start_background_tasks(session, assistant)
