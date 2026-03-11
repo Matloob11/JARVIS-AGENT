@@ -5,63 +5,42 @@ Core logic for the BrainAssistant agent.
 
 # pylint: disable=protected-access, broad-exception-caught
 
+import os
 import re
 import asyncio
 import json
+import uuid
 from typing import Any, Optional
-
+from datetime import datetime
+import httpx
 from livekit.agents import Agent, AgentSession, StopResponse, llm
 from livekit.plugins import google
 
-from jarvis_logger import setup_logger
-from jarvis_prompt import BEHAVIOR_PROMPT, ANNA_BEHAVIOR_PROMPT
-from jarvis_reasoning import (
+from services.utils.jarvis_config import config
+from services.utils.jarvis_logger import setup_logger
+from services.ai_core.jarvis_prompt import BEHAVIOR_PROMPT, ANNA_BEHAVIOR_PROMPT
+from services.ai_core.jarvis_reasoning import (
     analyze_user_intent, generate_smart_response, process_with_advanced_reasoning,
     context_analyzer
 )
-from jarvis_search import (
-    get_formatted_datetime, search_internet
-)
-from jarvis_get_weather import get_weather
-from jarvis_notepad_automation import (
-    create_template_code, open_notepad_simple, run_cmd_command, write_custom_code
-)
-from jarvis_window_ctrl import (
-    close, create_folder, lock_screen, maximize_window, minimize_window,
-    open_app, open_notepad_file, restart_system, save_notepad, shutdown_system,
-    sleep_system, folder_file, open_outputs_folder
-)
-from jarvis_file_opener import play_file, play_video, play_music
-from jarvis_system_info import get_laptop_info
-from jarvis_whatsapp_automation import automate_whatsapp
-from jarvis_youtube_automation import automate_youtube
-from jarvis_vision import analyze_screen
-from jarvis_rag import ask_about_document
-from jarvis_image_gen import tool_generate_image
-from jarvis_advanced_tools import download_images, zip_files, send_email
-from jarvis_qr_gen import generate_qr_code
-from jarvis_file_server import start_file_access_server, stop_file_access_server
-from jarvis_identity import (
-    jarvis_id, tool_update_user_background, tool_update_sir_background
-)
-from keyboard_mouse_ctrl import (
-    control_volume_tool, mouse_click_tool, move_cursor_tool, press_hotkey_tool,
-    press_key_tool, scroll_cursor_tool, set_volume_tool, swipe_gesture_tool,
-    type_text_tool
-)
-from jarvis_reminders import list_reminders, set_reminder
-from jarvis_researcher import perform_web_research, autonomous_research_and_email
-from jarvis_self_healing import autonomous_self_repair
-from jarvis_bug_hunter import tool_investigate_recent_bugs
-from jarvis_diagnostics import tool_perform_diagnostics
-from jarvis_youtube_downloader import download_youtube_media
-from agent_memory import MemoryExtractor
+from services.ai_core.jarvis_plugin_manager import JarvisPluginManager
+from services.ai_core.agent_memory import MemoryExtractor
+from services.ai_core.jarvis_identity import jarvis_id
+from services.utils.jarvis_health import health_monitor
+from services.utils.jarvis_telemetry import telemetry
+from services.utils.jarvis_adaptive import adaptive_engine
+from services.utils.jarvis_security import vortex_guard, security_manager
+from services.utils.jarvis_audit import jarvis_audit
+from services.ai_core.autonomous_planner import tool_report_plan_progress
+from services.system.jarvis_window_ctrl import get_active_window_context
 
 logger = setup_logger("JARVIS-CORE")
+# pylint: disable=unused-import
 
 INSTRUCTIONS_PROMPT = BEHAVIOR_PROMPT
 
 
+# pylint: disable=too-many-instance-attributes
 class BrainAssistant(Agent):
     """
     Enhanced Assistant with reasoning capabilities and integrated tool suite.
@@ -87,39 +66,43 @@ class BrainAssistant(Agent):
         self._active_session: Optional[AgentSession] = None
         self._muted = False
         self._gf_mode_active = False
+        self.last_vision_frame = None
+        self.active_window_context = {}
+        self._proactive_vision_task: Optional[asyncio.Task] = None
+
+        self.plugin_manager = JarvisPluginManager()
+        package_path = os.path.join(os.path.dirname(__file__), 'services')
+        self.plugin_manager.discover_plugins(package_path)
+
+        # Wrap internal tools to avoid 'self' in signature
+        all_tools = self.plugin_manager.get_livekit_tools()
+
+        async def wrap_set_wake_word_mode(active: bool) -> dict:
+            return await self.tool_set_wake_word_mode(active)
+        wrap_set_wake_word_mode.__doc__ = self.tool_set_wake_word_mode.__doc__
+
+        async def wrap_change_voice(voice_name: str) -> dict:
+            return await self.tool_change_voice(voice_name)
+        wrap_change_voice.__doc__ = self.tool_change_voice.__doc__
+
+        async def wrap_toggle_gf_mode(active: bool) -> dict:
+            return await self.tool_toggle_gf_mode(active)
+        wrap_toggle_gf_mode.__doc__ = self.tool_toggle_gf_mode.__doc__
+
+        all_tools.extend([
+            llm.function_tool(wrap_set_wake_word_mode),
+            llm.function_tool(wrap_change_voice),
+            llm.function_tool(wrap_toggle_gf_mode),
+        ])
 
         super().__init__(
             chat_ctx=chat_ctx,
             instructions=prompt_with_info,
             llm=google.realtime.RealtimeModel(
                 voice="charon", model="models/gemini-2.5-flash-native-audio-latest"),
-            tools=[
-                search_internet, get_formatted_datetime, get_weather,
-                create_template_code, write_custom_code, run_cmd_command,
-                open_notepad_simple, shutdown_system, restart_system,
-                sleep_system, lock_screen, create_folder, folder_file,
-                open_outputs_folder, open_app, close, minimize_window,
-                maximize_window, save_notepad, open_notepad_file,
-                play_file, play_video, play_music, get_laptop_info,
-                automate_whatsapp, move_cursor_tool, mouse_click_tool,
-                scroll_cursor_tool, type_text_tool, press_key_tool,
-                press_hotkey_tool, control_volume_tool, set_volume_tool,
-                swipe_gesture_tool, automate_youtube,
-                analyze_screen, ask_about_document, download_images,
-                zip_files, send_email, set_reminder, list_reminders,
-                perform_web_research, autonomous_research_and_email,
-                autonomous_self_repair, tool_investigate_recent_bugs,
-                tool_perform_diagnostics, tool_generate_image,
-                generate_qr_code, start_file_access_server,
-                stop_file_access_server, download_youtube_media,
-                tool_update_user_background, tool_update_sir_background,
-                llm.function_tool(self.tool_set_wake_word_mode),
-                llm.function_tool(self.tool_change_voice),
-                llm.function_tool(self.tool_toggle_gf_mode),
-            ]
+            tools=all_tools
         )
 
-    # ... Rest of BrainAssistant methods ...
     async def tool_set_wake_word_mode(self, active: bool) -> dict:
         """Toggle the strict wake word enforcement mode."""
         self._wake_word_mode = active
@@ -135,20 +118,23 @@ class BrainAssistant(Agent):
         valid_voices = ["alloy", "echo", "shimmer", "ash",
                         "ballad", "coral", "sage", "verse", "charon", "aoede"]
         if voice_name.lower() not in valid_voices:
-            return {"status": "error", "message": f"Voice '{voice_name}' invalid. Use one of: {', '.join(valid_voices)}"}
+            msg = f"Voice '{voice_name}' invalid. Use one of: {', '.join(valid_voices)}"
+            return {"status": "error", "message": msg}
+
+        self.llm.voice = voice_name.lower()
 
         # Update voice in the session if active
         if self._active_session:
             try:
-                # Accessing internal RealtimeSession for dynamic voice change
-                if hasattr(self._active_session, "_activity") and self._active_session._activity:
+                if (hasattr(self._active_session, "_activity") and
+                        self._active_session._activity):
                     rt_session = getattr(
                         self._active_session._activity, "_rt_session", None)
                     if rt_session:
                         rt_session.update_options(voice=voice_name.lower())
-                        logger.info(f"Voice changed to: {voice_name}")
+                        logger.info("Voice changed to: %s", voice_name)
             except Exception as e:
-                logger.error(f"Failed to change voice dynamically: {e}")
+                logger.error("Failed to change voice dynamically: %s", e)
 
         return {
             "status": "success",
@@ -157,7 +143,7 @@ class BrainAssistant(Agent):
         }
 
     async def _update_persona_instructions(self):
-        """Generates and applies the correct instructions for the active persona."""
+        """Generates and applies instructions for the active persona."""
         if self._gf_mode_active:
             state = jarvis_id.get_anna_state()
             instr = ANNA_BEHAVIOR_PROMPT.format(
@@ -171,35 +157,56 @@ class BrainAssistant(Agent):
             instr = f"{BEHAVIOR_PROMPT}\n{jarvis_id.get_context()}"
             voice = "charon"
 
-        # The session will handle instruction updates via update_instructions
-        # Update current prompt using the standard method
         await self.update_instructions(instr)
+        self.llm.voice = voice
 
         if self._active_session:
             try:
-                # Note: Voice update still requires reaching into the underlying RealtimeSession
-                # as AgentSession doesn't support 'voice' in update_options.
-                if hasattr(self._active_session, "_activity") and self._active_session._activity:
+                # Find the Realtime Session deeper in the object structure for LiveKit 0.22+
+                rt_session = None
+                if hasattr(self._active_session, "_activity"):
                     rt_session = getattr(
                         self._active_session._activity, "_rt_session", None)
-                if rt_session:
-                    logger.info(f"Setting session voice to: {voice}")
-                    rt_session.update_options(voice=voice)
 
-                # UI Sync: Minimize inactive, Maximize active
-                try:
-                    if self._gf_mode_active:
-                        asyncio.create_task(minimize_window("J.A.R.V.I.S"))
-                        asyncio.create_task(maximize_window(
-                            "A.N.N.A - Core Interface"))
-                    else:
-                        asyncio.create_task(minimize_window(
-                            "A.N.N.A - Core Interface"))
-                        asyncio.create_task(maximize_window("J.A.R.V.I.S"))
-                except Exception as e:
-                    logger.warning(f"UI window sync failed: {e}")
+                if rt_session:
+                    logger.info("Setting session options: voice=%s", voice)
+                    rt_session.update_options(voice=voice)
+                else:
+                    logger.warning(
+                        "Could not find underlying RT session to update options.")
+
+                active_persona = "anna" if self._gf_mode_active else "jarvis"
+                asyncio.create_task(self._notify_ui_persona(active_persona))
             except Exception as e:
-                logger.warning(f"Failed to sync persona/voice: {e}")
+                logger.warning("Failed to sync persona/voice: %s", e)
+
+    async def _notify_ui_event(self, event_type: str, payload: Any):
+        """Generic helper to notify STONIX UI with signed payloads."""
+        try:
+            payload_data = {"type": event_type, "payload": payload}
+            json_payload = json.dumps(payload_data, sort_keys=True)
+            signature = security_manager.generate_signature(json_payload)
+
+            headers = {
+                "X-Vortex-Token": config.security_token,
+                "X-Vortex-Signature": signature
+            }
+            url = f"{config.bridge_url}/notify"
+            async with httpx.AsyncClient() as client:
+                await client.post(url, json=payload_data, headers=headers, timeout=1.0)
+        except Exception as e:
+            logger.debug("UI Notification failed (%s): %s", event_type, e)
+
+    async def _notify_ui_reasoning(self, reasoning_result: dict):
+        """Sends intelligence/reasoning metadata to the UI Bridge."""
+        await self._notify_ui_event("reasoning", {
+            "intent": reasoning_result.get("intent_analysis", {}).get("primary_intent"),
+            "confidence": reasoning_result.get(
+                "intent_analysis", {}).get("confidence_scores", {}),
+            "plan": reasoning_result.get("plan", []),
+            "is_ambiguous": reasoning_result.get(
+                "intent_analysis", {}).get("is_ambiguous", False)
+        })
 
     async def tool_toggle_gf_mode(self, active: bool) -> dict:
         """Toggle the romantic GF (Anna) persona."""
@@ -211,15 +218,54 @@ class BrainAssistant(Agent):
     def attach_session(self, session: AgentSession):
         """Link the active session to this assistant."""
         self._active_session = session
+        if not self._proactive_vision_task:
+            self._proactive_vision_task = asyncio.create_task(
+                self._proactive_vision_loop())
+
+    async def _proactive_vision_loop(self):
+        """Background loop for environment awareness."""
+        logger.info("🔭 AuraView 2.0: Proactive awareness loop started.")
+        while True:
+            try:
+                ctx = await get_active_window_context()
+                if ctx.get("status") == "success":
+                    self.active_window_context = ctx
+                    logger.debug("Active Window: %s", ctx.get("title"))
+                health_monitor.record_heartbeat("vision_loop")
+            except Exception as e:
+                logger.error("Vision loop error: %s", e)
+            await asyncio.sleep(60)
 
     async def process_with_reasoning(self, user_input: str) -> str:
         """Process user input with advanced reasoning."""
+        session_id = str(uuid.uuid4())
+        telemetry.start_interaction(session_id, user_input)
+        health_monitor.record_heartbeat("backend_core")
         try:
+            telemetry.record_step(session_id, "intent_analysis")
             intent = await analyze_user_intent(user_input)
-            mem = await self.memory_extractor.memory.get_recent_context(max_messages=10)
-            sem = await self.memory_extractor.memory.get_semantic_context(query=user_input, n_results=3)
-            return await generate_smart_response(user_input, intent, mem, sem)
-        except (AttributeError, ValueError, json.JSONDecodeError):
+            intent_name = intent.get("primary_intent", "general")
+            adj = adaptive_engine.get_intent_adjustment(intent_name)
+            if adj != 1.0:
+                logger.debug("Adjusted intent confidence: x%.2f", adj)
+
+            strategy = adaptive_engine.select_strategy(intent_name)
+            telemetry.record_step(session_id, "strategy_selected",
+                                  {"strategy": strategy})
+
+            mem = await self.memory_extractor.memory.get_recent_context(
+                max_messages=10)
+            raw_sem = await self.memory_extractor.memory.get_semantic_context(
+                query=user_input, n_results=3)
+            sem = [m["document"] for m in raw_sem if m["score"] >= 0.6]
+
+            response = await generate_smart_response(
+                user_input, intent, mem, sem, is_anna=self._gf_mode_active)
+            telemetry.end_interaction(session_id, success=True)
+            return response
+        except Exception as e:
+            logger.error("Cognitive Engine Error: %s", e)
+            telemetry.end_interaction(session_id, success=False)
             return "Sir, main samajh gaya."
 
     async def _handle_persona_switch(self, is_anna, is_jarvis):
@@ -244,8 +290,8 @@ class BrainAssistant(Agent):
     async def _handle_wake_word(self, text: str) -> tuple[bool, bool]:
         """Checks for wake words."""
         is_j = bool(re.search(r"\bjarvis\b", text, re.IGNORECASE))
-        is_a = bool(
-            re.search(r"\b(anna|babu|jaan|myra|kiara|zoya)\b", text, re.IGNORECASE))
+        is_a = bool(re.search(r"\b(anna|babu|jaan|myra|kiara|zoya)\b",
+                              text, re.IGNORECASE))
         if not is_j and not is_a:
             return False, False
         await self._handle_persona_switch(is_a, is_j)
@@ -254,10 +300,11 @@ class BrainAssistant(Agent):
     async def _inject_emotional_context(self, text: str, turn_ctx: Any):
         """Injects emotional hints."""
         try:
-            mem = await self.memory_extractor.memory.get_recent_context(max_messages=5)
+            mem = await self.memory_extractor.memory.get_recent_context(
+                max_messages=5)
             curr = context_analyzer.analyze_context(text, mem)
             if self._gf_mode_active and curr.get("user_mood") == "upset":
-                turn_ctx.chat_ctx.items.append(llm.ChatMessage(
+                turn_ctx.chat_ctx.messages.append(llm.ChatMessage(
                     role="assistant", content=["Manao him."]))
         except Exception as e:
             logger.exception("Reasoning error: %s", e)
@@ -276,54 +323,137 @@ class BrainAssistant(Agent):
             turn_ctx.chat_ctx.items.append(llm.ChatMessage(
                 role="assistant", content=["Demand sorry."]))
 
-    async def _inject_reasoning_and_memory(self, text: str, turn_ctx: Any, is_anna: bool):
-        """Injects reasoning and memory."""
-        try:
-            sem = await self.memory_extractor.memory.get_semantic_context(query=text, n_results=3)
-            if sem:
-                turn_ctx.chat_ctx.items.append(llm.ChatMessage(
-                    role="system", content=[f"[LONG-TERM MEMORY CONTEXT]: {sem}"]))
-            res = await process_with_advanced_reasoning(text, self.conversation_history, is_anna=is_anna)
-            if res.get("is_agentic") and res.get("plan"):
-                turn_ctx.chat_ctx.items.append(llm.ChatMessage(
-                    role="system", content=[f"[EXECUTION PLAN]: {res['plan']}"]))
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.exception("Reasoning error: %s", e)
+    async def _inject_memory_context(self, text: str, turn_ctx: Any, is_anna: bool):
+        """Retrieves and injects long-term memory into chat context."""
+        n_results = 5 if is_anna else 3
+        raw_sem = await self.memory_extractor.memory.get_semantic_context(
+            query=text, n_results=n_results)
 
+        threshold = 0.55 if is_anna else 0.65
+        filtered_sem = [m["document"]
+                        for m in raw_sem if m["score"] >= threshold]
+
+        if filtered_sem:
+            context_str = "\n".join(filtered_sem)
+            turn_ctx.chat_ctx.messages.append(llm.ChatMessage(
+                role="system", content=[f"[LONG-TERM MEMORY CONTEXT]: {context_str}"]))
+            logger.info("🧠 Scored Memory Injected: %d items",
+                        len(filtered_sem))
+
+    async def _inject_reasoning_and_memory(self, text: str, turn_ctx: Any,
+                                           is_anna: bool = False):
+        """Injects reasoning and memory with confidence filtering."""
+        try:
+            await self._inject_memory_context(text, turn_ctx, is_anna)
+            res = await process_with_advanced_reasoning(
+                text, self.conversation_history, is_anna=is_anna)
+
+            asyncio.create_task(self._notify_ui_reasoning(res))
+            if res.get("is_agentic") and res.get("plan"):
+                turn_ctx.chat_ctx.messages.append(llm.ChatMessage(
+                    role="system", content=[f"[EXECUTION PLAN]: {res['plan']}"]))
+        except Exception as e:
+            logger.error("Reasoning injection error: %s", e)
+
+    async def _handle_vision_query(self, text, new_message, turn_ctx):
+        """Processes and injects vision data if query is detected."""
+        kw = ["vision", "dekh", "see", "view", "camera", "nazar", "peeche"]
+        is_vision = any(w in text for w in kw)
+
+        if is_vision and self.last_vision_frame:
+            logger.info("Vision query detected. Injecting frame.")
+            raw_data = self.last_vision_frame
+            if isinstance(raw_data, str) and "," in str(raw_data):
+                b64_data = str(raw_data).split(",")[1]
+            else:
+                b64_data = str(raw_data)
+
+            img_content = llm.ImageContent(
+                image=b64_data, mime_type="image/jpeg")
+            new_message.content = [text, img_content]
+            await turn_ctx.add_message(
+                role="system", content="[VISION SYSTEM ACTIVE] Describe frame.")
+        else:
+            new_message.content = text
+
+    async def _handle_window_context(self, turn_ctx):
+        """Injects environment awareness context."""
+        if (self.active_window_context and
+                self.active_window_context.get("status") == "success"):
+            title = self.active_window_context.get("title")
+            system_msg = f"[ENVIRONMENT]: User is focused on: '{title}'."
+            turn_ctx.chat_ctx.messages.append(llm.ChatMessage(
+                role="system", content=[system_msg]
+            ))
+
+    async def _notify_ui_persona(self, persona: str):
+        """Sends notification to UI Bridge about persona change."""
+        await self._notify_ui_event("persona_change", persona)
+
+    async def handle_user_query(self, query: str) -> str:
+        """EntryPoint for user queries."""
+        start_time = datetime.now()
+        sanitized = vortex_guard.sanitize_input(query)
+        threat = vortex_guard.detect_threat(sanitized)
+
+        if threat:
+            logger.critical("🚨 Security Threat Blocked: %s", threat)
+            jarvis_audit.log_threat(threat, source="UserQuery")
+            return f"I detected a security risk: {threat}."
+
+        response = await self.process_with_reasoning(sanitized)
+        duration = (datetime.now() - start_time).total_seconds()
+        jarvis_audit.log_event("QUERY_PROCESSED", f"Duration={duration:.2f}s")
+        return response
+
+    # pylint: disable=too-many-locals
     async def on_user_turn_completed(self, turn_ctx, new_message):
-        """Called when user turn completed."""
+        """Called when user turn completed with full system integration."""
         text = self._extract_text_from_message(new_message)
+        sanitized_text = vortex_guard.sanitize_input(text)
+        threat = vortex_guard.detect_threat(sanitized_text)
+
+        if threat:
+            logger.warning("🚨 Security Threat Blocked: %s", threat)
+            jarvis_audit.log_threat(threat, source="VoiceStream")
+            raise StopResponse()
+
         if self._wake_word_mode:
-            detected, is_a = await self._handle_wake_word(text)
+            detected, is_anna = await self._handle_wake_word(sanitized_text)
             if not detected:
                 raise StopResponse()
-            await self._handle_anna_upset_state(text, turn_ctx)
-            if self._muted:
-                raise StopResponse()
-            await self._inject_emotional_context(text, turn_ctx)
-            new_message.content = text
-            await self._inject_reasoning_and_memory(text, turn_ctx, is_anna=is_a)
-            self.conversation_history.append({"role": "user", "content": text})
+        else:
+            is_anna = False
+
+        asyncio.create_task(self._notify_ui_event("thinking", "START"))
+        if self._muted:
+            raise StopResponse()
+
+        try:
+            await self._handle_anna_upset_state(sanitized_text, turn_ctx)
+            await self._inject_emotional_context(sanitized_text, turn_ctx)
+            await self._handle_vision_query(sanitized_text, new_message, turn_ctx)
+            await self._handle_window_context(turn_ctx)
+            await self._inject_reasoning_and_memory(sanitized_text, turn_ctx, is_anna)
+
+            self.conversation_history.append(
+                {"role": "user", "content": sanitized_text})
             if len(self.conversation_history) > 20:
                 self.conversation_history.pop(0)
-            try:
-                return await super().on_user_turn_completed(turn_ctx, new_message)
-            except (StopResponse, asyncio.CancelledError):
-                raise
-            except (ImportError, AttributeError, SyntaxError) as e:
-                # Note: The original error message was "Turn error".
-                # The provided replacement log message "Error importing %s: %s"
-                # and the variable 'name' are not directly applicable here.
-                # To maintain syntactic correctness and avoid NameError,
-                # 'name' is replaced with a placeholder string.
-                logger.error(
-                    "Error during turn completion (e.g., tool call or import): %s", e)
-                raise StopResponse() from e
-        return await super().on_user_turn_completed(turn_ctx, new_message)
+
+            health_monitor.check_anomalies()
+            response = await super().on_user_turn_completed(turn_ctx, new_message)
+
+            session_id = str(uuid.uuid4())
+            telemetry.end_interaction(session_id, success=True)
+            asyncio.create_task(adaptive_engine.log_interaction(
+                session_id, sanitized_text, str(response), success=True))
+            return response
+        except Exception as e:
+            logger.error("Turn Error: %s", e)
+            telemetry.end_interaction("ERROR", success=False)
+            raise StopResponse() from e
 
 
 if __name__ == "__main__":
-    import asyncio
-    brain = BrainAssistant()
-    # No-op run to verify initialization
-    asyncio.run(asyncio.sleep(0.1))
+    print("✅ BrainAssistant class loaded successfully.")

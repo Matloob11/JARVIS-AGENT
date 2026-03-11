@@ -1,0 +1,36 @@
+# --- STAGE 1: Build ---
+FROM python:3.11-slim as builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install python dependencies
+COPY requirements_audit.txt .
+RUN pip install --user --no-cache-dir -r requirements_audit.txt
+
+# --- STAGE 2: Runtime ---
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Copy installed packages from builder
+COPY --from=builder /root/.local /root/.local
+ENV PATH=/root/.local/bin:$PATH
+
+# Copy application code
+COPY . .
+
+# Environment variables
+ENV PYTHONUNBUFFERED=1
+ENV VORTEX_ENV=production
+
+# Ports: 5001 (UI Bridge)
+EXPOSE 5001
+
+# Note: In production, we typically use a process manager or entrypoint script
+# to start both the bridge and the runner if they reside in the same container.
+CMD ["python", "ui_bridge.py"]

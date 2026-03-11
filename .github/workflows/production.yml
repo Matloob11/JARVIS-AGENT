@@ -1,0 +1,57 @@
+name: JARVIS Production CI/CD
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- PYTHON QUALITY ---
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff safety
+          if [ -f requirements_audit.txt ]; then pip install -r requirements_audit.txt; fi
+
+      - name: Lint with Ruff
+        run: ruff check .
+
+      - name: Security Scan (Dependencies)
+        run: safety check
+
+      # --- FRONTEND QUALITY ---
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+            node-version: 20
+            cache: 'npm'
+            cache-dependency-path: stonix_ui/package-lock.json
+
+      - name: Install Frontend dependencies
+        run: cd stonix_ui && npm install
+
+      - name: Frontend Security Audit
+        run: cd stonix_ui && npm audit --audit-level=high
+
+  docker-build-test:
+    needs: quality-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Backend Image
+        run: docker build -t jarvis-backend:test -f Dockerfile.backend .
+
+      - name: Build Frontend Image
+        run: docker build -t jarvis-frontend:test -f stonix_ui/Dockerfile .

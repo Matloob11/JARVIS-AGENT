@@ -1,66 +1,94 @@
-import { useEffect, useRef } from 'react';
+import React from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface Message {
   id: string;
-  role: 'user' | 'agent';
+  role: 'agent' | 'user';
   text: string;
-  timestamp: string;
+  timestamp: number;
 }
 
-const Transcription = ({ messages }: { messages: Message[] }) => {
-  const scrollRef = useRef<HTMLDivElement>(null);
+interface TranscriptionProps {
+  messages: Message[];
+  activePersona: 'jarvis' | 'anna';
+}
 
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages]);
-
+const Typewriter: React.FC<{ text: string }> = ({ text }) => {
+  const words = text.split(' ');
+  
   return (
-    <div className="flex flex-col h-full bg-stonix-bg/80 border border-stonix-border rounded-lg overflow-hidden glass shadow-neon-blue">
-      {/* Header */}
-      <div className="px-4 py-2 border-b border-stonix-border flex items-center justify-between bg-stonix-primary/10">
-        <span className="text-stonix-primary font-orbitron text-xs tracking-widest uppercase">System Transcription</span>
-        <div className="flex space-x-1">
-          <div className="w-2 h-2 rounded-full bg-stonix-primary animate-pulse" />
-          <div className="w-2 h-2 rounded-full bg-stonix-primary/30" />
-        </div>
-      </div>
+    <div className="flex flex-wrap gap-x-1">
+      {words.map((word, i) => (
+        <motion.span
+          key={`${word}-${i}`}
+          initial={{ opacity: 0, filter: 'blur(4px)' }}
+          animate={{ opacity: 1, filter: 'blur(0px)' }}
+          transition={{
+            duration: 0.2,
+            delay: i * 0.04,
+            ease: "easeOut"
+          }}
+          className="inline-block"
+        >
+          {word}
+        </motion.span>
+      ))}
+    </div>
+  );
+};
 
-      {/* Message List */}
-      <div 
-        ref={scrollRef}
-        className="flex-1 overflow-y-auto p-4 space-y-4 font-mono text-sm scrollbar-hide"
-      >
-        {messages.map((msg) => (
-          <div key={msg.id} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-            <div className="flex items-center space-x-2 mb-1">
-              <span className={`text-[10px] uppercase font-bold ${msg.role === 'user' ? 'text-stonix-secondary' : 'text-stonix-primary'}`}>
-                {msg.role === 'user' ? 'User' : 'J.A.R.V.I.S'}
-              </span>
-              <span className="text-[10px] text-gray-500">{msg.timestamp}</span>
-            </div>
-            <div className={`max-w-[85%] px-3 py-2 rounded-lg border ${
-              msg.role === 'user' 
-                ? 'bg-stonix-secondary/10 border-stonix-secondary/30 text-white' 
-                : 'bg-stonix-primary/10 border-stonix-primary/30 text-stonix-primary'
-            }`}>
-              {msg.text}
-            </div>
-          </div>
-        ))}
-        {messages.length === 0 && (
-          <div className="h-full flex items-center justify-center opacity-20 italic">
-            Waiting for neural input...
-          </div>
-        )}
-      </div>
-
-      {/* Footer Status */}
-      <div className="px-4 py-1 text-[10px] text-stonix-primary/50 border-t border-stonix-border bg-black/50 flex justify-between">
-        <span>BUFFER: ACTIVE</span>
-        <span>ENCRYPTED: CHACHA20</span>
-      </div>
+const Transcription: React.FC<TranscriptionProps> = ({ messages, activePersona }) => {
+  return (
+    <div className="space-y-6 pb-4">
+      <AnimatePresence initial={false} mode="popLayout">
+        {messages.map((message) => {
+          const isUser = message.role === 'user';
+          const personaColor = activePersona === 'jarvis' ? 'border-jarvis-cyan/30 bg-jarvis-cyan/5' : 'border-anna-magenta/30 bg-anna-magenta/5';
+          
+          return (
+            <motion.div
+              key={message.id}
+              initial={{ opacity: 0, y: 20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}
+            >
+              {/* Header Info */}
+              <div className="flex items-center gap-2 mb-2 px-1 opacity-40">
+                <span className="text-[10px] font-black tracking-widest uppercase font-mono">
+                  {isUser ? 'BIO_TRANSCRIPT' : `${activePersona.toUpperCase()}_LOG`}
+                </span>
+                <span className="text-[9px] font-mono">{message.timestamp}</span>
+              </div>
+              
+              {/* Message Bubble */}
+              <div className={`max-w-[90%] p-4 rounded-2xl relative transition-all duration-500 border shadow-2xl ${
+                isUser 
+                  ? 'bg-white/5 border-white/10 rounded-tr-none' 
+                  : `${personaColor} rounded-tl-none`
+              }`}>
+                <div className={`text-[14px] leading-relaxed tracking-wide ${
+                  isUser ? 'text-white/70' : 'text-white font-medium'
+                }`}>
+                  {!isUser ? (
+                    <Typewriter text={message.text} />
+                  ) : (
+                    <p>{message.text}</p>
+                  )}
+                </div>
+                
+                {/* Decorative Corner */}
+                <div className={`absolute top-0 ${isUser ? '-right-1' : '-left-1'} w-2 h-2 rotate-45 ${
+                   isUser 
+                     ? 'bg-transparent border-t border-r border-white/20' 
+                     : (activePersona === 'jarvis' ? 'bg-transparent border-t border-l border-jarvis-cyan/40' : 'bg-transparent border-t border-l border-anna-magenta/40')
+                }`} />
+              </div>
+            </motion.div>
+          );
+        })}
+      </AnimatePresence>
     </div>
   );
 };

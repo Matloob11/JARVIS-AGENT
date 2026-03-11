@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  ui-bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: jarvis-bridge
+    ports:
+      - "5001:5001"
+    env_file: .env
+    restart: always
+    volumes:
+      - ./logs:/app/logs
+      - ./Jarvis_Outputs:/app/Jarvis_Outputs
+
+  frontend:
+    build:
+      context: ./stonix_ui
+      dockerfile: Dockerfile
+    container_name: jarvis-frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - ui-bridge
+    restart: always
+
+networks:
+  default:
+    name: jarvis-network

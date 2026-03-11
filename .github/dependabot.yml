@@ -1,0 +1,27 @@
+version: 2
+updates:
+  # Maintain Python dependencies
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      python-deps:
+        patterns:
+          - "*"
+
+  # Maintain Frontend dependencies
+  - package-ecosystem: "npm"
+    directory: "/stonix_ui"
+    schedule:
+      interval: "weekly"
+    groups:
+      frontend-deps:
+        patterns:
+          - "*"
+
+  # Maintain GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"

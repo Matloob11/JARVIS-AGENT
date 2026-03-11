@@ -3,13 +3,17 @@ export default {
   theme: {
     extend: {
       colors: {
-        stonix: {
-          bg: '#050505',
-          primary: '#00f2ff',
-          secondary: '#7000ff',
-          accent: '#ff0055',
-          glass: 'rgba(15, 23, 42, 0.6)',
-          border: 'rgba(0, 242, 255, 0.2)',
+        jarvis: {
+          cyan: '#00f2ff',
+        },
+        anna: {
+          magenta: '#ff00ff',
+        },
+        accent: {
+          purple: '#7000ff',
+        },
+        bg: {
+          deep: '#020205',
         }
       },
       boxShadow: {
