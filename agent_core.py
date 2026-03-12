@@ -73,6 +73,7 @@ class BrainAssistant(Agent):
         self._audio_buffer = bytearray()
         self._audio_sample_rate = 16000 # Default
         self._last_speaker_verified = True
+        self.voice_id_engine = voice_id_engine
         
         # Session options for modality sync
         self._session_options = type('obj', (object,), {

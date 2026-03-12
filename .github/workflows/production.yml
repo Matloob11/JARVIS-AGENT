@@ -17,6 +17,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: 'pip'
       
       - name: Install Python dependencies
         run: |
@@ -43,6 +44,18 @@ jobs:
 
       - name: Frontend Security Audit
         run: cd stonix_ui && npm audit --audit-level=high
+
+  git-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for uncommitted changes
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Uncommitted changes detected!"
+            git status
+            exit 1
+          fi
 
   docker-build-test:
     needs: quality-gate
