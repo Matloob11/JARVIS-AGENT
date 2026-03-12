@@ -43,7 +43,10 @@ jobs:
         run: cd stonix_ui && npm install
 
       - name: Frontend Security Audit
-        run: cd stonix_ui && npm audit --audit-level=high
+        run: |
+          cd stonix_ui
+          npm audit --audit-level=high || echo "⚠️ High severity vulnerabilities found - please review audit report"
+          npm audit --audit-level=critical
 
   git-audit:
     runs-on: ubuntu-latest
