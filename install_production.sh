@@ -16,8 +16,14 @@ source venv/bin/activate
 # 3. Install Dependencies
 echo "🛠️ [STEP 2] Installing Core Dependencies..."
 pip install --upgrade pip
-if [ -f requirements_audit.txt ]; then
-    pip install -r requirements_audit.txt
+if [ -f requirements.txt ]; then
+    pip install -r requirements.txt
+fi
+
+# 4. Install Development Dependencies (optional)
+if [ "$1" = "--dev" ] && [ -f requirements-dev.txt ]; then
+    echo "🔧 [STEP 2.1] Installing Development Dependencies..."
+    pip install -r requirements-dev.txt
 fi
 
 # 4. Create local .env

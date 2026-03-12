@@ -97,6 +97,10 @@ async def start_ui_command_listener(assistant: "BrainAssistant"):
         elif cmd_type == "unmute":
             assistant.set_muted(False)
             logger.info("🔊 Agent UNMUTED via UI.")
+        elif cmd_type == "wake_word_toggle":
+            new_mode = payload if isinstance(payload, bool) else (not assistant.wake_word_mode)
+            assistant.set_wake_word_mode(new_mode)
+            logger.info("🎤 Wake word mode set to %s via UI.", new_mode)
         elif cmd_type == "stop":
             logger.warning("🛑 STOP command received. Shutdown...")
             sys.exit(0)

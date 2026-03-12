@@ -41,6 +41,8 @@ export const useNeuralNetwork = () => {
   const [status, setStatus] = useState('idle');
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isWakeWordActive, setIsWakeWordActive] = useState(true);
   const spectralDataRef = useRef<number[]>([]);
   const [vitals, setVitals] = useState({ cpu: 0, ram: 0, disk: 0 });
   const [telemetry, setTelemetry] = useState({ success_rate: 1.0, avg_latency: 0.1, status: 'STABLE' });
@@ -89,14 +91,16 @@ export const useNeuralNetwork = () => {
       if (state.messages) setMessages(state.messages);
       if (state.persona) setActivePersona(state.persona);
     };
-    const onNewMessage = (msg: Record<string, unknown>) => {
-      console.log('📡 Socket: new_message', msg);
-      setMessages(prev => [...prev, msg as unknown as Message].slice(-50));
-    };
     const onUpdateMessage = (msg: Record<string, unknown>) => {
       console.log('📡 Socket: update_message', msg);
       setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, ...msg as unknown as Message } : m));
     };
+    const onNewMessage = (msg: Record<string, unknown>) => {
+      console.log('📡 Socket: new_message', msg);
+      setMessages(prev => [...prev, msg as unknown as Message].slice(-50));
+    };
+    const onMuteUpdate = (muted: boolean) => setIsMuted(muted);
+    const onWakeWordUpdate = (active: boolean) => setIsWakeWordActive(active);
 
     socket.on('connect', onConnect);
     socket.on('disconnect', onDisconnect);
@@ -109,9 +113,15 @@ export const useNeuralNetwork = () => {
     socket.on('memory_sync', onMemorySync);
     socket.on('tool_update', onToolUpdate);
     socket.on('transcription_update', onTranscriptionUpdate);
-    socket.on('init_state', onInitState);
+    socket.on('init_state', (state: { muted?: boolean; wake_word_active?: boolean; [key: string]: unknown }) => {
+      onInitState(state as any);
+      setIsMuted(state.muted || false);
+      setIsWakeWordActive(state.wake_word_active !== false);
+    });
     socket.on('new_message', onNewMessage);
     socket.on('update_message', onUpdateMessage);
+    socket.on('mute_update', onMuteUpdate);
+    socket.on('wake_word_update', onWakeWordUpdate);
 
     return () => {
       socket.off('connect', onConnect);
@@ -128,6 +138,8 @@ export const useNeuralNetwork = () => {
       socket.off('init_state', onInitState);
       socket.off('new_message', onNewMessage);
       socket.off('update_message', onUpdateMessage);
+      socket.off('mute_update', onMuteUpdate);
+      socket.off('wake_word_update', onWakeWordUpdate);
     };
   }, []);
 
@@ -164,11 +176,21 @@ export const useNeuralNetwork = () => {
     setMessages(prev => [...prev, userMsg].slice(-50));
   };
 
+  const toggleMute = () => {
+    emitCommand(isMuted ? 'unmute' : 'mute');
+  };
+
+  const toggleWakeWord = () => {
+    emitCommand('wake_word_toggle', !isWakeWordActive);
+  };
+
   return {
     isConnected,
     status,
     isSpeaking,
     isThinking,
+    isMuted,
+    isWakeWordActive,
     spectralDataRef,
     vitals,
     telemetry,
@@ -181,7 +203,9 @@ export const useNeuralNetwork = () => {
     changePersona,
     updateSettings,
     emitCommand,
-    sendMessage
+    sendMessage,
+    toggleMute,
+    toggleWakeWord
   };
 };
 

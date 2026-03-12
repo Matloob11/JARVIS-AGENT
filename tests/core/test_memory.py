@@ -32,13 +32,18 @@ def test_vector_memory_add_memory(mock_chroma):
 
 def test_vector_memory_search(mock_chroma):
     mock_client, mock_collection = mock_chroma
-    mock_collection.query.return_value = {"documents": [["result 1"]]}
+    mock_collection.query.return_value = {
+        "documents": [["result 1"]],
+        "distances": [[0.1]]
+    }
 
     vm = VectorMemory()
     vm._ensure_initialized()
 
     results = vm.query_memory("query")
-    assert results == ["result 1"]
+    assert len(results) == 1
+    assert results[0]["document"] == "result 1"
+    assert results[0]["score"] > 0
 
 @pytest.mark.asyncio
 async def test_conversation_memory_save_load():

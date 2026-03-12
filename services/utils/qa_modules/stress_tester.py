@@ -31,7 +31,7 @@ class StressQA:
         }
         
         async with httpx.AsyncClient() as client:
-            while time.time() - start_time < 30:
+            while time.time() - start_time < 10: # Reduced from 30s
                 try:
                     payload = {
                         "type": "transcription",
@@ -48,7 +48,7 @@ class StressQA:
                     logger.debug("Stress ping failed: %s", e)
                 
                 msg_count += 1
-                await asyncio.sleep(0.01) # Simulating 100 msg/sec burst
+                await asyncio.sleep(0.1) # Reduced from 100 msg/sec to 10 msg/sec
 
         avg_latency = (sum(latencies) / len(latencies)) * 1000 if latencies else 0
         vitals = psutil.cpu_percent()

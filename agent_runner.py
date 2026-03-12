@@ -121,13 +121,25 @@ async def _start_background_tasks(session: AgentSession, assistant: Any):
             assistant.chat_ctx.messages.append(
                 llm.ChatMessage(
                     role="assistant",
-                    content=f"[SYSTEM NOTIFICATION: CLIPBOARD ERROR DETECTED]\n{solution}"
+                    content=[f"[SYSTEM NOTIFICATION: CLIPBOARD ERROR DETECTED]\n{solution}"]
                 )
             )
 
     tasks.append(asyncio.create_task(
         clip_monitor.start(_on_clipboard_detected)))
     return tasks
+
+
+async def _process_user_audio(publication: rtc.TrackPublication, assistant: BrainAssistant):
+    """Subscribes to user audio and feeds frames to the assistant for Voice ID."""
+    logger.info("🎤 Subscribing to audio track: %s", publication.sid)
+    try:
+        track = await publication.subscribe()
+        audio_stream = rtc.AudioStream(track)
+        async for audio_frame in audio_stream:
+            assistant.add_audio_frame(audio_frame)
+    except Exception as e:
+        logger.error("Audio subscription error: %s", e)
 
 
 async def _cleanup_session_resources(session: Optional[AgentSession], tasks: list):
@@ -193,6 +205,19 @@ async def entrypoint(ctx: agents.JobContext):
             logger.info("✅ Session started successfully.")
             assistant.attach_session(session)
 
+            # --- Speaker Identification Subscription ---
+            @ctx.room.on("track_published")
+            def on_track_published(publication: rtc.TrackPublication, participant: rtc.RemoteParticipant):
+                if publication.kind == rtc.TrackKind.KIND_AUDIO:
+                    asyncio.create_task(_process_user_audio(publication, assistant))
+
+            # Subscribe to existing tracks
+            for participant in ctx.room.remote_participants.values():
+                for publication in participant.track_publications.values():
+                    if publication.kind == rtc.TrackKind.KIND_AUDIO:
+                        asyncio.create_task(_process_user_audio(publication, assistant))
+            # --------------------------------------------
+
             @session.on("user_input_transcribed")
             def on_user_transcription(event: agents.voice.UserInputTranscribedEvent):
                 if event.transcript:
@@ -240,9 +265,18 @@ async def entrypoint(ctx: agents.JobContext):
             logger.info("🛑 Shutdown signal received.")
             break
         except Exception as exc:
-            logger.error("⚠️ Session error: %s", exc, exc_info=True)
+            # Categorize the error for better visibility
+            err_type = type(exc).__name__
+            logger.error("⚠️ Session attempt %d failed [%s]: %s", attempt + 1, err_type, exc)
+            
+            if "TimeoutError" in str(exc) or "handshake" in str(exc).lower():
+                logger.warning("🕒 Handshake timeout detected. System may be under heavy load.")
+            
             attempt += 1
-            await asyncio.sleep(5)
+            if attempt < max_retries:
+                retry_delay = 5 * attempt
+                logger.info("🔄 Retrying in %ds...", retry_delay)
+                await asyncio.sleep(retry_delay)
         finally:
             await _cleanup_session_resources(session, tasks)
 

@@ -130,21 +130,20 @@ async def open_app(full_command: str) -> dict:  # pylint: disable=too-many-branc
             "OPEN → raw='%s' clean='%s' match='%s'",
             full_command, clean, matched_key)
 
+        # Special Bot Integrations
+        if matched_key == "whatsapp":
+            await whatsapp_bot.open_whatsapp()
+            await whatsapp_bot.ensure_whatsapp_focus()
+        elif matched_key == "youtube":
+            # For now YouTube bot might just be startfile + focus
+            os.startfile(app)
+            await asyncio.sleep(3)
+            await focus_window("YouTube")
         # 🌐 URL → browser or desktop app
-        if app.startswith("http"):
+        elif app.startswith("http"):
             # Use os.startfile for better handling of browser launches
             os.startfile(app)  # nosec B606
             await asyncio.sleep(3)  # Wait for browser to open
-            if "youtube" in matched_key.lower():
-                await focus_window("YouTube")
-            elif "whatsapp" in matched_key.lower():
-                await focus_window("WhatsApp")
-        elif matched_key == "whatsapp":
-            await whatsapp_bot.open_whatsapp()
-            await whatsapp_bot.ensure_whatsapp_focus()
-        elif app.startswith("whatsapp://"):
-            if app:
-                os.startfile(app)  # nosec B606
         else:
             # 🖥️ Generic Desktop App launch
             try:

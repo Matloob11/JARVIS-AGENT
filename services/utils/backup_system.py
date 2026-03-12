@@ -7,7 +7,7 @@ Archives critical data like identity, outputs, and configs.
 import os
 import shutil
 import datetime
-from services.utils.logger import jarvis_log as log
+from services.utils.jarvis_logger import jarvis_log as log
 
 
 class JarvisBackup:

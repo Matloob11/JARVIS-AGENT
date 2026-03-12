@@ -112,12 +112,14 @@ class WhatsAppAutomation:
     async def open_whatsapp(self):
         """Opens WhatsApp Desktop application using the Store URI"""
         try:
+            # Check if WhatsApp Store App exists (rudimentary check via path possibility)
+            # This is a bit tricky for 'shell:AppsFolder', so we try-except the startfile
             logger.info("Opening WhatsApp via URI: %s", WHATSAPP_URI)
             os.startfile(WHATSAPP_URI)  # nosec B606
             await asyncio.sleep(3.0)  # Initial wait for launch
             return True
         except (OSError, ValueError) as e:
-            logger.error("Failed to open WhatsApp: %s", e)
+            logger.error("Failed to open WhatsApp (Is it installed?): %s", e)
             return False
 
     async def search_and_select_contact(self, contact_name: str):

@@ -17,7 +17,16 @@ call venv\Scripts\activate
 
 :: 3. Install Dependencies
 echo [STEP 2] Installing Core Dependencies...
-pip install -r requirements_audit.txt
+pip install --upgrade pip
+if exist requirements.txt (
+    pip install -r requirements.txt
+)
+
+:: 4. Install Development Dependencies (optional)
+if "%1"=="--dev" if exist requirements-dev.txt (
+    echo [STEP 2.1] Installing Development Dependencies...
+    pip install -r requirements-dev.txt
+)
 
 :: 4. Create local .env
 if not exist .env (

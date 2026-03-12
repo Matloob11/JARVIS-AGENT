@@ -14,14 +14,14 @@ from typing import Any, Optional
 from datetime import datetime
 import httpx
 from livekit.agents import Agent, AgentSession, StopResponse, llm
+from livekit import rtc
 from livekit.plugins import google
 
 from services.utils.jarvis_config import config
 from services.utils.jarvis_logger import setup_logger
 from services.ai_core.jarvis_prompt import BEHAVIOR_PROMPT, ANNA_BEHAVIOR_PROMPT
 from services.ai_core.jarvis_reasoning import (
-    analyze_user_intent, generate_smart_response, process_with_advanced_reasoning,
-    context_analyzer
+    process_with_advanced_reasoning, context_analyzer
 )
 from services.ai_core.jarvis_plugin_manager import JarvisPluginManager
 from services.ai_core.agent_memory import MemoryExtractor
@@ -31,8 +31,9 @@ from services.utils.jarvis_telemetry import telemetry
 from services.utils.jarvis_adaptive import adaptive_engine
 from services.utils.jarvis_security import vortex_guard, security_manager
 from services.utils.jarvis_audit import jarvis_audit
-from services.ai_core.autonomous_planner import tool_report_plan_progress
+# from services.ai_core.autonomous_planner import tool_report_plan_progress (Removed as unused)
 from services.system.jarvis_window_ctrl import get_active_window_context
+from services.ai_core.voice_fingerprint import voice_id_engine
 
 logger = setup_logger("JARVIS-CORE")
 # pylint: disable=unused-import
@@ -69,6 +70,15 @@ class BrainAssistant(Agent):
         self.last_vision_frame = None
         self.active_window_context = {}
         self._proactive_vision_task: Optional[asyncio.Task] = None
+        self._audio_buffer = bytearray()
+        self._audio_sample_rate = 16000 # Default
+        self._last_speaker_verified = True
+        
+        # Session options for modality sync
+        self._session_options = type('obj', (object,), {
+            'voice_id': 'jarvis_v2',
+            'response_modality': 'audio'
+        })()
 
         self.plugin_manager = JarvisPluginManager()
         package_path = os.path.join(os.path.dirname(__file__), 'services')
@@ -142,6 +152,38 @@ class BrainAssistant(Agent):
             "message": f"Voice change karkay '{voice_name}' kar di gai hai, Sir."
         }
 
+    @property
+    def wake_word_mode(self) -> bool:
+        """Returns the current wake word mode."""
+        return self._wake_word_mode
+
+    @property
+    def muted(self) -> bool:
+        """Returns the current muted state."""
+        return self._muted
+
+    def set_muted(self, active: bool):
+        """Set the muted state of the assistant."""
+        self._muted = active
+        logger.info("Muted set to: %s", active)
+
+    def set_wake_word_mode(self, active: bool):
+        """Toggle the strict wake word enforcement mode."""
+        self._wake_word_mode = active
+        status = "active" if active else "disabled"
+        logger.info("Wake word mode set to: %s", status)
+        asyncio.create_task(self._notify_ui_event("wake_word_sync", active))
+
+    def get_state(self) -> dict:
+        """Returns a snapshot of the current agent state."""
+        return {
+            "muted": self._muted,
+            "wake_word_active": self._wake_word_mode,
+            "active_persona": "anna" if self._gf_mode_active else "jarvis",
+            "voice": self.llm.voice,
+            "modality": "audio" if self._gf_mode_active else "text"
+        }
+
     async def _update_persona_instructions(self):
         """Generates and applies instructions for the active persona."""
         if self._gf_mode_active:
@@ -162,6 +204,9 @@ class BrainAssistant(Agent):
 
         if self._active_session:
             try:
+                # Syncing modality
+                self._update_session_modality("ANNA" if self._gf_mode_active else "JARVIS")
+                
                 # Find the Realtime Session deeper in the object structure for LiveKit 0.22+
                 rt_session = None
                 if hasattr(self._active_session, "_activity"):
@@ -171,14 +216,21 @@ class BrainAssistant(Agent):
                 if rt_session:
                     logger.info("Setting session options: voice=%s", voice)
                     rt_session.update_options(voice=voice)
-                else:
-                    logger.warning(
-                        "Could not find underlying RT session to update options.")
-
+                
                 active_persona = "anna" if self._gf_mode_active else "jarvis"
                 asyncio.create_task(self._notify_ui_persona(active_persona))
             except Exception as e:
                 logger.warning("Failed to sync persona/voice: %s", e)
+
+    def _update_session_modality(self, persona: str = "JARVIS"):
+        """Centralized helper to update session options based on persona."""
+        if persona == "ANNA":
+            self._session_options.voice_id = "anna_v3_premium"
+            self._session_options.response_modality = "audio"
+        else:
+            self._session_options.voice_id = "jarvis_v2"
+            self._session_options.response_modality = "text"
+        logger.info("Session modality updated for persona: %s", persona)
 
     async def _notify_ui_event(self, event_type: str, payload: Any):
         """Generic helper to notify STONIX UI with signed payloads."""
@@ -237,36 +289,26 @@ class BrainAssistant(Agent):
             await asyncio.sleep(60)
 
     async def process_with_reasoning(self, user_input: str) -> str:
-        """Process user input with advanced reasoning."""
+        """Process user input with advanced reasoning pipeline."""
         session_id = str(uuid.uuid4())
-        telemetry.start_interaction(session_id, user_input)
         health_monitor.record_heartbeat("backend_core")
         try:
-            telemetry.record_step(session_id, "intent_analysis")
-            intent = await analyze_user_intent(user_input)
-            intent_name = intent.get("primary_intent", "general")
-            adj = adaptive_engine.get_intent_adjustment(intent_name)
-            if adj != 1.0:
-                logger.debug("Adjusted intent confidence: x%.2f", adj)
-
-            strategy = adaptive_engine.select_strategy(intent_name)
-            telemetry.record_step(session_id, "strategy_selected",
-                                  {"strategy": strategy})
-
-            mem = await self.memory_extractor.memory.get_recent_context(
-                max_messages=10)
-            raw_sem = await self.memory_extractor.memory.get_semantic_context(
-                query=user_input, n_results=3)
-            sem = [m["document"] for m in raw_sem if m["score"] >= 0.6]
-
-            response = await generate_smart_response(
-                user_input, intent, mem, sem, is_anna=self._gf_mode_active)
+            telemetry.start_interaction(session_id, user_input)
+            
+            # Use unified reasoning pipeline
+            res = await process_with_advanced_reasoning(
+                user_input,
+                history=self.conversation_history,
+                is_anna=self._gf_mode_active
+            )
+            
+            asyncio.create_task(self._notify_ui_reasoning(res))
             telemetry.end_interaction(session_id, success=True)
-            return response
+            return res.get("generated_response", "Sir, main samajh gaya.")
         except Exception as e:
             logger.error("Cognitive Engine Error: %s", e)
             telemetry.end_interaction(session_id, success=False)
-            return "Sir, main samajh gaya."
+            return "Sir, main madad karne ke liye ready hun."
 
     async def _handle_persona_switch(self, is_anna, is_jarvis):
         """Logic to switch personas dynamically."""
@@ -406,6 +448,48 @@ class BrainAssistant(Agent):
         jarvis_audit.log_event("QUERY_PROCESSED", f"Duration={duration:.2f}s")
         return response
 
+    def add_audio_frame(self, frame: rtc.AudioFrame):
+        """Accumulates audio frames for speaker verification."""
+        # Update sample rate from incoming frame
+        if hasattr(frame, "sample_rate"):
+            self._audio_sample_rate = frame.sample_rate
+            
+        self._audio_buffer.extend(frame.data)
+        # Keep only last 10 seconds of audio (approx 320k bytes for 16kHz mono)
+        if len(self._audio_buffer) > 320000:
+            self._audio_buffer = self._audio_buffer[-320000:]
+
+    async def verify_speaker_identity(self) -> bool:
+        """Verifies if the current audio buffer matches the enrolled user."""
+        # SECURE BY DEFAULT: If no audio is captured, it is NOT verified.
+        if not self._audio_buffer:
+            logger.warning("🛡️ Voice ID: No audio captured in buffer. ACCESS DENIED.")
+            return False
+            
+        # Require at least 1.0 seconds of audio for a reliable check
+        # (1.0s * 16000 samples/s * 2 bytes/sample = 32000 bytes)
+        if len(self._audio_buffer) < 32000:
+            logger.warning("🛡️ Voice ID: Audio segment too short for verification. ACCESS DENIED.")
+            return False
+        
+        # Take the accumulated buffer and verify
+        # Threshold 0.72 is stricter for production security
+        audio_bytes = bytes(self._audio_buffer)
+        # 4. Voice Identity Enforcement (Final Security Layer)
+        is_match, score = self.voice_id_engine.verify_bytes(audio_bytes, threshold=0.65)
+        logger.info("Voice Security Check: Score=%.4f | Threshold=0.65 | Match=%s", score, is_match)
+        
+        self._last_speaker_verified = is_match
+        percentage = score * 100
+        
+        if is_match:
+            logger.info("🛡️ Voice ID Match: %.2f%% - ACCESS GRANTED", percentage)
+        else:
+            logger.warning("🛡️ Voice ID Match: %.2f%% - ACCESS DENIED", percentage)
+            
+        self._audio_buffer.clear() # Reset for next turn
+        return is_match
+
     # pylint: disable=too-many-locals
     async def on_user_turn_completed(self, turn_ctx, new_message):
         """Called when user turn completed with full system integration."""
@@ -417,6 +501,15 @@ class BrainAssistant(Agent):
             logger.warning("🚨 Security Threat Blocked: %s", threat)
             jarvis_audit.log_threat(threat, source="VoiceStream")
             raise StopResponse()
+
+        # Speaker Verification Check
+        logger.info("🛡️ Running Voice Fingerprint check...")
+        is_authorized = await self.verify_speaker_identity()
+        if not is_authorized:
+            logger.warning("⛔ Unauthorized Voice detected. Ignoring command.")
+            raise StopResponse()
+        
+        logger.info("✅ Voice Identity Verified.")
 
         if self._wake_word_mode:
             detected, is_anna = await self._handle_wake_word(sanitized_text)
@@ -442,16 +535,17 @@ class BrainAssistant(Agent):
                 self.conversation_history.pop(0)
 
             health_monitor.check_anomalies()
+            # Super call for legacy tool execution
             response = await super().on_user_turn_completed(turn_ctx, new_message)
 
-            session_id = str(uuid.uuid4())
-            telemetry.end_interaction(session_id, success=True)
+            # Telemetry is handled in the underlying handle_user_query / process_with_reasoning
+            # But we log final UI status here
             asyncio.create_task(adaptive_engine.log_interaction(
-                session_id, sanitized_text, str(response), success=True))
+                "BOT_TURN", sanitized_text, str(response), success=True))
             return response
         except Exception as e:
             logger.error("Turn Error: %s", e)
-            telemetry.end_interaction("ERROR", success=False)
+            telemetry.end_interaction("ERROR_TURN", success=False)
             raise StopResponse() from e
 
 

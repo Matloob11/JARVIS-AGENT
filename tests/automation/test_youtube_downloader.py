@@ -5,7 +5,7 @@ from services.multimedia.jarvis_youtube_downloader import YouTubeDownloader, dow
 
 @pytest.fixture
 def mock_yt_bot():
-    with patch("jarvis_youtube_downloader.yt_bot") as mock:
+    with patch("services.multimedia.jarvis_youtube_downloader.yt_bot") as mock:
         mock.get_video_url = AsyncMock()
         mock.open_url_in_app = AsyncMock()
         yield mock
@@ -13,7 +13,7 @@ def mock_yt_bot():
 
 @pytest.fixture
 def mock_subprocess():
-    with patch("jarvis_youtube_downloader.subprocess.run") as mock:
+    with patch("services.multimedia.jarvis_youtube_downloader.subprocess.run") as mock:
         yield mock
 
 
@@ -71,7 +71,7 @@ async def test_download_error_fallback(mock_subprocess, mock_yt_bot):
 
 @pytest.mark.asyncio
 async def test_tool_download_youtube_media():
-    with patch("jarvis_youtube_downloader.yt_downloader.download", new_callable=AsyncMock) as m_dl:
+    with patch("services.multimedia.jarvis_youtube_downloader.yt_downloader.download", new_callable=AsyncMock) as m_dl:
         m_dl.return_value = {"status": "success", "message": "Done"}
         res = await download_youtube_media("song", "audio")
         assert res['status'] == "success"

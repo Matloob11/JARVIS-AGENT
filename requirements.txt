@@ -1,0 +1,109 @@
+# J.A.R.V.I.S Agent - Core Dependencies
+# Generated on: 2026-03-11
+# Description: Main production dependencies for JARVIS AI Assistant
+
+# Core AI & ML
+google-generativeai==0.8.6
+google-ai-generativelanguage==0.6.15
+google-genai==1.63.0
+transformers==5.1.0
+torch==2.10.0
+torchvision==0.25.0
+sentence-transformers==5.2.3
+
+# LiveKit & Real-time Communication
+livekit==1.0.25
+livekit-agents==1.4.1
+livekit-api==1.1.0
+livekit-plugins-google==1.4.1
+livekit-plugins-openai==1.4.1
+livekit-plugins-silero==1.4.1
+livekit-plugins-noise-cancellation==0.2.5
+livekit-protocol==1.1.2
+
+# Database & Memory
+chromadb==1.5.0
+aiosqlite==0.22.1
+SQLAlchemy==2.0.46
+
+# Web & API
+fastapi==0.133.0
+httpx==0.28.1
+requests==2.32.5
+aiohttp==3.13.3
+uvicorn==0.41.0
+
+# Audio & Speech Processing
+PyAudio==0.2.14
+sounddevice==0.5.5
+SpeechRecognition==3.14.5
+gTTS==2.5.4
+pyttsx3==2.99
+google-cloud-speech==2.36.1
+google-cloud-texttospeech==2.34.1
+speechbrain==1.0.1
+soundfile==0.12.1
+
+# Computer Vision
+opencv-python==4.11.0.86
+opencv-contrib-python==4.11.0.86
+mediapipe==0.10.32
+pillow==12.1.1
+
+# System Automation
+PyAutoGUI==0.9.54
+pynput==1.8.1
+pyperclip==1.11.0
+psutil==7.2.2
+pywin32==311
+
+# Data Processing
+pandas==3.0.1
+numpy==2.4.2
+scikit-learn==1.8.0
+
+# Security & Authentication
+cryptography==46.0.5
+PyJWT==2.11.0
+bcrypt==5.0.0
+
+# Utilities & Tools
+python-dotenv==1.2.1
+pydantic==2.12.5
+pydantic-settings==2.12.0
+PyYAML==6.0.3
+tqdm==4.67.3
+beautifulsoup4==4.14.3
+lxml==6.0.2
+
+# Search & Web Scraping
+duckduckgo_search==8.1.1
+ddgs==9.10.0
+wikipedia==1.4.0
+
+# Media Processing
+yt-dlp==2026.2.4
+pygame==2.6.1
+playsound==1.2.2
+
+# Document Processing
+python-docx==1.2.0
+pypdf==6.7.0
+
+# Communication & Messaging
+pywhatkit==5.4
+
+# Development & Testing
+pytest==9.0.2
+
+# Monitoring & Observability
+prometheus_client==0.24.1
+
+# Additional AI Services
+openai==2.20.0
+langchain-community==0.4.1
+langchain-core==1.2.12
+langsmith==0.7.1
+
+# Performance & Optimization
+polars==1.38.1

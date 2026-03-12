@@ -2,7 +2,7 @@ import tracemalloc
 import asyncio
 import os
 import gc
-from agent_runner import notify_ui, get_http_client
+from services.utils.jarvis_bridge import notify_ui, get_http_client
 from services.utils.jarvis_config import config
 
 async def test_notify_leak():

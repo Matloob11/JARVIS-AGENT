@@ -1,0 +1,36 @@
+# J.A.R.V.I.S Agent - Development Dependencies
+# Development and testing specific packages
+
+# Testing Framework
+pytest==9.0.2
+pytest-asyncio
+pytest-cov
+pytest-mock
+
+# Code Quality
+black
+flake8
+pylint
+mypy
+pre-commit
+
+# Development Tools
+jupyter
+ipython
+python-dotenv==1.2.1
+
+# Documentation
+sphinx
+sphinx-rtd-theme
+
+# Performance Profiling
+memory-profiler
+line-profiler
+
+# Security Scanning
+bandit
+safety
+
+# Type Checking
+types-requests
+types-protobuf

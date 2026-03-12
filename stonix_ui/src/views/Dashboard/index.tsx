@@ -21,6 +21,7 @@ import NodeMatrix from '@/components/NodeMatrix';
 import IntelligenceHub from '@/components/IntelligenceHub';
 import NeuralFeed from '@/components/NeuralFeed';
 import AuraView from '@/components/AuraView';
+import ControlCenter from '@/components/ControlCenter';
 
 import { useNeuralNetwork } from '@/hooks/useNeuralNetwork';
 
@@ -67,6 +68,7 @@ const Dashboard: React.FC = () => {
          </div>
 
          <AuraView />
+         <ControlCenter />
          <div className="flex-1 overflow-hidden">
             <NeuralFeed />
          </div>

@@ -9,10 +9,10 @@ import asyncio
 from datetime import datetime
 from typing import List, Dict, Union
 from collections import OrderedDict
+import cryptography
 from services.ai_core.jarvis_vector_memory import jarvis_vector_db
 from services.utils.jarvis_logger import setup_logger
 from services.utils.jarvis_crypto import jarvis_crypto
-import cryptography
 
 # Configure logging
 logger = setup_logger("JARVIS-MEMORY-STORE")

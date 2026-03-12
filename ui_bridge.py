@@ -63,6 +63,8 @@ app_asgi = socketio.ASGIApp(sio, other_asgi_app=app)
 bridge_state = {
     "speaking": False,
     "thinking": False,
+    "muted": False,
+    "wake_word_active": True,
     "last_transcription": "",
     "messages": [],
     "memories": [],
@@ -182,11 +184,19 @@ async def notify_bridge(data: dict, request: Request):
         "vitals": lambda p: sio.emit("vitals_update", p),
         "reasoning": lambda p: sio.emit("reasoning_update", p),
         "intelligence_sync": lambda p: sio.emit("intelligence_sync", p),
-        "intelligence_update": lambda p: sio.emit("intelligence_sync", p)
+        "intelligence_update": lambda p: sio.emit("intelligence_sync", p),
+        "mute_sync": None, # Handled below
+        "wake_word_sync": None # Handled below
     }
 
-    if event_type in handlers:
+    if event_type in handlers and handlers[event_type]:
         await handlers[event_type](payload)
+    elif event_type == "mute_sync":
+        bridge_state["muted"] = payload
+        await sio.emit("mute_update", payload)
+    elif event_type == "wake_word_sync":
+        bridge_state["wake_word_active"] = payload
+        await sio.emit("wake_word_update", payload)
     elif event_type == "persona_change":
         bridge_state["active_persona"] = payload
         await sio.emit("persona_update", {"persona": payload})

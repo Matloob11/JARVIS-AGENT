@@ -8,7 +8,7 @@ import signal
 import subprocess
 import json
 from services.utils.jarvis_config import config
-from services.utils.logger import jarvis_log as log
+from services.utils.jarvis_logger import jarvis_log as log
 
 # Test Configuration
 BRIDGE_URL = "http://127.0.0.1:5001"

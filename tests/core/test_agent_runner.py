@@ -8,29 +8,24 @@ from agent_runner import notify_ui, perform_startup_diagnostics, _start_backgrou
 
 @pytest.fixture
 def mock_runner_deps():
-    with patch("jarvis_logger.setup_logger"):
-        with patch("jarvis_diagnostics.diagnostics.run_full_diagnostics", new_callable=AsyncMock) as mock_diag:
+    with patch("services.utils.jarvis_logger.setup_logger"):
+        with patch("services.utils.jarvis_diagnostics.diagnostics.run_all", new_callable=AsyncMock) as mock_diag:
             yield mock_diag
 
 
-def test_notify_ui():
-    with patch("socket.socket") as mock_socket:
-        mock_sock_inst = mock_socket.return_value
-        notify_ui("START")
-
-        # Verify JSON message and address
-        args, _ = mock_sock_inst.sendto.call_args
-        sent_msg = args[0].decode()
-        address = args[1]
-
-        assert json.loads(sent_msg) == {"status": "START"}
-        assert address == ("127.0.0.1", 5005)
+@pytest.mark.asyncio
+async def test_notify_ui():
+    with patch("services.utils.jarvis_bridge.httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        await notify_ui("START")
+        mock_post.assert_called_once()
+        args, kwargs = mock_post.call_args
+        assert kwargs["json"]["payload"] == "START"
 
 
 @pytest.mark.asyncio
 async def test_perform_startup_diagnostics(mock_runner_deps):
     mock_diag = mock_runner_deps
-    mock_diag.return_value = {"summary": "All Ok", "health_score": "100%"}
+    mock_diag.return_value = ["Health check ok"]
 
     await perform_startup_diagnostics()
     mock_diag.assert_called_once()
@@ -40,13 +35,14 @@ async def test_perform_startup_diagnostics(mock_runner_deps):
 async def test_start_background_tasks(mock_runner_deps):
     session = MagicMock()
     assistant = MagicMock()
+    assistant.memory_extractor = MagicMock()
 
     with patch("asyncio.create_task") as mock_create:
-        with patch("jarvis_clipboard.ClipboardMonitor"):
+        with patch("services.automation.jarvis_clipboard.ClipboardMonitor"):
             tasks = await _start_background_tasks(session, assistant)
-            # 4 tasks initially + 1 for clipboard monitor
-            assert len(tasks) == 5
-            assert mock_create.call_count == 5
+            # 9 tasks in main list + 1 for clipboard monitor = 10
+            assert len(tasks) == 10
+            assert mock_create.call_count == 10
 
 
 @pytest.mark.asyncio
@@ -87,15 +83,16 @@ async def test_start_memory_loop(mock_runner_deps):
         MagicMock(role="assistant", content="hi there")
     ]
 
-    with patch("agent_memory.MemoryExtractor.run", new_callable=AsyncMock) as mock_run:
+    with patch("services.ai_core.agent_memory.MemoryExtractor.run", new_callable=AsyncMock) as mock_run:
         # We need to stop the loop after one iteration
         with patch("asyncio.sleep", side_effect=[None, asyncio.CancelledError]):
             from agent_runner import start_memory_loop
+            extractor = MagicMock()
             try:
-                await start_memory_loop(session)
+                await start_memory_loop(session, extractor)
             except asyncio.CancelledError:
                 pass
-            mock_run.assert_called()
+            extractor.run.assert_called()
 
 
 @pytest.mark.asyncio
@@ -103,14 +100,16 @@ async def test_on_clipboard_detected_logic():
     from agent_runner import _start_background_tasks
     session = MagicMock()
     assistant = MagicMock()
+    assistant.chat_ctx.messages = []
 
     with patch("asyncio.create_task"):
-        with patch("jarvis_clipboard.ClipboardMonitor.start") as mock_start:
+        with patch("services.automation.jarvis_clipboard.ClipboardMonitor.start") as mock_start:
             await _start_background_tasks(session, assistant)
-            # The callback is the first argument to start()
+            # The callback is the first positional argument to start()
+            assert mock_start.called
             callback = mock_start.call_args[0][0]
 
             # Trigger callback
             await callback("solution text")
-            session.history.append.assert_called()
-            session.inference.assert_called()
+            assert len(assistant.chat_ctx.messages) > 0
+            assert "CLIPBOARD ERROR DETECTED" in assistant.chat_ctx.messages[0].content[0]

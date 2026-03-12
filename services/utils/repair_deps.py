@@ -10,7 +10,7 @@ except ImportError:
     pkg_resources = None
 
 import os
-from services.utils.logger import jarvis_log as log
+from services.utils.jarvis_logger import jarvis_log as log
 
 
 def check_and_fix_dependencies():
@@ -18,9 +18,10 @@ def check_and_fix_dependencies():
     Automated repair script for dependency drift.
     Verifies installed packages against requirements.
     """
-    requirements_file = "requirements_audit.txt"
+    requirements_file = "requirements.txt"
+    
     if not os.path.exists(requirements_file):
-        log.warning("⚠️ No requirements file found for repair.")
+        log.warning("⚠️ No requirements.txt file found for repair.")
         return
 
     if not pkg_resources:

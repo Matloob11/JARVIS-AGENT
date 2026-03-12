@@ -23,10 +23,18 @@ class YouTubeDownloader:
         self.base_dir = os.path.join(
             os.getcwd(), "Jarvis_Outputs", "Downloads", "YouTube")
         os.makedirs(self.base_dir, exist_ok=True)
-        # 🛠️ Set FFmpeg path if it exists at C:\ffmpeg\bin
+        # 🛠️ Set FFmpeg path if it exists at C:\ffmpeg\bin or in system PATH
         self.ffmpeg_path = r"C:\ffmpeg\bin"
         if not os.path.exists(os.path.join(self.ffmpeg_path, "ffmpeg.exe")):
-            self.ffmpeg_path = None
+            # Try to find it in system path
+            from shutil import which # pylint: disable=import-outside-toplevel
+            system_ffmpeg = which("ffmpeg")
+            if system_ffmpeg:
+                self.ffmpeg_path = os.path.dirname(system_ffmpeg)
+                logger.info("FFmpeg found in system path: %s", self.ffmpeg_path)
+            else:
+                self.ffmpeg_path = None
+                logger.warning("FFmpeg not found at C:\\ffmpeg\\bin or in system PATH.")
 
     def is_valid_url(self, url: str) -> bool:
         """Simple check for YouTube URL."""

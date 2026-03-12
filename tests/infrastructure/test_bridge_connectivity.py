@@ -17,12 +17,12 @@ async def verify_ui_bridge_endpoints():
     headers = {"X-Vortex-Token": VORTEX_SECURITY_TOKEN}
 
     async with httpx.AsyncClient() as client:
-        # 1. Test Status Endpoint
+        # 1. Test Health Endpoint
         try:
-            resp = await client.get(f"{BRIDGE_URL}/status")
-            print(f"[STATUS] Code: {resp.status_code}, Body: {resp.json()}")
+            resp = await client.get(f"{BRIDGE_URL}/health")
+            print(f"[HEALTH] Code: {resp.status_code}, Body: {resp.json()}")
         except Exception as e:
-            print(f"[STATUS] Failed: {e}")
+            print(f"[HEALTH] Failed: {e}")
 
         # 2. Test Secure Notify Endpoint
         print("\n[NOTIFY] Testing auth and message routing...")

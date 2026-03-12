@@ -1,14 +1,15 @@
 import pytest
 import asyncio
 from unittest.mock import MagicMock, patch
-from jarvis_reasoning import (
-    IntentAnalyzer, ContextAnalyzer, WorkflowPlanner,
+from services.ai_core.jarvis_reasoning import (
+    HierarchicalIntentAnalyzer, ContextAnalyzer, WorkflowPlanner,
     ResponseGenerator, analyze_user_intent,
-    generate_smart_response, process_with_advanced_reasoning
+    generate_smart_response, process_with_advanced_reasoning,
+    intent_analyzer, context_analyzer, workflow_planner, response_generator
 )
 
 def test_intent_analyzer():
-    analyzer = IntentAnalyzer()
+    analyzer = HierarchicalIntentAnalyzer()
 
     # Test weather intent
     result = analyzer.analyze_intent("Aaj mausam kaisa hai?")

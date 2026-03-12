@@ -89,7 +89,7 @@ async def notify_transcription(role: str, text: str,
             await client.post(url, json={
                 "type": "transcription",
                 "payload": payload
-            }, headers=headers, timeout=2.0)
+            }, headers=headers, timeout=5.0)
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger.error("Transcription Notification failed: %s", e)
 

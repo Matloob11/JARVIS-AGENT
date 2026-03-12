@@ -2,7 +2,7 @@ import pytest
 import asyncio
 import pygetwindow as gw
 from unittest.mock import MagicMock, patch, AsyncMock
-from jarvis_window_ctrl import (
+from services.system.jarvis_window_ctrl import (
     focus_window,
     maximize_window,
     minimize_window,
@@ -10,6 +10,8 @@ from jarvis_window_ctrl import (
     normalize_command,
     fuzzy_match_app,
     open_app,
+    save_notepad,
+    open_notepad_file,
     APP_MAPPINGS
 )
 
@@ -65,32 +67,33 @@ async def test_close_window():
 
 @pytest.mark.asyncio
 async def test_open_app_whatsapp():
-    with patch("jarvis_window_ctrl.focus_window", new_callable=AsyncMock) as mock_focus:
+    with patch("services.system.jarvis_window_ctrl.focus_window", new_callable=AsyncMock) as mock_focus:
         with patch("subprocess.Popen") as mock_popen:
-            # Patch whatsapp_bot INSIDE jarvis_window_ctrl
-            with patch("jarvis_window_ctrl.whatsapp_bot") as mock_ws:
+            # Patch at the SOURCE because it's imported inside the function
+            with patch("services.automation.jarvis_whatsapp_automation.whatsapp_bot") as mock_ws:
                 mock_ws.open_whatsapp = AsyncMock()
                 mock_ws.ensure_whatsapp_focus = AsyncMock()
 
                 await open_app("whatsapp")
-                # focus_window is called in open_app for whatsapp if it starts with http
-                # But here it hits elif matched_key == "whatsapp":
                 mock_ws.open_whatsapp.assert_called()
+                mock_ws.ensure_whatsapp_focus.assert_called()
+
 
 @pytest.mark.asyncio
-async def test_lock_screen():
-    with patch("subprocess.run") as mock_run:
-        from jarvis_system_ctrl import lock_screen
-        await lock_screen()
-        args = mock_run.call_args[0][0]
-        assert "rundll32.exe" in args
-        assert any("LockWorkStation" in arg for arg in args)
+async def test_save_notepad_success():
+    mock_win = MagicMock()
+    with patch("services.system.jarvis_window_ctrl.get_windows", return_value=[mock_win]):
+        with patch("pyautogui.hotkey"):
+            with patch("pyautogui.typewrite"):
+                with patch("pyautogui.press"):
+                    with patch("os.path.exists", return_value=True):
+                        res = await save_notepad("D:/test_note.txt")
+                        assert res["status"] == "success"
 
 @pytest.mark.asyncio
-async def test_shutdown_system():
-    with patch("subprocess.run") as mock_run:
-        from jarvis_system_ctrl import shutdown_system
-        await shutdown_system()
-        args = mock_run.call_args[0][0]
-        assert "shutdown" in args
-        assert "/s" in args
+async def test_open_notepad_file_success():
+    with patch("os.path.exists", return_value=True):
+        with patch("subprocess.Popen") as mock_popen:
+            res = await open_notepad_file("D:/test_note.txt")
+            assert res["status"] == "success"
+            mock_popen.assert_called()

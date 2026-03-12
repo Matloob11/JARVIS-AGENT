@@ -75,3 +75,5 @@ def setup_logger(name, log_file=None, level=None):
 
 # Shorthand for general use
 jarvis_log = setup_logger("JARVIS")
+bridge_log = setup_logger("BRIDGE", "logs/bridge.log")
+runner_log = setup_logger("RUNNER", "logs/runner.log")

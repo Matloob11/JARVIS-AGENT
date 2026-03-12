@@ -59,8 +59,9 @@ J.A.R.V.I.S (Just A Rather Very Intelligent System) is not just a chatbot; it's 
 | ☁️ **Weather AI**    | Real-time weather analytics with location awareness.                          |
 | 📁 **File Engine**   | Folder management, file creation, zipping, and image downloading.             |
 | 📧 **Messenger**     | Sends real-time emails via SMTP with attachments.                             |
-| 🎥 **Media Suite**   | YouTube downloading, Media playback, and CLIPBOARD monitoring.                |
+| 🎥 **Media Suite**   | YouTube downloading, Ad-Free Playback trick, and Media playback.     |
 | 🧹 **Diagnostics**   | Pre-flight system health checks to ensure 100% operational status.            |
+| 🔒 **Voice Guard**   | Advanced biometric voice fingerprinting for owner-only access.                |
 
 ---
 
@@ -100,6 +101,11 @@ J.A.R.V.I.S (Just A Rather Very Intelligent System) is not just a chatbot; it's 
    WEATHER_API_KEY=your_openweather_key
    ```
 
+4. **🔐 Encrypt Sensitive Data (Recommended)**:
+   ```bash
+   python scripts/encrypt_env.py --backup --remove-original
+   ```
+
 ### 🔱 Activation
 
 Run the worker and the agent simultaneously:
@@ -109,6 +115,49 @@ python agent.py dev
 ```
 
 _Wait for the "SYSTEM ONLINE" banner and the HUD to initialize._
+
+### 🧪 Testing
+
+Run comprehensive test suite:
+
+```bash
+# Run all tests
+python scripts/run_tests.py
+
+# Run voice security verification
+python scripts/voice/realtime_voice_test.py
+
+# Run YouTube ad-free verification
+python scripts/verify_yt_fix.py
+
+# Run specific test profiles
+python scripts/run_tests.py --profile unit
+```
+
+### 📊 Monitoring
+
+Start performance monitoring:
+
+```bash
+python scripts/start_monitoring.py
+```
+
+Access the monitoring dashboard at: `http://127.0.0.1:8000`
+
+### 🛡️ Security Features
+
+- **🔐 Biometric Voice Fingerprint**: Strict owner-only access with biometric matching.
+- **🔐 API Key Encryption**: All sensitive data encrypted with AES-256.
+- **🔐 Secure Configuration**: Encrypted environment file management.
+- **🔐 Memory Protection**: Secure in-memory data handling.
+- **🔐 Audit Logging**: Complete security audit trail.
+
+### 📈 Performance Features
+
+- **📊 Real-time Monitoring**: System, application, and LLM metrics
+- **📊 Performance Dashboard**: Interactive web dashboard
+- **📊 Alert System**: Automated performance alerts
+- **📊 Historical Analysis**: Performance trend analysis
 
 ---
 

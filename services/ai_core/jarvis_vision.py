@@ -12,8 +12,10 @@ import base64
 from io import BytesIO
 import pyautogui
 from PIL import Image
+import cv2  # Added for local webcam support
 import requests
 from google import genai
+from openai import OpenAI  # Used for Groq's OpenAI-compatible API
 from dotenv import load_dotenv
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
 from services.utils.jarvis_logger import setup_logger
@@ -26,13 +28,21 @@ load_dotenv()
 # Configure Google Generative AI Client
 client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 
+# Configure Groq Client (OpenAI-compatible)
+groq_client = None
+if os.getenv("GROQ_API_KEY"):
+    groq_client = OpenAI(
+        api_key=os.getenv("GROQ_API_KEY"),
+        base_url="https://api.groq.com/openai/v1"
+    )
+
 
 class ScreenPerceiver:
     """
     Handles capturing and analyzing screen content.
     """
 
-    def __init__(self, model_name="models/gemini-2.5-flash-native-audio-latest"):
+    def __init__(self, model_name="gemini-2.0-flash"):
         self.model_name = model_name
 
     async def capture_screen(self) -> bytes:
@@ -52,16 +62,52 @@ class ScreenPerceiver:
             logger.error("Error capturing screen: %s", e)
             raise
 
+    async def capture_webcam(self) -> bytes:
+        """
+        Captures a frame from the local webcam using OpenCV.
+        Returns JPEG bytes.
+        """
+        try:
+            # Run in thread to avoid blocking loop
+            def do_capture():
+                # pylint: disable=no-member
+                cap = cv2.VideoCapture(0)
+                if not cap.isOpened():
+                    return None
+                ret, frame = cap.read()
+                cap.release()
+                if not ret:
+                    return None
+                # Convert BGR to RGB
+                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                # pylint: enable=no-member
+                img = Image.fromarray(rgb_frame)
+                buffered = BytesIO()
+                img.save(buffered, format="JPEG")
+                return buffered.getvalue()
+
+            data = await asyncio.to_thread(do_capture)
+            if data is None:
+                raise IOError("Could not capture from webcam.")
+            return data
+        except (RuntimeError, IOError, ValueError) as e:
+            logger.error("Error capturing webcam: %s", e)
+            raise
+
     async def analyze_via_google(self, prompt: str, image: Image.Image) -> str:
         """Attempts analysis via native Google SDK."""
         logger.info("Sending image to Gemini (%s) with prompt: %s",
                     self.model_name, prompt)
-        response = await asyncio.to_thread(
-            client.models.generate_content,
-            model=self.model_name,
-            contents=[prompt, image]
-        )
-        return str(response.text) if response.text else "No analysis found."
+        try:
+            response = await asyncio.to_thread(
+                client.models.generate_content,
+                model=self.model_name,
+                contents=[prompt, image]
+            )
+            return str(response.text) if response.text else "No analysis found."
+        except Exception as e:
+            logger.error("Google Vision API error: %s", e)
+            raise
 
     async def analyze_via_openrouter(self, prompt: str, image: Image.Image) -> str:
         """Fallback analysis via OpenRouter (NVIDIA Nemotron)."""
@@ -105,6 +151,36 @@ class ScreenPerceiver:
         except (requests.RequestException, ValueError, KeyError) as e:
             return f"Fallback failed: {str(e)}"
 
+    async def analyze_via_groq(self, prompt: str, image: Image.Image) -> str:
+        """Analysis via Groq Llama 3.2 Vision."""
+        if not groq_client:
+            return "Error: Groq client not initialized."
+
+        logger.info("Attempting analysis via Groq (Llama 3.2 Vision)...")
+        try:
+            # Convert PIL to base64
+            buffered = BytesIO()
+            image.save(buffered, format="JPEG")
+            img_b64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+
+            response = await asyncio.to_thread(
+                groq_client.chat.completions.create,
+                model="meta-llama/llama-4-scout-17b-16e-instruct",
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {
+                            "url": f"data:image/jpeg;base64,{img_b64}"}}
+                    ]
+                }],
+                max_tokens=1024
+            )
+            return response.choices[0].message.content
+        except (RuntimeError, ValueError, IOError) as e:
+            logger.error("Groq Vision API error: %s", e)
+            return f"Error: Groq failed: {str(e)}"
+
     async def analyze_content(self, prompt: str = "What is on my screen?") -> str:
         """
         Captures the screen and uses tiered providers to analyze it.
@@ -117,15 +193,24 @@ class ScreenPerceiver:
             # Try Primary: Gemini
             try:
                 return await self.analyze_via_google(prompt, image)
-            except (ValueError, RuntimeError, AttributeError) as e:
-                # Catch Quota or Rate Limit errors specifically if possible
-                if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+            except (RuntimeError, ValueError, IOError) as e:
+                # Catch Quota, Rate Limit, or Model Not Found errors specifically
+                msg = str(e).upper()
+                if any(err in msg for err in ["429", "RESOURCE_EXHAUSTED", "404", "NOT_FOUND", "500"]):
                     logger.warning(
-                        "Gemini quota exhausted. Falling back to OpenRouter...")
+                        "Gemini error (%s). Falling back to Groq...", msg)
+                    
+                    # Try Secondary: Groq
+                    groq_result = await self.analyze_via_groq(prompt, image)
+                    if not groq_result.startswith("Error"):
+                        return groq_result
+                    
+                    # Try Tertiary: OpenRouter
+                    logger.warning("Groq failed. Falling back to OpenRouter...")
                     return await self.analyze_via_openrouter(prompt, image)
                 raise e
 
-        except (OSError, IOError, ValueError) as e:  # pylint: disable=broad-exception-caught
+        except (OSError, IOError, ValueError) as e:
             logger.error("Error in vision system: %s", e)
             return f"Error: Vision analysis failed: {str(e)}"
 
@@ -152,10 +237,54 @@ async def analyze_screen(query: str = "Describe what you see on my screen in det
             "query": query,
             "message": f"👁️ Screen Analysis report taiyyar hai, Sir:\n{result}"
         }
-    except (OSError, IOError, RuntimeError) as e:  # pylint: disable=broad-exception-caught
+    except (OSError, IOError, RuntimeError) as e:
         logger.exception("Vision tool error: %s", e)
         return {
             "status": "error",
             "message": f"👁️ Vision analysis failed: {str(e)}",
+            "error": str(e)
+        }
+
+
+@jarvis_tool
+async def analyze_camera(query: str = "What do you see in the camera?") -> dict:
+    """
+    Captures a frame from your local webcam and uses AI to describe it.
+    Use this to ask questions about your surroundings or objects held in front of the camera.
+    """
+    try:
+        logger.info("Capturing webcam for analysis...")
+        image_bytes = await vision_system.capture_webcam()
+        image = Image.open(BytesIO(image_bytes))
+
+        # Try Primary: Gemini
+        try:
+            result = await vision_system.analyze_via_google(query, image)
+        except (RuntimeError, ValueError, IOError) as e:
+            msg = str(e).upper()
+            if any(err in msg for err in ["429", "RESOURCE_EXHAUSTED", "404", "NOT_FOUND", "500"]):
+                logger.warning("Gemini error in camera. Falling back to Groq...")
+                
+                # Try Groq
+                result = await vision_system.analyze_via_groq(query, image)
+                if result.startswith("Error"):
+                    logger.warning("Groq camera failed. Falling back to OpenRouter...")
+                    result = await vision_system.analyze_via_openrouter(query, image)
+            else:
+                raise e
+
+        if result.startswith("Error"):
+            return {"status": "error", "message": f"📷 Camera analysis failed: {result}"}
+
+        return {
+            "status": "success",
+            "query": query,
+            "message": f"📷 Camera view analysis, Sir:\n{result}"
+        }
+    except (OSError, IOError, RuntimeError, ValueError) as e:
+        logger.exception("Camera tool error: %s", e)
+        return {
+            "status": "error",
+            "message": f"📷 Camera analysis failed: {str(e)}",
             "error": str(e)
         }
