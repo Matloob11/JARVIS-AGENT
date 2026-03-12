@@ -90,7 +90,7 @@ async def start_ui_command_listener(assistant: "BrainAssistant"):
     async def _handle_command(assistant: "BrainAssistant", data: dict):
         cmd_type = data.get("type")
         payload = data.get("payload")
-        
+
         if cmd_type == "mute":
             assistant.set_muted(True)
             logger.info("🔇 Agent MUTED via UI.")
@@ -129,7 +129,7 @@ async def start_ui_command_listener(assistant: "BrainAssistant"):
             user_msg_id = str(uuid.uuid4())
             await notify_transcription("user", message, msg_id=user_msg_id)
             response = await assistant.handle_user_query(message)
-            
+
             # pylint: disable=protected-access
             if assistant._active_session:
                 assistant._active_session.say(response, allow_interruptions=True)
@@ -154,11 +154,11 @@ async def start_ui_command_listener(assistant: "BrainAssistant"):
 
         if command == "check_intelligence":
             assistant._active_session.say(
-                "Sir, main aapke system ki intelligence metrics check kar raha hoon.", 
+                "Sir, main aapke system ki intelligence metrics check kar raha hoon.",
                 allow_interruptions=True)
         elif command == "open_archives":
             assistant._active_session.say(
-                "Sir, main aapke archives aur memory storage open kar raha hoon.", 
+                "Sir, main aapke archives aur memory storage open kar raha hoon.",
                 allow_interruptions=True)
         elif command == "open_comm":
             assistant._active_session.say(

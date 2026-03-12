@@ -1,4 +1,3 @@
-import asyncio
 import httpx
 from services.utils.jarvis_logger import setup_logger
 from services.utils.jarvis_config import config
@@ -17,7 +16,7 @@ class SecurityQA:
     async def run(self) -> dict:
         """Executes a series of security probes."""
         logger.info("🛡️ Starting system security audit...")
-        
+
         results = {
             "prompt_injection": "UNKNOWN",
             "unauthorized_access": "UNKNOWN",
@@ -44,7 +43,7 @@ class SecurityQA:
             results["prompt_injection"] = "PASS" if is_malicious else "FAIL"
 
             # 3. Test HMAC Integrity
-            # Sending a request with a valid token but NO signature (if required) 
+            # Sending a request with a valid token but NO signature (if required)
             # or a forged signature to test the verification logic.
             # The ui_bridge requires a signature for notifications.
             try:
@@ -58,9 +57,9 @@ class SecurityQA:
 
         all_passed = all(v == "PASS" for v in results.values())
         status = "PASS" if all_passed else "FAIL"
-        
+
         logger.info("🔐 Security Audit Result: %s (%s)", status, results)
-        
+
         return {
             "status": status,
             "probes": results

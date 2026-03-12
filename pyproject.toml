@@ -1,0 +1,28 @@
+[tool.ruff]
+# Target Python version
+target-version = "py311"
+
+# Exclude directories that contain debug, profiling, or temporary tools
+exclude = [
+    ".git",
+    ".github",
+    ".pytest_cache",
+    ".venv",
+    "scripts/debug",
+    "scripts/profiling",
+    "scripts/tools",
+    "tests",
+    "debug",
+    "dev_tools",
+    "__pycache__",
+    "build",
+    "dist"
+]
+
+[tool.ruff.lint]
+# Enable Pyflakes (F) and E rules, but ignore E501 (Line too long)
+select = ["F", "E", "W"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"services/ai_core/voice_fingerprint.py" = ["E402"]

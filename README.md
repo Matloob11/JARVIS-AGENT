@@ -103,7 +103,7 @@ J.A.R.V.I.S (Just A Rather Very Intelligent System) is not just a chatbot; it's 
 
 4. **🔐 Encrypt Sensitive Data (Recommended)**:
    ```bash
-   python scripts/encrypt_env.py --backup --remove-original
+    python scripts/tools/encrypt_env.py --backup --remove-original
    ```
 
 ### 🔱 Activation
@@ -122,16 +122,13 @@ Run comprehensive test suite:
 
 ```bash
 # Run all tests
-python scripts/run_tests.py
+python scripts/tools/run_tests.py
 
 # Run voice security verification
 python scripts/voice/realtime_voice_test.py
 
-# Run YouTube ad-free verification
-python scripts/verify_yt_fix.py
-
 # Run specific test profiles
-python scripts/run_tests.py --profile unit
+python scripts/tools/run_tests.py --profile unit
 ```
 
 ### 📊 Monitoring
@@ -139,7 +136,7 @@ python scripts/run_tests.py --profile unit
 Start performance monitoring:
 
 ```bash
-python scripts/start_monitoring.py
+python scripts/tools/start_monitoring.py
 ```
 
 Access the monitoring dashboard at: `http://127.0.0.1:8000`

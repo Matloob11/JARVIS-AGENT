@@ -4,7 +4,6 @@ J.A.R.V.I.S Monitoring Startup Script
 Starts performance monitoring and metrics server
 """
 
-import os
 import sys
 import argparse
 import asyncio
@@ -33,42 +32,42 @@ def signal_handler(signum, frame):
 async def run_monitoring_services(host: str = "127.0.0.1", port: int = 8000):
     """Run monitoring services"""
     logger.info("🚀 Starting J.A.R.V.I.S Monitoring Services")
-    
+
     try:
         # Start performance monitoring
         logger.info("📊 Starting performance monitoring...")
         start_monitoring()
-        
+
         # Start metrics server
         logger.info(f"🌐 Starting metrics server on http://{host}:{port}")
         server_task = asyncio.create_task(start_metrics_server(host, port))
-        
+
         # Setup signal handlers
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
-        
+
         logger.info("✅ All monitoring services started successfully!")
         logger.info(f"📊 Dashboard available at: http://{host}:{port}")
         logger.info("📈 Metrics API available at: http://{host}:{port}/api/metrics/current")
         logger.info("💚 Health check at: http://{host}:{port}/api/health")
-        
+
         # Keep running until shutdown
         while not shutdown_flag:
             await asyncio.sleep(1)
-        
+
         logger.info("🛑 Shutting down monitoring services...")
-        
+
         # Cleanup
         stop_monitoring()
         server_task.cancel()
-        
+
         try:
             await server_task
         except asyncio.CancelledError:
             pass
-        
+
         logger.info("✅ Monitoring services stopped gracefully")
-        
+
     except Exception as e:
         logger.error(f"❌ Error running monitoring services: {e}")
         sys.exit(1)
@@ -92,25 +91,25 @@ def main():
         action="store_true",
         help="Only check monitoring setup, don't start services"
     )
-    
+
     args = parser.parse_args()
-    
+
     if args.check_only:
         # Check monitoring setup
         logger.info("🔍 Checking monitoring setup...")
-        
+
         try:
-            monitor = get_performance_monitor()
+            get_performance_monitor()
             logger.info("✅ Performance monitor initialized successfully")
-            
+
             # Check dependencies
             import psutil
             import fastapi
             import uvicorn
             logger.info("✅ All dependencies available")
-            
+
             logger.info("✅ Monitoring setup is ready")
-            
+
         except ImportError as e:
             logger.error(f"❌ Missing dependency: {e}")
             logger.error("Install with: pip install -r requirements.txt")
@@ -118,9 +117,9 @@ def main():
         except Exception as e:
             logger.error(f"❌ Setup check failed: {e}")
             sys.exit(1)
-        
+
         return
-    
+
     # Run monitoring services
     try:
         asyncio.run(run_monitoring_services(args.host, args.port))

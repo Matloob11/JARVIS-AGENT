@@ -268,10 +268,10 @@ async def entrypoint(ctx: agents.JobContext):
             # Categorize the error for better visibility
             err_type = type(exc).__name__
             logger.error("⚠️ Session attempt %d failed [%s]: %s", attempt + 1, err_type, exc)
-            
+
             if "TimeoutError" in str(exc) or "handshake" in str(exc).lower():
                 logger.warning("🕒 Handshake timeout detected. System may be under heavy load.")
-            
+
             attempt += 1
             if attempt < max_retries:
                 retry_delay = 5 * attempt

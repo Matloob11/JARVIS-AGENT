@@ -51,7 +51,7 @@ if os.name == 'nt':
                 shutil.copy2(src, dst)
         except OSError:
             pass
-    
+
     os.symlink = _patched_symlink
 
 from speechbrain.inference.speaker import SpeakerRecognition # pylint: disable=import-error
@@ -68,7 +68,7 @@ class VoiceFingerprintEngine:
         self.master_voice_path = master_voice_path
         self.model_source = "speechbrain/spkrec-ecapa-voxceleb"
         self.save_dir = os.path.join(os.getcwd(), "pretrained_models", "spkrec-ecapa-voxceleb")
-        
+
         logger.info("Initializing Speaker Identification Engine...")
         try:
             # Manually download snapshot to avoid symlink issues on Windows
@@ -89,7 +89,7 @@ class VoiceFingerprintEngine:
                 savedir=self.save_dir,
                 run_opts={"device": "cpu"}
             )
-            
+
             if not os.path.exists(master_voice_path):
                 logger.error("Master voice file not found at %s", master_voice_path)
                 self.master_embedding = None
@@ -97,7 +97,7 @@ class VoiceFingerprintEngine:
                 logger.info("Enrolling Master Voice from %s", master_voice_path)
                 self.master_embedding = self._get_embedding(master_voice_path)
                 logger.info("✅ Master Voice Identity Loaded.")
-                
+
         except (RuntimeError, ValueError, IOError) as e:
             logger.error("Failed to initialize Voice ID Engine: %s", e)
             self.verification = None
@@ -126,13 +126,13 @@ class VoiceFingerprintEngine:
                 except (subprocess.SubprocessError, RuntimeError, IOError) as e:
                     logger.error("FFmpeg conversion failed: %s", e)
                     return None
-            
+
             with wave.open(audio_path, 'rb') as wf:
                 fs = wf.getframerate()
                 n_channels = wf.getnchannels()
                 n_frames = wf.getnframes()
                 sampwidth = wf.getsampwidth()
-                
+
                 if sampwidth != 2:
                     # Fallback for non-16bit if soundfile is present
                     data, fs = sf.read(audio_path)
@@ -141,29 +141,29 @@ class VoiceFingerprintEngine:
                     frames = wf.readframes(n_frames)
                     data = np.frombuffer(frames, dtype=np.int16)
                     signal = torch.from_numpy(data.copy()).float() / 32768.0
-                    
+
                     if n_channels > 1:
                         # Reshape interleaved data: [L, R, L, R...] -> [C, T]
                         signal = signal.view(-1, n_channels).transpose(0, 1)
-                
+
                 # Cleanup temp file if created
                 if ".converted.wav" in audio_path and os.path.exists(audio_path):
                     wf.close() # Close before deleting
                     os.remove(audio_path)
-                
+
                 # Reshape and Resample
                 if len(signal.shape) == 1:
                     signal = signal.unsqueeze(0)
                 elif len(signal.shape) == 2 and signal.shape[1] < signal.shape[0]:
                     signal = signal.transpose(0, 1)
-                
+
                 if fs != 16000:
                     resampler = torchaudio.transforms.Resample(fs, 16000)
                     signal = resampler(signal)
-                
+
                 if signal.shape[0] > 1:
                     signal = torch.mean(signal, dim=0, keepdim=True)
-                
+
                 logger.info("Signal loaded for %s: Shape=%s, SampleRate=%d", audio_path, signal.shape, fs)
 
             embedding = self.verification.encode_batch(signal)
@@ -186,7 +186,7 @@ class VoiceFingerprintEngine:
             test_embedding = self._get_embedding(segment_path)
             if test_embedding is None:
                 return False, 0.0
-            
+
             # SpeechBrain's verify_batch expects raw signals.
             # Since we pre-compute embeddings, we should compare them directly.
             try:
@@ -194,17 +194,18 @@ class VoiceFingerprintEngine:
                 # Ensure they are not None and are tensors
                 m_emb = self.master_embedding
                 t_emb = test_embedding
-                
+
                 if m_emb is None or t_emb is None:
                     logger.error("Embedding is None during comparison.")
                     return False, 0.0
-                
+
                 master_emb = m_emb.squeeze()
                 test_emb = t_emb.squeeze()
-                
-                # pylint: disable=multiple-statements,not-callable
-                if len(master_emb.shape) == 1: master_emb = master_emb.unsqueeze(0)
-                if len(test_emb.shape) == 1: test_emb = test_emb.unsqueeze(0)
+
+                if len(master_emb.shape) == 1:
+                    master_emb = master_emb.unsqueeze(0)
+                if len(test_emb.shape) == 1:
+                    test_emb = test_emb.unsqueeze(0)
 
                 # Calculate Cosine Similarity
                 similarity = torch.nn.functional.cosine_similarity(master_emb, test_emb)
@@ -213,12 +214,12 @@ class VoiceFingerprintEngine:
             except (RuntimeError, ValueError, TypeError) as e:
                 logger.error("Similarity calculation failed: %s", e)
                 return False, 0.0
-            
+
             is_match = score_val >= threshold
-            
+
             logger.info("Voice Security Check: Score=%.4f | Threshold=%.2f | Match=%s", score_val, threshold, is_match)
             return is_match, score_val
-            
+
         except (RuntimeError, ValueError, IOError) as e:
             logger.error("Verification logic failed: %s", e)
             return False, 0.0 # SECURE BY DEFAULT: Deny on failure
@@ -239,7 +240,7 @@ class VoiceFingerprintEngine:
                 wf.setframerate(sample_rate)
                 wf.writeframes(audio_bytes)
             # pylint: enable=no-member
-            
+
             result = self.verify_segment(temp_path, threshold)
             return result
         except (ValueError, RuntimeError, IOError) as e:
@@ -256,8 +257,8 @@ class VoiceFingerprintEngine:
                     os.remove(temp_path)
                 except OSError:
                     pass
-        
-        return False, 0.0 # Final fallback return 
+
+        return False, 0.0 # Final fallback return
 
 # Singleton instance
 voice_id_engine = VoiceFingerprintEngine("d:/Personal-Assistant-main/data/identity/master_voice.wav")

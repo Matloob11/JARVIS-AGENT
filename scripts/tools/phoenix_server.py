@@ -1,7 +1,6 @@
 import os
 import phoenix as px
 import time
-import sys
 
 # Phoenix playground features may require an OpenAI API key.
 # We set a placeholder if not present to prevent the server from crashing on startup.

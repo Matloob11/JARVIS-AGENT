@@ -55,25 +55,25 @@ async def dashboard():
                 <h1>🤖 J.A.R.V.I.S Performance Dashboard</h1>
                 <button class="refresh-btn" onclick="loadData()">Refresh Data</button>
             </div>
-            
+
             <div class="metrics-grid" id="metricsGrid">
                 <!-- Metrics will be populated here -->
             </div>
-            
+
             <div class="chart-container">
                 <h3>System Performance Over Time</h3>
                 <canvas id="performanceChart"></canvas>
             </div>
-            
+
             <div class="chart-container">
                 <h3>Application Metrics</h3>
                 <canvas id="applicationChart"></canvas>
             </div>
         </div>
-        
+
         <script>
             let performanceChart, applicationChart;
-            
+
             async function loadData() {
                 try {
                     const response = await fetch('/api/metrics/current');
@@ -84,11 +84,11 @@ async def dashboard():
                     console.error('Error loading data:', error);
                 }
             }
-            
+
             function updateMetricsDisplay(data) {
                 const grid = document.getElementById('metricsGrid');
                 const summary = data.summary || {};
-                
+
                 grid.innerHTML = `
                     <div class="metric-card">
                         <div class="metric-label">System Status</div>
@@ -124,12 +124,12 @@ async def dashboard():
                     </div>
                 `;
             }
-            
+
             function updateCharts(data) {
                 // Update performance chart
                 const ctx1 = document.getElementById('performanceChart').getContext('2d');
                 if (performanceChart) performanceChart.destroy();
-                
+
                 performanceChart = new Chart(ctx1, {
                     type: 'line',
                     data: {
@@ -153,11 +153,11 @@ async def dashboard():
                         }
                     }
                 });
-                
+
                 // Update application chart
                 const ctx2 = document.getElementById('applicationChart').getContext('2d');
                 if (applicationChart) applicationChart.destroy();
-                
+
                 applicationChart = new Chart(ctx2, {
                     type: 'bar',
                     data: {
@@ -180,10 +180,10 @@ async def dashboard():
                     }
                 });
             }
-            
+
             // Auto-refresh every 5 seconds
             setInterval(loadData, 5000);
-            
+
             // Initial load
             loadData();
         </script>
@@ -210,7 +210,7 @@ async def get_metrics_history(minutes: int = 60):
     try:
         if minutes > 1440:  # Limit to 24 hours
             raise HTTPException(status_code=400, detail="Maximum history is 1440 minutes (24 hours)")
-        
+
         history = monitor.get_metrics_history(minutes)
         return {
             "minutes": minutes,
@@ -238,7 +238,7 @@ async def health_check():
     try:
         summary = monitor.get_performance_summary()
         status_code = 200 if summary["status"] == "healthy" else 503
-        
+
         return {
             "status": summary["status"],
             "timestamp": datetime.now().isoformat(),
@@ -259,9 +259,9 @@ async def export_metrics(minutes: int = 60):
     try:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"jarvis_metrics_{timestamp}.json"
-        
+
         monitor.export_metrics(filename, minutes)
-        
+
         return {
             "message": f"Metrics exported to {filename}",
             "filename": filename,
@@ -296,16 +296,16 @@ async def stop_monitoring():
 
 class MetricsServer:
     """Metrics server wrapper"""
-    
+
     def __init__(self, host: str = "127.0.0.1", port: int = 8000):
         self.host = host
         self.port = port
         self.server = None
-    
+
     async def start(self):
         """Start the metrics server"""
         logger.info("🌐 Starting metrics server on http://%s:%s", self.host, self.port)
-        
+
         config = uvicorn.Config(
             app=app,
             host=self.host,
@@ -314,7 +314,7 @@ class MetricsServer:
         )
         self.server = uvicorn.Server(config)
         await self.server.serve()
-    
+
     def stop(self):
         """Stop the metrics server"""
         if self.server:

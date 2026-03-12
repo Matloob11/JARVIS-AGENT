@@ -7,7 +7,6 @@ Shows match percentage as you speak.
 import os
 import sys
 import time
-import torch
 import torchaudio
 import numpy as np
 import sounddevice as sd
@@ -88,12 +87,12 @@ def start_realtime_test():
                     percentage = score * 100
                     if score > session_peak:
                         session_peak = score
-                        
+
                     status_icon = "🟢" if is_match else "🔴"
                     identity = "BOSS (Matloob)" if is_match else "STRANGER / FRIEND"
-                    
+
                     print(f"{status_icon} [{identity}] | Confidence: {percentage:.2f}% (Peak: {float(session_peak)*100:.2f}%)")
-                    
+
                     if is_match and score > 0.9:
                         print("   ✨ AUTHENTICATED: High Confidence.")
                     elif not is_match and score < 0.3:

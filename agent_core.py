@@ -74,7 +74,7 @@ class BrainAssistant(Agent):
         self._audio_sample_rate = 16000 # Default
         self._last_speaker_verified = True
         self.voice_id_engine = voice_id_engine
-        
+
         # Session options for modality sync
         self._session_options = type('obj', (object,), {
             'voice_id': 'jarvis_v2',
@@ -207,7 +207,7 @@ class BrainAssistant(Agent):
             try:
                 # Syncing modality
                 self._update_session_modality("ANNA" if self._gf_mode_active else "JARVIS")
-                
+
                 # Find the Realtime Session deeper in the object structure for LiveKit 0.22+
                 rt_session = None
                 if hasattr(self._active_session, "_activity"):
@@ -217,7 +217,7 @@ class BrainAssistant(Agent):
                 if rt_session:
                     logger.info("Setting session options: voice=%s", voice)
                     rt_session.update_options(voice=voice)
-                
+
                 active_persona = "anna" if self._gf_mode_active else "jarvis"
                 asyncio.create_task(self._notify_ui_persona(active_persona))
             except Exception as e:
@@ -295,14 +295,14 @@ class BrainAssistant(Agent):
         health_monitor.record_heartbeat("backend_core")
         try:
             telemetry.start_interaction(session_id, user_input)
-            
+
             # Use unified reasoning pipeline
             res = await process_with_advanced_reasoning(
                 user_input,
                 history=self.conversation_history,
                 is_anna=self._gf_mode_active
             )
-            
+
             asyncio.create_task(self._notify_ui_reasoning(res))
             telemetry.end_interaction(session_id, success=True)
             return res.get("generated_response", "Sir, main samajh gaya.")
@@ -454,7 +454,7 @@ class BrainAssistant(Agent):
         # Update sample rate from incoming frame
         if hasattr(frame, "sample_rate"):
             self._audio_sample_rate = frame.sample_rate
-            
+
         self._audio_buffer.extend(frame.data)
         # Keep only last 10 seconds of audio (approx 320k bytes for 16kHz mono)
         if len(self._audio_buffer) > 320000:
@@ -466,28 +466,28 @@ class BrainAssistant(Agent):
         if not self._audio_buffer:
             logger.warning("🛡️ Voice ID: No audio captured in buffer. ACCESS DENIED.")
             return False
-            
+
         # Require at least 1.0 seconds of audio for a reliable check
         # (1.0s * 16000 samples/s * 2 bytes/sample = 32000 bytes)
         if len(self._audio_buffer) < 32000:
             logger.warning("🛡️ Voice ID: Audio segment too short for verification. ACCESS DENIED.")
             return False
-        
+
         # Take the accumulated buffer and verify
         # Threshold 0.72 is stricter for production security
         audio_bytes = bytes(self._audio_buffer)
         # 4. Voice Identity Enforcement (Final Security Layer)
         is_match, score = self.voice_id_engine.verify_bytes(audio_bytes, threshold=0.65)
         logger.info("Voice Security Check: Score=%.4f | Threshold=0.65 | Match=%s", score, is_match)
-        
+
         self._last_speaker_verified = is_match
         percentage = score * 100
-        
+
         if is_match:
             logger.info("🛡️ Voice ID Match: %.2f%% - ACCESS GRANTED", percentage)
         else:
             logger.warning("🛡️ Voice ID Match: %.2f%% - ACCESS DENIED", percentage)
-            
+
         self._audio_buffer.clear() # Reset for next turn
         return is_match
 
@@ -509,7 +509,7 @@ class BrainAssistant(Agent):
         if not is_authorized:
             logger.warning("⛔ Unauthorized Voice detected. Ignoring command.")
             raise StopResponse()
-        
+
         logger.info("✅ Voice Identity Verified.")
 
         if self._wake_word_mode:

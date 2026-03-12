@@ -19,7 +19,7 @@ def check_and_fix_dependencies():
     Verifies installed packages against requirements.
     """
     requirements_file = "requirements.txt"
-    
+
     if not os.path.exists(requirements_file):
         log.warning("⚠️ No requirements.txt file found for repair.")
         return

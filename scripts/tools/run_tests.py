@@ -21,92 +21,92 @@ def run_command(cmd, description=""):
     print(f"\n🚀 {description}")
     print(f"📝 Command: {' '.join(cmd)}")
     print("-" * 60)
-    
+
     start_time = time.time()
     result = subprocess.run(cmd, capture_output=True, text=True)
     end_time = time.time()
-    
+
     print(result.stdout)
     if result.stderr:
         print("STDERR:", result.stderr)
-    
+
     duration = end_time - start_time
     status = "✅ PASSED" if result.returncode == 0 else "❌ FAILED"
     print(f"\n{status} (Duration: {duration:.2f}s)")
-    
+
     return result.returncode == 0
 
 
 def run_unit_tests(coverage=True, verbose=True):
     """Run unit tests"""
     cmd = ["python", "-m", "pytest", "-m", "unit"]
-    
+
     if verbose:
         cmd.append("-v")
-    
+
     if coverage:
         cmd.extend([
             "--cov=services",
-            "--cov=agent_core", 
+            "--cov=agent_core",
             "--cov=agent_runner",
             "--cov-report=term-missing",
             "--cov-report=html:htmlcov",
             "--cov-report=xml"
         ])
-    
+
     return run_command(cmd, "Running Unit Tests")
 
 
 def run_integration_tests(verbose=True):
     """Run integration tests"""
     cmd = ["python", "-m", "pytest", "-m", "integration"]
-    
+
     if verbose:
         cmd.append("-v")
-    
+
     return run_command(cmd, "Running Integration Tests")
 
 
 def run_security_tests(verbose=True):
     """Run security tests"""
     cmd = ["python", "-m", "pytest", "-m", "security"]
-    
+
     if verbose:
         cmd.append("-v")
-    
+
     return run_command(cmd, "Running Security Tests")
 
 
 def run_all_tests(coverage=True, parallel=False, verbose=True):
     """Run all tests"""
     cmd = ["python", "-m", "pytest"]
-    
+
     if verbose:
         cmd.append("-v")
-    
+
     if coverage:
         cmd.extend([
             "--cov=services",
             "--cov=agent_core",
-            "--cov=agent_runner", 
+            "--cov=agent_runner",
             "--cov-report=term-missing",
             "--cov-report=html:htmlcov",
             "--cov-report=xml"
         ])
-    
+
     if parallel:
         cmd.extend(["-n", "auto"])
-    
+
     return run_command(cmd, "Running All Tests")
 
 
 def run_specific_tests(test_path, coverage=True, verbose=True):
     """Run specific test file or directory"""
     cmd = ["python", "-m", "pytest", test_path]
-    
+
     if verbose:
         cmd.append("-v")
-    
+
     if coverage:
         cmd.extend([
             "--cov=services",
@@ -114,7 +114,7 @@ def run_specific_tests(test_path, coverage=True, verbose=True):
             "--cov=agent_runner",
             "--cov-report=term-missing"
         ])
-    
+
     return run_command(cmd, f"Running Tests: {test_path}")
 
 
@@ -128,18 +128,18 @@ def check_test_dependencies():
     """Check if test dependencies are installed"""
     required_packages = ["pytest", "pytest-cov", "pytest-asyncio"]
     missing_packages = []
-    
+
     for package in required_packages:
         try:
             __import__(package.replace("-", "_"))
         except ImportError:
             missing_packages.append(package)
-    
+
     if missing_packages:
         print(f"❌ Missing test dependencies: {', '.join(missing_packages)}")
         print("Install with: pip install -r requirements-dev.txt")
         return False
-    
+
     print("✅ All test dependencies are installed")
     return True
 
@@ -147,7 +147,7 @@ def check_test_dependencies():
 def generate_test_report():
     """Generate comprehensive test report"""
     print("\n📊 Generating Test Report...")
-    
+
     # Run tests with detailed reporting
     cmd = [
         "python", "-m", "pytest",
@@ -160,16 +160,16 @@ def generate_test_report():
         "--html=test-report.html",
         "--self-contained-html"
     ]
-    
+
     success = run_command(cmd, "Generating Test Report")
-    
+
     if success:
         print("\n📋 Test Reports Generated:")
         print("  - HTML Coverage Report: htmlcov/index.html")
         print("  - XML Coverage Report: coverage.xml")
         print("  - Test Results: test-results.xml")
         print("  - HTML Test Report: test-report.html")
-    
+
     return success
 
 
@@ -216,9 +216,9 @@ def main():
         action="store_true",
         help="Check test dependencies only"
     )
-    
+
     args = parser.parse_args()
-    
+
     # Fix Unicode for Windows
     if sys.platform == "win32":
         import io
@@ -226,27 +226,27 @@ def main():
 
     print("🤖 J.A.R.V.I.S Test Runner")
     print("=" * 50)
-    
+
     # Check dependencies
     if not check_test_dependencies():
         sys.exit(1)
-    
+
     # Strict mode handling
     if hasattr(args, 'strict') and args.strict:
         print("🛡️ STRICT MODE ENABLED")
-    
+
     if args.check_deps:
         print("✅ Dependencies check complete")
         sys.exit(0)
-    
+
     # Change to project directory
     os.chdir(project_root)
-    
+
     verbose = not args.quiet
     coverage = not args.no_coverage
-    
+
     success = True
-    
+
     try:
         if args.path:
             # Run specific tests
@@ -263,18 +263,18 @@ def main():
                 success = run_performance_tests()
             elif args.profile == "all":
                 success = run_all_tests(coverage, args.parallel, verbose)
-        
+
         # Generate report if requested
         if args.report and success:
             success = generate_test_report()
-        
+
     except KeyboardInterrupt:
         print("\n⚠️ Tests interrupted by user")
         success = False
     except Exception as e:
         print(f"\n❌ Test runner error: {e}")
         success = False
-    
+
     # Final status
     print("\n" + "=" * 50)
     if success:

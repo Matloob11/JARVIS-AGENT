@@ -84,7 +84,7 @@ class AutonomousPlanner:
             }
 
             async with httpx.AsyncClient() as client:
-                await client.post(f"{config.bridge_url}/notify", 
+                await client.post(f"{config.bridge_url}/notify",
                                   json=payload, headers=headers, timeout=1.0)
 
             logger.info("Plan Progress Updated: Step %d/%d - %s",

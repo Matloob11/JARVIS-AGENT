@@ -52,10 +52,10 @@ class JarvisCrypto:
     def encrypt_env_file(cls, env_file_path: str = ".env") -> str:
         """
         Encrypt environment file with API keys
-        
+
         Args:
             env_file_path: Path to .env file
-            
+
         Returns:
             Path to encrypted file
         """
@@ -63,7 +63,7 @@ class JarvisCrypto:
             if not os.path.exists(env_file_path):
                 logger.warning("⚠️ Environment file %s not found", env_file_path)
                 return ""
-            
+
             # Read and parse env file
             env_data = {}
             with open(env_file_path, 'r', encoding='utf-8') as f:
@@ -72,28 +72,28 @@ class JarvisCrypto:
                     if line and not line.startswith('#') and '=' in line:
                         key, value = line.split('=', 1)
                         env_data[key.strip()] = value.strip()
-            
+
             # Identify and encrypt sensitive keys
             sensitive_patterns = [
-                'API_KEY', 'API_SECRET', 'PASSWORD', 'TOKEN', 
+                'API_KEY', 'API_SECRET', 'PASSWORD', 'TOKEN',
                 'SECRET', 'KEY', 'PRIVATE', 'CREDENTIALS'
             ]
-            
+
             encrypted_data = {}
             for key, value in env_data.items():
                 if any(pattern in key.upper() for pattern in sensitive_patterns):
                     encrypted_data[key] = cls.encrypt(value).decode()
                 else:
                     encrypted_data[key] = value
-            
+
             # Save encrypted file
             encrypted_file_path = env_file_path + ".encrypted"
             with open(encrypted_file_path, 'w', encoding='utf-8') as f:
                 json.dump(encrypted_data, f, indent=2)
-            
+
             logger.info("🔐 Environment file encrypted: %s", encrypted_file_path)
             return encrypted_file_path
-            
+
         except Exception as e: # pylint: disable=broad-exception-caught
             logger.error("❌ Failed to encrypt environment file: %s", e)
             raise
@@ -102,10 +102,10 @@ class JarvisCrypto:
     def load_encrypted_env(cls, encrypted_file_path: str = ".env.encrypted") -> Dict[str, str]:
         """
         Load and decrypt environment variables from encrypted file
-        
+
         Args:
             encrypted_file_path: Path to encrypted env file
-            
+
         Returns:
             Dictionary of decrypted environment variables
         """
@@ -113,11 +113,11 @@ class JarvisCrypto:
             if not os.path.exists(encrypted_file_path):
                 logger.warning("⚠️ Encrypted environment file not found: %s", encrypted_file_path)
                 return {}
-            
+
             # Load encrypted data
             with open(encrypted_file_path, 'r', encoding='utf-8') as f:
                 encrypted_data = json.load(f)
-            
+
             # Decrypt data
             decrypted_data = {}
             for key, value in encrypted_data.items():
@@ -126,10 +126,10 @@ class JarvisCrypto:
                     decrypted_data[key] = cls.decrypt(value)
                 except Exception: # pylint: disable=broad-exception-caught
                     decrypted_data[key] = value
-            
+
             logger.info("🔓 Environment file decrypted successfully")
             return decrypted_data
-            
+
         except Exception as e: # pylint: disable=broad-exception-caught
             logger.error("❌ Failed to decrypt environment file: %s", e)
             return {}
@@ -138,11 +138,11 @@ class JarvisCrypto:
     def get_secure_env_var(cls, key: str, encrypted_file_path: str = ".env.encrypted") -> Optional[str]:
         """
         Get specific encrypted environment variable
-        
+
         Args:
             key: Environment variable key
             encrypted_file_path: Path to encrypted env file
-            
+
         Returns:
             Decrypted value or None
         """

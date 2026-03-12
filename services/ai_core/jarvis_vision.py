@@ -199,12 +199,12 @@ class ScreenPerceiver:
                 if any(err in msg for err in ["429", "RESOURCE_EXHAUSTED", "404", "NOT_FOUND", "500"]):
                     logger.warning(
                         "Gemini error (%s). Falling back to Groq...", msg)
-                    
+
                     # Try Secondary: Groq
                     groq_result = await self.analyze_via_groq(prompt, image)
                     if not groq_result.startswith("Error"):
                         return groq_result
-                    
+
                     # Try Tertiary: OpenRouter
                     logger.warning("Groq failed. Falling back to OpenRouter...")
                     return await self.analyze_via_openrouter(prompt, image)
@@ -264,7 +264,7 @@ async def analyze_camera(query: str = "What do you see in the camera?") -> dict:
             msg = str(e).upper()
             if any(err in msg for err in ["429", "RESOURCE_EXHAUSTED", "404", "NOT_FOUND", "500"]):
                 logger.warning("Gemini error in camera. Falling back to Groq...")
-                
+
                 # Try Groq
                 result = await vision_system.analyze_via_groq(query, image)
                 if result.startswith("Error"):
