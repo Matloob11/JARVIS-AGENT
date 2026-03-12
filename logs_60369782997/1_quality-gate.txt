@@ -1,0 +1,1771 @@
+﻿2026-03-12T16:54:55.5641566Z ##[debug]Starting: quality-gate
+2026-03-12T16:54:55.5663903Z ##[debug]Cleaning runner temp folder: /home/runner/work/_temp
+2026-03-12T16:54:55.5767769Z ##[debug]Starting: Set up job
+2026-03-12T16:54:55.5768877Z Current runner version: '2.332.0'
+2026-03-12T16:54:55.5790391Z ##[group]Runner Image Provisioner
+2026-03-12T16:54:55.5791093Z Hosted Compute Agent
+2026-03-12T16:54:55.5791786Z Version: 20260213.493
+2026-03-12T16:54:55.5792470Z Commit: 5c115507f6dd24b8de37d8bbe0bb4509d0cc0fa3
+2026-03-12T16:54:55.5793147Z Build Date: 2026-02-13T00:28:41Z
+2026-03-12T16:54:55.5793908Z Worker ID: {b56450e6-9882-42c2-9c26-b2b58d09c142}
+2026-03-12T16:54:55.5794589Z Azure Region: westus
+2026-03-12T16:54:55.5795127Z ##[endgroup]
+2026-03-12T16:54:55.5796550Z ##[group]Operating System
+2026-03-12T16:54:55.5797613Z Ubuntu
+2026-03-12T16:54:55.5798071Z 24.04.3
+2026-03-12T16:54:55.5798643Z LTS
+2026-03-12T16:54:55.5799097Z ##[endgroup]
+2026-03-12T16:54:55.5799618Z ##[group]Runner Image
+2026-03-12T16:54:55.5800263Z Image: ubuntu-24.04
+2026-03-12T16:54:55.5801002Z Version: 20260302.42.1
+2026-03-12T16:54:55.5802131Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260302.42/images/ubuntu/Ubuntu2404-Readme.md
+2026-03-12T16:54:55.5803490Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260302.42
+2026-03-12T16:54:55.5804412Z ##[endgroup]
+2026-03-12T16:54:55.5805595Z ##[group]GITHUB_TOKEN Permissions
+2026-03-12T16:54:55.5807564Z Contents: read
+2026-03-12T16:54:55.5808217Z Metadata: read
+2026-03-12T16:54:55.5808730Z Packages: read
+2026-03-12T16:54:55.5809251Z ##[endgroup]
+2026-03-12T16:54:55.5811244Z Secret source: Actions
+2026-03-12T16:54:55.5812178Z ##[debug]Primary repository: Matloob11/JARVIS-AGENT
+2026-03-12T16:54:55.5812945Z Prepare workflow directory
+2026-03-12T16:54:55.5883507Z ##[debug]Creating pipeline directory: '/home/runner/work/JARVIS-AGENT'
+2026-03-12T16:54:55.5887746Z ##[debug]Creating workspace directory: '/home/runner/work/JARVIS-AGENT/JARVIS-AGENT'
+2026-03-12T16:54:55.5889662Z ##[debug]Update context data
+2026-03-12T16:54:55.5893038Z ##[debug]Evaluating job-level environment variables
+2026-03-12T16:54:55.6118648Z ##[debug]Evaluating job container
+2026-03-12T16:54:55.6123054Z ##[debug]Evaluating job service containers
+2026-03-12T16:54:55.6127205Z ##[debug]Evaluating job defaults
+2026-03-12T16:54:55.6155499Z Prepare all required actions
+2026-03-12T16:54:55.6195665Z Getting action download info
+2026-03-12T16:54:56.1215089Z Download action repository 'actions/checkout@v4' (SHA:34e114876b0b11c390a56381ad16ebd13914f8d5)
+2026-03-12T16:54:56.1246722Z ##[debug]Copied action archive '/opt/actionarchivecache/actions_checkout/34e114876b0b11c390a56381ad16ebd13914f8d5.tar.gz' to '/home/runner/work/_actions/_temp_09804daf-cca1-44d6-97f2-86a9bddfe910/0ce44a9f-2d5e-4a4b-8ea9-e8d563e3fd81.tar.gz'
+2026-03-12T16:54:56.2239403Z ##[debug]Unwrap 'actions-checkout-34e1148' to '/home/runner/work/_actions/actions/checkout/v4'
+2026-03-12T16:54:56.2369599Z ##[debug]Archive '/home/runner/work/_actions/_temp_09804daf-cca1-44d6-97f2-86a9bddfe910/0ce44a9f-2d5e-4a4b-8ea9-e8d563e3fd81.tar.gz' has been unzipped into '/home/runner/work/_actions/actions/checkout/v4'.
+2026-03-12T16:54:56.2468711Z Download action repository 'actions/setup-python@v5' (SHA:a26af69be951a213d495a4c3e4e4022e16d87065)
+2026-03-12T16:54:56.2527430Z ##[debug]Copied action archive '/opt/actionarchivecache/actions_setup-python/a26af69be951a213d495a4c3e4e4022e16d87065.tar.gz' to '/home/runner/work/_actions/_temp_018a41df-5d39-4ad3-8082-daf4bfc1c921/d0cd7279-0a19-4c30-bee9-48dd28bd3a43.tar.gz'
+2026-03-12T16:54:56.3061865Z ##[debug]Unwrap 'actions-setup-python-a26af69' to '/home/runner/work/_actions/actions/setup-python/v5'
+2026-03-12T16:54:56.3280229Z ##[debug]Archive '/home/runner/work/_actions/_temp_018a41df-5d39-4ad3-8082-daf4bfc1c921/d0cd7279-0a19-4c30-bee9-48dd28bd3a43.tar.gz' has been unzipped into '/home/runner/work/_actions/actions/setup-python/v5'.
+2026-03-12T16:54:56.3321273Z Download action repository 'actions/setup-node@v4' (SHA:49933ea5288caeca8642d1e84afbd3f7d6820020)
+2026-03-12T16:54:56.3370244Z ##[debug]Copied action archive '/opt/actionarchivecache/actions_setup-node/49933ea5288caeca8642d1e84afbd3f7d6820020.tar.gz' to '/home/runner/work/_actions/_temp_54d9f0b4-9b9a-46ff-a6bf-e0a61269a176/cc9de7d5-5100-4d7c-9a50-1b229c1369e5.tar.gz'
+2026-03-12T16:54:56.3949616Z ##[debug]Unwrap 'actions-setup-node-49933ea' to '/home/runner/work/_actions/actions/setup-node/v4'
+2026-03-12T16:54:56.4190188Z ##[debug]Archive '/home/runner/work/_actions/_temp_54d9f0b4-9b9a-46ff-a6bf-e0a61269a176/cc9de7d5-5100-4d7c-9a50-1b229c1369e5.tar.gz' has been unzipped into '/home/runner/work/_actions/actions/setup-node/v4'.
+2026-03-12T16:54:56.4248000Z ##[debug]action.yml for action: '/home/runner/work/_actions/actions/checkout/v4/action.yml'.
+2026-03-12T16:54:56.5095829Z ##[debug]action.yml for action: '/home/runner/work/_actions/actions/setup-python/v5/action.yml'.
+2026-03-12T16:54:56.5160305Z ##[debug]action.yml for action: '/home/runner/work/_actions/actions/setup-node/v4/action.yml'.
+2026-03-12T16:54:56.5290522Z ##[debug]Set step '__actions_checkout' display name to: 'Run actions/checkout@v4'
+2026-03-12T16:54:56.5293891Z ##[debug]Set step '__actions_setup-python' display name to: 'Set up Python 3.11'
+2026-03-12T16:54:56.5296007Z ##[debug]Set step '__run' display name to: 'Install Python dependencies'
+2026-03-12T16:54:56.5298098Z ##[debug]Set step '__run_2' display name to: 'Lint with Ruff'
+2026-03-12T16:54:56.5300011Z ##[debug]Set step '__run_3' display name to: 'Security Scan (Dependencies)'
+2026-03-12T16:54:56.5301896Z ##[debug]Set step '__actions_setup-node' display name to: 'Set up Node.js'
+2026-03-12T16:54:56.5303829Z ##[debug]Set step '__run_4' display name to: 'Install Frontend dependencies'
+2026-03-12T16:54:56.5305687Z ##[debug]Set step '__run_5' display name to: 'Frontend Security Audit'
+2026-03-12T16:54:56.5306436Z Complete job name: quality-gate
+2026-03-12T16:54:56.5343232Z ##[debug]Collect running processes for tracking orphan processes.
+2026-03-12T16:54:56.5572157Z ##[debug]Finishing: Set up job
+2026-03-12T16:54:56.5687107Z ##[debug]Evaluating condition for step: 'Run actions/checkout@v4'
+2026-03-12T16:54:56.5725806Z ##[debug]Evaluating: success()
+2026-03-12T16:54:56.5730901Z ##[debug]Evaluating success:
+2026-03-12T16:54:56.5746325Z ##[debug]=> true
+2026-03-12T16:54:56.5752997Z ##[debug]Result: true
+2026-03-12T16:54:56.5775170Z ##[debug]Starting: Run actions/checkout@v4
+2026-03-12T16:54:56.5849105Z ##[debug]Register post job cleanup for action: actions/checkout@v4
+2026-03-12T16:54:56.5925007Z ##[debug]Loading inputs
+2026-03-12T16:54:56.5937379Z ##[debug]Evaluating: github.repository
+2026-03-12T16:54:56.5938634Z ##[debug]Evaluating Index:
+2026-03-12T16:54:56.5940517Z ##[debug]..Evaluating github:
+2026-03-12T16:54:56.5941753Z ##[debug]..=> Object
+2026-03-12T16:54:56.5947516Z ##[debug]..Evaluating String:
+2026-03-12T16:54:56.5948443Z ##[debug]..=> 'repository'
+2026-03-12T16:54:56.5953221Z ##[debug]=> 'Matloob11/JARVIS-AGENT'
+2026-03-12T16:54:56.5954777Z ##[debug]Result: 'Matloob11/JARVIS-AGENT'
+2026-03-12T16:54:56.5959035Z ##[debug]Evaluating: github.token
+2026-03-12T16:54:56.5959597Z ##[debug]Evaluating Index:
+2026-03-12T16:54:56.5960094Z ##[debug]..Evaluating github:
+2026-03-12T16:54:56.5960587Z ##[debug]..=> Object
+2026-03-12T16:54:56.5961053Z ##[debug]..Evaluating String:
+2026-03-12T16:54:56.5961547Z ##[debug]..=> 'token'
+2026-03-12T16:54:56.5962287Z ##[debug]=> '***'
+2026-03-12T16:54:56.5962870Z ##[debug]Result: '***'
+2026-03-12T16:54:56.5982320Z ##[debug]Loading env
+2026-03-12T16:54:56.6052081Z ##[group]Run actions/checkout@v4
+2026-03-12T16:54:56.6052792Z with:
+2026-03-12T16:54:56.6053224Z   repository: Matloob11/JARVIS-AGENT
+2026-03-12T16:54:56.6053905Z   token: ***
+2026-03-12T16:54:56.6054310Z   ssh-strict: true
+2026-03-12T16:54:56.6054712Z   ssh-user: git
+2026-03-12T16:54:56.6055133Z   persist-credentials: true
+2026-03-12T16:54:56.6055592Z   clean: true
+2026-03-12T16:54:56.6056006Z   sparse-checkout-cone-mode: true
+2026-03-12T16:54:56.6056498Z   fetch-depth: 1
+2026-03-12T16:54:56.6057308Z   fetch-tags: false
+2026-03-12T16:54:56.6057738Z   show-progress: true
+2026-03-12T16:54:56.6058169Z   lfs: false
+2026-03-12T16:54:56.6058549Z   submodules: false
+2026-03-12T16:54:56.6058975Z   set-safe-directory: true
+2026-03-12T16:54:56.6059722Z ##[endgroup]
+2026-03-12T16:54:56.7058792Z ##[debug]GITHUB_WORKSPACE = '/home/runner/work/JARVIS-AGENT/JARVIS-AGENT'
+2026-03-12T16:54:56.7060775Z ##[debug]qualified repository = 'Matloob11/JARVIS-AGENT'
+2026-03-12T16:54:56.7061834Z ##[debug]ref = 'refs/heads/main'
+2026-03-12T16:54:56.7062757Z ##[debug]commit = '1de49defdf1c4e36d6fd16bb6e13e14aa685acb6'
+2026-03-12T16:54:56.7063799Z ##[debug]clean = true
+2026-03-12T16:54:56.7064715Z ##[debug]filter = undefined
+2026-03-12T16:54:56.7065538Z ##[debug]fetch depth = 1
+2026-03-12T16:54:56.7066244Z ##[debug]fetch tags = false
+2026-03-12T16:54:56.7067168Z ##[debug]show progress = true
+2026-03-12T16:54:56.7067898Z ##[debug]lfs = false
+2026-03-12T16:54:56.7068554Z ##[debug]submodules = false
+2026-03-12T16:54:56.7069306Z ##[debug]recursive submodules = false
+2026-03-12T16:54:56.7070055Z ##[debug]GitHub Host URL = 
+2026-03-12T16:54:56.7071382Z ::add-matcher::/home/runner/work/_actions/actions/checkout/v4/dist/problem-matcher.json
+2026-03-12T16:54:56.7142892Z ##[debug]Added matchers: 'checkout-git'. Problem matchers scan action output for known warning or error strings and report these inline.
+2026-03-12T16:54:56.7147723Z Syncing repository: Matloob11/JARVIS-AGENT
+2026-03-12T16:54:56.7149044Z ::group::Getting Git version info
+2026-03-12T16:54:56.7150248Z ##[group]Getting Git version info
+2026-03-12T16:54:56.7150985Z Working directory is '/home/runner/work/JARVIS-AGENT/JARVIS-AGENT'
+2026-03-12T16:54:56.7151986Z ##[debug]Getting git version
+2026-03-12T16:54:56.7152484Z [command]/usr/bin/git version
+2026-03-12T16:54:56.7218801Z git version 2.53.0
+2026-03-12T16:54:56.7241643Z ##[debug]0
+2026-03-12T16:54:56.7243950Z ##[debug]git version 2.53.0
+2026-03-12T16:54:56.7244710Z ##[debug]
+2026-03-12T16:54:56.7246104Z ##[debug]Set git useragent to: git/2.53.0 (github-actions-checkout)
+2026-03-12T16:54:56.7247846Z ::endgroup::
+2026-03-12T16:54:56.7248319Z ##[endgroup]
+2026-03-12T16:54:56.7252332Z ::add-mask::***
+2026-03-12T16:54:56.7259309Z Temporarily overriding HOME='/home/runner/work/_temp/3d4f8fa3-7ec4-4cdd-b9d3-6593a8830298' before making global git config changes
+2026-03-12T16:54:56.7260718Z Adding repository directory to the temporary git global config as a safe directory
+2026-03-12T16:54:56.7272037Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/JARVIS-AGENT/JARVIS-AGENT
+2026-03-12T16:54:56.7310221Z ##[debug]0
+2026-03-12T16:54:56.7311034Z ##[debug]
+2026-03-12T16:54:56.7315231Z Deleting the contents of '/home/runner/work/JARVIS-AGENT/JARVIS-AGENT'
+2026-03-12T16:54:56.7318913Z ::group::Initializing the repository
+2026-03-12T16:54:56.7319633Z ##[group]Initializing the repository
+2026-03-12T16:54:56.7322927Z [command]/usr/bin/git init /home/runner/work/JARVIS-AGENT/JARVIS-AGENT
+2026-03-12T16:54:56.7441229Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-03-12T16:54:56.7442583Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-03-12T16:54:56.7443652Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-03-12T16:54:56.7444591Z hint: call:
+2026-03-12T16:54:56.7445258Z hint:
+2026-03-12T16:54:56.7446153Z hint: 	git config --global init.defaultBranch <name>
+2026-03-12T16:54:56.7447507Z hint:
+2026-03-12T16:54:56.7448708Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-03-12T16:54:56.7450690Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-03-12T16:54:56.7451635Z hint:
+2026-03-12T16:54:56.7452068Z hint: 	git branch -m <name>
+2026-03-12T16:54:56.7452579Z hint:
+2026-03-12T16:54:56.7453271Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-03-12T16:54:56.7454535Z Initialized empty Git repository in /home/runner/work/JARVIS-AGENT/JARVIS-AGENT/.git/
+2026-03-12T16:54:56.7456584Z ##[debug]0
+2026-03-12T16:54:56.7457802Z ##[debug]Initialized empty Git repository in /home/runner/work/JARVIS-AGENT/JARVIS-AGENT/.git/
+2026-03-12T16:54:56.7458754Z ##[debug]
+2026-03-12T16:54:56.7460928Z [command]/usr/bin/git remote add origin https://github.com/Matloob11/JARVIS-AGENT
+2026-03-12T16:54:56.7495149Z ##[debug]0
+2026-03-12T16:54:56.7495957Z ##[debug]
+2026-03-12T16:54:56.7496704Z ::endgroup::
+2026-03-12T16:54:56.7497338Z ##[endgroup]
+2026-03-12T16:54:56.7498069Z ::group::Disabling automatic garbage collection
+2026-03-12T16:54:56.7498690Z ##[group]Disabling automatic garbage collection
+2026-03-12T16:54:56.7499796Z [command]/usr/bin/git config --local gc.auto 0
+2026-03-12T16:54:56.7527738Z ##[debug]0
+2026-03-12T16:54:56.7528544Z ##[debug]
+2026-03-12T16:54:56.7529331Z ::endgroup::
+2026-03-12T16:54:56.7529714Z ##[endgroup]
+2026-03-12T16:54:56.7530357Z ::group::Setting up auth
+2026-03-12T16:54:56.7530840Z ##[group]Setting up auth
+2026-03-12T16:54:56.7534899Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-03-12T16:54:56.7559515Z ##[debug]1
+2026-03-12T16:54:56.7560369Z ##[debug]
+2026-03-12T16:54:56.7564973Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-03-12T16:54:56.7912928Z ##[debug]0
+2026-03-12T16:54:56.7913905Z ##[debug]
+2026-03-12T16:54:56.7919139Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-03-12T16:54:56.7945511Z ##[debug]1
+2026-03-12T16:54:56.7946418Z ##[debug]
+2026-03-12T16:54:56.7951334Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-03-12T16:54:56.8181536Z ##[debug]0
+2026-03-12T16:54:56.8182922Z ##[debug]
+2026-03-12T16:54:56.8191116Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-03-12T16:54:56.8229531Z ##[debug]1
+2026-03-12T16:54:56.8230624Z ##[debug]
+2026-03-12T16:54:56.8235938Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-03-12T16:54:56.8464017Z ##[debug]0
+2026-03-12T16:54:56.8465295Z ##[debug]
+2026-03-12T16:54:56.8473326Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-03-12T16:54:56.8501822Z ##[debug]0
+2026-03-12T16:54:56.8502943Z ##[debug]
+2026-03-12T16:54:56.8510368Z ::endgroup::
+2026-03-12T16:54:56.8511077Z ##[endgroup]
+2026-03-12T16:54:56.8512286Z ::group::Fetching the repository
+2026-03-12T16:54:56.8513177Z ##[group]Fetching the repository
+2026-03-12T16:54:56.8520639Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +1de49defdf1c4e36d6fd16bb6e13e14aa685acb6:refs/remotes/origin/main
+2026-03-12T16:54:57.6623859Z From https://github.com/Matloob11/JARVIS-AGENT
+2026-03-12T16:54:57.6628276Z  * [new ref]         1de49defdf1c4e36d6fd16bb6e13e14aa685acb6 -> origin/main
+2026-03-12T16:54:57.6660383Z ##[debug]0
+2026-03-12T16:54:57.6662094Z ##[debug]
+2026-03-12T16:54:57.6663922Z ::endgroup::
+2026-03-12T16:54:57.6664905Z ##[endgroup]
+2026-03-12T16:54:57.6666699Z ::group::Determining the checkout info
+2026-03-12T16:54:57.6668355Z ##[group]Determining the checkout info
+2026-03-12T16:54:57.6670643Z ::endgroup::
+2026-03-12T16:54:57.6671634Z ##[endgroup]
+2026-03-12T16:54:57.6673025Z [command]/usr/bin/git sparse-checkout disable
+2026-03-12T16:54:57.6711650Z ##[debug]0
+2026-03-12T16:54:57.6713478Z ##[debug]
+2026-03-12T16:54:57.6717987Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-03-12T16:54:57.6746788Z ##[debug]0
+2026-03-12T16:54:57.6748965Z ##[debug]
+2026-03-12T16:54:57.6750957Z ::group::Checking out the ref
+2026-03-12T16:54:57.6752846Z ##[group]Checking out the ref
+2026-03-12T16:54:57.6755411Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+2026-03-12T16:54:58.2767319Z Switched to a new branch 'main'
+2026-03-12T16:54:58.2769509Z branch 'main' set up to track 'origin/main'.
+2026-03-12T16:54:58.3086493Z ##[debug]0
+2026-03-12T16:54:58.3087606Z ##[debug]branch 'main' set up to track 'origin/main'.
+2026-03-12T16:54:58.3088105Z ##[debug]
+2026-03-12T16:54:58.3088712Z ::endgroup::
+2026-03-12T16:54:58.3089070Z ##[endgroup]
+2026-03-12T16:54:58.3122518Z ##[debug]0
+2026-03-12T16:54:58.3123546Z ##[debug]commit 1de49defdf1c4e36d6fd16bb6e13e14aa685acb6
+2026-03-12T16:54:58.3124138Z ##[debug]Author: Matloob11 <matloobulhassnain11@gmail.com>
+2026-03-12T16:54:58.3124680Z ##[debug]Date:   Thu Mar 12 21:33:42 2026 +0500
+2026-03-12T16:54:58.3125145Z ##[debug]
+2026-03-12T16:54:58.3126421Z ##[debug]    Forensic Stabilize: Refactor scripts to modular sub-dirs, add Ruff config (pyproject.toml) to exclude debug tools, and fix AI core linting
+2026-03-12T16:54:58.3128719Z ##[debug]
+2026-03-12T16:54:58.3129541Z [command]/usr/bin/git log -1 --format=%H
+2026-03-12T16:54:58.3151468Z 1de49defdf1c4e36d6fd16bb6e13e14aa685acb6
+2026-03-12T16:54:58.3155953Z ##[debug]0
+2026-03-12T16:54:58.3156895Z ##[debug]1de49defdf1c4e36d6fd16bb6e13e14aa685acb6
+2026-03-12T16:54:58.3157726Z ##[debug]
+2026-03-12T16:54:58.3161844Z ##[debug]Unsetting HOME override
+2026-03-12T16:54:58.3170969Z ::remove-matcher owner=checkout-git::
+2026-03-12T16:54:58.3183788Z ##[debug]Removed matchers: 'checkout-git'
+2026-03-12T16:54:58.3237780Z ##[debug]Node Action run completed with exit code 0
+2026-03-12T16:54:58.3273245Z ##[debug]Save intra-action state isPost = true
+2026-03-12T16:54:58.3273978Z ##[debug]Save intra-action state setSafeDirectory = true
+2026-03-12T16:54:58.3274715Z ##[debug]Save intra-action state repositoryPath = /home/runner/work/JARVIS-AGENT/JARVIS-AGENT
+2026-03-12T16:54:58.3279170Z ##[debug]Set output commit = 1de49defdf1c4e36d6fd16bb6e13e14aa685acb6
+2026-03-12T16:54:58.3280471Z ##[debug]Set output ref = refs/heads/main
+2026-03-12T16:54:58.3286302Z ##[debug]Finishing: Run actions/checkout@v4
+2026-03-12T16:54:58.3301465Z ##[debug]Evaluating condition for step: 'Set up Python 3.11'
+2026-03-12T16:54:58.3305834Z ##[debug]Evaluating: success()
+2026-03-12T16:54:58.3306537Z ##[debug]Evaluating success:
+2026-03-12T16:54:58.3307576Z ##[debug]=> true
+2026-03-12T16:54:58.3308394Z ##[debug]Result: true
+2026-03-12T16:54:58.3309458Z ##[debug]Starting: Set up Python 3.11
+2026-03-12T16:54:58.3342928Z ##[debug]Register post job cleanup for action: actions/setup-python@v5
+2026-03-12T16:54:58.3359337Z ##[debug]Loading inputs
+2026-03-12T16:54:58.3384316Z ##[debug]Evaluating: (((github.server_url == 'https://github.com') && github.token) || '')
+2026-03-12T16:54:58.3385115Z ##[debug]Evaluating Or:
+2026-03-12T16:54:58.3387686Z ##[debug]..Evaluating And:
+2026-03-12T16:54:58.3389672Z ##[debug]....Evaluating Equal:
+2026-03-12T16:54:58.3390891Z ##[debug]......Evaluating Index:
+2026-03-12T16:54:58.3391382Z ##[debug]........Evaluating github:
+2026-03-12T16:54:58.3391858Z ##[debug]........=> Object
+2026-03-12T16:54:58.3392334Z ##[debug]........Evaluating String:
+2026-03-12T16:54:58.3392778Z ##[debug]........=> 'server_url'
+2026-03-12T16:54:58.3393272Z ##[debug]......=> 'https://github.com'
+2026-03-12T16:54:58.3393766Z ##[debug]......Evaluating String:
+2026-03-12T16:54:58.3394213Z ##[debug]......=> 'https://github.com'
+2026-03-12T16:54:58.3397983Z ##[debug]....=> true
+2026-03-12T16:54:58.3398639Z ##[debug]....Evaluating Index:
+2026-03-12T16:54:58.3399097Z ##[debug]......Evaluating github:
+2026-03-12T16:54:58.3399550Z ##[debug]......=> Object
+2026-03-12T16:54:58.3399978Z ##[debug]......Evaluating String:
+2026-03-12T16:54:58.3400386Z ##[debug]......=> 'token'
+2026-03-12T16:54:58.3401145Z ##[debug]....=> '***'
+2026-03-12T16:54:58.3401645Z ##[debug]..=> '***'
+2026-03-12T16:54:58.3402365Z ##[debug]=> '***'
+2026-03-12T16:54:58.3407239Z ##[debug]Expanded: ((('https://github.com' == 'https://github.com') && '***') || '')
+2026-03-12T16:54:58.3408223Z ##[debug]Result: '***'
+2026-03-12T16:54:58.3413902Z ##[debug]Loading env
+2026-03-12T16:54:58.3487951Z ##[group]Run actions/setup-python@v5
+2026-03-12T16:54:58.3488699Z with:
+2026-03-12T16:54:58.3489269Z   python-version: 3.11
+2026-03-12T16:54:58.3489901Z   cache: pip
+2026-03-12T16:54:58.3490452Z   check-latest: false
+2026-03-12T16:54:58.3491289Z   token: ***
+2026-03-12T16:54:58.3491859Z   update-environment: true
+2026-03-12T16:54:58.3492505Z   allow-prereleases: false
+2026-03-12T16:54:58.3493146Z   freethreaded: false
+2026-03-12T16:54:58.3493731Z ##[endgroup]
+2026-03-12T16:54:58.5198707Z ##[debug]Python is expected to be installed into /opt/hostedtoolcache
+2026-03-12T16:54:58.5200808Z ::group::Installed versions
+2026-03-12T16:54:58.5201348Z ##[group]Installed versions
+2026-03-12T16:54:58.5205605Z ##[debug]Semantic version spec of 3.11 is 3.11
+2026-03-12T16:54:58.5207473Z ##[debug]isExplicit: 
+2026-03-12T16:54:58.5208311Z ##[debug]explicit? false
+2026-03-12T16:54:58.5219370Z ##[debug]isExplicit: 3.10.19
+2026-03-12T16:54:58.5223663Z ##[debug]explicit? true
+2026-03-12T16:54:58.5224455Z ##[debug]isExplicit: 3.11.14
+2026-03-12T16:54:58.5225011Z ##[debug]explicit? true
+2026-03-12T16:54:58.5234780Z ##[debug]isExplicit: 3.12.12
+2026-03-12T16:54:58.5235589Z ##[debug]explicit? true
+2026-03-12T16:54:58.5242756Z ##[debug]isExplicit: 3.13.12
+2026-03-12T16:54:58.5243550Z ##[debug]explicit? true
+2026-03-12T16:54:58.5247179Z ##[debug]isExplicit: 3.14.3
+2026-03-12T16:54:58.5248294Z ##[debug]explicit? true
+2026-03-12T16:54:58.5257996Z ##[debug]evaluating 5 versions
+2026-03-12T16:54:58.5281780Z ##[debug]matched: 3.11.14
+2026-03-12T16:54:58.5282972Z ##[debug]checking cache: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-03-12T16:54:58.5284083Z ##[debug]Found tool in cache Python 3.11.14 x64
+2026-03-12T16:54:58.5298867Z Successfully set up CPython (3.11.14)
+2026-03-12T16:54:58.5299824Z ::endgroup::
+2026-03-12T16:54:58.5300255Z ##[endgroup]
+2026-03-12T16:54:58.5306789Z ##[debug]followSymbolicLinks 'true'
+2026-03-12T16:54:58.5332577Z ##[debug]followSymbolicLinks 'true'
+2026-03-12T16:54:58.5333835Z ##[debug]implicitDescendants 'true'
+2026-03-12T16:54:58.5334504Z ##[debug]matchDirectories 'true'
+2026-03-12T16:54:58.5335119Z ##[debug]omitBrokenSymbolicLinks 'true'
+2026-03-12T16:54:58.5335752Z ##[debug]excludeHiddenFiles 'false'
+2026-03-12T16:54:58.5337929Z ##[debug]Search path '/home/runner/work/JARVIS-AGENT/JARVIS-AGENT'
+2026-03-12T16:54:58.5523733Z ##[debug]/home/runner/work/JARVIS-AGENT/JARVIS-AGENT/requirements.txt
+2026-03-12T16:54:58.5927750Z ##[debug]Found 1 files to hash.
+2026-03-12T16:54:58.6099046Z ##[debug]OS Name: Ubuntu, Version: 24.04
+2026-03-12T16:54:58.6115237Z [command]/opt/hostedtoolcache/Python/3.11.14/x64/bin/pip cache dir
+2026-03-12T16:54:58.9351887Z /home/runner/.cache/pip
+2026-03-12T16:54:58.9597566Z ##[debug]global cache directory path is /home/runner/.cache/pip
+2026-03-12T16:54:58.9604991Z ##[debug]Cache service version: v2
+2026-03-12T16:54:58.9608393Z ##[debug]Resolved Keys:
+2026-03-12T16:54:58.9614695Z ##[debug]["setup-python-Linux-x64-24.04-Ubuntu-python-3.11.14-pip-895e445901db06b55ea76a2cd4424b397f4c62f45ae8c1b339be6ba0734291e8","setup-python-Linux-x64-24.04-Ubuntu-python-3.11.14-pip"]
+2026-03-12T16:54:58.9615765Z ##[debug]Checking zstd --quiet --version
+2026-03-12T16:54:58.9675422Z ##[debug]1.5.7
+2026-03-12T16:54:58.9678363Z ##[debug]zstd version: 1.5.7
+2026-03-12T16:54:58.9686741Z ##[debug][Request] GetCacheEntryDownloadURL https://results-receiver.actions.githubusercontent.com/twirp/github.actions.results.api.v1.CacheService/GetCacheEntryDownloadURL
+2026-03-12T16:54:59.2678374Z ##[debug][Response] - 200
+2026-03-12T16:54:59.2683126Z ##[debug]Headers: {
+2026-03-12T16:54:59.2683365Z ##[debug]  "content-length": "561",
+2026-03-12T16:54:59.2683665Z ##[debug]  "content-type": "application/json",
+2026-03-12T16:54:59.2684008Z ##[debug]  "date": "Thu, 12 Mar 2026 16:54:59 GMT",
+2026-03-12T16:54:59.2684332Z ##[debug]  "x-github-backend": "Kubernetes",
+2026-03-12T16:54:59.2684713Z ##[debug]  "x-github-request-id": "B01B:282CAD:2DBC8B:31BEB9:69B2EFE3"
+2026-03-12T16:54:59.2685570Z ##[debug]}
+2026-03-12T16:54:59.2686421Z ::add-mask::***
+2026-03-12T16:54:59.2688199Z ::add-mask::***
+2026-03-12T16:54:59.2688883Z ##[debug]Body: {
+2026-03-12T16:54:59.2689088Z ##[debug]  "ok": true,
+2026-03-12T16:54:59.2691019Z ##[debug]  "signed_download_url": "https://productionresultssa5.blob.core.windows.net/actions-cache/28c-3221924803?se=2026-03-12T17%3A04%3A59Z&sig=***&ske=2026-03-12T20%3A38%3A24Z&skoid=ca7593d4-ee42-46cd-af88-8b886a2f84eb&sks=b&skt=2026-03-12T16%3A38%3A24Z&sktid=398a6654-997b-47e9-b12b-9515b896b4de&skv=2025-11-05&sp=r&spr=https&sr=b&st=2026-03-12T16%3A54%3A54Z&sv=2025-11-05",
+2026-03-12T16:54:59.2693617Z ##[debug]  "matched_key": "setup-python-Linux-x64-24.04-Ubuntu-python-3.11.14-pip-895e445901db06b55ea76a2cd4424b397f4c62f45ae8c1b339be6ba0734291e8"
+2026-03-12T16:54:59.2694290Z ##[debug]}
+2026-03-12T16:54:59.2694899Z Cache hit for: setup-python-Linux-x64-24.04-Ubuntu-python-3.11.14-pip-895e445901db06b55ea76a2cd4424b397f4c62f45ae8c1b339be6ba0734291e8
+2026-03-12T16:54:59.2700059Z ##[debug]Archive path: /home/runner/work/_temp/05939b73-bed4-43be-85a9-bc2f74684b95/cache.tzst
+2026-03-12T16:54:59.2701114Z ##[debug]Starting download of archive to: /home/runner/work/_temp/05939b73-bed4-43be-85a9-bc2f74684b95/cache.tzst
+2026-03-12T16:54:59.2702121Z ##[debug]Use Azure SDK: true
+2026-03-12T16:54:59.2702736Z ##[debug]Download concurrency: 8
+2026-03-12T16:54:59.2703135Z ##[debug]Request timeout (ms): 30000
+2026-03-12T16:54:59.2703644Z ##[debug]Cache segment download timeout mins env var: undefined
+2026-03-12T16:54:59.2704122Z ##[debug]Segment download timeout (ms): 600000
+2026-03-12T16:54:59.2704516Z ##[debug]Lookup only: false
+2026-03-12T16:54:59.5379895Z ##[debug]Downloading segment at offset 0 with length 29922740...
+2026-03-12T16:55:00.5373763Z Received 13145524 of 29922740 (43.9%), 12.5 MBs/sec
+2026-03-12T16:55:00.9438178Z Received 29922740 of 29922740 (100.0%), 20.3 MBs/sec
+2026-03-12T16:55:00.9438693Z Cache Size: ~29 MB (29922740 B)
+2026-03-12T16:55:00.9468254Z [command]/usr/bin/tar -tf /home/runner/work/_temp/05939b73-bed4-43be-85a9-bc2f74684b95/cache.tzst -P --use-compress-program unzstd
+2026-03-12T16:55:00.9595419Z ../../../.cache/pip/
+2026-03-12T16:55:00.9597351Z ../../../.cache/pip/http-v2/
+2026-03-12T16:55:00.9597773Z ../../../.cache/pip/http-v2/1/
+2026-03-12T16:55:00.9598190Z ../../../.cache/pip/http-v2/1/3/
+2026-03-12T16:55:00.9598620Z ../../../.cache/pip/http-v2/1/3/d/
+2026-03-12T16:55:00.9598909Z ../../../.cache/pip/http-v2/1/3/d/6/
+2026-03-12T16:55:00.9599282Z ../../../.cache/pip/http-v2/1/3/d/6/c/
+2026-03-12T16:55:00.9600050Z ../../../.cache/pip/http-v2/1/3/d/6/c/13d6c9b226a47b42b3e13d13ced85b25bb3ea4e70b2e24144ee06cc7
+2026-03-12T16:55:00.9601154Z ../../../.cache/pip/http-v2/1/3/d/6/c/13d6c9b226a47b42b3e13d13ced85b25bb3ea4e70b2e24144ee06cc7.body
+2026-03-12T16:55:00.9602001Z ../../../.cache/pip/http-v2/1/b/
+2026-03-12T16:55:00.9602428Z ../../../.cache/pip/http-v2/1/b/b/
+2026-03-12T16:55:00.9602909Z ../../../.cache/pip/http-v2/1/b/b/d/
+2026-03-12T16:55:00.9603395Z ../../../.cache/pip/http-v2/1/b/b/d/9/
+2026-03-12T16:55:00.9604196Z ../../../.cache/pip/http-v2/1/b/b/d/9/1bbd936ff6515f1868b952626f6423f4e5ac29f54bbb360a9dd57a9c.body
+2026-03-12T16:55:00.9605288Z ../../../.cache/pip/http-v2/1/b/b/d/9/1bbd936ff6515f1868b952626f6423f4e5ac29f54bbb360a9dd57a9c
+2026-03-12T16:55:00.9605998Z ../../../.cache/pip/http-v2/1/6/
+2026-03-12T16:55:00.9606395Z ../../../.cache/pip/http-v2/1/6/0/
+2026-03-12T16:55:00.9606799Z ../../../.cache/pip/http-v2/1/6/0/d/
+2026-03-12T16:55:00.9607462Z ../../../.cache/pip/http-v2/1/6/0/d/3/
+2026-03-12T16:55:00.9608204Z ../../../.cache/pip/http-v2/1/6/0/d/3/160d3e8f69a7eca4743b16bea3eecb80155f94e8435ce6481997004c.body
+2026-03-12T16:55:00.9614549Z ../../../.cache/pip/http-v2/1/6/0/d/3/160d3e8f69a7eca4743b16bea3eecb80155f94e8435ce6481997004c
+2026-03-12T16:55:00.9615693Z ../../../.cache/pip/http-v2/1/f/
+2026-03-12T16:55:00.9616738Z ../../../.cache/pip/http-v2/1/f/a/
+2026-03-12T16:55:00.9617900Z ../../../.cache/pip/http-v2/1/f/a/7/
+2026-03-12T16:55:00.9618926Z ../../../.cache/pip/http-v2/1/f/a/7/e/
+2026-03-12T16:55:00.9621401Z ../../../.cache/pip/http-v2/1/f/a/7/e/1fa7edaa49882a41fc3a07143079a43fb7c6cde4e887c514b5e817df
+2026-03-12T16:55:00.9627586Z ../../../.cache/pip/http-v2/1/f/a/7/e/1fa7edaa49882a41fc3a07143079a43fb7c6cde4e887c514b5e817df.body
+2026-03-12T16:55:00.9628437Z ../../../.cache/pip/http-v2/1/d/
+2026-03-12T16:55:00.9628882Z ../../../.cache/pip/http-v2/1/d/3/
+2026-03-12T16:55:00.9629329Z ../../../.cache/pip/http-v2/1/d/3/5/
+2026-03-12T16:55:00.9629789Z ../../../.cache/pip/http-v2/1/d/3/5/6/
+2026-03-12T16:55:00.9630547Z ../../../.cache/pip/http-v2/1/d/3/5/6/1d35689f38065a2bc2b39f9d9854abf2dad854e8d71ea7ebb054c576
+2026-03-12T16:55:00.9631650Z ../../../.cache/pip/http-v2/1/d/3/5/6/1d35689f38065a2bc2b39f9d9854abf2dad854e8d71ea7ebb054c576.body
+2026-03-12T16:55:00.9632448Z ../../../.cache/pip/http-v2/1/8/
+2026-03-12T16:55:00.9632858Z ../../../.cache/pip/http-v2/1/8/0/
+2026-03-12T16:55:00.9633275Z ../../../.cache/pip/http-v2/1/8/0/c/
+2026-03-12T16:55:00.9633729Z ../../../.cache/pip/http-v2/1/8/0/c/9/
+2026-03-12T16:55:00.9634465Z ../../../.cache/pip/http-v2/1/8/0/c/9/180c97d0ce330d4b5bdf9a3714532b2cb5ff73126efb503833a43e4b
+2026-03-12T16:55:00.9635577Z ../../../.cache/pip/http-v2/1/8/0/c/9/180c97d0ce330d4b5bdf9a3714532b2cb5ff73126efb503833a43e4b.body
+2026-03-12T16:55:00.9636382Z ../../../.cache/pip/http-v2/1/8/7/
+2026-03-12T16:55:00.9636786Z ../../../.cache/pip/http-v2/1/8/7/a/
+2026-03-12T16:55:00.9637429Z ../../../.cache/pip/http-v2/1/8/7/a/c/
+2026-03-12T16:55:00.9638156Z ../../../.cache/pip/http-v2/1/8/7/a/c/187ac7a4026b4029cf282bde24a9146cdf595a03aa442cb15441ac5c.body
+2026-03-12T16:55:00.9639172Z ../../../.cache/pip/http-v2/1/8/7/a/c/187ac7a4026b4029cf282bde24a9146cdf595a03aa442cb15441ac5c
+2026-03-12T16:55:00.9639902Z ../../../.cache/pip/http-v2/1/5/
+2026-03-12T16:55:00.9640293Z ../../../.cache/pip/http-v2/1/5/f/
+2026-03-12T16:55:00.9640690Z ../../../.cache/pip/http-v2/1/5/f/8/
+2026-03-12T16:55:00.9641107Z ../../../.cache/pip/http-v2/1/5/f/8/b/
+2026-03-12T16:55:00.9642089Z ../../../.cache/pip/http-v2/1/5/f/8/b/15f8bfc5a27ce1fbb1dc842b349c3cd9fec891793980dd6e5295fc39.body
+2026-03-12T16:55:00.9643164Z ../../../.cache/pip/http-v2/1/5/f/8/b/15f8bfc5a27ce1fbb1dc842b349c3cd9fec891793980dd6e5295fc39
+2026-03-12T16:55:00.9643887Z ../../../.cache/pip/http-v2/1/4/
+2026-03-12T16:55:00.9644284Z ../../../.cache/pip/http-v2/1/4/a/
+2026-03-12T16:55:00.9644688Z ../../../.cache/pip/http-v2/1/4/a/a/
+2026-03-12T16:55:00.9645092Z ../../../.cache/pip/http-v2/1/4/a/a/f/
+2026-03-12T16:55:00.9645785Z ../../../.cache/pip/http-v2/1/4/a/a/f/14aaf7643dce3f389cfaa2f24beba9e2d02071e4624c02c288b2a440
+2026-03-12T16:55:00.9646833Z ../../../.cache/pip/http-v2/1/4/a/a/f/14aaf7643dce3f389cfaa2f24beba9e2d02071e4624c02c288b2a440.body
+2026-03-12T16:55:00.9647771Z ../../../.cache/pip/http-v2/e/
+2026-03-12T16:55:00.9648161Z ../../../.cache/pip/http-v2/e/0/
+2026-03-12T16:55:00.9648553Z ../../../.cache/pip/http-v2/e/0/b/
+2026-03-12T16:55:00.9648981Z ../../../.cache/pip/http-v2/e/0/b/4/
+2026-03-12T16:55:00.9649413Z ../../../.cache/pip/http-v2/e/0/b/4/f/
+2026-03-12T16:55:00.9650188Z ../../../.cache/pip/http-v2/e/0/b/4/f/e0b4f4d1d5b8bb8b844f230fb9255eeabd73b4bd6598e826c4219d4f.body
+2026-03-12T16:55:00.9651354Z ../../../.cache/pip/http-v2/e/0/b/4/f/e0b4f4d1d5b8bb8b844f230fb9255eeabd73b4bd6598e826c4219d4f
+2026-03-12T16:55:00.9652106Z ../../../.cache/pip/http-v2/e/7/
+2026-03-12T16:55:00.9652497Z ../../../.cache/pip/http-v2/e/7/5/
+2026-03-12T16:55:00.9652913Z ../../../.cache/pip/http-v2/e/7/5/e/
+2026-03-12T16:55:00.9653343Z ../../../.cache/pip/http-v2/e/7/5/e/3/
+2026-03-12T16:55:00.9654078Z ../../../.cache/pip/http-v2/e/7/5/e/3/e75e3a72ec5ffce867a4e738b4b84c7a8477fb04f819b70bfe837470.body
+2026-03-12T16:55:00.9655177Z ../../../.cache/pip/http-v2/e/7/5/e/3/e75e3a72ec5ffce867a4e738b4b84c7a8477fb04f819b70bfe837470
+2026-03-12T16:55:00.9655924Z ../../../.cache/pip/http-v2/e/2/
+2026-03-12T16:55:00.9656325Z ../../../.cache/pip/http-v2/e/2/0/
+2026-03-12T16:55:00.9657250Z ../../../.cache/pip/http-v2/e/2/0/7/
+2026-03-12T16:55:00.9657679Z ../../../.cache/pip/http-v2/e/2/0/7/4/
+2026-03-12T16:55:00.9658407Z ../../../.cache/pip/http-v2/e/2/0/7/4/e207426cbcf220918fdf354826064190a066f96cd6ad8830f1f11fdc
+2026-03-12T16:55:00.9659485Z ../../../.cache/pip/http-v2/e/2/0/7/4/e207426cbcf220918fdf354826064190a066f96cd6ad8830f1f11fdc.body
+2026-03-12T16:55:00.9660248Z ../../../.cache/pip/http-v2/e/c/
+2026-03-12T16:55:00.9660614Z ../../../.cache/pip/http-v2/e/c/c/
+2026-03-12T16:55:00.9660967Z ../../../.cache/pip/http-v2/e/c/c/8/
+2026-03-12T16:55:00.9661333Z ../../../.cache/pip/http-v2/e/c/c/8/2/
+2026-03-12T16:55:00.9662006Z ../../../.cache/pip/http-v2/e/c/c/8/2/ecc820c0fa17099bc4eec816d5f33de60ae8124220406981185058a3.body
+2026-03-12T16:55:00.9662901Z ../../../.cache/pip/http-v2/e/c/c/8/2/ecc820c0fa17099bc4eec816d5f33de60ae8124220406981185058a3
+2026-03-12T16:55:00.9663524Z ../../../.cache/pip/http-v2/e/5/
+2026-03-12T16:55:00.9663907Z ../../../.cache/pip/http-v2/e/5/7/
+2026-03-12T16:55:00.9664351Z ../../../.cache/pip/http-v2/e/5/7/b/
+2026-03-12T16:55:00.9664763Z ../../../.cache/pip/http-v2/e/5/7/b/5/
+2026-03-12T16:55:00.9665511Z ../../../.cache/pip/http-v2/e/5/7/b/5/e57b55fae68b16ab8d58c168c03725b4e894bffb9cdfa0c5252b04f9
+2026-03-12T16:55:00.9666582Z ../../../.cache/pip/http-v2/e/5/7/b/5/e57b55fae68b16ab8d58c168c03725b4e894bffb9cdfa0c5252b04f9.body
+2026-03-12T16:55:00.9667672Z ../../../.cache/pip/http-v2/e/a/
+2026-03-12T16:55:00.9668069Z ../../../.cache/pip/http-v2/e/a/c/
+2026-03-12T16:55:00.9668477Z ../../../.cache/pip/http-v2/e/a/c/6/
+2026-03-12T16:55:00.9668983Z ../../../.cache/pip/http-v2/e/a/c/6/1/
+2026-03-12T16:55:00.9669633Z ../../../.cache/pip/http-v2/e/a/c/6/1/eac61126daf80149d2a016f12a54eab5e3b5c1dbc77410ff1a97edc4.body
+2026-03-12T16:55:00.9670659Z ../../../.cache/pip/http-v2/e/a/c/6/1/eac61126daf80149d2a016f12a54eab5e3b5c1dbc77410ff1a97edc4
+2026-03-12T16:55:00.9671388Z ../../../.cache/pip/http-v2/0/
+2026-03-12T16:55:00.9671769Z ../../../.cache/pip/http-v2/0/1/
+2026-03-12T16:55:00.9672173Z ../../../.cache/pip/http-v2/0/1/6/
+2026-03-12T16:55:00.9672580Z ../../../.cache/pip/http-v2/0/1/6/2/
+2026-03-12T16:55:00.9673261Z ../../../.cache/pip/http-v2/0/1/6/2/d/
+2026-03-12T16:55:00.9674045Z ../../../.cache/pip/http-v2/0/1/6/2/d/0162de538e6e4a5055807995be4eeda518fe77fb4f02702e89bfda3e
+2026-03-12T16:55:00.9675125Z ../../../.cache/pip/http-v2/0/1/6/2/d/0162de538e6e4a5055807995be4eeda518fe77fb4f02702e89bfda3e.body
+2026-03-12T16:55:00.9675923Z ../../../.cache/pip/http-v2/0/3/
+2026-03-12T16:55:00.9676324Z ../../../.cache/pip/http-v2/0/3/b/
+2026-03-12T16:55:00.9676747Z ../../../.cache/pip/http-v2/0/3/b/7/
+2026-03-12T16:55:00.9677479Z ../../../.cache/pip/http-v2/0/3/b/7/e/
+2026-03-12T16:55:00.9678180Z ../../../.cache/pip/http-v2/0/3/b/7/e/03b7e31ef41a67b4d5d0212d71d27b02703ce649d01a9d3a622a0976
+2026-03-12T16:55:00.9679244Z ../../../.cache/pip/http-v2/0/3/b/7/e/03b7e31ef41a67b4d5d0212d71d27b02703ce649d01a9d3a622a0976.body
+2026-03-12T16:55:00.9680021Z ../../../.cache/pip/http-v2/0/7/
+2026-03-12T16:55:00.9680440Z ../../../.cache/pip/http-v2/0/7/5/
+2026-03-12T16:55:00.9680848Z ../../../.cache/pip/http-v2/0/7/5/4/
+2026-03-12T16:55:00.9681281Z ../../../.cache/pip/http-v2/0/7/5/4/6/
+2026-03-12T16:55:00.9682010Z ../../../.cache/pip/http-v2/0/7/5/4/6/0754653d3535372fb243dff0d5ea56432167ba71b1cd19ce67d1cc3c.body
+2026-03-12T16:55:00.9683055Z ../../../.cache/pip/http-v2/0/7/5/4/6/0754653d3535372fb243dff0d5ea56432167ba71b1cd19ce67d1cc3c
+2026-03-12T16:55:00.9683790Z ../../../.cache/pip/http-v2/0/7/9/
+2026-03-12T16:55:00.9684199Z ../../../.cache/pip/http-v2/0/7/9/a/
+2026-03-12T16:55:00.9684629Z ../../../.cache/pip/http-v2/0/7/9/a/e/
+2026-03-12T16:55:00.9685335Z ../../../.cache/pip/http-v2/0/7/9/a/e/079aeb8774071b5b935b54c42480ef064baf117b616cbc694780e7f3
+2026-03-12T16:55:00.9686379Z ../../../.cache/pip/http-v2/0/7/9/a/e/079aeb8774071b5b935b54c42480ef064baf117b616cbc694780e7f3.body
+2026-03-12T16:55:00.9687322Z ../../../.cache/pip/http-v2/0/6/
+2026-03-12T16:55:00.9687734Z ../../../.cache/pip/http-v2/0/6/7/
+2026-03-12T16:55:00.9688380Z ../../../.cache/pip/http-v2/0/6/7/d/
+2026-03-12T16:55:00.9688811Z ../../../.cache/pip/http-v2/0/6/7/d/e/
+2026-03-12T16:55:00.9689517Z ../../../.cache/pip/http-v2/0/6/7/d/e/067de891d4624fc09de1c690b01d8bf477f69f0ce81f8101b21b3549
+2026-03-12T16:55:00.9690603Z ../../../.cache/pip/http-v2/0/6/7/d/e/067de891d4624fc09de1c690b01d8bf477f69f0ce81f8101b21b3549.body
+2026-03-12T16:55:00.9691396Z ../../../.cache/pip/http-v2/0/6/9/
+2026-03-12T16:55:00.9691867Z ../../../.cache/pip/http-v2/0/6/9/2/
+2026-03-12T16:55:00.9692292Z ../../../.cache/pip/http-v2/0/6/9/2/0/
+2026-03-12T16:55:00.9693018Z ../../../.cache/pip/http-v2/0/6/9/2/0/06920338a4965470bb832ba925694800e223b1b981e0345ba1c9929a.body
+2026-03-12T16:55:00.9694130Z ../../../.cache/pip/http-v2/0/6/9/2/0/06920338a4965470bb832ba925694800e223b1b981e0345ba1c9929a
+2026-03-12T16:55:00.9694858Z ../../../.cache/pip/http-v2/0/d/
+2026-03-12T16:55:00.9695265Z ../../../.cache/pip/http-v2/0/d/d/
+2026-03-12T16:55:00.9695684Z ../../../.cache/pip/http-v2/0/d/d/c/
+2026-03-12T16:55:00.9696123Z ../../../.cache/pip/http-v2/0/d/d/c/c/
+2026-03-12T16:55:00.9696878Z ../../../.cache/pip/http-v2/0/d/d/c/c/0ddcc4d907dd4d8c3307074b6869d260abb891f5178579de5abe7eff.body
+2026-03-12T16:55:00.9698116Z ../../../.cache/pip/http-v2/0/d/d/c/c/0ddcc4d907dd4d8c3307074b6869d260abb891f5178579de5abe7eff
+2026-03-12T16:55:00.9698886Z ../../../.cache/pip/http-v2/0/c/
+2026-03-12T16:55:00.9699297Z ../../../.cache/pip/http-v2/0/c/1/
+2026-03-12T16:55:00.9699721Z ../../../.cache/pip/http-v2/0/c/1/9/
+2026-03-12T16:55:00.9700153Z ../../../.cache/pip/http-v2/0/c/1/9/0/
+2026-03-12T16:55:00.9700855Z ../../../.cache/pip/http-v2/0/c/1/9/0/0c1902a50947e5344575b4ef11e0b41b63cc4e3e15eb945e6b0cd91d
+2026-03-12T16:55:00.9701887Z ../../../.cache/pip/http-v2/0/c/1/9/0/0c1902a50947e5344575b4ef11e0b41b63cc4e3e15eb945e6b0cd91d.body
+2026-03-12T16:55:00.9702706Z ../../../.cache/pip/http-v2/0/5/
+2026-03-12T16:55:00.9703113Z ../../../.cache/pip/http-v2/0/5/a/
+2026-03-12T16:55:00.9703522Z ../../../.cache/pip/http-v2/0/5/a/7/
+2026-03-12T16:55:00.9703964Z ../../../.cache/pip/http-v2/0/5/a/7/4/
+2026-03-12T16:55:00.9704873Z ../../../.cache/pip/http-v2/0/5/a/7/4/05a74540eb65ad078e4e70140f951919d2248dc11cb1db5ccba5484a
+2026-03-12T16:55:00.9705925Z ../../../.cache/pip/http-v2/0/5/a/7/4/05a74540eb65ad078e4e70140f951919d2248dc11cb1db5ccba5484a.body
+2026-03-12T16:55:00.9706712Z ../../../.cache/pip/http-v2/0/a/
+2026-03-12T16:55:00.9707313Z ../../../.cache/pip/http-v2/0/a/e/
+2026-03-12T16:55:00.9707732Z ../../../.cache/pip/http-v2/0/a/e/8/
+2026-03-12T16:55:00.9708155Z ../../../.cache/pip/http-v2/0/a/e/8/4/
+2026-03-12T16:55:00.9708865Z ../../../.cache/pip/http-v2/0/a/e/8/4/0ae84cda1068eb8069d0d031ff1b592b6ce0646c279bf59396ff2d05
+2026-03-12T16:55:00.9709942Z ../../../.cache/pip/http-v2/0/a/e/8/4/0ae84cda1068eb8069d0d031ff1b592b6ce0646c279bf59396ff2d05.body
+2026-03-12T16:55:00.9710718Z ../../../.cache/pip/http-v2/0/4/
+2026-03-12T16:55:00.9711131Z ../../../.cache/pip/http-v2/0/4/6/
+2026-03-12T16:55:00.9711546Z ../../../.cache/pip/http-v2/0/4/6/5/
+2026-03-12T16:55:00.9711975Z ../../../.cache/pip/http-v2/0/4/6/5/1/
+2026-03-12T16:55:00.9712666Z ../../../.cache/pip/http-v2/0/4/6/5/1/04651185225d2f4f97326e1133d8157925fc8a7b89e811a1210f6558
+2026-03-12T16:55:00.9713677Z ../../../.cache/pip/http-v2/0/4/6/5/1/04651185225d2f4f97326e1133d8157925fc8a7b89e811a1210f6558.body
+2026-03-12T16:55:00.9747905Z ../../../.cache/pip/http-v2/0/4/4/
+2026-03-12T16:55:00.9777569Z ../../../.cache/pip/http-v2/0/4/4/0/
+2026-03-12T16:55:00.9778106Z ../../../.cache/pip/http-v2/0/4/4/0/9/
+2026-03-12T16:55:00.9788976Z ../../../.cache/pip/http-v2/0/4/4/0/9/04409a64cbe9342d7e3b5728f6ad45c1cb35fb3ec830064d6f7f201a
+2026-03-12T16:55:00.9790193Z ../../../.cache/pip/http-v2/0/4/4/0/9/04409a64cbe9342d7e3b5728f6ad45c1cb35fb3ec830064d6f7f201a.body
+2026-03-12T16:55:00.9791037Z ../../../.cache/pip/http-v2/3/
+2026-03-12T16:55:00.9791483Z ../../../.cache/pip/http-v2/3/1/
+2026-03-12T16:55:00.9791956Z ../../../.cache/pip/http-v2/3/1/5/
+2026-03-12T16:55:00.9792443Z ../../../.cache/pip/http-v2/3/1/5/3/
+2026-03-12T16:55:00.9793383Z ../../../.cache/pip/http-v2/3/1/5/3/9/
+2026-03-12T16:55:00.9794238Z ../../../.cache/pip/http-v2/3/1/5/3/9/31539552f2303282ae40da968a51b4e53cadfeaff6b349f1c1a078d2
+2026-03-12T16:55:00.9795357Z ../../../.cache/pip/http-v2/3/1/5/3/9/31539552f2303282ae40da968a51b4e53cadfeaff6b349f1c1a078d2.body
+2026-03-12T16:55:00.9796222Z ../../../.cache/pip/http-v2/3/0/
+2026-03-12T16:55:00.9796743Z ../../../.cache/pip/http-v2/3/0/e/
+2026-03-12T16:55:00.9797469Z ../../../.cache/pip/http-v2/3/0/e/f/
+2026-03-12T16:55:00.9797963Z ../../../.cache/pip/http-v2/3/0/e/f/1/
+2026-03-12T16:55:00.9798802Z ../../../.cache/pip/http-v2/3/0/e/f/1/30ef132248ab98ab0a92d2d15ee6957bdad5542ffbb630d3a32f7721.body
+2026-03-12T16:55:00.9799874Z ../../../.cache/pip/http-v2/3/0/e/f/1/30ef132248ab98ab0a92d2d15ee6957bdad5542ffbb630d3a32f7721
+2026-03-12T16:55:00.9800588Z ../../../.cache/pip/http-v2/3/7/
+2026-03-12T16:55:00.9801004Z ../../../.cache/pip/http-v2/3/7/c/
+2026-03-12T16:55:00.9801438Z ../../../.cache/pip/http-v2/3/7/c/5/
+2026-03-12T16:55:00.9801914Z ../../../.cache/pip/http-v2/3/7/c/5/1/
+2026-03-12T16:55:00.9802603Z ../../../.cache/pip/http-v2/3/7/c/5/1/37c518ffee828550acec5a0fd158a5f1d852928eea13df9d077b428b
+2026-03-12T16:55:00.9803620Z ../../../.cache/pip/http-v2/3/7/c/5/1/37c518ffee828550acec5a0fd158a5f1d852928eea13df9d077b428b.body
+2026-03-12T16:55:00.9804371Z ../../../.cache/pip/http-v2/3/7/5/
+2026-03-12T16:55:00.9804792Z ../../../.cache/pip/http-v2/3/7/5/7/
+2026-03-12T16:55:00.9805222Z ../../../.cache/pip/http-v2/3/7/5/7/0/
+2026-03-12T16:55:00.9805929Z ../../../.cache/pip/http-v2/3/7/5/7/0/3757009b65690233a32ce8c0dd383c3ca67d6fceddf6cf1003421d02
+2026-03-12T16:55:00.9807113Z ../../../.cache/pip/http-v2/3/7/5/7/0/3757009b65690233a32ce8c0dd383c3ca67d6fceddf6cf1003421d02.body
+2026-03-12T16:55:00.9807957Z ../../../.cache/pip/http-v2/3/6/
+2026-03-12T16:55:00.9814847Z ../../../.cache/pip/http-v2/3/6/1/
+2026-03-12T16:55:00.9815302Z ../../../.cache/pip/http-v2/3/6/1/b/
+2026-03-12T16:55:00.9815747Z ../../../.cache/pip/http-v2/3/6/1/b/f/
+2026-03-12T16:55:00.9816751Z ../../../.cache/pip/http-v2/3/6/1/b/f/361bf053ab706a1212f013301d35a0c4b0af9cd8cc559d24c73d6a6f.body
+2026-03-12T16:55:00.9818094Z ../../../.cache/pip/http-v2/3/6/1/b/f/361bf053ab706a1212f013301d35a0c4b0af9cd8cc559d24c73d6a6f
+2026-03-12T16:55:00.9818883Z ../../../.cache/pip/http-v2/3/2/
+2026-03-12T16:55:00.9819348Z ../../../.cache/pip/http-v2/3/2/4/
+2026-03-12T16:55:00.9819821Z ../../../.cache/pip/http-v2/3/2/4/d/
+2026-03-12T16:55:00.9820301Z ../../../.cache/pip/http-v2/3/2/4/d/4/
+2026-03-12T16:55:00.9821103Z ../../../.cache/pip/http-v2/3/2/4/d/4/324d452fb0049fb2bf10d8b96263e1f9fd84df3bc269e3e4a4b15750.body
+2026-03-12T16:55:00.9822344Z ../../../.cache/pip/http-v2/3/2/4/d/4/324d452fb0049fb2bf10d8b96263e1f9fd84df3bc269e3e4a4b15750
+2026-03-12T16:55:00.9823286Z ../../../.cache/pip/http-v2/3/d/
+2026-03-12T16:55:00.9823787Z ../../../.cache/pip/http-v2/3/d/b/
+2026-03-12T16:55:00.9824278Z ../../../.cache/pip/http-v2/3/d/b/a/
+2026-03-12T16:55:00.9824621Z ../../../.cache/pip/http-v2/3/d/b/a/4/
+2026-03-12T16:55:00.9825210Z ../../../.cache/pip/http-v2/3/d/b/a/4/3dba48e33e4deae5b8e0b5d8173f7d8b9ede86f6e2f3b423cb213061.body
+2026-03-12T16:55:00.9826235Z ../../../.cache/pip/http-v2/3/d/b/a/4/3dba48e33e4deae5b8e0b5d8173f7d8b9ede86f6e2f3b423cb213061
+2026-03-12T16:55:00.9827282Z ../../../.cache/pip/http-v2/3/8/
+2026-03-12T16:55:00.9827722Z ../../../.cache/pip/http-v2/3/8/6/
+2026-03-12T16:55:00.9828130Z ../../../.cache/pip/http-v2/3/8/6/0/
+2026-03-12T16:55:00.9828582Z ../../../.cache/pip/http-v2/3/8/6/0/e/
+2026-03-12T16:55:00.9829297Z ../../../.cache/pip/http-v2/3/8/6/0/e/3860e4de9ae53c79d2fd61419e9049df314ccc8b640782c02c6e2e2d
+2026-03-12T16:55:00.9830376Z ../../../.cache/pip/http-v2/3/8/6/0/e/3860e4de9ae53c79d2fd61419e9049df314ccc8b640782c02c6e2e2d.body
+2026-03-12T16:55:00.9831225Z ../../../.cache/pip/http-v2/3/c/
+2026-03-12T16:55:00.9831672Z ../../../.cache/pip/http-v2/3/c/e/
+2026-03-12T16:55:00.9832112Z ../../../.cache/pip/http-v2/3/c/e/7/
+2026-03-12T16:55:00.9832624Z ../../../.cache/pip/http-v2/3/c/e/7/7/
+2026-03-12T16:55:00.9833796Z ../../../.cache/pip/http-v2/3/c/e/7/7/3ce770df07ea321ab056bed31a67391a50e82aea9460d349fd057276.body
+2026-03-12T16:55:00.9834983Z ../../../.cache/pip/http-v2/3/c/e/7/7/3ce770df07ea321ab056bed31a67391a50e82aea9460d349fd057276
+2026-03-12T16:55:00.9835823Z ../../../.cache/pip/http-v2/3/5/
+2026-03-12T16:55:00.9836233Z ../../../.cache/pip/http-v2/3/5/4/
+2026-03-12T16:55:00.9836602Z ../../../.cache/pip/http-v2/3/5/4/b/
+2026-03-12T16:55:00.9837156Z ../../../.cache/pip/http-v2/3/5/4/b/2/
+2026-03-12T16:55:00.9837752Z ../../../.cache/pip/http-v2/3/5/4/b/2/354b28a7597030ee782f0a1554b59fffdbea4d98d745ffaa10fbb885
+2026-03-12T16:55:00.9838427Z ../../../.cache/pip/http-v2/3/5/4/b/2/354b28a7597030ee782f0a1554b59fffdbea4d98d745ffaa10fbb885.body
+2026-03-12T16:55:00.9838948Z ../../../.cache/pip/http-v2/3/9/
+2026-03-12T16:55:00.9839295Z ../../../.cache/pip/http-v2/3/9/5/
+2026-03-12T16:55:00.9839642Z ../../../.cache/pip/http-v2/3/9/5/b/
+2026-03-12T16:55:00.9839991Z ../../../.cache/pip/http-v2/3/9/5/b/c/
+2026-03-12T16:55:00.9840532Z ../../../.cache/pip/http-v2/3/9/5/b/c/395bc73efd302f7d742a8b69a0d15de0af47c6a2b8a5accf08c79c9b.body
+2026-03-12T16:55:00.9841218Z ../../../.cache/pip/http-v2/3/9/5/b/c/395bc73efd302f7d742a8b69a0d15de0af47c6a2b8a5accf08c79c9b
+2026-03-12T16:55:00.9841760Z ../../../.cache/pip/http-v2/3/4/
+2026-03-12T16:55:00.9842099Z ../../../.cache/pip/http-v2/3/4/e/
+2026-03-12T16:55:00.9842461Z ../../../.cache/pip/http-v2/3/4/e/4/
+2026-03-12T16:55:00.9842929Z ../../../.cache/pip/http-v2/3/4/e/4/e/
+2026-03-12T16:55:00.9843728Z ../../../.cache/pip/http-v2/3/4/e/4/e/34e4ed9f6da78ec378e04be04de734c69a68c889dbef86cb0f5f498a.body
+2026-03-12T16:55:00.9844789Z ../../../.cache/pip/http-v2/3/4/e/4/e/34e4ed9f6da78ec378e04be04de734c69a68c889dbef86cb0f5f498a
+2026-03-12T16:55:00.9845523Z ../../../.cache/pip/http-v2/3/4/f/
+2026-03-12T16:55:00.9845944Z ../../../.cache/pip/http-v2/3/4/f/3/
+2026-03-12T16:55:00.9846368Z ../../../.cache/pip/http-v2/3/4/f/3/5/
+2026-03-12T16:55:00.9847285Z ../../../.cache/pip/http-v2/3/4/f/3/5/34f35e68224a7918339af3f1e6f6dfcfd5192fd17c6ebb73cd6dd91a.body
+2026-03-12T16:55:00.9848534Z ../../../.cache/pip/http-v2/3/4/f/3/5/34f35e68224a7918339af3f1e6f6dfcfd5192fd17c6ebb73cd6dd91a
+2026-03-12T16:55:00.9849283Z ../../../.cache/pip/http-v2/7/
+2026-03-12T16:55:00.9849692Z ../../../.cache/pip/http-v2/7/0/
+2026-03-12T16:55:00.9850107Z ../../../.cache/pip/http-v2/7/0/b/
+2026-03-12T16:55:00.9850528Z ../../../.cache/pip/http-v2/7/0/b/9/
+2026-03-12T16:55:00.9850960Z ../../../.cache/pip/http-v2/7/0/b/9/c/
+2026-03-12T16:55:00.9851694Z ../../../.cache/pip/http-v2/7/0/b/9/c/70b9c022893d41f3d2b5cd47c3935b21f2c02945201dbf0acd4f302c.body
+2026-03-12T16:55:00.9852724Z ../../../.cache/pip/http-v2/7/0/b/9/c/70b9c022893d41f3d2b5cd47c3935b21f2c02945201dbf0acd4f302c
+2026-03-12T16:55:00.9853451Z ../../../.cache/pip/http-v2/7/2/
+2026-03-12T16:55:00.9853859Z ../../../.cache/pip/http-v2/7/2/4/
+2026-03-12T16:55:00.9854282Z ../../../.cache/pip/http-v2/7/2/4/0/
+2026-03-12T16:55:00.9854709Z ../../../.cache/pip/http-v2/7/2/4/0/7/
+2026-03-12T16:55:00.9855475Z ../../../.cache/pip/http-v2/7/2/4/0/7/724076fec36b0a89f905cd03cdaf59c4175a2fbc753cb28f462a4f76.body
+2026-03-12T16:55:00.9856520Z ../../../.cache/pip/http-v2/7/2/4/0/7/724076fec36b0a89f905cd03cdaf59c4175a2fbc753cb28f462a4f76
+2026-03-12T16:55:00.9857410Z ../../../.cache/pip/http-v2/7/a/
+2026-03-12T16:55:00.9857805Z ../../../.cache/pip/http-v2/7/a/5/
+2026-03-12T16:55:00.9858219Z ../../../.cache/pip/http-v2/7/a/5/f/
+2026-03-12T16:55:00.9858659Z ../../../.cache/pip/http-v2/7/a/5/f/7/
+2026-03-12T16:55:00.9859384Z ../../../.cache/pip/http-v2/7/a/5/f/7/7a5f717e7b3fb99ec006f4d173aad55224eb063005c662c586ba0518.body
+2026-03-12T16:55:00.9860416Z ../../../.cache/pip/http-v2/7/a/5/f/7/7a5f717e7b3fb99ec006f4d173aad55224eb063005c662c586ba0518
+2026-03-12T16:55:00.9861164Z ../../../.cache/pip/http-v2/7/4/
+2026-03-12T16:55:00.9861573Z ../../../.cache/pip/http-v2/7/4/9/
+2026-03-12T16:55:00.9861972Z ../../../.cache/pip/http-v2/7/4/9/a/
+2026-03-12T16:55:00.9862384Z ../../../.cache/pip/http-v2/7/4/9/a/4/
+2026-03-12T16:55:00.9863287Z ../../../.cache/pip/http-v2/7/4/9/a/4/749a44933d57ff5f5887c48cf71835fe9b67e5d0c69770d82f1f758b.body
+2026-03-12T16:55:00.9864300Z ../../../.cache/pip/http-v2/7/4/9/a/4/749a44933d57ff5f5887c48cf71835fe9b67e5d0c69770d82f1f758b
+2026-03-12T16:55:00.9865033Z ../../../.cache/pip/http-v2/b/
+2026-03-12T16:55:00.9865433Z ../../../.cache/pip/http-v2/b/1/
+2026-03-12T16:55:00.9865837Z ../../../.cache/pip/http-v2/b/1/b/
+2026-03-12T16:55:00.9866263Z ../../../.cache/pip/http-v2/b/1/b/c/
+2026-03-12T16:55:00.9866694Z ../../../.cache/pip/http-v2/b/1/b/c/4/
+2026-03-12T16:55:00.9867596Z ../../../.cache/pip/http-v2/b/1/b/c/4/b1bc490c5e0cca2a2d96076c15d68fbd776750f65fed2e31e85eb654.body
+2026-03-12T16:55:00.9868617Z ../../../.cache/pip/http-v2/b/1/b/c/4/b1bc490c5e0cca2a2d96076c15d68fbd776750f65fed2e31e85eb654
+2026-03-12T16:55:00.9869361Z ../../../.cache/pip/http-v2/b/e/
+2026-03-12T16:55:00.9869777Z ../../../.cache/pip/http-v2/b/e/d/
+2026-03-12T16:55:00.9870181Z ../../../.cache/pip/http-v2/b/e/d/4/
+2026-03-12T16:55:00.9870600Z ../../../.cache/pip/http-v2/b/e/d/4/e/
+2026-03-12T16:55:00.9871362Z ../../../.cache/pip/http-v2/b/e/d/4/e/bed4e7c2b407105e5c80f6f3c9c9ce06074cd1bc90409700e4489759.body
+2026-03-12T16:55:00.9872417Z ../../../.cache/pip/http-v2/b/e/d/4/e/bed4e7c2b407105e5c80f6f3c9c9ce06074cd1bc90409700e4489759
+2026-03-12T16:55:00.9873137Z ../../../.cache/pip/http-v2/b/0/
+2026-03-12T16:55:00.9873560Z ../../../.cache/pip/http-v2/b/0/c/
+2026-03-12T16:55:00.9873961Z ../../../.cache/pip/http-v2/b/0/c/3/
+2026-03-12T16:55:00.9874397Z ../../../.cache/pip/http-v2/b/0/c/3/0/
+2026-03-12T16:55:00.9875131Z ../../../.cache/pip/http-v2/b/0/c/3/0/b0c304a2d0d2dd17cd2e818948220da223f52dfe26c6e170a35508ec.body
+2026-03-12T16:55:00.9876152Z ../../../.cache/pip/http-v2/b/0/c/3/0/b0c304a2d0d2dd17cd2e818948220da223f52dfe26c6e170a35508ec
+2026-03-12T16:55:00.9876866Z ../../../.cache/pip/http-v2/b/b/
+2026-03-12T16:55:00.9877429Z ../../../.cache/pip/http-v2/b/b/a/
+2026-03-12T16:55:00.9877846Z ../../../.cache/pip/http-v2/b/b/a/d/
+2026-03-12T16:55:00.9878263Z ../../../.cache/pip/http-v2/b/b/a/d/c/
+2026-03-12T16:55:00.9879139Z ../../../.cache/pip/http-v2/b/b/a/d/c/bbadc07fc383ff650474f2a8246a59ba64776ab6b35809d02400a398
+2026-03-12T16:55:00.9880173Z ../../../.cache/pip/http-v2/b/b/a/d/c/bbadc07fc383ff650474f2a8246a59ba64776ab6b35809d02400a398.body
+2026-03-12T16:55:00.9880961Z ../../../.cache/pip/http-v2/b/f/
+2026-03-12T16:55:00.9881380Z ../../../.cache/pip/http-v2/b/f/b/
+2026-03-12T16:55:00.9881809Z ../../../.cache/pip/http-v2/b/f/b/b/
+2026-03-12T16:55:00.9882238Z ../../../.cache/pip/http-v2/b/f/b/b/b/
+2026-03-12T16:55:00.9882944Z ../../../.cache/pip/http-v2/b/f/b/b/b/bfbbb64251bb29d7400e962e6937ccfc7d6cf8628b719dcd859d1c80
+2026-03-12T16:55:00.9884011Z ../../../.cache/pip/http-v2/b/f/b/b/b/bfbbb64251bb29d7400e962e6937ccfc7d6cf8628b719dcd859d1c80.body
+2026-03-12T16:55:00.9884788Z ../../../.cache/pip/http-v2/b/d/
+2026-03-12T16:55:00.9885199Z ../../../.cache/pip/http-v2/b/d/8/
+2026-03-12T16:55:00.9885598Z ../../../.cache/pip/http-v2/b/d/8/4/
+2026-03-12T16:55:00.9886034Z ../../../.cache/pip/http-v2/b/d/8/4/2/
+2026-03-12T16:55:00.9886794Z ../../../.cache/pip/http-v2/b/d/8/4/2/bd8423d498f03d77d4efefb5ad32d28cd5cabffffeb50018edce6df4.body
+2026-03-12T16:55:00.9888047Z ../../../.cache/pip/http-v2/b/d/8/4/2/bd8423d498f03d77d4efefb5ad32d28cd5cabffffeb50018edce6df4
+2026-03-12T16:55:00.9888818Z ../../../.cache/pip/http-v2/b/5/
+2026-03-12T16:55:00.9889215Z ../../../.cache/pip/http-v2/b/5/1/
+2026-03-12T16:55:00.9889630Z ../../../.cache/pip/http-v2/b/5/1/8/
+2026-03-12T16:55:00.9890062Z ../../../.cache/pip/http-v2/b/5/1/8/8/
+2026-03-12T16:55:00.9890742Z ../../../.cache/pip/http-v2/b/5/1/8/8/b5188dab98e1f552825d724168c25fd8777697fef7b855b8b4fe7b3e
+2026-03-12T16:55:00.9891743Z ../../../.cache/pip/http-v2/b/5/1/8/8/b5188dab98e1f552825d724168c25fd8777697fef7b855b8b4fe7b3e.body
+2026-03-12T16:55:00.9892481Z ../../../.cache/pip/http-v2/b/5/9/
+2026-03-12T16:55:00.9892901Z ../../../.cache/pip/http-v2/b/5/9/1/
+2026-03-12T16:55:00.9893371Z ../../../.cache/pip/http-v2/b/5/9/1/c/
+2026-03-12T16:55:00.9894221Z ../../../.cache/pip/http-v2/b/5/9/1/c/b591c850f75b927d4cc54057e93115b246f6f225b112c1204f34d4e6
+2026-03-12T16:55:00.9895239Z ../../../.cache/pip/http-v2/b/5/9/1/c/b591c850f75b927d4cc54057e93115b246f6f225b112c1204f34d4e6.body
+2026-03-12T16:55:00.9896004Z ../../../.cache/pip/http-v2/b/a/
+2026-03-12T16:55:00.9896424Z ../../../.cache/pip/http-v2/b/a/5/
+2026-03-12T16:55:00.9896873Z ../../../.cache/pip/http-v2/b/a/5/f/
+2026-03-12T16:55:00.9897455Z ../../../.cache/pip/http-v2/b/a/5/f/7/
+2026-03-12T16:55:00.9898194Z ../../../.cache/pip/http-v2/b/a/5/f/7/ba5f704865a0941d0105a358ecf537ffc2a8d00bddb74d4d066b2bb2.body
+2026-03-12T16:55:00.9899247Z ../../../.cache/pip/http-v2/b/a/5/f/7/ba5f704865a0941d0105a358ecf537ffc2a8d00bddb74d4d066b2bb2
+2026-03-12T16:55:00.9899994Z ../../../.cache/pip/http-v2/b/a/4/
+2026-03-12T16:55:00.9900405Z ../../../.cache/pip/http-v2/b/a/4/9/
+2026-03-12T16:55:00.9900826Z ../../../.cache/pip/http-v2/b/a/4/9/0/
+2026-03-12T16:55:00.9901543Z ../../../.cache/pip/http-v2/b/a/4/9/0/ba490d5ad7f698407be5b7bebb82ce39f96fa00fd74fc9c7bb50ec34
+2026-03-12T16:55:00.9902630Z ../../../.cache/pip/http-v2/b/a/4/9/0/ba490d5ad7f698407be5b7bebb82ce39f96fa00fd74fc9c7bb50ec34.body
+2026-03-12T16:55:00.9903426Z ../../../.cache/pip/http-v2/6/
+2026-03-12T16:55:00.9903823Z ../../../.cache/pip/http-v2/6/d/
+2026-03-12T16:55:00.9904232Z ../../../.cache/pip/http-v2/6/d/d/
+2026-03-12T16:55:00.9904653Z ../../../.cache/pip/http-v2/6/d/d/7/
+2026-03-12T16:55:00.9905068Z ../../../.cache/pip/http-v2/6/d/d/7/f/
+2026-03-12T16:55:00.9905803Z ../../../.cache/pip/http-v2/6/d/d/7/f/6dd7f72563c9dcb2a786e420e686844bbc8f61eb5d9fae5d3bcb6458.body
+2026-03-12T16:55:00.9906863Z ../../../.cache/pip/http-v2/6/d/d/7/f/6dd7f72563c9dcb2a786e420e686844bbc8f61eb5d9fae5d3bcb6458
+2026-03-12T16:55:00.9907756Z ../../../.cache/pip/http-v2/6/8/
+2026-03-12T16:55:00.9908158Z ../../../.cache/pip/http-v2/6/8/3/
+2026-03-12T16:55:00.9908577Z ../../../.cache/pip/http-v2/6/8/3/e/
+2026-03-12T16:55:00.9908992Z ../../../.cache/pip/http-v2/6/8/3/e/b/
+2026-03-12T16:55:00.9909921Z ../../../.cache/pip/http-v2/6/8/3/e/b/683ebcc61ccc9a465b1c11d684f2e02aa803034e58b3feafd3091276.body
+2026-03-12T16:55:00.9911000Z ../../../.cache/pip/http-v2/6/8/3/e/b/683ebcc61ccc9a465b1c11d684f2e02aa803034e58b3feafd3091276
+2026-03-12T16:55:00.9911750Z ../../../.cache/pip/http-v2/6/a/
+2026-03-12T16:55:00.9912157Z ../../../.cache/pip/http-v2/6/a/f/
+2026-03-12T16:55:00.9912577Z ../../../.cache/pip/http-v2/6/a/f/5/
+2026-03-12T16:55:00.9913006Z ../../../.cache/pip/http-v2/6/a/f/5/f/
+2026-03-12T16:55:00.9913727Z ../../../.cache/pip/http-v2/6/a/f/5/f/6af5f6c2ccab2f5a7b0f97e29187aa1ed6adf66cfe931299c7175412
+2026-03-12T16:55:00.9914803Z ../../../.cache/pip/http-v2/6/a/f/5/f/6af5f6c2ccab2f5a7b0f97e29187aa1ed6adf66cfe931299c7175412.body
+2026-03-12T16:55:00.9915595Z ../../../.cache/pip/http-v2/2/
+2026-03-12T16:55:00.9915990Z ../../../.cache/pip/http-v2/2/3/
+2026-03-12T16:55:00.9916382Z ../../../.cache/pip/http-v2/2/3/5/
+2026-03-12T16:55:00.9916799Z ../../../.cache/pip/http-v2/2/3/5/3/
+2026-03-12T16:55:00.9917415Z ../../../.cache/pip/http-v2/2/3/5/3/9/
+2026-03-12T16:55:00.9918143Z ../../../.cache/pip/http-v2/2/3/5/3/9/235392053f2a1040f180b6ba82c549e2c6a0340d4d823ef3a0847ef7
+2026-03-12T16:55:00.9919224Z ../../../.cache/pip/http-v2/2/3/5/3/9/235392053f2a1040f180b6ba82c549e2c6a0340d4d823ef3a0847ef7.body
+2026-03-12T16:55:00.9919983Z ../../../.cache/pip/http-v2/2/b/
+2026-03-12T16:55:00.9920393Z ../../../.cache/pip/http-v2/2/b/0/
+2026-03-12T16:55:00.9920799Z ../../../.cache/pip/http-v2/2/b/0/a/
+2026-03-12T16:55:00.9921219Z ../../../.cache/pip/http-v2/2/b/0/a/4/
+2026-03-12T16:55:00.9921924Z ../../../.cache/pip/http-v2/2/b/0/a/4/2b0a4fda1a2c912a5a1c5245a8b34b5da87876e311f607befabc98ee
+2026-03-12T16:55:00.9922983Z ../../../.cache/pip/http-v2/2/b/0/a/4/2b0a4fda1a2c912a5a1c5245a8b34b5da87876e311f607befabc98ee.body
+2026-03-12T16:55:00.9923839Z ../../../.cache/pip/http-v2/2/6/
+2026-03-12T16:55:00.9924288Z ../../../.cache/pip/http-v2/2/6/4/
+2026-03-12T16:55:00.9924726Z ../../../.cache/pip/http-v2/2/6/4/1/
+2026-03-12T16:55:00.9925477Z ../../../.cache/pip/http-v2/2/6/4/1/7/
+2026-03-12T16:55:00.9926326Z ../../../.cache/pip/http-v2/2/6/4/1/7/264179aeab1d8942e5f72419f2c39e8a5577779f5155b081e3ad0fd8.body
+2026-03-12T16:55:00.9927701Z ../../../.cache/pip/http-v2/2/6/4/1/7/264179aeab1d8942e5f72419f2c39e8a5577779f5155b081e3ad0fd8
+2026-03-12T16:55:00.9928465Z ../../../.cache/pip/http-v2/2/d/
+2026-03-12T16:55:00.9928866Z ../../../.cache/pip/http-v2/2/d/2/
+2026-03-12T16:55:00.9929289Z ../../../.cache/pip/http-v2/2/d/2/7/
+2026-03-12T16:55:00.9929788Z ../../../.cache/pip/http-v2/2/d/2/7/4/
+2026-03-12T16:55:00.9930502Z ../../../.cache/pip/http-v2/2/d/2/7/4/2d274909802a294101952666e88fb2e3b7731b90c4e0fa9015d5a2c9
+2026-03-12T16:55:00.9931548Z ../../../.cache/pip/http-v2/2/d/2/7/4/2d274909802a294101952666e88fb2e3b7731b90c4e0fa9015d5a2c9.body
+2026-03-12T16:55:00.9932336Z ../../../.cache/pip/http-v2/2/d/c/
+2026-03-12T16:55:00.9932679Z ../../../.cache/pip/http-v2/2/d/c/9/
+2026-03-12T16:55:00.9933036Z ../../../.cache/pip/http-v2/2/d/c/9/d/
+2026-03-12T16:55:00.9933569Z ../../../.cache/pip/http-v2/2/d/c/9/d/2dc9db41a91ca90b8be37b076449cc6454660eb86e1ed13132b756cc
+2026-03-12T16:55:00.9934269Z ../../../.cache/pip/http-v2/2/d/c/9/d/2dc9db41a91ca90b8be37b076449cc6454660eb86e1ed13132b756cc.body
+2026-03-12T16:55:00.9934851Z ../../../.cache/pip/http-v2/2/8/
+2026-03-12T16:55:00.9935342Z ../../../.cache/pip/http-v2/2/8/8/
+2026-03-12T16:55:00.9935808Z ../../../.cache/pip/http-v2/2/8/8/5/
+2026-03-12T16:55:00.9936284Z ../../../.cache/pip/http-v2/2/8/8/5/1/
+2026-03-12T16:55:00.9936782Z ../../../.cache/pip/http-v2/2/8/8/5/1/28851bfda9e7b366cbac79b783dc038d1fee039b3e50c3151b437013.body
+2026-03-12T16:55:00.9938084Z ../../../.cache/pip/http-v2/2/8/8/5/1/28851bfda9e7b366cbac79b783dc038d1fee039b3e50c3151b437013
+2026-03-12T16:55:00.9938592Z ../../../.cache/pip/http-v2/2/c/
+2026-03-12T16:55:00.9938942Z ../../../.cache/pip/http-v2/2/c/5/
+2026-03-12T16:55:00.9939296Z ../../../.cache/pip/http-v2/2/c/5/0/
+2026-03-12T16:55:00.9939648Z ../../../.cache/pip/http-v2/2/c/5/0/9/
+2026-03-12T16:55:00.9940423Z ../../../.cache/pip/http-v2/2/c/5/0/9/2c5093416a6abc33fb0ff1433322d374c320a79a2ce63946a0a9ddf3
+2026-03-12T16:55:00.9941098Z ../../../.cache/pip/http-v2/2/c/5/0/9/2c5093416a6abc33fb0ff1433322d374c320a79a2ce63946a0a9ddf3.body
+2026-03-12T16:55:00.9941645Z ../../../.cache/pip/http-v2/2/5/
+2026-03-12T16:55:00.9941972Z ../../../.cache/pip/http-v2/2/5/6/
+2026-03-12T16:55:00.9942345Z ../../../.cache/pip/http-v2/2/5/6/f/
+2026-03-12T16:55:00.9942793Z ../../../.cache/pip/http-v2/2/5/6/f/a/
+2026-03-12T16:55:00.9943477Z ../../../.cache/pip/http-v2/2/5/6/f/a/256fad6320369f7b90bfbe8fe459f4bed58775ce967535145f8328b5
+2026-03-12T16:55:00.9944540Z ../../../.cache/pip/http-v2/2/5/6/f/a/256fad6320369f7b90bfbe8fe459f4bed58775ce967535145f8328b5.body
+2026-03-12T16:55:00.9945357Z ../../../.cache/pip/http-v2/f/
+2026-03-12T16:55:00.9945808Z ../../../.cache/pip/http-v2/f/1/
+2026-03-12T16:55:00.9946310Z ../../../.cache/pip/http-v2/f/1/4/
+2026-03-12T16:55:00.9946845Z ../../../.cache/pip/http-v2/f/1/4/4/
+2026-03-12T16:55:00.9947555Z ../../../.cache/pip/http-v2/f/1/4/4/f/
+2026-03-12T16:55:00.9948651Z ../../../.cache/pip/http-v2/f/1/4/4/f/f144fc5f521357791868967c964c3bd54bb7dd9e4b6b52d15969d47c
+2026-03-12T16:55:00.9949800Z ../../../.cache/pip/http-v2/f/1/4/4/f/f144fc5f521357791868967c964c3bd54bb7dd9e4b6b52d15969d47c.body
+2026-03-12T16:55:00.9950618Z ../../../.cache/pip/http-v2/f/f/
+2026-03-12T16:55:00.9951104Z ../../../.cache/pip/http-v2/f/f/3/
+2026-03-12T16:55:00.9951558Z ../../../.cache/pip/http-v2/f/f/3/2/
+2026-03-12T16:55:00.9952102Z ../../../.cache/pip/http-v2/f/f/3/2/d/
+2026-03-12T16:55:00.9952856Z ../../../.cache/pip/http-v2/f/f/3/2/d/ff32dd05b67b546ea41abb7a84a730e316e5831f36bddf688aa0df6d
+2026-03-12T16:55:00.9953789Z ../../../.cache/pip/http-v2/f/f/3/2/d/ff32dd05b67b546ea41abb7a84a730e316e5831f36bddf688aa0df6d.body
+2026-03-12T16:55:00.9954343Z ../../../.cache/pip/http-v2/f/f/6/
+2026-03-12T16:55:00.9954741Z ../../../.cache/pip/http-v2/f/f/6/3/
+2026-03-12T16:55:00.9955121Z ../../../.cache/pip/http-v2/f/f/6/3/f/
+2026-03-12T16:55:00.9955878Z ../../../.cache/pip/http-v2/f/f/6/3/f/ff63f8aee48f79bb6d2cdeff8f7863b5820a3c507a2623f007846bb0
+2026-03-12T16:55:00.9956597Z ../../../.cache/pip/http-v2/f/f/6/3/f/ff63f8aee48f79bb6d2cdeff8f7863b5820a3c507a2623f007846bb0.body
+2026-03-12T16:55:00.9957455Z ../../../.cache/pip/http-v2/f/f/5/
+2026-03-12T16:55:00.9957870Z ../../../.cache/pip/http-v2/f/f/5/7/
+2026-03-12T16:55:00.9958275Z ../../../.cache/pip/http-v2/f/f/5/7/0/
+2026-03-12T16:55:00.9958854Z ../../../.cache/pip/http-v2/f/f/5/7/0/ff57044fbdd8366a0aafc1423058140ac7d29cfda72f3b6a82557928
+2026-03-12T16:55:00.9959820Z ../../../.cache/pip/http-v2/f/f/5/7/0/ff57044fbdd8366a0aafc1423058140ac7d29cfda72f3b6a82557928.body
+2026-03-12T16:55:00.9960524Z ../../../.cache/pip/http-v2/d/
+2026-03-12T16:55:00.9960864Z ../../../.cache/pip/http-v2/d/0/
+2026-03-12T16:55:00.9961214Z ../../../.cache/pip/http-v2/d/0/1/
+2026-03-12T16:55:00.9961668Z ../../../.cache/pip/http-v2/d/0/1/b/
+2026-03-12T16:55:00.9962133Z ../../../.cache/pip/http-v2/d/0/1/b/7/
+2026-03-12T16:55:00.9962918Z ../../../.cache/pip/http-v2/d/0/1/b/7/d01b75bf0e331a9e22160ebda15b330e26789777201136ee08c89b17.body
+2026-03-12T16:55:00.9964050Z ../../../.cache/pip/http-v2/d/0/1/b/7/d01b75bf0e331a9e22160ebda15b330e26789777201136ee08c89b17
+2026-03-12T16:55:00.9964843Z ../../../.cache/pip/http-v2/d/b/
+2026-03-12T16:55:00.9965319Z ../../../.cache/pip/http-v2/d/b/4/
+2026-03-12T16:55:00.9965763Z ../../../.cache/pip/http-v2/d/b/4/f/
+2026-03-12T16:55:00.9966234Z ../../../.cache/pip/http-v2/d/b/4/f/1/
+2026-03-12T16:55:00.9967158Z ../../../.cache/pip/http-v2/d/b/4/f/1/db4f1a46f0bc9bac065fd35cdbe1c65d030e9fd9ca59d06fa230106f
+2026-03-12T16:55:00.9968290Z ../../../.cache/pip/http-v2/d/b/4/f/1/db4f1a46f0bc9bac065fd35cdbe1c65d030e9fd9ca59d06fa230106f.body
+2026-03-12T16:55:00.9969130Z ../../../.cache/pip/http-v2/d/f/
+2026-03-12T16:55:00.9969561Z ../../../.cache/pip/http-v2/d/f/f/
+2026-03-12T16:55:00.9970023Z ../../../.cache/pip/http-v2/d/f/f/3/
+2026-03-12T16:55:00.9970549Z ../../../.cache/pip/http-v2/d/f/f/3/d/
+2026-03-12T16:55:00.9971605Z ../../../.cache/pip/http-v2/d/f/f/3/d/dff3d15775f7efad32d8ece4b90b653b67dcd6598271dcf061705226.body
+2026-03-12T16:55:00.9972806Z ../../../.cache/pip/http-v2/d/f/f/3/d/dff3d15775f7efad32d8ece4b90b653b67dcd6598271dcf061705226
+2026-03-12T16:55:00.9973617Z ../../../.cache/pip/http-v2/d/8/
+2026-03-12T16:55:00.9974067Z ../../../.cache/pip/http-v2/d/8/7/
+2026-03-12T16:55:00.9974516Z ../../../.cache/pip/http-v2/d/8/7/4/
+2026-03-12T16:55:00.9974977Z ../../../.cache/pip/http-v2/d/8/7/4/9/
+2026-03-12T16:55:00.9975759Z ../../../.cache/pip/http-v2/d/8/7/4/9/d87498713c6bf3fd6cd85abc4629304b110ac53b2ab8bc415c24d41f.body
+2026-03-12T16:55:00.9976838Z ../../../.cache/pip/http-v2/d/8/7/4/9/d87498713c6bf3fd6cd85abc4629304b110ac53b2ab8bc415c24d41f
+2026-03-12T16:55:00.9977795Z ../../../.cache/pip/http-v2/d/9/
+2026-03-12T16:55:00.9978253Z ../../../.cache/pip/http-v2/d/9/6/
+2026-03-12T16:55:00.9978706Z ../../../.cache/pip/http-v2/d/9/6/f/
+2026-03-12T16:55:00.9979207Z ../../../.cache/pip/http-v2/d/9/6/f/e/
+2026-03-12T16:55:00.9980002Z ../../../.cache/pip/http-v2/d/9/6/f/e/d96fe6fd2648eec8369ea2075eaae095777aa9f0d2b0f402ce710581
+2026-03-12T16:55:00.9981119Z ../../../.cache/pip/http-v2/d/9/6/f/e/d96fe6fd2648eec8369ea2075eaae095777aa9f0d2b0f402ce710581.body
+2026-03-12T16:55:00.9981934Z ../../../.cache/pip/http-v2/8/
+2026-03-12T16:55:00.9982372Z ../../../.cache/pip/http-v2/8/1/
+2026-03-12T16:55:00.9982820Z ../../../.cache/pip/http-v2/8/1/3/
+2026-03-12T16:55:00.9983260Z ../../../.cache/pip/http-v2/8/1/3/c/
+2026-03-12T16:55:00.9983716Z ../../../.cache/pip/http-v2/8/1/3/c/c/
+2026-03-12T16:55:00.9984500Z ../../../.cache/pip/http-v2/8/1/3/c/c/813cc7096c25ba43edba14a4ab40832db33af638c43e975795995aec.body
+2026-03-12T16:55:00.9985605Z ../../../.cache/pip/http-v2/8/1/3/c/c/813cc7096c25ba43edba14a4ab40832db33af638c43e975795995aec
+2026-03-12T16:55:00.9986400Z ../../../.cache/pip/http-v2/8/e/
+2026-03-12T16:55:00.9986881Z ../../../.cache/pip/http-v2/8/e/c/
+2026-03-12T16:55:00.9987528Z ../../../.cache/pip/http-v2/8/e/c/f/
+2026-03-12T16:55:00.9988208Z ../../../.cache/pip/http-v2/8/e/c/f/f/
+2026-03-12T16:55:00.9988977Z ../../../.cache/pip/http-v2/8/e/c/f/f/8ecffcc7a3e38674c0b5a8addfcc2c1a5184431d21c3b57c81cc4a6d
+2026-03-12T16:55:00.9990099Z ../../../.cache/pip/http-v2/8/e/c/f/f/8ecffcc7a3e38674c0b5a8addfcc2c1a5184431d21c3b57c81cc4a6d.body
+2026-03-12T16:55:00.9990923Z ../../../.cache/pip/http-v2/8/b/
+2026-03-12T16:55:00.9991379Z ../../../.cache/pip/http-v2/8/b/2/
+2026-03-12T16:55:00.9991907Z ../../../.cache/pip/http-v2/8/b/2/4/
+2026-03-12T16:55:00.9992374Z ../../../.cache/pip/http-v2/8/b/2/4/2/
+2026-03-12T16:55:00.9993132Z ../../../.cache/pip/http-v2/8/b/2/4/2/8b24226e2da88df4abeee0d8ca6bce79b19ca2bcd5f94b543939c66c
+2026-03-12T16:55:00.9994288Z ../../../.cache/pip/http-v2/8/b/2/4/2/8b24226e2da88df4abeee0d8ca6bce79b19ca2bcd5f94b543939c66c.body
+2026-03-12T16:55:00.9995167Z ../../../.cache/pip/http-v2/8/6/
+2026-03-12T16:55:00.9995607Z ../../../.cache/pip/http-v2/8/6/1/
+2026-03-12T16:55:00.9996076Z ../../../.cache/pip/http-v2/8/6/1/4/
+2026-03-12T16:55:00.9996560Z ../../../.cache/pip/http-v2/8/6/1/4/a/
+2026-03-12T16:55:00.9997584Z ../../../.cache/pip/http-v2/8/6/1/4/a/8614a6e8a4ad9aa5595a607eb8f7a0d8a8f7a7a34cff9540f443a21f.body
+2026-03-12T16:55:00.9998733Z ../../../.cache/pip/http-v2/8/6/1/4/a/8614a6e8a4ad9aa5595a607eb8f7a0d8a8f7a7a34cff9540f443a21f
+2026-03-12T16:55:00.9999541Z ../../../.cache/pip/http-v2/8/d/
+2026-03-12T16:55:00.9999984Z ../../../.cache/pip/http-v2/8/d/0/
+2026-03-12T16:55:01.0000434Z ../../../.cache/pip/http-v2/8/d/0/e/
+2026-03-12T16:55:01.0000923Z ../../../.cache/pip/http-v2/8/d/0/e/1/
+2026-03-12T16:55:01.0001725Z ../../../.cache/pip/http-v2/8/d/0/e/1/8d0e104919449355aedb55b5b546bb9fd53f0e1a8ca1b082109464e9.body
+2026-03-12T16:55:01.0002814Z ../../../.cache/pip/http-v2/8/d/0/e/1/8d0e104919449355aedb55b5b546bb9fd53f0e1a8ca1b082109464e9
+2026-03-12T16:55:01.0003591Z ../../../.cache/pip/http-v2/8/8/
+2026-03-12T16:55:01.0004033Z ../../../.cache/pip/http-v2/8/8/f/
+2026-03-12T16:55:01.0004464Z ../../../.cache/pip/http-v2/8/8/f/0/
+2026-03-12T16:55:01.0004903Z ../../../.cache/pip/http-v2/8/8/f/0/6/
+2026-03-12T16:55:01.0005853Z ../../../.cache/pip/http-v2/8/8/f/0/6/88f06a944c734c3736badbb02d887cddfeb74de4f837c06db79e749c
+2026-03-12T16:55:01.0007190Z ../../../.cache/pip/http-v2/8/8/f/0/6/88f06a944c734c3736badbb02d887cddfeb74de4f837c06db79e749c.body
+2026-03-12T16:55:01.0008060Z ../../../.cache/pip/http-v2/8/8/f/7/
+2026-03-12T16:55:01.0008541Z ../../../.cache/pip/http-v2/8/8/f/7/d/
+2026-03-12T16:55:01.0009296Z ../../../.cache/pip/http-v2/8/8/f/7/d/88f7d71f2d1361f8fb38230bb8ae05bdb624c08a2414e1c535731370
+2026-03-12T16:55:01.0010412Z ../../../.cache/pip/http-v2/8/8/f/7/d/88f7d71f2d1361f8fb38230bb8ae05bdb624c08a2414e1c535731370.body
+2026-03-12T16:55:01.0011236Z ../../../.cache/pip/http-v2/8/a/
+2026-03-12T16:55:01.0011687Z ../../../.cache/pip/http-v2/8/a/c/
+2026-03-12T16:55:01.0012137Z ../../../.cache/pip/http-v2/8/a/c/4/
+2026-03-12T16:55:01.0012579Z ../../../.cache/pip/http-v2/8/a/c/4/d/
+2026-03-12T16:55:01.0013340Z ../../../.cache/pip/http-v2/8/a/c/4/d/8ac4d14dc45e27d21da49fb515570b6f875b78707de9b08ce1088d1b
+2026-03-12T16:55:01.0014440Z ../../../.cache/pip/http-v2/8/a/c/4/d/8ac4d14dc45e27d21da49fb515570b6f875b78707de9b08ce1088d1b.body
+2026-03-12T16:55:01.0015272Z ../../../.cache/pip/http-v2/8/4/
+2026-03-12T16:55:01.0015701Z ../../../.cache/pip/http-v2/8/4/7/
+2026-03-12T16:55:01.0016162Z ../../../.cache/pip/http-v2/8/4/7/9/
+2026-03-12T16:55:01.0016642Z ../../../.cache/pip/http-v2/8/4/7/9/9/
+2026-03-12T16:55:01.0017640Z ../../../.cache/pip/http-v2/8/4/7/9/9/84799b8655f88d894ff8663929f886e60f69e5ae9aa4c12853ea54cb
+2026-03-12T16:55:01.0018729Z ../../../.cache/pip/http-v2/8/4/7/9/9/84799b8655f88d894ff8663929f886e60f69e5ae9aa4c12853ea54cb.body
+2026-03-12T16:55:01.0019542Z ../../../.cache/pip/http-v2/c/
+2026-03-12T16:55:01.0019952Z ../../../.cache/pip/http-v2/c/e/
+2026-03-12T16:55:01.0020389Z ../../../.cache/pip/http-v2/c/e/6/
+2026-03-12T16:55:01.0020842Z ../../../.cache/pip/http-v2/c/e/6/7/
+2026-03-12T16:55:01.0021317Z ../../../.cache/pip/http-v2/c/e/6/7/6/
+2026-03-12T16:55:01.0022342Z ../../../.cache/pip/http-v2/c/e/6/7/6/ce6762d91f1e7c3c4bece64762122d18df14d8f8e7532d5f15dfdb37
+2026-03-12T16:55:01.0023539Z ../../../.cache/pip/http-v2/c/e/6/7/6/ce6762d91f1e7c3c4bece64762122d18df14d8f8e7532d5f15dfdb37.body
+2026-03-12T16:55:01.0024375Z ../../../.cache/pip/http-v2/c/e/8/
+2026-03-12T16:55:01.0024854Z ../../../.cache/pip/http-v2/c/e/8/c/
+2026-03-12T16:55:01.0025350Z ../../../.cache/pip/http-v2/c/e/8/c/e/
+2026-03-12T16:55:01.0026094Z ../../../.cache/pip/http-v2/c/e/8/c/e/ce8ce0a03e1383cf2c131092937755c11449e482ec89120dc3f760be
+2026-03-12T16:55:01.0027385Z ../../../.cache/pip/http-v2/c/e/8/c/e/ce8ce0a03e1383cf2c131092937755c11449e482ec89120dc3f760be.body
+2026-03-12T16:55:01.0028275Z ../../../.cache/pip/http-v2/c/0/
+2026-03-12T16:55:01.0028733Z ../../../.cache/pip/http-v2/c/0/e/
+2026-03-12T16:55:01.0029193Z ../../../.cache/pip/http-v2/c/0/e/8/
+2026-03-12T16:55:01.0029649Z ../../../.cache/pip/http-v2/c/0/e/8/5/
+2026-03-12T16:55:01.0030426Z ../../../.cache/pip/http-v2/c/0/e/8/5/c0e854830132b4466a4ad702e2f7168f1253a791e391b297676ef2cd
+2026-03-12T16:55:01.0031537Z ../../../.cache/pip/http-v2/c/0/e/8/5/c0e854830132b4466a4ad702e2f7168f1253a791e391b297676ef2cd.body
+2026-03-12T16:55:01.0032342Z ../../../.cache/pip/http-v2/c/6/
+2026-03-12T16:55:01.0032813Z ../../../.cache/pip/http-v2/c/6/3/
+2026-03-12T16:55:01.0033281Z ../../../.cache/pip/http-v2/c/6/3/0/
+2026-03-12T16:55:01.0033749Z ../../../.cache/pip/http-v2/c/6/3/0/6/
+2026-03-12T16:55:01.0034499Z ../../../.cache/pip/http-v2/c/6/3/0/6/c6306d205b48faecb62eb823053e850df036f38e59b11523829f5c31
+2026-03-12T16:55:01.0035592Z ../../../.cache/pip/http-v2/c/6/3/0/6/c6306d205b48faecb62eb823053e850df036f38e59b11523829f5c31.body
+2026-03-12T16:55:01.0036444Z ../../../.cache/pip/http-v2/c/6/f/
+2026-03-12T16:55:01.0037087Z ../../../.cache/pip/http-v2/c/6/f/3/
+2026-03-12T16:55:01.0037668Z ../../../.cache/pip/http-v2/c/6/f/3/1/
+2026-03-12T16:55:01.0038481Z ../../../.cache/pip/http-v2/c/6/f/3/1/c6f3192810e6b78a08fee1da61557cd4bdd93a63331b9d474bca9d38.body
+2026-03-12T16:55:01.0039874Z ../../../.cache/pip/http-v2/c/6/f/3/1/c6f3192810e6b78a08fee1da61557cd4bdd93a63331b9d474bca9d38
+2026-03-12T16:55:01.0040722Z ../../../.cache/pip/http-v2/c/f/
+2026-03-12T16:55:01.0041190Z ../../../.cache/pip/http-v2/c/f/2/
+2026-03-12T16:55:01.0041661Z ../../../.cache/pip/http-v2/c/f/2/6/
+2026-03-12T16:55:01.0042153Z ../../../.cache/pip/http-v2/c/f/2/6/f/
+2026-03-12T16:55:01.0042954Z ../../../.cache/pip/http-v2/c/f/2/6/f/cf26ff7c8e1d36bd32120ce0540a3fad19396927d29b69b65f1a09a4
+2026-03-12T16:55:01.0044152Z ../../../.cache/pip/http-v2/c/f/2/6/f/cf26ff7c8e1d36bd32120ce0540a3fad19396927d29b69b65f1a09a4.body
+2026-03-12T16:55:01.0045033Z ../../../.cache/pip/http-v2/c/f/c/
+2026-03-12T16:55:01.0045498Z ../../../.cache/pip/http-v2/c/f/c/d/
+2026-03-12T16:55:01.0045998Z ../../../.cache/pip/http-v2/c/f/c/d/b/
+2026-03-12T16:55:01.0046807Z ../../../.cache/pip/http-v2/c/f/c/d/b/cfcdb2eb70f734215320a85c27ba88c6a7d5e40e0d1a5ce70c2d640a.body
+2026-03-12T16:55:01.0048180Z ../../../.cache/pip/http-v2/c/f/c/d/b/cfcdb2eb70f734215320a85c27ba88c6a7d5e40e0d1a5ce70c2d640a
+2026-03-12T16:55:01.0049039Z ../../../.cache/pip/http-v2/c/9/
+2026-03-12T16:55:01.0049549Z ../../../.cache/pip/http-v2/c/9/4/
+2026-03-12T16:55:01.0050021Z ../../../.cache/pip/http-v2/c/9/4/a/
+2026-03-12T16:55:01.0050490Z ../../../.cache/pip/http-v2/c/9/4/a/e/
+2026-03-12T16:55:01.0051221Z ../../../.cache/pip/http-v2/c/9/4/a/e/c94ae1695304888e79191be0f465ad0b2a85880ee474d189ee9126ed
+2026-03-12T16:55:01.0052316Z ../../../.cache/pip/http-v2/c/9/4/a/e/c94ae1695304888e79191be0f465ad0b2a85880ee474d189ee9126ed.body
+2026-03-12T16:55:01.0053151Z ../../../.cache/pip/http-v2/5/
+2026-03-12T16:55:01.0053610Z ../../../.cache/pip/http-v2/5/1/
+2026-03-12T16:55:01.0054065Z ../../../.cache/pip/http-v2/5/1/a/
+2026-03-12T16:55:01.0054544Z ../../../.cache/pip/http-v2/5/1/a/a/
+2026-03-12T16:55:01.0055019Z ../../../.cache/pip/http-v2/5/1/a/a/9/
+2026-03-12T16:55:01.0055793Z ../../../.cache/pip/http-v2/5/1/a/a/9/51aa962e20875b0c0559e5e4d707837c6548eb9a4055608b1273708c
+2026-03-12T16:55:01.0057336Z ../../../.cache/pip/http-v2/5/1/a/a/9/51aa962e20875b0c0559e5e4d707837c6548eb9a4055608b1273708c.body
+2026-03-12T16:55:01.0058221Z ../../../.cache/pip/http-v2/5/1/4/
+2026-03-12T16:55:01.0058609Z ../../../.cache/pip/http-v2/5/1/4/d/
+2026-03-12T16:55:01.0058985Z ../../../.cache/pip/http-v2/5/1/4/d/d/
+2026-03-12T16:55:01.0059525Z ../../../.cache/pip/http-v2/5/1/4/d/d/514ddc396585af19faddc3cf8d7976420dccfe19bea69bfd80047ea1.body
+2026-03-12T16:55:01.0060204Z ../../../.cache/pip/http-v2/5/1/4/d/d/514ddc396585af19faddc3cf8d7976420dccfe19bea69bfd80047ea1
+2026-03-12T16:55:01.0060714Z ../../../.cache/pip/http-v2/5/b/
+2026-03-12T16:55:01.0061059Z ../../../.cache/pip/http-v2/5/b/e/
+2026-03-12T16:55:01.0061412Z ../../../.cache/pip/http-v2/5/b/e/6/
+2026-03-12T16:55:01.0061780Z ../../../.cache/pip/http-v2/5/b/e/6/4/
+2026-03-12T16:55:01.0062508Z ../../../.cache/pip/http-v2/5/b/e/6/4/5be64dddf357efe8e015c621695508a39823691e4777c7d90558ec8b.body
+2026-03-12T16:55:01.0063423Z ../../../.cache/pip/http-v2/5/b/e/6/4/5be64dddf357efe8e015c621695508a39823691e4777c7d90558ec8b
+2026-03-12T16:55:01.0064051Z ../../../.cache/pip/http-v2/5/b/d/
+2026-03-12T16:55:01.0064499Z ../../../.cache/pip/http-v2/5/b/d/8/
+2026-03-12T16:55:01.0064987Z ../../../.cache/pip/http-v2/5/b/d/8/9/
+2026-03-12T16:55:01.0065784Z ../../../.cache/pip/http-v2/5/b/d/8/9/5bd894eeb3dfe1c8aaee1daecdfb74bbb314293813a730238621f077
+2026-03-12T16:55:01.0067089Z ../../../.cache/pip/http-v2/5/b/d/8/9/5bd894eeb3dfe1c8aaee1daecdfb74bbb314293813a730238621f077.body
+2026-03-12T16:55:01.0067954Z ../../../.cache/pip/http-v2/5/b/5/
+2026-03-12T16:55:01.0068466Z ../../../.cache/pip/http-v2/5/b/5/7/
+2026-03-12T16:55:01.0068973Z ../../../.cache/pip/http-v2/5/b/5/7/6/
+2026-03-12T16:55:01.0069734Z ../../../.cache/pip/http-v2/5/b/5/7/6/5b576ddc69cb2cda42f61333b85f066e4990a5eab5c96e0670cbb445.body
+2026-03-12T16:55:01.0070465Z ../../../.cache/pip/http-v2/5/b/5/7/6/5b576ddc69cb2cda42f61333b85f066e4990a5eab5c96e0670cbb445
+2026-03-12T16:55:01.0070987Z ../../../.cache/pip/http-v2/5/b/9/
+2026-03-12T16:55:01.0071327Z ../../../.cache/pip/http-v2/5/b/9/a/
+2026-03-12T16:55:01.0071885Z ../../../.cache/pip/http-v2/5/b/9/a/9/
+2026-03-12T16:55:01.0072431Z ../../../.cache/pip/http-v2/5/b/9/a/9/5b9a9fd3c0c45469fcb69cafd8dcbf862b093a20c76a8fbb53eca5af
+2026-03-12T16:55:01.0073370Z ../../../.cache/pip/http-v2/5/b/9/a/9/5b9a9fd3c0c45469fcb69cafd8dcbf862b093a20c76a8fbb53eca5af.body
+2026-03-12T16:55:01.0073916Z ../../../.cache/pip/http-v2/5/c/
+2026-03-12T16:55:01.0074398Z ../../../.cache/pip/http-v2/5/c/0/
+2026-03-12T16:55:01.0074879Z ../../../.cache/pip/http-v2/5/c/0/a/
+2026-03-12T16:55:01.0075355Z ../../../.cache/pip/http-v2/5/c/0/a/7/
+2026-03-12T16:55:01.0101068Z ../../../.cache/pip/http-v2/5/c/0/a/7/5c0a78fe3a2ccdcf468b0763d8a2175ddb17099adea22315f937c942.body
+2026-03-12T16:55:01.0102175Z ../../../.cache/pip/http-v2/5/c/0/a/7/5c0a78fe3a2ccdcf468b0763d8a2175ddb17099adea22315f937c942
+2026-03-12T16:55:01.0102941Z ../../../.cache/pip/http-v2/5/9/
+2026-03-12T16:55:01.0103422Z ../../../.cache/pip/http-v2/5/9/c/
+2026-03-12T16:55:01.0103837Z ../../../.cache/pip/http-v2/5/9/c/5/
+2026-03-12T16:55:01.0104237Z ../../../.cache/pip/http-v2/5/9/c/5/0/
+2026-03-12T16:55:01.0104782Z ../../../.cache/pip/http-v2/5/9/c/5/0/59c5017976d4b09ccdcc322ecef2f9f3ffce3ba2c7411f80b22bdf62
+2026-03-12T16:55:01.0105515Z ../../../.cache/pip/http-v2/5/9/c/5/0/59c5017976d4b09ccdcc322ecef2f9f3ffce3ba2c7411f80b22bdf62.body
+2026-03-12T16:55:01.0106092Z ../../../.cache/pip/http-v2/5/4/
+2026-03-12T16:55:01.0106428Z ../../../.cache/pip/http-v2/5/4/6/
+2026-03-12T16:55:01.0106780Z ../../../.cache/pip/http-v2/5/4/6/6/
+2026-03-12T16:55:01.0107302Z ../../../.cache/pip/http-v2/5/4/6/6/0/
+2026-03-12T16:55:01.0107818Z ../../../.cache/pip/http-v2/5/4/6/6/0/546608b4cfc14c0e3a5dbf977e51ce4684a18bfc1d1931bc386d24ef
+2026-03-12T16:55:01.0108490Z ../../../.cache/pip/http-v2/5/4/6/6/0/546608b4cfc14c0e3a5dbf977e51ce4684a18bfc1d1931bc386d24ef.body
+2026-03-12T16:55:01.0109031Z ../../../.cache/pip/http-v2/5/4/4/
+2026-03-12T16:55:01.0109632Z ../../../.cache/pip/http-v2/5/4/4/d/
+2026-03-12T16:55:01.0109992Z ../../../.cache/pip/http-v2/5/4/4/d/a/
+2026-03-12T16:55:01.0110526Z ../../../.cache/pip/http-v2/5/4/4/d/a/544daa6b94f8ef2f9328e2d28398f4342af5cd74948ea71f0ae4884a.body
+2026-03-12T16:55:01.0111542Z ../../../.cache/pip/http-v2/5/4/4/d/a/544daa6b94f8ef2f9328e2d28398f4342af5cd74948ea71f0ae4884a
+2026-03-12T16:55:01.0112273Z ../../../.cache/pip/http-v2/9/
+2026-03-12T16:55:01.0112697Z ../../../.cache/pip/http-v2/9/1/
+2026-03-12T16:55:01.0113169Z ../../../.cache/pip/http-v2/9/1/a/
+2026-03-12T16:55:01.0113649Z ../../../.cache/pip/http-v2/9/1/a/c/
+2026-03-12T16:55:01.0114104Z ../../../.cache/pip/http-v2/9/1/a/c/4/
+2026-03-12T16:55:01.0114878Z ../../../.cache/pip/http-v2/9/1/a/c/4/91ac4141ee513b48d6e2106b8504eedf08543a9ac70e664c84a86c9b
+2026-03-12T16:55:01.0116013Z ../../../.cache/pip/http-v2/9/1/a/c/4/91ac4141ee513b48d6e2106b8504eedf08543a9ac70e664c84a86c9b.body
+2026-03-12T16:55:01.0117063Z ../../../.cache/pip/http-v2/9/e/
+2026-03-12T16:55:01.0117561Z ../../../.cache/pip/http-v2/9/e/2/
+2026-03-12T16:55:01.0118062Z ../../../.cache/pip/http-v2/9/e/2/9/
+2026-03-12T16:55:01.0118592Z ../../../.cache/pip/http-v2/9/e/2/9/3/
+2026-03-12T16:55:01.0119409Z ../../../.cache/pip/http-v2/9/e/2/9/3/9e293f5a39d8466e2b362aa21216c5e4bc32898b0a39bfff792d145e
+2026-03-12T16:55:01.0120629Z ../../../.cache/pip/http-v2/9/e/2/9/3/9e293f5a39d8466e2b362aa21216c5e4bc32898b0a39bfff792d145e.body
+2026-03-12T16:55:01.0121525Z ../../../.cache/pip/http-v2/9/e/d/
+2026-03-12T16:55:01.0122052Z ../../../.cache/pip/http-v2/9/e/d/7/
+2026-03-12T16:55:01.0122602Z ../../../.cache/pip/http-v2/9/e/d/7/a/
+2026-03-12T16:55:01.0123390Z ../../../.cache/pip/http-v2/9/e/d/7/a/9ed7a4460d564817af93fad4280a2b6176012fb1d5ffb0f4601d0dec
+2026-03-12T16:55:01.0124544Z ../../../.cache/pip/http-v2/9/e/d/7/a/9ed7a4460d564817af93fad4280a2b6176012fb1d5ffb0f4601d0dec.body
+2026-03-12T16:55:01.0125399Z ../../../.cache/pip/http-v2/9/3/
+2026-03-12T16:55:01.0125908Z ../../../.cache/pip/http-v2/9/3/6/
+2026-03-12T16:55:01.0126402Z ../../../.cache/pip/http-v2/9/3/6/e/
+2026-03-12T16:55:01.0127334Z ../../../.cache/pip/http-v2/9/3/6/e/f/
+2026-03-12T16:55:01.0128257Z ../../../.cache/pip/http-v2/9/3/6/e/f/936ef88052230050c9d8c803e64ef58ee62e7c4e4f61da74ba2ef008.body
+2026-03-12T16:55:01.0129408Z ../../../.cache/pip/http-v2/9/3/6/e/f/936ef88052230050c9d8c803e64ef58ee62e7c4e4f61da74ba2ef008
+2026-03-12T16:55:01.0130246Z ../../../.cache/pip/http-v2/9/b/
+2026-03-12T16:55:01.0130730Z ../../../.cache/pip/http-v2/9/b/c/
+2026-03-12T16:55:01.0131186Z ../../../.cache/pip/http-v2/9/b/c/1/
+2026-03-12T16:55:01.0131660Z ../../../.cache/pip/http-v2/9/b/c/1/0/
+2026-03-12T16:55:01.0132443Z ../../../.cache/pip/http-v2/9/b/c/1/0/9bc10a56cbc98f665d8f442fdae3da90236fd7681681035c740db82d.body
+2026-03-12T16:55:01.0133524Z ../../../.cache/pip/http-v2/9/b/c/1/0/9bc10a56cbc98f665d8f442fdae3da90236fd7681681035c740db82d
+2026-03-12T16:55:01.0134307Z ../../../.cache/pip/http-v2/9/4/
+2026-03-12T16:55:01.0134742Z ../../../.cache/pip/http-v2/9/4/d/
+2026-03-12T16:55:01.0135181Z ../../../.cache/pip/http-v2/9/4/d/0/
+2026-03-12T16:55:01.0135640Z ../../../.cache/pip/http-v2/9/4/d/0/2/
+2026-03-12T16:55:01.0136503Z ../../../.cache/pip/http-v2/9/4/d/0/2/94d022fb6c12e6dc453f3090252f397a80e9c2dbb7341fb45c1b150f.body
+2026-03-12T16:55:01.0137917Z ../../../.cache/pip/http-v2/9/4/d/0/2/94d022fb6c12e6dc453f3090252f397a80e9c2dbb7341fb45c1b150f
+2026-03-12T16:55:01.0138678Z ../../../.cache/pip/http-v2/9/4/5/
+2026-03-12T16:55:01.0139126Z ../../../.cache/pip/http-v2/9/4/5/2/
+2026-03-12T16:55:01.0139597Z ../../../.cache/pip/http-v2/9/4/5/2/4/
+2026-03-12T16:55:01.0140373Z ../../../.cache/pip/http-v2/9/4/5/2/4/9452417670b2e75527d793717779fce5d54e5f21adb3344c273876fa.body
+2026-03-12T16:55:01.0141356Z ../../../.cache/pip/http-v2/9/4/5/2/4/9452417670b2e75527d793717779fce5d54e5f21adb3344c273876fa
+2026-03-12T16:55:01.0142032Z ../../../.cache/pip/http-v2/a/
+2026-03-12T16:55:01.0142431Z ../../../.cache/pip/http-v2/a/1/
+2026-03-12T16:55:01.0142846Z ../../../.cache/pip/http-v2/a/1/9/
+2026-03-12T16:55:01.0143490Z ../../../.cache/pip/http-v2/a/1/9/5/
+2026-03-12T16:55:01.0143918Z ../../../.cache/pip/http-v2/a/1/9/5/3/
+2026-03-12T16:55:01.0144636Z ../../../.cache/pip/http-v2/a/1/9/5/3/a19537d3cf37c122db841d6fe4cd322bc10d1a558bb00d146b85cb9a
+2026-03-12T16:55:01.0145701Z ../../../.cache/pip/http-v2/a/1/9/5/3/a19537d3cf37c122db841d6fe4cd322bc10d1a558bb00d146b85cb9a.body
+2026-03-12T16:55:01.0146483Z ../../../.cache/pip/http-v2/a/1/4/
+2026-03-12T16:55:01.0147181Z ../../../.cache/pip/http-v2/a/1/4/d/
+2026-03-12T16:55:01.0147616Z ../../../.cache/pip/http-v2/a/1/4/d/6/
+2026-03-12T16:55:01.0148307Z ../../../.cache/pip/http-v2/a/1/4/d/6/a14d6c773d62b6b54f24503af9d6c8ecfa96a8645baae4f67205ed94
+2026-03-12T16:55:01.0149301Z ../../../.cache/pip/http-v2/a/1/4/d/6/a14d6c773d62b6b54f24503af9d6c8ecfa96a8645baae4f67205ed94.body
+2026-03-12T16:55:01.0150043Z ../../../.cache/pip/http-v2/a/e/
+2026-03-12T16:55:01.0150449Z ../../../.cache/pip/http-v2/a/e/5/
+2026-03-12T16:55:01.0150886Z ../../../.cache/pip/http-v2/a/e/5/a/
+2026-03-12T16:55:01.0151329Z ../../../.cache/pip/http-v2/a/e/5/a/a/
+2026-03-12T16:55:01.0152152Z ../../../.cache/pip/http-v2/a/e/5/a/a/ae5aaead5e24b1eb0e27e8deefb2951f5a8422d82e2dbbe843d63c22
+2026-03-12T16:55:01.0153418Z ../../../.cache/pip/http-v2/a/e/5/a/a/ae5aaead5e24b1eb0e27e8deefb2951f5a8422d82e2dbbe843d63c22.body
+2026-03-12T16:55:01.0153975Z ../../../.cache/pip/http-v2/a/0/
+2026-03-12T16:55:01.0154340Z ../../../.cache/pip/http-v2/a/0/3/
+2026-03-12T16:55:01.0154701Z ../../../.cache/pip/http-v2/a/0/3/e/
+2026-03-12T16:55:01.0155053Z ../../../.cache/pip/http-v2/a/0/3/e/7/
+2026-03-12T16:55:01.0155601Z ../../../.cache/pip/http-v2/a/0/3/e/7/a03e77d6fd1aff6b4ee6b34a140bd46cfb7fa1873254b62a2d30e9d7.body
+2026-03-12T16:55:01.0156292Z ../../../.cache/pip/http-v2/a/0/3/e/7/a03e77d6fd1aff6b4ee6b34a140bd46cfb7fa1873254b62a2d30e9d7
+2026-03-12T16:55:01.0156802Z ../../../.cache/pip/http-v2/a/6/
+2026-03-12T16:55:01.0157350Z ../../../.cache/pip/http-v2/a/6/4/
+2026-03-12T16:55:01.0157711Z ../../../.cache/pip/http-v2/a/6/4/d/
+2026-03-12T16:55:01.0158084Z ../../../.cache/pip/http-v2/a/6/4/d/7/
+2026-03-12T16:55:01.0158733Z ../../../.cache/pip/http-v2/a/6/4/d/7/a64d7a79837595b310316748b33b0c7f2e5c1dc54f9518fcecd304e2
+2026-03-12T16:55:01.0159440Z ../../../.cache/pip/http-v2/a/6/4/d/7/a64d7a79837595b310316748b33b0c7f2e5c1dc54f9518fcecd304e2.body
+2026-03-12T16:55:01.0159987Z ../../../.cache/pip/http-v2/a/c/
+2026-03-12T16:55:01.0160328Z ../../../.cache/pip/http-v2/a/c/b/
+2026-03-12T16:55:01.0160690Z ../../../.cache/pip/http-v2/a/c/b/6/
+2026-03-12T16:55:01.0161062Z ../../../.cache/pip/http-v2/a/c/b/6/a/
+2026-03-12T16:55:01.0161577Z ../../../.cache/pip/http-v2/a/c/b/6/a/acb6a6a2e09bcc36571f79c4cb1d3c0e7fa6da6d9e3892d9f7b92ceb
+2026-03-12T16:55:01.0162280Z ../../../.cache/pip/http-v2/a/c/b/6/a/acb6a6a2e09bcc36571f79c4cb1d3c0e7fa6da6d9e3892d9f7b92ceb.body
+2026-03-12T16:55:01.0162810Z ../../../.cache/pip/http-v2/a/c/5/
+2026-03-12T16:55:01.0163130Z ../../../.cache/pip/http-v2/a/c/5/4/
+2026-03-12T16:55:01.0163496Z ../../../.cache/pip/http-v2/a/c/5/4/0/
+2026-03-12T16:55:01.0164029Z ../../../.cache/pip/http-v2/a/c/5/4/0/ac54069ce3005f186e18ca5efecdb2f814d717ad8b72989b4c98c88c.body
+2026-03-12T16:55:01.0164727Z ../../../.cache/pip/http-v2/a/c/5/4/0/ac54069ce3005f186e18ca5efecdb2f814d717ad8b72989b4c98c88c
+2026-03-12T16:55:01.0165247Z ../../../.cache/pip/http-v2/a/5/
+2026-03-12T16:55:01.0165590Z ../../../.cache/pip/http-v2/a/5/c/
+2026-03-12T16:55:01.0165942Z ../../../.cache/pip/http-v2/a/5/c/1/
+2026-03-12T16:55:01.0166300Z ../../../.cache/pip/http-v2/a/5/c/1/e/
+2026-03-12T16:55:01.0166802Z ../../../.cache/pip/http-v2/a/5/c/1/e/a5c1e9de753f2b4a921c3228e67d715e53b1cd2db11a5618f22a688f
+2026-03-12T16:55:01.0167665Z ../../../.cache/pip/http-v2/a/5/c/1/e/a5c1e9de753f2b4a921c3228e67d715e53b1cd2db11a5618f22a688f.body
+2026-03-12T16:55:01.0168189Z ../../../.cache/pip/http-v2/a/4/
+2026-03-12T16:55:01.0168526Z ../../../.cache/pip/http-v2/a/4/6/
+2026-03-12T16:55:01.0168879Z ../../../.cache/pip/http-v2/a/4/6/b/
+2026-03-12T16:55:01.0169228Z ../../../.cache/pip/http-v2/a/4/6/b/7/
+2026-03-12T16:55:01.0170064Z ../../../.cache/pip/http-v2/a/4/6/b/7/a46b74c1407dd55ebf9eeb7eb2c73000028b7639a6ed9edc7981950c.body
+2026-03-12T16:55:01.0171117Z ../../../.cache/pip/http-v2/a/4/6/b/7/a46b74c1407dd55ebf9eeb7eb2c73000028b7639a6ed9edc7981950c
+2026-03-12T16:55:01.0171900Z ../../../.cache/pip/http-v2/a/4/9/
+2026-03-12T16:55:01.0172340Z ../../../.cache/pip/http-v2/a/4/9/7/
+2026-03-12T16:55:01.0172797Z ../../../.cache/pip/http-v2/a/4/9/7/b/
+2026-03-12T16:55:01.0173581Z ../../../.cache/pip/http-v2/a/4/9/7/b/a497b159463e3a3388ba7fd719b0904d7d53032dab94b97fd3a91b62
+2026-03-12T16:55:01.0174589Z ../../../.cache/pip/http-v2/a/4/9/7/b/a497b159463e3a3388ba7fd719b0904d7d53032dab94b97fd3a91b62.body
+2026-03-12T16:55:01.0175120Z ../../../.cache/pip/http-v2/4/
+2026-03-12T16:55:01.0175466Z ../../../.cache/pip/http-v2/4/7/
+2026-03-12T16:55:01.0175810Z ../../../.cache/pip/http-v2/4/7/1/
+2026-03-12T16:55:01.0176163Z ../../../.cache/pip/http-v2/4/7/1/8/
+2026-03-12T16:55:01.0176512Z ../../../.cache/pip/http-v2/4/7/1/8/3/
+2026-03-12T16:55:01.0177241Z ../../../.cache/pip/http-v2/4/7/1/8/3/47183d737402ca3f1b87fc37951cdbf4a1186e5c43ff7a6c4b835daf
+2026-03-12T16:55:01.0177904Z ../../../.cache/pip/http-v2/4/7/1/8/3/47183d737402ca3f1b87fc37951cdbf4a1186e5c43ff7a6c4b835daf.body
+2026-03-12T16:55:01.0178435Z ../../../.cache/pip/http-v2/4/b/
+2026-03-12T16:55:01.0178776Z ../../../.cache/pip/http-v2/4/b/e/
+2026-03-12T16:55:01.0179121Z ../../../.cache/pip/http-v2/4/b/e/0/
+2026-03-12T16:55:01.0179467Z ../../../.cache/pip/http-v2/4/b/e/0/7/
+2026-03-12T16:55:01.0179984Z ../../../.cache/pip/http-v2/4/b/e/0/7/4be07d3ac353e38d2c9e3a257cad36ee2a758fc88b4cd5f0d479a5a9
+2026-03-12T16:55:01.0180690Z ../../../.cache/pip/http-v2/4/b/e/0/7/4be07d3ac353e38d2c9e3a257cad36ee2a758fc88b4cd5f0d479a5a9.body
+2026-03-12T16:55:01.0181254Z ../../../.cache/pip/http-v2/4/b/6/
+2026-03-12T16:55:01.0181597Z ../../../.cache/pip/http-v2/4/b/6/6/
+2026-03-12T16:55:01.0181955Z ../../../.cache/pip/http-v2/4/b/6/6/c/
+2026-03-12T16:55:01.0182485Z ../../../.cache/pip/http-v2/4/b/6/6/c/4b66ceb6c63be17cb2553c2d6a199ee95f971d93e3bb02611eaeeba7.body
+2026-03-12T16:55:01.0183351Z ../../../.cache/pip/http-v2/4/b/6/6/c/4b66ceb6c63be17cb2553c2d6a199ee95f971d93e3bb02611eaeeba7
+2026-03-12T16:55:01.0183883Z ../../../.cache/pip/http-v2/4/6/
+2026-03-12T16:55:01.0184213Z ../../../.cache/pip/http-v2/4/6/1/
+2026-03-12T16:55:01.0184555Z ../../../.cache/pip/http-v2/4/6/1/d/
+2026-03-12T16:55:01.0184902Z ../../../.cache/pip/http-v2/4/6/1/d/c/
+2026-03-12T16:55:01.0185414Z ../../../.cache/pip/http-v2/4/6/1/d/c/461dc09e8f6de124407790b13833a5c526191c1e01488264ac3bf808.body
+2026-03-12T16:55:01.0186164Z ../../../.cache/pip/http-v2/4/6/1/d/c/461dc09e8f6de124407790b13833a5c526191c1e01488264ac3bf808
+2026-03-12T16:55:01.0186893Z ../../../.cache/pip/http-v2/4/6/3/
+2026-03-12T16:55:01.0187490Z ../../../.cache/pip/http-v2/4/6/3/9/
+2026-03-12T16:55:01.0187941Z ../../../.cache/pip/http-v2/4/6/3/9/6/
+2026-03-12T16:55:01.0188593Z ../../../.cache/pip/http-v2/4/6/3/9/6/463961a78de6425aeb3aeb0df1ecd309a48678801b1e3aa6d80dd934
+2026-03-12T16:55:01.0189660Z ../../../.cache/pip/http-v2/4/6/3/9/6/463961a78de6425aeb3aeb0df1ecd309a48678801b1e3aa6d80dd934.body
+2026-03-12T16:55:01.0190462Z ../../../.cache/pip/http-v2/4/f/
+2026-03-12T16:55:01.0190888Z ../../../.cache/pip/http-v2/4/f/f/
+2026-03-12T16:55:01.0191390Z ../../../.cache/pip/http-v2/4/f/f/8/
+2026-03-12T16:55:01.0191866Z ../../../.cache/pip/http-v2/4/f/f/8/6/
+2026-03-12T16:55:01.0192616Z ../../../.cache/pip/http-v2/4/f/f/8/6/4ff8606ef3565dd3d8cb49160a12b00a0874f4891b47bf2460855867.body
+2026-03-12T16:55:01.0193704Z ../../../.cache/pip/http-v2/4/f/f/8/6/4ff8606ef3565dd3d8cb49160a12b00a0874f4891b47bf2460855867
+2026-03-12T16:55:01.0194467Z ../../../.cache/pip/http-v2/4/5/
+2026-03-12T16:55:01.0194930Z ../../../.cache/pip/http-v2/4/5/9/
+2026-03-12T16:55:01.0195370Z ../../../.cache/pip/http-v2/4/5/9/7/
+2026-03-12T16:55:01.0195798Z ../../../.cache/pip/http-v2/4/5/9/7/6/
+2026-03-12T16:55:01.0196533Z ../../../.cache/pip/http-v2/4/5/9/7/6/45976c194ebb9180bf7410d422bcad653ce13bcb64dda0d07d72b09d
+2026-03-12T16:55:01.0198097Z ../../../.cache/pip/http-v2/4/5/9/7/6/45976c194ebb9180bf7410d422bcad653ce13bcb64dda0d07d72b09d.body
+2026-03-12T16:55:01.0198920Z ../../../.cache/pip/http-v2/4/4/
+2026-03-12T16:55:01.0199389Z ../../../.cache/pip/http-v2/4/4/e/
+2026-03-12T16:55:01.0199734Z ../../../.cache/pip/http-v2/4/4/e/5/
+2026-03-12T16:55:01.0200094Z ../../../.cache/pip/http-v2/4/4/e/5/b/
+2026-03-12T16:55:01.0200604Z ../../../.cache/pip/http-v2/4/4/e/5/b/44e5b11a6caa92636d8ccfe658d420ba4ed8f67f7f4e835b214255aa
+2026-03-12T16:55:01.0201293Z ../../../.cache/pip/http-v2/4/4/e/5/b/44e5b11a6caa92636d8ccfe658d420ba4ed8f67f7f4e835b214255aa.body
+2026-03-12T16:55:01.0202119Z ../../../.cache/pip/http-v2/4/4/a/
+2026-03-12T16:55:01.0202591Z ../../../.cache/pip/http-v2/4/4/a/d/
+2026-03-12T16:55:01.0203084Z ../../../.cache/pip/http-v2/4/4/a/d/5/
+2026-03-12T16:55:01.0203841Z ../../../.cache/pip/http-v2/4/4/a/d/5/44ad51ab4fe732177892254938ca19df59a19add805fe17b3b22c658.body
+2026-03-12T16:55:01.0204885Z ../../../.cache/pip/http-v2/4/4/a/d/5/44ad51ab4fe732177892254938ca19df59a19add805fe17b3b22c658
+2026-03-12T16:55:01.0205667Z ../../../.cache/pip/selfcheck/
+2026-03-12T16:55:01.0206343Z ../../../.cache/pip/selfcheck/67214f6378f442e4cde8e472e26647341eb3fdb9c1e96d6251524b24
+2026-03-12T16:55:01.0208241Z [command]/usr/bin/tar -xf /home/runner/work/_temp/05939b73-bed4-43be-85a9-bc2f74684b95/cache.tzst -P -C /home/runner/work/JARVIS-AGENT/JARVIS-AGENT --use-compress-program unzstd
+2026-03-12T16:55:01.0847353Z Cache restored successfully
+2026-03-12T16:55:01.0911674Z Cache restored from key: setup-python-Linux-x64-24.04-Ubuntu-python-3.11.14-pip-895e445901db06b55ea76a2cd4424b397f4c62f45ae8c1b339be6ba0734291e8
+2026-03-12T16:55:01.0921438Z ##[add-matcher]/home/runner/work/_actions/actions/setup-python/v5/.github/python.json
+2026-03-12T16:55:01.0939766Z ##[debug]Added matchers: 'python'. Problem matchers scan action output for known warning or error strings and report these inline.
+2026-03-12T16:55:01.1020987Z ##[debug]Node Action run completed with exit code 0
+2026-03-12T16:55:01.1030292Z ##[debug]pythonLocation='/opt/hostedtoolcache/Python/3.11.14/x64'
+2026-03-12T16:55:01.1030969Z ##[debug]PKG_CONFIG_PATH='/opt/hostedtoolcache/Python/3.11.14/x64/lib/pkgconfig'
+2026-03-12T16:55:01.1031478Z ##[debug]pythonLocation='/opt/hostedtoolcache/Python/3.11.14/x64'
+2026-03-12T16:55:01.1031908Z ##[debug]Python_ROOT_DIR='/opt/hostedtoolcache/Python/3.11.14/x64'
+2026-03-12T16:55:01.1032457Z ##[debug]Python2_ROOT_DIR='/opt/hostedtoolcache/Python/3.11.14/x64'
+2026-03-12T16:55:01.1032884Z ##[debug]Python3_ROOT_DIR='/opt/hostedtoolcache/Python/3.11.14/x64'
+2026-03-12T16:55:01.1033349Z ##[debug]PKG_CONFIG_PATH='/opt/hostedtoolcache/Python/3.11.14/x64/lib/pkgconfig'
+2026-03-12T16:55:01.1033852Z ##[debug]LD_LIBRARY_PATH='/opt/hostedtoolcache/Python/3.11.14/x64/lib'
+2026-03-12T16:55:01.1035618Z ##[debug]Save intra-action state cache-paths = ["/home/runner/.cache/pip"]
+2026-03-12T16:55:01.1036557Z ##[debug]Save intra-action state cache-primary-key = setup-python-Linux-x64-24.04-Ubuntu-python-3.11.14-pip-895e445901db06b55ea76a2cd4424b397f4c62f45ae8c1b339be6ba0734291e8
+2026-03-12T16:55:01.1040666Z ##[debug]Save intra-action state cache-matched-key = setup-python-Linux-x64-24.04-Ubuntu-python-3.11.14-pip-895e445901db06b55ea76a2cd4424b397f4c62f45ae8c1b339be6ba0734291e8
+2026-03-12T16:55:01.1041847Z ##[debug]Set output python-version = 3.11.14
+2026-03-12T16:55:01.1042276Z ##[debug]Set output python-path = /opt/hostedtoolcache/Python/3.11.14/x64/bin/python
+2026-03-12T16:55:01.1042699Z ##[debug]Set output cache-hit = true
+2026-03-12T16:55:01.1043423Z ##[debug]Finishing: Set up Python 3.11
+2026-03-12T16:55:01.1051832Z ##[debug]Evaluating condition for step: 'Install Python dependencies'
+2026-03-12T16:55:01.1053864Z ##[debug]Evaluating: success()
+2026-03-12T16:55:01.1054225Z ##[debug]Evaluating success:
+2026-03-12T16:55:01.1054685Z ##[debug]=> true
+2026-03-12T16:55:01.1055005Z ##[debug]Result: true
+2026-03-12T16:55:01.1055695Z ##[debug]Starting: Install Python dependencies
+2026-03-12T16:55:01.1066833Z ##[debug]Loading inputs
+2026-03-12T16:55:01.1068561Z ##[debug]Loading env
+2026-03-12T16:55:01.1085266Z ##[group]Run python -m pip install --upgrade pip
+2026-03-12T16:55:01.1085666Z [36;1mpython -m pip install --upgrade pip[0m
+2026-03-12T16:55:01.1085961Z [36;1mpip install ruff safety[0m
+2026-03-12T16:55:01.1086389Z [36;1mif [ -f requirements_audit.txt ]; then pip install -r requirements_audit.txt; fi[0m
+2026-03-12T16:55:01.1143698Z shell: /usr/bin/bash -e {0}
+2026-03-12T16:55:01.1143953Z env:
+2026-03-12T16:55:01.1144215Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-03-12T16:55:01.1144726Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.14/x64/lib/pkgconfig
+2026-03-12T16:55:01.1145140Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-03-12T16:55:01.1145503Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-03-12T16:55:01.1145869Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-03-12T16:55:01.1146256Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.14/x64/lib
+2026-03-12T16:55:01.1146553Z ##[endgroup]
+2026-03-12T16:55:01.1220469Z ##[debug]/usr/bin/bash -e /home/runner/work/_temp/2062d44d-d747-4d4b-b00e-44cd53f5b419.sh
+2026-03-12T16:55:01.7386888Z Requirement already satisfied: pip in /opt/hostedtoolcache/Python/3.11.14/x64/lib/python3.11/site-packages (26.0.1)
+2026-03-12T16:55:02.5832319Z Collecting ruff
+2026-03-12T16:55:02.5849835Z   Using cached ruff-0.15.5-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (26 kB)
+2026-03-12T16:55:02.6067992Z Collecting safety
+2026-03-12T16:55:02.6085190Z   Using cached safety-3.7.0-py3-none-any.whl.metadata (11 kB)
+2026-03-12T16:55:02.6242518Z Collecting authlib>=1.2.0 (from safety)
+2026-03-12T16:55:02.6257739Z   Using cached authlib-1.6.9-py2.py3-none-any.whl.metadata (9.8 kB)
+2026-03-12T16:55:02.6397361Z Collecting click>=8.0.2 (from safety)
+2026-03-12T16:55:02.6414778Z   Using cached click-8.3.1-py3-none-any.whl.metadata (2.6 kB)
+2026-03-12T16:55:02.6512576Z Collecting dparse>=0.6.4 (from safety)
+2026-03-12T16:55:02.6527151Z   Using cached dparse-0.6.4-py3-none-any.whl.metadata (5.5 kB)
+2026-03-12T16:55:02.6687288Z Collecting filelock<4.0,>=3.16.1 (from safety)
+2026-03-12T16:55:02.6703294Z   Using cached filelock-3.25.2-py3-none-any.whl.metadata (2.0 kB)
+2026-03-12T16:55:02.6857631Z Collecting httpx (from safety)
+2026-03-12T16:55:02.6873154Z   Using cached httpx-0.28.1-py3-none-any.whl.metadata (7.1 kB)
+2026-03-12T16:55:02.6995239Z Collecting jinja2>=3.1.0 (from safety)
+2026-03-12T16:55:02.7011159Z   Using cached jinja2-3.1.6-py3-none-any.whl.metadata (2.9 kB)
+2026-03-12T16:55:02.7262537Z Collecting marshmallow>=3.15.0 (from safety)
+2026-03-12T16:55:02.7277638Z   Using cached marshmallow-4.2.2-py3-none-any.whl.metadata (7.4 kB)
+2026-03-12T16:55:02.7394405Z Collecting nltk>=3.9 (from safety)
+2026-03-12T16:55:02.7408697Z   Using cached nltk-3.9.3-py3-none-any.whl.metadata (3.2 kB)
+2026-03-12T16:55:02.7532161Z Collecting packaging>=21.0 (from safety)
+2026-03-12T16:55:02.7545940Z   Using cached packaging-26.0-py3-none-any.whl.metadata (3.3 kB)
+2026-03-12T16:55:02.8703192Z Collecting pydantic>=2.6.0 (from safety)
+2026-03-12T16:55:02.8718747Z   Using cached pydantic-2.12.5-py3-none-any.whl.metadata (90 kB)
+2026-03-12T16:55:02.8943626Z Collecting requests (from safety)
+2026-03-12T16:55:02.8958514Z   Using cached requests-2.32.5-py3-none-any.whl.metadata (4.9 kB)
+2026-03-12T16:55:03.0065796Z Collecting ruamel-yaml>=0.17.21 (from safety)
+2026-03-12T16:55:03.0081845Z   Using cached ruamel_yaml-0.19.1-py3-none-any.whl.metadata (16 kB)
+2026-03-12T16:55:03.0195852Z Collecting safety-schemas==0.0.16 (from safety)
+2026-03-12T16:55:03.0209979Z   Using cached safety_schemas-0.0.16-py3-none-any.whl.metadata (1.1 kB)
+2026-03-12T16:55:03.0321357Z Collecting tenacity>=8.1.0 (from safety)
+2026-03-12T16:55:03.0335589Z   Using cached tenacity-9.1.4-py3-none-any.whl.metadata (1.2 kB)
+2026-03-12T16:55:03.0477117Z Collecting tomlkit (from safety)
+2026-03-12T16:55:03.0491738Z   Using cached tomlkit-0.14.0-py3-none-any.whl.metadata (2.8 kB)
+2026-03-12T16:55:03.0627547Z Collecting typer>=0.16.0 (from safety)
+2026-03-12T16:55:03.0642102Z   Using cached typer-0.24.1-py3-none-any.whl.metadata (16 kB)
+2026-03-12T16:55:03.0769238Z Collecting typing-extensions>=4.7.1 (from safety)
+2026-03-12T16:55:03.0782877Z   Using cached typing_extensions-4.15.0-py3-none-any.whl.metadata (3.3 kB)
+2026-03-12T16:55:03.2380022Z Collecting cryptography (from authlib>=1.2.0->safety)
+2026-03-12T16:55:03.2395885Z   Using cached cryptography-46.0.5-cp311-abi3-manylinux_2_34_x86_64.whl.metadata (5.7 kB)
+2026-03-12T16:55:03.3192557Z Collecting MarkupSafe>=2.0 (from jinja2>=3.1.0->safety)
+2026-03-12T16:55:03.3208563Z   Using cached markupsafe-3.0.3-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.7 kB)
+2026-03-12T16:55:03.3377967Z Collecting joblib (from nltk>=3.9->safety)
+2026-03-12T16:55:03.3391883Z   Using cached joblib-1.5.3-py3-none-any.whl.metadata (5.5 kB)
+2026-03-12T16:55:03.6482060Z Collecting regex>=2021.8.3 (from nltk>=3.9->safety)
+2026-03-12T16:55:03.6498303Z   Using cached regex-2026.2.28-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (40 kB)
+2026-03-12T16:55:03.6779787Z Collecting tqdm (from nltk>=3.9->safety)
+2026-03-12T16:55:03.6794343Z   Using cached tqdm-4.67.3-py3-none-any.whl.metadata (57 kB)
+2026-03-12T16:55:03.6914526Z Collecting annotated-types>=0.6.0 (from pydantic>=2.6.0->safety)
+2026-03-12T16:55:03.6928712Z   Using cached annotated_types-0.7.0-py3-none-any.whl.metadata (15 kB)
+2026-03-12T16:55:04.3655299Z Collecting pydantic-core==2.41.5 (from pydantic>=2.6.0->safety)
+2026-03-12T16:55:04.3671269Z   Using cached pydantic_core-2.41.5-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (7.3 kB)
+2026-03-12T16:55:04.3752621Z Collecting typing-inspection>=0.4.2 (from pydantic>=2.6.0->safety)
+2026-03-12T16:55:04.3766402Z   Using cached typing_inspection-0.4.2-py3-none-any.whl.metadata (2.6 kB)
+2026-03-12T16:55:04.3882791Z Collecting shellingham>=1.3.0 (from typer>=0.16.0->safety)
+2026-03-12T16:55:04.3896346Z   Using cached shellingham-1.5.4-py2.py3-none-any.whl.metadata (3.5 kB)
+2026-03-12T16:55:04.4147474Z Collecting rich>=12.3.0 (from typer>=0.16.0->safety)
+2026-03-12T16:55:04.4161516Z   Using cached rich-14.3.3-py3-none-any.whl.metadata (18 kB)
+2026-03-12T16:55:04.4244033Z Collecting annotated-doc>=0.0.2 (from typer>=0.16.0->safety)
+2026-03-12T16:55:04.4257841Z   Using cached annotated_doc-0.0.4-py3-none-any.whl.metadata (6.6 kB)
+2026-03-12T16:55:04.4365965Z Collecting markdown-it-py>=2.2.0 (from rich>=12.3.0->typer>=0.16.0->safety)
+2026-03-12T16:55:04.4379957Z   Using cached markdown_it_py-4.0.0-py3-none-any.whl.metadata (7.3 kB)
+2026-03-12T16:55:04.4535452Z Collecting pygments<3.0.0,>=2.13.0 (from rich>=12.3.0->typer>=0.16.0->safety)
+2026-03-12T16:55:04.4549581Z   Using cached pygments-2.19.2-py3-none-any.whl.metadata (2.5 kB)
+2026-03-12T16:55:04.4623059Z Collecting mdurl~=0.1 (from markdown-it-py>=2.2.0->rich>=12.3.0->typer>=0.16.0->safety)
+2026-03-12T16:55:04.4636526Z   Using cached mdurl-0.1.2-py3-none-any.whl.metadata (1.6 kB)
+2026-03-12T16:55:04.5501672Z Collecting cffi>=2.0.0 (from cryptography->authlib>=1.2.0->safety)
+2026-03-12T16:55:04.5518421Z   Using cached cffi-2.0.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (2.6 kB)
+2026-03-12T16:55:04.5611123Z Collecting pycparser (from cffi>=2.0.0->cryptography->authlib>=1.2.0->safety)
+2026-03-12T16:55:04.5624935Z   Using cached pycparser-3.0-py3-none-any.whl.metadata (8.2 kB)
+2026-03-12T16:55:04.5773066Z Collecting anyio (from httpx->safety)
+2026-03-12T16:55:04.5787946Z   Using cached anyio-4.12.1-py3-none-any.whl.metadata (4.3 kB)
+2026-03-12T16:55:04.5943322Z Collecting certifi (from httpx->safety)
+2026-03-12T16:55:04.5957482Z   Using cached certifi-2026.2.25-py3-none-any.whl.metadata (2.5 kB)
+2026-03-12T16:55:04.6081895Z Collecting httpcore==1.* (from httpx->safety)
+2026-03-12T16:55:04.6096069Z   Using cached httpcore-1.0.9-py3-none-any.whl.metadata (21 kB)
+2026-03-12T16:55:04.6208565Z Collecting idna (from httpx->safety)
+2026-03-12T16:55:04.6222425Z   Using cached idna-3.11-py3-none-any.whl.metadata (8.4 kB)
+2026-03-12T16:55:04.6306629Z Collecting h11>=0.16 (from httpcore==1.*->httpx->safety)
+2026-03-12T16:55:04.6320481Z   Using cached h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+2026-03-12T16:55:04.7855066Z Collecting charset_normalizer<4,>=2 (from requests->safety)
+2026-03-12T16:55:04.7871885Z   Using cached charset_normalizer-3.4.5-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (39 kB)
+2026-03-12T16:55:04.8088226Z Collecting urllib3<3,>=1.21.1 (from requests->safety)
+2026-03-12T16:55:04.8103613Z   Using cached urllib3-2.6.3-py3-none-any.whl.metadata (6.9 kB)
+2026-03-12T16:55:04.8193654Z Using cached ruff-0.15.5-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (11.2 MB)
+2026-03-12T16:55:04.8288671Z Using cached safety-3.7.0-py3-none-any.whl (312 kB)
+2026-03-12T16:55:04.8304481Z Using cached safety_schemas-0.0.16-py3-none-any.whl (39 kB)
+2026-03-12T16:55:04.8318288Z Using cached filelock-3.25.2-py3-none-any.whl (26 kB)
+2026-03-12T16:55:04.8331957Z Using cached authlib-1.6.9-py2.py3-none-any.whl (244 kB)
+2026-03-12T16:55:04.8346784Z Using cached click-8.3.1-py3-none-any.whl (108 kB)
+2026-03-12T16:55:04.8361020Z Using cached dparse-0.6.4-py3-none-any.whl (11 kB)
+2026-03-12T16:55:04.8374493Z Using cached jinja2-3.1.6-py3-none-any.whl (134 kB)
+2026-03-12T16:55:04.8389264Z Using cached markupsafe-3.0.3-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (22 kB)
+2026-03-12T16:55:04.8402620Z Using cached marshmallow-4.2.2-py3-none-any.whl (48 kB)
+2026-03-12T16:55:04.8416125Z Using cached nltk-3.9.3-py3-none-any.whl (1.5 MB)
+2026-03-12T16:55:04.8440731Z Using cached packaging-26.0-py3-none-any.whl (74 kB)
+2026-03-12T16:55:04.8454475Z Using cached pydantic-2.12.5-py3-none-any.whl (463 kB)
+2026-03-12T16:55:04.8471505Z Using cached pydantic_core-2.41.5-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (2.1 MB)
+2026-03-12T16:55:04.8498763Z Using cached annotated_types-0.7.0-py3-none-any.whl (13 kB)
+2026-03-12T16:55:04.8512675Z Using cached regex-2026.2.28-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (800 kB)
+2026-03-12T16:55:04.8532105Z Using cached ruamel_yaml-0.19.1-py3-none-any.whl (118 kB)
+2026-03-12T16:55:04.8546059Z Using cached tenacity-9.1.4-py3-none-any.whl (28 kB)
+2026-03-12T16:55:04.8559682Z Using cached typer-0.24.1-py3-none-any.whl (56 kB)
+2026-03-12T16:55:04.8573333Z Using cached annotated_doc-0.0.4-py3-none-any.whl (5.3 kB)
+2026-03-12T16:55:04.8586762Z Using cached rich-14.3.3-py3-none-any.whl (310 kB)
+2026-03-12T16:55:04.8602848Z Using cached pygments-2.19.2-py3-none-any.whl (1.2 MB)
+2026-03-12T16:55:04.8624601Z Using cached markdown_it_py-4.0.0-py3-none-any.whl (87 kB)
+2026-03-12T16:55:04.8638532Z Using cached mdurl-0.1.2-py3-none-any.whl (10.0 kB)
+2026-03-12T16:55:04.8651821Z Using cached shellingham-1.5.4-py2.py3-none-any.whl (9.8 kB)
+2026-03-12T16:55:04.8665092Z Using cached typing_extensions-4.15.0-py3-none-any.whl (44 kB)
+2026-03-12T16:55:04.8678751Z Using cached typing_inspection-0.4.2-py3-none-any.whl (14 kB)
+2026-03-12T16:55:04.8692114Z Using cached cryptography-46.0.5-cp311-abi3-manylinux_2_34_x86_64.whl (4.5 MB)
+2026-03-12T16:55:04.8736289Z Using cached cffi-2.0.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (215 kB)
+2026-03-12T16:55:04.8750948Z Using cached httpx-0.28.1-py3-none-any.whl (73 kB)
+2026-03-12T16:55:04.8764503Z Using cached httpcore-1.0.9-py3-none-any.whl (78 kB)
+2026-03-12T16:55:04.8778615Z Using cached h11-0.16.0-py3-none-any.whl (37 kB)
+2026-03-12T16:55:04.8793710Z Using cached anyio-4.12.1-py3-none-any.whl (113 kB)
+2026-03-12T16:55:04.8807837Z Using cached idna-3.11-py3-none-any.whl (71 kB)
+2026-03-12T16:55:04.8822771Z Using cached certifi-2026.2.25-py3-none-any.whl (153 kB)
+2026-03-12T16:55:04.8836787Z Using cached joblib-1.5.3-py3-none-any.whl (309 kB)
+2026-03-12T16:55:04.8852276Z Using cached pycparser-3.0-py3-none-any.whl (48 kB)
+2026-03-12T16:55:04.8865805Z Using cached requests-2.32.5-py3-none-any.whl (64 kB)
+2026-03-12T16:55:04.8880572Z Using cached charset_normalizer-3.4.5-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (193 kB)
+2026-03-12T16:55:04.8894789Z Using cached urllib3-2.6.3-py3-none-any.whl (131 kB)
+2026-03-12T16:55:04.8909023Z Using cached tomlkit-0.14.0-py3-none-any.whl (39 kB)
+2026-03-12T16:55:04.8922462Z Using cached tqdm-4.67.3-py3-none-any.whl (78 kB)
+2026-03-12T16:55:05.0051841Z Installing collected packages: urllib3, typing-extensions, tqdm, tomlkit, tenacity, shellingham, ruff, ruamel-yaml, regex, pygments, pycparser, packaging, mdurl, marshmallow, MarkupSafe, joblib, idna, h11, filelock, click, charset_normalizer, certifi, annotated-types, annotated-doc, typing-inspection, requests, pydantic-core, nltk, markdown-it-py, jinja2, httpcore, dparse, cffi, anyio, rich, pydantic, httpx, cryptography, typer, safety-schemas, authlib, safety
+2026-03-12T16:55:08.9884955Z 
+2026-03-12T16:55:08.9909906Z Successfully installed MarkupSafe-3.0.3 annotated-doc-0.0.4 annotated-types-0.7.0 anyio-4.12.1 authlib-1.6.9 certifi-2026.2.25 cffi-2.0.0 charset_normalizer-3.4.5 click-8.3.1 cryptography-46.0.5 dparse-0.6.4 filelock-3.25.2 h11-0.16.0 httpcore-1.0.9 httpx-0.28.1 idna-3.11 jinja2-3.1.6 joblib-1.5.3 markdown-it-py-4.0.0 marshmallow-4.2.2 mdurl-0.1.2 nltk-3.9.3 packaging-26.0 pycparser-3.0 pydantic-2.12.5 pydantic-core-2.41.5 pygments-2.19.2 regex-2026.2.28 requests-2.32.5 rich-14.3.3 ruamel-yaml-0.19.1 ruff-0.15.5 safety-3.7.0 safety-schemas-0.0.16 shellingham-1.5.4 tenacity-9.1.4 tomlkit-0.14.0 tqdm-4.67.3 typer-0.24.1 typing-extensions-4.15.0 typing-inspection-0.4.2 urllib3-2.6.3
+2026-03-12T16:55:09.4858040Z ##[debug]Finishing: Install Python dependencies
+2026-03-12T16:55:09.4865757Z ##[debug]Evaluating condition for step: 'Lint with Ruff'
+2026-03-12T16:55:09.4868066Z ##[debug]Evaluating: success()
+2026-03-12T16:55:09.4868415Z ##[debug]Evaluating success:
+2026-03-12T16:55:09.4868805Z ##[debug]=> true
+2026-03-12T16:55:09.4869111Z ##[debug]Result: true
+2026-03-12T16:55:09.4869684Z ##[debug]Starting: Lint with Ruff
+2026-03-12T16:55:09.4877425Z ##[debug]Loading inputs
+2026-03-12T16:55:09.4878541Z ##[debug]Loading env
+2026-03-12T16:55:09.4882978Z ##[group]Run ruff check .
+2026-03-12T16:55:09.4883217Z [36;1mruff check .[0m
+2026-03-12T16:55:09.4936245Z shell: /usr/bin/bash -e {0}
+2026-03-12T16:55:09.4936486Z env:
+2026-03-12T16:55:09.4936746Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-03-12T16:55:09.4937388Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.14/x64/lib/pkgconfig
+2026-03-12T16:55:09.4937808Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-03-12T16:55:09.4938227Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-03-12T16:55:09.4938585Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-03-12T16:55:09.4938970Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.14/x64/lib
+2026-03-12T16:55:09.4939283Z ##[endgroup]
+2026-03-12T16:55:09.4995291Z ##[debug]/usr/bin/bash -e /home/runner/work/_temp/f94807b9-ad5b-4973-ba41-0055ec09e3ad.sh
+2026-03-12T16:55:09.5192239Z All checks passed!
+2026-03-12T16:55:09.5209985Z ##[debug]Finishing: Lint with Ruff
+2026-03-12T16:55:09.5217770Z ##[debug]Evaluating condition for step: 'Security Scan (Dependencies)'
+2026-03-12T16:55:09.5219594Z ##[debug]Evaluating: success()
+2026-03-12T16:55:09.5219939Z ##[debug]Evaluating success:
+2026-03-12T16:55:09.5220314Z ##[debug]=> true
+2026-03-12T16:55:09.5220640Z ##[debug]Result: true
+2026-03-12T16:55:09.5221245Z ##[debug]Starting: Security Scan (Dependencies)
+2026-03-12T16:55:09.5228904Z ##[debug]Loading inputs
+2026-03-12T16:55:09.5230086Z ##[debug]Loading env
+2026-03-12T16:55:09.5233815Z ##[group]Run safety check
+2026-03-12T16:55:09.5234046Z [36;1msafety check[0m
+2026-03-12T16:55:09.5286761Z shell: /usr/bin/bash -e {0}
+2026-03-12T16:55:09.5287211Z env:
+2026-03-12T16:55:09.5287468Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-03-12T16:55:09.5288071Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.14/x64/lib/pkgconfig
+2026-03-12T16:55:09.5288498Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-03-12T16:55:09.5288899Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-03-12T16:55:09.5289267Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-03-12T16:55:09.5289630Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.14/x64/lib
+2026-03-12T16:55:09.5289933Z ##[endgroup]
+2026-03-12T16:55:09.5342503Z ##[debug]/usr/bin/bash -e /home/runner/work/_temp/63b2ef84-8606-4933-b9e4-e8417d5a3522.sh
+2026-03-12T16:55:10.6709921Z 
+2026-03-12T16:55:10.6710023Z 
+2026-03-12T16:55:10.6711517Z [33m[1m+===========================================================================================================================================================================================+[0m
+2026-03-12T16:55:10.6712263Z 
+2026-03-12T16:55:10.6712268Z 
+2026-03-12T16:55:10.6712950Z [31m[1mDEPRECATED: [0m[33m[1mthis command (`check`) has been DEPRECATED, and will be unsupported beyond 01 June 2024.[0m
+2026-03-12T16:55:10.6713552Z 
+2026-03-12T16:55:10.6713574Z 
+2026-03-12T16:55:10.6714450Z [32mWe highly encourage switching to the new [0m[32m[1m`scan`[0m[32m command which is easier to use, more powerful, and can be set up to mimic the deprecated command if required.[0m
+2026-03-12T16:55:10.6715287Z 
+2026-03-12T16:55:10.6715292Z 
+2026-03-12T16:55:10.6715926Z [33m[1m+===========================================================================================================================================================================================+[0m
+2026-03-12T16:55:10.6716434Z 
+2026-03-12T16:55:10.6716438Z 
+2026-03-12T16:55:11.0182325Z +==============================================================================+
+2026-03-12T16:55:11.0182785Z 
+2026-03-12T16:55:11.0182949Z                                /$$$$$$            /$$
+2026-03-12T16:55:11.0183415Z                               /$$__  $$          | $$
+2026-03-12T16:55:11.0183927Z            /$$$$$$$  /$$$$$$ | $$  \__//$$$$$$  /$$$$$$   /$$   /$$
+2026-03-12T16:55:11.0184438Z           /$$_____/ |____  $$| $$$$   /$$__  $$|_  $$_/  | $$  | $$
+2026-03-12T16:55:11.0184951Z          |  $$$$$$   /$$$$$$$| $$_/  | $$$$$$$$  | $$    | $$  | $$
+2026-03-12T16:55:11.0185447Z           \____  $$ /$$__  $$| $$    | $$_____/  | $$ /$$| $$  | $$
+2026-03-12T16:55:11.0185934Z           /$$$$$$$/|  $$$$$$$| $$    |  $$$$$$$  |  $$$$/|  $$$$$$$
+2026-03-12T16:55:11.0186317Z          |_______/  \_______/|__/     \_______/   \___/   \____  $$
+2026-03-12T16:55:11.0186619Z                                                           /$$  | $$
+2026-03-12T16:55:11.0187083Z                                                          |  $$$$$$/
+2026-03-12T16:55:11.0187451Z   by safetycli.com                                        \______/
+2026-03-12T16:55:11.0187683Z 
+2026-03-12T16:55:11.0187800Z +==============================================================================+
+2026-03-12T16:55:11.0188019Z 
+2026-03-12T16:55:11.0188308Z  [1mREPORT[0m 
+2026-03-12T16:55:11.0188418Z 
+2026-03-12T16:55:11.0188662Z   Safety [1mv3.7.0[0m is scanning for [1mVulnerabilities[0m[1m...[0m
+2026-03-12T16:55:11.0189404Z [1m  Scanning dependencies[0m in your [1menvironment:[0m
+2026-03-12T16:55:11.0189653Z 
+2026-03-12T16:55:11.0189852Z   -> /opt/hostedtoolcache/Python/3.11.14/x64/lib/python3.11/site-packages
+2026-03-12T16:55:11.0190158Z 
+2026-03-12T16:55:11.0190327Z   Using [1mopen-source vulnerability database[0m
+2026-03-12T16:55:11.0190658Z [1m  Found and scanned 44 packages[0m
+2026-03-12T16:55:11.0190945Z   Timestamp [1m2026-03-12 16:55:10[0m
+2026-03-12T16:55:11.0191239Z [1m  0[0m[1m vulnerabilities reported[0m
+2026-03-12T16:55:11.0191540Z [1m  0[0m[1m vulnerabilities ignored[0m
+2026-03-12T16:55:11.0191818Z +==============================================================================+
+2026-03-12T16:55:11.0192035Z 
+2026-03-12T16:55:11.0192378Z  [32m[1mNo known security vulnerabilities reported.[0m 
+2026-03-12T16:55:11.0192596Z 
+2026-03-12T16:55:11.0192779Z +==============================================================================+[0m
+2026-03-12T16:55:11.0193030Z 
+2026-03-12T16:55:11.0193034Z 
+2026-03-12T16:55:11.0193446Z [33m[1m+===========================================================================================================================================================================================+[0m
+2026-03-12T16:55:11.0193813Z 
+2026-03-12T16:55:11.0193817Z 
+2026-03-12T16:55:11.0194239Z [31m[1mDEPRECATED: [0m[33m[1mthis command (`check`) has been DEPRECATED, and will be unsupported beyond 01 June 2024.[0m
+2026-03-12T16:55:11.0194666Z 
+2026-03-12T16:55:11.0194669Z 
+2026-03-12T16:55:11.0195307Z [32mWe highly encourage switching to the new [0m[32m[1m`scan`[0m[32m command which is easier to use, more powerful, and can be set up to mimic the deprecated command if required.[0m
+2026-03-12T16:55:11.0195918Z 
+2026-03-12T16:55:11.0195922Z 
+2026-03-12T16:55:11.0196311Z [33m[1m+===========================================================================================================================================================================================+[0m
+2026-03-12T16:55:11.0196690Z 
+2026-03-12T16:55:11.0196694Z 
+2026-03-12T16:55:11.1445323Z ##[debug]Finishing: Security Scan (Dependencies)
+2026-03-12T16:55:11.1455816Z ##[debug]Evaluating condition for step: 'Set up Node.js'
+2026-03-12T16:55:11.1457889Z ##[debug]Evaluating: success()
+2026-03-12T16:55:11.1458249Z ##[debug]Evaluating success:
+2026-03-12T16:55:11.1458664Z ##[debug]=> true
+2026-03-12T16:55:11.1458977Z ##[debug]Result: true
+2026-03-12T16:55:11.1459521Z ##[debug]Starting: Set up Node.js
+2026-03-12T16:55:11.1493594Z ##[debug]Register post job cleanup for action: actions/setup-node@v4
+2026-03-12T16:55:11.1505323Z ##[debug]Loading inputs
+2026-03-12T16:55:11.1523409Z ##[debug]Evaluating: (((github.server_url == 'https://github.com') && github.token) || '')
+2026-03-12T16:55:11.1523905Z ##[debug]Evaluating Or:
+2026-03-12T16:55:11.1524144Z ##[debug]..Evaluating And:
+2026-03-12T16:55:11.1524379Z ##[debug]....Evaluating Equal:
+2026-03-12T16:55:11.1524613Z ##[debug]......Evaluating Index:
+2026-03-12T16:55:11.1524859Z ##[debug]........Evaluating github:
+2026-03-12T16:55:11.1525163Z ##[debug]........=> Object
+2026-03-12T16:55:11.1525464Z ##[debug]........Evaluating String:
+2026-03-12T16:55:11.1525740Z ##[debug]........=> 'server_url'
+2026-03-12T16:55:11.1526060Z ##[debug]......=> 'https://github.com'
+2026-03-12T16:55:11.1526336Z ##[debug]......Evaluating String:
+2026-03-12T16:55:11.1526603Z ##[debug]......=> 'https://github.com'
+2026-03-12T16:55:11.1526883Z ##[debug]....=> true
+2026-03-12T16:55:11.1527348Z ##[debug]....Evaluating Index:
+2026-03-12T16:55:11.1527584Z ##[debug]......Evaluating github:
+2026-03-12T16:55:11.1527831Z ##[debug]......=> Object
+2026-03-12T16:55:11.1528062Z ##[debug]......Evaluating String:
+2026-03-12T16:55:11.1528291Z ##[debug]......=> 'token'
+2026-03-12T16:55:11.1528751Z ##[debug]....=> '***'
+2026-03-12T16:55:11.1529068Z ##[debug]..=> '***'
+2026-03-12T16:55:11.1529351Z ##[debug]=> '***'
+2026-03-12T16:55:11.1529891Z ##[debug]Expanded: ((('https://github.com' == 'https://github.com') && '***') || '')
+2026-03-12T16:55:11.1530377Z ##[debug]Result: '***'
+2026-03-12T16:55:11.1532377Z ##[debug]Loading env
+2026-03-12T16:55:11.1536347Z ##[group]Run actions/setup-node@v4
+2026-03-12T16:55:11.1536586Z with:
+2026-03-12T16:55:11.1536755Z   node-version: 20
+2026-03-12T16:55:11.1537174Z   cache: npm
+2026-03-12T16:55:11.1537432Z   cache-dependency-path: stonix_ui/package-lock.json
+2026-03-12T16:55:11.1537731Z   always-auth: false
+2026-03-12T16:55:11.1537923Z   check-latest: false
+2026-03-12T16:55:11.1538236Z   token: ***
+2026-03-12T16:55:11.1538406Z env:
+2026-03-12T16:55:11.1538639Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-03-12T16:55:11.1539045Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.14/x64/lib/pkgconfig
+2026-03-12T16:55:11.1539649Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-03-12T16:55:11.1540010Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-03-12T16:55:11.1540366Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-03-12T16:55:11.1540731Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.14/x64/lib
+2026-03-12T16:55:11.1541033Z ##[endgroup]
+2026-03-12T16:55:11.3300674Z ##[debug]isExplicit: 
+2026-03-12T16:55:11.3301851Z ##[debug]explicit? false
+2026-03-12T16:55:11.3310094Z ##[debug]isExplicit: 20.20.0
+2026-03-12T16:55:11.3310662Z ##[debug]explicit? true
+2026-03-12T16:55:11.3322543Z ##[debug]isExplicit: 22.22.0
+2026-03-12T16:55:11.3322978Z ##[debug]explicit? true
+2026-03-12T16:55:11.3326164Z ##[debug]isExplicit: 24.14.0
+2026-03-12T16:55:11.3326579Z ##[debug]explicit? true
+2026-03-12T16:55:11.3331145Z ##[debug]evaluating 3 versions
+2026-03-12T16:55:11.3355651Z ##[debug]matched: 20.20.0
+2026-03-12T16:55:11.3356460Z ##[debug]checking cache: /opt/hostedtoolcache/node/20.20.0/x64
+2026-03-12T16:55:11.3357584Z ##[debug]Found tool in cache node 20.20.0 x64
+2026-03-12T16:55:11.3358244Z Found in cache @ /opt/hostedtoolcache/node/20.20.0/x64
+2026-03-12T16:55:11.3364703Z ::group::Environment details
+2026-03-12T16:55:11.3365145Z ##[group]Environment details
+2026-03-12T16:55:11.7056474Z node: v20.20.0
+2026-03-12T16:55:11.7056859Z npm: 10.8.2
+2026-03-12T16:55:11.7058127Z yarn: 1.22.22
+2026-03-12T16:55:11.7058890Z ::endgroup::
+2026-03-12T16:55:11.7059206Z ##[endgroup]
+2026-03-12T16:55:11.7088777Z [command]/opt/hostedtoolcache/node/20.20.0/x64/bin/npm config get cache
+2026-03-12T16:55:11.8368315Z /home/runner/.npm
+2026-03-12T16:55:11.8437664Z ##[debug]npm's cache folder "/home/runner/.npm" configured for the root directory
+2026-03-12T16:55:11.8442638Z ##[debug]followSymbolicLinks 'true'
+2026-03-12T16:55:11.8470884Z ##[debug]followSymbolicLinks 'true'
+2026-03-12T16:55:11.8473144Z ##[debug]implicitDescendants 'true'
+2026-03-12T16:55:11.8473874Z ##[debug]matchDirectories 'true'
+2026-03-12T16:55:11.8474615Z ##[debug]omitBrokenSymbolicLinks 'true'
+2026-03-12T16:55:11.8475326Z ##[debug]excludeHiddenFiles 'false'
+2026-03-12T16:55:11.8478992Z ##[debug]Search path '/home/runner/work/JARVIS-AGENT/JARVIS-AGENT/stonix_ui/package-lock.json'
+2026-03-12T16:55:11.8488492Z ##[debug]/home/runner/work/JARVIS-AGENT/JARVIS-AGENT/stonix_ui/package-lock.json
+2026-03-12T16:55:11.8542120Z ##[debug]Found 1 files to hash.
+2026-03-12T16:55:11.8543381Z ##[debug]primary key is node-cache-Linux-x64-npm-14ad11e35cc66e9b844af571eb1f011e1c46d2f1a46e51bd6f049b6c2c3f14b8
+2026-03-12T16:55:11.8545690Z ##[debug]Cache service version: v2
+2026-03-12T16:55:11.8549169Z ##[debug]Resolved Keys:
+2026-03-12T16:55:11.8550272Z ##[debug]["node-cache-Linux-x64-npm-14ad11e35cc66e9b844af571eb1f011e1c46d2f1a46e51bd6f049b6c2c3f14b8"]
+2026-03-12T16:55:11.8554430Z ##[debug]Checking zstd --quiet --version
+2026-03-12T16:55:11.8631741Z ##[debug]1.5.7
+2026-03-12T16:55:11.8635135Z ##[debug]zstd version: 1.5.7
+2026-03-12T16:55:11.8648624Z ##[debug][Request] GetCacheEntryDownloadURL https://results-receiver.actions.githubusercontent.com/twirp/github.actions.results.api.v1.CacheService/GetCacheEntryDownloadURL
+2026-03-12T16:55:12.1477925Z ##[debug][Response] - 200
+2026-03-12T16:55:12.1479456Z ##[debug]Headers: {
+2026-03-12T16:55:12.1479732Z ##[debug]  "content-length": "54",
+2026-03-12T16:55:12.1480241Z ##[debug]  "content-type": "application/json",
+2026-03-12T16:55:12.1480793Z ##[debug]  "date": "Thu, 12 Mar 2026 16:55:12 GMT",
+2026-03-12T16:55:12.1481231Z ##[debug]  "x-github-backend": "Kubernetes",
+2026-03-12T16:55:12.1481697Z ##[debug]  "x-github-request-id": "B018:96CBA:63048E1:6E2AD31:69B2EFF0"
+2026-03-12T16:55:12.1482148Z ##[debug]}
+2026-03-12T16:55:12.1482573Z ##[debug]Body: {
+2026-03-12T16:55:12.1482811Z ##[debug]  "ok": false,
+2026-03-12T16:55:12.1483093Z ##[debug]  "signed_download_url": "",
+2026-03-12T16:55:12.1483419Z ##[debug]  "matched_key": ""
+2026-03-12T16:55:12.1483681Z ##[debug]}
+2026-03-12T16:55:12.1488921Z ##[debug]Cache not found for version 04d00cc68e25ee34fd8b04095d0a46a28244d98af53e6925e47ed311d487b1d6 of keys: node-cache-Linux-x64-npm-14ad11e35cc66e9b844af571eb1f011e1c46d2f1a46e51bd6f049b6c2c3f14b8
+2026-03-12T16:55:12.1490843Z npm cache is not found
+2026-03-12T16:55:12.1492444Z ##[add-matcher]/home/runner/work/_actions/actions/setup-node/v4/.github/tsc.json
+2026-03-12T16:55:12.1511369Z ##[debug]Added matchers: 'tsc'. Problem matchers scan action output for known warning or error strings and report these inline.
+2026-03-12T16:55:12.1512338Z ##[add-matcher]/home/runner/work/_actions/actions/setup-node/v4/.github/eslint-stylish.json
+2026-03-12T16:55:12.1518609Z ##[debug]Added matchers: 'eslint-stylish'. Problem matchers scan action output for known warning or error strings and report these inline.
+2026-03-12T16:55:12.1519658Z ##[add-matcher]/home/runner/work/_actions/actions/setup-node/v4/.github/eslint-compact.json
+2026-03-12T16:55:12.1522446Z ##[debug]Added matchers: 'eslint-compact'. Problem matchers scan action output for known warning or error strings and report these inline.
+2026-03-12T16:55:12.1566503Z ##[debug]Node Action run completed with exit code 0
+2026-03-12T16:55:12.1568899Z ##[debug]Save intra-action state SETUP_NODE_CACHE_PACKAGE_MANAGER = npm
+2026-03-12T16:55:12.1569363Z ##[debug]Save intra-action state CACHE_PATHS = ["/home/runner/.npm"]
+2026-03-12T16:55:12.1570387Z ##[debug]Save intra-action state CACHE_KEY = node-cache-Linux-x64-npm-14ad11e35cc66e9b844af571eb1f011e1c46d2f1a46e51bd6f049b6c2c3f14b8
+2026-03-12T16:55:12.1571308Z ##[debug]Set output node-version = v20.20.0
+2026-03-12T16:55:12.1571597Z ##[debug]Set output cache-hit = false
+2026-03-12T16:55:12.1572059Z ##[debug]Finishing: Set up Node.js
+2026-03-12T16:55:12.1579422Z ##[debug]Evaluating condition for step: 'Install Frontend dependencies'
+2026-03-12T16:55:12.1581309Z ##[debug]Evaluating: success()
+2026-03-12T16:55:12.1581683Z ##[debug]Evaluating success:
+2026-03-12T16:55:12.1582190Z ##[debug]=> true
+2026-03-12T16:55:12.1582508Z ##[debug]Result: true
+2026-03-12T16:55:12.1583062Z ##[debug]Starting: Install Frontend dependencies
+2026-03-12T16:55:12.1590583Z ##[debug]Loading inputs
+2026-03-12T16:55:12.1591574Z ##[debug]Loading env
+2026-03-12T16:55:12.1595174Z ##[group]Run cd stonix_ui && npm install
+2026-03-12T16:55:12.1595453Z [36;1mcd stonix_ui && npm install[0m
+2026-03-12T16:55:12.1655247Z shell: /usr/bin/bash -e {0}
+2026-03-12T16:55:12.1655481Z env:
+2026-03-12T16:55:12.1655761Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-03-12T16:55:12.1656206Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.14/x64/lib/pkgconfig
+2026-03-12T16:55:12.1656651Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-03-12T16:55:12.1657261Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-03-12T16:55:12.1657647Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-03-12T16:55:12.1658038Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.14/x64/lib
+2026-03-12T16:55:12.1658354Z ##[endgroup]
+2026-03-12T16:55:12.1708630Z ##[debug]/usr/bin/bash -e /home/runner/work/_temp/4935e4e7-092b-491d-989f-1f732fe27541.sh
+2026-03-12T16:55:13.0812415Z npm warn ERESOLVE overriding peer dependency
+2026-03-12T16:55:13.0813281Z npm warn While resolving: @monogrid/gainmap-js@3.4.0
+2026-03-12T16:55:13.0813899Z npm warn Found: three@0.158.0
+2026-03-12T16:55:13.0814292Z npm warn node_modules/three
+2026-03-12T16:55:13.0814668Z npm warn   three@"^0.158.0" from the root project
+2026-03-12T16:55:13.0815187Z npm warn   10 more (@react-spring/three, @react-three/drei, ...)
+2026-03-12T16:55:13.0815577Z npm warn
+2026-03-12T16:55:13.0815862Z npm warn Could not resolve dependency:
+2026-03-12T16:55:13.0816368Z npm warn peer three@">= 0.159.0" from @monogrid/gainmap-js@3.4.0
+2026-03-12T16:55:13.0817179Z npm warn node_modules/@react-three/drei/node_modules/@monogrid/gainmap-js
+2026-03-12T16:55:13.0817839Z npm warn   @monogrid/gainmap-js@"^3.0.6" from @react-three/drei@9.122.0
+2026-03-12T16:55:13.0818344Z npm warn   node_modules/@react-three/drei
+2026-03-12T16:55:13.0818914Z npm warn
+2026-03-12T16:55:13.0819246Z npm warn Conflicting peer dependency: three@0.183.2
+2026-03-12T16:55:13.0819615Z npm warn node_modules/three
+2026-03-12T16:55:13.0820061Z npm warn   peer three@">= 0.159.0" from @monogrid/gainmap-js@3.4.0
+2026-03-12T16:55:13.0820683Z npm warn   node_modules/@react-three/drei/node_modules/@monogrid/gainmap-js
+2026-03-12T16:55:13.0821329Z npm warn     @monogrid/gainmap-js@"^3.0.6" from @react-three/drei@9.122.0
+2026-03-12T16:55:13.0821807Z npm warn     node_modules/@react-three/drei
+2026-03-12T16:55:14.6161169Z npm warn deprecated rimraf@3.0.2: Rimraf versions prior to v4 are no longer supported
+2026-03-12T16:55:15.2292209Z npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
+2026-03-12T16:55:15.3556452Z npm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+2026-03-12T16:55:15.9568987Z npm warn deprecated boolean@3.2.0: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+2026-03-12T16:55:16.0504170Z npm warn deprecated @humanwhocodes/object-schema@2.0.3: Use @eslint/object-schema instead
+2026-03-12T16:55:16.0809393Z npm warn deprecated @humanwhocodes/config-array@0.13.0: Use @eslint/config-array instead
+2026-03-12T16:55:17.0316738Z npm warn deprecated glob@10.4.5: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+2026-03-12T16:55:17.5490982Z npm warn deprecated three-mesh-bvh@0.7.8: Deprecated due to three.js version incompatibility. Please use v0.8.0, instead.
+2026-03-12T16:55:19.8148451Z npm warn deprecated eslint@8.57.1: This version is no longer supported. Please see https://eslint.org/version-support for other options.
+2026-03-12T16:55:28.5545045Z 
+2026-03-12T16:55:28.5545899Z added 481 packages, and audited 482 packages in 16s
+2026-03-12T16:55:28.5546347Z 
+2026-03-12T16:55:28.5546612Z 104 packages are looking for funding
+2026-03-12T16:55:28.5547264Z   run `npm fund` for details
+2026-03-12T16:55:28.6073679Z 
+2026-03-12T16:55:28.6074482Z 12 vulnerabilities (5 moderate, 7 high)
+2026-03-12T16:55:28.6074977Z 
+2026-03-12T16:55:28.6075421Z To address issues that do not require attention, run:
+2026-03-12T16:55:28.6076101Z   npm audit fix
+2026-03-12T16:55:28.6076344Z 
+2026-03-12T16:55:28.6076804Z To address all issues (including breaking changes), run:
+2026-03-12T16:55:28.6077698Z   npm audit fix --force
+2026-03-12T16:55:28.6077993Z 
+2026-03-12T16:55:28.6078220Z Run `npm audit` for details.
+2026-03-12T16:55:28.6394334Z ##[debug]Finishing: Install Frontend dependencies
+2026-03-12T16:55:28.6402773Z ##[debug]Evaluating condition for step: 'Frontend Security Audit'
+2026-03-12T16:55:28.6405820Z ##[debug]Evaluating: success()
+2026-03-12T16:55:28.6406209Z ##[debug]Evaluating success:
+2026-03-12T16:55:28.6406610Z ##[debug]=> true
+2026-03-12T16:55:28.6407132Z ##[debug]Result: true
+2026-03-12T16:55:28.6407759Z ##[debug]Starting: Frontend Security Audit
+2026-03-12T16:55:28.6417465Z ##[debug]Loading inputs
+2026-03-12T16:55:28.6418580Z ##[debug]Loading env
+2026-03-12T16:55:28.6424326Z ##[group]Run cd stonix_ui && npm audit --audit-level=high
+2026-03-12T16:55:28.6424712Z [36;1mcd stonix_ui && npm audit --audit-level=high[0m
+2026-03-12T16:55:28.6476642Z shell: /usr/bin/bash -e {0}
+2026-03-12T16:55:28.6476883Z env:
+2026-03-12T16:55:28.6477273Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-03-12T16:55:28.6477705Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.14/x64/lib/pkgconfig
+2026-03-12T16:55:28.6478159Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-03-12T16:55:28.6478713Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-03-12T16:55:28.6479081Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-03-12T16:55:28.6479448Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.14/x64/lib
+2026-03-12T16:55:28.6479756Z ##[endgroup]
+2026-03-12T16:55:28.6534099Z ##[debug]/usr/bin/bash -e /home/runner/work/_temp/3f048c96-4265-4d17-8214-5536c16064af.sh
+2026-03-12T16:55:29.5449143Z # npm audit report
+2026-03-12T16:55:29.5449453Z 
+2026-03-12T16:55:29.5449694Z @remix-run/router  <=1.23.1
+2026-03-12T16:55:29.5450263Z Severity: high
+2026-03-12T16:55:29.5451324Z React Router vulnerable to XSS via Open Redirects - https://github.com/advisories/GHSA-2w69-qvjg-hvjx
+2026-03-12T16:55:29.5452389Z fix available via `npm audit fix`
+2026-03-12T16:55:29.5453002Z node_modules/@remix-run/router
+2026-03-12T16:55:29.5453550Z   react-router  6.0.0 - 6.30.2
+2026-03-12T16:55:29.5454234Z   Depends on vulnerable versions of @remix-run/router
+2026-03-12T16:55:29.5454692Z   node_modules/react-router
+2026-03-12T16:55:29.5455045Z     react-router-dom  6.0.0-alpha.0 - 6.30.2
+2026-03-12T16:55:29.5455502Z     Depends on vulnerable versions of @remix-run/router
+2026-03-12T16:55:29.5456299Z     Depends on vulnerable versions of react-router
+2026-03-12T16:55:29.5457293Z     node_modules/react-router-dom
+2026-03-12T16:55:29.5457676Z 
+2026-03-12T16:55:29.5457875Z ajv  <6.14.0
+2026-03-12T16:55:29.5458302Z Severity: moderate
+2026-03-12T16:55:29.5459352Z ajv has ReDoS when using `$data` option - https://github.com/advisories/GHSA-2g4f-4pwh-qvx6
+2026-03-12T16:55:29.5460222Z fix available via `npm audit fix`
+2026-03-12T16:55:29.5460646Z node_modules/ajv
+2026-03-12T16:55:29.5460847Z 
+2026-03-12T16:55:29.5461019Z axios  1.0.0 - 1.13.4
+2026-03-12T16:55:29.5461371Z Severity: high
+2026-03-12T16:55:29.5462403Z Axios is vulnerable to DoS attack through lack of data size check - https://github.com/advisories/GHSA-4hjh-wcwx-xvwj
+2026-03-12T16:55:29.5464447Z Axios is Vulnerable to Denial of Service via __proto__ Key in mergeConfig - https://github.com/advisories/GHSA-43fc-jf86-j433
+2026-03-12T16:55:29.5465617Z fix available via `npm audit fix`
+2026-03-12T16:55:29.5466053Z node_modules/axios
+2026-03-12T16:55:29.5466271Z 
+2026-03-12T16:55:29.5466448Z electron  <=35.7.4
+2026-03-12T16:55:29.5466818Z Severity: moderate
+2026-03-12T16:55:29.5468092Z Electron vulnerable to Heap Buffer Overflow in NativeImage - https://github.com/advisories/GHSA-6r2x-8pq8-9489
+2026-03-12T16:55:29.5469778Z Electron has ASAR Integrity Bypass via resource modification - https://github.com/advisories/GHSA-vmqv-hx8q-j7mg
+2026-03-12T16:55:29.5470855Z fix available via `npm audit fix --force`
+2026-03-12T16:55:29.5471636Z Will install electron@41.0.0, which is a breaking change
+2026-03-12T16:55:29.5472242Z node_modules/electron
+2026-03-12T16:55:29.5472479Z 
+2026-03-12T16:55:29.5472652Z esbuild  <=0.24.2
+2026-03-12T16:55:29.5473016Z Severity: moderate
+2026-03-12T16:55:29.5474731Z esbuild enables any website to send any requests to the development server and read the response - https://github.com/advisories/GHSA-67mh-4wv8-2f99
+2026-03-12T16:55:29.5476037Z fix available via `npm audit fix --force`
+2026-03-12T16:55:29.5476711Z Will install vite@8.0.0, which is a breaking change
+2026-03-12T16:55:29.5477521Z node_modules/esbuild
+2026-03-12T16:55:29.5477871Z   vite  <=6.1.6
+2026-03-12T16:55:29.5478283Z   Depends on vulnerable versions of esbuild
+2026-03-12T16:55:29.5478754Z   node_modules/vite
+2026-03-12T16:55:29.5478959Z 
+2026-03-12T16:55:29.5479129Z glob  10.2.0 - 10.4.5
+2026-03-12T16:55:29.5479487Z Severity: high
+2026-03-12T16:55:29.5480592Z glob CLI: Command injection via -c/--cmd executes matches with shell:true - https://github.com/advisories/GHSA-5j98-mcp5-4vw2
+2026-03-12T16:55:29.5481676Z fix available via `npm audit fix`
+2026-03-12T16:55:29.5482214Z node_modules/sucrase/node_modules/glob
+2026-03-12T16:55:29.5482533Z 
+2026-03-12T16:55:29.5482764Z js-yaml  4.0.0 - 4.1.0
+2026-03-12T16:55:29.5483155Z Severity: moderate
+2026-03-12T16:55:29.5484381Z js-yaml has prototype pollution in merge (<<) - https://github.com/advisories/GHSA-mh29-5h37-fv8m
+2026-03-12T16:55:29.5485316Z fix available via `npm audit fix`
+2026-03-12T16:55:29.5485789Z node_modules/js-yaml
+2026-03-12T16:55:29.5486020Z 
+2026-03-12T16:55:29.5486265Z minimatch  <=3.1.3 || 9.0.0 - 9.0.6
+2026-03-12T16:55:29.5486698Z Severity: high
+2026-03-12T16:55:29.5487651Z minimatch has a ReDoS via repeated wildcards with non-matching literal in pattern - https://github.com/advisories/GHSA-3ppc-4f35-3m26
+2026-03-12T16:55:29.5489217Z minimatch has a ReDoS via repeated wildcards with non-matching literal in pattern - https://github.com/advisories/GHSA-3ppc-4f35-3m26
+2026-03-12T16:55:29.5491530Z minimatch has ReDoS: matchOne() combinatorial backtracking via multiple non-adjacent GLOBSTAR segments - https://github.com/advisories/GHSA-7r86-cg39-jmmj
+2026-03-12T16:55:29.5493860Z minimatch has ReDoS: matchOne() combinatorial backtracking via multiple non-adjacent GLOBSTAR segments - https://github.com/advisories/GHSA-7r86-cg39-jmmj
+2026-03-12T16:55:29.5496111Z minimatch ReDoS: nested *() extglobs generate catastrophically backtracking regular expressions - https://github.com/advisories/GHSA-23c5-xmqv-rm74
+2026-03-12T16:55:29.5498568Z minimatch ReDoS: nested *() extglobs generate catastrophically backtracking regular expressions - https://github.com/advisories/GHSA-23c5-xmqv-rm74
+2026-03-12T16:55:29.5499833Z fix available via `npm audit fix`
+2026-03-12T16:55:29.5500278Z node_modules/minimatch
+2026-03-12T16:55:29.5500773Z node_modules/sucrase/node_modules/minimatch
+2026-03-12T16:55:29.5501115Z 
+2026-03-12T16:55:29.5501124Z 
+2026-03-12T16:55:29.5501301Z rollup  3.0.0 - 3.29.5
+2026-03-12T16:55:29.5501650Z Severity: high
+2026-03-12T16:55:29.5502580Z Rollup 4 has Arbitrary File Write via Path Traversal - https://github.com/advisories/GHSA-mw96-cpmx-2vgc
+2026-03-12T16:55:29.5503525Z fix available via `npm audit fix`
+2026-03-12T16:55:29.5504009Z node_modules/rollup
+2026-03-12T16:55:29.5504233Z 
+2026-03-12T16:55:29.5504249Z 
+2026-03-12T16:55:29.5504517Z 12 vulnerabilities (5 moderate, 7 high)
+2026-03-12T16:55:29.5504852Z 
+2026-03-12T16:55:29.5505200Z To address issues that do not require attention, run:
+2026-03-12T16:55:29.5505732Z   npm audit fix
+2026-03-12T16:55:29.5505924Z 
+2026-03-12T16:55:29.5506306Z To address all issues (including breaking changes), run:
+2026-03-12T16:55:29.5506894Z   npm audit fix --force
+2026-03-12T16:55:29.5584044Z ##[error]Process completed with exit code 1.
+2026-03-12T16:55:29.5596804Z ##[debug]Finishing: Frontend Security Audit
+2026-03-12T16:55:29.5615483Z ##[debug]Evaluating condition for step: 'Post Set up Node.js'
+2026-03-12T16:55:29.5617619Z ##[debug]Evaluating: success()
+2026-03-12T16:55:29.5617992Z ##[debug]Evaluating success:
+2026-03-12T16:55:29.5618375Z ##[debug]=> false
+2026-03-12T16:55:29.5618711Z ##[debug]Result: false
+2026-03-12T16:55:29.5624187Z ##[debug]Evaluating condition for step: 'Post Set up Python 3.11'
+2026-03-12T16:55:29.5625339Z ##[debug]Evaluating: success()
+2026-03-12T16:55:29.5625673Z ##[debug]Evaluating success:
+2026-03-12T16:55:29.5626004Z ##[debug]=> false
+2026-03-12T16:55:29.5626307Z ##[debug]Result: false
+2026-03-12T16:55:29.5631134Z ##[debug]Evaluating condition for step: 'Post Run actions/checkout@v4'
+2026-03-12T16:55:29.5632991Z ##[debug]Evaluating: always()
+2026-03-12T16:55:29.5633348Z ##[debug]Evaluating always:
+2026-03-12T16:55:29.5634079Z ##[debug]=> true
+2026-03-12T16:55:29.5634411Z ##[debug]Result: true
+2026-03-12T16:55:29.5634886Z ##[debug]Starting: Post Run actions/checkout@v4
+2026-03-12T16:55:29.5666120Z ##[debug]Loading inputs
+2026-03-12T16:55:29.5669327Z ##[debug]Evaluating: github.repository
+2026-03-12T16:55:29.5669611Z ##[debug]Evaluating Index:
+2026-03-12T16:55:29.5669841Z ##[debug]..Evaluating github:
+2026-03-12T16:55:29.5670101Z ##[debug]..=> Object
+2026-03-12T16:55:29.5670320Z ##[debug]..Evaluating String:
+2026-03-12T16:55:29.5670546Z ##[debug]..=> 'repository'
+2026-03-12T16:55:29.5670861Z ##[debug]=> 'Matloob11/JARVIS-AGENT'
+2026-03-12T16:55:29.5671332Z ##[debug]Result: 'Matloob11/JARVIS-AGENT'
+2026-03-12T16:55:29.5673012Z ##[debug]Evaluating: github.token
+2026-03-12T16:55:29.5673308Z ##[debug]Evaluating Index:
+2026-03-12T16:55:29.5673535Z ##[debug]..Evaluating github:
+2026-03-12T16:55:29.5673777Z ##[debug]..=> Object
+2026-03-12T16:55:29.5673987Z ##[debug]..Evaluating String:
+2026-03-12T16:55:29.5674204Z ##[debug]..=> 'token'
+2026-03-12T16:55:29.5674772Z ##[debug]=> '***'
+2026-03-12T16:55:29.5675106Z ##[debug]Result: '***'
+2026-03-12T16:55:29.5685203Z ##[debug]Loading env
+2026-03-12T16:55:29.5689254Z Post job cleanup.
+2026-03-12T16:55:29.6618232Z ##[debug]Getting git version
+2026-03-12T16:55:29.6632658Z [command]/usr/bin/git version
+2026-03-12T16:55:29.6669998Z git version 2.53.0
+2026-03-12T16:55:29.6692586Z ##[debug]0
+2026-03-12T16:55:29.6693242Z ##[debug]git version 2.53.0
+2026-03-12T16:55:29.6693637Z ##[debug]
+2026-03-12T16:55:29.6694417Z ##[debug]Set git useragent to: git/2.53.0 (github-actions-checkout)
+2026-03-12T16:55:29.6698254Z ::add-mask::***
+2026-03-12T16:55:29.6714316Z Temporarily overriding HOME='/home/runner/work/_temp/53ce3213-93b6-4e04-b7c4-599f870db523' before making global git config changes
+2026-03-12T16:55:29.6715854Z Adding repository directory to the temporary git global config as a safe directory
+2026-03-12T16:55:29.6721283Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/JARVIS-AGENT/JARVIS-AGENT
+2026-03-12T16:55:29.6752552Z ##[debug]0
+2026-03-12T16:55:29.6753134Z ##[debug]
+2026-03-12T16:55:29.6760864Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-03-12T16:55:29.6789864Z ##[debug]1
+2026-03-12T16:55:29.6790453Z ##[debug]
+2026-03-12T16:55:29.6797319Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-03-12T16:55:29.7034924Z ##[debug]0
+2026-03-12T16:55:29.7035472Z ##[debug]
+2026-03-12T16:55:29.7044198Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-03-12T16:55:29.7067712Z http.https://github.com/.extraheader
+2026-03-12T16:55:29.7073686Z ##[debug]0
+2026-03-12T16:55:29.7074219Z ##[debug]http.https://github.com/.extraheader
+2026-03-12T16:55:29.7074509Z ##[debug]
+2026-03-12T16:55:29.7080251Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-03-12T16:55:29.7107613Z ##[debug]0
+2026-03-12T16:55:29.7108452Z ##[debug]
+2026-03-12T16:55:29.7114275Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-03-12T16:55:29.7346514Z ##[debug]0
+2026-03-12T16:55:29.7364390Z ##[debug]
+2026-03-12T16:55:29.7365183Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-03-12T16:55:29.7381107Z ##[debug]1
+2026-03-12T16:55:29.7381742Z ##[debug]
+2026-03-12T16:55:29.7388191Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-03-12T16:55:29.7623229Z ##[debug]0
+2026-03-12T16:55:29.7623751Z ##[debug]
+2026-03-12T16:55:29.7624969Z ##[debug]Unsetting HOME override
+2026-03-12T16:55:29.7693918Z ##[debug]Node Action run completed with exit code 0
+2026-03-12T16:55:29.7696421Z ##[debug]Finishing: Post Run actions/checkout@v4
+2026-03-12T16:55:29.7737678Z ##[debug]Starting: Complete job
+2026-03-12T16:55:29.7739509Z Uploading runner diagnostic logs
+2026-03-12T16:55:29.7750556Z ##[debug]Starting diagnostic file upload.
+2026-03-12T16:55:29.7750888Z ##[debug]Setting up diagnostic log folders.
+2026-03-12T16:55:29.7752542Z ##[debug]Creating diagnostic log files folder.
+2026-03-12T16:55:29.7760698Z ##[debug]Copying 1 worker diagnostic logs.
+2026-03-12T16:55:29.7768675Z ##[debug]Copying 1 runner diagnostic logs.
+2026-03-12T16:55:29.7769782Z ##[debug]Zipping diagnostic files.
+2026-03-12T16:55:29.7846686Z ##[debug]Uploading diagnostic metadata file.
+2026-03-12T16:55:29.7873789Z ##[debug]Diagnostic file upload complete.
+2026-03-12T16:55:29.7874318Z Completed runner diagnostic log upload
+2026-03-12T16:55:29.7874592Z Cleaning up orphan processes
+2026-03-12T16:55:29.8156619Z ##[warning]Node.js 20 actions are deprecated. The following actions are running on Node.js 20 and may not work as expected: actions/checkout@v4, actions/setup-node@v4, actions/setup-python@v5. Actions will be forced to run with Node.js 24 by default starting June 2nd, 2026. Please check if updated versions of these actions are available that support Node.js 24. To opt into Node.js 24 now, set the FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true environment variable on the runner or in your workflow file. Once Node.js 24 becomes the default, you can temporarily opt out by setting ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-03-12T16:55:29.8159974Z ##[debug]Finishing: Complete job
+2026-03-12T16:55:29.8189396Z ##[debug]Finishing: quality-gate
