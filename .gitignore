@@ -27,3 +27,8 @@ Jarvis_Outputs/
 chroma_db/
 generated_images/
 KMS/
+backups/
+final_verify_env/
+test_conversations/
+.pytest_cache/
+.ruff_cache/
