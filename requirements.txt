@@ -59,6 +59,8 @@ pywin32==311; sys_platform == 'win32'
 
 # Data Processing
 pandas==3.0.1
+# protobuf upgraded for CVE-2026-0994
+protobuf==7.34.0
 numpy==2.4.2
 scikit-learn==1.8.0
 
