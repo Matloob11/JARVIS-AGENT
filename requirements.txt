@@ -55,7 +55,7 @@ PyAutoGUI==0.9.54
 pynput==1.8.1
 pyperclip==1.11.0
 psutil==7.2.2
-pywin32==311
+pywin32==311; sys_platform == 'win32'
 
 # Data Processing
 pandas==3.0.1
