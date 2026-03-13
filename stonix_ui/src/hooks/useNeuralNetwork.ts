@@ -83,11 +83,11 @@ export const useNeuralNetwork = () => {
     const onToolUpdate = (data: ToolLog) => {
       setToolLogs(prev => [data, ...prev].slice(0, 20));
     };
-    const onTranscriptionUpdate = (data: { text: string }) => {
+    const onTranscriptionUpdate: (data: { text: string }) => void = (data) => {
       console.log('🎙️ Socket: transcription_update', data);
       setTranscription(data.text);
     };
-    const onInitState = (state: { messages?: Message[]; persona?: 'jarvis' | 'anna' }) => {
+    const onInitState: (state: { messages?: Message[]; persona?: 'jarvis' | 'anna' }) => void = (state) => {
       if (state.messages) setMessages(state.messages);
       if (state.persona) setActivePersona(state.persona);
     };
@@ -113,8 +113,8 @@ export const useNeuralNetwork = () => {
     socket.on('memory_sync', onMemorySync);
     socket.on('tool_update', onToolUpdate);
     socket.on('transcription_update', onTranscriptionUpdate);
-    socket.on('init_state', (state: { muted?: boolean; wake_word_active?: boolean; [key: string]: unknown }) => {
-      onInitState(state as any);
+    socket.on('init_state', (state: { messages?: Message[]; persona?: 'jarvis' | 'anna'; muted?: boolean; wake_word_active?: boolean; [key: string]: unknown }) => {
+      onInitState(state as { messages?: Message[]; persona?: 'jarvis' | 'anna' });
       setIsMuted(state.muted || false);
       setIsWakeWordActive(state.wake_word_active !== false);
     });
