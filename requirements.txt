@@ -34,7 +34,7 @@ aiohttp==3.13.3
 uvicorn==0.41.0
 
 # Audio & Speech Processing
-PyAudio==0.2.14
+PyAudio==0.2.14; sys_platform == 'win32'
 sounddevice==0.5.5
 SpeechRecognition==3.14.5
 gTTS==2.5.4
