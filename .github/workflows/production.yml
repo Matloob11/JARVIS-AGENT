@@ -10,7 +10,7 @@ jobs:
   quality-gate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # --- PYTHON QUALITY ---
       - name: Set up Python
@@ -58,7 +58,7 @@ jobs:
   git-audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Check for uncommitted changes
         run: |
           if [ -n "$(git status --porcelain)" ]; then
@@ -79,7 +79,7 @@ jobs:
           sudo rm -rf "/usr/local/share/boost"
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Build Backend Image
         run: docker build -t jarvis-backend:test -f Dockerfile.backend .
