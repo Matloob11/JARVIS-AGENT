@@ -45,7 +45,7 @@ class YouTubeAutomation:
 
             video_id = results[0].get('id')
             if video_id:
-                url = f"https://www.youtube.com./watch?v={video_id}"
+                url = f"https://www.youtube.com/watch?v={video_id}"
                 logger.info("Found Video URL: %s", url)
                 return url
 
@@ -129,7 +129,7 @@ async def automate_youtube(action: str, query: str = "") -> dict:
 
 async def _handle_open():
     """Helper for 'open' action."""
-    homepage_url = "https://www.youtube.com."
+    homepage_url = "https://www.youtube.com"
     await yt_bot.open_url_in_app(homepage_url)
     msg = "✅ YouTube homepage khol di gayi hai."
     return {"status": "success", "action": "open", "message": msg}
@@ -154,7 +154,7 @@ async def _handle_play(query):
 
 async def _handle_search(query):
     """Helper for 'search' action."""
-    search_url = f"https://www.youtube.com./results?search_query={quote(query)}"
+    search_url = f"https://www.youtube.com/results?search_query={quote(query)}"
     await yt_bot.open_url_in_app(search_url)
     msg = f"✅ YouTube par '{query}' search kar raha hoon, Sir."
     return {

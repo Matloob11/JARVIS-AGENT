@@ -69,8 +69,8 @@ async def test_close_window():
 async def test_open_app_whatsapp():
     with patch("services.system.jarvis_window_ctrl.focus_window", new_callable=AsyncMock) as mock_focus:
         with patch("subprocess.Popen") as mock_popen:
-            # Patch at the SOURCE because it's imported inside the function
-            with patch("services.automation.jarvis_whatsapp_automation.whatsapp_bot") as mock_ws:
+            # Patch at the SOURCE because it's already imported
+            with patch("services.system.jarvis_window_ctrl.whatsapp_bot") as mock_ws:
                 mock_ws.open_whatsapp = AsyncMock()
                 mock_ws.ensure_whatsapp_focus = AsyncMock()
 

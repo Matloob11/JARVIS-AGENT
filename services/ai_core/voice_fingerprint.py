@@ -49,8 +49,8 @@ if os.name == 'nt':
                 if os.path.exists(dst):
                     os.remove(dst)
                 shutil.copy2(src, dst)
-        except OSError:
-            pass
+        except OSError as e:
+            logger.warning("Windows symlink fallback failed: %s", e)
 
     os.symlink = _patched_symlink
 
@@ -208,6 +208,7 @@ class VoiceFingerprintEngine:
                     test_emb = test_emb.unsqueeze(0)
 
                 # Calculate Cosine Similarity
+                # pylint: disable=not-callable
                 similarity = torch.nn.functional.cosine_similarity(master_emb, test_emb)
                 # pylint: enable=multiple-statements,not-callable
                 score_val = float(similarity[0].item())

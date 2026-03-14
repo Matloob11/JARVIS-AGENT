@@ -40,7 +40,9 @@ async def test_capture_screen(mock_pg):
 @pytest.mark.asyncio
 async def test_analyze_via_google():
     perceiver = ScreenPerceiver()
-    with patch("jarvis_vision.client") as mock_client:
+    with patch("jarvis_vision.get_google_client") as mock_get:
+        mock_client = MagicMock()
+        mock_get.return_value = mock_client
         mock_response = MagicMock()
         mock_response.text = "I see a desktop."
         mock_client.models.generate_content.return_value = mock_response

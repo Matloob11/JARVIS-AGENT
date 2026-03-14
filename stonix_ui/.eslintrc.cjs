@@ -1,5 +1,6 @@
 module.exports = {
-  env: { browser: true, es2020: true },
+  root: true,
+  env: { browser: true, es2020: true, node: true },
   extends: [
     'eslint:recommended',
     'plugin:@typescript-eslint/recommended',
@@ -12,4 +13,16 @@ module.exports = {
   rules: {
     'react-refresh/only-export-components': 'warn',
   },
+  overrides: [
+    {
+      files: ['electron/**/*.cjs'],
+      env: {
+        node: true,
+      },
+      rules: {
+        '@typescript-eslint/no-var-requires': 'off',
+        'no-undef': 'off',
+      },
+    },
+  ],
 };

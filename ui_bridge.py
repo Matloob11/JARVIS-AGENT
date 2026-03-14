@@ -72,6 +72,7 @@ bridge_state = {
     "active_persona": "jarvis",
     "vitals": {"cpu": 0, "ram": 0, "disk": 0},
     "telemetry": {"success_rate": 1.0, "avg_latency": 0.5, "status": "HEALTHY"},
+    "location": {"city": "Detecting...", "lat": 0, "lng": 0},
     "runner_status": "online",
     "last_runner_contact": time.time()
 }
@@ -185,12 +186,16 @@ async def notify_bridge(data: dict, request: Request):
         "reasoning": lambda p: sio.emit("reasoning_update", p),
         "intelligence_sync": lambda p: sio.emit("intelligence_sync", p),
         "intelligence_update": lambda p: sio.emit("intelligence_sync", p),
+        "location_sync": None, # Handled below
         "mute_sync": None, # Handled below
         "wake_word_sync": None # Handled below
     }
 
     if event_type in handlers and handlers[event_type]:
         await handlers[event_type](payload)
+    elif event_type == "location_sync":
+        bridge_state["location"] = payload
+        await sio.emit("location_update", payload)
     elif event_type == "mute_sync":
         bridge_state["muted"] = payload
         await sio.emit("mute_update", payload)

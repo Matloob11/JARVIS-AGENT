@@ -33,8 +33,8 @@ const NeuralFeed = () => {
                 <div className="flex items-center justify-between mb-1">
                    <div className="flex items-center gap-1">
                       <Terminal size={8} className="text-jarvis-cyan" />
-                      <span className="text-[8px] font-mono text-jarvis-cyan/60">
-                        {new Date((item.timestamp as any) * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                       <span className="text-[8px] font-mono text-jarvis-cyan/60">
+                        {new Date(item.timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
                    </div>
                    <span className="text-[8px] font-black text-white/20 uppercase">{item.tool}</span>

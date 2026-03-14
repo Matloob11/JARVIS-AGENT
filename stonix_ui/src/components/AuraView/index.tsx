@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNeuralNetwork, getSocket } from '../../hooks/useNeuralNetwork';
-import { Map, Scan, AlertCircle } from 'lucide-react';
+import { Scan, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import MapComponent from './MapComponent';
 
 const AuraView = () => {
-  const { activePersona } = useNeuralNetwork();
+  const { activePersona, location } = useNeuralNetwork();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
@@ -12,9 +13,6 @@ const AuraView = () => {
 
   const isAnna = activePersona === 'anna';
   const accentClass = isAnna ? 'text-anna-magenta' : 'text-jarvis-cyan';
-  const bgAccentClass = isAnna ? 'bg-anna-magenta' : 'bg-jarvis-cyan';
-
-  const borderAccentClass = isAnna ? 'border-anna-magenta' : 'border-jarvis-cyan';
   const shadowNeonClass = isAnna ? 'shadow-neon-magenta' : 'shadow-neon-cyan';
 
   useEffect(() => {
@@ -106,55 +104,42 @@ const AuraView = () => {
          />
          <canvas ref={canvasRef} className="hidden" />
          
-         {/* Visual Intelligence Overlays */}
          <div className="absolute inset-0 pointer-events-none">
-            {/* HUD Scanning Line */}
-            <motion.div 
-               animate={{ top: ['0%', '100%', '0%'] }}
-               transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
-               className={`absolute left-0 w-full h-[1px] ${bgAccentClass}/30 shadow-[0_0_15px_rgba(0,255,255,0.8)] z-20`}
-            />
-
-            {/* Corner Targeting Brackets */}
-            <motion.div 
-               animate={{ scale: [1, 1.05, 1] }} 
-               transition={{ duration: 2, repeat: Infinity }}
-               className={`absolute top-4 right-4 w-6 h-6 border-t border-r ${borderAccentClass}/40 rounded-tr-lg`}
-            />
-            <motion.div 
-               animate={{ scale: [1, 1.05, 1] }} 
-               transition={{ duration: 2, repeat: Infinity }}
-               className={`absolute bottom-4 left-4 w-6 h-6 border-b border-l ${borderAccentClass}/40 rounded-bl-lg`}
-            />
-
             {/* HUD Labels */}
             <div className="absolute top-4 left-4 flex flex-col gap-1 drop-shadow-lg">
                <span className={`text-[10px] font-black tracking-widest ${accentClass} ${shadowNeonClass} uppercase`}>Aura View</span>
                <div className="flex items-center gap-2">
                   <span className="inline-block w-1 h-1 rounded-full bg-red-500 animate-pulse" />
-                  <span className="text-[8px] font-mono text-white/60 uppercase">Rec // Cam_01_Input</span>
+                  <span className="text-[8px] font-mono text-white/60 uppercase">Vision Feed Live</span>
                </div>
-            </div>
-
-            <div className="absolute bottom-4 right-4 hidden group-hover:block transition-opacity">
-               <span className={`text-[8px] font-mono ${accentClass}/60 tracking-tighter uppercase`}>Data_Stream: Encrypted</span>
             </div>
          </div>
       </div>
 
       {/* Map Synchronization View */}
       <div className="aspect-square rounded-3xl overflow-hidden glass-card relative bg-white/[0.02]">
-         <div className="absolute inset-0 opacity-20 pointer-events-none">
-            <div className="w-full h-full border-white/10 border-dashed border-[0.5px]" style={{ backgroundSize: '20px 20px', backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)' }} />
+         {/* Functional Map Component */}
+         <div className="absolute inset-0">
+            <MapComponent 
+               center={[location.lat, location.lng]} 
+               zoom={13}
+            />
          </div>
-         <div className="absolute inset-0 flex items-center justify-center">
-            <Map size={32} className="text-white/10" />
-         </div>
-         <div className="absolute top-4 right-4 text-[9px] font-mono text-white/20 uppercase tracking-[0.2em]">Map Sync: active</div>
          
-         <div className="absolute bottom-4 left-4 flex flex-col gap-0.5">
-            <span className="text-[8px] font-black text-white/20 tracking-widest uppercase">Geo-Position</span>
-            <span className="text-[10px] font-mono text-white/40 tracking-tighter">40.7128° N, 74.0060° W</span>
+         {/* Overlay Grid/Visual Polish */}
+         <div className="absolute inset-0 opacity-10 pointer-events-none">
+            <div className="w-full h-full border-white/10 border-dashed border-[0.5px]" style={{ backgroundSize: '40px 40px', backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.1) 1px, transparent 1px)' }} />
+         </div>
+
+         <div className="absolute top-4 right-4 text-[9px] font-mono text-white/40 uppercase tracking-[0.2em] bg-black/40 px-2 py-1 rounded-full backdrop-blur-md border border-white/10">
+            Map Sync: {location.city !== 'Detecting...' ? 'Online' : 'Active'}
+         </div>
+         
+         <div className="absolute bottom-4 left-4 flex flex-col gap-0.5 bg-black/60 p-3 rounded-2xl backdrop-blur-lg border border-white/10 shadow-2xl">
+            <span className={`text-[8px] font-black tracking-widest uppercase ${accentClass} ${shadowNeonClass}`}>{location.city} // Position</span>
+            <span className="text-[10px] font-mono text-white/80 tracking-tighter">
+               {location.lat.toFixed(4)}° {location.lat >= 0 ? 'N' : 'S'}, {location.lng.toFixed(4)}° {location.lng >= 0 ? 'E' : 'W'}
+            </span>
          </div>
       </div>
     </div>

@@ -6,8 +6,9 @@ from jarvis_search import get_current_city, search_tavily, search_google, search
 @pytest.mark.asyncio
 async def test_get_current_city_env():
     with patch("os.getenv", side_effect=lambda k, d=None: "TestCity" if k == "USER_CITY" else d):
-        city = await get_current_city()
-        assert city == "TestCity"
+        with patch("requests.get", side_effect=ValueError("API Error")):
+            city = await get_current_city()
+            assert city == "TestCity"
 
 @pytest.mark.asyncio
 async def test_get_current_city_api():

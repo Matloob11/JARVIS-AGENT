@@ -10,11 +10,22 @@ let sharedSocket: Socket | null = null;
 export const getSocket = () => {
   if (!sharedSocket) {
     sharedSocket = io(VORTEX_URL, {
-      auth: { token: VORTEX_TOKEN }
+      auth: { token: VORTEX_TOKEN },
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000
     });
   }
   return sharedSocket;
 };
+
+export const disconnectSocket = () => {
+  if (sharedSocket) {
+    sharedSocket.disconnect();
+    sharedSocket = null;
+  }
+};
+
 
 export interface NeuralMemory {
   id: string;
@@ -34,6 +45,19 @@ export interface Message {
   role: 'agent' | 'user';
   text: string;
   timestamp: number;
+}
+
+export interface LocationData {
+  city: string;
+  lat: number;
+  lng: number;
+}
+
+export interface ReasoningPlan {
+  intent?: string;
+  plan: string[];
+  confidence?: Record<string, number>;
+  is_ambiguous?: boolean;
 }
 
 export const useNeuralNetwork = () => {
@@ -58,6 +82,8 @@ export const useNeuralNetwork = () => {
   const [toolLogs, setToolLogs] = useState<ToolLog[]>([]);
   const [transcription, setTranscription] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
+  const [location, setLocation] = useState<LocationData>({ city: 'Detecting...', lat: 0, lng: 0 });
+  const [reasoning, setReasoning] = useState<ReasoningPlan | null>(null);
 
   useEffect(() => {
     const socket = getSocket();
@@ -73,10 +99,19 @@ export const useNeuralNetwork = () => {
       setIsSpeaking(data.speaking);
       setIsThinking(data.thinking);
     };
-    const onVitals = (data: { cpu: number; ram: number; disk: number }) => setVitals(data);
-    const onTelemetryUpdate = (data: { success_rate: number; avg_latency: number; status: string }) => setTelemetry(data);
+    const onVitals = (data: { cpu: number; ram: number; disk: number }) => {
+      console.debug('📊 Vitals Update:', data);
+      setVitals(data);
+    };
+    const onTelemetryUpdate = (data: { success_rate: number; avg_latency: number; status: string }) => {
+      console.debug('📈 Telemetry Update:', data);
+      setTelemetry(data);
+    };
     const onIntelligenceUpdate = (data: { type: 'image' | 'json'; url?: string; data?: Record<string, unknown>; label?: string }) => setIntelligence(data);
-    const onPersonaUpdate = (data: { persona: 'jarvis' | 'anna' }) => setActivePersona(data.persona);
+    const onPersonaUpdate = (data: { persona: 'jarvis' | 'anna' }) => {
+      console.log('👤 Persona Update:', data.persona);
+      setActivePersona(data.persona);
+    };
     const onMemorySync = (data: NeuralMemory) => {
       setMemories(prev => [data, ...prev].slice(0, 50));
     };
@@ -84,23 +119,32 @@ export const useNeuralNetwork = () => {
       setToolLogs(prev => [data, ...prev].slice(0, 20));
     };
     const onTranscriptionUpdate: (data: { text: string }) => void = (data) => {
-      console.log('🎙️ Socket: transcription_update', data);
+      console.log('🎙️ Transcription Update:', data);
       setTranscription(data.text);
     };
     const onInitState: (state: { messages?: Message[]; persona?: 'jarvis' | 'anna' }) => void = (state) => {
+      console.log('🚀 Init State:', state);
       if (state.messages) setMessages(state.messages);
       if (state.persona) setActivePersona(state.persona);
     };
     const onUpdateMessage = (msg: Record<string, unknown>) => {
-      console.log('📡 Socket: update_message', msg);
+      console.log('📡 Message Update:', msg);
       setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, ...msg as unknown as Message } : m));
     };
     const onNewMessage = (msg: Record<string, unknown>) => {
-      console.log('📡 Socket: new_message', msg);
+      console.log('📡 New Message:', msg);
       setMessages(prev => [...prev, msg as unknown as Message].slice(-50));
     };
     const onMuteUpdate = (muted: boolean) => setIsMuted(muted);
     const onWakeWordUpdate = (active: boolean) => setIsWakeWordActive(active);
+    const onLocationUpdate = (data: LocationData) => {
+      console.log('📍 Location Update:', data);
+      setLocation(data);
+    };
+    const onReasoningUpdate = (data: ReasoningPlan) => {
+      console.log('🧠 Reasoning Update:', data);
+      setReasoning(data);
+    };
 
     socket.on('connect', onConnect);
     socket.on('disconnect', onDisconnect);
@@ -113,10 +157,13 @@ export const useNeuralNetwork = () => {
     socket.on('memory_sync', onMemorySync);
     socket.on('tool_update', onToolUpdate);
     socket.on('transcription_update', onTranscriptionUpdate);
-    socket.on('init_state', (state: { messages?: Message[]; persona?: 'jarvis' | 'anna'; muted?: boolean; wake_word_active?: boolean; [key: string]: unknown }) => {
+    socket.on('location_update', onLocationUpdate);
+    socket.on('reasoning_update', onReasoningUpdate);
+    socket.on('init_state', (state: { messages?: Message[]; persona?: 'jarvis' | 'anna'; muted?: boolean; wake_word_active?: boolean; location?: LocationData; [key: string]: unknown }) => {
       onInitState(state as { messages?: Message[]; persona?: 'jarvis' | 'anna' });
       setIsMuted(state.muted || false);
       setIsWakeWordActive(state.wake_word_active !== false);
+      if (state.location) setLocation(state.location);
     });
     socket.on('new_message', onNewMessage);
     socket.on('update_message', onUpdateMessage);
@@ -135,6 +182,8 @@ export const useNeuralNetwork = () => {
       socket.off('memory_sync', onMemorySync);
       socket.off('tool_update', onToolUpdate);
       socket.off('transcription_update', onTranscriptionUpdate);
+      socket.off('location_update', onLocationUpdate);
+      socket.off('reasoning_update', onReasoningUpdate);
       socket.off('init_state', onInitState);
       socket.off('new_message', onNewMessage);
       socket.off('update_message', onUpdateMessage);
@@ -200,14 +249,23 @@ export const useNeuralNetwork = () => {
     toolLogs,
     transcription,
     messages,
+    location,
+    reasoning,
     changePersona,
     updateSettings,
     emitCommand,
     sendMessage,
     toggleMute,
-    toggleWakeWord
+    toggleWakeWord,
+    reconnect: () => {
+      disconnectSocket();
+      getSocket(); // Re-initialize
+      // Note: The useEffect will pick up the new socket next render or we can force a state update
+      setIsConnected(false);
+    }
   };
 };
+
 
 
 

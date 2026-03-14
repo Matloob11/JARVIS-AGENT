@@ -2,14 +2,12 @@ import { motion } from 'framer-motion';
 
 const TopNav = ({ activeTab, onTabChange }: { activeTab: string, onTabChange: (tab: string) => void }) => {
   const tabs = [
-    { id: 'intelligence', label: 'INTELLIGENCE' },
-    { id: 'notes', label: 'NOTES' },
-    { id: 'tasks', label: 'TASKS' },
-    { id: 'contacts', label: 'CONTACTS' }
+    { id: 'intelligence', label: 'INTELLIGENCE' }
   ];
 
+
   return (
-    <div className="flex items-center justify-center p-6 gap-2">
+    <div className="flex items-center justify-center p-2 gap-2">
       {tabs.map((tab) => (
         <button
           key={tab.id}

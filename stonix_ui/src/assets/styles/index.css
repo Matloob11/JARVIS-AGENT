@@ -9,10 +9,10 @@
   --jarvis-teal: #00d4da;
   --anna-magenta: #ff00ff;
   --accent-purple: #7000ff;
-  --bg-deep: #020406;
-  --panel-bg: rgba(6, 8, 10, 0.4);
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --glass-bg: rgba(10, 15, 20, 0.6);
+  --bg-deep: #010203;
+  --panel-bg: rgba(0, 0, 0, 0.6);
+  --glass-border: rgba(255, 255, 255, 0.05);
+  --glass-bg: rgba(8, 10, 12, 0.7);
 }
 
 @layer utilities {
@@ -64,9 +64,9 @@
 
   .glass-card {
     background: var(--glass-bg);
-    backdrop-filter: blur(20px);
+    backdrop-filter: blur(24px) saturate(180%);
     border: 1px solid var(--glass-border);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+    box-shadow: 0 4px 24px -1px rgba(0, 0, 0, 0.8);
   }
 }
 

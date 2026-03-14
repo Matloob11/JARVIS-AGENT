@@ -3,7 +3,8 @@ import asyncio
 import socket
 import json
 from unittest.mock import MagicMock, patch, AsyncMock
-from agent_runner import notify_ui, start_memory_loop, perform_startup_diagnostics, _start_background_tasks, _cleanup_session_resources, entrypoint
+from services.utils.jarvis_bridge import notify_ui
+from agent_runner import start_memory_loop, perform_startup_diagnostics, _start_background_tasks, _cleanup_session_resources, entrypoint
 
 
 @pytest.mark.asyncio

@@ -6,7 +6,7 @@ Shared UI notification and telemetry functions for JARVIS.
 import asyncio
 import time
 import uuid
-from typing import Optional
+from typing import Optional, Any
 import httpx
 from services.utils.jarvis_config import config
 from services.utils.jarvis_logger import setup_logger
@@ -27,9 +27,8 @@ def get_http_client() -> httpx.AsyncClient:
     return HTTP_CLIENT
 
 
-async def notify_ui(status: str):
-    """Sends a notification to the STONIX UI Bridge with heartbeat."""
-    health_monitor.record_heartbeat("agent_runner")
+async def notify_event(event_type: str, payload: Any):
+    """Sends a generic event notification to the STONIX UI Bridge."""
     async with TELEMETRY_SEMAPHORE:
         try:
             client = get_http_client()
@@ -39,11 +38,33 @@ async def notify_ui(status: str):
             }
             url = f"{config.bridge_url}/notify"
             await client.post(url, json={
-                "type": "status",
-                "payload": status
+                "type": event_type,
+                "payload": payload
             }, headers=headers, timeout=2.0)
         except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.error("Bridge Notification failed: %s", e)
+            logger.error("Bridge Notification failed for %s: %s", event_type, e)
+
+
+async def notify_ui(status: str):
+    """Sends a notification to the STONIX UI Bridge with heartbeat."""
+    health_monitor.record_heartbeat("agent_runner")
+    await notify_event("status", status)
+
+
+async def notify_vitals(vitals: dict):
+    """Pushes real-time system vitals to the UI."""
+    payload = {
+        "cpu": vitals.get("cpu", {}).get("usage", 0),
+        "ram": vitals.get("memory", {}).get("percent", 0),
+        "disk": vitals.get("disk", {}).get("percent", 0)
+    }
+    await notify_event("vitals", payload)
+
+
+async def notify_location(location_data: dict):
+    """Pushes real-time location to the UI."""
+    await notify_event("location_sync", location_data)
+
 
 
 async def notify_thinking(status: str):

@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { useNeuralNetwork } from '@/hooks/useNeuralNetwork';
 
 const ParticleSphere = ({ isSpeaking, isThinking, dataRef, activePersona }: { isSpeaking: boolean, isThinking: boolean, dataRef: React.MutableRefObject<number[]>, activePersona: 'jarvis' | 'anna' }) => {
-  const pointsRef = useRef<THREE.Points>(null!);
+  const pointsRef = useRef<THREE.Points>(null);
   const particleCount = 4000; 
 
   const [positions, colors] = useMemo(() => {
@@ -36,6 +36,7 @@ const ParticleSphere = ({ isSpeaking, isThinking, dataRef, activePersona }: { is
   }, []);
 
   useFrame((state) => {
+    if (!pointsRef.current) return;
     const time = state.clock.getElapsedTime();
     const data = dataRef.current;
     const average = data && data.length > 0 ? (data.reduce((a, b) => a + b) / data.length) / 100 : 0;

@@ -3,7 +3,8 @@ import asyncio
 from unittest.mock import MagicMock, patch, AsyncMock
 import socket
 import json
-from agent_runner import notify_ui, perform_startup_diagnostics, _start_background_tasks, _cleanup_session_resources
+from services.utils.jarvis_bridge import notify_ui
+from agent_runner import perform_startup_diagnostics, _start_background_tasks, _cleanup_session_resources
 
 
 @pytest.fixture
@@ -40,9 +41,9 @@ async def test_start_background_tasks(mock_runner_deps):
     with patch("asyncio.create_task") as mock_create:
         with patch("services.automation.jarvis_clipboard.ClipboardMonitor"):
             tasks = await _start_background_tasks(session, assistant)
-            # 9 tasks in main list + 1 for clipboard monitor = 10
-            assert len(tasks) == 10
-            assert mock_create.call_count == 10
+            # 3 main tasks + 1 for clipboard monitor = 4
+            assert len(tasks) == 4
+            assert mock_create.call_count == 4
 
 
 @pytest.mark.asyncio

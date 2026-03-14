@@ -26,9 +26,14 @@ waitOn({
 });
 
 function startElectron() {
+    // Ensure ELECTRON_RUN_AS_NODE is not inherited, as it breaks Electron's browser context
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+
     const electron = spawn('npx', ['electron', '.'], {
         stdio: 'inherit',
-        shell: true
+        shell: true,
+        env: env
     });
 
     electron.on('exit', (code) => {

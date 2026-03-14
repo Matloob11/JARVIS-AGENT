@@ -1,59 +1,70 @@
 import { useEffect, useState } from 'react';
 import { X, Minus, Square, Copy } from 'lucide-react';
 
+interface Window {
+  electronAPI?: {
+    onMaximize: (callback: () => void) => void;
+    onUnmaximize: (callback: () => void) => void;
+    minimize: () => void;
+    maximize: () => void;
+    close: () => void;
+  };
+}
+
 const WindowControls = () => {
   const [isMaximized, setIsMaximized] = useState(false);
   const isElectron = window.navigator.userAgent.toLowerCase().includes('electron');
+  const electronAPI = (window as unknown as Window).electronAPI;
 
   useEffect(() => {
-    if (isElectron && (window as any).electronAPI) {
-      (window as any).electronAPI.onMaximize(() => setIsMaximized(true));
-      (window as any).electronAPI.onUnmaximize(() => setIsMaximized(false));
+    if (isElectron && electronAPI) {
+      electronAPI.onMaximize(() => setIsMaximized(true));
+      electronAPI.onUnmaximize(() => setIsMaximized(false));
     }
-  }, [isElectron]);
+  }, [isElectron, electronAPI]);
 
   const minimize = () => {
-    if (isElectron && (window as any).electronAPI) {
-      (window as any).electronAPI.minimize();
+    if (isElectron && electronAPI) {
+      electronAPI.minimize();
     }
   };
 
   const maximize = () => {
-    if (isElectron && (window as any).electronAPI) {
-      (window as any).electronAPI.maximize();
+    if (isElectron && electronAPI) {
+      electronAPI.maximize();
     }
   };
 
   const close = () => {
-    if (isElectron && (window as any).electronAPI) {
-      (window as any).electronAPI.close();
+    if (isElectron && electronAPI) {
+      electronAPI.close();
     }
   };
 
-  if (!isElectron) return null;
+  // if (!isElectron) return null;
 
   return (
     <div className="flex items-center gap-1 z-[100] no-drag">
       <button 
         onClick={minimize}
-        className="p-2 hover:bg-white/10 rounded-lg transition-colors text-jarvis-cyan/40 hover:text-jarvis-cyan"
+        className="p-2 hover:bg-white/10 rounded-lg transition-all text-white/60 hover:text-jarvis-cyan active:scale-95"
         title="Minimize"
       >
-        <Minus size={16} />
+        <Minus size={16} strokeWidth={2.5} />
       </button>
       <button 
         onClick={maximize}
-        className="p-2 hover:bg-white/10 rounded-lg transition-colors text-jarvis-cyan/40 hover:text-jarvis-cyan"
+        className="p-2 hover:bg-white/10 rounded-lg transition-all text-white/60 hover:text-jarvis-cyan active:scale-95"
         title={isMaximized ? "Restore" : "Maximize"}
       >
-        {isMaximized ? <Copy size={14} /> : <Square size={14} />}
+        {isMaximized ? <Copy size={14} strokeWidth={2.5} /> : <Square size={14} strokeWidth={2.5} />}
       </button>
       <button 
         onClick={close}
-        className="p-2 hover:bg-red-500/20 rounded-lg transition-colors text-white/40 hover:text-red-500 group"
+        className="p-2 hover:bg-red-500/20 rounded-lg transition-all text-white/60 hover:text-red-500 group active:scale-95"
         title="Close (Minimize to Tray)"
       >
-        <X size={18} className="group-hover:scale-110 transition-transform" />
+        <X size={18} strokeWidth={2.5} className="group-hover:rotate-90 transition-transform duration-300" />
       </button>
     </div>
   );

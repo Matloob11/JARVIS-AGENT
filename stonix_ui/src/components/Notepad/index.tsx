@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Save, Trash2, X, Archive, FileText, CheckCircle2 } from 'lucide-react';
-import { useNeuralNetwork } from '../../hooks/useNeuralNetwork';
+import { useNeuralNetwork, ToolLog } from '../../hooks/useNeuralNetwork';
 
 interface NotepadProps {
   isOpen: boolean;
   onClose: () => void;
-  logs?: any[];
+  logs?: ToolLog[];
 }
 
 const Notepad: React.FC<NotepadProps> = ({ isOpen, onClose, logs = [] }) => {

@@ -27,28 +27,44 @@ SEARCH_ENGINE_ID = os.getenv("SEARCH_ENGINE_ID")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 
 
-async def get_current_city() -> str:
+async def get_current_city_data() -> dict:
     """
-    Detects the current city of the user based on IP address.
-    Checks .env for USER_CITY first.
+    Detects the current location of the user based on IP address.
+    Returns: {"city": str, "lat": float, "lng": float}
     """
+    default_data = {
+        "city": os.getenv("USER_CITY", "Lahore"),
+        "lat": 31.5204,
+        "lng": 74.3587
+    }
     try:
-        # Check if city is manually set in .env
-        env_city = os.getenv("USER_CITY")
-        if env_city:
-            return env_city
-
         # Using asyncio.to_thread for blocking requests call
-        response = await asyncio.to_thread(requests.get, "https://ipinfo.io", timeout=5)
+        response = await asyncio.to_thread(requests.get, "https://ipinfo.io/json", timeout=5)
         data = response.json()
-        detected_city = data.get("city", "Lahore")
+        
+        loc = data.get("loc", "").split(",")
+        lat = float(loc[0]) if len(loc) == 2 else default_data["lat"]
+        lng = float(loc[1]) if len(loc) == 2 else default_data["lng"]
+        
+        detected_city = data.get("city", default_data["city"])
 
         if detected_city.lower() in ["unknown", "", "none"]:
-            return "Lahore"
-        return detected_city
+            detected_city = default_data["city"]
+            
+        return {
+            "city": detected_city,
+            "lat": lat,
+            "lng": lng
+        }
     except (requests.RequestException, ValueError, KeyError, OSError, RuntimeError) as e:
-        logger.warning("Error getting current city: %s", e)
-        return os.getenv("USER_CITY", "Lahore")
+        logger.warning("Error getting current location: %s", e)
+        return default_data
+
+
+async def get_current_city() -> str:
+    """Wrapper for legacy code expecting only string."""
+    data = await get_current_city_data()
+    return data["city"]
 
 
 @jarvis_tool

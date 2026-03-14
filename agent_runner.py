@@ -6,6 +6,7 @@ Entrypoint and session management for the JARVIS agent.
 # pylint: disable=broad-exception-caught
 
 import asyncio
+import traceback
 from typing import Optional, Any
 
 from livekit import agents, rtc
@@ -15,19 +16,17 @@ from livekit.plugins import google
 from services.utils.jarvis_logger import setup_logger
 from services.utils.jarvis_health import health_monitor
 from services.utils.jarvis_healing import healing_engine
-from services.utils.jarvis_checkpoint import checkpoint_manager
-from services.utils.jarvis_qa import qa_engine
 from services.utils.jarvis_diagnostics import diagnostics as diagnostics_instance
 
 from services.ai_core.agent_memory import MemoryExtractor
-from services.info.jarvis_search import get_formatted_datetime, get_current_city
+from services.info.jarvis_search import (
+    get_formatted_datetime, get_current_city, get_current_city_data
+)
 from services.ai_core.agent_loops import (
-    start_reminder_loop, start_bug_hunter_loop, start_ui_command_listener
+    start_ui_command_listener
 )
 from services.automation.jarvis_clipboard import ClipboardMonitor
-from services.utils.jarvis_bridge import (
-    notify_ui, notify_transcription, notify_thinking
-)
+# Notification functions moved inside entrypoint to handle potential scope/import issues
 
 # Import BrainAssistant from agent_core
 from agent_core import BrainAssistant
@@ -81,27 +80,20 @@ async def _start_background_tasks(session: AgentSession, assistant: Any):
     """Starts all background loops and monitors."""
     logger.info("🔄 Starting background tasks...")
 
-    async def _get_agent_state():
-        return assistant.get_state() if hasattr(assistant, "get_state") else {}
+    # async def _get_agent_state():
+    #     return assistant.get_state() if hasattr(assistant, "get_state") else {}
 
     tasks = [
         asyncio.create_task(start_memory_loop(
             session, assistant.memory_extractor)),
         asyncio.create_task(start_heartbeat_loop()),
-        asyncio.create_task(start_reminder_loop(session)),
-        asyncio.create_task(start_bug_hunter_loop(session)),
         asyncio.create_task(start_ui_command_listener(assistant)),
-        asyncio.create_task(perform_startup_diagnostics()),
-        asyncio.create_task(healing_engine.start_healing_loop()),
-        asyncio.create_task(
-            checkpoint_manager.start_checkpoint_loop(_get_agent_state, interval=3600)),
-        asyncio.create_task(qa_engine.start_qa_loop(
-            _get_agent_state, interval=7200))
     ]
 
     # Register Recovery Actions
     async def _recover_ui_bridge():
         logger.warning("🚑 HEALING: Attempting to notify UI of runner pulse...")
+        from services.utils.jarvis_bridge import notify_ui # pylint: disable=import-outside-toplevel
         await notify_ui("HEARTBEAT")
 
     async def _recover_backend_core():
@@ -134,7 +126,12 @@ async def _process_user_audio(publication: rtc.TrackPublication, assistant: Brai
     """Subscribes to user audio and feeds frames to the assistant for Voice ID."""
     logger.info("🎤 Subscribing to audio track: %s", publication.sid)
     try:
-        track = await publication.subscribe()
+        publication.set_subscribed(True)
+        # Wait for track to be available
+        while not publication.track:
+            await asyncio.sleep(0.1)
+        
+        track = publication.track
         audio_stream = rtc.AudioStream(track)
         async for audio_frame in audio_stream:
             assistant.add_audio_frame(audio_frame)
@@ -154,7 +151,7 @@ async def _cleanup_session_resources(session: Optional[AgentSession], tasks: lis
     if tasks:
         logger.info("🛑 Cleaning up background tasks...")
         for task in tasks:
-            if task and not task.done():
+            if task and isinstance(task, asyncio.Task) and not task.done():
                 task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -178,6 +175,9 @@ async def entrypoint(ctx: agents.JobContext):
         session: Optional[AgentSession] = None
         tasks = []
         try:
+            from services.utils.jarvis_bridge import ( # pylint: disable=import-outside-toplevel
+                notify_ui, notify_transcription, notify_thinking, notify_event, notify_vitals, notify_location
+            )
             logger.info("Attempting to start session...")
 
             # Context data
@@ -204,6 +204,34 @@ async def entrypoint(ctx: agents.JobContext):
             await session.start(room=ctx.room, agent=assistant)
             logger.info("✅ Session started successfully.")
             assistant.attach_session(session)
+
+            # --- Location Sync ---
+            loc_data = await get_current_city_data()
+            asyncio.create_task(notify_event("location_sync", loc_data))
+
+            # --- Vitals Telemetry Loop ---
+            async def vitals_loop():
+                while True:
+                    try:
+                        report = health_monitor.generate_health_report()
+                        await notify_vitals(report.get("vitals", {}))
+                    except Exception as e:
+                        logger.error("Vitals loop error: %s", e)
+                    await asyncio.sleep(5)
+
+            # --- Location Update Loop ---
+            async def location_loop():
+                while True:
+                    try:
+                        loc_data = await get_current_city_data()
+                        await notify_location(loc_data)
+                    except Exception as e:
+                        logger.error("Location loop error: %s", e)
+                    await asyncio.sleep(60) # Location doesn't change often
+
+            tasks.append(asyncio.create_task(vitals_loop()))
+            tasks.append(asyncio.create_task(location_loop()))
+
 
             # --- Speaker Identification Subscription ---
             @ctx.room.on("track_published")
@@ -268,6 +296,7 @@ async def entrypoint(ctx: agents.JobContext):
             # Categorize the error for better visibility
             err_type = type(exc).__name__
             logger.error("⚠️ Session attempt %d failed [%s]: %s", attempt + 1, err_type, exc)
+            logger.error(traceback.format_exc())
 
             if "TimeoutError" in str(exc) or "handshake" in str(exc).lower():
                 logger.warning("🕒 Handshake timeout detected. System may be under heavy load.")

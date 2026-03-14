@@ -25,14 +25,27 @@ logger = setup_logger("JARVIS-VISION")
 
 load_dotenv()
 
-# Configure Google Generative AI Client
-client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+# Global clients (lazy initialized where needed)
+_google_client = None
 
-# Configure Groq Client (OpenAI-compatible)
-groq_client = None
-if os.getenv("GROQ_API_KEY"):
-    groq_client = OpenAI(
-        api_key=os.getenv("GROQ_API_KEY"),
+def get_google_client():
+    """Lazily initializes and returns the Google GenAI client."""
+    global _google_client # pylint: disable=global-statement
+    if _google_client is None:
+        api_key = os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            logger.warning("GOOGLE_API_KEY missing in environment.")
+            return None
+        _google_client = genai.Client(api_key=api_key)
+    return _google_client
+
+def get_groq_client():
+    """Lazily initializes and returns the Groq OpenAI client."""
+    api_key = os.getenv("GROQ_API_KEY")
+    if not api_key:
+        return None
+    return OpenAI(
+        api_key=api_key,
         base_url="https://api.groq.com/openai/v1"
     )
 
@@ -88,19 +101,23 @@ class ScreenPerceiver:
 
             data = await asyncio.to_thread(do_capture)
             if data is None:
-                raise IOError("Could not capture from webcam.")
+                raise IOError("Could not capture from webcam. Check if your camera is connected and available.")
             return data
-        except (RuntimeError, IOError, ValueError) as e:
+        except Exception as e:
             logger.error("Error capturing webcam: %s", e)
             raise
 
     async def analyze_via_google(self, prompt: str, image: Image.Image) -> str:
         """Attempts analysis via native Google SDK."""
+        google_client = get_google_client()
+        if not google_client:
+            raise ValueError("Google GenAI client not initialized. Check GOOGLE_API_KEY.")
+
         logger.info("Sending image to Gemini (%s) with prompt: %s",
                     self.model_name, prompt)
         try:
             response = await asyncio.to_thread(
-                client.models.generate_content,
+                google_client.models.generate_content,
                 model=self.model_name,
                 contents=[prompt, image]
             )
@@ -153,6 +170,7 @@ class ScreenPerceiver:
 
     async def analyze_via_groq(self, prompt: str, image: Image.Image) -> str:
         """Analysis via Groq Llama 3.2 Vision."""
+        groq_client = get_groq_client()
         if not groq_client:
             return "Error: Groq client not initialized."
 
@@ -193,10 +211,10 @@ class ScreenPerceiver:
             # Try Primary: Gemini
             try:
                 return await self.analyze_via_google(prompt, image)
-            except (RuntimeError, ValueError, IOError) as e:
-                # Catch Quota, Rate Limit, or Model Not Found errors specifically
+            except Exception as e:
+                # Catch API errors (google-genai APIError) and quota issues
                 msg = str(e).upper()
-                if any(err in msg for err in ["429", "RESOURCE_EXHAUSTED", "404", "NOT_FOUND", "500"]):
+                if any(err in msg for err in ["429", "RESOURCE_EXHAUSTED", "404", "NOT_FOUND", "500", "APIERROR", "QUOTA", "EXCEPTION"]):
                     logger.warning(
                         "Gemini error (%s). Falling back to Groq...", msg)
 
@@ -238,7 +256,7 @@ async def analyze_screen(query: str = "Describe what you see on my screen in det
             "message": f"👁️ Screen Analysis report taiyyar hai, Sir:\n{result}"
         }
     except (OSError, IOError, RuntimeError) as e:
-        logger.exception("Vision tool error: %s", e)
+        logger.error("Vision tool error: %s", e)
         return {
             "status": "error",
             "message": f"👁️ Vision analysis failed: {str(e)}",
@@ -260,9 +278,9 @@ async def analyze_camera(query: str = "What do you see in the camera?") -> dict:
         # Try Primary: Gemini
         try:
             result = await vision_system.analyze_via_google(query, image)
-        except (RuntimeError, ValueError, IOError) as e:
+        except Exception as e: # pylint: disable=broad-exception-caught
             msg = str(e).upper()
-            if any(err in msg for err in ["429", "RESOURCE_EXHAUSTED", "404", "NOT_FOUND", "500"]):
+            if any(err in msg for err in ["429", "RESOURCE_EXHAUSTED", "404", "NOT_FOUND", "500", "APIERROR", "QUOTA", "EXCEPTION"]):
                 logger.warning("Gemini error in camera. Falling back to Groq...")
 
                 # Try Groq
@@ -282,7 +300,7 @@ async def analyze_camera(query: str = "What do you see in the camera?") -> dict:
             "message": f"📷 Camera view analysis, Sir:\n{result}"
         }
     except (OSError, IOError, RuntimeError, ValueError) as e:
-        logger.exception("Camera tool error: %s", e)
+        logger.error("Camera tool error: %s", e)
         return {
             "status": "error",
             "message": f"📷 Camera analysis failed: {str(e)}",

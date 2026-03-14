@@ -164,7 +164,7 @@ def mock_plugin_manager():
 def mock_environment_variables(monkeypatch):
     """Mock environment variables for all tests"""
     test_env = {
-        "JARVIS_ENCRYPTION_KEY": "test_encryption_key_32_bytes_long",
+        "JARVIS_ENCRYPTION_KEY": "MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI=",
         "PYTHONPATH": str(project_root),
         "JARVIS_TEST_MODE": "true"
     }

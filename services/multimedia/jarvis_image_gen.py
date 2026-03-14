@@ -90,8 +90,8 @@ class JarvisImageGenerator:
                     "url": url,
                     "message": f"Sir, image generate ho gayi hai (via fallback): {filename}"
                 }
-        except (requests.RequestException, OSError):
-            pass
+        except (requests.RequestException, OSError) as e:
+            logger.error("Pollinations fallback failed: %s", e)
 
         return {
             "status": "error",

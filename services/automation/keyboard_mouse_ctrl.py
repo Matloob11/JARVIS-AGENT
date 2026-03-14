@@ -217,9 +217,9 @@ class SafeController:
                 self.log(
                     f"Fast-typed (clipboard) due to {reason}: {len(text)} chars.")
                 return f"Fast-typed {len(text)} characters using clipboard ({reason})."
-            except (ImportError, OSError):
+            except (ImportError, OSError) as e:
                 # Fallback if pyperclip is somehow missing or fails
-                pass
+                logger.warning("Clipboard fast-typing failed, falling back to character typing: %s", e)
 
         # Traditional typing for short strings or if clipboard fails
         for char in text:
@@ -358,8 +358,8 @@ class SafeController:
             elif direction == "right":
                 pyautogui.moveTo(x - 200, y)
                 pyautogui.dragTo(x + 200, y, duration=0.5)
-        except (pyautogui.FailSafeException, AttributeError, OSError):
-            pass
+        except (pyautogui.FailSafeException, AttributeError, OSError) as e:
+            logger.warning("Swipe gesture failed or aborted: %s", e)
         await asyncio.sleep(0.5)
         self.log(f"Swipe gesture: {direction}")
         return f"Swipe {direction} done."

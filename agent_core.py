@@ -10,6 +10,7 @@ import re
 import asyncio
 import json
 import uuid
+import types   # For SimpleNamespace
 from typing import Any, Optional
 from datetime import datetime
 import httpx
@@ -76,10 +77,10 @@ class BrainAssistant(Agent):
         self.voice_id_engine = voice_id_engine
 
         # Session options for modality sync
-        self._session_options = type('obj', (object,), {
-            'voice_id': 'jarvis_v2',
-            'response_modality': 'audio'
-        })()
+        self._session_options = types.SimpleNamespace(
+            voice_id='jarvis_v2',
+            response_modality='audio'
+        )
 
         self.plugin_manager = JarvisPluginManager()
         package_path = os.path.join(os.path.dirname(__file__), 'services')
@@ -137,10 +138,10 @@ class BrainAssistant(Agent):
         # Update voice in the session if active
         if self._active_session:
             try:
-                if (hasattr(self._active_session, "_activity") and
-                        self._active_session._activity):
-                    rt_session = getattr(
-                        self._active_session._activity, "_rt_session", None)
+                # Find the Realtime Session deeper in the object structure for LiveKit 0.22+
+                activity = getattr(self._active_session, "_activity", None)
+                if activity:
+                    rt_session = getattr(activity, "_rt_session", None)
                     if rt_session:
                         rt_session.update_options(voice=voice_name.lower())
                         logger.info("Voice changed to: %s", voice_name)
@@ -210,9 +211,9 @@ class BrainAssistant(Agent):
 
                 # Find the Realtime Session deeper in the object structure for LiveKit 0.22+
                 rt_session = None
-                if hasattr(self._active_session, "_activity"):
-                    rt_session = getattr(
-                        self._active_session._activity, "_rt_session", None)
+                activity = getattr(self._active_session, "_activity", None)
+                if activity:
+                    rt_session = getattr(activity, "_rt_session", None)
 
                 if rt_session:
                     logger.info("Setting session options: voice=%s", voice)
@@ -458,7 +459,8 @@ class BrainAssistant(Agent):
         self._audio_buffer.extend(frame.data)
         # Keep only last 10 seconds of audio (approx 320k bytes for 16kHz mono)
         if len(self._audio_buffer) > 320000:
-            self._audio_buffer = self._audio_buffer[-320000:]
+            bytes_to_keep = 320000
+            self._audio_buffer = self._audio_buffer[-bytes_to_keep:]
 
     async def verify_speaker_identity(self) -> bool:
         """Verifies if the current audio buffer matches the enrolled user."""

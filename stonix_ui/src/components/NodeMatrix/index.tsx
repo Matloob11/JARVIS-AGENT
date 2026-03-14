@@ -1,33 +1,19 @@
 import { motion } from 'framer-motion';
-import { Plus, Database, History, User, FileText } from 'lucide-react';
+import { Database, User } from 'lucide-react';
+import { useNeuralNetwork } from '../../hooks/useNeuralNetwork';
 
 const NodeMatrix = () => {
+  const { memories } = useNeuralNetwork();
   const nodes = [
-    { id: 'add', label: 'ADD FILES', sub: 'EXTERNAL INPUT', icon: <Plus size={16} />, color: 'cyan' },
-    { id: 'memory', label: 'MEMORY', sub: 'NEURAL INDEX', icon: <Database size={16} />, color: 'red' },
-    { id: 'history', label: 'HISTORY', sub: 'EVENT LOGS', icon: <History size={16} />, color: 'blue' },
+    { id: 'memory', label: 'MEMORY', sub: `${memories.length} NEURAL_INDEX`, icon: <Database size={16} />, color: 'red' },
     { id: 'user', label: 'USER', sub: 'BIOMETRIC DATA', icon: <User size={16} />, color: 'white' }
   ];
 
   return (
     <div className="flex items-center gap-12 p-8">
-      {/* Import Control */}
-      <div className="flex flex-col gap-4">
-        <div className="glass-card flex flex-col items-center p-6 rounded-2xl w-24">
-           <button className="w-12 h-12 rounded-xl bg-jarvis-cyan/10 border border-jarvis-cyan/30 flex items-center justify-center text-jarvis-cyan shadow-neon-cyan mb-4 hover:scale-110 transition-transform">
-              <Plus size={24} />
-           </button>
-           <span className="text-[10px] font-bold text-jarvis-cyan tracking-widest uppercase opacity-60">Import</span>
-        </div>
-        
-        <div className="glass-card flex flex-col gap-4 p-4 rounded-2xl opacity-50">
-           <div className="w-12 h-12 bg-white/5 rounded-lg flex items-center justify-center text-white/40">
-              <FileText size={20} />
-           </div>
-           <div className="w-12 h-12 bg-white/5 rounded-lg flex items-center justify-center text-white/40">
-              <FileText size={20} />
-           </div>
-        </div>
+      {/* Visual Convergence Point (Left) */}
+      <div className="w-px h-64 bg-gradient-to-b from-transparent via-jarvis-cyan/40 to-transparent relative">
+         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-jarvis-cyan shadow-neon-cyan" />
       </div>
 
       {/* Connection Lines (Static for now) */}

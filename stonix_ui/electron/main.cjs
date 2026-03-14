@@ -1,6 +1,6 @@
 const { app, BrowserWindow, ipcMain, Menu, Tray } = require('electron');
 const path = require('path');
-const isDev = require('electron-is-dev');
+const isDev = !app.isPackaged;
 const { spawn } = require('child_process');
 
 let mainWindow;
@@ -35,21 +35,25 @@ function startBackend() {
 }
 
 function createTray() {
-  const iconPath = path.join(__dirname, '../public/favicon.ico'); // Assume favicon exists
-  tray = new Tray(iconPath);
-  
-  const contextMenu = Menu.buildFromTemplate([
-    { label: 'Show JARVIS', click: () => mainWindow.show() },
-    { type: 'separator' },
-    { label: 'Quit JARVIS', click: () => {
-      isQuitting = true;
-      app.quit();
-    }}
-  ]);
+  try {
+    const iconPath = path.join(__dirname, '../public/favicon/favicon-32x32.png');
+    tray = new Tray(iconPath);
+    
+    const contextMenu = Menu.buildFromTemplate([
+      { label: 'Show JARVIS', click: () => mainWindow.show() },
+      { type: 'separator' },
+      { label: 'Quit JARVIS', click: () => {
+        isQuitting = true;
+        app.quit();
+      }}
+    ]);
 
-  tray.setToolTip('JARVIS-AGENT');
-  tray.setContextMenu(contextMenu);
-  tray.on('double-click', () => mainWindow.show());
+    tray.setToolTip('JARVIS-AGENT');
+    tray.setContextMenu(contextMenu);
+    tray.on('double-click', () => mainWindow.show());
+  } catch (err) {
+    console.error(`[Electron] Failed to create tray: ${err.message}`);
+  }
 }
 
 function createWindow() {
