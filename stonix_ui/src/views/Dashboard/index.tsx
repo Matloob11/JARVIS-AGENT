@@ -80,11 +80,11 @@ const Dashboard: React.FC = () => {
                   <NeuralFeed />
                </div>
                <div className="mt-auto pt-6 border-t border-white/5 flex gap-4">
-                  <button onClick={() => setIsNotepadOpen(true)} className="flex-1 panel-recessed p-3 rounded-xl border-white/5 text-white/40 hover:text-jarvis-cyan transition-colors flex items-center justify-center gap-2">
+                  <button onClick={() => setIsNotepadOpen(true)} className="flex-1 panel-recessed p-3 rounded-xl border-white/5 text-white/40 hover:text-jarvis-cyan transition-colors flex items-center justify-center gap-2" title="Archive">
                      <FileText size={16} />
                      <span className="text-[9px] font-black tracking-widest uppercase">Archive</span>
                   </button>
-                  <button onClick={() => setActivePanel('settings')} className="panel-recessed p-3 rounded-xl border-white/5 text-white/40 hover:text-white transition-colors">
+                  <button onClick={() => setActivePanel('settings')} className="panel-recessed p-3 rounded-xl border-white/5 text-white/40 hover:text-white transition-colors" title="System Settings">
                      <Settings size={16} />
                   </button>
                </div>
@@ -195,6 +195,7 @@ const MessageInput: React.FC<{ onSend: (text: string) => void }> = ({ onSend }) 
       <button 
         type="submit"
         className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-white/20 group-focus-within:text-jarvis-cyan transition-colors"
+        title="Send Message"
       >
         <FileText size={14} />
       </button>

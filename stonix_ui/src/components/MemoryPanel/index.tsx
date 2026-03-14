@@ -29,7 +29,7 @@ const MemoryPanel: React.FC<MemoryPanelProps> = ({ onClose, memories = [] }) => 
           <Sparkles className="text-jarvis-cyan w-5 h-5 shadow-neon-cyan" />
           <h2 className="text-sm font-black tracking-widest uppercase">Memory Bank</h2>
         </div>
-        <button onClick={onClose} className="text-white/40 hover:text-white transition-colors">
+        <button onClick={onClose} className="text-white/40 hover:text-white transition-colors" title="Close Memory Bank">
           <X className="w-5 h-5" />
         </button>
       </div>

@@ -54,11 +54,11 @@ const MapComponent: React.FC<MapComponentProps> = ({
   if (!isMounted) return <div className="map-placeholder">Loading Map...</div>;
 
   return (
-    <div style={{ width: '100%', height: '100%', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+    <div className="map-container">
       <MapContainer 
         center={center} 
         zoom={zoom} 
-        style={{ width: '100%', height: '100%' }}
+        className="map-inner"
         zoomControl={false}
       >
         {/* Premium Dark Theme Tiles from CartoDB */}
@@ -74,7 +74,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
         {markers.map((marker) => (
           <Marker key={marker.id} position={marker.position} icon={DefaultIcon}>
             <Popup>
-              <div style={{ color: '#000' }}>
+              <div className="map-popup-text">
                 <strong>{marker.label}</strong>
               </div>
             </Popup>
@@ -85,7 +85,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
         {markers.length === 0 && (
           <Marker position={center} icon={DefaultIcon}>
             <Popup>
-              <div style={{ color: '#000' }}>
+              <div className="map-popup-text">
                 Your Current Location
               </div>
             </Popup>

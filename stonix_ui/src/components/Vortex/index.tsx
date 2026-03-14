@@ -1,5 +1,6 @@
 import { useRef, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
+import { motion } from 'framer-motion';
 import * as THREE from 'three';
 import { useNeuralNetwork } from '@/hooks/useNeuralNetwork';
 
@@ -144,8 +145,10 @@ const Vortex = () => {
               </span>
               <div className="flex gap-0.5">
                  {[...Array(4)].map((_, i) => (
-                   <div key={i} className={`w-1 h-3 rounded-full transition-all duration-300 ${isSpeaking ? (activePersona === 'jarvis' ? 'bg-jarvis-cyan shadow-neon-cyan' : 'bg-anna-magenta shadow-neon-magenta') : 'bg-white/20'}`} 
-                        style={{ height: isSpeaking ? `${8 + Math.random() * 12}px` : '4px' }}
+                   <motion.div 
+                        key={i} 
+                        className={`w-1 h-3 rounded-full transition-all duration-300 ${isSpeaking ? (activePersona === 'jarvis' ? 'bg-jarvis-cyan shadow-neon-cyan' : 'bg-anna-magenta shadow-neon-magenta') : 'bg-white/20'}`} 
+                        animate={{ height: isSpeaking ? `${8 + Math.random() * 12}px` : '4px' }}
                    />
                  ))}
               </div>

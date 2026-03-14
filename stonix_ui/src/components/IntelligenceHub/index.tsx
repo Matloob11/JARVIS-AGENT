@@ -17,10 +17,10 @@ const IntelligenceHub = () => {
           </div>
         </div>
         <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-           <button className="p-2 hover:bg-white/5 rounded-lg text-white/40 hover:text-white transition-colors">
+           <button className="p-2 hover:bg-white/5 rounded-lg text-white/40 hover:text-white transition-colors" title="Share Insights">
               <Share2 size={14} />
            </button>
-           <button className="p-2 hover:bg-white/5 rounded-lg text-white/40 hover:text-white transition-colors">
+           <button className="p-2 hover:bg-white/5 rounded-lg text-white/40 hover:text-white transition-colors" title="Expand View">
               <Maximize2 size={14} />
            </button>
         </div>

@@ -29,7 +29,7 @@ const PersonalizationPanel = ({ onClose }: { onClose: () => void }) => {
           <User className="text-anna-magenta w-5 h-5 shadow-neon-magenta" />
           <h2 className="text-sm font-black tracking-widest uppercase">AI Personalities</h2>
         </div>Hello W
-        <button onClick={onClose} className="text-white/40 hover:text-white transition-colors">
+        <button onClick={onClose} className="text-white/40 hover:text-white transition-colors" title="Close Personalization">
           <X className="w-5 h-5" />
         </button>
       </div>
@@ -49,7 +49,7 @@ const PersonalizationPanel = ({ onClose }: { onClose: () => void }) => {
             aria-label="Language selection"
           >
             <option>English</option>
-            <option>Uorldzzrdu</option>
+            <option>Urdu</option>
             <option>Hindi</option>
             <option>Spanish</option>
           </select>

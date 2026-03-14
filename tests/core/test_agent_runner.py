@@ -1,8 +1,6 @@
-import pytest
 import asyncio
+import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
-import socket
-import json
 from services.utils.jarvis_bridge import notify_ui
 from agent_runner import perform_startup_diagnostics, _start_background_tasks, _cleanup_session_resources
 
@@ -19,21 +17,22 @@ async def test_notify_ui():
     with patch("services.utils.jarvis_bridge.httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
         await notify_ui("START")
         mock_post.assert_called_once()
-        args, kwargs = mock_post.call_args
+        _, kwargs = mock_post.call_args
         assert kwargs["json"]["payload"] == "START"
 
 
 @pytest.mark.asyncio
 async def test_perform_startup_diagnostics(mock_runner_deps):
-    mock_diag = mock_runner_deps
-    mock_diag.return_value = ["Health check ok"]
+    mock_diag_internal = mock_runner_deps
+    mock_diag_internal.return_value = ["Health check ok"]
 
     await perform_startup_diagnostics()
-    mock_diag.assert_called_once()
+    mock_diag_internal.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_start_background_tasks(mock_runner_deps):
+    # pylint: disable=unused-argument
     session = MagicMock()
     assistant = MagicMock()
     assistant.memory_extractor = MagicMock()
@@ -48,6 +47,7 @@ async def test_start_background_tasks(mock_runner_deps):
 
 @pytest.mark.asyncio
 async def test_cleanup_session_resources(mock_runner_deps):
+    # pylint: disable=unused-argument
     session = AsyncMock()
 
     # Create a real but simple task
@@ -78,13 +78,14 @@ def test_print_startup_banner():
 
 @pytest.mark.asyncio
 async def test_start_memory_loop(mock_runner_deps):
+    # pylint: disable=unused-argument
     session = MagicMock()
     session.history.items = [
         MagicMock(role="user", content="hello jarvis"),
         MagicMock(role="assistant", content="hi there")
     ]
 
-    with patch("services.ai_core.agent_memory.MemoryExtractor.run", new_callable=AsyncMock) as mock_run:
+    with patch("services.ai_core.agent_memory.MemoryExtractor.run", new_callable=AsyncMock):
         # We need to stop the loop after one iteration
         with patch("asyncio.sleep", side_effect=[None, asyncio.CancelledError]):
             from agent_runner import start_memory_loop
@@ -98,7 +99,6 @@ async def test_start_memory_loop(mock_runner_deps):
 
 @pytest.mark.asyncio
 async def test_on_clipboard_detected_logic():
-    from agent_runner import _start_background_tasks
     session = MagicMock()
     assistant = MagicMock()
     assistant.chat_ctx.messages = []
@@ -114,3 +114,4 @@ async def test_on_clipboard_detected_logic():
             await callback("solution text")
             assert len(assistant.chat_ctx.messages) > 0
             assert "CLIPBOARD ERROR DETECTED" in assistant.chat_ctx.messages[0].content[0]
+# pylint: disable=redefined-outer-name, unused-variable, import-outside-toplevel

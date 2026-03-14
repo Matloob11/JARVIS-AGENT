@@ -87,6 +87,7 @@ const Notepad: React.FC<NotepadProps> = ({ isOpen, onClose, logs = [] }) => {
                 <button 
                   onClick={onClose}
                   className="p-2 hover:bg-white/10 rounded-lg transition-colors text-white/40 hover:text-white"
+                  title="Close Archives"
                 >
                   <X size={18} />
                 </button>

@@ -128,7 +128,7 @@ const AuraView = () => {
          
          {/* Overlay Grid/Visual Polish */}
          <div className="absolute inset-0 opacity-10 pointer-events-none">
-            <div className="w-full h-full border-white/10 border-dashed border-[0.5px]" style={{ backgroundSize: '40px 40px', backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.1) 1px, transparent 1px)' }} />
+            <div className="grid-overlay-neural" />
          </div>
 
          <div className="absolute top-4 right-4 text-[9px] font-mono text-white/40 uppercase tracking-[0.2em] bg-black/40 px-2 py-1 rounded-full backdrop-blur-md border border-white/10">
