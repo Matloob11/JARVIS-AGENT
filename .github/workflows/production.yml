@@ -49,6 +49,12 @@ jobs:
           npm audit --audit-level=high || echo "⚠️ High severity vulnerabilities found - please review audit report"
           npm audit --audit-level=critical
 
+      - name: Frontend Lint & Type Check
+        run: |
+          cd stonix_ui
+          npm run lint
+          npx tsc --noEmit
+
   git-audit:
     runs-on: ubuntu-latest
     steps:
