@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v4
 
       # --- PYTHON QUALITY ---
-      - name: Set up Python 3.11
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -22,8 +22,9 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install ruff safety
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install --no-cache-dir ruff safety
+          pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch torchvision
+          if [ -f requirements.txt ]; then pip install --no-cache-dir -r requirements.txt; fi
 
       - name: Lint with Ruff
         run: ruff check .

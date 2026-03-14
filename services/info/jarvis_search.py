@@ -41,16 +41,16 @@ async def get_current_city_data() -> dict:
         # Using asyncio.to_thread for blocking requests call
         response = await asyncio.to_thread(requests.get, "https://ipinfo.io/json", timeout=5)
         data = response.json()
-        
+
         loc = data.get("loc", "").split(",")
         lat = float(loc[0]) if len(loc) == 2 else default_data["lat"]
         lng = float(loc[1]) if len(loc) == 2 else default_data["lng"]
-        
+
         detected_city = data.get("city", default_data["city"])
 
         if detected_city.lower() in ["unknown", "", "none"]:
             detected_city = default_data["city"]
-            
+
         return {
             "city": detected_city,
             "lat": lat,

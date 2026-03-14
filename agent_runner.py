@@ -130,7 +130,7 @@ async def _process_user_audio(publication: rtc.TrackPublication, assistant: Brai
         # Wait for track to be available
         while not publication.track:
             await asyncio.sleep(0.1)
-        
+
         track = publication.track
         audio_stream = rtc.AudioStream(track)
         async for audio_frame in audio_stream:

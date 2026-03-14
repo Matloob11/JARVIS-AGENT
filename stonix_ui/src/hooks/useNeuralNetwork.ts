@@ -233,6 +233,20 @@ export const useNeuralNetwork = () => {
     emitCommand('wake_word_toggle', !isWakeWordActive);
   };
 
+  // Mock Spectral Data Generator for animation reactivity
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval>;
+    if (isSpeaking) {
+      interval = setInterval(() => {
+        // Generate random frequency bands for the vortex to react to
+        spectralDataRef.current = Array.from({ length: 32 }, () => Math.floor(Math.random() * 100));
+      }, 50);
+    } else {
+      spectralDataRef.current = [];
+    }
+    return () => clearInterval(interval);
+  }, [isSpeaking]);
+
   return {
     isConnected,
     status,

@@ -27,7 +27,7 @@ async def show_location_on_map(location_name: str) -> str:
         # Geocoding - Nominatim is free but we must respect their usage policy (1 request per sec)
         # We use asyncio.to_thread for blocking geopy calls
         location = await asyncio.to_thread(geolocator.geocode, location_name)
-        
+
         if not location:
             logger.warning("❌ Could not find location: %s", location_name)
             return f"I couldn't find the coordinates for '{location_name}'. Please be more specific."

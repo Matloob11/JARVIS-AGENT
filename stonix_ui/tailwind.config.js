@@ -19,6 +19,8 @@ export default {
       boxShadow: {
         'neon-blue': '0 0 10px rgba(0, 242, 255, 0.5), 0 0 20px rgba(0, 242, 255, 0.2)',
         'neon-purple': '0 0 10px rgba(112, 0, 255, 0.5), 0 0 20px rgba(112, 0, 255, 0.2)',
+        'neon-cyan': '0 0 15px rgba(0, 242, 255, 0.6), 0 0 30px rgba(0, 242, 255, 0.3)',
+        'neon-magenta': '0 0 15px rgba(255, 0, 255, 0.6), 0 0 30px rgba(255, 0, 255, 0.3)',
       },
       fontFamily: {
         mono: ['Space Mono', 'Roboto Mono', 'monospace'],

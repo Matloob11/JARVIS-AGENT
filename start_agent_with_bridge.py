@@ -6,11 +6,10 @@ Helper script to start both the JARVIS Agent and the UI Bridge backend simultane
 import subprocess
 import sys
 import time
-import os
 
 def main():
     print("🚀 Starting JARVIS Environment...")
-    
+
     # Ensure UTF-8 output
     if sys.platform == "win32":
         import io

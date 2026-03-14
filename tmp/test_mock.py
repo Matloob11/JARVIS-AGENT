@@ -1,5 +1,4 @@
 from unittest.mock import MagicMock
-import subprocess
 
 def test_mock_unpacking():
     m = MagicMock()
