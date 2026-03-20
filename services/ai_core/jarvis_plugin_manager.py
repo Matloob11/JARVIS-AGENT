@@ -3,13 +3,16 @@
 Handles dynamic discovery and registration of AI tools.
 """
 
+import asyncio
 import functools
 import importlib
 import pkgutil
-import time
+import threading
 from typing import Callable, Any, List
 from livekit.agents import llm
 from services.utils.jarvis_logger import setup_logger
+
+from services.utils.plugin_manifest import Permission, get_permissions_for_module
 
 logger = setup_logger("PLUGIN-MANAGER")
 
@@ -19,30 +22,53 @@ class JarvisPluginManager:
     Manages the lifecycle of AI tools, including registration and discovery.
     """
     _instance = None
+    _lock = threading.Lock()
+    _tools_lock = threading.RLock()
 
     def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super(JarvisPluginManager, cls).__new__(cls)
-            # Initialize attributes safely
-            cls._instance.tools = []
-            cls._instance.discovered = False
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = super(JarvisPluginManager, cls).__new__(cls)
+                cls._instance._initialized = False
         return cls._instance
 
     def __init__(self):
-        """Attributes are handled in __new__ for singleton consistency."""
-        if not hasattr(self, "tools"):
+        """Initialize attributes only once for the singleton instance."""
+        if not getattr(self, "_initialized", False):
             self.tools = []
-        if not hasattr(self, "discovered"):
             self.discovered = False
+            self._pending_discovery = False
+            self._initialized = True
 
-    def register_tool(self, func: Callable, retry_attempts: int = 0, retry_delay: float = 1.0):
+    def register_tool(self, func: Callable, permissions: List[str] = None, retry_attempts: int = 0, retry_delay: float = 1.0):
         """Registers a function as a tool for autonomous discovery."""
 
+        # Resolve required permissions
+        required_perms = set()
+        if permissions:
+            for p in permissions:
+                try:
+                    required_perms.add(Permission(p))
+                except ValueError:
+                    logger.warning("Invalid permission requested by '%s': %s", func.__name__, p)
+
         @functools.wraps(func)
-        def tool_wrapper(*args, **kwargs):
+        async def tool_wrapper(*args, **kwargs):
+            # SECURITY ENFORCEMENT
+            module_name = getattr(func, "__module__", "unknown")
+            allowed_perms = get_permissions_for_module(module_name)
+            
+            missing = required_perms - allowed_perms
+            if missing:
+                error_msg = f"SECURITY BLOCK: Tool '{func.__name__}' requires permissions {missing} which are not granted."
+                logger.critical(error_msg)
+                return error_msg
+
             attempts = 0
             while True:
                 try:
+                    if asyncio.iscoroutinefunction(func):
+                        return await func(*args, **kwargs)
                     return func(*args, **kwargs)
                 except (ValueError, KeyError, RuntimeError, TypeError, IOError, OSError) as e:
                     attempts += 1
@@ -50,7 +76,7 @@ class JarvisPluginManager:
                         logger.warning(
                             "Tool '%s' failed (Attempt %d/%d). Retrying in %.1fs... Error: %s",
                             func.__name__, attempts, retry_attempts + 1, retry_delay, e)
-                        time.sleep(retry_delay)
+                        await asyncio.sleep(retry_delay)
                         continue
 
                     error_msg = f"Tool '{func.__name__}' failure after {attempts} attempts: {str(e)}"
@@ -65,17 +91,18 @@ class JarvisPluginManager:
         setattr(tool_wrapper, "__is_jarvis_tool__", True)
 
         # Store as a raw function. We will convert to LiveKit tools on demand.
-        if not hasattr(self, "tools"):
-            self.tools = []
+        with self._tools_lock:
+            if not hasattr(self, "tools"):
+                self.tools = []  # pylint: disable=attribute-defined-outside-init
 
-        # Prevent duplicates
-        for existing in self.tools:
-            if getattr(existing, "__name__", "") == func.__name__:
-                logger.debug(
-                    "Tool '%s' already registered, skipping.", func.__name__)
-                return func
+            # Prevent duplicates
+            for existing in self.tools:
+                if getattr(existing, "__name__", "") == func.__name__:
+                    logger.debug(
+                        "Tool '%s' already registered, skipping.", func.__name__)
+                    return func
 
-        self.tools.append(tool_wrapper)
+            self.tools.append(tool_wrapper)
         logger.debug("Registered tool: %s", func.__name__)
         return func
 
@@ -86,40 +113,43 @@ class JarvisPluginManager:
     def get_livekit_tools(self) -> List[llm.FunctionTool]:
         """Converts raw tools into LiveKit-compatible FunctionTool objects."""
         lk_tools = []
-        tools = getattr(self, "tools", [])
-        seen_names = set()
+        with self._tools_lock:
+            tools = getattr(self, "tools", [])
+            seen_names = set()
 
-        for tool_func in tools:
-            # Check for generic wrapper name and try to get the original function name
-            func_name = getattr(tool_func, "__name__", "unknown")
-            if func_name == "tool_wrapper" and hasattr(tool_func, "__wrapped__"):
-                func_name = tool_func.__wrapped__.__name__
+            for tool_func in tools:
+                # Check for generic wrapper name and try to get the original function name
+                func_name = getattr(tool_func, "__name__", "unknown")
+                if func_name == "tool_wrapper" and hasattr(tool_func, "__wrapped__"):
+                    func_name = tool_func.__wrapped__.__name__
 
-            if func_name in seen_names:
-                logger.debug("Skipping duplicate LiveKit tool: %s", func_name)
-                continue
+                if func_name in seen_names:
+                    logger.debug("Skipping duplicate LiveKit tool: %s", func_name)
+                    continue
 
-            logger.info("Converting tool to LiveKit format: %s", func_name)
+                logger.info("Converting tool to LiveKit format: %s", func_name)
 
-            try:
-                # Use the decorator to create a FunctionTool
-                lk_tool = llm.function_tool(tool_func)
-                lk_tools.append(lk_tool)
-                seen_names.add(func_name)
-            except (ValueError, TypeError, AttributeError, KeyError) as e:
-                logger.error("Failed to register tool '%s': %s", func_name, e)
-                # If it's the 'self' error, we definitely want to know which tool it is
-                if "self" in str(e) or isinstance(e, KeyError):
-                    logger.critical(
-                        "CRITICAL: Tool '%s' has unhinted 'self' or signature issues!", func_name)
+                try:
+                    # Use the decorator to create a FunctionTool
+                    logger.debug("Attempting to convert to FunctionTool: %s", func_name)
+                    lk_tool = llm.function_tool(tool_func)
+                    lk_tools.append(lk_tool)
+                    seen_names.add(func_name)
+                except (ValueError, TypeError, AttributeError, KeyError) as e:
+                    logger.error("Failed to register tool '%s': %s", func_name, e)
+                    # If it's the 'self' error, we definitely want to know which tool it is
+                    if "self" in str(e) or isinstance(e, KeyError):
+                        logger.critical(
+                            "CRITICAL: Tool '%s' has unhinted 'self' or signature issues! Context: %s", func_name, tool_func)
         return lk_tools
 
     def discover_plugins(self, package_path: str):
         """Recursively discovers and imports plugins from the given package path."""
-        if self.discovered:
-            return
-
-        self.discovered = True
+        with self._tools_lock:
+            if self.discovered:
+                logger.debug("Plugin discovery already done. Skipping.")
+                return
+            self.discovered = True
 
         # We assume package_path is an absolute path to the 'services' directory
         for _, module_name, _ in pkgutil.walk_packages([package_path], "services."):
@@ -137,22 +167,23 @@ class JarvisPluginManager:
 plugin_manager = JarvisPluginManager()
 
 
-def jarvis_tool(retry_attempts=0, retry_delay=1.0):
+def jarvis_tool(permissions: List[str] = None, retry_attempts=0, retry_delay=1.0):
     """
     Decorator to register a function as a Jarvis AI tool.
-    Supports optional retries for delicate operations like API calls.
+    Supports optional retries for delicate operations like API calls and permission controls.
     Usage:
     @jarvis_tool
     OR
-    @jarvis_tool(retry_attempts=3, retry_delay=2.0)
+    @jarvis_tool(permissions=["filesystem:read"], retry_attempts=3)
     """
-    if callable(retry_attempts):
+    if callable(permissions):
         # Case where @jarvis_tool is used without parentheses
-        func = retry_attempts
+        func = permissions
         return plugin_manager.register_tool(func)
 
     def decorator(func: Callable):
-        return plugin_manager.register_tool(func, retry_attempts=retry_attempts,
+        return plugin_manager.register_tool(func, permissions=permissions, 
+                                            retry_attempts=retry_attempts,
                                             retry_delay=retry_delay)
 
     return decorator

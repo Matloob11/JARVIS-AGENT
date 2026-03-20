@@ -24,8 +24,8 @@ const Typewriter: React.FC<{ text: string }> = ({ text }) => {
           initial={{ opacity: 0, filter: 'blur(4px)' }}
           animate={{ opacity: 1, filter: 'blur(0px)' }}
           transition={{
-            duration: 0.2,
-            delay: i * 0.04,
+            duration: 0.15,
+            delay: i * 0.02,
             ease: "easeOut"
           }}
           className="inline-block"
@@ -39,7 +39,7 @@ const Typewriter: React.FC<{ text: string }> = ({ text }) => {
 
 const Transcription: React.FC<TranscriptionProps> = ({ messages, activePersona }) => {
   return (
-    <div className="space-y-6 pb-4">
+    <div className="space-y-6 pb-4 flex flex-col">
       <AnimatePresence initial={false} mode="popLayout">
         {messages.map((message) => {
           const isUser = message.role === 'user';
@@ -48,27 +48,35 @@ const Transcription: React.FC<TranscriptionProps> = ({ messages, activePersona }
           return (
             <motion.div
               key={message.id}
-              initial={{ opacity: 0, y: 20, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}
+              layout
+              initial={{ opacity: 0, y: 10, filter: 'blur(10px)' }}
+              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ 
+                type: "spring", 
+                damping: 30, 
+                stiffness: 250,
+                layout: { duration: 0.2 }
+              }}
+              className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} shrink-0`}
             >
               {/* Header Info */}
               <div className="flex items-center gap-2 mb-2 px-1 opacity-40">
                 <span className="text-[10px] font-black tracking-widest uppercase font-mono">
                   {isUser ? 'BIO_TRANSCRIPT' : `${activePersona.toUpperCase()}_LOG`}
                 </span>
-                <span className="text-[9px] font-mono">{message.timestamp}</span>
+                <span className="text-[9px] font-mono">
+                  {new Date(message.timestamp * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
+                </span>
               </div>
               
               {/* Message Bubble */}
-              <div className={`max-w-[90%] p-4 rounded-2xl relative transition-all duration-500 border shadow-2xl ${
+              <div className={`max-w-[90%] p-4 rounded-2xl relative transition-all duration-500 border shadow-2xl overflow-hidden ${
                 isUser 
                   ? 'bg-white/5 border-white/10 rounded-tr-none' 
                   : `${personaColor} rounded-tl-none`
               }`}>
-                <div className={`text-[14px] leading-relaxed tracking-wide ${
+                <div className={`text-[14px] leading-relaxed tracking-wide min-h-[1.5em] ${
                   isUser ? 'text-white/70' : 'text-white font-medium'
                 }`}>
                   {!isUser ? (
@@ -79,11 +87,7 @@ const Transcription: React.FC<TranscriptionProps> = ({ messages, activePersona }
                 </div>
                 
                 {/* Decorative Corner */}
-                <div className={`absolute top-0 ${isUser ? '-right-1' : '-left-1'} w-2 h-2 rotate-45 ${
-                   isUser 
-                     ? 'bg-transparent border-t border-r border-white/20' 
-                     : (activePersona === 'jarvis' ? 'bg-transparent border-t border-l border-jarvis-cyan/40' : 'bg-transparent border-t border-l border-anna-magenta/40')
-                }`} />
+                <div className={`absolute top-0 ${isUser ? '-right-1' : '-left-1'} w-2 h-2 rotate-45 ${isUser ? 'bg-transparent border-t border-r border-white/20' : (activePersona === 'jarvis' ? 'bg-transparent border-t border-l border-jarvis-cyan/40' : 'bg-transparent border-t border-l border-anna-magenta/40')}`} />
               </div>
             </motion.div>
           );

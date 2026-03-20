@@ -8,6 +8,7 @@ import asyncio
 import requests
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
 from services.utils.jarvis_logger import setup_logger
+from services.utils.jarvis_bridge import notify_sim_data, notify_sim_loading
 
 # Setup logging
 logger = setup_logger("JARVIS-SIM-LOOKUP")
@@ -30,19 +31,21 @@ async def lookup_sim_data(phone_number: str) -> dict:
     elif clean_number.startswith("0"):
         clean_number = clean_number[1:]
         
-    # 3. Validation: Pakistani mobile numbers (after cleaning) must be 10 digits
-    if len(clean_number) < 10:
+    # 3. Validation: Pakistani mobile numbers (10 digits) or CNIC (13 digits)
+    if not (len(clean_number) == 10 or len(clean_number) == 13):
         return {
             "status": "validation_error",
-            "message": f"Sir, ye number incomplete lag raha hai ({phone_number}). Please mukammal 11 digits wala number batayein (e.g. 03331234567)."
-        }
-    if len(clean_number) > 10:
-        return {
-            "status": "validation_error",
-            "message": f"Sir, ye number bohot lamba hai ({phone_number}). Please sahi number check kar ke batayein."
+            "message": f"Sir, ye input sahi nahi lag raha ({phone_number}). Please 11 digits wala phone number ya 13 digits wala CNIC batayein."
         }
     
-    logger.info("Looking up SIM data for cleaned number: %s", clean_number)
+    is_cnic_search = len(clean_number) == 13
+    logger.info("Looking up SIM data for cleaned %s: %s", "CNIC" if is_cnic_search else "number", clean_number)
+
+    # Notify UI that a lookup is in progress
+    try:
+        await notify_sim_loading()
+    except Exception:  # pylint: disable=broad-exception-caught
+        pass
 
     try:
         # Using asyncio.to_thread for blocking requests call
@@ -55,6 +58,9 @@ async def lookup_sim_data(phone_number: str) -> dict:
         if data.get("status") and data.get("result"):
             results = data["result"]
             
+            # Extract first found CNIC for proactive suggestion
+            found_cnic = results[0].get('cnic') if not is_cnic_search else None
+            
             # Format results for the agent to read
             formatted_results = []
             for idx, res in enumerate(results, 1):
@@ -63,20 +69,32 @@ async def lookup_sim_data(phone_number: str) -> dict:
                     f"Name: {res.get('full_name', 'N/A')}\n"
                     f"CNIC: {res.get('cnic', 'N/A')}\n"
                     f"Address: {res.get('address', 'N/A')}\n"
+                    f"Phone: {res.get('phone', 'N/A')}\n"
                 )
             
+            # Notify the UI with the results
+            try:
+                await notify_sim_data(results, phone_number)
+            except Exception:  # pylint: disable=broad-exception-caught
+                pass
+
             summary = "\n".join(formatted_results)
+            proactive_msg = ""
+            if found_cnic and not is_cnic_search:
+                proactive_msg = f"\n\n**Sir, kia main is ka CNIC ({found_cnic}) number use kar ka is ki baki active sims ka data bi nikal doin?**"
+
             return {
                 "status": "success",
                 "count": len(results),
-                "message": f"Found {len(results)} records for {phone_number}:\n{summary}"
+                "cnic_found": found_cnic,
+                "message": f"Found {len(results)} records for {phone_number}:\n{summary}{proactive_msg}"
             }
-        else:
-            logger.info("No records found for %s", clean_number)
-            return {
-                "status": "not_found",
-                "message": f"Sorry Sir, record for {phone_number} hamare database mein nahi mila."
-            }
+        
+        logger.info("No records found for %s", clean_number)
+        return {
+            "status": "not_found",
+            "message": f"Sorry Sir, record for {phone_number} hamare database mein nahi mila."
+        }
             
     except (requests.RequestException, ValueError, KeyError) as e:
         logger.error("Error fetching SIM data: %s", e)

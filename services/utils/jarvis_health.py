@@ -4,6 +4,7 @@ Real-time system health monitor for JARVIS.
 Tracks resource usage, process status, and service heartbeats.
 """
 
+import os
 import time
 from typing import Dict, Any
 import psutil
@@ -46,8 +47,8 @@ class JarvisHealthMonitor:
                     "percent": psutil.virtual_memory().percent
                 },
                 "disk": {
-                    "percent": psutil.disk_usage('/').percent,
-                    "free": psutil.disk_usage('/').free
+                    "percent": psutil.disk_usage('C:' if os.name == 'nt' else '/').percent,
+                    "free": psutil.disk_usage('C:' if os.name == 'nt' else '/').free
                 },
                 "uptime": time.time() - self.start_time
             }

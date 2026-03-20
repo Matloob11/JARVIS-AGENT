@@ -8,7 +8,7 @@ import tempfile
 import os
 from unittest.mock import Mock, patch, AsyncMock
 
-from agent_core import BrainAssistant
+from src.core.agent_core import BrainAssistant
 from services.utils.jarvis_secure_config import SecureConfigManager
 
 

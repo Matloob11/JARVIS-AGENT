@@ -61,6 +61,17 @@ class JarvisConfig:
         )
         self.allowed_origins = origins.split(",")
 
+        # Shared Assets
+        self.shared_dir = os.getenv("JARVIS_SHARED_DIR", "D:/Jarvis_Shared")
+        if self.shared_dir:
+            try:
+                # Use exist_ok=True and wrap in try-except to prevent startup blocks
+                if not os.path.exists(self.shared_dir):
+                    os.makedirs(self.shared_dir, exist_ok=True)
+                    logger.info("📁 Created shared directory: %s", self.shared_dir)
+            except (OSError, PermissionError) as e:
+                logger.warning("⚠️ Could not access or create shared directory %s: %s", self.shared_dir, e)
+
     def is_production(self):
         """Returns True if the environment is set to production."""
         return self.env == "production"

@@ -4,7 +4,7 @@ import socket
 import json
 from unittest.mock import MagicMock, patch, AsyncMock
 from services.utils.jarvis_bridge import notify_ui
-from agent_runner import start_memory_loop, perform_startup_diagnostics, _start_background_tasks, _cleanup_session_resources, entrypoint
+from src.core.agent_runner import start_memory_loop, perform_startup_diagnostics, _start_background_tasks, _cleanup_session_resources, entrypoint
 
 
 @pytest.mark.asyncio
@@ -35,7 +35,7 @@ async def test_start_memory_loop_exception_handling():
 
     session.history.items = [item_user, item_assistant]
 
-    with patch("agent_runner.MemoryExtractor") as mock_ext_cls:
+    with patch("src.core.agent_runner.MemoryExtractor") as mock_ext_cls:
         mock_ext = mock_ext_cls.return_value
         mock_ext.run = AsyncMock()
 
@@ -81,14 +81,14 @@ async def test_entrypoint_retry_logic():
     ctx.room.sid = "test_sid"
 
     # Mocking dependencies that come BEFORE ctx.connect logic
-    with patch("agent_runner.get_formatted_datetime", AsyncMock(return_value={"formatted": "now"})), \
-            patch("agent_runner.get_current_city", AsyncMock(return_value="NY")), \
-            patch("agent_runner.AgentSession") as mock_session_cls, \
-            patch("agent_runner.perform_startup_diagnostics", AsyncMock(return_value=None)), \
-            patch("agent_runner.llm.ChatContext") as mock_chat_ctx_cls, \
-            patch("agent_runner.BrainAssistant") as mock_assistant_cls, \
-            patch("agent_runner._start_background_tasks", AsyncMock(return_value=[])), \
-            patch("agent_runner._print_startup_banner"), \
+    with patch("src.core.agent_runner.get_formatted_datetime", AsyncMock(return_value={"formatted": "now"})), \
+            patch("src.core.agent_runner.get_current_city", AsyncMock(return_value="NY")), \
+            patch("src.core.agent_runner.AgentSession") as mock_session_cls, \
+            patch("src.core.agent_runner.perform_startup_diagnostics", AsyncMock(return_value=None)), \
+            patch("src.core.agent_runner.llm.ChatContext") as mock_chat_ctx_cls, \
+            patch("src.core.agent_runner.BrainAssistant") as mock_assistant_cls, \
+            patch("src.core.agent_runner._start_background_tasks", AsyncMock(return_value=[])), \
+            patch("src.core.agent_runner._print_startup_banner"), \
             patch("asyncio.sleep", AsyncMock()), \
             patch("asyncio.Event", return_value=AsyncMock(wait=AsyncMock(side_effect=asyncio.CancelledError()))):
 

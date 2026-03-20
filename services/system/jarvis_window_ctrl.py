@@ -8,6 +8,7 @@ Also provides system-level controls like shutdown, restart, and sleep.
 # pylint: disable=too-many-lines
 
 import asyncio
+import io
 import os
 import re
 import subprocess
@@ -30,7 +31,12 @@ from services.utils.jarvis_logger import setup_logger
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
 
 # ===================== LOGGER ===================== #
-sys.stdout.reconfigure(encoding="utf-8")
+# Safe stdout reconfigure — only if supported (avoids crash in piped/test environments)
+if hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except (AttributeError, io.UnsupportedOperation):
+        pass
 logger = setup_logger("JARVIS-WINDOW")
 
 get_windows = gw.getWindowsWithTitle
@@ -262,7 +268,7 @@ async def save_notepad(file_path: str = r"D:\jarvis_notes.txt") -> dict:
 
 
 @jarvis_tool
-async def open_notepad_file(file_path: str) -> str:
+async def open_notepad_file(file_path: str) -> dict:
     """
     Opens a specific text file in Notepad.
     """

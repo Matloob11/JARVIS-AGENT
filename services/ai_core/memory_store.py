@@ -9,7 +9,14 @@ import asyncio
 from datetime import datetime
 from typing import List, Dict, Union
 from collections import OrderedDict
-import cryptography
+
+try:
+    from cryptography.fernet import InvalidToken
+except ImportError:
+    class InvalidToken(Exception):
+        """Fallback exception if cryptography is not installed."""
+        pass
+
 from services.ai_core.jarvis_vector_memory import jarvis_vector_db
 from services.utils.jarvis_logger import setup_logger
 from services.utils.jarvis_crypto import jarvis_crypto
@@ -39,52 +46,53 @@ class ConversationMemory:
 
     async def load_memory(self) -> List[Dict]:
         """Load conversation history from encrypted disk storage."""
+        async with self.lock:
+            return await self._load_memory_unlocked()
+
+    async def _load_memory_unlocked(self) -> List[Dict]:
+        """Internal load without lock acquisition to safely call from other locked methods."""
         if not await asyncio.to_thread(os.path.exists, self.memory_file):
             return []
 
-        async with self.lock:
-            try:
-                def _read_file():
-                    with open(self.memory_file, 'rb') as f:
-                        data = f.read()
+        try:
+            def _read_file():
+                with open(self.memory_file, 'rb') as f:
+                    data = f.read()
 
-                    # Phase 6: Check if data is encrypted or legacy JSON
+                # Phase 6: Check if data is encrypted or legacy JSON
+                try:
+                    # Try decrypting
+                    decrypted = jarvis_crypto.decrypt(data)
+                    return json.loads(decrypted)
+                except (ValueError, RuntimeError, InvalidToken):
+                    # Fallback for legacy migration or key mismatch
+                    logger.warning(
+                        "Decryption failed or invalid token. Attempting legacy JSON load or resetting.")
+
                     try:
-                        # Try decrypting
-                        decrypted = jarvis_crypto.decrypt(data)
-                        return json.loads(decrypted)
-                    except (ValueError, RuntimeError, cryptography.exceptions.InvalidKey,
-                            cryptography.fernet.InvalidToken):
-                        # Fallback for legacy migration or key mismatch
-                        logger.warning(
-                            "Decryption failed or invalid token. Attempting legacy JSON load or resetting.")
+                        # Re-open in text mode for legacy JSON
+                        with open(self.memory_file, 'r', encoding='utf-8') as f:
+                            return json.load(f)
+                    except Exception:
+                        # If it's truly undecryptable/corrupt, the outer exception handler will back it up
+                        raise InvalidToken("Undecryptable memory") from None
 
-                        try:
-                            # Re-open in text mode for legacy JSON
-                            with open(self.memory_file, 'r', encoding='utf-8') as f:
-                                return json.load(f)
-                        except Exception:
-                            # If it's truly undecryptable/corrupt, the outer exception handler will back it up
-                            raise cryptography.fernet.InvalidToken(
-                                "Undecryptable memory") from None
-
-                memory = await asyncio.to_thread(_read_file)
-                if not isinstance(memory, list):
-                    logger.error(
-                        "Loaded memory is not a list for user %s. Resetting.", self.user_id)
-                    return []
-                return memory
-            except (json.JSONDecodeError, IOError, OSError, Exception) as e:  # pylint: disable=broad-exception-caught
-                logger.exception(
-                    "Omega Corruption in User Memory %s: %s", self.user_id, e)
-                # Backup corrupted file
-                if await asyncio.to_thread(os.path.exists, self.memory_file):
-                    timestamp = int(datetime.now().timestamp())
-                    await asyncio.to_thread(
-                        os.rename, self.memory_file, f"{self.memory_file}.corrupted_{timestamp}"
-                    )
+            memory = await asyncio.to_thread(_read_file)
+            if not isinstance(memory, list):
+                logger.error(
+                    "Loaded memory is not a list for user %s. Resetting.", self.user_id)
                 return []
-        return []
+            return memory
+        except (json.JSONDecodeError, IOError, OSError, Exception) as e:  # pylint: disable=broad-exception-caught
+            logger.exception(
+                "Omega Corruption in User Memory %s: %s", self.user_id, e)
+            # Backup corrupted file
+            if await asyncio.to_thread(os.path.exists, self.memory_file):
+                timestamp = int(datetime.now().timestamp())
+                await asyncio.to_thread(
+                    os.rename, self.memory_file, f"{self.memory_file}.corrupted_{timestamp}"
+                )
+            return []
 
     def _conversation_exists(
             self, new_conversation: Dict, existing_conversations: List[Dict]) -> bool:
@@ -115,7 +123,7 @@ class ConversationMemory:
         """Atomic save - returns True if successful. Updates LRU cache."""
         async with self.lock:
             try:
-                memory = await self.load_memory()
+                memory = await self._load_memory_unlocked()
                 if hasattr(conversation, 'model_dump'):
                     conversation_dict = conversation.model_dump()
                 else:
@@ -193,7 +201,7 @@ class ConversationMemory:
                                 "timestamp": conversation_dict.get('timestamp')
                             }
                         )
-        except (ValueError, KeyError, AttributeError, OSError) as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             logger.error("Vector DB sync failed: %s", e)
 
     async def save_to_disk(self):
@@ -222,33 +230,34 @@ class ConversationMemory:
 
     async def get_recent_context(self, max_messages: int = 30) -> List[Dict]:
         """Get recent conversation context using LRU cache for high-speed retrieval."""
+        async with self.lock:
+            # Phase 5: Optimization - Return from Cache if populated
+            if len(self.cache) >= max_messages:
+                logger.info("⚡ LRU Cache Hit: Returning %d messages", max_messages)
+                items = list(self.cache.values())
+                return items[-max_messages:]
 
-        # Phase 5: Optimization - Return from Cache if populated
-        if len(self.cache) >= max_messages:
-            logger.info("⚡ LRU Cache Hit: Returning %d messages", max_messages)
-            items = list(self.cache.values())
-            return items[-max_messages:]
+            logger.info("💾 Cache Miss: Loading from disk...")
+            # Use unlocked version to avoid deadlock
+            memory = await self._load_memory_unlocked()
+            all_messages = []
 
-        logger.info("💾 Cache Miss: Loading from disk...")
-        memory = await self.load_memory()
-        all_messages = []
+            # Flatten all conversations into a single message list
+            for conversation in memory:
+                if "messages" in conversation:
+                    all_messages.extend(conversation["messages"])
 
-        # Flatten all conversations into a single message list
-        for conversation in memory:
-            if "messages" in conversation:
-                all_messages.extend(conversation["messages"])
+            # Re-populate cache from disk
+            for msg in all_messages[-self._mem_cache_size:]:
+                msg_id = msg.get("id") or str(len(self.cache))
+                self.cache[msg_id] = msg
+                self.cache.move_to_end(msg_id)
 
-        # Re-populate cache from disk
-        for msg in all_messages[-self._mem_cache_size:]:
-            msg_id = msg.get("id") or str(len(self.cache))
-            self.cache[msg_id] = msg
-            self.cache.move_to_end(msg_id)
-
-        # Return the most recent messages
-        recent_messages = all_messages[-max_messages:] if all_messages else []
-        logger.info(
-            "Retrieved %d recent messages for user %s", len(recent_messages), self.user_id)
-        return recent_messages
+            # Return the most recent messages
+            recent_messages = all_messages[-max_messages:] if all_messages else []
+            logger.info(
+                "Retrieved %d recent messages for user %s", len(recent_messages), self.user_id)
+            return recent_messages
 
     async def get_conversation_count(self) -> int:
         """Get total number of saved conversations"""
@@ -256,25 +265,29 @@ class ConversationMemory:
         return len(memory)
 
     async def clear_duplicates(self) -> int:
-        """Remove duplicate conversations and return count of removed duplicates"""
-        memory = await self.load_memory()
-        unique_conversations = []
-        removed_count = 0
+        """Remove duplicate conversations atomically under the lock."""
+        async with self.lock:
+            memory = await self._load_memory_unlocked()
+            unique_conversations = []
+            removed_count = 0
 
-        for conv in memory:
-            if not self._conversation_exists(conv, unique_conversations):
-                unique_conversations.append(conv)
-            else:
-                removed_count += 1
+            for conv in memory:
+                if not self._conversation_exists(conv, unique_conversations):
+                    unique_conversations.append(conv)
+                else:
+                    removed_count += 1
 
-        if removed_count > 0:
-            def _write_unique():
-                with open(self.memory_file, 'w', encoding='utf-8') as f:
-                    json.dump(unique_conversations, f,
-                              indent=2, ensure_ascii=False)
+            if removed_count > 0:
+                def _write_unique():
+                    temp_file = f"{self.memory_file}.tmp"
+                    data = json.dumps(unique_conversations, indent=2, ensure_ascii=False)
+                    encrypted = jarvis_crypto.encrypt(data)
+                    with open(temp_file, 'wb') as f:
+                        f.write(encrypted)
+                    os.replace(temp_file, self.memory_file)
 
-            await asyncio.to_thread(_write_unique)
-            logger.info("Removed %d duplicate conversations", removed_count)
+                await asyncio.to_thread(_write_unique)
+                logger.info("Removed %d duplicate conversations", removed_count)
 
         return removed_count
 

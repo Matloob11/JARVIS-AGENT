@@ -7,6 +7,7 @@ import os
 import subprocess
 import re
 from typing import List, Dict, Union
+from services.utils.jarvis_config import config
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
 from services.utils.jarvis_logger import setup_logger
 from services.automation.jarvis_youtube_automation import yt_bot
@@ -20,8 +21,7 @@ class YouTubeDownloader:
 
     def __init__(self):
         # Centralized output directory
-        self.base_dir = os.path.join(
-            os.getcwd(), "Jarvis_Outputs", "Downloads", "YouTube")
+        self.base_dir = os.path.join(config.shared_dir, "Downloads", "YouTube")
         os.makedirs(self.base_dir, exist_ok=True)
         # 🛠️ Set FFmpeg path if it exists at C:\ffmpeg\bin or in system PATH
         self.ffmpeg_path = r"C:\ffmpeg\bin"

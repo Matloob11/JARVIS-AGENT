@@ -1,7 +1,7 @@
 import asyncio
 import base64
 from unittest.mock import MagicMock, AsyncMock
-from agent_core import BrainAssistant
+from src.core.agent_core import BrainAssistant
 from livekit.agents import llm
 
 

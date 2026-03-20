@@ -27,9 +27,7 @@ class MemoryExtractor:
         self.user_id: str = effective_id
         self.memory = ConversationMemory(self.user_id)
         self.conversation_count = 0
-
-        # Phase 5: Startup Integrity Audit
-        asyncio.create_task(self._audit_memory())
+        self._audited = False
 
     async def _audit_memory(self):
         """Audits memory structure and logs stale context count."""
@@ -50,6 +48,10 @@ class MemoryExtractor:
         """
         Process chat context to extract and save new messages to memory.
         """
+        if not self._audited:
+            await self._audit_memory()
+            self._audited = True
+
         try:
             # Save current conversation context
             if chat_ctx and len(chat_ctx) > self.conversation_count:
@@ -78,8 +80,8 @@ class MemoryExtractor:
                     if success:
                         logger.info(
                             "✅ Memory Extracted and Saved for role: %s", role)
-                        # Notify UI about new memory
-                        asyncio.create_task(notify_memory(conversation_data))
+                        # Notify UI about new memory (pass the string content)
+                        asyncio.create_task(notify_memory(msg_content))
                     else:
                         logger.error("❌ Memory save failed for role: %s", role)
 

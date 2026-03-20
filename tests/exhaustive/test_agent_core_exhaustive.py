@@ -2,7 +2,7 @@ import pytest
 import asyncio
 import json
 from unittest.mock import MagicMock, patch, AsyncMock, PropertyMock
-from agent_core import BrainAssistant
+from src.core.agent_core import BrainAssistant
 from livekit.agents import StopResponse
 
 
@@ -84,10 +84,10 @@ async def test_attach_session(mock_agent_deps):
 async def test_process_with_reasoning_success(mock_agent_deps):
     assistant = BrainAssistant(chat_ctx=MagicMock())
     # Test lines 206-208
-    with patch("agent_core.analyze_user_intent", new_callable=AsyncMock, return_value="intent"):
+    with patch("src.core.agent_core.analyze_user_intent", new_callable=AsyncMock, return_value="intent"):
         with patch.object(assistant.memory_extractor.memory, "get_recent_context", new_callable=AsyncMock, return_value="mem"):
             with patch.object(assistant.memory_extractor.memory, "get_semantic_context", new_callable=AsyncMock, return_value="sem"):
-                with patch("agent_core.generate_smart_response", new_callable=AsyncMock, return_value="smart response"):
+                with patch("src.core.agent_core.generate_smart_response", new_callable=AsyncMock, return_value="smart response"):
                     result = await assistant.process_with_reasoning("test input")
                     assert result == "smart response"
 
@@ -98,7 +98,7 @@ async def test_extract_text_from_message_exception(mock_agent_deps):
     # Test lines 228-229
     mock_msg = MagicMock()
     # Use a side_effect on getattr to raise error when accessing 'content'
-    with patch("agent_core.getattr", side_effect=TypeError("Test Error")):
+    with patch("src.core.agent_core.getattr", side_effect=TypeError("Test Error")):
         result = assistant._extract_text_from_message(mock_msg)
         assert result == ""
 

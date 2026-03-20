@@ -27,7 +27,7 @@ class YouTubeAutomation:
 
     async def get_video_url(self, query: str):
         """
-        Searches for a YouTube video using youtube-search and returns the direct URL.
+        Searches for a YouTube video and returns a direct embed URL for ad-minimal playback.
         """
         try:
             logger.info("Searching for video URL: %s", query)
@@ -45,47 +45,62 @@ class YouTubeAutomation:
 
             video_id = results[0].get('id')
             if video_id:
-                url = f"https://www.youtube.com/watch?v={video_id}"
-                logger.info("Found Video URL: %s", url)
+                # Use standard watch URL with autoplay for compatibility (Embed often fails with Error 153)
+                url = f"https://www.youtube.com/watch?v={video_id}&autoplay=1&rel=0&modestbranding=1"
+                logger.info("Found High-Compatibility URL: %s", url)
                 return url
 
             return None
 
-        except (AttributeError, KeyError, RuntimeError) as e:  # pylint: disable=broad-exception-caught
+        except (RuntimeError, ValueError, KeyError, AttributeError) as e:
             logger.error("Error finding video URL: %s", e)
             return None
 
     async def open_url_in_app(self, url: str):
-        """Opens a URL in Edge App mode (PWA style) safely."""
+        """Opens a URL in Browser App mode for a dedicated, app-like experience."""
         try:
-            logger.info("Opening URL in App Mode: %s", url)
-            edge_path = self._get_edge_path()
-
-            if os.name == 'nt' and edge_path:
-                logger.info("Launching Edge in App Mode on Windows")
-                subprocess.Popen([edge_path, f"--app={url}"], shell=False)
+            logger.info("Attempting to open URL in App Mode: %s", url)
+            browser_path = self._get_browser_path()
+            
+            if os.name == 'nt' and browser_path:
+                logger.info("Launching browser in App Mode: %s", browser_path)
+                # App mode provides a borderless, dedicated window
+                subprocess.Popen([browser_path, f"--app={url}"], shell=False)
                 return True
-
-            logger.info("Edge not found or non-Windows, falling back to default browser")
+            
+            # Fallback to default browser
+            logger.info("Falling back to default browser protocol.")
             webbrowser.open(url)
             return True
-        except (subprocess.SubprocessError, OSError, AttributeError) as e:
+        except (subprocess.SubprocessError, OSError) as e:
             logger.error("Failed to open URL: %s", e)
             return False
 
-    def _get_edge_path(self):
-        """Finds MS Edge path."""
-        edge_path = shutil.which("msedge")
-        if not edge_path and os.name == 'nt':
+    def _get_browser_path(self):
+        """Finds MS Edge or Chrome path for App Mode."""
+        # Check for Edge first (usually better on Windows)
+        edge = shutil.which("msedge")
+        if edge:
+            return edge
+        
+        # Check for Chrome
+        chrome = shutil.which("chrome") or shutil.which("google-chrome")
+        if chrome:
+            return chrome
+        
+        if os.name == 'nt':
             common_paths = [
+                # Edge
                 r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
                 r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
-                os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\Edge\Application\msedge.exe")
+                # Chrome
+                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
             ]
             for path in common_paths:
                 if os.path.exists(path):
                     return path
-        return edge_path
+        return None
 
 
 # Global Instance

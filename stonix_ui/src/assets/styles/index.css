@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+@import 'leaflet/dist/leaflet.css';
 
 @tailwind base;
 @tailwind components;
@@ -9,10 +10,12 @@
   --jarvis-teal: #00d4da;
   --anna-magenta: #ff00ff;
   --accent-purple: #7000ff;
-  --bg-deep: #010203;
-  --panel-bg: rgba(0, 0, 0, 0.6);
+  --bg-deep: #050608;
+  --panel-bg: rgba(6, 8, 12, 0.6);
   --glass-border: rgba(255, 255, 255, 0.05);
-  --glass-bg: rgba(8, 10, 12, 0.7);
+  --glass-bg: rgba(10, 12, 16, 0.35);
+  --glow-cyan: 0 0 25px rgba(0, 242, 255, 0.4);
+  --glow-magenta: 0 0 25px rgba(255, 0, 255, 0.4);
 }
 
 @layer utilities {
@@ -67,10 +70,85 @@
 
   .glass-card {
     background: var(--glass-bg);
-    -webkit-backdrop-filter: blur(24px) saturate(180%);
-    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(28px) saturate(200%);
+    backdrop-filter: blur(28px) saturate(200%);
     border: 1px solid var(--glass-border);
-    box-shadow: 0 4px 24px -1px rgba(0, 0, 0, 0.8);
+    box-shadow: 0 8px 32px -2px rgba(0, 0, 0, 0.9);
+  }
+
+  .scan-line {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .scan-line::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(
+      0deg,
+      transparent 0%,
+      rgba(0, 242, 255, 0.05) 50%,
+      rgba(0, 242, 255, 0.1) 50.5%,
+      rgba(0, 242, 255, 0.05) 51%,
+      transparent 100%
+    );
+    background-size: 100% 200%;
+    animation: scan 4s linear infinite;
+    pointer-events: none;
+    z-index: 5;
+  }
+
+  @keyframes scan {
+    0% { background-position: 0 -100%; }
+    100% { background-position: 0 100%; }
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    /* stylelint-disable-next-line property-no-unknown */
+    scrollbar-width: none; /* Firefox & Chrome 121+ */
+  }
+
+  .chat-input-textarea::-webkit-scrollbar {
+    display: none;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    @apply bg-white/20;
+  }
+
+  /* Grid Area Mappings */
+  .area-sidebar { grid-area: sidebar; }
+  .area-core-orb { grid-area: core-orb; }
+  .area-trace { grid-area: trace; }
+  .area-neural-chat { grid-area: neural-chat; }
+  .area-metrics { grid-area: metrics; }
+
+  .main-dashboard-grid {
+    display: grid;
+    grid-template-columns: 300px 1fr 360px;
+    grid-template-rows: 340px 1fr auto;
+    grid-template-areas: 
+      "sidebar core-orb neural-chat"
+      "sidebar trace neural-chat"
+      "sidebar trace metrics";
   }
 }
 
@@ -82,6 +160,10 @@
   
   .glass-panel:hover {
     @apply border-white/20 bg-white/10;
+  }
+
+  .camera-container {
+    height: 180px;
   }
 
   .nav-item {
@@ -118,6 +200,28 @@ code, .font-mono {
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.2);
+}
+
+/* Firefox & Chrome 121+ scrollbar styling */
+* {
+  /* stylelint-disable-next-line property-no-unknown */
+  scrollbar-width: thin;
+  /* stylelint-disable-next-line property-no-unknown */
+  scrollbar-color: rgba(0, 243, 255, 0.3) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+/* For better browser compatibility */
+.message-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.message-list::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
 }
 
 .neural-grid {

@@ -1,7 +1,7 @@
 import pytest
 import asyncio
 from unittest.mock import MagicMock, patch, AsyncMock, PropertyMock
-from agent_core import BrainAssistant
+from src.core.agent_core import BrainAssistant
 
 @pytest.fixture
 def mock_agent_deps():

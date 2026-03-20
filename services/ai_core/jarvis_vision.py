@@ -10,6 +10,7 @@ import os
 import asyncio
 import base64
 from io import BytesIO
+from typing import Any, Optional
 import pyautogui
 from PIL import Image
 import cv2  # Added for local webcam support
@@ -57,6 +58,30 @@ class ScreenPerceiver:
 
     def __init__(self, model_name="gemini-2.0-flash"):
         self.model_name = model_name
+        self.latest_frame: Optional[bytes] = None  # Stores JPEG bytes from UI
+
+    def update_webcam_frame(self, frame_data: Any):
+        """
+        Updates the internal buffer with a new frame from the UI.
+        Handles base64 or raw bytes.
+        """
+        try:
+            if not frame_data:
+                return
+            
+            # If it's a data URL or base64 string
+            if isinstance(frame_data, str):
+                if "," in frame_data:
+                    b64_str = frame_data.split(",")[1]
+                else:
+                    b64_str = frame_data
+                self.latest_frame = base64.b64decode(b64_str)
+            elif isinstance(frame_data, bytes):
+                self.latest_frame = frame_data
+            
+            logger.debug("Vision system updated with new UI frame.")
+        except (ValueError, TypeError, base64.binascii.Error) as e:
+            logger.error("Error decoding vision frame: %s", e)
 
     async def capture_screen(self) -> bytes:
         """
@@ -77,9 +102,14 @@ class ScreenPerceiver:
 
     async def capture_webcam(self) -> bytes:
         """
-        Captures a frame from the local webcam using OpenCV.
+        Captures a frame from the UI-provided buffer or local webcam.
         Returns JPEG bytes.
         """
+        # Priority 1: Use frame captured from the UI Bridge
+        if self.latest_frame:
+            return self.latest_frame
+
+        # Priority 2: Fallback to local webcam (OpenCV)
         try:
             # Run in thread to avoid blocking loop
             def do_capture():
@@ -101,11 +131,14 @@ class ScreenPerceiver:
 
             data = await asyncio.to_thread(do_capture)
             if data is None:
-                raise IOError("Could not capture from webcam. Check if your camera is connected and available.")
+                raise IOError(
+                    "Sir, camera access nahi mil raha. "
+                    "Kripya check karein ke browser mein camera allowed hai ya nahi."
+                )
             return data
-        except Exception as e:
+        except (RuntimeError, ValueError, IOError) as e:
             logger.error("Error capturing webcam: %s", e)
-            raise
+            raise IOError(f"Camera error: {str(e)}") from e
 
     async def analyze_via_google(self, prompt: str, image: Image.Image) -> str:
         """Attempts analysis via native Google SDK."""
@@ -303,6 +336,9 @@ async def analyze_camera(query: str = "What do you see in the camera?") -> dict:
         logger.error("Camera tool error: %s", e)
         return {
             "status": "error",
-            "message": f"📷 Camera analysis failed: {str(e)}",
+            "message": (
+                f"📷 Camera analysis failed, Sir. Report: {str(e)}. "
+                "Shayad camera permission ya technical error ki wajah se."
+            ),
             "error": str(e)
         }

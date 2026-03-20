@@ -127,13 +127,12 @@ class WhatsAppAutomation:
         try:
             logger.info("Searching for contact: %s", contact_name)
 
-            for i in range(3):
-                logger.info("Triggering search bar (Attempt %d/3)...", i+1)
-                pg.hotkey('ctrl', 'f')
-                await asyncio.sleep(0.8)
-                pg.hotkey('ctrl', 'a')
-                pg.press('backspace')
-                await asyncio.sleep(0.3)
+            # Open search bar once, clear it, then type
+            pg.hotkey('ctrl', 'f')
+            await asyncio.sleep(1.0)
+            pg.hotkey('ctrl', 'a')
+            pg.press('backspace')
+            await asyncio.sleep(0.3)
 
             logger.info("Typing contact name...")
             for char in contact_name:
@@ -141,7 +140,7 @@ class WhatsAppAutomation:
                 await asyncio.sleep(0.1)
 
             logger.info("Waiting for search results...")
-            await asyncio.sleep(6.0)
+            await asyncio.sleep(3.0)
 
             pg.press('down')
             await asyncio.sleep(0.5)

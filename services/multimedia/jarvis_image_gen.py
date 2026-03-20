@@ -9,8 +9,11 @@ import time
 import asyncio
 from typing import Dict, Any
 from huggingface_hub import InferenceClient
+from services.utils.jarvis_config import config
+from services.system.jarvis_file_server import get_local_ip
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
 from services.utils.jarvis_logger import setup_logger
+from services.utils.jarvis_bridge import notify_event
 
 logger = setup_logger("JARVIS-IMAGE-GEN")
 
@@ -26,7 +29,7 @@ class JarvisImageGenerator:
         self.hf_token = os.getenv("HF_TOKEN")
         self.client = InferenceClient(
             token=self.hf_token) if self.hf_token else None
-        self.output_dir = "Jarvis_Outputs/Generated_Images"
+        self.output_dir = os.path.join(config.shared_dir, "Generated_Images")
         os.makedirs(self.output_dir, exist_ok=True)
 
     async def generate_image(self, prompt: str, aspect_ratio: str = "1:1") -> Dict[str, Any]:
@@ -54,10 +57,26 @@ class JarvisImageGenerator:
 
             image.save(filepath)
 
+            local_ip = get_local_ip()
+            # Since server root is now D:/, we need to include Jarvis_Shared in the URL path
+            folder_name = os.path.basename(config.shared_dir)
+            image_url = f"http://{local_ip}:8000/{folder_name}/Generated_Images/{filename}"
+
+            # Notify UI about the new image
+            await notify_event("intelligence_update", {
+                "type": "image",
+                "label": "GENERATED IMAGE",
+                "url": image_url,
+                "data": {
+                    "prompt": prompt,
+                    "filename": filename
+                }
+            })
+
             return {
                 "status": "success",
                 "path": filepath,
-                "url": f"http://localhost:8000/{filepath.replace(os.sep, '/')}",
+                "url": image_url,
                 "message": f"Sir, aapke liye image generate kar di hai: {filename}"
             }
         except (ValueError, RuntimeError, OSError) as e:

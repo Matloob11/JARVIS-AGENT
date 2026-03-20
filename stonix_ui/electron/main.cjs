@@ -8,13 +8,30 @@ let backendProcess;
 let tray = null;
 let isQuitting = false;
 
+const fs = require('fs');
+
 function startBackend() {
   const rootDir = path.join(__dirname, '../../');
   console.log(`[Electron] Starting JARVIS Backend in ${rootDir}...`);
   
-  const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+  let pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
   
-  backendProcess = spawn(pythonCmd, ['vortex.py'], {
+  // Try to find a virtual environment's python
+  const venvs = ['.venv_312', '.venv', 'venv'];
+  const scriptsDir = process.platform === 'win32' ? 'Scripts' : 'bin';
+  const pythonExec = process.platform === 'win32' ? 'python.exe' : 'python3';
+  
+  for (const venv of venvs) {
+    const vPath = path.join(rootDir, venv, scriptsDir, pythonExec);
+    if (fs.existsSync(vPath)) {
+      pythonCmd = vPath;
+      console.log(`[Electron] Using virtual env python: ${pythonCmd}`);
+      break;
+    }
+  }
+  
+  const backendPath = path.join(rootDir, 'src/core/vortex.py');
+  backendProcess = spawn(pythonCmd, [backendPath], {
     cwd: rootDir,
     stdio: 'inherit',
     shell: true

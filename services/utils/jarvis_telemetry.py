@@ -22,7 +22,9 @@ class JarvisTelemetry:
     def __init__(self, log_path="logs/telemetry.jsonl"):
         """Initializes the telemetry logger with a target log file."""
         self.log_path = log_path
-        os.makedirs(os.path.dirname(self.log_path), exist_ok=True)
+        _dir = os.path.dirname(self.log_path)
+        if _dir:
+            os.makedirs(_dir, exist_ok=True)
         self.session_data = {}
 
     def start_interaction(self, session_id: str, user_input: str):

@@ -13,21 +13,21 @@ def test_agent_main_logic():
     # Mock agents.cli.run_app to avoid starting a real worker
     with patch("livekit.agents.cli.run_app") as mock_run:
         with patch("sys.stdout", new=io.TextIOWrapper(io.BytesIO(), encoding='utf-8')):
-            # Mock entrypoint from agent_runner
-            with patch("agent_runner.entrypoint"):
+            # Mock entrypoint from src.core.agent_runner
+            with patch("src.core.agent_runner.entrypoint"):
                 # Run the script
                 # We need to simulate being in __main__
-                runpy.run_module("agent", run_name="__main__")
+                runpy.run_module("src.core.agent", run_name="__main__")
 
                 mock_run.assert_called()
                 # Verify WorkerOptions was created with entrypoint
                 args, kwargs = mock_run.call_args
                 opts = args[0]
-                from agent_runner import entrypoint
+                from src.core.agent_runner import entrypoint
                 assert opts.entrypoint_fnc == entrypoint
 
 
 def test_agent_env_vars():
     # Ensure GOOGLE_API_CORE_SUPPRESS_VERSION_CHECK is set
-    import agent  # This will set the env var on import
+    from src.core import agent  # This will set the env var on import
     assert os.environ.get("GOOGLE_API_CORE_SUPPRESS_VERSION_CHECK") == "1"

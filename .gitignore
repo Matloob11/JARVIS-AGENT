@@ -1,34 +1,103 @@
-# Security
+# ════════════════════════════════════════
+# JARVIS — Personal Assistant .gitignore
+# ════════════════════════════════════════
+
+# ── Security & Secrets ──────────────────
 .env
 .env.local
+.env.*.local
 secrets.json
+*.pem
+*.key
+*.p12
 
-# Python
+# ── Python Runtime ───────────────────────
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
 .Python
+pip-log.txt
+pip-delete-this-directory.txt
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ── Virtual Environments ─────────────────
 env/
 venv/
 .venv/
-pip-log.txt
-pip-delete-this-directory.txt
-
-# IDEs
-.vscode/
-.idea/
-
-# Local data
-conversations/
-*.log
-control_log.txt
-Jarvis_Outputs/
-chroma_db/
-generated_images/
-KMS/
-backups/
+.venv_312/
 final_verify_env/
-test_conversations/
+ENV/
+
+# ── Testing & Linting Cache ──────────────
 .pytest_cache/
 .ruff_cache/
+.coverage
+htmlcov/
+coverage.xml
+*.cover
+.hypothesis/
+
+# ── IDEs ────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Logs ────────────────────────────────
+*.log
+logs/
+control_log.txt
+telemetry.jsonl
+
+# ── Runtime / Generated Data ─────────────
+conversations/
+chroma_db/
+Jarvis_Outputs/
+generated_images/
+backups/
+tmp/
+temp/
+
+# ── ML Models (large binary files) ───────
+pretrained_models/
+*.pt
+*.pth
+*.onnx
+*.safetensors
+
+# ── Node / Frontend ──────────────────────
+node_modules/
+stonix_ui/node_modules/
+stonix_ui/dist/
+stonix_ui/.vite/
+*.tsbuildinfo
+
+# ── Electron Build Outputs ───────────────
+stonix_ui/out/
+stonix_ui/release/
+stonix_ui/electron-dist/
+
+# ── OS Files ────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+
+# ── Misc ─────────────────────────────────
+*.tmp
+*.bak
+*.orig
+*.swp
+repro_self_error.py
+test_bridge.py
+KMS/
+test_conversations/

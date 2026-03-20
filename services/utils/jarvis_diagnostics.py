@@ -43,9 +43,12 @@ class JarvisDiagnostics:
 
     async def check_network(self):
         """Checks Internet connectivity via ping."""
+        import sys  # pylint: disable=import-outside-toplevel
         try:
+            # -n is Windows flag, -c is Linux/macOS
+            count_flag = "-n" if sys.platform == "win32" else "-c"
             process = await asyncio.create_subprocess_exec(
-                "ping", "-n", "1", "8.8.8.8",
+                "ping", count_flag, "1", "8.8.8.8",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE)
             await process.communicate()

@@ -59,7 +59,7 @@ async def monitor_logs(callback):
 
     while True:
         try:
-            new_lines = hunter.get_new_errors()
+            new_lines = await asyncio.to_thread(hunter.get_new_errors)
             if new_lines:
                 error_block = "".join(new_lines)
                 if "ERROR" in error_block or "TRACEBACK" in error_block.upper():

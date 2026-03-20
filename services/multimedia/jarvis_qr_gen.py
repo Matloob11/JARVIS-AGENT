@@ -10,6 +10,7 @@ import qrcode
 from qrcode.image.styledpil import StyledPilImage
 from qrcode.image.styles.moduledrawers import CircleModuleDrawer
 from qrcode.image.styles.colormasks import SolidFillColorMask
+from services.utils.jarvis_config import config
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
 from services.utils.jarvis_logger import setup_logger
 
@@ -25,7 +26,7 @@ async def generate_qr_code(data: str, filename: str = "my_stylish_qr.png") -> di
     """
     try:
         # Base directory for QR codes
-        base_dir = os.path.join(os.getcwd(), "Jarvis_Outputs", "QR_Codes")
+        base_dir = os.path.join(config.shared_dir, "QR_Codes")
         os.makedirs(base_dir, exist_ok=True)
 
         if not filename.lower().endswith('.png'):

@@ -1,8 +1,9 @@
+# pylint: disable=redefined-outer-name, unused-variable, import-outside-toplevel
 import asyncio
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
 from services.utils.jarvis_bridge import notify_ui
-from agent_runner import perform_startup_diagnostics, _start_background_tasks, _cleanup_session_resources
+from src.core.agent_runner import perform_startup_diagnostics, _start_background_tasks, _cleanup_session_resources
 
 
 @pytest.fixture
@@ -71,7 +72,7 @@ async def test_cleanup_session_resources(mock_runner_deps):
 
 def test_print_startup_banner():
     with patch("builtins.print") as mock_print:
-        from agent_runner import _print_startup_banner
+        from src.core.agent_runner import _print_startup_banner
         _print_startup_banner()
         assert mock_print.call_count >= 5
 
@@ -88,7 +89,7 @@ async def test_start_memory_loop(mock_runner_deps):
     with patch("services.ai_core.agent_memory.MemoryExtractor.run", new_callable=AsyncMock):
         # We need to stop the loop after one iteration
         with patch("asyncio.sleep", side_effect=[None, asyncio.CancelledError]):
-            from agent_runner import start_memory_loop
+            from src.core.agent_runner import start_memory_loop
             extractor = MagicMock()
             try:
                 await start_memory_loop(session, extractor)
@@ -114,4 +115,3 @@ async def test_on_clipboard_detected_logic():
             await callback("solution text")
             assert len(assistant.chat_ctx.messages) > 0
             assert "CLIPBOARD ERROR DETECTED" in assistant.chat_ctx.messages[0].content[0]
-# pylint: disable=redefined-outer-name, unused-variable, import-outside-toplevel

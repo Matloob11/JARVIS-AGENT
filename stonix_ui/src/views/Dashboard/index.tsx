@@ -1,184 +1,224 @@
-import React, { useState } from 'react';
-import { 
-  Settings, 
-  Activity,
-  FileText
-} from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Settings, Send, Mic, MicOff, Wifi } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// Components
+// Core Components
 import Vortex from '@/components/Vortex';
 import Transcription from '@/components/Transcription';
 import WindowControls from '@/components/WindowControls';
-import MemoryPanel from '@/components/MemoryPanel';
-import PersonalizationPanel from '@/components/PersonalizationPanel';
 import SettingsPanel from '@/components/SettingsPanel';
 import Notepad from '@/components/Notepad';
 
-// New Command Center Components
-import TopNav from '@/components/TopNav';
-import NodeMatrix from '@/components/NodeMatrix';
-import IntelligenceHub from '@/components/IntelligenceHub';
-import NeuralFeed from '@/components/NeuralFeed';
-import AuraView from '@/components/AuraView';
-import ControlCenter from '@/components/ControlCenter';
+// New Layout Components
+import CameraView from '@/components/CameraView';
+import LocationBox from '@/components/LocationBox';
+import SimInfoBox from '@/components/SimInfoBox';
+import SystemLogs from '@/components/SystemLogs';
 
 import { useNeuralNetwork } from '@/hooks/useNeuralNetwork';
 
 const Dashboard: React.FC = () => {
-  const [activeTab, setActiveTab] = useState('intelligence');
-  const { 
+  const {
     isConnected,
     isSpeaking,
+    isThinking,
+    isMuted,
     vitals,
     activePersona,
-    memories,
-    toolLogs,
+    vortexLogs,
     messages,
-    sendMessage
+    sendMessage,
+    location,
+    simRecords,
+    simLoading,
+    toggleMute,
   } = useNeuralNetwork();
 
-  // Scroll to bottom effect
-  React.useEffect(() => {
-    const anchor = document.getElementById('scroll-anchor');
-    if (anchor) anchor.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-  
-  // Panel States
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [activePanel, setActivePanel] = useState<string | null>(null);
   const [isNotepadOpen, setIsNotepadOpen] = useState(false);
 
-   return (
-      <div className="h-screen w-screen bg-[#030303] text-white flex flex-col overflow-hidden font-sans selection:bg-jarvis-cyan/30 relative">
-         <div className="absolute inset-0 bg-bg-deep neural-grid mesh-gradient animate-mesh opacity-40 pointer-events-none" />
-         
-         {/* 1. GLOBAL HEADER */}
-         <header className="h-16 flex items-center justify-center relative drag-handle !bg-black/80 backdrop-blur-3xl z-[200] border-b border-white/5 shadow-2xl flex-shrink-0">
-            <TopNav activeTab={activeTab} onTabChange={setActiveTab} />
-            
-            <div className="absolute left-6 top-1/2 -translate-y-1/2 flex items-center gap-4 no-drag group">
-               <h1 className="text-xl font-black tracking-tighter text-glow-cyan leading-none">JARVIS & ANNA</h1>
-               <div className="h-4 w-[1px] bg-white/10 mx-1" />
-               <div className="flex items-center gap-2 opacity-40">
-                  <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-jarvis-cyan shadow-neon-cyan' : 'bg-red-500'} animate-pulse`} />
-                  <span className="text-[9px] font-black tracking-[0.3em] text-white/50 uppercase">Neural Shell v2.5</span>
-               </div>
-            </div>
+  // Auto-scroll chat to bottom
+  useEffect(() => {
+    if (scrollContainerRef.current) {
+      const el = scrollContainerRef.current;
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    }
+  }, [messages]);
 
-            <div className="absolute right-6 top-1/2 -translate-y-1/2 flex items-center gap-6 no-drag">
-               <WindowControls />
-            </div>
-         </header>
+  const agentStatusText = isThinking
+    ? 'PROCESSING...'
+    : isSpeaking
+    ? 'BROADCASTING'
+    : isConnected
+    ? `${activePersona.toUpperCase()} ONLINE`
+    : 'OFFLINE';
 
-         {/* 2. MAIN LAYOUT */}
-         <div className="flex flex-1 h-0 overflow-hidden relative z-10">
-            {/* LEFT SIDEBAR */}
-            <aside className="w-80 h-full flex flex-col p-6 gap-6 z-50 glass-card !rounded-none !border-y-0 !border-l-0 overflow-hidden no-scrollbar">
-               <AuraView />
-               <ControlCenter />
-               <div className="flex-1 overflow-hidden">
-                  <NeuralFeed />
-               </div>
-               <div className="mt-auto pt-6 border-t border-white/5 flex gap-4">
-                  <button onClick={() => setIsNotepadOpen(true)} className="flex-1 panel-recessed p-3 rounded-xl border-white/5 text-white/40 hover:text-jarvis-cyan transition-colors flex items-center justify-center gap-2" title="Archive">
-                     <FileText size={16} />
-                     <span className="text-[9px] font-black tracking-widest uppercase">Archive</span>
-                  </button>
-                  <button onClick={() => setActivePanel('settings')} className="panel-recessed p-3 rounded-xl border-white/5 text-white/40 hover:text-white transition-colors" title="System Settings">
-                     <Settings size={16} />
-                  </button>
-               </div>
-            </aside>
-
-            {/* CENTRAL COLUMN */}
-            <main className="flex-1 h-full flex flex-col relative z-20 overflow-hidden bg-black/20">
-               <div className="flex-1 overflow-y-auto no-scrollbar relative p-8">
-                  <div className="absolute inset-0 flex flex-col pointer-events-none opacity-30">
-                     <NodeMatrix />
-                  </div>
-
-                  <div className="min-h-full flex flex-col items-center justify-center gap-6 py-10 relative z-10">
-                     <div className="w-72 h-72 relative group cursor-pointer" onClick={() => setActivePanel('persona')}>
-                        <div className="absolute inset-0 bg-jarvis-cyan/10 rounded-full blur-[120px] opacity-0 group-hover:opacity-30 transition-opacity duration-700" />
-                        <Vortex />
-                        <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center whitespace-nowrap">
-                           <div className="px-5 py-2 rounded-full bg-black/60 border border-white/10 backdrop-blur-md flex items-center gap-3 shadow-2xl">
-                              <div className={`w-1.5 h-1.5 rounded-full ${activePersona === 'jarvis' ? 'bg-jarvis-cyan' : 'bg-anna-magenta'} shadow-neon-${activePersona === 'jarvis' ? 'cyan' : 'magenta'}`} />
-                              <span className="text-[9px] font-black tracking-[0.2em] text-white/70 uppercase">
-                                {isSpeaking ? 'NEURAL BROADCASTING' : `${activePersona.toUpperCase()} CORE STABLE`}
-                              </span>
-                           </div>
-                        </div>
-                     </div>
-                     <IntelligenceHub />
-                  </div>
-               </div>
-            </main>
-
-            {/* RIGHT SIDEBAR */}
-            <aside className="w-96 h-full flex flex-col z-50 glass-card !rounded-none !border-y-0 !border-r-0 relative">
-               <div className="p-6 border-b border-white/5 flex items-center justify-between bg-black/20">
-                  <div className="flex items-center gap-3">
-                     <Activity size={16} className="text-jarvis-cyan" />
-                     <span className="text-[11px] font-black tracking-[0.2em] text-white/90 uppercase">Neural Transcript</span>
-                  </div>
-               </div>
-
-               <div className="flex-1 flex flex-col p-6 overflow-hidden">
-                  <div className="flex-1 overflow-y-auto space-y-6 pr-4 no-scrollbar mb-4 scroll-smooth">
-                     <Transcription messages={messages} activePersona={activePersona} />
-                     <div id="scroll-anchor" />
-                  </div>
-                  <MessageInput onSend={sendMessage} />
-                  <div className="mt-4 pt-6 border-t border-white/5 space-y-4">
-                     <VitalMetric label="CPU" value={vitals.cpu} color="cyan" />
-                     <VitalMetric label="MEMORY" value={vitals.ram} color="magenta" />
-                  </div>
-               </div>
-            </aside>
-         </div>
-
-         <AnimatePresence>
-            {activePanel === 'memory' && (
-               <MemoryPanel onClose={() => setActivePanel(null)} memories={memories} />
-            )}
-            {activePanel === 'persona' && <PersonalizationPanel onClose={() => setActivePanel(null)} />}
-            {activePanel === 'settings' && <SettingsPanel onClose={() => setActivePanel(null)} />}
-         </AnimatePresence>
-
-         <Notepad isOpen={isNotepadOpen} onClose={() => setIsNotepadOpen(false)} logs={toolLogs} />
-      </div>
-   );
-};
-
-const VitalMetric: React.FC<{ label: string; value: number; color: 'cyan' | 'magenta' }> = ({ label, value, color }) => {
   return (
-    <div className="panel-recessed p-3 rounded-xl border-white/5">
-      <div className="flex items-center justify-between mb-2">
-         <span className="text-[8px] font-black tracking-widest text-white/30 uppercase">{label}</span>
-         <span className={`text-[10px] font-mono font-black ${color === 'cyan' ? 'text-jarvis-cyan' : 'text-anna-magenta'}`}>
-            {Math.round(value)}%
-         </span>
+    <div className="h-screen w-screen bg-[#020408] text-white flex flex-col overflow-hidden font-sans select-none relative">
+      {/* Dynamic Background Elements */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute inset-0 mesh-gradient opacity-40" />
+        <div className="absolute inset-0 neural-grid opacity-10" />
+        <div className="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] bg-jarvis-cyan/5 blur-[120px] rounded-full" />
+        <div className="absolute -bottom-[10%] -right-[10%] w-[40%] h-[40%] bg-anna-magenta/5 blur-[120px] rounded-full" />
       </div>
-      <div className="h-1 bg-white/5 rounded-full overflow-hidden">
-         <motion.div 
-           initial={{ width: 0 }}
-           animate={{ width: `${value}%` }}
-           className={`h-full ${color === 'cyan' ? 'bg-jarvis-cyan shadow-neon-cyan' : 'bg-anna-magenta shadow-neon-magenta'}`}
-         />
+
+      {/* ─── HEADER ─── */}
+      <header className="h-14 flex items-center px-6 justify-between relative drag-handle bg-black/40 backdrop-blur-3xl border-b border-white/10 z-50 flex-shrink-0">
+        <div className="flex items-center gap-4 no-drag">
+          <div className="flex flex-col">
+            <h1 className="text-sm font-black tracking-[0.5em] text-white flex items-center gap-3">
+              <span className={`w-2 h-2 rounded-full ${isConnected ? (activePersona === 'jarvis' ? 'bg-jarvis-cyan shadow-neon-cyan' : 'bg-anna-magenta shadow-neon-magenta') : 'bg-red-600'} animate-pulse`} />
+              <span className="drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]">JARVIS & ANNA</span>
+            </h1>
+            <span className="text-[8px] font-mono text-white/20 tracking-[0.3em] ml-5 uppercase">Advanced Neural Interface v2.5.0</span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-6 no-drag">
+          <div className="flex items-center gap-4 border-x border-white/10 px-6 h-full">
+            <div className="flex flex-col items-end">
+              <span className={`text-[9px] font-black tracking-widest uppercase ${
+                isConnected ? 'text-jarvis-cyan' : 'text-red-500'
+              }`}>
+                {agentStatusText}
+              </span>
+              <span className="text-[7px] font-mono text-white/20 uppercase tracking-tighter">Link_Stability: 98%</span>
+            </div>
+            <Wifi size={12} className={isConnected ? 'text-jarvis-cyan' : 'text-white/10'} />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={toggleMute}
+              className={`p-2 rounded-xl border transition-all ${isMuted ? 'bg-red-500/10 border-red-500/40 text-red-500' : 'bg-white/5 border-white/10 text-white/40 hover:text-white hover:bg-white/10'}`}
+              title={isMuted ? 'Unmute' : 'Mute'}
+            >
+              {isMuted ? <MicOff size={14} /> : <Mic size={14} />}
+            </button>
+            <button
+              onClick={() => setActivePanel('settings')}
+              className="p-2 rounded-xl bg-white/5 border border-white/10 text-white/40 hover:text-white hover:bg-white/10 transition-all"
+              title="Settings"
+            >
+              <Settings size={14} />
+            </button>
+          </div>
+          <WindowControls />
+        </div>
+      </header>
+
+      {/* ─── MAIN GRID LAYOUT ─── */}
+      <div className="main-dashboard-grid flex-1 min-h-0 overflow-hidden relative z-10 p-4 gap-4">
+        
+        {/* ── SIDEBAR (LEFT) ── */}
+        <motion.aside 
+          initial={{ x: -20, opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          transition={{ duration: 0.8, ease: 'easeOut', delay: 0.2 }}
+          className="area-sidebar flex flex-col gap-4 overflow-hidden"
+        >
+          <CameraView />
+          <LocationBox location={location} />
+          <SimInfoBox records={simRecords} isLoading={simLoading} />
+        </motion.aside>
+
+        {/* ── NEURAL CORE (CENTER TOP) ── */}
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 1, ease: 'easeOut' }}
+          className="area-core-orb glass-panel relative overflow-hidden group"
+        >
+          <Vortex />
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-3 px-4 py-1.5 rounded-full bg-black/40 border border-white/5 backdrop-blur-md opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-jarvis-cyan shadow-neon-cyan' : 'bg-red-500'} animate-pulse`} />
+            <span className="text-[9px] font-black tracking-widest text-white/60 uppercase">
+              {isConnected ? 'Neural Uplink Stable' : 'Link Offline'}
+            </span>
+          </div>
+        </motion.div>
+
+        {/* ── SYSTEM TRACE (CENTER BOTTOM) ── */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.5 }}
+          className="area-trace flex flex-col min-h-0"
+        >
+          <SystemLogs logs={vortexLogs} isConnected={isConnected} />
+        </motion.div>
+
+        {/* ── NEURAL TRANSCRIPT (RIGHT) ── */}
+        <motion.aside 
+          initial={{ x: 20, opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          transition={{ duration: 0.8, ease: 'easeOut', delay: 0.4 }}
+          className="area-neural-chat flex flex-col gap-4 overflow-hidden glass-panel"
+        >
+          <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
+            <span className="text-[10px] font-black tracking-[0.4em] text-white/40 uppercase italic">Conversation</span>
+            <div className="flex gap-1">
+              <div className={`w-1 h-1 rounded-full ${activePersona === 'jarvis' ? 'bg-jarvis-cyan' : 'bg-anna-magenta'} animate-ping`} />
+              <div className={`w-1 h-1 rounded-full ${activePersona === 'jarvis' ? 'bg-jarvis-cyan' : 'bg-anna-magenta'}`} />
+            </div>
+          </div>
+          <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-5 py-4 custom-scrollbar bg-black/10">
+            <Transcription messages={messages} activePersona={activePersona} />
+          </div>
+          <div className="p-4 bg-black/40 border-t border-white/10">
+            <MessageInput onSend={sendMessage} persona={activePersona} />
+          </div>
+        </motion.aside>
+
+        {/* ── BIOLOGICAL VITALS (BOTTOM RIGHT) ── */}
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.6 }}
+          className="area-metrics flex flex-col gap-3"
+        >
+           <VitalBar label="CPU USAGE" value={vitals.cpu} color="cyan" />
+           <VitalBar label="MEMORY_CORE" value={vitals.ram} color="magenta" />
+        </motion.div>
       </div>
+
+      <AnimatePresence>
+        {activePanel === 'settings' && <SettingsPanel onClose={() => setActivePanel(null)} />}
+        {isNotepadOpen && <Notepad isOpen={isNotepadOpen} onClose={() => setIsNotepadOpen(false)} />}
+      </AnimatePresence>
     </div>
   );
 };
 
+// ─── Sub-Components (Internal to avoid clutter) ──────────────────────────────
 
-const MessageInput: React.FC<{ onSend: (text: string) => void }> = ({ onSend }) => {
+const VitalBar: React.FC<{ label: string; value: number; color: 'cyan' | 'magenta' }> = ({ label, value, color }) => (
+  <div className="glass-panel p-3 border border-white/5">
+    <div className="flex justify-between items-center mb-1.5 px-0.5">
+      <span className="text-[9px] font-black tracking-[0.2em] text-white/30 uppercase">{label}</span>
+      <span className={`text-[10px] font-mono font-bold ${color === 'cyan' ? 'text-jarvis-cyan' : 'text-anna-magenta'}`}>
+        {value}%
+      </span>
+    </div>
+    <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
+      <motion.div
+        animate={{ width: `${value}%` }}
+        transition={{ duration: 0.5 }}
+        className={`h-full rounded-full ${color === 'cyan' ? 'bg-jarvis-cyan shadow-[0_0_10px_rgba(0,242,255,0.5)]' : 'bg-anna-magenta shadow-[0_0_10px_rgba(255,0,255,0.5)]'}`}
+      />
+    </div>
+  </div>
+);
+
+const MessageInput: React.FC<{ onSend: (t: string) => void; persona: 'jarvis' | 'anna' }> = ({ onSend, persona }) => {
   const [text, setText] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (text.trim()) {
-      onSend(text);
+      onSend(text.trim());
       setText('');
     }
   };
@@ -188,18 +228,21 @@ const MessageInput: React.FC<{ onSend: (text: string) => void }> = ({ onSend }) 
       <input
         type="text"
         value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="Aura interaction active..."
-        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-[12px] font-mono focus:outline-none focus:border-jarvis-cyan/40 transition-all placeholder:text-white/10"
+        onChange={e => setText(e.target.value)}
+        placeholder={persona === 'anna' ? 'Anna is listening...' : 'Type a command...'}
+        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-[11px] font-mono focus:outline-none focus:border-jarvis-cyan/40 transition-all placeholder:text-white/10 pr-10"
       />
-      <button 
+      <button
         type="submit"
-        className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-white/20 group-focus-within:text-jarvis-cyan transition-colors"
-        title="Send Message"
+        title="Send command"
+        className={`absolute right-3 top-1/2 -translate-y-1/2 p-1.5 transition-colors ${
+          text.trim()
+            ? persona === 'jarvis' ? 'text-jarvis-cyan' : 'text-anna-magenta'
+            : 'text-white/10'
+        }`}
       >
-        <FileText size={14} />
+        <Send size={14} />
       </button>
-      <div className="absolute inset-0 rounded-xl bg-jarvis-cyan/5 blur-xl -z-10 opacity-0 group-focus-within:opacity-100 transition-opacity" />
     </form>
   );
 };

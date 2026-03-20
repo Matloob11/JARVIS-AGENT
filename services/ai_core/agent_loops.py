@@ -10,9 +10,10 @@ from services.utils.jarvis_config import config
 from services.utils.jarvis_logger import setup_logger
 from services.automation.jarvis_reminders import check_due_reminders
 from services.utils.jarvis_bug_hunter import monitor_logs
+from services.ai_core.jarvis_vision import vision_system
 
 if TYPE_CHECKING:
-    from agent_core import BrainAssistant
+    from src.core.agent_core import BrainAssistant
     from livekit.agents import AgentSession
 
 # Setup logger
@@ -45,7 +46,7 @@ async def start_reminder_loop(session: "AgentSession"):
             due = await asyncio.to_thread(check_due_reminders)
             for item in due:
                 print(f"🔔 Triggering proactive reminder: {item['message']}")
-                session.say(
+                await session.say(
                     f"Sir ko proactively yaad dilayein (Natural Urdu main): '{item['message']}'",
                     allow_interruptions=True
                 )
@@ -62,8 +63,7 @@ async def start_bug_hunter_loop(session: "AgentSession"):
     """Monitor error logs and notify the user about issues."""
     async def on_error_detected(error_block: str):
         logger.warning("🚨 AI Bug Hunter detected a system error.")
-        # Proactively trigger a response to analyze and fix
-        session.say(
+        await session.say(
             (
                 "Sir ko Roman Urdu main batayein ke ek system error mila hai "
                 "aur uska analysis dain. "
@@ -132,7 +132,7 @@ async def start_ui_command_listener(assistant: "BrainAssistant"):
 
             # pylint: disable=protected-access
             if assistant._active_session:
-                assistant._active_session.say(response, allow_interruptions=True)
+                await assistant._active_session.say(response, allow_interruptions=True)
             else:
                 logger.warning("⚠️ No active session for voice.")
         except (ValueError, KeyError, RuntimeError, TypeError, AttributeError) as e:
@@ -143,37 +143,67 @@ async def start_ui_command_listener(assistant: "BrainAssistant"):
         """Update the assistant with the latest camera frame."""
         command = None
         if isinstance(data, dict):
-            assistant.last_vision_frame = data.get("frame")
+            frame = data.get("frame")
             command = data.get("command")
         else:
-            assistant.last_vision_frame = data
+            frame = data
+
+        # Correctly set frame on VisionHandler, not on assistant directly
+        if hasattr(assistant, 'vision_handler'):
+            assistant.vision_handler.last_vision_frame = frame
+        else:
+            assistant.last_vision_frame = frame
+
+        # Sync with the shared vision system for tool access
+        vision_system.update_webcam_frame(frame)
 
         # pylint: disable=protected-access
         if not assistant._active_session:
             return
 
         if command == "check_intelligence":
-            assistant._active_session.say(
+            await assistant._active_session.say(
                 "Sir, main aapke system ki intelligence metrics check kar raha hoon.",
                 allow_interruptions=True)
         elif command == "open_archives":
-            assistant._active_session.say(
+            await assistant._active_session.say(
                 "Sir, main aapke archives aur memory storage open kar raha hoon.",
                 allow_interruptions=True)
         elif command == "open_comm":
-            assistant._active_session.say(
+            await assistant._active_session.say(
                 "Sir, communications channel open hai.", allow_interruptions=True)
 
-    vortex_token = config.security_token
+    vortex_token = config.security_token  # noqa: F841
+    _is_reconnecting = False
 
-    for i in range(5):
+    @sio.on('connect')
+    async def on_connect():
+        nonlocal _is_reconnecting
+        _is_reconnecting = False
+        logger.info("✅ UI Bridge Connected.")
+
+    @sio.on('disconnect')
+    async def on_disconnect():
+        nonlocal _is_reconnecting
+        logger.warning("❌ UI Bridge Disconnected. Retrying...")
+        _is_reconnecting = True
+
+    while True:
         try:
-            await sio.connect(config.bridge_url, auth={"token": vortex_token})
-            logger.info("✅ Connected to UI Bridge.")
-            await sio.wait()
+            if not sio.connected:
+                await sio.connect(config.bridge_url, auth={'token': config.security_token})
+
+            # Poll for disconnects — sio.wait() blocks forever, so we use sleep loop
+            while sio.connected:
+                await asyncio.sleep(1)
+
+            # If we get here, we disconnected — retry after delay
+            logger.warning("🔄 UI Bridge lost. Sleeping 5s before reconnect...")
+            await asyncio.sleep(5)
+
+        except asyncio.CancelledError:
+            logger.info("UI Command Listener stopping gracefully.")
             break
-        except (ConnectionError, ValueError, RuntimeError) as e:
-            logger.debug("Bridge failed (Attempt %d): %s", i+1, e)
-            await asyncio.sleep(2)
-    else:
-        logger.error("❌ UI Bridge connection failed.")
+        except Exception as e:
+            logger.error("UI Bridge connection failed: %s. Retrying in 5s...", e)
+            await asyncio.sleep(5)

@@ -12,6 +12,7 @@ from pathlib import Path
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
 from services.utils.jarvis_logger import setup_logger
 from services.multimedia.jarvis_qr_gen import generate_qr_code
+from services.utils.jarvis_bridge import notify_event
 
 # Setup logger
 logger = setup_logger("JARVIS-FILE-SERVER")
@@ -29,23 +30,21 @@ class DDriveHandler(SimpleHTTPRequestHandler):
         path_str = path.split('?', 1)[0].split('#', 1)[0]
 
         # Secure root for D: drive sharing
-        root = Path("D:/Jarvis_Shared").resolve()
-        if not root.exists():
-            root.mkdir(parents=True, exist_ok=True)
+        # Use D:/ but resolve to handle potential symbolic links or path issues
+        root = Path("D:/").resolve()
 
         # Normalize and sanitize the requested path
         requested_path = Path(urllib.parse.unquote(path_str))
 
-        # Strip leading slashes to prevent absolute path escapes
-        sanitized_parts = [p for p in requested_path.parts if p not in ('/', '\\', '..')]
-
-        # Build the final path
+        # Build the final path relative to D:/ root
+        # Join the parts, but filtering out '..' or absolute path artifacts
+        sanitized_parts = [p for p in requested_path.parts if p not in ('/', '\\', '..', 'D:', 'd:')]
         final_path = root.joinpath(*sanitized_parts).resolve()
 
-        # Final safety check: Ensure the final path is still under root
-        if not str(final_path).startswith(str(root)):
-            logger.warning("PATH TRAVERSAL ATTEMPT BLOCKED: %s", path)
-            # Fall back to root to prevent disclosure
+        # Final safety check: Ensure the final path is still under D:/
+        # (This prevents escaping to other drives if applicable)
+        if not str(final_path).lower().startswith("d:"):
+            logger.warning("PATH ESCAPE ATTEMPT BLOCKED: %s", path)
             return str(root)
 
         return str(final_path)
@@ -113,6 +112,19 @@ async def start_file_access_server(port: int = 8000) -> dict:
                 f"🔗 URL: {server_url}\n"
                 f"📱 Is QR code ko scan kar ke D: storage browsing shuru karein."
             )
+            
+            # Notify UI about the server and drive access
+            await notify_event("intelligence_update", {
+                "type": "json",
+                "label": "D: DRIVE VISUAL SERVER",
+                "data": {
+                    "url": server_url,
+                    "qr_path": qr_result["file_path"],
+                    "status": "active",
+                    "mode": "file_server"
+                }
+            })
+
             return {
                 "status": "success",
                 "url": server_url,

@@ -6,7 +6,9 @@ Speaker Identification engine for JARVIS using SpeechBrain.
 import os
 import shutil
 import wave
+import tempfile
 import subprocess
+import asyncio
 
 import torch # pylint: disable=import-error
 import torchaudio # pylint: disable=import-error
@@ -14,9 +16,29 @@ import torchaudio.transforms # pylint: disable=import-error
 import numpy as np
 import soundfile as sf
 
-# Monkeypatch for torchaudio compatibility with SpeechBrain on newer versions
+# --- torchaudio compatibility monkeypatches for SpeechBrain ---
+# torchaudio 2.x removed several legacy APIs that SpeechBrain still calls
 if not hasattr(torchaudio, "list_audio_backends"):
-    torchaudio.list_audio_backends = lambda: []
+    torchaudio.list_audio_backends = lambda: ["soundfile"]
+
+if not hasattr(torchaudio, "get_audio_backend"):
+    torchaudio.get_audio_backend = lambda: "soundfile"
+
+if not hasattr(torchaudio, "set_audio_backend"):
+    torchaudio.set_audio_backend = lambda backend: None
+
+# Patch torchaudio.load to use soundfile directly if native load fails
+_original_torchaudio_load = torchaudio.load
+def _safe_torchaudio_load(filepath, *args, **kwargs):
+    try:
+        return _original_torchaudio_load(filepath, *args, **kwargs)
+    except Exception:  # pylint: disable=broad-exception-caught
+        # Fallback to soundfile
+        data, sample_rate = sf.read(filepath, dtype='float32', always_2d=True)
+        tensor = torch.from_numpy(data.T)  # (channels, samples)
+        return tensor, sample_rate
+torchaudio.load = _safe_torchaudio_load
+# --------------------------------------------------------------
 
 # pylint: disable=wrong-import-position
 import huggingface_hub
@@ -49,8 +71,8 @@ if os.name == 'nt':
                 if os.path.exists(dst):
                     os.remove(dst)
                 shutil.copy2(src, dst)
-        except OSError as e:
-            logger.warning("Windows symlink fallback failed: %s", e)
+        except OSError:
+            pass  # Silently ignore — logger not yet available here
 
     os.symlink = _patched_symlink
 
@@ -95,15 +117,19 @@ class VoiceFingerprintEngine:
                 self.master_embedding = None
             else:
                 logger.info("Enrolling Master Voice from %s", master_voice_path)
-                self.master_embedding = self._get_embedding(master_voice_path)
-                logger.info("✅ Master Voice Identity Loaded.")
+                # Run async embedding in a new event loop since __init__ is sync
+                # Always use lazy enrollment to avoid issues with running loops during import
+                self.master_embedding = None
+                self._pending_enroll = master_voice_path
+                logger.info("Master voice enrollment deferred until first use.")
 
         except (RuntimeError, ValueError, IOError) as e:
             logger.error("Failed to initialize Voice ID Engine: %s", e)
             self.verification = None
             self.master_embedding = None
+            self._pending_enroll = None
 
-    def _get_embedding(self, audio_path: str):
+    async def _get_embedding(self, audio_path: str):
         """Extracts speaker embedding from audio file with automatic format conversion if needed."""
         try:
             # Check if it's a valid WAV, if not, try to convert using ffmpeg
@@ -117,39 +143,48 @@ class VoiceFingerprintEngine:
             if not is_valid_wav:
                 logger.info("Non-WAV format detected for %s. Attempting FFmpeg conversion...", audio_path)
                 temp_wav = audio_path + ".converted.wav"
-                try:
-                    subprocess.run(
+                def _run_ffmpeg():
+                    return subprocess.run(
                         ['ffmpeg', '-y', '-i', audio_path, '-ar', '16000', '-ac', '1', temp_wav],
                         check=True, capture_output=True
                     )
+                try:
+                    await asyncio.to_thread(_run_ffmpeg)
                     audio_path = temp_wav
                 except (subprocess.SubprocessError, RuntimeError, IOError) as e:
                     logger.error("FFmpeg conversion failed: %s", e)
                     return None
 
-            with wave.open(audio_path, 'rb') as wf:
-                fs = wf.getframerate()
-                n_channels = wf.getnchannels()
-                n_frames = wf.getnframes()
-                sampwidth = wf.getsampwidth()
+            def _load_audio():
+                with wave.open(audio_path, 'rb') as wf:
+                    fs = wf.getframerate()
+                    n_channels = wf.getnchannels()
+                    n_frames = wf.getnframes()
+                    sampwidth = wf.getsampwidth()
 
-                if sampwidth != 2:
-                    # Fallback for non-16bit if soundfile is present
-                    data, fs = sf.read(audio_path)
-                    signal = torch.from_numpy(data.copy()).float()
-                else:
-                    frames = wf.readframes(n_frames)
-                    data = np.frombuffer(frames, dtype=np.int16)
-                    signal = torch.from_numpy(data.copy()).float() / 32768.0
+                    if sampwidth != 2:
+                        # Fallback for non-16bit if soundfile is present
+                        data, fs_sf = sf.read(audio_path)
+                        signal = torch.from_numpy(data.copy()).float()
+                        return signal, fs_sf
+                    else:
+                        frames = wf.readframes(n_frames)
+                        data = np.frombuffer(frames, dtype=np.int16)
+                        signal = torch.from_numpy(data.copy()).float() / 32768.0
 
-                    if n_channels > 1:
-                        # Reshape interleaved data: [L, R, L, R...] -> [C, T]
-                        signal = signal.view(-1, n_channels).transpose(0, 1)
+                        if n_channels > 1:
+                            # Reshape interleaved data: [L, R, L, R...] -> [C, T]
+                            signal = signal.view(-1, n_channels).transpose(0, 1)
+                        return signal, fs
 
-                # Cleanup temp file if created
-                if ".converted.wav" in audio_path and os.path.exists(audio_path):
-                    wf.close() # Close before deleting
+            signal, fs = await asyncio.to_thread(_load_audio)
+
+            # Cleanup temp file AFTER closing wave context
+            if ".converted.wav" in audio_path and os.path.exists(audio_path):
+                try:
                     os.remove(audio_path)
+                except OSError:
+                    pass
 
                 # Reshape and Resample
                 if len(signal.shape) == 1:
@@ -166,14 +201,14 @@ class VoiceFingerprintEngine:
 
                 logger.info("Signal loaded for %s: Shape=%s, SampleRate=%d", audio_path, signal.shape, fs)
 
-            embedding = self.verification.encode_batch(signal)
+            embedding = await asyncio.to_thread(self.verification.encode_batch, signal)
             # Ensure 3D (1, 1, 192) or 2D (1, 192)
             return embedding
         except (RuntimeError, ValueError, IOError) as e:
             logger.error("Embedding extraction failed for %s: %s", audio_path, e)
             return None
 
-    def verify_segment(self, segment_path: str, threshold: float = 0.65) -> tuple[bool, float]:
+    async def verify_segment(self, segment_path: str, threshold: float = 0.65) -> tuple[bool, float]:
         """
         Verifies if the audio segment matches the master voice.
         Returns: (is_match, score)
@@ -183,7 +218,7 @@ class VoiceFingerprintEngine:
             return False, 0.0
 
         try:
-            test_embedding = self._get_embedding(segment_path)
+            test_embedding = await self._get_embedding(segment_path)
             if test_embedding is None:
                 return False, 0.0
 
@@ -218,6 +253,9 @@ class VoiceFingerprintEngine:
 
             is_match = score_val >= threshold
 
+            from services.utils.jarvis_bridge import notify_voice_match # pylint: disable=import-outside-toplevel
+            await notify_voice_match(score_val)
+
             logger.info("Voice Security Check: Score=%.4f | Threshold=%.2f | Match=%s", score_val, threshold, is_match)
             return is_match, score_val
 
@@ -225,13 +263,26 @@ class VoiceFingerprintEngine:
             logger.error("Verification logic failed: %s", e)
             return False, 0.0 # SECURE BY DEFAULT: Deny on failure
 
-    def verify_bytes(self, audio_bytes: bytes, sample_rate: int = 16000, threshold: float = 0.70) -> tuple[bool, float]:
+    async def verify_bytes(self, audio_bytes: bytes, sample_rate: int = 16000, threshold: float = 0.70) -> tuple[bool, float]:
         """Verifies raw audio bytes (16-bit PCM)."""
+        # Lazy enroll if __init__ ran inside a running event loop
+        if self.master_embedding is None and getattr(self, "_pending_enroll", None):
+            logger.info("Lazy enrolling master voice...")
+            self.master_embedding = await self._get_embedding(self._pending_enroll)
+            self._pending_enroll = None
+            if self.master_embedding is not None:
+                logger.info("✅ Master Voice Identity Loaded (lazy).")
+            else:
+                logger.error("❌ Lazy enrollment failed.")
+
         # Ensure audio is at least 1.0 seconds long to avoid model padding errors and low-confidence matches
         if len(audio_bytes) < (sample_rate * 1.0 * 2): # 2 bytes per sample for 16-bit
             return False, 0.0
 
-        temp_path = "tmp_segment.wav"
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            temp_path = tmp.name
+            tmp.close()  # Close the handle so wave can open it on Windows
+
         try:
             # Use wave module to save instead of torchaudio.save to avoid backend issues
             # pylint: disable=no-member
@@ -242,7 +293,7 @@ class VoiceFingerprintEngine:
                 wf.writeframes(audio_bytes)
             # pylint: enable=no-member
 
-            result = self.verify_segment(temp_path, threshold)
+            result = await self.verify_segment(temp_path, threshold)
             return result
         except (ValueError, RuntimeError, IOError) as e:
             # Short fragments or noise might cause padding errors in the model
@@ -259,7 +310,8 @@ class VoiceFingerprintEngine:
                 except OSError:
                     pass
 
-        return False, 0.0 # Final fallback return
-
 # Singleton instance
-voice_id_engine = VoiceFingerprintEngine("d:/Personal-Assistant-main/data/identity/master_voice.wav")
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Expected path: d:/Personal-Assistant-main/data/identity/master_voice.wav
+MASTER_VOICE_PATH = os.path.join(BASE_DIR, "data", "identity", "master_voice.wav")
+voice_id_engine = VoiceFingerprintEngine(MASTER_VOICE_PATH)

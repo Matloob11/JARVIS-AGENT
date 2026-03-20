@@ -40,5 +40,5 @@ if not exist logs mkdir logs
 if not exist backups mkdir backups
 
 echo [COMPLETED] JARVIS-AGENT is ready for production.
-echo To start: python services/utils/watchdog.py
+echo To start: python src/core/vortex.py
 pause

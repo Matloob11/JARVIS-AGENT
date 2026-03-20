@@ -21,7 +21,9 @@ class JarvisAdaptiveEngine:
     def __init__(self, data_path="conversations/learning_state.json"):
         """Initializes the adaptive engine with state path."""
         self.data_path = data_path
-        os.makedirs(os.path.dirname(self.data_path), exist_ok=True)
+        _dir = os.path.dirname(self.data_path)
+        if _dir:
+            os.makedirs(_dir, exist_ok=True)
         self.state = self._load_state()
 
     def _load_state(self) -> Dict:

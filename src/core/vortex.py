@@ -1,0 +1,134 @@
+"""
+# vortex.py
+Orchestrator for JARVIS Systems.
+Starts the UI Bridge (Socket.IO) and the Agent Runner (LiveKit).
+"""
+
+import os
+import subprocess
+import time
+import sys
+import logging
+import threading
+from typing import List, Dict, Any
+
+logging.basicConfig(level=logging.INFO, format="[VORTEX] %(message)s")
+logger = logging.getLogger("VORTEX")
+
+
+def start_process(command, name, extra_env=None):
+    """Start a subprocess with the correct environment."""
+    print(f"Starting {name}...")
+    # Build env: inherit current env and inject PYTHONPATH so modules resolve
+    env = os.environ.copy()
+    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    python_path_parts = [root_dir, os.path.join(root_dir, 'src'), os.path.join(root_dir, 'services')]
+    existing = env.get('PYTHONPATH', '')
+    if existing:
+        python_path_parts.append(existing)
+    env['PYTHONPATH'] = os.pathsep.join(python_path_parts)
+    if extra_env:
+        env.update(extra_env)
+    return subprocess.Popen(
+        command,
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+        universal_newlines=True,
+        cwd=root_dir,
+        env=env
+    )
+
+
+def main():
+    # Ensure UTF-8 for Windows console via env var (safer than replacing sys.stdout)
+    if sys.platform == "win32":
+        os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+
+    print("="*50)
+    print("JARVIS ORCHESTRATOR | SIR MATLOOB EDITION")
+    print("="*50)
+
+    python_cmd = sys.executable
+
+    # Start UI Bridge
+    bridge_proc = start_process(f"{python_cmd} -m src.core.ui_bridge", "UI-BRIDGE")
+
+    # Wait for bridge to be healthy before starting Agent Runner
+    print("[VORTEX] Waiting for UI Bridge to initialize...")
+    import urllib.request
+    import json
+    max_retries = 10
+    for i in range(max_retries):
+        try:
+            with urllib.request.urlopen("http://127.0.0.1:5001/health", timeout=1) as response:
+                if response.status == 200:
+                    print("[VORTEX] UI Bridge is ONLINE.")
+                    break
+        except Exception:
+            if i < max_retries - 1:
+                time.sleep(1)
+            else:
+                print("[VORTEX] Warning: UI Bridge did not respond after 10s. Starting agent anyway.")
+
+    # Start Agent Runner
+    agent_proc = start_process(f"{python_cmd} -m src.core.agent dev", "AGENT-RUNNER")
+
+    processes: List[Dict[str, Any]] = [
+        {"proc": bridge_proc, "name": "UI-BRIDGE"},
+        {"proc": agent_proc, "name": "AGENT-RUNNER"}
+    ]
+
+    def stream_reader(pipe: Any, prefix: str):
+        try:
+            for line in iter(pipe.readline, ''):
+                if line:
+                    print(f"[{prefix}] {line.strip()}")
+        except (IOError, ValueError) as e:
+            print(f"[{prefix}] Reader Error: {e}")
+        except Exception as e: # pylint: disable=broad-exception-caught
+            logger.error("[%s] Unexpected Reader Error: %s", prefix, e)
+        finally:
+            pipe.close()
+
+    try:
+        # Start reader threads
+        for p in processes:
+            t = threading.Thread(target=stream_reader, args=(p["proc"].stdout, p["name"]), daemon=True)
+            t.start()
+            p["thread"] = t
+
+        while True:
+            for p in processes:
+                # Poll for exit
+                proc_obj = p["proc"]
+                retcode = proc_obj.poll()
+                if retcode is not None:
+                    print(f"\n[ERROR] {p['name']} EXITED with code {retcode}")
+                    raise KeyboardInterrupt
+            time.sleep(1)
+
+    except KeyboardInterrupt:
+        print("\n[INFO] Shutting down JARVIS systems...")
+        for p in processes:
+            print(f"Terminating {p['name']}...")
+            if p["proc"].poll() is None:  # Only kill if still running
+                if sys.platform == "win32":
+                    # Use taskkill with /T (tree) and suppress errors if process is already gone
+                    subprocess.call(
+                        ['taskkill', '/F', '/T', '/PID', str(p["proc"].pid)],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL
+                    )
+                else:
+                    p["proc"].terminate()
+            else:
+                print(f"{p['name']} was already terminated.")
+        print("[INFO] All systems offline.")
+        sys.exit(1) # Ensure non-zero exit code on failure/interrupt if it was triggered by a crash
+
+
+if __name__ == "__main__":
+    main()

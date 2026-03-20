@@ -4,6 +4,13 @@ import { io, Socket } from 'socket.io-client';
 const VORTEX_TOKEN = import.meta.env.VITE_VORTEX_SECURITY_TOKEN || '';
 const VORTEX_URL = import.meta.env.VITE_VORTEX_URL || 'http://localhost:5001';
 
+if (!VORTEX_TOKEN) {
+  console.error("❌ CRITICAL: VITE_VORTEX_SECURITY_TOKEN is missing from .env");
+}
+if (!import.meta.env.VITE_VORTEX_URL) {
+  console.warn("⚠️ VITE_VORTEX_URL not set — falling back to http://localhost:5001");
+}
+
 // Singleton socket for performance
 let sharedSocket: Socket | null = null;
 
@@ -60,16 +67,32 @@ export interface ReasoningPlan {
   is_ambiguous?: boolean;
 }
 
+export interface VortexLog {
+  text: string;
+  category: string;
+  timestamp: number;
+}
+
+export interface SimRecord {
+  full_name?: string;
+  cnic?: string;
+  address?: string;
+  phone?: string;
+}
+
 export const useNeuralNetwork = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [status, setStatus] = useState('idle');
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isUserSpeaking, setIsUserSpeaking] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isWakeWordActive, setIsWakeWordActive] = useState(true);
   const spectralDataRef = useRef<number[]>([]);
   const [vitals, setVitals] = useState({ cpu: 0, ram: 0, disk: 0 });
   const [telemetry, setTelemetry] = useState({ success_rate: 1.0, avg_latency: 0.1, status: 'STABLE' });
+  const [vortexLogs, setVortexLogs] = useState<VortexLog[]>([]);
+  const [voiceMatch, setVoiceMatch] = useState(0.0);
   const [intelligence, setIntelligence] = useState<{
     type: 'image' | 'json';
     url?: string;
@@ -84,6 +107,9 @@ export const useNeuralNetwork = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [location, setLocation] = useState<LocationData>({ city: 'Detecting...', lat: 0, lng: 0 });
   const [reasoning, setReasoning] = useState<ReasoningPlan | null>(null);
+  const [simRecords, setSimRecords] = useState<SimRecord[]>([]);
+  const [simLoading, setSimLoading] = useState(false);
+  const [socketVersion, setSocketVersion] = useState(0);
 
   useEffect(() => {
     const socket = getSocket();
@@ -106,6 +132,9 @@ export const useNeuralNetwork = () => {
     const onTelemetryUpdate = (data: { success_rate: number; avg_latency: number; status: string }) => {
       console.debug('📈 Telemetry Update:', data);
       setTelemetry(data);
+    };
+    const onUserStatusChange = (data: { speaking: boolean }) => {
+      setIsUserSpeaking(data.speaking);
     };
     const onIntelligenceUpdate = (data: { type: 'image' | 'json'; url?: string; data?: Record<string, unknown>; label?: string }) => setIntelligence(data);
     const onPersonaUpdate = (data: { persona: 'jarvis' | 'anna' }) => {
@@ -145,11 +174,26 @@ export const useNeuralNetwork = () => {
       console.log('🧠 Reasoning Update:', data);
       setReasoning(data);
     };
+    const onNewLog = (data: VortexLog) => {
+      setVortexLogs(prev => [data, ...prev].slice(0, 50));
+    };
+    const onVoiceMatchUpdate = (data: { confidence: number; timestamp: number }) => {
+      setVoiceMatch(data.confidence);
+    };
+    const onSimDataResult = (data: { records: SimRecord[] }) => {
+      setSimRecords(data.records || []);
+      setSimLoading(false);
+    };
+    const onSimDataLoading = () => {
+      setSimLoading(true);
+      setSimRecords([]);
+    };
 
     socket.on('connect', onConnect);
     socket.on('disconnect', onDisconnect);
     socket.on('status_update', onStatusUpdate);
     socket.on('status_change', onStatusChange);
+    socket.on('user_status_change', onUserStatusChange);
     socket.on('vitals_update', onVitals);
     socket.on('telemetry_update', onTelemetryUpdate);
     socket.on('intelligence_update', onIntelligenceUpdate);
@@ -159,11 +203,17 @@ export const useNeuralNetwork = () => {
     socket.on('transcription_update', onTranscriptionUpdate);
     socket.on('location_update', onLocationUpdate);
     socket.on('reasoning_update', onReasoningUpdate);
-    socket.on('init_state', (state: { messages?: Message[]; persona?: 'jarvis' | 'anna'; muted?: boolean; wake_word_active?: boolean; location?: LocationData; [key: string]: unknown }) => {
+    socket.on('new_log', onNewLog);
+    socket.on('voice_match_update', onVoiceMatchUpdate);
+    socket.on('sim_data_result', onSimDataResult);
+    socket.on('sim_data_loading', onSimDataLoading);
+    socket.on('init_state', (state: { messages?: Message[]; persona?: 'jarvis' | 'anna'; muted?: boolean; wake_word_active?: boolean; location?: LocationData; vortex_logs?: VortexLog[]; voice_match?: number; [key: string]: unknown }) => {
       onInitState(state as { messages?: Message[]; persona?: 'jarvis' | 'anna' });
       setIsMuted(state.muted || false);
       setIsWakeWordActive(state.wake_word_active !== false);
       if (state.location) setLocation(state.location);
+      if (state.vortex_logs) setVortexLogs(state.vortex_logs.reverse());
+      if (state.voice_match !== undefined) setVoiceMatch(state.voice_match);
     });
     socket.on('new_message', onNewMessage);
     socket.on('update_message', onUpdateMessage);
@@ -175,6 +225,7 @@ export const useNeuralNetwork = () => {
       socket.off('disconnect', onDisconnect);
       socket.off('status_update', onStatusUpdate);
       socket.off('status_change', onStatusChange);
+      socket.off('user_status_change', onUserStatusChange);
       socket.off('vitals_update', onVitals);
       socket.off('telemetry_update', onTelemetryUpdate);
       socket.off('intelligence_update', onIntelligenceUpdate);
@@ -184,13 +235,17 @@ export const useNeuralNetwork = () => {
       socket.off('transcription_update', onTranscriptionUpdate);
       socket.off('location_update', onLocationUpdate);
       socket.off('reasoning_update', onReasoningUpdate);
-      socket.off('init_state', onInitState);
+      socket.off('new_log', onNewLog);
+      socket.off('voice_match_update', onVoiceMatchUpdate);
+      socket.off('sim_data_result', onSimDataResult);
+      socket.off('sim_data_loading', onSimDataLoading);
+      socket.off('init_state');
       socket.off('new_message', onNewMessage);
       socket.off('update_message', onUpdateMessage);
       socket.off('mute_update', onMuteUpdate);
       socket.off('wake_word_update', onWakeWordUpdate);
     };
-  }, []);
+  }, [socketVersion]);
 
   const emitCommand = (type: string, payload?: unknown) => {
     const socket = getSocket();
@@ -220,17 +275,21 @@ export const useNeuralNetwork = () => {
       id: Math.random().toString(36).substr(2, 9),
       role: 'user',
       text,
-      timestamp: Date.now() / 1000
+      timestamp: Math.floor(Date.now() / 1000)  // integer seconds, matches backend
     };
     setMessages(prev => [...prev, userMsg].slice(-50));
   };
 
   const toggleMute = () => {
-    emitCommand(isMuted ? 'unmute' : 'mute');
+    const nextMuted = !isMuted;
+    setIsMuted(nextMuted); // Optimistic update
+    emitCommand(nextMuted ? 'mute' : 'unmute');
   };
 
   const toggleWakeWord = () => {
-    emitCommand('wake_word_toggle', !isWakeWordActive);
+    const nextActive = !isWakeWordActive;
+    setIsWakeWordActive(nextActive); // Optimistic update
+    emitCommand('wake_word_toggle', nextActive);
   };
 
   // Mock Spectral Data Generator for animation reactivity
@@ -251,6 +310,7 @@ export const useNeuralNetwork = () => {
     isConnected,
     status,
     isSpeaking,
+    isUserSpeaking,
     isThinking,
     isMuted,
     isWakeWordActive,
@@ -265,6 +325,10 @@ export const useNeuralNetwork = () => {
     messages,
     location,
     reasoning,
+    vortexLogs,
+    voiceMatch,
+    simRecords,
+    simLoading,
     changePersona,
     updateSettings,
     emitCommand,
@@ -273,9 +337,8 @@ export const useNeuralNetwork = () => {
     toggleWakeWord,
     reconnect: () => {
       disconnectSocket();
-      getSocket(); // Re-initialize
-      // Note: The useEffect will pick up the new socket next render or we can force a state update
       setIsConnected(false);
+      setSocketVersion(v => v + 1); // triggers useEffect to re-attach listeners
     }
   };
 };

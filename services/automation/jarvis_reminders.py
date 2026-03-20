@@ -95,7 +95,7 @@ async def set_reminder(time_str: str, message: str) -> str:
             )
 
         async with reminders_lock:
-            reminders = load_reminders()
+            reminders = await asyncio.to_thread(load_reminders)
             new_reminder = {
                 "id": f"rem_{int(target_time.timestamp())}",
                 "time": target_time.isoformat(),
@@ -104,7 +104,7 @@ async def set_reminder(time_str: str, message: str) -> str:
                 "created_at": now.isoformat()
             }
             reminders.append(new_reminder)
-            save_reminders(reminders)
+            await asyncio.to_thread(save_reminders, reminders)
 
         # Replaced the original Hindi return with the English one,
         # and formatted it to fit within reasonable line length.
@@ -121,7 +121,7 @@ async def set_reminder(time_str: str, message: str) -> str:
 @jarvis_tool
 async def list_reminders() -> str:
     """List all pending reminders."""
-    reminders = load_reminders()
+    reminders = await asyncio.to_thread(load_reminders)
     pending = [r for r in reminders if r.get("status") == "pending"]
 
     if not pending:

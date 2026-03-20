@@ -37,4 +37,4 @@ fi
 mkdir -p logs backups Jarvis_Outputs
 
 echo "✅ [COMPLETED] JARVIS-AGENT is ready for production."
-echo "To start: python3 services/utils/watchdog.py"
+echo "To start: python src/core/vortex.py"
