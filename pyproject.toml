@@ -8,6 +8,10 @@ exclude = [
     ".github",
     ".pytest_cache",
     ".venv",
+    ".venv_312",
+    ".agent",
+    "chroma_db",
+    "pretrained_models",
     "scripts/debug",
     "scripts/profiling",
     "scripts/tools",
@@ -20,8 +24,31 @@ exclude = [
 ]
 
 [tool.ruff.lint]
-# Enable Pyflakes (F) and E rules, but ignore E501 (Line too long)
-select = ["F", "E", "W"]
+# ULTRA-STRICT: Enable extensive rules for security, performance, and best practices
+select = [
+    "F",     # Pyflakes
+    "E",     # Error
+    "W",     # Warning
+    "I",     # Isort (Import sorting)
+    "N",     # PEP8 Naming
+    "UP",    # Pyupgrade
+    "ASYNC", # Asyncio checks
+    "S",     # Security checks (bandit)
+    "B",     # Bugbear (potential bugs)
+    "A",     # Built-ins (prevent shadowing)
+    "COM",   # Commas
+    "C4",    # Comprehensions
+    "DTZ",   # Datetime/Timezones
+    "T20",   # Print statements
+    "RET",   # Return style
+    "SIM",   # Simplify
+    "ARG",   # Unused arguments
+    "PTH",   # Pathlib
+    "ERA",   # Eradicate (commented out code)
+    "PL",    # Pylint rules
+    "PERF",  # Performance
+    "RUF"    # Ruff-specific rules
+]
 ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]

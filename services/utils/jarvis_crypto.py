@@ -3,10 +3,11 @@ J.A.R.V.I.S Cryptographic Security Module
 Enhanced with API key encryption and secure environment management
 """
 
-import os
 import json
 import logging
-from typing import Dict, Optional, Union
+import os
+from pathlib import Path
+
 from cryptography.fernet import Fernet
 
 logger = logging.getLogger("JARVIS-CRYPTO")
@@ -17,8 +18,8 @@ class JarvisCrypto:
     Enhanced cryptographic security for JARVIS sensitive data
     Handles API keys, environment variables, and sensitive data
     """
-    _key: bytes = None
-    _fernet: Fernet = None
+    _key: bytes | None = None
+    _fernet: Fernet | None = None
 
     @classmethod
     def get_key(cls) -> bytes:
@@ -35,7 +36,7 @@ class JarvisCrypto:
         return cls._key
 
     @classmethod
-    def encrypt(cls, data: Union[str, bytes]) -> bytes:
+    def encrypt(cls, data: str | bytes) -> bytes:
         """Encrypt data using AES-256."""
         f = Fernet(cls.get_key())
         if isinstance(data, str):
@@ -43,13 +44,15 @@ class JarvisCrypto:
         return f.encrypt(data)
 
     @classmethod
-    def decrypt(cls, token: Union[str, bytes]) -> str:
+    def decrypt(cls, token: str | bytes) -> str:
         """Decrypt data back to string."""
         f = Fernet(cls.get_key())
+        if isinstance(token, str):
+            token = token.encode()
         return f.decrypt(token).decode()
 
     @classmethod
-    def encrypt_env_file(cls, env_file_path: str = ".env") -> str:
+    def encrypt_env_file(cls, env_file_path: str | Path = ".env") -> str:
         """
         Encrypt environment file with API keys
 
@@ -60,13 +63,14 @@ class JarvisCrypto:
             Path to encrypted file
         """
         try:
-            if not os.path.exists(env_file_path):
-                logger.warning("⚠️ Environment file %s not found", env_file_path)
+            path = Path(env_file_path)
+            if not path.exists():
+                logger.warning("⚠️ Environment file %s not found", path)
                 return ""
 
             # Read and parse env file
             env_data = {}
-            with open(env_file_path, 'r', encoding='utf-8') as f:
+            with open(env_file_path, encoding='utf-8') as f:
                 for line in f:
                     line = line.strip()
                     if line and not line.startswith('#') and '=' in line:
@@ -76,7 +80,7 @@ class JarvisCrypto:
             # Identify and encrypt sensitive keys
             sensitive_patterns = [
                 'API_KEY', 'API_SECRET', 'PASSWORD', 'TOKEN',
-                'SECRET', 'KEY', 'PRIVATE', 'CREDENTIALS'
+                'SECRET', 'KEY', 'PRIVATE', 'CREDENTIALS',
             ]
 
             encrypted_data = {}
@@ -87,7 +91,7 @@ class JarvisCrypto:
                     encrypted_data[key] = value
 
             # Save encrypted file
-            encrypted_file_path = env_file_path + ".encrypted"
+            encrypted_file_path = str(env_file_path) + ".encrypted"
             with open(encrypted_file_path, 'w', encoding='utf-8') as f:
                 json.dump(encrypted_data, f, indent=2)
 
@@ -99,7 +103,7 @@ class JarvisCrypto:
             raise
 
     @classmethod
-    def load_encrypted_env(cls, encrypted_file_path: str = ".env.encrypted") -> Dict[str, str]:
+    def load_encrypted_env(cls, encrypted_file_path: str | Path = ".env.encrypted") -> dict[str, str]:
         """
         Load and decrypt environment variables from encrypted file
 
@@ -110,12 +114,13 @@ class JarvisCrypto:
             Dictionary of decrypted environment variables
         """
         try:
-            if not os.path.exists(encrypted_file_path):
-                logger.warning("⚠️ Encrypted environment file not found: %s", encrypted_file_path)
+            path = Path(encrypted_file_path)
+            if not path.exists():
+                logger.warning("⚠️ Encrypted environment file not found: %s", path)
                 return {}
 
             # Load encrypted data
-            with open(encrypted_file_path, 'r', encoding='utf-8') as f:
+            with open(encrypted_file_path, encoding='utf-8') as f:
                 encrypted_data = json.load(f)
 
             # Decrypt data
@@ -135,7 +140,7 @@ class JarvisCrypto:
             return {}
 
     @classmethod
-    def get_secure_env_var(cls, key: str, encrypted_file_path: str = ".env.encrypted") -> Optional[str]:
+    def get_secure_env_var(cls, key: str, encrypted_file_path: str | Path = ".env.encrypted") -> str | None:
         """
         Get specific encrypted environment variable
 
@@ -156,3 +161,12 @@ class JarvisCrypto:
 
 # Global utility
 jarvis_crypto = JarvisCrypto()
+
+# Module-level convenience functions (backward-compat aliases)
+def encrypt_data(data: str) -> bytes:
+    """Encrypt a string using the global JARVIS crypto key."""
+    return jarvis_crypto.encrypt(data)
+
+def decrypt_data(token: str | bytes) -> str:
+    """Decrypt bytes/string back to plaintext."""
+    return jarvis_crypto.decrypt(token)

@@ -5,13 +5,13 @@ Autonomous Task Planning and progress tracking for JARVIS.
 
 import json
 from datetime import datetime
-from typing import List, Dict
+
 import httpx
 
-from services.utils.jarvis_logger import setup_logger
-from services.utils.jarvis_config import config
-from services.utils.jarvis_security import security_manager
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
+from services.utils.jarvis_config import config
+from services.utils.jarvis_logger import setup_logger
+from services.utils.jarvis_security import security_manager
 
 logger = setup_logger("AUTONOMOUS-PLANNER")
 
@@ -22,9 +22,9 @@ class AutonomousPlanner:
     """
 
     def __init__(self):
-        self.active_plans: Dict[str, Dict] = {}
+        self.active_plans: dict[str, dict] = {}
 
-    def create_dynamic_plan(self, user_input: str, _intent_info: Dict) -> List[Dict]:
+    def create_dynamic_plan(self, user_input: str, _intent_info: dict) -> list[dict]:
         """
         Dynamically generates a sequence of steps based on input and intent.
         """
@@ -39,7 +39,7 @@ class AutonomousPlanner:
                 {"step": 2, "action": "Synthesis",
                     "desc": "Analyzing and boiling down data."},
                 {"step": 3, "action": "Reporting",
-                    "desc": "Writing and delivering the final output."}
+                    "desc": "Writing and delivering the final output."},
             ]
         elif "code" in text or "develop" in text:
             plan = [
@@ -47,13 +47,13 @@ class AutonomousPlanner:
                 {"step": 2, "action": "Implementation",
                     "desc": "Writing code modules."},
                 {"step": 3, "action": "Verification",
-                    "desc": "Testing and linting code."}
+                    "desc": "Testing and linting code."},
             ]
         elif "audit" in text or "check" in text:
             plan = [
                 {"step": 1, "action": "Scan", "desc": "Identifying system anomalies."},
                 {"step": 2, "action": "Heal", "desc": "Triggering autonomous recovery."},
-                {"step": 3, "action": "Verify", "desc": "Confirming system stability."}
+                {"step": 3, "action": "Verify", "desc": "Confirming system stability."},
             ]
 
         return plan
@@ -71,16 +71,17 @@ class AutonomousPlanner:
                     "total": total_steps,
                     "action": action,
                     "status": status,
-                    "timestamp": datetime.now().isoformat()
-                }
+                    "timestamp": datetime.now().isoformat(),
+                },
             }
 
             json_payload = json.dumps(payload, sort_keys=True)
             signature = security_manager.generate_signature(json_payload)
 
+            token = str(config.security_token) if config.security_token else "local"
             headers = {
-                "X-Vortex-Token": config.security_token,
-                "X-Vortex-Signature": signature
+                "X-Vortex-Token": token,
+                "X-Vortex-Signature": signature,
             }
 
             async with httpx.AsyncClient() as client:
@@ -99,7 +100,7 @@ autonomous_planner = AutonomousPlanner()
 
 @jarvis_tool
 async def tool_report_plan_progress(step_index: int, total_steps: int,
-                                    action: str, status: str = "IN_PROGRESS") -> Dict:
+                                    action: str, status: str = "IN_PROGRESS") -> dict:
     """
     Reporting tool used by the agent to manually update the UI on autonomous plan progress.
     Args:
@@ -111,5 +112,5 @@ async def tool_report_plan_progress(step_index: int, total_steps: int,
     await autonomous_planner.notify_ui_progress(step_index, total_steps, action, status)
     return {
         "status": "success",
-        "message": f"Plan progress reported: {step_index}/{total_steps} - {action} ({status})."
+        "message": f"Plan progress reported: {step_index}/{total_steps} - {action} ({status}).",
     }

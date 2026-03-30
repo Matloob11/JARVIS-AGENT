@@ -5,10 +5,12 @@ Extracts and synthesizes information from multiple websites.
 """
 
 import asyncio
+from typing import Any
 from urllib.parse import quote
-from typing import List
+
 import requests
 from bs4 import BeautifulSoup
+
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
 from services.info.jarvis_search import GOOGLE_SEARCH_API_KEY, SEARCH_ENGINE_ID
 from services.multimedia.jarvis_advanced_tools import send_email
@@ -18,6 +20,24 @@ from services.utils.jarvis_logger import setup_logger
 logger = setup_logger("JARVIS-RESEARCHER")
 
 
+def _parse_html(html_text: str) -> str:
+    """Helper to parse HTML in a separate thread to prevent blocking event loop."""
+    soup = BeautifulSoup(html_text, 'html.parser')
+
+    # Remove script and style elements
+    for script_or_style in soup(["script", "style"]):
+        script_or_style.decompose()
+
+    # Get text and clean up whitespace
+    text = soup.get_text()
+    lines = (line.strip() for line in text.splitlines())
+    chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+    text = '\n'.join(chunk for chunk in chunks if chunk)
+
+    # Limit to first 4000 characters to keep context manageable
+    return text[:4000]
+
+
 async def scrape_url(url: str, timeout: int = 10) -> str:
     """Extract clean text content from a URL."""
     try:
@@ -25,44 +45,33 @@ async def scrape_url(url: str, timeout: int = 10) -> str:
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-            )
+            ),
         }
         response = None
         for attempt in range(2):  # Simple retry
             try:
                 # Use to_thread for the blocking requests call
                 response = await asyncio.to_thread(
-                    requests.get, url, headers=headers, timeout=timeout
+                    requests.get, url, headers=headers, timeout=timeout,
                 )
                 response.raise_for_status()
                 break
-            except (requests.RequestException, asyncio.TimeoutError):
+            except (TimeoutError, requests.RequestException):
                 if attempt == 1:
                     raise
                 await asyncio.sleep(1)
 
-        soup = BeautifulSoup(response.text, 'html.parser')
+        if response is None:
+            return ""
 
-        # Remove script and style elements
-        for script_or_style in soup(["script", "style"]):
-            script_or_style.decompose()
-
-        # Get text and clean up whitespace
-        text = soup.get_text()
-        lines = (line.strip() for line in text.splitlines())
-        chunks = (phrase.strip()
-                  for line in lines for phrase in line.split("  "))
-        text = '\n'.join(chunk for chunk in chunks if chunk)
-
-        # Limit to first 4000 characters to keep context manageable
-        return text[:4000]
+        return await asyncio.to_thread(_parse_html, response.text)
     except (requests.RequestException, ValueError, AttributeError,
             KeyError, OSError, RuntimeError) as e:
         logger.error("Error scraping %s: %s", url, e)
         return ""
 
 
-async def get_search_urls(query: str, count: int = 5) -> List[str]:
+async def get_search_urls(query: str, count: int = 5) -> list[str]:
     """Get top URLs from Google Search."""
     if not GOOGLE_SEARCH_API_KEY or not SEARCH_ENGINE_ID:
         logger.error("Search API credentials missing")
@@ -127,7 +136,7 @@ async def perform_web_research(query: str) -> str:
 
 @jarvis_tool
 async def autonomous_research_and_email(query: str, recipient: str,
-                                         subject: str = "Research Report") -> dict:
+                                         subject: str = "Research Report") -> str | dict[str, Any]:
     """
     Performs deep research on a topic, synthesizes it, and sends it via email.
     This is a multi-step agentic tool for complex requests.
@@ -140,7 +149,7 @@ async def autonomous_research_and_email(query: str, recipient: str,
     if "[RESEARCH DATA RETRIEVED]" not in research_summary:
         return {
             "status": "error",
-            "message": "❌ Research fail ho gayi, email nahi bheji ja saki."
+            "message": "❌ Research fail ho gayi, email nahi bheji ja saki.",
         }
 
     # Step 2: Email sending
@@ -158,7 +167,7 @@ async def autonomous_research_and_email(query: str, recipient: str,
             "status": "success",
             "query": query,
             "recipient": recipient,
-            "message": result_msg
+            "message": result_msg,
         }
 
     fail_msg = (
@@ -167,5 +176,5 @@ async def autonomous_research_and_email(query: str, recipient: str,
     )
     return {
         "status": "partial_success",
-        "message": fail_msg
+        "message": fail_msg,
     }

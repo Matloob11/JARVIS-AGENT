@@ -4,11 +4,11 @@ Proactive Reminder System for JARVIS.
 Stores and manages scheduled tasks and notifications.
 """
 
+import asyncio
 import json
 import os
-import asyncio
 from datetime import datetime, timedelta
-from typing import List, Dict
+
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
 from services.utils.jarvis_logger import setup_logger
 
@@ -20,13 +20,13 @@ REMINDERS_FILE = os.path.join("conversations", "reminders.json")
 reminders_lock = asyncio.Lock()
 
 
-def load_reminders() -> List[Dict]:
+def load_reminders() -> list[dict]:
     """Load reminders with backup on corruption."""
     if os.path.exists(REMINDERS_FILE):
         try:
-            with open(REMINDERS_FILE, 'r', encoding='utf-8') as f:
+            with open(REMINDERS_FILE, encoding='utf-8') as f:
                 return json.load(f)
-        except (json.JSONDecodeError, IOError) as e:
+        except (OSError, json.JSONDecodeError) as e:
             logger.error("Omega Corruption Detected: %s. Backing up.", e)
             # Atomic backup of corrupted state
             if os.path.exists(REMINDERS_FILE):
@@ -36,7 +36,7 @@ def load_reminders() -> List[Dict]:
     return []
 
 
-def save_reminders(reminders: List[Dict]):
+def save_reminders(reminders: list[dict]):
     """Atomic write: writes to temp file then renames."""
     os.makedirs(os.path.dirname(REMINDERS_FILE), exist_ok=True)
     temp_file = f"{REMINDERS_FILE}.tmp"
@@ -45,7 +45,7 @@ def save_reminders(reminders: List[Dict]):
             json.dump(reminders, f, indent=2, ensure_ascii=False)
         # Swap temp for real - OS level atomic rename
         os.replace(temp_file, REMINDERS_FILE)
-    except IOError as e:
+    except OSError as e:
         logger.error("Error saving reminders: %s", e)
         if os.path.exists(temp_file):
             os.remove(temp_file)
@@ -101,7 +101,7 @@ async def set_reminder(time_str: str, message: str) -> str:
                 "time": target_time.isoformat(),
                 "message": message,
                 "status": "pending",
-                "created_at": now.isoformat()
+                "created_at": now.isoformat(),
             }
             reminders.append(new_reminder)
             await asyncio.to_thread(save_reminders, reminders)
@@ -115,7 +115,7 @@ async def set_reminder(time_str: str, message: str) -> str:
 
     except (ValueError, TypeError, KeyError, OSError, json.JSONDecodeError) as e:
         logger.error("Error in set_reminder: %s", e)
-        return f"Error setting reminder: {str(e)}"
+        return f"Error setting reminder: {e!s}"
 
 
 @jarvis_tool
@@ -135,7 +135,7 @@ async def list_reminders() -> str:
     return "\n".join(lines)
 
 
-def check_due_reminders() -> List[Dict]:
+def check_due_reminders() -> list[dict]:
     """Check for reminders that are due now."""
     # Since this is called from an async loop but is synchronous itself,
     # and we need the lock, we must handle the logic carefully.

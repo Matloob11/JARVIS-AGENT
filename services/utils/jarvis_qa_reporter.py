@@ -4,6 +4,8 @@ QA Reporting module for JARVIS, providing system diagnostics and performance rep
 """
 import os
 from datetime import datetime
+from typing import Any, TextIO
+
 from services.utils.jarvis_logger import setup_logger
 
 logger = setup_logger("JARVIS-QA-REPORTER")
@@ -14,14 +16,14 @@ class JarvisQAReporter:
     Automated QA Reporting system.
     Generates markdown summaries of quality audits.
     """
-    def __init__(self, report_dir="logs/qa_reports"):
+    def __init__(self, report_dir: str = "logs/qa_reports") -> None:
         self.report_dir = report_dir
         os.makedirs(self.report_dir, exist_ok=True)
 
-    def _write_report_header(self, file, date_str):
+    def _write_report_header(self, file: TextIO, date_str: str) -> None:
         file.write(f"# 🛡️ JARVIS Autonomous QA Report - {date_str}\n\n")
 
-    def _write_audit_results(self, file, results):
+    def _write_audit_results(self, file: TextIO, results: dict[str, Any]) -> None:
         file.write("### 🧪 Audit Results\n")
         for module, res in results.items():
             mod_status = res.get("status", "UNKNOWN")
@@ -34,7 +36,7 @@ class JarvisQAReporter:
                 for probe, p_status in res["probes"].items():
                     file.write(f"  - {probe.replace('_',' ')}: {p_status}\n")
 
-    def generate_daily_report(self, history: list) -> str:
+    def generate_daily_report(self, history: list[dict[str, Any]]) -> str:
         """Generates a markdown report from audit history."""
         date_str = datetime.now().strftime("%Y-%m-%d")
         report_path = os.path.join(self.report_dir, f"qa_report_{date_str}.md")
@@ -61,11 +63,11 @@ class JarvisQAReporter:
 
                 f.write("\n\n---\n*Report generated autonomously by JARVIS QA Engine.*")
             return report_path
-        except (IOError, OSError, ValueError) as error:
+        except (OSError, ValueError) as error:
             logger.error("Failed to generate QA report: %s", error)
             return ""
 
-    def get_status(self):
+    def get_status(self) -> dict[str, Any]:
         """Returns the reporter status and report directory."""
         return {"report_dir": self.report_dir, "status": "active"}
 

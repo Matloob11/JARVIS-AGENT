@@ -6,21 +6,25 @@ Keyboard and mouse control tools for the JARVIS agent.
 # pylint: disable=no-member, protected-access, broad-exception-caught
 
 import asyncio
-import time
-import os
 import codecs
-from ctypes import cast, POINTER
+import os
+import time
+from ctypes import POINTER, cast
 from datetime import datetime
-from typing import List
+
+import pyautogui
+import pyperclip
+
 # Third-party imports
 import pythoncom
 import pywintypes
 from comtypes import CLSCTX_ALL
-import pyautogui
-from pynput.keyboard import Key, Controller as KeyboardController
-from pynput.mouse import Button, Controller as MouseController
-import pyperclip
 from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+from pynput.keyboard import Controller as KeyboardController
+from pynput.keyboard import Key
+from pynput.mouse import Button
+from pynput.mouse import Controller as MouseController
+
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
 
 # First-party imports
@@ -56,7 +60,7 @@ class SafeController:
             "up": Key.up, "down": Key.down, "left": Key.left, "right": Key.right,
             "caps_lock": Key.caps_lock, "cmd": Key.cmd, "win": Key.cmd,
             "home": Key.home, "end": Key.end,
-            "page_up": Key.page_up, "page_down": Key.page_down
+            "page_up": Key.page_up, "page_down": Key.page_down,
         }
 
     async def _get_volume_interface(self):
@@ -103,8 +107,9 @@ class SafeController:
         Logs a controller action.
         """
         logger.info("Controller Action: %s", action)
-        # Keep control_log.txt for backward compatibility or separate record if needed
-        with open("control_log.txt", "a", encoding="utf-8") as f:
+        # Move log to unified logs directory
+        log_path = os.path.join("logs", "control_log.txt")
+        with open(log_path, "a", encoding="utf-8") as f:
             f.write(f"{datetime.now()}: {action}\n")
 
     def activate(self, token=None):
@@ -190,9 +195,9 @@ class SafeController:
         self.log(f"Mouse scrolled {direction}")
         return f"Scrolled {direction}"
 
-    async def type_text(self, text: str):
+    async def type_text(self, text: str, interval: float = 0.0, force_typing: bool = False):
         """
-        Simulates typing text. For long strings (> 50 chars), uses clipboard (Ctrl+V) for speed.
+        Simulates typing text. For long strings (> 50 chars), uses clipboard (Ctrl+V) unless force_typing is True.
         """
         if not self.is_active():
             return "🛑 Controller is inactive."
@@ -203,7 +208,7 @@ class SafeController:
         # Check for non-ASCII (Unicode/Urdu) characters
         is_unicode = any(ord(char) > 127 for char in text)
 
-        if len(text) > 50 or is_unicode:
+        if not force_typing and (len(text) > 50 or is_unicode):
             # Use clipboard for fast entry of long text or reliable Unicode support
             try:
                 pyperclip.copy(text)
@@ -221,7 +226,7 @@ class SafeController:
                 # Fallback if pyperclip is somehow missing or fails
                 logger.warning("Clipboard fast-typing failed, falling back to character typing: %s", e)
 
-        # Traditional typing for short strings or if clipboard fails
+        # Traditional typing for short strings or if force_typing is True
         for char in text:
             try:
                 if char == "\n":
@@ -233,7 +238,11 @@ class SafeController:
                 elif char.isprintable():
                     self.keyboard.press(char)
                     self.keyboard.release(char)
-                await asyncio.sleep(0.01)  # Faster interval
+
+                # Dynamic interval for "2x speed" animation
+                actual_interval = interval if interval > 0 else 0.005 # Default fast but readable
+                if actual_interval > 0:
+                    await asyncio.sleep(actual_interval)
             except (ValueError, KeyError, AttributeError):
                 continue
 
@@ -258,7 +267,7 @@ class SafeController:
         self.log(f"Pressed key: {key}")
         return f"Key '{key}' pressed."
 
-    async def press_hotkey(self, keys: List[str]):
+    async def press_hotkey(self, keys: list[str]):
         """
         Simulates a hotkey combination (e.g., Ctrl+C).
         """
@@ -447,19 +456,26 @@ async def scroll_cursor_tool(direction: str, amount: int = 10):
 
 
 @jarvis_tool
-async def type_text_tool(text: str):
+async def type_text_tool(text: str, interval: float = 0.0, force_typing: bool = False):
     """
-    Simulates typing the given text character by character, as if entered manually from a keyboard.
-
-    Useful for commands like "type hello world" or "hello likho".
-
+    Simulates typing text.
+    
     Args:
-        text (str): The full string to type, including spaces, punctuation, and symbols.
-
-    Returns:
-        str: A message confirming the typed input.
+        text (str): String to type.
+        interval (float, optional): Typing speed between chars.
+        force_typing (bool, optional): Skip clipboard, always type.
     """
-    return await with_temporary_activation(controller.type_text, text)
+    return await with_temporary_activation(controller.type_text, text, interval, force_typing)
+
+
+@jarvis_tool
+async def type_code_animation_tool(code: str):
+    """
+    Types code with a visible 'hacker style' speed animation.
+    Useful for Notepad/Writing demonstrations.
+    """
+    # 0.005 is extremely fast (3x+ feel)
+    return await with_temporary_activation(controller.type_text, code, interval=0.005, force_typing=True)
 
 
 @jarvis_tool
@@ -480,7 +496,7 @@ async def press_key_tool(key: str):
 
 
 @jarvis_tool
-async def press_hotkey_tool(keys: List[str]):
+async def press_hotkey_tool(keys: list[str]):
     """
     Simulates pressing a keyboard shortcut like Ctrl+S, Alt+F4, etc.
 

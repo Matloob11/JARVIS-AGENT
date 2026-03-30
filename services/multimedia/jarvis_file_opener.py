@@ -7,7 +7,9 @@ import os
 import subprocess
 import sys
 import time
+
 from fuzzywuzzy import process
+
 try:
     import pygetwindow as gw
 except ImportError:
@@ -76,7 +78,7 @@ async def index_files(search_dirs):
                     index.append({
                         "name": f,
                         "path": os.path.join(root, f),
-                        "type": "file"
+                        "type": "file",
                     })
         return index
 
@@ -137,14 +139,14 @@ async def open_file(item):
             "status": "success",
             "message": f"✅ File open ho gayi: {item['name']}",
             "file_path": item['path'],
-            "file_name": item['name']
+            "file_name": item['name'],
         }
     except (OSError, ValueError, subprocess.SubprocessError) as open_e:
         logger.exception("❌ File open karne mein error aaya: %s", open_e)
         return {
             "status": "error",
             "message": f"❌ File open karne mein vifal raha. {open_e}",
-            "error": str(open_e)
+            "error": str(open_e),
         }
 
 
@@ -158,7 +160,7 @@ async def handle_command(command, index):
     logger.warning("❌ File nahi mili.")
     return {
         "status": "not_found",
-        "message": "❌ Maaf kijiye, mujhe wo file nahi mili."
+        "message": "❌ Maaf kijiye, mujhe wo file nahi mili.",
     }
 
 

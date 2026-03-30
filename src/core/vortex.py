@@ -4,19 +4,20 @@ Orchestrator for JARVIS Systems.
 Starts the UI Bridge (Socket.IO) and the Agent Runner (LiveKit).
 """
 
+import logging
 import os
 import subprocess
-import time
 import sys
-import logging
 import threading
-from typing import List, Dict, Any
+import time
+import urllib.request
+from typing import Any
 
 logging.basicConfig(level=logging.INFO, format="[VORTEX] %(message)s")
 logger = logging.getLogger("VORTEX")
 
 
-def start_process(command, name, extra_env=None):
+def start_process(command: str, name: str, extra_env: dict[str, str] | None = None) -> subprocess.Popen[str]:
     """Start a subprocess with the correct environment."""
     print(f"Starting {name}...")
     # Build env: inherit current env and inject PYTHONPATH so modules resolve
@@ -38,11 +39,11 @@ def start_process(command, name, extra_env=None):
         bufsize=1,
         universal_newlines=True,
         cwd=root_dir,
-        env=env
+        env=env,
     )
 
 
-def main():
+def main() -> None:
     # Ensure UTF-8 for Windows console via env var (safer than replacing sys.stdout)
     if sys.platform == "win32":
         os.environ.setdefault("PYTHONIOENCODING", "utf-8")
@@ -58,8 +59,6 @@ def main():
 
     # Wait for bridge to be healthy before starting Agent Runner
     print("[VORTEX] Waiting for UI Bridge to initialize...")
-    import urllib.request
-    import json
     max_retries = 10
     for i in range(max_retries):
         try:
@@ -67,7 +66,7 @@ def main():
                 if response.status == 200:
                     print("[VORTEX] UI Bridge is ONLINE.")
                     break
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             if i < max_retries - 1:
                 time.sleep(1)
             else:
@@ -76,17 +75,17 @@ def main():
     # Start Agent Runner
     agent_proc = start_process(f"{python_cmd} -m src.core.agent dev", "AGENT-RUNNER")
 
-    processes: List[Dict[str, Any]] = [
+    processes: list[dict[str, Any]] = [
         {"proc": bridge_proc, "name": "UI-BRIDGE"},
-        {"proc": agent_proc, "name": "AGENT-RUNNER"}
+        {"proc": agent_proc, "name": "AGENT-RUNNER"},
     ]
 
-    def stream_reader(pipe: Any, prefix: str):
+    def stream_reader(pipe: Any, prefix: str) -> None:
         try:
             for line in iter(pipe.readline, ''):
                 if line:
                     print(f"[{prefix}] {line.strip()}")
-        except (IOError, ValueError) as e:
+        except (OSError, ValueError) as e:
             print(f"[{prefix}] Reader Error: {e}")
         except Exception as e: # pylint: disable=broad-exception-caught
             logger.error("[%s] Unexpected Reader Error: %s", prefix, e)
@@ -120,7 +119,7 @@ def main():
                     subprocess.call(
                         ['taskkill', '/F', '/T', '/PID', str(p["proc"].pid)],
                         stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL
+                        stderr=subprocess.DEVNULL,
                     )
                 else:
                     p["proc"].terminate()

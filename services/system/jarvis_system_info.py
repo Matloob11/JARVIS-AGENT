@@ -3,6 +3,7 @@ Jarvis System Info Module
 Retrieves laptop information such as battery and charging status.
 """
 import psutil
+
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
 from services.utils.jarvis_logger import setup_logger
 

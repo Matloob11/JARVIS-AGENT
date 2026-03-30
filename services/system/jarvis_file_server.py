@@ -7,12 +7,13 @@ Starts a local HTTP server to share ONLY the D: drive with mobile devices on the
 import socket
 import threading
 import urllib.parse
-from http.server import SimpleHTTPRequestHandler, HTTPServer
+from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
+
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
-from services.utils.jarvis_logger import setup_logger
 from services.multimedia.jarvis_qr_gen import generate_qr_code
 from services.utils.jarvis_bridge import notify_event
+from services.utils.jarvis_logger import setup_logger
 
 # Setup logger
 logger = setup_logger("JARVIS-FILE-SERVER")
@@ -61,7 +62,7 @@ def get_local_ip():
         ip = s.getsockname()[0]
         s.close()
         return ip
-    except (socket.error, socket.herror, socket.gaierror) as e:
+    except (OSError, socket.herror, socket.gaierror) as e:
         logger.error("Could not determine local IP: %s", e)
         return "127.0.0.1"
 
@@ -84,7 +85,7 @@ async def start_file_access_server(port: int = 8000) -> dict:
                        f"http://{local_ip}:{port} par access kar sakte hain.")
             return {
                 "status": "info",
-                "message": message
+                "message": message,
             }
 
         local_ip = get_local_ip()
@@ -112,7 +113,7 @@ async def start_file_access_server(port: int = 8000) -> dict:
                 f"🔗 URL: {server_url}\n"
                 f"📱 Is QR code ko scan kar ke D: storage browsing shuru karein."
             )
-            
+
             # Notify UI about the server and drive access
             await notify_event("intelligence_update", {
                 "type": "json",
@@ -121,29 +122,29 @@ async def start_file_access_server(port: int = 8000) -> dict:
                     "url": server_url,
                     "qr_path": qr_result["file_path"],
                     "status": "active",
-                    "mode": "file_server"
-                }
+                    "mode": "file_server",
+                },
             })
 
             return {
                 "status": "success",
                 "url": server_url,
                 "qr_path": qr_result["file_path"],
-                "message": message
+                "message": message,
             }
 
         qr_msg = "✅ Server toh start ho gaya hai ({s_url}), lekin QR code banane mein masla aaya."
         return {
             "status": "partial_success",
             "url": server_url,
-            "message": qr_msg.format(s_url=server_url)
+            "message": qr_msg.format(s_url=server_url),
         }
 
     except (OSError, RuntimeError, ValueError) as e:
         logger.exception("Error starting storage server: %s", e)
         return {
             "status": "error",
-            "message": f"❌ Maazrat Sir, storage server start karne mein error aaya: {str(e)}"
+            "message": f"❌ Maazrat Sir, storage server start karne mein error aaya: {e!s}",
         }
 
 
@@ -160,4 +161,4 @@ async def stop_file_access_server() -> dict:
         return {"status": "info", "message": "Sir, koi server active nahi hai."}
     except (RuntimeError, OSError) as e:
         logger.error("Error stopping file server: %s", e)
-        return {"status": "error", "message": f"Server band karne mein error aaya: {str(e)}"}
+        return {"status": "error", "message": f"Server band karne mein error aaya: {e!s}"}

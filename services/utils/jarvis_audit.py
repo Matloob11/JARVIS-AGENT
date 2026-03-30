@@ -5,17 +5,17 @@ Logs security events and threat detections to a dedicated audit trail.
 """
 
 import logging
-import os
+from pathlib import Path
 
 # Setup dedicated security logger
 security_logger = logging.getLogger("JARVIS-AUDIT")
 security_logger.setLevel(logging.INFO)
 
 # File handler for security.log
-if not os.path.exists("logs"):
-    os.makedirs("logs")
+logs_dir = Path("logs")
+logs_dir.mkdir(exist_ok=True)
 
-fh = logging.FileHandler("logs/security.log")
+fh = logging.FileHandler(logs_dir / "security.log")
 formatter = logging.Formatter('%(asctime)s - [%(levelname)s] - %(message)s')
 fh.setFormatter(formatter)
 security_logger.addHandler(fh)
@@ -27,7 +27,7 @@ class JarvisAudit:
     """
 
     @classmethod
-    def log_event(cls, event_type: str, details: str, severity: str = "INFO"):
+    def log_event(cls, event_type: str, details: str, severity: str = "INFO") -> None:
         """Log a security event to the audit trail."""
         message = f"EVENT={event_type} | DETAILS={details}"
         if severity == "CRITICAL":
@@ -38,7 +38,7 @@ class JarvisAudit:
             security_logger.info(message)
 
     @classmethod
-    def log_threat(cls, threat_description: str, source: str = "UserProxy"):
+    def log_threat(cls, threat_description: str, source: str = "UserProxy") -> None:
         """Log a detected threat with higher priority."""
         cls.log_event("THREAT_DETECTED",
                       f"SOURCE={source} | DESC={threat_description}",

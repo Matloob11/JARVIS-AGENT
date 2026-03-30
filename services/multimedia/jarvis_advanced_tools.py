@@ -4,16 +4,18 @@ Jarvis Advanced Automation Tools
 Handles image downloading, file compression, and mock email simulation.
 """
 
+import asyncio
 import os
 import shutil
 import smtplib
+from email import encoders
+from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from email.mime.base import MIMEBase
-from email import encoders
-import asyncio
+
 import requests
 from duckduckgo_search import DDGS
+
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
 from services.utils.jarvis_logger import setup_logger
 
@@ -48,7 +50,7 @@ async def download_images(query: str, count: int = 5,
         if not results:
             return {
                 "status": "error",
-                "message": f"❌ Maazrat, '{query}' ke liye koi images nahi mileen."
+                "message": f"❌ Maazrat, '{query}' ke liye koi images nahi mileen.",
             }
 
         logger.info("Downloading %d images to %s", len(results), target_dir)
@@ -65,21 +67,21 @@ async def download_images(query: str, count: int = 5,
             "message": (
                 f"✅ Done! {downloaded_count} images for '{query}' download "
                 f"karke '{target_dir}' mein save kar di hain, Sir Matloob."
-            )
+            ),
         }
-    except (requests.RequestException, IOError, OSError, ValueError, RuntimeError) as e:
+    except (requests.RequestException, OSError, ValueError, RuntimeError) as e:
         logger.exception("Error in download_images: %s", e)
         return {
             "status": "error",
-            "message": f"❌ Error downloading images: {str(e)}",
-            "error": str(e)
+            "message": f"❌ Error downloading images: {e!s}",
+            "error": str(e),
         }
 
 
 async def _download_single_image(url: str, index: int, query: str, target_dir: str) -> int:
     """Helper to download a single image."""
     try:
-        ext = url.split('.')[-1].split('?')[0]
+        ext = url.rsplit('.', maxsplit=1)[-1].split('?', maxsplit=1)[0]
         if ext.lower() not in ['jpg', 'jpeg', 'png', 'webp']:
             ext = 'jpg'
 
@@ -91,7 +93,7 @@ async def _download_single_image(url: str, index: int, query: str, target_dir: s
             with open(file_path, 'wb') as f:
                 f.write(response.content)
             return 1
-    except (requests.RequestException, IOError, OSError) as e:
+    except (requests.RequestException, OSError) as e:
         logger.warning("Failed to download image %d: %s", index, e)
     return 0
 
@@ -112,7 +114,7 @@ async def zip_files(folder_path: str, zip_name: str = "Archive.zip") -> dict:
             if not os.path.exists(actual_path):
                 return {
                     "status": "error",
-                    "message": f"❌ Folder '{folder_path}' nahi mila."
+                    "message": f"❌ Folder '{folder_path}' nahi mila.",
                 }
             folder_path = actual_path
 
@@ -122,13 +124,13 @@ async def zip_files(folder_path: str, zip_name: str = "Archive.zip") -> dict:
         return {
             "status": "success",
             "zip_path": zip_path,
-            "message": f"✅ Folder ko successfully zip kar diya gaya hai: {zip_path}"
+            "message": f"✅ Folder ko successfully zip kar diya gaya hai: {zip_path}",
         }
     except (FileNotFoundError, PermissionError, OSError) as e:
         logger.error("Zip error: %s", e)
         return {
             "status": "error",
-            "message": f"❌ Error zipping files: {str(e)}"
+            "message": f"❌ Error zipping files: {e!s}",
         }
 
 
@@ -146,16 +148,16 @@ async def send_email(recipient: str, subject: str, body: str,
         msg = "❌ Error: Email credentials (.env mein EMAIL_USER ya EMAIL_APP_PASSWORD) nahi mile."
         return {
             "status": "error",
-            "message": msg
+            "message": msg,
         }
 
     try:
         # Create message
-        msg = MIMEMultipart()
-        msg['From'] = user_email
-        msg['To'] = recipient
-        msg['Subject'] = subject
-        msg.attach(MIMEText(body, 'plain'))
+        email_msg = MIMEMultipart()
+        email_msg['From'] = user_email
+        email_msg['To'] = recipient
+        email_msg['Subject'] = subject
+        email_msg.attach(MIMEText(body, 'plain'))
 
         # Handle attachment
         if attachment_path and os.path.exists(attachment_path):
@@ -166,7 +168,7 @@ async def send_email(recipient: str, subject: str, body: str,
                 encoders.encode_base64(part)
                 part.add_header("Content-Disposition",
                                 f"attachment; filename= {filename}")
-                msg.attach(part)
+                email_msg.attach(part)
 
         # Connect and send in a separate thread
         def do_send():
@@ -175,7 +177,7 @@ async def send_email(recipient: str, subject: str, body: str,
             server.set_debuglevel(0)
             server.starttls()
             server.login(user_email, password)
-            text = msg.as_string()
+            text = email_msg.as_string()
             server.sendmail(user_email, recipient, text)
             server.quit()
 
@@ -186,12 +188,12 @@ async def send_email(recipient: str, subject: str, body: str,
             "status": "success",
             "recipient": recipient,
             "subject": subject,
-            "message": f"📧 Email successfully bhej diya gaya hai '{recipient}' ko, Sir Matloob."
+            "message": f"📧 Email successfully bhej diya gaya hai '{recipient}' ko, Sir Matloob.",
         }
     except (smtplib.SMTPException, ConnectionError, OSError) as e:
         logger.error("Email send error: %s", e)
         return {
             "status": "error",
             "recipient": recipient,
-            "message": f"❌ Error sending email: {str(e)}"
+            "message": f"❌ Error sending email: {e!s}",
         }

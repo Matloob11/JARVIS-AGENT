@@ -4,16 +4,18 @@ Handles automated fixing of missing or conflicting dependencies.
 """
 import subprocess
 import sys
+
 try:
     import pkg_resources
 except ImportError:
-    pkg_resources = None
+    pkg_resources = None # type: ignore
 
 import os
+
 from services.utils.jarvis_logger import jarvis_log as log
 
 
-def check_and_fix_dependencies():
+def check_and_fix_dependencies() -> None:
     """
     Automated repair script for dependency drift.
     Verifies installed packages against requirements.
@@ -31,7 +33,7 @@ def check_and_fix_dependencies():
 
     log.info("🔍 Checking for dependency drift...")
     try:
-        with open(requirements_file, "r", encoding="utf-8") as f:
+        with open(requirements_file, encoding="utf-8") as f:
             requirements = pkg_resources.parse_requirements(f.read())
 
         missing = []
@@ -45,7 +47,7 @@ def check_and_fix_dependencies():
             log.warning(
                 "🩹 Detected drift in: %s. Repairing...", ", ".join(missing))
             subprocess.check_call(
-                [sys.executable, "-m", "pip", "install"] + missing)
+                [sys.executable, "-m", "pip", "install", *missing])
             log.info("✅ Dependency repair successful.")
         else:
             log.info("✅ All dependencies are up to date.")

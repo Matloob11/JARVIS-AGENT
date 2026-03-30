@@ -6,9 +6,11 @@ import json
 import threading
 import time
 from collections import deque
-from dataclasses import dataclass, asdict
+from collections.abc import Callable
+from dataclasses import asdict, dataclass
 from datetime import datetime
-from typing import Dict, List, Callable, Any
+from pathlib import Path
+from typing import Any, cast
 
 import psutil
 
@@ -81,9 +83,9 @@ class PerformanceMonitor:
         self.enable_alerts = enable_alerts
 
         # Metric storage
-        self.system_metrics = deque(maxlen=max_history_size)
-        self.app_metrics = deque(maxlen=max_history_size)
-        self.llm_metrics = deque(maxlen=max_history_size)
+        self.system_metrics: deque[SystemMetrics] = deque(maxlen=max_history_size)
+        self.app_metrics: deque[ApplicationMetrics] = deque(maxlen=max_history_size)
+        self.llm_metrics: deque[LLMMetrics] = deque(maxlen=max_history_size)
 
         # Performance counters
         self.request_count = 0
@@ -99,19 +101,19 @@ class PerformanceMonitor:
         self.response_time_alert_threshold = 5000.0  # 5 seconds
 
         # Monitoring state
-        self._monitoring = False
-        self._monitor_thread = None
-        self._start_time = time.time()
+        self._monitoring: bool = False
+        self._monitor_thread: threading.Thread | None = None
+        self._start_time: float = time.time()
 
         # Performance callbacks
-        self._alert_callbacks: List[Callable] = []
+        self._alert_callbacks: list[Callable[[str], None]] = []
 
         # Previous network stats for delta calculation
-        self._prev_network_io = None
+        self._prev_network_io: Any | None = None
 
         logger.info("📊 Performance Monitor initialized")
 
-    def start_monitoring(self):
+    def start_monitoring(self) -> None:
         """Start background monitoring"""
         if self._monitoring:
             logger.warning("⚠️ Monitoring already running")
@@ -122,14 +124,14 @@ class PerformanceMonitor:
         self._monitor_thread.start()
         logger.info("📊 Performance monitoring started")
 
-    def stop_monitoring(self):
+    def stop_monitoring(self) -> None:
         """Stop background monitoring"""
         self._monitoring = False
         if self._monitor_thread:
             self._monitor_thread.join(timeout=10)
         logger.info("📊 Performance monitoring stopped")
 
-    def _monitor_loop(self):
+    def _monitor_loop(self) -> None:
         """Main monitoring loop"""
         while self._monitoring:
             try:
@@ -158,9 +160,12 @@ class PerformanceMonitor:
     def _collect_system_metrics(self) -> SystemMetrics:
         """Collect system performance metrics"""
         # CPU and Memory
-        cpu_percent = psutil.cpu_percent(interval=1)
+        cpu_percent: float = cast(float, psutil.cpu_percent(interval=1))
         memory = psutil.virtual_memory()
-        disk = psutil.disk_usage('/')
+
+        # Cross-platform disk check
+        root_path = "C:/" if Path("C:/").exists() else "/"
+        disk = psutil.disk_usage(root_path)
 
         # Network I/O
         network_io = psutil.net_io_counters()
@@ -182,16 +187,16 @@ class PerformanceMonitor:
             network_io_sent_mb=network_sent_mb,
             network_io_recv_mb=network_recv_mb,
             active_connections=connections,
-            process_count=processes
+            process_count=processes,
         )
 
     def _collect_application_metrics(self) -> ApplicationMetrics:
         """Collect application-specific metrics"""
         # Calculate average response time from recent metrics
         recent_response_times = [
-            m.response_time_ms for m in self.app_metrics[-10:]
+            m.response_time_ms for m in list(self.app_metrics)[-10:]
         ]
-        avg_response_time = sum(recent_response_times) / len(recent_response_times) if recent_response_times else 0
+        avg_response_time = sum(recent_response_times) / len(recent_response_times) if recent_response_times else 0.0
 
         # Memory leak detection (simplified)
         memory_leaks_detected = self._detect_memory_leaks()
@@ -204,7 +209,7 @@ class PerformanceMonitor:
             active_sessions=self._get_active_sessions(),
             memory_leaks_detected=memory_leaks_detected,
             avg_processing_time=avg_response_time,
-            queue_size=self._get_queue_size()
+            queue_size=self._get_queue_size(),
         )
 
     def _collect_llm_metrics(self) -> LLMMetrics:
@@ -216,7 +221,7 @@ class PerformanceMonitor:
             cache_hit_rate=self._get_cache_hit_rate(),
             model_load_time=self._get_model_load_time(),
             api_calls_made=self.llm_api_calls,
-            api_errors=self.llm_api_errors
+            api_errors=self.llm_api_errors,
         )
 
     def _detect_memory_leaks(self) -> bool:
@@ -257,7 +262,7 @@ class PerformanceMonitor:
         # This would be implemented based on actual model loading
         return 0.0
 
-    def _check_system_alerts(self, metrics: SystemMetrics):
+    def _check_system_alerts(self, metrics: SystemMetrics) -> None:
         """Check for system performance alerts"""
         alerts = []
 
@@ -274,7 +279,7 @@ class PerformanceMonitor:
         for alert in alerts:
             self._trigger_alert(alert)
 
-    def _trigger_alert(self, message: str):
+    def _trigger_alert(self, message: str) -> None:
         """Trigger performance alert"""
         logger.warning("🚨 Performance Alert: %s", message)
 
@@ -284,7 +289,7 @@ class PerformanceMonitor:
             except Exception as e: # pylint: disable=broad-exception-caught
                 logger.error("❌ Alert callback error: %s", e)
 
-    def record_request(self, response_time_ms: float, success: bool = True):
+    def record_request(self, response_time_ms: float, success: bool = True) -> None:
         """Record a request for application metrics"""
         self.request_count += 1
         if not success:
@@ -295,40 +300,40 @@ class PerformanceMonitor:
             latest_metric = self.app_metrics[-1]
             latest_metric.response_time_ms = response_time_ms
 
-    def record_llm_interaction(self, tokens: int, response_time_ms: float, success: bool = True):
+    def record_llm_interaction(self, tokens: int, response_time_ms: float, success: bool = True) -> None:
         """Record LLM interaction"""
         self.llm_tokens_processed += tokens
         self.llm_api_calls += 1
         if not success:
             self.llm_api_errors += 1
 
-    def add_alert_callback(self, callback: Callable[[str], None]):
+    def add_alert_callback(self, callback: Callable[[str], None]) -> None:
         """Add alert callback function"""
         self._alert_callbacks.append(callback)
 
-    def get_current_metrics(self) -> Dict[str, Any]:
+    def get_current_metrics(self) -> dict[str, Any]:
         """Get current performance metrics"""
         return {
             "system": asdict(self.system_metrics[-1]) if self.system_metrics else {},
             "application": asdict(self.app_metrics[-1]) if self.app_metrics else {},
             "llm": asdict(self.llm_metrics[-1]) if self.llm_metrics else {},
-            "uptime_seconds": time.time() - self._start_time
+            "uptime_seconds": float(time.time() - self._start_time),
         }
 
-    def get_metrics_history(self, minutes: int = 60) -> Dict[str, List[Dict]]:
+    def get_metrics_history(self, minutes: int = 60) -> dict[str, list[dict[str, Any]]]:
         """Get metrics history for specified time period"""
-        cutoff_time = time.time() - (minutes * 60)
+        cutoff_time: float = time.time() - (minutes * 60)
 
-        def filter_metrics(metrics):
+        def filter_metrics(metrics: deque[Any]) -> list[dict[str, Any]]:
             return [asdict(m) for m in metrics if m.timestamp >= cutoff_time]
 
         return {
             "system": filter_metrics(self.system_metrics),
             "application": filter_metrics(self.app_metrics),
-            "llm": filter_metrics(self.llm_metrics)
+            "llm": filter_metrics(self.llm_metrics),
         }
 
-    def get_performance_summary(self) -> Dict[str, Any]:
+    def get_performance_summary(self) -> dict[str, Any]:
         """Get performance summary"""
         if not self.system_metrics:
             return {"status": "No data available"}
@@ -343,18 +348,18 @@ class PerformanceMonitor:
             "system": {
                 "cpu_percent": latest_system.cpu_percent,
                 "memory_percent": latest_system.memory_percent,
-                "disk_percent": latest_system.disk_usage_percent
+                "disk_percent": latest_system.disk_usage_percent,
             },
             "application": {
                 "total_requests": self.request_count,
                 "error_rate": (self.error_count / self.request_count * 100) if self.request_count > 0 else 0,
-                "avg_response_time": latest_app.response_time_ms if latest_app else 0
+                "avg_response_time": latest_app.response_time_ms if latest_app else 0,
             },
             "llm": {
                 "total_tokens": self.llm_tokens_processed,
                 "api_calls": self.llm_api_calls,
-                "api_error_rate": (self.llm_api_errors / self.llm_api_calls * 100) if self.llm_api_calls > 0 else 0
-            }
+                "api_error_rate": (self.llm_api_errors / self.llm_api_calls * 100) if self.llm_api_calls > 0 else 0,
+            },
         }
 
         # Determine overall status
@@ -369,22 +374,23 @@ class PerformanceMonitor:
 
         return summary
 
-    def export_metrics(self, filepath: str, minutes: int = 60):
+    def export_metrics(self, filepath: str | Path, minutes: int = 60) -> None:
         """Export metrics to file"""
         metrics_data = {
             "export_timestamp": datetime.now().isoformat(),
             "summary": self.get_performance_summary(),
-            "history": self.get_metrics_history(minutes)
+            "history": self.get_metrics_history(minutes),
         }
 
-        with open(filepath, 'w', encoding='utf-8') as f:
+        path = Path(filepath)
+        with path.open("w", encoding="utf-8") as f:
             json.dump(metrics_data, f, indent=2)
 
-        logger.info("📊 Metrics exported to %s", filepath)
+        logger.info("📊 Metrics exported to %s", path)
 
 
 # Global performance monitor instance
-_performance_monitor = None
+_performance_monitor: PerformanceMonitor | None = None
 
 def get_performance_monitor() -> PerformanceMonitor:
     """Get global performance monitor instance"""
@@ -393,12 +399,12 @@ def get_performance_monitor() -> PerformanceMonitor:
         _performance_monitor = PerformanceMonitor()
     return _performance_monitor
 
-def start_monitoring():
+def start_monitoring() -> None:
     """Start global performance monitoring"""
     monitor = get_performance_monitor()
     monitor.start_monitoring()
 
-def stop_monitoring():
+def stop_monitoring() -> None:
     """Stop global performance monitoring"""
     monitor = get_performance_monitor()
     monitor.stop_monitoring()

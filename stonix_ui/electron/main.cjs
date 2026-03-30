@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, Menu, Tray } = require('electron');
 const path = require('path');
-const isDev = !app.isPackaged;
+const isDev = process.env.ELECTRON_IS_DEV !== '0' && !app.isPackaged;
+const startBackendEnabled = process.env.DISABLE_BACKEND !== '1';
 const { spawn } = require('child_process');
 
 let mainWindow;
@@ -135,7 +136,11 @@ function createWindow() {
 }
 
 app.on('ready', () => {
-  startBackend();
+  if (startBackendEnabled) {
+    startBackend();
+  } else {
+    console.log('[Electron] Automatic backend start disabled by environment flag.');
+  }
   createWindow();
   createTray();
 });

@@ -4,9 +4,10 @@ Automated backup system for JARVIS-AGENT.
 Archives critical data like identity, outputs, and configs.
 """
 
+import datetime
 import os
 import shutil
-import datetime
+
 from services.utils.jarvis_logger import jarvis_log as log
 
 
@@ -20,7 +21,7 @@ class JarvisBackup:
         self.source_dirs = source_dirs or [
             "Jarvis_Outputs",
             "conversations/identity.json",
-            "services/utils/jarvis_config.py"
+            "services/utils/jarvis_config.py",
         ]
         self.backup_root = backup_root
         os.makedirs(self.backup_root, exist_ok=True)
@@ -50,7 +51,7 @@ class JarvisBackup:
 
             log.info("[SUCCESS] Backup completed: %s.zip", backup_folder)
             return f"{backup_folder}.zip"
-        except (OSError, IOError, shutil.Error) as e:
+        except (OSError, shutil.Error) as e:
             log.error("[ERROR] Backup failed: %s", e)
             return None
 

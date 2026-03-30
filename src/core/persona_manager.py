@@ -1,38 +1,50 @@
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
+
 from livekit.agents import llm
-from services.utils.jarvis_logger import setup_logger
-from services.ai_core.jarvis_prompt import BEHAVIOR_PROMPT, ANNA_BEHAVIOR_PROMPT
+
 from services.ai_core.jarvis_identity import jarvis_id
+from services.ai_core.jarvis_prompt import ANNA_BEHAVIOR_PROMPT, BEHAVIOR_PROMPT
 from services.ai_core.jarvis_reasoning import context_analyzer
+from services.utils.jarvis_logger import setup_logger
 
 logger = setup_logger("PERSONA-MANAGER")
+
+@runtime_checkable
+class AssistantProtocol(Protocol):
+    """Protocol for the assistant to decouple PersonaManager from AgentCore."""
+    llm: Any
+    async def update_instructions(self, instructions: str) -> None: ...
+    @property
+    def memory_extractor(self) -> Any: ...
 
 class PersonaManager:
     """
     Handles persona state and instruction/voice updates for the assistant.
     """
 
-    def __init__(self, assistant_ref):
+    def __init__(self, assistant_ref: AssistantProtocol) -> None:
         self._assistant = assistant_ref
-        self._gf_mode_active = False
+        self._gf_mode_active: bool = False
 
     @property
     def is_anna(self) -> bool:
+        """Returns True if the assistant is currently in Anna mode."""
         return self._gf_mode_active
 
     @property
     def active_persona_name(self) -> str:
+        """Returns the name of the currently active persona."""
         return "anna" if self._gf_mode_active else "jarvis"
 
-    async def set_persona(self, is_anna: bool):
+    async def set_persona(self, is_anna: bool) -> None:
         """Switches the assistant's persona."""
         if self._gf_mode_active == is_anna:
             return
-        
+
         self._gf_mode_active = is_anna
         await self.update_assistant_persona()
 
-    async def update_assistant_persona(self):
+    async def update_assistant_persona(self) -> None:
         """Applies current persona settings to the assistant."""
         if self._gf_mode_active:
             state = jarvis_id.get_anna_state()
@@ -40,7 +52,7 @@ class PersonaManager:
                 mood=state["mood"],
                 is_upset=state["is_upset"],
                 user_background=jarvis_id.data.get("user_background"),
-                sir_background=jarvis_id.data.get("sir_background")
+                sir_background=jarvis_id.data.get("sir_background"),
             )
             voice = "aoede"
         else:
@@ -56,11 +68,10 @@ class PersonaManager:
             try:
                 # pylint: disable=protected-access
                 self._update_session_options(voice)
-                # Notify UI (will be handled by bridge_notifier in agent_core refactor)
             except (AttributeError, RuntimeError) as e:
                 logger.warning("Failed to sync session settings: %s", e)
 
-    def _update_session_options(self, voice: str):
+    def _update_session_options(self, voice: str) -> None:
         """Syncs voice and modality to the active LiveKit session."""
         try:
             # Sync options struct
@@ -84,7 +95,7 @@ class PersonaManager:
         except (AttributeError, RuntimeError) as e:
             logger.debug("Session option sync failed: %s", e)
 
-    async def handle_anna_upset_state(self, text: str, turn_ctx: Any):
+    async def handle_anna_upset_state(self, text: str, turn_ctx: Any) -> None:
         """Processes Anna's upset state based on input."""
         if not self._gf_mode_active:
             return
@@ -96,17 +107,17 @@ class PersonaManager:
             await self.set_persona(True)
         else:
             turn_ctx.chat_ctx.messages.append(llm.ChatMessage(
-                role="assistant", content=["Demand sorry."]
+                role="assistant", content=["Demand sorry."],
             ))
 
-    async def inject_emotional_context(self, text: str, turn_ctx: Any, history: list):
+    async def inject_emotional_context(self, text: str, turn_ctx: Any, history: list[Any]) -> None:
         """Injects emotional hints into the reasoning context."""
         try:
             mem = await self._assistant.memory_extractor.memory.get_recent_context(max_messages=5)
             curr = context_analyzer.analyze_context(text, mem)
             if self._gf_mode_active and curr.get("user_mood") == "upset":
                 turn_ctx.chat_ctx.messages.append(llm.ChatMessage(
-                    role="assistant", content=["Manao him."]
+                    role="assistant", content=["Manao him."],
                 ))
         except (AttributeError, KeyError, RuntimeError) as e:
             logger.error("Emotional context injection failed: %s", e)

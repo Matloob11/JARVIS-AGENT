@@ -11,24 +11,24 @@ import asyncio
 import io
 import os
 import re
+import shlex
 import subprocess
 import sys
-import shlex
-from typing import Optional
+
+import pyautogui as pg
+import pygetwindow as gw
 
 # Third-party imports
 from fuzzywuzzy import process
-import pygetwindow as gw
-import pyperclip
-import pyautogui as pg
 
-# First-party imports
-from services.utils.jarvis_win32 import win32gui, win32con, pywintypes
-from services.utils.jarvis_config import APP_MAPPINGS, FOCUS_TITLES
+from services.ai_core.jarvis_plugin_manager import jarvis_tool
 from services.automation.jarvis_whatsapp_automation import whatsapp_bot
 from services.automation.keyboard_mouse_ctrl import type_text_tool
+from services.utils.jarvis_config import APP_MAPPINGS, FOCUS_TITLES
 from services.utils.jarvis_logger import setup_logger
-from services.ai_core.jarvis_plugin_manager import jarvis_tool
+
+# First-party imports
+from services.utils.jarvis_win32 import WIN32_ERRORS, pywintypes, win32con, win32gui
 
 # ===================== LOGGER ===================== #
 # Safe stdout reconfigure — only if supported (avoids crash in piped/test environments)
@@ -53,7 +53,7 @@ def normalize_command(text: str) -> str:
         "open", "opening", "opened", "run", "launch", "start",
         "kholo", "khol", "karo", "chalao", "chalana",
         "aur", "usmein", "likh", "do", "hello", "jarvis", "what", "are", "you", "doing",
-        "browser", "app", "application", "please", "zara"
+        "browser", "app", "application", "please", "zara",
     ]
     text = text.lower()
 
@@ -188,15 +188,15 @@ async def open_app(full_command: str) -> dict:  # pylint: disable=too-many-branc
         return {
             "status": "success",
             "app": matched_key,
-            "message": f"🚀 {matched_key} khol diya gaya hai"
+            "message": f"🚀 {matched_key} khol diya gaya hai",
         }
 
-    except (OSError, pywintypes.error, ValueError) as e:  # pylint: disable=no-member
+    except WIN32_ERRORS as e:  # pylint: disable=no-member
         logger.error("App open error: %s", e)
         return {
             "status": "error",
-            "message": f"❌ App open nahi ho paaya: {str(e)}",
-            "error": str(e)
+            "message": f"❌ App open nahi ho paaya: {e!s}",
+            "error": str(e),
         }
 
 
@@ -211,59 +211,61 @@ async def _handle_write_after_open(matched_key: str, write_text: str) -> dict:
     return {
         "status": "success",
         "app": matched_key,
-        "message": f"🚀 {matched_key} khol diya gaya hai aur {result}"
+        "message": f"🚀 {matched_key} khol diya gaya hai aur {result}",
     }
 
 
 @jarvis_tool
-async def save_notepad(file_path: str = r"D:\jarvis_notes.txt") -> dict:
+async def save_notepad(filename: str = "jarvis_notes.txt") -> dict:
     """
-    Saves the content of an open Notepad window.
+    Saves the content of an open Notepad window into the Jarvis_Outputs folder.
     """
     try:
+        # Set dedicated workspace folder
+        project_root = "d:\\Personal-Assistant-main"
+        folder_path = os.path.join(project_root, "Jarvis_Outputs")
+        os.makedirs(folder_path, exist_ok=True)
+
+        file_path = os.path.join(folder_path, os.path.basename(filename))
+
         # Try to find Notepad window
         notepad_windows = list(get_windows('Notepad'))
         if not notepad_windows:
             return {
                 "status": "error",
-                "message": "❌ Notepad window nahi mili."
+                "message": "❌ Sir, maazrat! Notepad window nahi mili.",
             }
 
         notepad = notepad_windows[0]
         notepad.activate()
         await asyncio.sleep(1)
 
-        # Ctrl+S
+        # Ctrl+S to trigger Save As
         pg.hotkey('ctrl', 's')
-        await asyncio.sleep(1.5)  # Wait for Save As dialog
+        await asyncio.sleep(1.5)
 
-        # Type path using clipboard
-        pyperclip.copy(file_path)
-        await asyncio.sleep(0.5)
-        pg.hotkey('ctrl', 'v')
+        # Type absolute path directly for reliability
+        pg.write(file_path)
         await asyncio.sleep(0.5)
         pg.press('enter')
 
-        # Overwrite check - ONLY if file exists
-        if os.path.exists(file_path):
-            await asyncio.sleep(1.2)
-            pg.press('left')
-            pg.press('enter')
-        else:
-            await asyncio.sleep(0.5)
+        # Handle Overwrite
+        await asyncio.sleep(1.0)
+        confirm_wins = get_windows('Confirm Save As')
+        if confirm_wins:
+            pg.press('y')
 
         return {
             "status": "success",
             "file_path": file_path,
-            "message": f"💾 Notepad file ko '{file_path}' par save kar diya gaya hai."
+            "message": f"💾 Notepad file ko '{os.path.basename(file_path)}' ke naam se save kar diya gaya hai, Sir.",
         }
 
-    except (OSError, pywintypes.error, ValueError, AttributeError) as e:  # pylint: disable=no-member
+    except WIN32_ERRORS as e:
         logger.error("Notepad save error: %s", e)
         return {
             "status": "error",
-            "message": f"❌ Notepad save karne mein error: {str(e)}",
-            "error": str(e)
+            "message": f"❌ Notepad save karne mein masla aaya: {e!s}",
         }
 
 
@@ -273,7 +275,10 @@ async def open_notepad_file(file_path: str) -> dict:
     Opens a specific text file in Notepad.
     """
     if not os.path.exists(file_path):
-        return f"❌ File nahi mili: {file_path}"
+        return {
+            "status": "error",
+            "message": f"❌ Maazrat Sir, file nahi mili: {file_path}",
+        }
 
     try:
         # pylint: disable=consider-using-with
@@ -282,14 +287,14 @@ async def open_notepad_file(file_path: str) -> dict:
         return {
             "status": "success",
             "file_path": file_path,
-            "message": f"📂 {file_path} ko Notepad mein open kar diya gaya hai."
+            "message": f"📂 {file_path} ko Notepad mein open kar diya gaya hai.",
         }
     except OSError as e:
         logger.error("open_notepad_file error: %s", e)
         return {
             "status": "error",
-            "message": f"❌ File open karne mein error: {str(e)}",
-            "error": str(e)
+            "message": f"❌ File open karne mein error: {e!s}",
+            "error": str(e),
         }
 
 # ===================== CLOSE WINDOW ===================== #
@@ -324,7 +329,7 @@ async def close(window_name: str) -> str:
             app_matchers = {
                 "notepad": lambda t: t.endswith(" - notepad") or t == "notepad",
                 "edge": lambda t: "edge" in t or "msedge" in t,
-                "chrome": lambda t: "google chrome" in t
+                "chrome": lambda t: "google chrome" in t,
             }
 
             matcher = app_matchers.get(matched_key)
@@ -339,7 +344,8 @@ async def close(window_name: str) -> str:
                     hwnds_to_close.append(hwnd)
 
     win32gui.EnumWindows(enum_handler, None)
-    return await _finalize_close(hwnds_to_close, original_name)
+    result = await _finalize_close(hwnds_to_close, original_name)
+    return result["message"] if isinstance(result, dict) else result
 
 
 async def _finalize_close(hwnds_to_close: list, original_name: str) -> dict:
@@ -347,7 +353,7 @@ async def _finalize_close(hwnds_to_close: list, original_name: str) -> dict:
     if not hwnds_to_close:
         return {
             "status": "error",
-            "message": f"❌ '{original_name}' naam ki koi window nahi mili."
+            "message": f"❌ '{original_name}' naam ki koi window nahi mili.",
         }
 
     # Send close messages
@@ -371,17 +377,17 @@ async def _finalize_close(hwnds_to_close: list, original_name: str) -> dict:
             "window": original_name,
             "still_open_count": still_open_count,
             "message": (f"⚠ {original_name} ko band karne ki command bhej di gaya hai, "
-                        f"lekin {still_open_count} window(s) open hain.")
+                        f"lekin {still_open_count} window(s) open hain."),
         }
 
     return {
         "status": "success",
         "window": original_name,
-        "message": f"🗑️ {original_name} band kar diya gaya hai."
+        "message": f"🗑️ {original_name} band kar diya gaya hai.",
     }
 
 
-async def _close_app_specific(window_name: str) -> Optional[str]:
+async def _close_app_specific(window_name: str) -> str | None:
     """Handles logic for closing specific applications."""
     if "whatsapp" in window_name:
         if await whatsapp_bot.close_whatsapp():
@@ -424,8 +430,8 @@ async def minimize_window(window_name: str = "active") -> str:
         logger.error("Minimize Error: %s", e)
         return {
             "status": "error",
-            "message": f"❌ Window minimize nahi ho paayi: {str(e)}",
-            "error": str(e)
+            "message": f"❌ Window minimize nahi ho paayi: {e!s}",
+            "error": str(e),
         }
 
 
@@ -455,8 +461,8 @@ async def maximize_window(window_name: str = "active") -> str:
         logger.error("Maximize Error: %s", e)
         return {
             "status": "error",
-            "message": f"❌ Window maximize nahi ho paayi: {str(e)}",
-            "error": str(e)
+            "message": f"❌ Window maximize nahi ho paayi: {e!s}",
+            "error": str(e),
         }
 
 
@@ -475,7 +481,7 @@ async def folder_file(path: str) -> dict:
         low_path = abs_path.lower()
         blocked_keywords = [
             "\\windows\\", "\\system32\\", "\\config\\",
-            "pagefile.sys", "ntuser.dat", "desktop.ini"
+            "pagefile.sys", "ntuser.dat", "desktop.ini",
         ]
 
         # Drive validation
@@ -498,13 +504,13 @@ async def folder_file(path: str) -> dict:
         return {
             "status": "success",
             "path": abs_path,
-            "message": f"📂 '{os.path.basename(abs_path)}' open ho gaya hai."
+            "message": f"📂 '{os.path.basename(abs_path)}' open ho gaya hai.",
         }
     except (OSError, ValueError, AttributeError) as e:
         logger.error("folder_file error: %s", e)
         return {
             "status": "error",
-            "message": f"❌ Open karne mein error: {str(e)}"
+            "message": f"❌ Open karne mein error: {e!s}",
         }
 
 
@@ -523,8 +529,8 @@ async def create_folder(folder_name: str):
         logger.error("Create folder error: %s", e)
         return {
             "status": "error",
-            "message": f"❌ Error creating folder: {str(e)}",
-            "error": str(e)
+            "message": f"❌ Error creating folder: {e!s}",
+            "error": str(e),
         }
 
 
@@ -541,7 +547,7 @@ async def open_outputs_folder(subfolder: str = "") -> dict:
             subfolders = {
                 "qr": "QR_Codes",
                 "image": "Generated_Images",
-                "download": "Downloads"
+                "download": "Downloads",
             }
             for key, folder in subfolders.items():
                 if key in subfolder.lower():
@@ -557,14 +563,14 @@ async def open_outputs_folder(subfolder: str = "") -> dict:
         return {
             "status": "success",
             "folder": folder_name,
-            "message": f"📂 {folder_name} folder open kar diya gaya hai."
+            "message": f"📂 {folder_name} folder open kar diya gaya hai.",
         }
     except OSError as e:
         logger.error("Error opening outputs folder: %s", e)
         return {
             "status": "error",
-            "message": f"❌ Folder open karne mein error: {str(e)}",
-            "error": str(e)
+            "message": f"❌ Folder open karne mein error: {e!s}",
+            "error": str(e),
         }
 
 
@@ -584,7 +590,7 @@ async def get_active_window_context() -> dict:
                 "title": active_window.title,
                 "is_maximized": active_window.isMaximized,
                 "is_minimized": active_window.isMinimized,
-                "message": f"User is focused on: {active_window.title}"
+                "message": f"User is focused on: {active_window.title}",
             }
         return {"status": "not_found", "message": "No active window detected."}
     except Exception as e:  # pylint: disable=broad-exception-caught

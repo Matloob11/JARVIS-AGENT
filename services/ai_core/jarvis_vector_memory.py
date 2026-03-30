@@ -3,19 +3,23 @@
 Long-Term Semantic Memory for JARVIS using ChromaDB.
 """
 
+import asyncio
+import logging
 import os
 import uuid
-import logging
-from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
+from typing import Any
+
 import chromadb
+from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
 from dotenv import load_dotenv
+
 from services.utils.jarvis_logger import setup_logger
 
 # Late-bound Phoenix import to avoid startup lag
 _PX_CACHED = None
 
 
-def get_px():
+def get_px() -> Any:
     """Lazily load Arize Phoenix to improve startup performance."""
     global _PX_CACHED # pylint: disable=global-statement
     if _PX_CACHED is not None:
@@ -65,69 +69,61 @@ class VectorMemory:
         self.client = None
         self.embedding_func = None
         self.collection = None
+        self._init_lock = asyncio.Lock()
 
-    def _ensure_initialized(self):
-        """Initializes components only when needed."""
-        if self.client is None:
+    async def _ensure_initialized(self) -> None:
+        """Initializes components only when needed with thread-safe locking."""
+        if self.client is not None:
+            return
+
+        async with self._init_lock:
+            # Double-check after acquiring lock
+            if self.client is not None:
+                return
+
             try:
                 logger.info("Initializing Vector Memory (Lazy Loading)...")
-                self.client = chromadb.PersistentClient(path=DB_PATH)
+                # PersistentClient is a blocking operation, so we run in thread to avoid blocking loop
+                self.client = await asyncio.to_thread(chromadb.PersistentClient, path=DB_PATH)
                 self.embedding_func = SentenceTransformerEmbeddingFunction(
-                    model_name="all-MiniLM-L6-v2"
+                    model_name="all-MiniLM-L6-v2",
                 )
-                self.collection = self.client.get_or_create_collection(
+                self.collection = await asyncio.to_thread(
+                    self.client.get_or_create_collection,
                     name=COLLECTION_NAME,
-                    embedding_function=self.embedding_func
+                    embedding_function=self.embedding_func,
                 )
-            except (ImportError, ValueError, RuntimeError, OSError, AttributeError) as e:
+            except Exception as e:
                 logger.error("Failed to initialize Vector Memory: %s", e)
                 # Keep client/collection as None so we can try again
                 self.client = None
                 self.collection = None
 
-    def add_memory(self, text, metadata=None):
-        """
-        Add a piece of text to the semantic memory.
-        """
+    async def add_memory(self, text: str, metadata: dict[str, Any] | None = None) -> bool:
+        """Add a piece of text to the semantic memory asynchronously."""
         if not text or not text.strip():
             return False
 
-        _px = get_px()
-        # pylint: disable=no-member, c-extension-no-member
-        if _px and hasattr(_px, "active_span"):
-            with _px.active_span("VectorMemory.add_memory") as span:
-                span.set_attribute("memory.text", text[:100] + "...")
-                return self._add_memory_internal(text, metadata, span)
-
-        return self._add_memory_internal(text, metadata)
-
-    def _add_memory_internal(self, text, metadata=None, span=None):
-        self._ensure_initialized()
+        await self._ensure_initialized()
         if self.collection is None:
-            logger.warning(
-                "Vector Memory not initialized. Skipping add_memory.")
+            logger.warning("Vector Memory not initialized. Skipping add_memory.")
             return False
 
         memory_id = str(uuid.uuid4())
         try:
-            self.collection.add(
+            # collection.add is blocking, run in thread
+            await asyncio.to_thread(
+                self.collection.add,
                 documents=[text],
                 metadatas=[metadata or {}],
-                ids=[memory_id]
+                ids=[memory_id],
             )
-            if span:
-                _px = get_px()
-                if _px:
-                    # pylint: disable=no-member, c-extension-no-member
-                    span.set_status(_px.SpanStatus.OK)
             return True
-        except (ValueError, KeyError, RuntimeError, OSError) as e:
+        except Exception as e:
             logger.error("Error adding to Vector Memory: %s", e)
-            if span:
-                span.record_exception(e)
             return False
 
-    def query_memory(self, query_text, n_results=5):
+    async def query_memory(self, query_text: str, n_results: int = 5) -> list[dict[str, Any]]:
         """
         Search for relevant memories with semantic similarity scores.
         Returns: List[Dict] containing 'document' and normalized 'score' (0-1).
@@ -135,79 +131,64 @@ class VectorMemory:
         if not query_text:
             return []
 
-        _px = get_px()
-        # pylint: disable=no-member, c-extension-no-member
-        if _px and hasattr(_px, "active_span"):
-            with _px.active_span("VectorMemory.query_memory") as span:
-                span.set_attribute("query.text", query_text)
-                return self._query_memory_internal(query_text, n_results, span)
-
-        return self._query_memory_internal(query_text, n_results)
-
-    def _query_memory_internal(self, query_text, n_results=5, span=None):
-        self._ensure_initialized()
+        await self._ensure_initialized()
         if self.collection is None:
-            logger.warning(
-                "Vector Memory not initialized. Skipping query_memory.")
             return []
+
         try:
-            results = self.collection.query(
+            # collection.query is blocking, run in thread
+            results = await asyncio.to_thread(
+                self.collection.query,
                 query_texts=[query_text],
-                n_results=n_results
+                n_results=n_results,
+                include=["documents", "metadatas", "distances"],
             )
 
-            docs = results.get("documents", [[]])[0]
-            distances = results.get("distances", [[]])[0]
+            extracted = []
+            if results and results.get("documents") and results["documents"][0]:
+                for i in range(len(results["documents"][0])):
+                    doc = results["documents"][0][i]
+                    # Convert distance to a similarity score (0.0 to 1.0)
+                    dist = results["distances"][0][i] if "distances" in results else 1.0
+                    # Normalizing distance (L2 distance in ChromaDB)
+                    score = round(max(0, 1.0 - (dist / 1.5)), 4)
 
-            scored_results = []
-            for doc, dist in zip(docs, distances):
-                # Normalize distance to 0-1 confidence score
-                # ChromaDB L2 distance: 0 is perfect, >1 is weak
-                confidence = max(0, 1.0 - (dist / 1.5))
-                scored_results.append({
-                    "document": doc,
-                    "score": round(confidence, 4)
-                })
-
-            if span:
-                _px = get_px()
-                if _px:
-                    span.set_attribute("results.count", len(docs))
-                    # pylint: disable=no-member, c-extension-no-member
-                    span.set_status(_px.SpanStatus.OK)
-
-            return scored_results
-        except (ValueError, KeyError, RuntimeError, OSError) as e:
+                    extracted.append({
+                        "document": doc,
+                        "metadata": results["metadatas"][0][i] if "metadatas" in results else {},
+                        "score": score,
+                    })
+            return extracted
+        except Exception as e:
             logger.error("Error querying Vector Memory: %s", e)
-            if span:
-                span.record_exception(e)
             return []
 
-    def clear_memory(self):
-        """
-        Wipes the entire memory collection. (USE WITH CAUTION)
-        """
-        self._ensure_initialized()
+    async def clear_memory(self) -> bool:
+        """Wipes the entire memory collection. (USE WITH CAUTION)"""
+        await self._ensure_initialized()
         try:
-            self.client.delete_collection(name=COLLECTION_NAME)
-            self.collection = self.client.create_collection(
-                name=COLLECTION_NAME,
-                embedding_function=self.embedding_func
-            )
-            logger.info("🧹 Collection '%s' cleared.", COLLECTION_NAME)
-            return True
-        except (ValueError, KeyError, RuntimeError, OSError) as e:
+            if self.client:
+                await asyncio.to_thread(self.client.delete_collection, name=COLLECTION_NAME)
+                self.collection = await asyncio.to_thread(
+                    self.client.create_collection,
+                    name=COLLECTION_NAME,
+                    embedding_function=self.embedding_func,
+                )
+                logger.info("🧹 Collection '%s' cleared.", COLLECTION_NAME)
+                return True
+            return False
+        except Exception as e:
             logger.error("Error clearing Vector Memory: %s", e)
             return False
 
-    def get_count(self):
-        """
-        Returns number of items in the collection.
-        """
-        self._ensure_initialized()
+    async def get_count(self) -> int:
+        """Returns number of items in the collection."""
+        await self._ensure_initialized()
         try:
-            return self.collection.count()
-        except (ValueError, KeyError, RuntimeError, OSError) as e:
+            if self.collection:
+                return int(await asyncio.to_thread(self.collection.count))
+            return 0
+        except Exception as e:
             logger.error("Error counting DB: %s", e)
             return 0
 
@@ -216,9 +197,11 @@ class VectorMemory:
 jarvis_vector_db = VectorMemory()
 
 if __name__ == "__main__":
-    # Quick test
-    db_test = VectorMemory()
-    db_test.add_memory("Sir Matloob ka favourite color black hai.",
-                       {"user": "Matloob"})
-    print("Test Query:", db_test.query_memory(
-        "Matloob ko kaunsa color pasand hai?"))
+    # Small test runner
+    async def _test() -> None:
+        db_test = VectorMemory()
+        await db_test.add_memory("Sir Matloob ka favourite color black hai.", {"user": "Matloob"})
+        results = await db_test.query_memory("Matloob ko kaunsa color pasand hai?")
+        print("Test Query:", results)
+
+    asyncio.run(_test())

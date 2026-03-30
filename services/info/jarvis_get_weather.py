@@ -7,12 +7,14 @@ Retrieves current weather information for a specified city (or automatic detecti
 
 import asyncio
 import os
+from typing import Any
+
 import requests
 from dotenv import load_dotenv
-from services.ai_core.jarvis_plugin_manager import jarvis_tool
-from services.utils.jarvis_logger import setup_logger
 
+from services.ai_core.jarvis_plugin_manager import jarvis_tool
 from services.info.jarvis_search import get_current_city, search_internet
+from services.utils.jarvis_logger import setup_logger
 
 load_dotenv()
 
@@ -21,7 +23,7 @@ logger = setup_logger("JARVIS-WEATHER")
 
 
 @jarvis_tool
-async def get_weather(city: str = "Lahore") -> str:
+async def get_weather(city: str = "Lahore") -> str | dict[str, Any]:
     """
     Gives current weather information for a given city.
 
@@ -39,9 +41,10 @@ async def get_weather(city: str = "Lahore") -> str:
 
     if not api_key:
         logger.error("OpenWeather API key missing hai.")
-        msg = ("Environment variables mein OpenWeather API key nahi mili. "
-               "WEATHER_API_KEY ya OPENWEATHER_API_KEY set karein.")
-        return msg
+        return {
+            "status": "error",
+            "message": "Maazrat Sir! OpenWeather API key nahi mili. .env file check karein.",
+        }
 
     # If no city provided or empty, detect city
     if not city or not city.strip():
@@ -57,7 +60,7 @@ async def get_weather(city: str = "Lahore") -> str:
     params = {
         "q": city,
         "appid": api_key,
-        "units": "metric"
+        "units": "metric",
     }
 
     try:
@@ -88,7 +91,7 @@ async def get_weather(city: str = "Lahore") -> str:
             "temperature": temperature,
             "humidity": humidity,
             "wind_speed": wind_speed,
-            "message": result
+            "message": result,
         }
 
     except (requests.exceptions.RequestException, ValueError, KeyError, RuntimeError) as e:
@@ -111,10 +114,10 @@ async def get_weather_via_search(city: str) -> dict:
             "status": "success",
             "city": city,
             "provider": "search_fallback",
-            "message": f"🌤️ {city} ka weather (via Search):\n{summary}"
+            "message": f"🌤️ {city} ka weather (via Search):\n{summary}",
         }
 
     return {
         "status": "error",
-        "message": f"Error: {city} ke liye weather fetch nahi kar paaye (API and Search failed)."
+        "message": f"Error: {city} ke liye weather fetch nahi kar paaye (API and Search failed).",
     }

@@ -2,6 +2,7 @@ import React from 'react';
 import { User, CreditCard, MapPin } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNeuralNetwork } from '../../hooks/useNeuralNetwork';
+import './styles.css';
 
 export interface SimRecord {
   full_name?: string;
@@ -54,67 +55,89 @@ const SimInfoBox: React.FC<SimInfoBoxProps> = ({ records, isLoading }) => {
       </div>
 
       <div className="relative z-10 flex-1 flex flex-col justify-center">
-        {isLoading ? (
-          <div className="flex flex-col items-center gap-3 py-4">
-            <div className={`w-6 h-6 border-2 ${isJarvis ? 'border-jarvis-cyan/20 border-t-jarvis-cyan' : 'border-anna-magenta/20 border-t-anna-magenta'} rounded-full animate-spin transition-colors duration-500`} />
-            <span className="text-[10px] text-white/40 font-black tracking-widest uppercase animate-pulse">Scanning Cloud Database...</span>
-          </div>
-        ) : record ? (
-          <motion.div 
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="space-y-4"
-          >
-            {/* Name */}
-            <div className="flex items-start gap-3">
-              <div className="p-2 rounded-lg bg-white/5 border border-white/5">
-                <User size={12} className={`${accentColor} transition-colors duration-500`} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[8px] text-white/20 uppercase tracking-[0.2em] font-black mb-0.5">Identified Subscriber</p>
-                <p className="text-xs font-bold text-white/90 truncate">{record.full_name || 'UNKNOWN ENTITY'}</p>
+        <motion.div 
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-4"
+        >
+          {/* Name */}
+          <div className="flex items-start gap-3">
+            <div className={`p-2 rounded-lg bg-white/5 border border-white/5 transition-colors ${isLoading ? 'animate-pulse' : ''}`}>
+              <User size={12} className={`${accentColor} transition-colors duration-500`} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[8px] text-white/20 uppercase tracking-[0.2em] font-black mb-0.5">Identified Subscriber</p>
+              <div className="h-4 flex items-center">
+                {isLoading && !record?.full_name ? (
+                  <div className={`h-2 w-32 ${dotColor} opacity-20 rounded animate-pulse`} />
+                ) : (
+                  <p className="text-xs font-bold text-white/90 truncate">{record?.full_name || 'PENDING_IDENTIFICATION'}</p>
+                )}
               </div>
             </div>
-            
-            <div className="grid grid-cols-2 gap-3">
-              {/* CNIC */}
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-1.5">
-                  <CreditCard size={10} className={`${accentColor} opacity-60 transition-colors duration-500`} />
-                  <p className="text-[8px] text-white/20 uppercase tracking-[0.1em] font-black">Identity_ID</p>
-                </div>
-                <p className="text-[10px] font-mono text-white/80">{record.cnic || 'UNDEFINED'}</p>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-3">
+            {/* CNIC */}
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-1.5">
+                <CreditCard size={10} className={`${accentColor} opacity-60 transition-colors duration-500`} />
+                <p className="text-[8px] text-white/20 uppercase tracking-[0.1em] font-black">Identity_ID</p>
               </div>
-
-              {/* Phone */}
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-1.5">
-                  <div className={`w-1 h-1 rounded-full ${dotColor} animate-pulse transition-colors duration-500`} />
-                  <p className="text-[8px] text-white/20 uppercase tracking-[0.1em] font-black">Link_Node</p>
-                </div>
-                <p className="text-[10px] font-mono text-white/80">{record.phone || 'NO_LINK'}</p>
+              <div className="h-3 flex items-center">
+                {isLoading && !record?.cnic ? (
+                  <div className={`h-1.5 w-full ${dotColor} opacity-20 rounded animate-pulse`} />
+                ) : (
+                  <p className="text-[10px] font-mono text-white/80">{record?.cnic || '00000-0000000-0'}</p>
+                )}
               </div>
             </div>
 
-            {/* Address */}
-            <div className="flex items-start gap-3 pt-2 border-t border-white/5">
-              <div className="p-2 rounded-lg bg-white/5 border border-white/5">
-                <MapPin size={12} className={`${accentColor} opacity-60 transition-colors duration-500`} />
+            {/* Phone */}
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-1.5">
+                <div className={`w-1 h-1 rounded-full ${dotColor} animate-pulse transition-colors duration-500`} />
+                <p className="text-[8px] text-white/20 uppercase tracking-[0.1em] font-black">Link_Node</p>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[8px] text-white/20 uppercase tracking-[0.2em] font-black mb-0.5">Geographic Vector</p>
-                <p className="text-[10px] text-white/50 leading-relaxed italic">{record.address || 'LOC_REDACTED'}</p>
+              <div className="h-3 flex items-center">
+                {isLoading && !record?.phone ? (
+                  <div className={`h-1.5 w-full ${dotColor} opacity-20 rounded animate-pulse`} />
+                ) : (
+                  <p className="text-[10px] font-mono text-white/80">{record?.phone || 'NO_LINK'}</p>
+                )}
               </div>
             </div>
-          </motion.div>
-        ) : (
-          <div className="py-8 text-center flex flex-col items-center gap-3">
-            <div className={`w-12 h-12 rounded-full border border-white/5 flex items-center justify-center bg-black/20 group-hover:${borderAccent} transition-colors duration-500`}>
-              <User size={20} className="text-white/5 group-hover:text-white/20 transition-colors duration-500" />
-            </div>
-            <p className="text-[9px] text-white/10 font-black tracking-widest uppercase">Awaiting Search Protocol</p>
           </div>
-        )}
+
+          {/* Address */}
+          <div className="flex items-start gap-3 pt-2 border-t border-white/5">
+            <div className={`p-2 rounded-lg bg-white/5 border border-white/5 transition-colors ${isLoading ? 'animate-pulse' : ''}`}>
+              <MapPin size={12} className={`${accentColor} opacity-60 transition-colors duration-500`} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[8px] text-white/20 uppercase tracking-[0.2em] font-black mb-0.5">Geographic Vector</p>
+              <div className="min-h-[20px]">
+                {isLoading && !record?.address ? (
+                  <div className="space-y-1.5">
+                    <div className={`h-1.5 w-full ${dotColor} opacity-20 rounded animate-pulse`} />
+                    <div className={`h-1.5 w-3/4 ${dotColor} opacity-20 rounded animate-pulse`} />
+                  </div>
+                ) : (
+                  <p className="text-[10px] text-white/50 leading-relaxed italic">{record?.address || 'Awaiting location signal...'}</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {isLoading && (
+            <div className="pt-2 border-t border-white/5 flex items-center justify-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${dotColor} dot-bounce delay-0`} />
+              <div className={`w-2 h-2 rounded-full ${dotColor} dot-bounce delay-150`} />
+              <div className={`w-2 h-2 rounded-full ${dotColor} dot-bounce delay-300`} />
+              <span className="text-[7px] font-mono text-white/30 uppercase tracking-[0.3em]">Querying Satellite Database...</span>
+            </div>
+          )}
+        </motion.div>
       </div>
     </div>
   );

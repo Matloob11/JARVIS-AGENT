@@ -4,14 +4,16 @@ Jarvis QR Code Generation Tool
 Supports stylish QR codes with "Modern Dots" style as requested.
 """
 
-import os
 import asyncio
+import os
+
 import qrcode
 from qrcode.image.styledpil import StyledPilImage
-from qrcode.image.styles.moduledrawers import CircleModuleDrawer
 from qrcode.image.styles.colormasks import SolidFillColorMask
-from services.utils.jarvis_config import config
+from qrcode.image.styles.moduledrawers import CircleModuleDrawer
+
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
+from services.utils.jarvis_config import config
 from services.utils.jarvis_logger import setup_logger
 
 # Setup logger
@@ -41,7 +43,7 @@ async def generate_qr_code(data: str, filename: str = "my_stylish_qr.png") -> di
                 version=1,
                 error_correction=qrcode.constants.ERROR_CORRECT_H,
                 box_size=10,
-                border=4
+                border=4,
             )
             qr.add_data(data)
             qr.make(fit=True)
@@ -51,13 +53,13 @@ async def generate_qr_code(data: str, filename: str = "my_stylish_qr.png") -> di
             # Crimson/Red color mask
             color_mask = SolidFillColorMask(
                 back_color=(255, 255, 255),
-                front_color=(233, 69, 96)
+                front_color=(233, 69, 96),
             )
 
             img = qr.make_image(
                 image_factory=StyledPilImage,
                 module_drawer=drawer,
-                color_mask=color_mask
+                color_mask=color_mask,
             )
             img.save(file_path)
             os.startfile(file_path)  # nosec B606
@@ -72,13 +74,13 @@ async def generate_qr_code(data: str, filename: str = "my_stylish_qr.png") -> di
             "data": data,
             "file_path": file_path,
             "message": (f"✅ Sir Matloob, aapka stylish dots wala QR code '{filename}' "
-                        f"ke naam se save kar diya gaya hai. Path: {file_path}")
+                        f"ke naam se save kar diya gaya hai. Path: {file_path}"),
         }
 
     except (OSError, ValueError, RuntimeError) as e:
         logger.exception("Error in generate_qr_code: %s", e)
         return {
             "status": "error",
-            "message": f"❌ Maazrat Sir, QR code generate karne mein error aaya: {str(e)}",
-            "error": str(e)
+            "message": f"❌ Maazrat Sir, QR code generate karne mein error aaya: {e!s}",
+            "error": str(e),
         }

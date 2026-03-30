@@ -6,21 +6,34 @@ Helper script to start both the JARVIS Agent and the UI Bridge backend simultane
 import subprocess
 import sys
 import time
-import io
 
-def main():
-    print("🚀 Starting JARVIS Environment...")
 
-    # Ensure UTF-8 output
+def main() -> None:
+    # Ensure project root is in path for absolute imports
+    import os
+    root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    if root_dir not in sys.path:
+        sys.path.insert(0, root_dir)
+
+    # Ensure UTF-8 output for emojis on Windows
     if sys.platform == "win32":
+        import io
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+
+    print("🚀 Starting JARVIS Environment...")
 
     bridge_process = None
     try:
         print("🌐 [1/2] Starting STONIX UI Bridge (Port 5001)...")
+        # Ensure child processes can find 'src'
+        import os
+        env = os.environ.copy()
+        root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        env["PYTHONPATH"] = root_dir + os.pathsep + env.get("PYTHONPATH", "")
+
         # Start bridge in the background
         # pylint: disable=consider-using-with
-        bridge_process = subprocess.Popen([sys.executable, "-m", "src.core.ui_bridge"])
+        bridge_process = subprocess.Popen([sys.executable, "-m", "src.core.ui_bridge"], env=env)
         time.sleep(3) # Give bridge time to bind to port
 
         if bridge_process.poll() is not None:
@@ -28,8 +41,8 @@ def main():
             sys.exit(1)
 
         print("🤖 [2/2] Starting JARVIS Agent Core...")
-        # Run agent in foreground
-        subprocess.run([sys.executable, "-m", "src.core.agent", "dev"], check=True)
+        # Run agent in foreground with updated env
+        subprocess.run([sys.executable, "-m", "src.core.agent", "dev"], check=True, env=env)
 
     except KeyboardInterrupt:
         print("\n🛑 Shutting down JARVIS...")

@@ -4,16 +4,18 @@ Image generation service for JARVIS.
 Used to create visuals using Hugging Face or Pollinations.
 """
 
+import asyncio
 import os
 import time
-import asyncio
-from typing import Dict, Any
+from typing import Any
+
 from huggingface_hub import InferenceClient
-from services.utils.jarvis_config import config
-from services.system.jarvis_file_server import get_local_ip
+
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
-from services.utils.jarvis_logger import setup_logger
+from services.system.jarvis_file_server import get_local_ip
 from services.utils.jarvis_bridge import notify_event
+from services.utils.jarvis_config import config
+from services.utils.jarvis_logger import setup_logger
 
 logger = setup_logger("JARVIS-IMAGE-GEN")
 
@@ -32,7 +34,7 @@ class JarvisImageGenerator:
         self.output_dir = os.path.join(config.shared_dir, "Generated_Images")
         os.makedirs(self.output_dir, exist_ok=True)
 
-    async def generate_image(self, prompt: str, aspect_ratio: str = "1:1") -> Dict[str, Any]:
+    async def generate_image(self, prompt: str, aspect_ratio: str = "1:1") -> dict[str, Any]:
         """
         Generates an image from a text prompt.
         """
@@ -69,21 +71,21 @@ class JarvisImageGenerator:
                 "url": image_url,
                 "data": {
                     "prompt": prompt,
-                    "filename": filename
-                }
+                    "filename": filename,
+                },
             })
 
             return {
                 "status": "success",
                 "path": filepath,
                 "url": image_url,
-                "message": f"Sir, aapke liye image generate kar di hai: {filename}"
+                "message": f"Sir, aapke liye image generate kar di hai: {filename}",
             }
         except (ValueError, RuntimeError, OSError) as e:
             logger.error("HF Generation failed: %s. Trying fallback.", e)
             return await self._generate_pollinations(prompt, aspect_ratio)
 
-    async def _generate_pollinations(self, prompt: str, aspect_ratio: str) -> Dict[str, Any]:
+    async def _generate_pollinations(self, prompt: str, aspect_ratio: str) -> dict[str, Any]:
         """Fallback: Pollinations.ai (No Token Required)"""
         # Pollinations usually uses URL redirection for generation
         import requests  # pylint: disable=import-outside-toplevel
@@ -107,14 +109,14 @@ class JarvisImageGenerator:
                     "status": "success",
                     "path": filepath,
                     "url": url,
-                    "message": f"Sir, image generate ho gayi hai (via fallback): {filename}"
+                    "message": f"Sir, image generate ho gayi hai (via fallback): {filename}",
                 }
         except (requests.RequestException, OSError) as e:
             logger.error("Pollinations fallback failed: %s", e)
 
         return {
             "status": "error",
-            "message": "Maazrat Sir, dono systems image generate nahi kar paaye."
+            "message": "Maazrat Sir, dono systems image generate nahi kar paaye.",
         }
 
     def _get_dimensions(self, ratio: str):
@@ -123,16 +125,16 @@ class JarvisImageGenerator:
             "1:1": (1024, 1024),
             "16:9": (1280, 720),
             "4:3": (1024, 768),
-            "9:16": (720, 1280)
+            "9:16": (720, 1280),
         }
         return mapping.get(ratio, (1024, 1024))
 
-    def get_service_info(self) -> Dict[str, Any]:
+    def get_service_info(self) -> dict[str, Any]:
         """Returns metadata about the image generation service."""
         return {
             "output_directory": self.output_dir,
             "hf_token_configured": self.hf_token is not None,
-            "supported_ratios": ["1:1", "16:9", "4:3", "9:16"]
+            "supported_ratios": ["1:1", "16:9", "4:3", "9:16"],
         }
 
 
@@ -141,7 +143,7 @@ image_gen = JarvisImageGenerator()
 
 
 @jarvis_tool
-async def generate_image(prompt: str, aspect_ratio: str = "1:1") -> Dict[str, Any]:
+async def generate_image(prompt: str, aspect_ratio: str = "1:1") -> dict[str, Any]:
     """
     Generates an image from a text prompt.
     User can specify aspect ratios like '1:1', '16:9', '4:3', '9:16'.

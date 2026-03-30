@@ -1,9 +1,11 @@
 import asyncio
 import time
+
 import httpx
 import psutil
-from services.utils.jarvis_logger import setup_logger
+
 from services.utils.jarvis_config import config
+from services.utils.jarvis_logger import setup_logger
 
 logger = setup_logger("QA-STRESS")
 
@@ -27,7 +29,7 @@ class StressQA:
 
         headers = {
             "X-Vortex-Token": self.token,
-            "X-Vortex-Signature": "INTERNAL"
+            "X-Vortex-Signature": "INTERNAL",
         }
 
         async with httpx.AsyncClient() as client:
@@ -35,7 +37,7 @@ class StressQA:
                 try:
                     payload = {
                         "type": "transcription",
-                        "payload": {"role": "agent", "text": f"QA Stress Ping {msg_count}", "timestamp": time.time()}
+                        "payload": {"role": "agent", "text": f"QA Stress Ping {msg_count}", "timestamp": time.time()},
                     }
                     t0 = time.perf_counter()
                     resp = await client.post(f"{self.bridge_url}/notify", json=payload, headers=headers)
@@ -64,5 +66,5 @@ class StressQA:
             "messages_sent": msg_count,
             "avg_latency_ms": avg_latency,
             "error_count": errors,
-            "cpu_load": vitals
+            "cpu_load": vitals,
         }

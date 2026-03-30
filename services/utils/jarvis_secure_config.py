@@ -4,8 +4,8 @@ Handles loading and management of encrypted configuration
 """
 
 import os
+
 # import logging (Removed as unused)
-from typing import Dict, Optional
 from services.utils.jarvis_crypto import JarvisCrypto
 from services.utils.jarvis_logger import setup_logger
 
@@ -26,13 +26,13 @@ class SecureConfigManager:
             encrypted_env_file: Path to encrypted environment file
         """
         self.encrypted_env_file = encrypted_env_file
-        self._config_cache = {}
+        self._config_cache: dict[str, str] = {}
         self._crypto = JarvisCrypto()
 
         # Load configuration on initialization
         self._load_configuration()
 
-    def _load_configuration(self):
+    def _load_configuration(self) -> None:
         """Load and decrypt configuration from encrypted file"""
         try:
             # Try to load from encrypted file first
@@ -52,10 +52,10 @@ class SecureConfigManager:
             logger.error("❌ Failed to load configuration: %s", e)
             self._config_cache = {}
 
-    def _load_plain_env(self):
+    def _load_plain_env(self) -> None:
         """Load from plain .env file"""
         try:
-            with open(".env", 'r', encoding='utf-8') as f:
+            with open(".env", encoding='utf-8') as f:
                 for line in f:
                     line = line.strip()
                     if line and not line.startswith('#') and '=' in line:
@@ -64,21 +64,21 @@ class SecureConfigManager:
         except Exception as e: # pylint: disable=broad-exception-caught
             logger.error("❌ Failed to load plain .env file: %s", e)
 
-    def _load_from_environment(self):
+    def _load_from_environment(self) -> None:
         """Load configuration from environment variables"""
         # Important JARVIS configuration keys
         jarvis_keys = [
             'LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET', 'LIVEKIT_URL',
             'GOOGLE_API_KEY', 'WEATHER_API_KEY', 'OPENWEATHER_API_KEY',
             'GOOGLE_SEARCH_API_KEY', 'SEARCH_ENGINE_ID', 'USER_NAME',
-            'CONTROLLER_TOKEN', 'TAVILY_API_KEY', 'JARVIS_ENCRYPTION_KEY'
+            'CONTROLLER_TOKEN', 'TAVILY_API_KEY', 'JARVIS_ENCRYPTION_KEY',
         ]
 
         for key in jarvis_keys:
             if key in os.environ and key not in self._config_cache:
                 self._config_cache[key] = os.environ[key]
 
-    def get(self, key: str, default: Optional[str] = None) -> Optional[str]:
+    def get(self, key: str, default: str | None = None) -> str | None:
         """
         Get configuration value
 
@@ -109,37 +109,37 @@ class SecureConfigManager:
             raise ValueError(f"Required configuration key '{key}' not found")
         return value
 
-    def get_livekit_config(self) -> Dict[str, str]:
+    def get_livekit_config(self) -> dict[str, str]:
         """Get LiveKit configuration"""
         return {
             'api_key': self.get_required('LIVEKIT_API_KEY'),
             'api_secret': self.get_required('LIVEKIT_API_SECRET'),
-            'url': self.get_required('LIVEKIT_URL')
+            'url': self.get_required('LIVEKIT_URL'),
         }
 
-    def get_google_config(self) -> Dict[str, str]:
+    def get_google_config(self) -> dict[str, str]:
         """Get Google API configuration"""
         return {
             'api_key': self.get_required('GOOGLE_API_KEY'),
-            'search_api_key': self.get('GOOGLE_SEARCH_API_KEY'),
-            'search_engine_id': self.get('SEARCH_ENGINE_ID')
+            'search_api_key': self.get('GOOGLE_SEARCH_API_KEY') or '',
+            'search_engine_id': self.get('SEARCH_ENGINE_ID') or '',
         }
 
-    def get_weather_config(self) -> Dict[str, str]:
+    def get_weather_config(self) -> dict[str, str]:
         """Get weather API configuration"""
         return {
-            'api_key': self.get_required('WEATHER_API_KEY') or self.get_required('OPENWEATHER_API_KEY')
+            'api_key': self.get_required('WEATHER_API_KEY') or self.get_required('OPENWEATHER_API_KEY'),
         }
 
-    def get_user_config(self) -> Dict[str, str]:
+    def get_user_config(self) -> dict[str, str]:
         """Get user-specific configuration"""
         return {
-            'name': self.get('USER_NAME', 'User'),
-            'controller_token': self.get('CONTROLLER_TOKEN'),
-            'tavily_api_key': self.get('TAVILY_API_KEY')
+            'name': self.get('USER_NAME', 'User') or 'User',
+            'controller_token': self.get('CONTROLLER_TOKEN') or '',
+            'tavily_api_key': self.get('TAVILY_API_KEY') or '',
         }
 
-    def validate_configuration(self) -> Dict[str, bool]:
+    def validate_configuration(self) -> dict[str, bool]:
         """
         Validate required configuration
 
@@ -148,7 +148,7 @@ class SecureConfigManager:
         """
         required_keys = [
             'LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET', 'LIVEKIT_URL',
-            'GOOGLE_API_KEY', 'WEATHER_API_KEY'
+            'GOOGLE_API_KEY', 'WEATHER_API_KEY',
         ]
 
         validation_results = {}
@@ -191,7 +191,7 @@ class SecureConfigManager:
             logger.error("❌ Failed to encrypt environment file: %s", e)
             return False
 
-    def reload(self):
+    def reload(self) -> None:
         """Reload configuration from files"""
         logger.info("🔄 Reloading configuration...")
         self._config_cache.clear()
@@ -199,7 +199,7 @@ class SecureConfigManager:
 
 
 # Global secure configuration instance
-_secure_config = None
+_secure_config: SecureConfigManager | None = None
 
 def get_secure_config() -> SecureConfigManager:
     """

@@ -4,12 +4,13 @@ Jarvis Local Documents RAG Module
 Handles searching, reading, and analyzing local PDF and Word documents.
 """
 
-import os
 import asyncio
-from typing import Optional
+import os
+
+from docx import Document
 from fuzzywuzzy import process
 from pypdf import PdfReader
-from docx import Document
+
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
 from services.utils.jarvis_logger import setup_logger
 
@@ -33,7 +34,7 @@ class DocumentRAG:
             search_dirs = ["D:/"]
         self.search_dirs = search_dirs
 
-    async def find_document(self, query: str) -> Optional[str]:
+    async def find_document(self, query: str) -> str | None:
         """
         Fuzzy searches for a document in the search directories.
         Uses a global cache to avoid repetitive slow indexing.
@@ -133,7 +134,7 @@ async def ask_about_document(doc_name: str, question: str = "Summarize this docu
         msg = f"❌ Maaf kijiye, mujhe '{doc_name}' naam ka koi PDF ya Word document nahi mila."
         return {
             "status": "not_found",
-            "message": msg
+            "message": msg,
         }
 
     logger.info("Found document at: %s. Extracting text...", file_path)
@@ -153,5 +154,5 @@ async def ask_about_document(doc_name: str, question: str = "Summarize this docu
         "document_path": file_path,
         "content": content,
         "question": question,
-        "message": msg
+        "message": msg,
     }

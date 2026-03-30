@@ -10,9 +10,11 @@ import asyncio
 import os
 from datetime import datetime
 from urllib.parse import quote
+
 import requests  # type: ignore
 from dotenv import load_dotenv
 from duckduckgo_search import DDGS
+
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
 from services.utils.jarvis_logger import setup_logger
 
@@ -35,7 +37,7 @@ async def get_current_city_data() -> dict:
     default_data = {
         "city": os.getenv("USER_CITY", "Lahore"),
         "lat": 31.5204,
-        "lng": 74.3587
+        "lng": 74.3587,
     }
     try:
         # Using asyncio.to_thread for blocking requests call
@@ -54,7 +56,7 @@ async def get_current_city_data() -> dict:
         return {
             "city": detected_city,
             "lat": lat,
-            "lng": lng
+            "lng": lng,
         }
     except (requests.RequestException, ValueError, KeyError, OSError, RuntimeError) as e:
         logger.warning("Error getting current location: %s", e)
@@ -97,7 +99,7 @@ async def search_tavily(query: str) -> dict:
         "api_key": TAVILY_API_KEY,
         "query": query,
         "search_depth": "advanced",
-        "max_results": 3
+        "max_results": 3,
     }
 
     try:
@@ -115,7 +117,7 @@ async def search_tavily(query: str) -> dict:
             "status": "success",
             "provider": "tavily",
             "results": results,
-            "message": f"[TAVILY SEARCH]\n{summary}"
+            "message": f"[TAVILY SEARCH]\n{summary}",
         }
     except (requests.exceptions.RequestException, ValueError, KeyError) as e:
         logger.warning("Tavily Search failed: %s", e)
@@ -143,7 +145,7 @@ async def search_google(query: str) -> dict:
             results.append({
                 "title": item.get("title", "No title"),
                 "snippet": item.get("snippet", ""),
-                "link": item.get("link", "")
+                "link": item.get("link", ""),
             })
 
         summary = "\n\n".join(
@@ -152,7 +154,7 @@ async def search_google(query: str) -> dict:
             "status": "success",
             "provider": "google",
             "results": results,
-            "message": f"[GOOGLE SEARCH]\n{summary}"
+            "message": f"[GOOGLE SEARCH]\n{summary}",
         }
     except (requests.RequestException, ValueError, KeyError, RuntimeError) as e:
         logger.warning("Google Search failed: %s", e)
@@ -179,7 +181,7 @@ async def search_duckduckgo(query: str) -> dict:
             formatted_results.append({
                 "title": r.get("title", "No Title"),
                 "snippet": r.get("body", ""),
-                "link": r.get("href", "")
+                "link": r.get("href", ""),
             })
 
         summary = "\n\n".join(
@@ -188,7 +190,7 @@ async def search_duckduckgo(query: str) -> dict:
             "status": "success",
             "provider": "duckduckgo",
             "query": query,
-            "message": f"[BACKUP SEARCH]\n{summary}"
+            "message": f"[BACKUP SEARCH]\n{summary}",
         }
     except (RuntimeError, AttributeError, KeyError, ValueError) as e:
         logger.error("DuckDuckGo fallback also failed: %s", e)
@@ -206,5 +208,5 @@ async def get_formatted_datetime() -> dict:
         "formatted": now.strftime("%A, %B %d, %Y - %I:%M %p"),
         "day": now.strftime("%A"),
         "date": now.strftime("%B %d, %Y"),
-        "time": now.strftime("%I:%M %p")
+        "time": now.strftime("%I:%M %p"),
     }

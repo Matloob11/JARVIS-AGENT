@@ -2,15 +2,17 @@
 Jarvis WhatsApp Automation Module
 Handles sending messages and automating WhatsApp Desktop.
 """
+import asyncio
 import os
 import time
-import asyncio
+
 import pyautogui as pg
 import pygetwindow as gw
+
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
 from services.automation.keyboard_mouse_ctrl import type_text_tool
-from services.utils.jarvis_win32 import win32gui, win32con, pywintypes
 from services.utils.jarvis_logger import setup_logger
+from services.utils.jarvis_win32 import pywintypes, win32con, win32gui
 
 # Setup logging
 logger = setup_logger("JARVIS-WHATSAPP")
@@ -201,7 +203,8 @@ async def automate_whatsapp(contact_name: str, message: str, close_after: bool =
         await whatsapp_bot.send_text_message(message)
 
         if close_after:
-            await asyncio.sleep(3.0)
+            # Wait longer for success delivery (2x buffer)
+            await asyncio.sleep(5.0)
             await whatsapp_bot.close_whatsapp()
             msg = f"Message sent to '{contact_name}' and WhatsApp closed."
             return {"status": "success", "contact": contact_name, "message": msg}
@@ -213,6 +216,6 @@ async def automate_whatsapp(contact_name: str, message: str, close_after: bool =
         logger.exception("WhatsApp automation error: %s", e)
         return {
             "status": "error",
-            "message": f"WhatsApp automation mein masla aaya: {str(e)}",
-            "error": str(e)
+            "message": f"WhatsApp automation mein masla aaya: {e!s}",
+            "error": str(e),
         }

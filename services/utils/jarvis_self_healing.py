@@ -4,11 +4,12 @@ Autonomous Self-Healing and Repair System for JARVIS.
 Detects tool failures and repairs source code autonomously.
 """
 
-import os
-import traceback
-import subprocess
-import re
 import asyncio
+import re
+import subprocess
+import traceback
+from pathlib import Path
+
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
 from services.utils.jarvis_logger import setup_logger
 
@@ -16,14 +17,14 @@ from services.utils.jarvis_logger import setup_logger
 logger = setup_logger("JARVIS-SELF-HEALING")
 
 
-def get_pylint_score(file_path: str) -> float:
+def get_pylint_score(file_path: str | Path) -> float:
     """Run pylint and extract the score."""
     try:
         result = subprocess.run(
             ["pylint", file_path],  # nosec B607
             capture_output=True,
             text=True,
-            check=False
+            check=False,
         )
         # Look for "Your code has been rated at X.XX/10"
         match = re.search(
@@ -36,29 +37,30 @@ def get_pylint_score(file_path: str) -> float:
 
 
 @jarvis_tool
-async def autonomous_self_repair(error_details: str, file_path: str) -> str:
+async def autonomous_self_repair(error_details: str, file_path: str | Path) -> str:
     """
     Autonomously repair a code file based on provided error details.
     Uses LLM reasoning to generate a patch and applies it.
     """
     try:
-        if not os.path.exists(file_path):
-            return f"Error: File {file_path} not found."
+        path = Path(file_path)
+        if not path.exists():
+            return f"Error: File {path} not found."
 
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with path.open("r", encoding="utf-8") as f:
             f.read()  # Verify file is readable
 
         logger.info("Analyzing error: %s", error_details)
-        pylint_score = await asyncio.to_thread(get_pylint_score, file_path)
+        pylint_score: float = await asyncio.to_thread(get_pylint_score, path)
         return (
-            f"[SELF-HEALING SYSTEM]: File {file_path} ready for repair.\n"
+            f"[SELF-HEALING SYSTEM]: File {path} ready for repair.\n"
             f"Original Score: {pylint_score}/10\n"
             "Please provide the corrected code block using 'write_custom_code'."
         )
 
-    except (OSError, IOError, ValueError) as e:
+    except (OSError, ValueError) as e:
         logger.error("Self-repair failed: %s", e)
-        return f"Self-repair failed: {str(e)}"
+        return f"Self-repair failed: {e!s}"
 
 
 def format_error_report(exception: Exception) -> str:

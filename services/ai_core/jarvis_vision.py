@@ -6,18 +6,21 @@ Handles screen perception by capturing screenshots and analyzing them using
 Google's Gemini multimodal AI model.
 """
 
-import os
 import asyncio
 import base64
+import binascii
+import os
 from io import BytesIO
-from typing import Any, Optional
-import pyautogui
-from PIL import Image
+from typing import Any
+
 import cv2  # Added for local webcam support
+import pyautogui
 import requests
+from dotenv import load_dotenv
 from google import genai
 from openai import OpenAI  # Used for Groq's OpenAI-compatible API
-from dotenv import load_dotenv
+from PIL import Image
+
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
 from services.utils.jarvis_logger import setup_logger
 
@@ -29,7 +32,7 @@ load_dotenv()
 # Global clients (lazy initialized where needed)
 _google_client = None
 
-def get_google_client():
+def get_google_client() -> genai.Client | None:
     """Lazily initializes and returns the Google GenAI client."""
     global _google_client # pylint: disable=global-statement
     if _google_client is None:
@@ -40,14 +43,14 @@ def get_google_client():
         _google_client = genai.Client(api_key=api_key)
     return _google_client
 
-def get_groq_client():
+def get_groq_client() -> OpenAI | None:
     """Lazily initializes and returns the Groq OpenAI client."""
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         return None
     return OpenAI(
         api_key=api_key,
-        base_url="https://api.groq.com/openai/v1"
+        base_url="https://api.groq.com/openai/v1",
     )
 
 
@@ -58,9 +61,9 @@ class ScreenPerceiver:
 
     def __init__(self, model_name="gemini-2.0-flash"):
         self.model_name = model_name
-        self.latest_frame: Optional[bytes] = None  # Stores JPEG bytes from UI
+        self.latest_frame: bytes | None = None  # Stores JPEG bytes from UI
 
-    def update_webcam_frame(self, frame_data: Any):
+    def update_webcam_frame(self, frame_data: Any) -> None:
         """
         Updates the internal buffer with a new frame from the UI.
         Handles base64 or raw bytes.
@@ -68,7 +71,7 @@ class ScreenPerceiver:
         try:
             if not frame_data:
                 return
-            
+
             # If it's a data URL or base64 string
             if isinstance(frame_data, str):
                 if "," in frame_data:
@@ -78,9 +81,9 @@ class ScreenPerceiver:
                 self.latest_frame = base64.b64decode(b64_str)
             elif isinstance(frame_data, bytes):
                 self.latest_frame = frame_data
-            
+
             logger.debug("Vision system updated with new UI frame.")
-        except (ValueError, TypeError, base64.binascii.Error) as e:
+        except (ValueError, TypeError, binascii.Error) as e:
             logger.error("Error decoding vision frame: %s", e)
 
     async def capture_screen(self) -> bytes:
@@ -96,7 +99,7 @@ class ScreenPerceiver:
             buffered = BytesIO()
             screenshot.save(buffered, format="PNG")
             return buffered.getvalue()
-        except (pyautogui.ImageNotFoundException, OSError, IOError) as e:
+        except (pyautogui.ImageNotFoundException, OSError) as e:
             logger.error("Error capturing screen: %s", e)
             raise
 
@@ -112,7 +115,7 @@ class ScreenPerceiver:
         # Priority 2: Fallback to local webcam (OpenCV)
         try:
             # Run in thread to avoid blocking loop
-            def do_capture():
+            def do_capture() -> bytes | None:
                 # pylint: disable=no-member
                 cap = cv2.VideoCapture(0)
                 if not cap.isOpened():
@@ -131,14 +134,14 @@ class ScreenPerceiver:
 
             data = await asyncio.to_thread(do_capture)
             if data is None:
-                raise IOError(
+                raise OSError(
                     "Sir, camera access nahi mil raha. "
-                    "Kripya check karein ke browser mein camera allowed hai ya nahi."
+                    "Kripya check karein ke browser mein camera allowed hai ya nahi.",
                 )
             return data
-        except (RuntimeError, ValueError, IOError) as e:
+        except (OSError, RuntimeError, ValueError) as e:
             logger.error("Error capturing webcam: %s", e)
-            raise IOError(f"Camera error: {str(e)}") from e
+            raise OSError(f"Camera error: {e!s}") from e
 
     async def analyze_via_google(self, prompt: str, image: Image.Image) -> str:
         """Attempts analysis via native Google SDK."""
@@ -152,7 +155,7 @@ class ScreenPerceiver:
             response = await asyncio.to_thread(
                 google_client.models.generate_content,
                 model=self.model_name,
-                contents=[prompt, image]
+                contents=[prompt, image],
             )
             return str(response.text) if response.text else "No analysis found."
         except Exception as e:
@@ -177,7 +180,7 @@ class ScreenPerceiver:
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
                 "HTTP-Referer": "https://github.com/Matloob11/JARVIS-AGENT",
-                "X-Title": "JARVIS Agent"
+                "X-Title": "JARVIS Agent",
             }
 
             payload = {
@@ -187,9 +190,9 @@ class ScreenPerceiver:
                     "content": [
                         {"type": "text", "text": prompt},
                         {"type": "image_url", "image_url": {
-                            "url": f"data:image/jpeg;base64,{img_b64}"}}
-                    ]
-                }]
+                            "url": f"data:image/jpeg;base64,{img_b64}"}},
+                    ],
+                }],
             }
 
             response = await asyncio.to_thread(
@@ -199,7 +202,7 @@ class ScreenPerceiver:
                 return result['choices'][0]['message']['content']
             return f"OpenRouter Error: {response.text}"
         except (requests.RequestException, ValueError, KeyError) as e:
-            return f"Fallback failed: {str(e)}"
+            return f"Fallback failed: {e!s}"
 
     async def analyze_via_groq(self, prompt: str, image: Image.Image) -> str:
         """Analysis via Groq Llama 3.2 Vision."""
@@ -222,15 +225,15 @@ class ScreenPerceiver:
                     "content": [
                         {"type": "text", "text": prompt},
                         {"type": "image_url", "image_url": {
-                            "url": f"data:image/jpeg;base64,{img_b64}"}}
-                    ]
+                            "url": f"data:image/jpeg;base64,{img_b64}"}},
+                    ],
                 }],
-                max_tokens=1024
+                max_tokens=1024,
             )
             return response.choices[0].message.content
-        except (RuntimeError, ValueError, IOError) as e:
+        except (OSError, RuntimeError, ValueError) as e:
             logger.error("Groq Vision API error: %s", e)
-            return f"Error: Groq failed: {str(e)}"
+            return f"Error: Groq failed: {e!s}"
 
     async def analyze_content(self, prompt: str = "What is on my screen?") -> str:
         """
@@ -261,9 +264,9 @@ class ScreenPerceiver:
                     return await self.analyze_via_openrouter(prompt, image)
                 raise e
 
-        except (OSError, IOError, ValueError) as e:
+        except (OSError, ValueError) as e:
             logger.error("Error in vision system: %s", e)
-            return f"Error: Vision analysis failed: {str(e)}"
+            return f"Error: Vision analysis failed: {e!s}"
 
 
 # Global Instance
@@ -281,19 +284,19 @@ async def analyze_screen(query: str = "Describe what you see on my screen in det
         if result.startswith("Error"):
             return {
                 "status": "error",
-                "message": f"👁️ Vision analysis failed: {result}"
+                "message": f"👁️ Vision analysis failed: {result}",
             }
         return {
             "status": "success",
             "query": query,
-            "message": f"👁️ Screen Analysis report taiyyar hai, Sir:\n{result}"
+            "message": f"👁️ Screen Analysis report taiyyar hai, Sir:\n{result}",
         }
-    except (OSError, IOError, RuntimeError) as e:
+    except (OSError, RuntimeError) as e:
         logger.error("Vision tool error: %s", e)
         return {
             "status": "error",
-            "message": f"👁️ Vision analysis failed: {str(e)}",
-            "error": str(e)
+            "message": f"👁️ Vision analysis failed: {e!s}",
+            "error": str(e),
         }
 
 
@@ -330,15 +333,15 @@ async def analyze_camera(query: str = "What do you see in the camera?") -> dict:
         return {
             "status": "success",
             "query": query,
-            "message": f"📷 Camera view analysis, Sir:\n{result}"
+            "message": f"📷 Camera view analysis, Sir:\n{result}",
         }
-    except (OSError, IOError, RuntimeError, ValueError) as e:
+    except (OSError, RuntimeError, ValueError) as e:
         logger.error("Camera tool error: %s", e)
         return {
             "status": "error",
             "message": (
-                f"📷 Camera analysis failed, Sir. Report: {str(e)}. "
+                f"📷 Camera analysis failed, Sir. Report: {e!s}. "
                 "Shayad camera permission ya technical error ki wajah se."
             ),
-            "error": str(e)
+            "error": str(e),
         }

@@ -4,12 +4,13 @@ Initializes Arize Phoenix instrumentation via OpenTelemetry.
 """
 
 import socket
+
 from services.utils.jarvis_logger import setup_logger
 
 logger = setup_logger("JARVIS-INSTRUMENTATION")
 
 
-def setup_instrumentation():
+def setup_instrumentation() -> None:
     """
     Initializes Arize Phoenix instrumentation via OpenTelemetry.
     Traces will be sent to the local Phoenix server.
@@ -20,11 +21,9 @@ def setup_instrumentation():
         s.settimeout(0.5)
         try:
             s.connect(collector_addr)
-        except (ConnectionRefusedError, socket.timeout, OSError):
-            print("⚠️ Phoenix server (port 4317) not reachable. Skipping.")
+        except (TimeoutError, ConnectionRefusedError, OSError):
             return
 
-    print("🧠 Initializing JARVIS Instrumentation (Arize Phoenix)...")
 
     if not _register_phoenix():
         return
@@ -32,7 +31,6 @@ def setup_instrumentation():
     _instrument_llm_frameworks()
     _instrument_network_clients()
 
-    print("✅ Instrumentation check complete.")
 
 
 def _register_phoenix() -> bool:
@@ -51,7 +49,7 @@ def _register_phoenix() -> bool:
         return False
 
 
-def _instrument_llm_frameworks():
+def _instrument_llm_frameworks() -> None:
     """Instruments OpenAI and LangChain if available."""
     try:
         # pylint: disable=import-outside-toplevel
@@ -74,7 +72,7 @@ def _instrument_llm_frameworks():
         logger.warning("LangChain instrumentation failed: %s", e)
 
 
-def _instrument_network_clients():
+def _instrument_network_clients() -> None:
     """Instruments Requests and HTTPX if available."""
     try:
         # pylint: disable=import-outside-toplevel

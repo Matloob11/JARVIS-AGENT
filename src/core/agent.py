@@ -1,5 +1,13 @@
+# pylint: disable=wrong-import-position
+# ruff: noqa: E402
 # Crucial: Suppress expensive metadata scan in Google API core on Windows
-# Must be set BEFORE importing any google-related modules
+import io
+import logging
+import os
+import subprocess
+import sys
+
+# SET THIS BEFORE ANY OTHER IMPORTS TO SUPPRESS GOOGLE API METADATA SCANNING ON WINDOWS
 os.environ["GOOGLE_API_CORE_SUPPRESS_VERSION_CHECK"] = "1"
 
 # SQLite3 Patch for older Linux systems (CentOS/Ubuntu)
@@ -7,17 +15,12 @@ os.environ["GOOGLE_API_CORE_SUPPRESS_VERSION_CHECK"] = "1"
 if os.name != 'nt':
     try:
         __import__('pysqlite3')
-        import sys
         sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
     except ImportError:
         pass
 
-import sys
-import subprocess
-import logging
-
-# Force global logging to suppress SDK and root noise
-logging.basicConfig(level=logging.WARNING, force=True)
+# Force global logging to show status while debugging
+logging.basicConfig(level=logging.INFO, force=True)
 for logger_name in ["livekit", "livekit.agents", "livekit.rtc"]:
     logging.getLogger(logger_name).setLevel(logging.WARNING)
 
@@ -29,9 +32,8 @@ else:
     venv_python = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".venv_312", "bin", "python"))
 
 if os.path.exists(venv_python) and os.path.abspath(sys.executable).lower() != venv_python.lower():
-    print(f"[JARVIS] Environment mismatch. Auto-activating: .venv_312")
+    print("[JARVIS] Environment mismatch. Auto-activating: .venv_312")
     # Using os.execv to replace current process smoothly on Linux/Windows
-    import subprocess
     sys.exit(subprocess.call([venv_python] + sys.argv))
 # ----------------------------
 
@@ -45,11 +47,9 @@ from livekit import agents
 # Use absolute import since root_dir is in sys.path
 from src.core.agent_runner import entrypoint
 
-
 if __name__ == "__main__":
     # Ensure UTF-8 for Windows console
     if sys.platform == "win32":
-        import io
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
     OPTS = agents.WorkerOptions(entrypoint_fnc=entrypoint)

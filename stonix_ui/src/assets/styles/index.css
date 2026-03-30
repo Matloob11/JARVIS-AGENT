@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:ital,wght@0,400;0,700;1,400;1,700&family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&display=swap');
 @import 'leaflet/dist/leaflet.css';
 
 @tailwind base;
@@ -110,9 +110,13 @@
     display: none;
   }
   .no-scrollbar {
-    -ms-overflow-style: none;
-    /* stylelint-disable-next-line property-no-unknown */
-    scrollbar-width: none; /* Firefox & Chrome 121+ */
+    -ms-overflow-style: none; /* IE and Edge */
+  }
+
+  @supports (scrollbar-width: none) {
+    .no-scrollbar {
+      scrollbar-width: none;
+    }
   }
 
   .chat-input-textarea::-webkit-scrollbar {
@@ -150,6 +154,11 @@
       "sidebar trace neural-chat"
       "sidebar trace metrics";
   }
+
+  /* Camera & Vision */
+  .video-mirror {
+    transform: scaleX(-1);
+  }
 }
 
 @layer components {
@@ -169,6 +178,57 @@
   .nav-item {
     @apply p-3 cursor-pointer rounded-xl transition-all duration-300 relative flex items-center justify-center;
   }
+
+  .hud-panel {
+    @apply relative bg-black/40 backdrop-blur-3xl border border-white/5 transition-all duration-500 overflow-hidden;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5), inset 0 0 20px rgba(0, 242, 255, 0.05);
+    clip-path: polygon(0 0, calc(100% - 15px) 0, 100% 15px, 100% 100%, 15px 100%, 0 calc(100% - 15px));
+  }
+
+  .hud-panel::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: none;
+    background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, transparent 100%);
+    z-index: 1;
+  }
+
+  .hud-bracket-tl {
+    @apply absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-jarvis-cyan/60 pointer-events-none z-10;
+  }
+  .hud-bracket-tr {
+    @apply absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-jarvis-cyan/60 pointer-events-none z-10;
+  }
+  .hud-bracket-bl {
+    @apply absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-jarvis-cyan/60 pointer-events-none z-10;
+  }
+  .hud-bracket-br {
+    @apply absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-jarvis-cyan/60 pointer-events-none z-10;
+  }
+
+  .hud-panel.anna .hud-bracket-tl,
+  .hud-panel.anna .hud-bracket-tr,
+  .hud-panel.anna .hud-bracket-bl,
+  .hud-panel.anna .hud-bracket-br {
+    @apply border-anna-magenta/60;
+  }
+
+  .hud-line-scan {
+    @apply absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-jarvis-cyan/40 to-transparent z-20;
+    animation: hud-scan 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  .hud-panel.anna .hud-line-scan {
+    @apply via-anna-magenta/40;
+  }
+}
+
+@keyframes hud-scan {
+  0% { top: 0%; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
 }
 
 body {
@@ -202,12 +262,17 @@ code, .font-mono {
   background: rgba(255, 255, 255, 0.2);
 }
 
-/* Firefox & Chrome 121+ scrollbar styling */
-* {
-  /* stylelint-disable-next-line property-no-unknown */
-  scrollbar-width: thin;
-  /* stylelint-disable-next-line property-no-unknown */
-  scrollbar-color: rgba(0, 243, 255, 0.3) transparent;
+/* Modern standardized scrollbar styling */
+@supports (scrollbar-width: thin) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 243, 255, 0.3) transparent;
+  }
+}
+
+::selection {
+  background: rgba(0, 242, 255, 0.3);
+  color: #fff;
 }
 
 ::-webkit-scrollbar {

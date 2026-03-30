@@ -1,0 +1,26 @@
+.dot-bounce {
+  animation: bounce 1s infinite alternate;
+}
+
+.delay-0 {
+  animation-delay: 0ms;
+}
+
+.delay-150 {
+  animation-delay: 150ms;
+}
+
+.delay-300 {
+  animation-delay: 300ms;
+}
+
+@keyframes bounce {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(-4px);
+    opacity: 0.3;
+  }
+}

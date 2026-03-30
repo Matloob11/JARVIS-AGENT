@@ -116,8 +116,7 @@ const CameraView: React.FC = () => {
           autoPlay
           muted
           playsInline
-          className="w-full h-full object-cover brightness-105 contrast-105 saturate-110"
-          style={{ transform: 'scaleX(-1)' }}
+          className="w-full h-full object-cover brightness-105 contrast-105 saturate-110 video-mirror"
         />
       ) : (
         <div className="w-full h-full flex flex-col items-center justify-center gap-2">

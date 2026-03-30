@@ -6,8 +6,11 @@ Detects errors and technical terms in the clipboard and suggests solutions.
 
 import asyncio
 import re
+from typing import Any
+
 import pyperclip
 from duckduckgo_search import DDGS
+
 from services.utils.jarvis_logger import setup_logger
 
 # Setup logging
@@ -31,7 +34,7 @@ class ClipboardMonitor:
             r"0x[0-9a-fA-F]{8}",
             r"syntax error",
             r"segmentation fault",
-            r"access violation"
+            r"access violation",
         ]
 
     def is_technical_error(self, text: str) -> bool:
@@ -52,34 +55,34 @@ class ClipboardMonitor:
         """
         try:
             # Truncate to first few lines of error for better search results
-            lines = error_text.strip().split('\n')
-            query = f"{lines[-1]} solution" if len(
+            lines: list[str] = error_text.strip().split('\n')
+            query: str = f"{lines[-1]} solution" if len(
                 lines) > 0 else "technical error solution"
 
-            def _ddgs_search():
+            def _ddgs_search() -> list[dict[str, str]]:
                 with DDGS() as ddgs:
                     return list(ddgs.text(query, max_results=3))
 
-            results = await asyncio.to_thread(_ddgs_search)
+            results: list[dict[str, str]] = await asyncio.to_thread(_ddgs_search)
 
             if not results:
                 return "Maazrat Sir, is error ka koi fori solution nahi mila."
 
-            best_match = results[0]['body']
-            msg = (
+            best_match: str = results[0]['body']
+            msg: str = (
                 f"Sir, maine clipboard par ye error dekha hai. "
                 f"Iska aik mumkina solution ye hai: {best_match}"
             )
             return msg
-        except (asyncio.TimeoutError, ConnectionError) as e:
+        except (TimeoutError, ConnectionError) as e:
             logger.error("Error searching for clipboard solution: %s", e)
             return ("Sir, maine clipboard par error toh dekha hai lekin internet "
                     "connection slow honay ki wajah se solution nahi mil paaya.")
         except (AttributeError, ValueError, KeyError, RuntimeError) as e:
             logger.error("Data parsing error in clipboard solution: %s", e)
-            return f"Error finding solution: {str(e)}"
+            return f"Error finding solution: {e!s}"
 
-    async def start(self, on_detection_callback):
+    async def start(self, on_detection_callback: Any) -> None:
         """
         Starts the monitoring loop.
         Calls on_detection_callback(solution_text) when an error is found.
@@ -93,14 +96,14 @@ class ClipboardMonitor:
                 if not self.is_running:
                     break
                 # pyperclip.paste() is blocking, run in thread
-                current_paste = await asyncio.to_thread(pyperclip.paste)
+                current_paste: str = await asyncio.to_thread(pyperclip.paste)
 
                 if current_paste != self.last_content:
                     self.last_content = current_paste
 
                     if self.is_technical_error(current_paste):
                         logger.info("Technical content detected in clipboard!")
-                        solution = await self.get_solution(current_paste)
+                        solution: str = await self.get_solution(current_paste)
                         await on_detection_callback(solution)
 
                 await asyncio.sleep(self.check_interval)
@@ -119,10 +122,10 @@ class ClipboardMonitor:
             except AttributeError as e:
                 logger.error("Clipboard loop attribute error: %s", e)
                 await asyncio.sleep(5)
-            except (IOError, OSError) as e:
+            except OSError as e:
                 logger.error("Clipboard loop IO error: %s", e)
                 await asyncio.sleep(10)
 
-    def stop(self):
+    def stop(self) -> None:
         """Stops the monitoring loop."""
         self.is_running = False

@@ -1,15 +1,13 @@
-"""
-J.A.R.V.I.S Metrics Server
-HTTP server for exposing performance metrics
-"""
 import asyncio
 from datetime import datetime
+from typing import Any
+
+import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
-import uvicorn
 
-from services.utils.jarvis_monitoring import get_performance_monitor
 from services.utils.jarvis_logger import setup_logger
+from services.utils.jarvis_monitoring import get_performance_monitor
 
 logger = setup_logger("JARVIS-METRICS-SERVER")
 
@@ -17,7 +15,7 @@ logger = setup_logger("JARVIS-METRICS-SERVER")
 app = FastAPI(
     title="J.A.R.V.I.S Metrics API",
     description="Real-time performance monitoring for J.A.R.V.I.S",
-    version="1.0.0"
+    version="1.0.0",
 )
 
 # Global monitor instance
@@ -25,7 +23,7 @@ monitor = get_performance_monitor()
 
 
 @app.get("/", response_class=HTMLResponse)
-async def dashboard():
+async def dashboard() -> str:
     """Metrics dashboard HTML"""
     return """
     <!DOCTYPE html>
@@ -193,7 +191,7 @@ async def dashboard():
 
 
 @app.get("/api/metrics/current")
-async def get_current_metrics():
+async def get_current_metrics() -> dict[str, Any]:
     """Get current performance metrics"""
     try:
         metrics = monitor.get_current_metrics()
@@ -205,7 +203,7 @@ async def get_current_metrics():
 
 
 @app.get("/api/metrics/history")
-async def get_metrics_history(minutes: int = 60):
+async def get_metrics_history(minutes: int = 60) -> dict[str, Any]:
     """Get metrics history"""
     try:
         if minutes > 1440:  # Limit to 24 hours
@@ -215,7 +213,7 @@ async def get_metrics_history(minutes: int = 60):
         return {
             "minutes": minutes,
             "data": history,
-            "summary": monitor.get_performance_summary()
+            "summary": monitor.get_performance_summary(),
         }
     except Exception as e: # pylint: disable=broad-exception-caught
         logger.error("Error getting metrics history: %s", e)
@@ -223,7 +221,7 @@ async def get_metrics_history(minutes: int = 60):
 
 
 @app.get("/api/metrics/summary")
-async def get_performance_summary():
+async def get_performance_summary() -> dict[str, Any]:
     """Get performance summary"""
     try:
         return monitor.get_performance_summary()
@@ -233,7 +231,7 @@ async def get_performance_summary():
 
 
 @app.get("/api/health")
-async def health_check():
+async def health_check() -> tuple[dict[str, Any], int]:
     """Health check endpoint"""
     try:
         summary = monitor.get_performance_summary()
@@ -242,19 +240,19 @@ async def health_check():
         return {
             "status": summary["status"],
             "timestamp": datetime.now().isoformat(),
-            "uptime_hours": summary["uptime_hours"]
+            "uptime_hours": summary["uptime_hours"],
         }, status_code
     except Exception as e: # pylint: disable=broad-exception-caught
         logger.error("Error in health check: %s", e)
         return {
             "status": "error",
             "timestamp": datetime.now().isoformat(),
-            "error": str(e)
+            "error": str(e),
         }, 500
 
 
 @app.post("/api/metrics/export")
-async def export_metrics(minutes: int = 60):
+async def export_metrics(minutes: int = 60) -> dict[str, Any]:
     """Export metrics to file"""
     try:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -265,7 +263,7 @@ async def export_metrics(minutes: int = 60):
         return {
             "message": f"Metrics exported to {filename}",
             "filename": filename,
-            "minutes": minutes
+            "minutes": minutes,
         }
     except Exception as e: # pylint: disable=broad-exception-caught
         logger.error("Error exporting metrics: %s", e)
@@ -273,7 +271,7 @@ async def export_metrics(minutes: int = 60):
 
 
 @app.post("/api/monitoring/start")
-async def start_monitoring():
+async def start_monitoring() -> dict[str, str]:
     """Start performance monitoring"""
     try:
         monitor.start_monitoring()
@@ -284,7 +282,7 @@ async def start_monitoring():
 
 
 @app.post("/api/monitoring/stop")
-async def stop_monitoring():
+async def stop_monitoring() -> dict[str, str]:
     """Stop performance monitoring"""
     try:
         monitor.stop_monitoring()
@@ -302,7 +300,7 @@ class MetricsServer:
         self.port = port
         self.server = None
 
-    async def start(self):
+    async def start(self) -> None:
         """Start the metrics server"""
         logger.info("🌐 Starting metrics server on http://%s:%s", self.host, self.port)
 
@@ -310,12 +308,12 @@ class MetricsServer:
             app=app,
             host=self.host,
             port=self.port,
-            log_level="info"
+            log_level="info",
         )
         self.server = uvicorn.Server(config)
         await self.server.serve()
 
-    def stop(self):
+    def stop(self) -> None:
         """Stop the metrics server"""
         if self.server:
             self.server.should_exit = True
@@ -332,7 +330,7 @@ def get_metrics_server(host: str = "127.0.0.1", port: int = 8000) -> MetricsServ
         _metrics_server = MetricsServer(host, port)
     return _metrics_server
 
-async def start_metrics_server(host: str = "127.0.0.1", port: int = 8000):
+async def start_metrics_server(host: str = "127.0.0.1", port: int = 8000) -> None:
     """Start metrics server"""
     server = get_metrics_server(host, port)
     await server.start()

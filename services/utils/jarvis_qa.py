@@ -5,12 +5,13 @@ Autonomous QA Engine for the JARVIS project.
 
 import asyncio
 import time
-from typing import Dict, Optional, Callable
-from services.utils.jarvis_logger import setup_logger
+from collections.abc import Callable
+
 from services.utils.jarvis_health import health_monitor
-from services.utils.qa_modules.stress_tester import StressQA
-from services.utils.qa_modules.security_tester import SecurityQA
+from services.utils.jarvis_logger import setup_logger
 from services.utils.jarvis_qa_reporter import qa_reporter
+from services.utils.qa_modules.security_tester import SecurityQA
+from services.utils.qa_modules.stress_tester import StressQA
 
 logger = setup_logger("JARVIS-QA")
 
@@ -23,7 +24,7 @@ class JarvisQAEngine:
     def __init__(self):
         self.modules = {
             "stress": StressQA(),
-            "security": SecurityQA()
+            "security": SecurityQA(),
         }
         self.last_run = 0
         self.is_running = False
@@ -57,7 +58,7 @@ class JarvisQAEngine:
         self.quality_history.append({
             "timestamp": self.last_run,
             "score": score,
-            "results": results
+            "results": results,
         })
 
         # Generate Report
@@ -66,7 +67,7 @@ class JarvisQAEngine:
         logger.info("✅ Quality Audit Complete. System Score: %d/100", score)
         return results
 
-    def _calculate_quality_score(self, results: Dict) -> int:
+    def _calculate_quality_score(self, results: dict) -> int:
         """Heuristic-based quality scoring."""
         score = 100
         # Deduct for failures
@@ -81,7 +82,7 @@ class JarvisQAEngine:
 
         return max(0, score)
 
-    async def start_qa_loop(self, get_state_func: Optional[Callable] = None, interval: int = 43200):
+    async def start_qa_loop(self, get_state_func: Callable | None = None, interval: int = 43200):
         """Background loop for continuous validation."""
         logger.info("🔱 QA Engine active. Cycle: Every %ds", interval)
         while True:

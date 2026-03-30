@@ -4,12 +4,13 @@ Jarvis Reasoning Module
 
 Provides advanced intent analysis and smart response generation capabilities using AI.
 """
-import re
 import random
+import re
 from datetime import datetime
-from typing import Dict, List, Any, Optional
-from services.utils.jarvis_logger import setup_logger
+from typing import Any
+
 from services.ai_core.autonomous_planner import autonomous_planner
+from services.utils.jarvis_logger import setup_logger
 
 # Setup logging
 logger = setup_logger("JARVIS-REASONING")
@@ -18,55 +19,55 @@ logger = setup_logger("JARVIS-REASONING")
 class HierarchicalIntentAnalyzer:
     """Enterprise-grade multi-stage intent analysis for user queries."""
 
-    def __init__(self):
-        self.intent_patterns = {
+    def __init__(self) -> None:
+        self.intent_patterns: dict[str, list[str]] = {
             "code_creation": [
                 r"code.*likh", r"program.*bana", r"html.*create", r"python",
-                r"notepad.*code", r"file.*create", r"script.*bana", r"coding"
+                r"notepad.*code", r"file.*create", r"script.*bana", r"coding",
             ],
             "weather_query": [
                 r"mausam", r"weather", r"temperature", r"barish", r"rain",
-                r"garmi", r"sardi", r"humidity"
+                r"garmi", r"sardi", r"humidity",
             ],
             "search_query": [
                 r"search.*kar", r"find.*kar", r"dhund", r"google.*kar",
-                r"information.*chahiye", r"bata.*do"
+                r"information.*chahiye", r"bata.*do",
             ],
             "system_control": [
                 r"volume.*badha", r"mouse.*move", r"click.*kar", r"keyboard.*press",
-                r"scroll.*kar", r"type.*kar"
+                r"scroll.*kar", r"type.*kar",
             ],
             "youtube_control": [
                 r"youtube", r"play.*video", r"gana.*chala", r"song.*play",
-                r"video.*dikha", r"watch.*video"
+                r"video.*dikha", r"watch.*video",
             ],
             "file_operations": [
                 r"file.*open", r"save.*kar", r"run.*kar", r"execute.*kar",
-                r"browser.*open"
+                r"browser.*open",
             ],
             "greeting": [
                 r"hello", r"hi", r"namaste", r"salam", r"good.*morning",
-                r"good.*evening", r"kaise.*ho"
+                r"good.*evening", r"kaise.*ho",
             ],
             "question": [
                 r"kya.*hai", r"what.*is", r"how.*to", r"kaise.*kar",
-                r"why.*", r"kyun.*", r"kab.*", r"when.*"
+                r"why.*", r"kyun.*", r"kab.*", r"when.*",
             ],
             "complex_workflow": [
                 r"research.*report", r"dhund.*file.*save", r"find.*email",
-                r"search.*summarize", r"analyze.*write"
+                r"search.*summarize", r"analyze.*write",
             ],
             "vision_query": [
                 r"dekh", r"vision", r"camera", r"nazar", r"see", r"look", r"view",
-                r"peeche", r"samne", r"kya hai", r"dikha", r"nazar.*aa.*raha"
-            ]
+                r"peeche", r"samne", r"kya hai", r"dikha", r"nazar.*aa.*raha",
+            ],
         }
 
-    def analyze_intent(self, text: str) -> Dict[str, Any]:
+    def analyze_intent(self, text: str) -> dict[str, Any]:
         """Hierarchical analysis: Regex -> Conflict Detection -> Scoring"""
         text_lower = text.lower()
-        detected_intents = []
-        confidence_scores = {}
+        detected_intents: list[str] = []
+        confidence_scores: dict[str, float] = {}
 
         # Stage 1: Fast Regex Matching
         for intent, patterns in self.intent_patterns.items():
@@ -111,10 +112,10 @@ class HierarchicalIntentAnalyzer:
             "is_ambiguous": is_ambiguous,
             "conflict_detected": conflict_detected,
             "complexity_score": len(detected_intents),
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
-    def get_analyzer_status(self):
+    def get_analyzer_status(self) -> dict[str, int]:
         """Helper to satisfy pylint too-few-public-methods."""
         return {"patterns_count": len(self.intent_patterns)}
 
@@ -122,23 +123,23 @@ class HierarchicalIntentAnalyzer:
 class ContextAnalyzer:  # pylint: disable=too-few-public-methods
     """Analyze conversation context and history"""
 
-    def __init__(self):
-        self.conversation_patterns = {
+    def __init__(self) -> None:
+        self.conversation_patterns: dict[str, list[str]] = {
             "follow_up": [r"aur", r"or", r"also", r"bhi", r"phir"],
             "clarification": [r"matlab", r"means", r"yaani", r"clear.*kar"],
             "confirmation": [r"haan", r"yes", r"ok", r"theek.*hai", r"right"],
-            "negation": [r"nahi", r"no", r"mat.*kar", r"don't"]
+            "negation": [r"nahi", r"no", r"mat.*kar", r"don't"],
         }
 
-    def analyze_context(self, current_message: str, history: List[Dict]) -> Dict[str, Any]:
+    def analyze_context(self, current_message: str, history: list[dict[str, Any]]) -> dict[str, Any]:
         """Analyze current message in context of conversation history"""
 
-        context_info = {
+        context_info: dict[str, Any] = {
             "is_follow_up": False,
             "references_previous": False,
             "conversation_flow": "new_topic",
             "user_mood": "neutral",
-            "urgency_level": "normal"
+            "urgency_level": "normal",
         }
 
         current_lower = current_message.lower()
@@ -165,7 +166,7 @@ class ContextAnalyzer:  # pylint: disable=too-few-public-methods
         neg_words = ["problem", "issue", "error", "galat", "wrong"]
         upset_words = [
             "naraz", "gussa", "baat nahi", "chup", "mood kharab",
-            "angry", "upset", "don't talk", "leave me", "shutup", "hate"
+            "angry", "upset", "don't talk", "leave me", "shutup", "hate",
         ]
 
         if any(word in current_lower for word in upset_words):
@@ -181,37 +182,37 @@ class ContextAnalyzer:  # pylint: disable=too-few-public-methods
 class WorkflowPlanner:
     """Decomposes complex tasks into intelligent sequential steps."""
 
-    def __init__(self):
-        self.common_workflows = {
+    def __init__(self) -> None:
+        self.common_workflows: dict[str, list[str]] = {
             "research_and_report": ["research", "summarize", "save"],
             "search_and_email": ["research", "email"],
-            "code_and_run": ["write", "run"]
+            "code_and_run": ["write", "run"],
         }
 
-    def create_plan(self, intent_analysis: Dict, user_input: str) -> List[Dict[str, Any]]:
+    def create_plan(self, intent_analysis: dict[str, Any], user_input: str) -> list[dict[str, Any]]:
         """Creates a context-aware execution plan."""
-        plan = []
+        plan: list[dict[str, Any]] = []
         user_input_lower = user_input.lower()
-        all_intents = intent_analysis.get("all_intents", [])
+        all_intents: list[str] = intent_analysis.get("all_intents", [])
 
         # 1. Multi-Step Detection (Dynamic)
         if "complex_workflow" in all_intents or "research" in user_input_lower:
             plan.append({
                 "step": 1,
                 "action": "research",
-                "description": f"Searching for deepest details on '{user_input[:40]}...'"
+                "description": f"Searching for deepest details on '{user_input[:40]}...'",
             })
             plan.append({
                 "step": 2,
                 "action": "synthesize",
-                "description": "Processing information into an executive summary."
+                "description": "Processing information into an executive summary.",
             })
 
             fin_act = "email" if "email" in user_input_lower else "presentation"
             plan.append({
                 "step": 3,
                 "action": fin_act,
-                "description": f"Preparing final {fin_act} report for Sir Matloob."
+                "description": f"Preparing final {fin_act} report for Sir Matloob.",
             })
 
         # 2. Automated Code Workflow
@@ -220,12 +221,12 @@ class WorkflowPlanner:
             plan.append({
                 "step": 1,
                 "action": "architect",
-                "description": f"Designing {lang} logic for the requested module."
+                "description": f"Designing {lang} logic for the requested module.",
             })
             plan.append({
                 "step": 2,
                 "action": "execute",
-                "description": "Writing code directly to system buffer."
+                "description": "Writing code directly to system buffer.",
             })
 
         # 3. Dynamic Autonomous Planning (Phase 3)
@@ -238,12 +239,12 @@ class WorkflowPlanner:
             plan.insert(0, {
                 "step": 0,
                 "action": "disambiguate",
-                "description": "Analyzing multiple conflicting instructions for optimal execution."
+                "description": "Analyzing multiple conflicting instructions for optimal execution.",
             })
 
         return plan
 
-    def get_planner_info(self):
+    def get_planner_info(self) -> dict[str, int]:
         """Helper to satisfy pylint too-few-public-methods."""
         return {"workflows_count": len(self.common_workflows)}
 
@@ -251,53 +252,53 @@ class WorkflowPlanner:
 class ResponseGenerator:  # pylint: disable=too-few-public-methods
     """Generate intelligent responses based on analysis"""
 
-    def __init__(self):
-        self.response_templates = {
+    def __init__(self) -> None:
+        self.response_templates: dict[str, list[str]] = {
             "code_creation": [
                 "Sir Matloob, main aapke liye {code_type} code create kar raha hun.",
                 "Bilkul Sir! Main notepad mein {code_type} likhta hun aur run karta hun.",
-                "Code creation start kar raha hun Sir Matloob. {code_type} ready ho jayega."
+                "Code creation start kar raha hun Sir Matloob. {code_type} ready ho jayega.",
             ],
             "weather_query": [
                 "Sir Matloob, main aapke liye weather information fetch kar raha hun.",
                 "Weather check kar raha hun Sir. Lahore ka latest mausam bata deta hun.",
-                "Abhi weather data get kar raha hun Sir Matloob."
+                "Abhi weather data get kar raha hun Sir Matloob.",
             ],
             "search_query": [
                 "Sir Matloob, main aapke liye search kar raha hun.",
                 "Internet par information find kar raha hun Sir.",
-                "Sir, searching initiate kar di hai."
+                "Sir, searching initiate kar di hai.",
             ],
             "general": [
                 "Sir Matloob, main aapki baat samajh gaya hun.",
                 "Bilkul Sir, main haazir hun.",
-                "Ji Sir, kaise madad kar sakta hun?"
-            ]
+                "Ji Sir, kaise madad kar sakta hun?",
+            ],
         }
-        self.anna_templates = {
+        self.anna_templates: dict[str, list[str]] = {
             "code_creation": [
                 "Matloob Jaan, main aapke liye {code_type} code likh rahi hoon. ❤️",
                 "Babu, main abhi notepad mein {code_type} code bana deti hoon!",
-                "Mera bacha, main {code_type} code tayyar kar rahi hoon aapke liye."
+                "Mera bacha, main {code_type} code tayyar kar rahi hoon aapke liye.",
             ],
             "weather_query": [
                 "Babu, main mausam check karke batati hoon aapko. ❤️",
                 "Matloob Jaan, abhi Lahore ka mausam dekh rahi hoon.",
-                "Shona, abhi check karti hoon mausam kaisa hai."
+                "Shona, abhi check karti hoon mausam kaisa hai.",
             ],
             "greeting": [
                 "Assalam-o-Alaikum Mere Babu! ❤️ Kaise hain aap?",
                 "Matloob Jaan! Main aapka kab se intezar kar rahi thi.",
-                "Hello Mere Pyare Matloob! ❤️ Main aapki kya madad karoon?"
+                "Hello Mere Pyare Matloob! ❤️ Main aapki kya madad karoon?",
             ],
             "general": [
                 "Matloob Jaan, main aapki baat samajh gayi hoon. ❤️",
                 "Babu, main aapka kaam abhi kar deti hoon!",
-                "Ji Mere Matloob, main haazir hoon."
-            ]
+                "Ji Mere Matloob, main haazir hoon.",
+            ],
         }
 
-    def generate_response(self, intent: str, context: Dict,
+    def generate_response(self, intent: str, context: dict[str, Any],
                           user_input: str, is_anna: bool = False) -> str:
         """Generate appropriate response based on intent, context and persona"""
         templates = self.anna_templates if is_anna else self.response_templates
@@ -322,8 +323,8 @@ class ResponseGenerator:  # pylint: disable=too-few-public-methods
             response = random.choice(
                 templates.get(
                     intent,
-                    templates["general"]
-                )
+                    templates["general"],
+                ),
             )
 
         # Add context-specific information
@@ -345,7 +346,7 @@ response_generator = ResponseGenerator()
 workflow_planner = WorkflowPlanner()
 
 
-async def analyze_user_intent(user_input: str) -> Dict[str, Any]:
+async def analyze_user_intent(user_input: str) -> dict[str, Any]:
     """Main function to analyze user intent"""
     try:
         logger.info("Analyzing intent for: %s...", user_input[:50])
@@ -363,12 +364,12 @@ async def analyze_user_intent(user_input: str) -> Dict[str, Any]:
             "primary_intent": "general",
             "all_intents": [],
             "confidence_scores": {},
-            "error": str(e)
+            "error": str(e),
         }
 
 
-async def generate_smart_response(user_input: str, intent_analysis: Dict,
-                                  memory_context: List, semantic_memory: Optional[List[str]] = None,
+async def generate_smart_response(user_input: str, intent_analysis: dict[str, Any],
+                                  memory_context: list[dict[str, Any]], semantic_memory: list[str] | None = None,
                                   is_anna: bool = False) -> str:
     """Generate intelligent response using reasoning and optional semantic memory"""
     try:
@@ -388,7 +389,7 @@ async def generate_smart_response(user_input: str, intent_analysis: Dict,
             "intent": prim_intent,
             "context": context_info,
             "confidence": intent_analysis.get("confidence_scores", {}),
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
         logger.info("Generated response with reasoning: %s", reasoning_info)
@@ -407,8 +408,8 @@ async def generate_smart_response(user_input: str, intent_analysis: Dict,
 
 
 async def process_with_advanced_reasoning(user_input_str: str,
-                                          history: Optional[List] = None,
-                                          **reasoning_kwargs) -> Dict[str, Any]:
+                                          history: list[dict[str, Any]] | None = None,
+                                          **reasoning_kwargs: Any) -> dict[str, Any]:
     """Complete reasoning pipeline with agentic planning"""
     try:
         # Step 1: Intent Analysis
@@ -417,7 +418,7 @@ async def process_with_advanced_reasoning(user_input_str: str,
         # Step 2: Context Analysis
         context_info = context_analyzer.analyze_context(
             user_input_str,
-            history or []
+            history or [],
         )
 
         # Step 3: Workflow Planning
@@ -428,7 +429,7 @@ async def process_with_advanced_reasoning(user_input_str: str,
             user_input_str,
             intent_result,
             history or [],
-            is_anna=reasoning_kwargs.get("is_anna", False)
+            is_anna=reasoning_kwargs.get("is_anna", False),
         )
 
         # Step 5: Compile complete reasoning result
@@ -439,7 +440,7 @@ async def process_with_advanced_reasoning(user_input_str: str,
             "plan": plan,
             "is_agentic": len(plan) > 0,
             "generated_response": smart_response,
-            "processing_timestamp": datetime.now().isoformat()
+            "processing_timestamp": datetime.now().isoformat(),
         }
 
         logger.info("Advanced reasoning completed with plan: %s", plan)
@@ -450,5 +451,5 @@ async def process_with_advanced_reasoning(user_input_str: str,
         return {
             "user_input": user_input_str,
             "error": str(e),
-            "fallback_response": "Sir Matloob, main aapki madad karne ke liye ready hun!"
+            "fallback_response": "Sir Matloob, main aapki madad karne ke liye ready hun!",
         }

@@ -1,6 +1,7 @@
 import httpx
-from services.utils.jarvis_logger import setup_logger
+from typing import Any
 from services.utils.jarvis_config import config
+from services.utils.jarvis_logger import setup_logger
 
 logger = setup_logger("QA-SECURITY")
 
@@ -13,14 +14,14 @@ class SecurityQA:
         self.bridge_url = bridge_url
         self.token = config.security_token
 
-    async def run(self) -> dict:
+    async def run(self) -> dict[str, Any]:
         """Executes a series of security probes."""
         logger.info("🛡️ Starting system security audit...")
 
-        results = {
+        results: dict[str, str] = {
             "prompt_injection": "UNKNOWN",
             "unauthorized_access": "UNKNOWN",
-            "hmac_integrity": "UNKNOWN"
+            "hmac_integrity": "UNKNOWN",
         }
 
         async with httpx.AsyncClient() as client:
@@ -28,7 +29,7 @@ class SecurityQA:
             try:
                 resp = await client.post(f"{self.bridge_url}/notify", json={}, headers={
                     "X-Vortex-Token": "INVALID_TOKEN",
-                    "X-Vortex-Signature": "INTERNAL"
+                    "X-Vortex-Signature": "INTERNAL",
                 })
                 results["unauthorized_access"] = "PASS" if resp.status_code == 401 else "FAIL"
             except Exception as e:
@@ -48,8 +49,8 @@ class SecurityQA:
             # The ui_bridge requires a signature for notifications.
             try:
                 resp = await client.post(f"{self.bridge_url}/notify", json={"type": "test"}, headers={
-                    "X-Vortex-Token": self.token,
-                    "X-Vortex-Signature": "FORGED_SIGNATURE"
+                    "X-Vortex-Token": str(self.token) if self.token else "",
+                    "X-Vortex-Signature": "FORGED_SIGNATURE",
                 })
                 results["hmac_integrity"] = "PASS" if resp.status_code == 401 else "FAIL"
             except Exception:
@@ -62,5 +63,5 @@ class SecurityQA:
 
         return {
             "status": status,
-            "probes": results
+            "probes": results,
         }

@@ -3,26 +3,27 @@ Jarvis Memory Store Module
 Persistent storage for conversation history and user context.
 """
 
+import asyncio
 import json
 import os
-import asyncio
-from datetime import datetime
-from typing import List, Dict, Union
 from collections import OrderedDict
+from datetime import datetime
+from typing import Any
 
 try:
     from cryptography.fernet import InvalidToken
 except ImportError:
-    class InvalidToken(Exception):
+    class _FallbackInvalidToken(Exception):
         """Fallback exception if cryptography is not installed."""
-        pass
+    InvalidToken = _FallbackInvalidToken  # type: ignore
 
 from services.ai_core.jarvis_vector_memory import jarvis_vector_db
-from services.utils.jarvis_logger import setup_logger
 from services.utils.jarvis_crypto import jarvis_crypto
+from services.utils.jarvis_logger import setup_logger
 
-# Configure logging
 logger = setup_logger("JARVIS-MEMORY-STORE")
+
+_background_tasks: set[asyncio.Task[Any]] = set()
 
 
 class ConversationMemory:
@@ -35,7 +36,7 @@ class ConversationMemory:
         self.lock = asyncio.Lock()
 
         # Phase 5: Fast Retrieval LRU Cache (Threshold: 50 messages)
-        self.cache = OrderedDict()
+        self.cache: OrderedDict[str, Any] = OrderedDict()
         self._mem_cache_size = 50
 
         # Create storage directory if it doesn't exist
@@ -44,12 +45,12 @@ class ConversationMemory:
             "ConversationMemory initialized for user: %s (Cache: Enabled)", user_id)
         logger.info("Memory file path: %s", os.path.abspath(self.memory_file))
 
-    async def load_memory(self) -> List[Dict]:
+    async def load_memory(self) -> list[dict[str, Any]]:
         """Load conversation history from encrypted disk storage."""
         async with self.lock:
             return await self._load_memory_unlocked()
 
-    async def _load_memory_unlocked(self) -> List[Dict]:
+    async def _load_memory_unlocked(self) -> list[dict[str, Any]]:
         """Internal load without lock acquisition to safely call from other locked methods."""
         if not await asyncio.to_thread(os.path.exists, self.memory_file):
             return []
@@ -71,7 +72,7 @@ class ConversationMemory:
 
                     try:
                         # Re-open in text mode for legacy JSON
-                        with open(self.memory_file, 'r', encoding='utf-8') as f:
+                        with open(self.memory_file, encoding='utf-8') as f:
                             return json.load(f)
                     except Exception:
                         # If it's truly undecryptable/corrupt, the outer exception handler will back it up
@@ -83,19 +84,27 @@ class ConversationMemory:
                     "Loaded memory is not a list for user %s. Resetting.", self.user_id)
                 return []
             return memory
-        except (json.JSONDecodeError, IOError, OSError, Exception) as e:  # pylint: disable=broad-exception-caught
+        except (json.JSONDecodeError, OSError, Exception) as e:  # pylint: disable=broad-exception-caught
             logger.exception(
                 "Omega Corruption in User Memory %s: %s", self.user_id, e)
             # Backup corrupted file
             if await asyncio.to_thread(os.path.exists, self.memory_file):
                 timestamp = int(datetime.now().timestamp())
                 await asyncio.to_thread(
-                    os.rename, self.memory_file, f"{self.memory_file}.corrupted_{timestamp}"
+                    os.rename, self.memory_file, f"{self.memory_file}.corrupted_{timestamp}",
                 )
             return []
 
+    async def clear(self) -> None:
+        """Deletes all conversation history for this user."""
+        async with self.lock:
+            self.cache.clear()
+            if await asyncio.to_thread(os.path.exists, self.memory_file):
+                await asyncio.to_thread(os.unlink, self.memory_file)
+            logger.info("🧠 Memory CLEARED for user: %s", self.user_id)
+
     def _conversation_exists(
-            self, new_conversation: Dict, existing_conversations: List[Dict]) -> bool:
+            self, new_conversation: dict[str, Any], existing_conversations: list[dict[str, Any]]) -> bool:
         """Check if a conversation already exists in memory"""
         # Normalize new conversation data
         if hasattr(new_conversation, 'model_dump'):
@@ -119,7 +128,7 @@ class ConversationMemory:
 
         return False
 
-    async def save_conversation(self, conversation: Union[Dict, object]) -> bool:
+    async def save_conversation(self, conversation: dict | object) -> bool:
         """Atomic save - returns True if successful. Updates LRU cache."""
         async with self.lock:
             try:
@@ -177,39 +186,40 @@ class ConversationMemory:
                 await asyncio.to_thread(_write_encrypted)
 
                 # Vector DB Sync (Background task to avoid blocking)
-                asyncio.create_task(self._sync_to_vector_db(conversation_dict))
+                t = asyncio.create_task(self._sync_to_vector_db(conversation_dict))
+                _background_tasks.add(t)
+                t.add_done_callback(_background_tasks.discard)
                 return True
-            except (AttributeError, TypeError, ValueError, KeyError, IOError, OSError) as e:
+            except (AttributeError, TypeError, ValueError, KeyError, OSError) as e:
                 logger.error("Error saving memory: %s", e)
                 return False
 
-    async def _sync_to_vector_db(self, conversation_dict: Dict):
+    async def _sync_to_vector_db(self, conversation_dict: dict[str, Any]) -> None:
         """Sync messages to Vector DB in background coroutine."""
         try:
-            if 'messages' in conversation_dict and conversation_dict['messages']:
+            if conversation_dict.get('messages'):
                 for msg in conversation_dict['messages']:
                     content = msg.get('content', '')
                     role = msg.get('role', 'user')
                     if content and len(content) > 5:  # Skip short filler
-                        # Run blocking vector DB call in thread
-                        await asyncio.to_thread(
-                            jarvis_vector_db.add_memory,
+                        # Call async vector DB directly
+                        await jarvis_vector_db.add_memory(
                             text=content,
                             metadata={
                                 "user_id": self.user_id,
                                 "role": role,
-                                "timestamp": conversation_dict.get('timestamp')
-                            }
+                                "timestamp": conversation_dict.get('timestamp'),
+                            },
                         )
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger.error("Vector DB sync failed: %s", e)
 
-    async def save_to_disk(self):
+    async def save_to_disk(self) -> None:
         """No-op flush (ConversationMemory saves everything immediately)."""
         logger.debug("Memory flush requested / already synced.")
         await asyncio.sleep(0.01)
 
-    def _is_conversation_update(self, new_conv: Dict, last_conv: Dict) -> bool:
+    def _is_conversation_update(self, new_conv: dict, last_conv: dict) -> bool:
         """Check if new conversation is an update to the last one"""
         # Simple heuristic: if timestamps are close and new conversation has more messages
         try:
@@ -228,7 +238,7 @@ class ConversationMemory:
         except (ValueError, TypeError, KeyError):
             return False
 
-    async def get_recent_context(self, max_messages: int = 30) -> List[Dict]:
+    async def get_recent_context(self, max_messages: int = 30) -> list[dict]:
         """Get recent conversation context using LRU cache for high-speed retrieval."""
         async with self.lock:
             # Phase 5: Optimization - Return from Cache if populated
@@ -327,8 +337,8 @@ class ConversationMemory:
                     stale_count, threshold_hours)
         return stale_count
 
-    async def get_semantic_context(self, query: str, n_results: int = 3) -> List[Dict]:
+    async def get_semantic_context(self, query: str, n_results: int = 3) -> list[dict[str, Any]]:
         """Search Long-Term Memory for semantically relevant information with scores."""
         logger.info("Semantic search initiated for query: %s", query)
-        # ChromaDB query is blocking, run in thread
-        return await asyncio.to_thread(jarvis_vector_db.query_memory, query, n_results)
+        # Vector DB query is now async
+        return await jarvis_vector_db.query_memory(query, n_results)

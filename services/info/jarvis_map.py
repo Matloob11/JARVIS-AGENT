@@ -4,7 +4,9 @@ Jarvis Mapping & Geocoding Tool
 """
 
 import asyncio
-from geopy.geocoders import Nominatim # pylint: disable=import-error
+
+from geopy.geocoders import Nominatim  # pylint: disable=import-error
+
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
 from services.utils.jarvis_bridge import notify_location
 from services.utils.jarvis_logger import setup_logger
@@ -35,7 +37,7 @@ async def show_location_on_map(location_name: str) -> str:
         payload = {
             "city": location_name.capitalize(),
             "lat": location.latitude,
-            "lng": location.longitude
+            "lng": location.longitude,
         }
         # Notify UI Through Bridge
         await notify_location(payload)
@@ -44,4 +46,4 @@ async def show_location_on_map(location_name: str) -> str:
 
     except Exception as e: # pylint: disable=broad-exception-caught
         logger.error("Map sync error: %s", e)
-        return f"Error syncing map for {location_name}: {str(e)}"
+        return f"Error syncing map for {location_name}: {e!s}"

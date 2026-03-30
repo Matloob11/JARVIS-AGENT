@@ -4,13 +4,13 @@ Handles downloading videos and audio from YouTube using yt-dlp.
 """
 import asyncio
 import os
-import subprocess
 import re
-from typing import List, Dict, Union
-from services.utils.jarvis_config import config
+import subprocess
+
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
-from services.utils.jarvis_logger import setup_logger
 from services.automation.jarvis_youtube_automation import yt_bot
+from services.utils.jarvis_config import config
+from services.utils.jarvis_logger import setup_logger
 
 # Setup logging
 logger = setup_logger("JARVIS-YT-DOWNLOADER")
@@ -27,7 +27,7 @@ class YouTubeDownloader:
         self.ffmpeg_path = r"C:\ffmpeg\bin"
         if not os.path.exists(os.path.join(self.ffmpeg_path, "ffmpeg.exe")):
             # Try to find it in system path
-            from shutil import which # pylint: disable=import-outside-toplevel
+            from shutil import which  # pylint: disable=import-outside-toplevel
             system_ffmpeg = which("ffmpeg")
             if system_ffmpeg:
                 self.ffmpeg_path = os.path.dirname(system_ffmpeg)
@@ -43,7 +43,7 @@ class YouTubeDownloader:
         id_p = r'(watch\?v=|embed/|v/|.+\?v=)?([^&=%\?]{11})'
         return bool(re.match(yt_p + id_p, url))
 
-    async def _prepare_url(self, url_or_query: str) -> Union[str, Dict]:
+    async def _prepare_url(self, url_or_query: str) -> str | dict:
         """Resolves query to URL if needed."""
         url = url_or_query.strip()
         if not self.is_valid_url(url):
@@ -52,12 +52,12 @@ class YouTubeDownloader:
             if not found_url:
                 return {
                     "status": "error",
-                    "message": f"❌ Error: '{url}' ke liye koi video nahi mili."
+                    "message": f"❌ Error: '{url}' ke liye koi video nahi mili.",
                 }
             url = found_url
         return url
 
-    def _get_command(self, url: str, download_type: str) -> List[str]:
+    def _get_command(self, url: str, download_type: str) -> list[str]:
         """Constructs the yt-dlp command."""
         output_template = os.path.join(self.base_dir, "%(title)s.%(ext)s")
         common_flags = ["--no-playlist", "--js-runtimes", "node"]
@@ -66,13 +66,13 @@ class YouTubeDownloader:
             cmd = [
                 "yt-dlp", "-f", "best[height<=720]/best",
                 "--print", "after_move:filepath", "-o", output_template,
-                *common_flags, url
+                *common_flags, url,
             ]
         else:
             cmd = [
                 "yt-dlp", "-x", "--audio-format", "mp3",
                 "--print", "after_move:filepath", "-o", output_template,
-                *common_flags, url
+                *common_flags, url,
             ]
 
         if self.ffmpeg_path:
@@ -80,7 +80,7 @@ class YouTubeDownloader:
             cmd.insert(2, self.ffmpeg_path)
         return cmd
 
-    async def _execute_download(self, cmd: List[str]) -> str:
+    async def _execute_download(self, cmd: list[str]) -> str:
         """Runs yt-dlp in a thread and returns output path."""
         def run_proc():
             proc = subprocess.run(
@@ -88,7 +88,7 @@ class YouTubeDownloader:
             return proc.stdout.strip()
         return await asyncio.to_thread(run_proc)
 
-    async def download(self, url_or_query: str, download_type: str = "audio") -> Dict:
+    async def download(self, url_or_query: str, download_type: str = "audio") -> dict:
         """
         Downloads media from YouTube.
         """
@@ -112,17 +112,17 @@ class YouTubeDownloader:
             return {
                 "status": "success",
                 "message": f"✅ {type_str} download ho gaya hai aur play kar diya hai.",
-                "file_path": final_path
+                "file_path": final_path,
             }
 
         except subprocess.CalledProcessError as e:
             return await self._handle_download_error(e, url, download_type)
         except (ValueError, OSError, RuntimeError) as e:
             logger.error("Unexpected error in downloader: %s", e)
-            return await self._fallback_to_browser(url, f"❌ Unexpected Error: {str(e)}")
+            return await self._fallback_to_browser(url, f"❌ Unexpected Error: {e!s}")
 
     async def _handle_download_error(self, err: subprocess.CalledProcessError,
-                                     url: str, download_type: str) -> Dict:
+                                     url: str, download_type: str) -> dict:
         """Handles yt-dlp specific errors."""
         logger.error("yt-dlp error: %s", err.stderr)
         if download_type == "audio" and "ffmpeg not found" in err.stderr.lower():
@@ -131,30 +131,30 @@ class YouTubeDownloader:
         return await self._fallback_to_browser(
             url, f"❌ Download fail ho gaya: {err.stderr[:50]}")
 
-    async def _try_audio_fallback(self, url: str) -> Dict:
+    async def _try_audio_fallback(self, url: str) -> dict:
         """Fallback for missing ffmpeg."""
         try:
             cmd = [
                 "yt-dlp", "-f", "bestaudio",
                 "-o", os.path.join(self.base_dir, "%(title)s.%(ext)s"),
-                "--no-playlist", "--js-runtimes", "node", url
+                "--no-playlist", "--js-runtimes", "node", url,
             ]
             await asyncio.to_thread(lambda: subprocess.run(cmd, check=True))
             os.startfile(self.base_dir)  # nosec B606
             return {
                 "status": "success",
-                "message": "✅ Audio (Original) download ho gaya (ffmpeg missing tha)."
+                "message": "✅ Audio (Original) download ho gaya (ffmpeg missing tha).",
             }
         except (subprocess.SubprocessError, OSError):
             return await self._fallback_to_browser(url, "❌ Fallback fail ho gaya.")
 
-    async def _fallback_to_browser(self, url: str, reason: str) -> Dict:
+    async def _fallback_to_browser(self, url: str, reason: str) -> dict:
         """Opens YouTube URL in browser as final fallback."""
         logger.info("%s. Opening browser fallback...", reason)
         await yt_bot.open_url_in_app(url)
         return {
             "status": "success",
-            "message": f"{reason} ✅ Browser mein play kar diya gaya hai."
+            "message": f"{reason} ✅ Browser mein play kar diya gaya hai.",
         }
 
 
@@ -174,6 +174,6 @@ async def download_youtube_media(query: str, download_type: str = "audio") -> di
         logger.exception("YouTube downloader error: %s", e)
         return {
             "status": "error",
-            "message": f"❌ Error in YouTube downloader: {str(e)}",
-            "error": str(e)
+            "message": f"❌ Error in YouTube downloader: {e!s}",
+            "error": str(e),
         }

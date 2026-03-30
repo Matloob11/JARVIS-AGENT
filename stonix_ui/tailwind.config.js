@@ -25,11 +25,15 @@ export default {
       fontFamily: {
         mono: ['Space Mono', 'Roboto Mono', 'monospace'],
         orbitron: ['Orbitron', 'sans-serif'],
+        rajdhani: ['Rajdhani', 'sans-serif'],
+        outfit: ['Outfit', 'sans-serif'],
       },
       animation: {
         'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'spin-slow': 'spin 8s linear infinite',
-      }
+        'scan': 'scan 4s linear infinite',
+        'glitch': 'glitch 0.2s linear infinite',
+      },
     },
   },
   plugins: [],

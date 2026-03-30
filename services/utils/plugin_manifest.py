@@ -4,7 +4,7 @@ Defines the permission system for JARVIS plugins.
 """
 
 from enum import Enum
-from typing import Set, Dict
+
 
 class Permission(Enum):
     FILESYSTEM_READ = "filesystem:read"
@@ -17,20 +17,20 @@ class Permission(Enum):
     REASONING_BYPASS = "reasoning:bypass"  # High privilege
 
 # Default permissions for unregistered/external plugins
-DEFAULT_PERMISSIONS: Set[Permission] = {
-    Permission.VISION_ACCESS  # Most tools can see what's happening
+DEFAULT_PERMISSIONS: set[Permission] = {
+    Permission.VISION_ACCESS,  # Most tools can see what's happening
 }
 
 # Explicit manifest for critical services
-PLUGIN_SECURITY_MANIFEST: Dict[str, Set[Permission]] = {
+PLUGIN_SECURITY_MANIFEST: dict[str, set[Permission]] = {
     "jarvis_window_ctrl": {Permission.SYSTEM_CONTROL, Permission.FILESYSTEM_READ},
     "jarvis_image_gen": {Permission.MULTIMEDIA_GEN, Permission.FILESYSTEM_WRITE},
     "jarvis_advanced_tools": {Permission.WEB_SEARCH, Permission.WEB_REQUEST, Permission.FILESYSTEM_READ},
-    "jarvis_reminders": {Permission.FILESYSTEM_READ, Permission.FILESYSTEM_WRITE}
+    "jarvis_reminders": {Permission.FILESYSTEM_READ, Permission.FILESYSTEM_WRITE},
 }
 
-def get_permissions_for_module(module_name: str) -> Set[Permission]:
+def get_permissions_for_module(module_name: str) -> set[Permission]:
     """Retrieves allowed permissions for a given module."""
     # Strip package prefix if present
-    base_name = module_name.split('.')[-1]
+    base_name = module_name.rsplit('.', maxsplit=1)[-1]
     return PLUGIN_SECURITY_MANIFEST.get(base_name, DEFAULT_PERMISSIONS)
