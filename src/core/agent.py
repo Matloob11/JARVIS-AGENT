@@ -4,8 +4,14 @@
 import io
 import logging
 import os
+import signal
 import subprocess
 import sys
+
+# Windows Signal Patch to prevent watchfiles/SIGKILL crash
+if sys.platform == "win32" and not hasattr(signal, "SIGKILL"):
+    # Map SIGKILL to SIGTERM on Windows as a fallback for libraries (like watchfiles)
+    signal.SIGKILL = signal.SIGTERM 
 
 # SET THIS BEFORE ANY OTHER IMPORTS TO SUPPRESS GOOGLE API METADATA SCANNING ON WINDOWS
 os.environ["GOOGLE_API_CORE_SUPPRESS_VERSION_CHECK"] = "1"

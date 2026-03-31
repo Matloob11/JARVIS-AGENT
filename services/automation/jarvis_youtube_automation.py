@@ -74,17 +74,26 @@ class YouTubeAutomation:
 
             if os.name == 'nt' and browser_path:
                 logger.info("Launching browser in App Mode: %s", browser_path)
-                # App mode provides a borderless, dedicated window
-                await asyncio.create_subprocess_exec(browser_path, f"--app={url}")
+                # Use subprocess.Popen in a thread — reliable non-blocking launch on Windows
+                await asyncio.to_thread(
+                    subprocess.Popen,
+                    [browser_path, f"--app={url}"],
+                )
                 return True
 
-            # Fallback to default browser
-            logger.info("Falling back to default browser protocol.")
+            # Fallback to default system browser (guaranteed to work)
+            logger.info("No browser path found. Falling back to webbrowser module.")
             await asyncio.to_thread(webbrowser.open, url)
             return True
-        except (subprocess.SubprocessError, OSError) as e:
-            logger.error("Failed to open URL: %s", e)
-            return False
+
+        except (subprocess.SubprocessError, OSError, Exception) as e:
+            logger.error("Browser App Mode failed: %s. Trying webbrowser fallback.", e)
+            try:
+                await asyncio.to_thread(webbrowser.open, url)
+                return True
+            except Exception as fallback_err:
+                logger.error("All browser open methods failed: %s", fallback_err)
+                return False
 
     def _get_browser_path(self):
         """Finds MS Edge or Chrome path for App Mode."""

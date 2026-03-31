@@ -11,7 +11,7 @@ import re
 import time
 import types  # For SimpleNamespace
 import uuid
-from collections import defaultdict
+from collections import defaultdict, deque
 from collections.abc import Coroutine
 from datetime import datetime
 from typing import Any
@@ -68,7 +68,8 @@ class BrainAssistant(Agent):
     voice_id_engine: Any
 
 
-    def __init__(self, chat_ctx: llm.ChatContext | Any, current_date: str | None = None,
+    def __init__(self, chat_ctx: llm.ChatContext | Any, llm_instance: llm.LLM,
+                 tools: list[llm.FunctionTool], current_date: str | None = None,
                  current_city: str | None = None, user_id: str | None = None) -> None:
         """
         Initialize the BRAIN assistant with context, LLM, and tools.
@@ -102,7 +103,7 @@ class BrainAssistant(Agent):
         self._wake_word_mode: bool = True
         self._active_session: AgentSession | None = None
         self._muted: bool = False
-        self._audio_buffer: bytearray = bytearray()
+        self._audio_buffer: deque[int] = deque(maxlen=96000)
         self._audio_sample_rate: int = 16000 # Default
         self._last_speaker_verified: bool = True
         self.voice_id_engine = voice_id_engine
@@ -117,8 +118,8 @@ class BrainAssistant(Agent):
         self._last_verification_score: float = 1.0 # default verified
         self._session_verification_count: int = 0
 
+        # Discovering plugins once centrally
         self.plugin_manager = JarvisPluginManager()
-        # Plugin discovery now points to the root-level services directory
         package_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'services'))
         self.plugin_manager.discover_plugins(package_path)
 
@@ -130,9 +131,7 @@ class BrainAssistant(Agent):
         self._spawned_tasks: set[asyncio.Task[Any]] = set()
         self.last_vision_frame: bytes | None = None
 
-        # Wrap internal tools to avoid 'self' in signature
-        all_tools = self.plugin_manager.get_livekit_tools()
-
+        # --- Wrap internal tools within this scope to capture 'self' ---
         @resilient_tool("set_wake_word_mode")
         async def wrap_set_wake_word_mode(active: bool) -> dict[str, Any]:
             """Toggle the strict wake word enforcement mode."""
@@ -153,19 +152,28 @@ class BrainAssistant(Agent):
             """Captures a frame from the system camera and performs advanced visual analytics. Use this when the user asks 'what do you see' or 'analyze surroundings'."""
             return await self.tool_analyze_surroundings(query)
 
-        all_tools.extend([
-            llm.function_tool(wrap_set_wake_word_mode),
-            llm.function_tool(wrap_change_voice),
-            llm.function_tool(wrap_toggle_gf_mode),
-            llm.function_tool(wrap_analyze_surroundings),
-        ])
+        # Merge external tools with internal ones
+        all_tools = []
+        
+        # 1. Add Internal Tools (using the correct function_tool factory)
+        all_tools.append(llm.function_tool(wrap_set_wake_word_mode))
+        all_tools.append(llm.function_tool(wrap_change_voice))
+        all_tools.append(llm.function_tool(wrap_toggle_gf_mode))
+        all_tools.append(llm.function_tool(wrap_analyze_surroundings))
 
-        # Correct super().__init__ call with mandatory instructions
-        # Passing stt and llm here so the Agent can handle tool calls and conversation context
+        # 2. Add External Tools discovered from modules/plugins
+        all_tools.extend(tools)
+
+        # Log tools for verification
+        logger.info("🔧 Registering Agent with %d total tools (%d external, 4 internal)", 
+                    len(all_tools), len(tools))
+        for t in all_tools:
+            logger.debug("   - Tool: %s", t.info.name)
+
+        # Correct super().__init__ call with mandatory instructions and tool list
         super().__init__(
             instructions=prompt_with_info,
-            llm=google.realtime.RealtimeModel(
-                voice="charon", model="models/gemini-2.5-flash-native-audio-latest"),
+            llm=llm_instance,
             stt=None,
             tools=all_tools,
             tts=None,
@@ -251,6 +259,20 @@ class BrainAssistant(Agent):
             except Exception as e:
                 logger.error("Failed to update session voice: %s", e)
         return {"status": "success", "voice": voice_name.lower()}
+
+    def attach_session(self, session: AgentSession) -> None:
+        """
+        Stores the active LiveKit session for dynamic updates (voice, instructions, modality).
+        Called by AgentRunner after session start.
+        """
+        self._active_session = session
+        logger.info("Live AgentSession attached to BrainAssistant (User: %s)", self.user_id)
+
+    def _update_session_modality(self, modality: str) -> None:
+        """Internal helper to sync modality if the session supports it."""
+        if self._active_session:
+            self._session_options.response_modality = modality
+            logger.info("Session modality target set to: %s", modality)
 
     def _run_back(self, coro: Coroutine[Any, Any, Any]) -> None:
         """Helper to run a coroutine in background with tracking."""
@@ -458,12 +480,8 @@ class BrainAssistant(Agent):
                 self._run_back(self.bridge_notifier.notify_user_speaking(False))
                 self._is_user_currently_speaking = False
 
+        # Add data to deque (it handles the maxlen automatically and efficiently)
         self._audio_buffer.extend(frame.data)
-        # Keep only last 3 seconds of audio (approx 96k bytes for 16kHz mono)
-        # 3 seconds is enough for a reliable Voice ID check while being 3x faster than 10s
-        if len(self._audio_buffer) > 96000:
-            # Optimized slicing to keep it non-blocking
-            self._audio_buffer = self._audio_buffer[-96000:]
 
     async def verify_speaker_identity(self) -> bool:
         """Verifies if the current audio buffer matches the enrolled user with caching logic."""
@@ -489,14 +507,13 @@ class BrainAssistant(Agent):
             logger.warning("🛡️ Voice ID: Audio segment too short for verification. ACCESS DENIED.")
             return False
 
-        # Take the accumulated buffer and verify
-        audio_bytes = bytes(self._audio_buffer)
-        is_match, score = await self.voice_id_engine.verify_bytes(audio_bytes, threshold=0.65)
-        logger.info("🛡️ Voice Security Check: Score=%.4f | Threshold=0.65 | Match=%s", score, is_match)
-
+        # Convert deque of integers (bytes) back to a single bytes object
+        audio_payload = bytes(self._audio_buffer)
+        is_match, score = await self.voice_id_engine.verify_bytes(audio_payload, threshold=0.65)
+        
         self._last_speaker_verified = is_match
         self._last_verification_score = score
-        self._session_verification_count = getattr(self, "_session_verification_count", 0) + 1
+        self._session_verification_count = current_session_count + 1
 
         percentage = score * 100
         if is_match:

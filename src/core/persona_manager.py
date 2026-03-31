@@ -54,46 +54,75 @@ class PersonaManager:
                 user_background=jarvis_id.data.get("user_background"),
                 sir_background=jarvis_id.data.get("sir_background"),
             )
-            voice = "aoede"
+            voice = "Aoede" # Standard Capitalized Gemini Voice
         else:
             instr = f"{BEHAVIOR_PROMPT}\n{jarvis_id.get_context()}"
-            voice = "charon"
+            voice = "Charon" # Standard Capitalized Gemini Voice
 
         await self._assistant.update_instructions(instr)
-        self._assistant.llm.voice = voice
+        # Update underlying LLM model property
+        if hasattr(self._assistant.llm, "voice"):
+             self._assistant.llm.voice = voice
 
         # Update session modality and voice
         active_session = getattr(self._assistant, "_active_session", None)
         if active_session:
             try:
                 # pylint: disable=protected-access
-                self._update_session_options(voice)
+                self._update_session_options(voice, instr)
             except (AttributeError, RuntimeError) as e:
                 logger.warning("Failed to sync session settings: %s", e)
 
-    def _update_session_options(self, voice: str) -> None:
-        """Syncs voice and modality to the active LiveKit session."""
+    def _update_session_options(self, voice: str, instructions: str) -> None:
+        """Syncs voice and instructions while avoiding keyword errors on wrapper sessions."""
         try:
-            # Sync options struct
+            # Sync session options struct if present
             session_options = getattr(self._assistant, "_session_options", None)
             if session_options:
-                if self._gf_mode_active:
-                    session_options.voice_id = "anna_v3_premium"
-                    session_options.response_modality = "audio"
-                else:
-                    session_options.voice_id = "jarvis_v2"
-                    session_options.response_modality = "text"
+                session_options.voice_id = voice
+                session_options.response_modality = "audio"
 
-            # Dynamic session update
             active_session = getattr(self._assistant, "_active_session", None)
-            activity = getattr(active_session, "_activity", None)
-            if activity:
-                rt_session = getattr(activity, "_rt_session", None)
-                if rt_session:
+            if not active_session:
+                return
+
+            # 1. Update Instructions (Safe for AgentSession)
+            if hasattr(active_session, "update_options"):
+                try:
+                    active_session.update_options(instructions=instructions)
+                    logger.debug("Instructions updated on high-level session.")
+                except TypeError:
+                    # Fallback if AgentSession.update_options doesn't exist/work
+                    pass
+
+            # 2. Update Voice (Requires Multimodal RealtimeSession)
+            # We dig for the internal RT session to find 'voice' parameter support
+            rt_session = None
+            if hasattr(active_session, "_session"):
+                 # Direct session (RealtimeSession)
+                 rt_session = getattr(active_session, "_session")
+            elif hasattr(active_session, "_activity"):
+                 activity = getattr(active_session, "_activity")
+                 if hasattr(activity, "_rt_session"):
+                      rt_session = getattr(activity, "_rt_session")
+            
+            # If the top level WAS the rt_session all along
+            if not rt_session and hasattr(active_session, "update_options"):
+                 rt_session = active_session
+
+            if rt_session:
+                try:
+                    # Gemini Multimodal Live uses 'voice' in update_options
+                    # We call it with voice only to avoid duplicate instruction pushes if already done
                     rt_session.update_options(voice=voice)
-                    logger.info("Session voice synced to: %s", voice)
-        except (AttributeError, RuntimeError) as e:
-            logger.debug("Session option sync failed: %s", e)
+                    logger.info("Voice switched to: %s on internal RT session.", voice)
+                except TypeError as e:
+                    logger.error("Internal session doesn't support 'voice' update: %s", e)
+            else:
+                 logger.warning("No RealtimeSession found for voice update.")
+
+        except Exception as e:
+            logger.error("Session sync failed critically: %s", e)
 
     async def handle_anna_upset_state(self, text: str, turn_ctx: Any) -> None:
         """Processes Anna's upset state based on input."""

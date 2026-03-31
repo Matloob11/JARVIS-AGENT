@@ -8,6 +8,7 @@ Entrypoint and session management for the JARVIS agent.
 
 import asyncio
 import logging
+import os
 import traceback
 import uuid
 from collections.abc import Coroutine
@@ -280,48 +281,35 @@ async def entrypoint(ctx: agents.JobContext):
                 notify_transcription,
                 notify_ui,
             )
-            logger.info("Attempting to start session...")
-            # FAST CONNECT: Connect to the room immediately to satisfy LiveKit assignment
-            await asyncio.wait_for(ctx.connect(), timeout=10.0)
+            logger.info("Attempting to start session (Timeout: 60s)...")
+            # INCREASED TIMEOUT: From 10s to 60s for high-load systems (Sir Matloob's Dell PC)
+            await asyncio.wait_for(ctx.connect(), timeout=60.0)
             logger.info("✅ Connected to room: %s", ctx.room.name)
 
             # Now perform secondary initialization
             current_dt_res = await get_formatted_datetime()
             city = await get_current_city()
+            
+            # --- Plugin & Tool Discovery (Centralized) ---
+            from services.ai_core.jarvis_plugin_manager import JarvisPluginManager
+            plugin_manager = JarvisPluginManager()
+            # Root-level services directory
+            package_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'services'))
+            plugin_manager.discover_plugins(package_path)
+            external_tools = plugin_manager.get_livekit_tools()
+            logger.info("🛠️ Discovered %d external tools from plugins.", len(external_tools))
 
             # Tune VAD to be less sensitive to background noise and prevent stuttering
-            # min_speech_duration: ignore short clicks/noise
-            # min_silence_duration: wait a bit longer before considering user done
             vad = silero.VAD.load(
-                min_speech_duration=0.1,
+                min_speech_duration=0.2, # Sir Matloob's PC - higher threshold reduces noise jitter
                 min_silence_duration=1.0,
             )
 
+            # USER PREFERRED EXPERIMENTAL MODEL: models/gemini-2.5-flash-native-audio-latest
             llm_model = google.realtime.RealtimeModel(
-                voice="charon",
+                voice="Charon", # Standardized Capitalized ID
                 model="models/gemini-2.5-flash-native-audio-latest",
             )
-
-            session = AgentSession(
-                preemptive_generation=True,
-                allow_interruptions=True,
-                vad=vad,
-                stt=None,
-                llm=llm_model,
-                tts=None,
-            )
-
-            # --- Internal Session Signaling Handlers ---
-            # Suppress noisy internal LiveKit SDK warnings
-            logging.getLogger("livekit").setLevel(logging.ERROR)
-            logging.getLogger("livekit.agents").setLevel(logging.ERROR)
-
-            @ctx.room.on("data_received")
-            def on_data_received(data: rtc.DataPacket): # pylint: disable=useless-return
-                # Suppress ignoring byte stream warnings for internal topics
-                if data.topic in ["lk.agent.session", "lk.agent.monitor", "lk.agent.chat"]:
-                    return  # pylint: disable=useless-return
-
 
             # Try to resolve participant identity for memory/context
             user_id = "User"
@@ -334,17 +322,44 @@ async def entrypoint(ctx: agents.JobContext):
                 user_id = ctx.room.local_participant.identity
 
             chat_ctx = llm.ChatContext()
+            
+            # BrainAssistant now receives the LLM and the external tools
+            # It will add its internal tools (persona, wake-word) automatically
             assistant = BrainAssistant(
                 chat_ctx=chat_ctx,
+                llm_instance=llm_model,
+                tools=external_tools,
                 current_date=current_dt_res.get("formatted"),
                 current_city=city,
                 user_id=user_id,
             )
 
+            # Important: AgentSession uses the assistant directly. 
+            # If we pass llm to AgentSession, it overrides the agent's llm.
+            session = AgentSession(
+                preemptive_generation=True,
+                allow_interruptions=True,
+                vad=vad,
+                stt=None,
+                llm=llm_model,
+                tts=None,
+            )
+
+            # --- Internal Session Signaling Handlers ---
+            # Set to WARNING to see important SDK signals but ignore trivial ones
+            logging.getLogger("livekit").setLevel(logging.WARNING)
+            logging.getLogger("livekit.agents").setLevel(logging.WARNING)
+
+            @ctx.room.on("data_received")
+            def on_data_received(data: rtc.DataPacket): # pylint: disable=useless-return
+                # Suppress ignoring byte stream warnings for internal topics
+                if data.topic in ["lk.agent.session", "lk.agent.monitor", "lk.agent.chat"]:
+                    return  # pylint: disable=useless-return
+
+
             logger.info("[AGENT] Connecting room and starting session...")
             await session.start(room=ctx.room, agent=assistant)
             logger.info("[AGENT] Session started successfully.")
-            logger.info("✅ Session started successfully.")
             assistant.attach_session(session)
 
             # --- Location Update Loop ---

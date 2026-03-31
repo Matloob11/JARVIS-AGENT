@@ -159,10 +159,9 @@ class JarvisPluginManager:
                 logger.info("Converting tool to LiveKit format: %s", func_name)
 
                 try:
-                    # Use the decorator to create a FunctionTool
-                    logger.debug("Attempting to convert to FunctionTool: %s", func_name)
-                    # LiveKit's function_tool expects a callable
-                    lk_tool = llm.FunctionTool.from_native(tool_func)
+                    # Use the factory function to create a tool
+                    # In this LiveKit version, llm.function_tool(func) is used directly
+                    lk_tool = llm.function_tool(tool_func)
                     lk_tools.append(lk_tool)
                 except (ValueError, TypeError, AttributeError, KeyError) as e:
                     logger.error("Failed to register tool '%s': %s", func_name, e)

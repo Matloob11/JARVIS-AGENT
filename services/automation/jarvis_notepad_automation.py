@@ -465,8 +465,8 @@ async def run_cmd_command(command: str) -> dict[str, Any]:
     try:
         # Sanitize and run via list to prevent injection
         cmd_list = ["cmd", "/c", "start", "cmd", "/k"] + shlex.split(command)
-        # pylint: disable=consider-using-with
-        subprocess.Popen(cmd_list)  # nosec B603
+        # Run in thread to prevent blocking
+        await asyncio.to_thread(subprocess.Popen, cmd_list)
         return {
             "status": "success",
             "command": command,
@@ -483,9 +483,18 @@ async def run_cmd_command(command: str) -> dict[str, Any]:
 @jarvis_tool
 async def open_notepad_simple() -> dict[str, Any]:
     """Open a blank Notepad instance"""
+    def _launch():
+        try:
+            # Try absolute path first
+            return subprocess.Popen([r"C:\Windows\System32\notepad.exe"])
+        except FileNotFoundError:
+            # Fallback to generic command
+            return subprocess.Popen(["notepad"])
+
     try:
-        # pylint: disable=consider-using-with
-        subprocess.Popen([r"C:\Windows\System32\notepad.exe"])
+        # Run process launch in background thread to avoid blocking main loop
+        await asyncio.to_thread(_launch)
+
         # Notify UI about Notepad open
         t = asyncio.create_task(notify_tool_action(
             "notepad", "Opened blank instance"))
@@ -493,7 +502,7 @@ async def open_notepad_simple() -> dict[str, Any]:
         t.add_done_callback(_bg_tasks.discard)
         return {
             "status": "success",
-            "message": "✅ Notepad opened",
+            "message": "✅ Notepad opened successfully"
         }
     except (subprocess.SubprocessError, OSError) as e:
         logger.exception("open_notepad_simple error: %s", e)
