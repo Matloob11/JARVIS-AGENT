@@ -33,17 +33,16 @@ async def test_perform_startup_diagnostics(mock_runner_deps):
 
 @pytest.mark.asyncio
 async def test_start_background_tasks(mock_runner_deps):
-    # pylint: disable=unused-argument
     session = MagicMock()
     assistant = MagicMock()
     assistant.memory_extractor = MagicMock()
 
-    with patch("asyncio.create_task") as mock_create:
-        with patch("services.automation.jarvis_clipboard.ClipboardMonitor"):
-            tasks = await _start_background_tasks(session, assistant)
-            # 3 main tasks + 1 for clipboard monitor = 4
-            assert len(tasks) == 4
-            assert mock_create.call_count == 4
+    with patch("src.core.agent_runner.autonomous_protector.run_protected", new_callable=AsyncMock) as mock_run_protected:
+        with patch("asyncio.create_task") as mock_create:
+            with patch("services.automation.jarvis_clipboard.ClipboardMonitor"):
+                tasks = await _start_background_tasks(session, assistant)
+                assert mock_run_protected.call_count == 8
+                assert mock_create.call_count == 1
 
 
 @pytest.mark.asyncio
@@ -60,11 +59,10 @@ async def test_cleanup_session_resources(mock_runner_deps):
 
     task = asyncio.create_task(simple_task())
 
-    with patch("asyncio.wait_for", new_callable=AsyncMock):
-        await _cleanup_session_resources(session, [task])
-        # In Python 3.11, task.cancelling() returns True if cancel was called
-        assert task.cancelling() or task.cancelled()
-        session.stop.assert_called_once()
+    await _cleanup_session_resources(session, [task])
+    # In Python 3.11, task.cancelling() returns True if cancel was called
+    assert task.cancelling() or task.cancelled()
+    session.stop.assert_called_once()
 
     # Final cleanup of the task to avoid warnings
     await asyncio.gather(task, return_exceptions=True)
@@ -79,23 +77,21 @@ def test_print_startup_banner():
 
 @pytest.mark.asyncio
 async def test_start_memory_loop(mock_runner_deps):
-    # pylint: disable=unused-argument
-    session = MagicMock()
-    session.history.items = [
+    assistant = MagicMock()
+    assistant.chat_ctx = MagicMock()
+    assistant.chat_ctx.messages = [
         MagicMock(role="user", content="hello jarvis"),
         MagicMock(role="assistant", content="hi there")
     ]
 
-    with patch("services.ai_core.agent_memory.MemoryExtractor.run", new_callable=AsyncMock):
-        # We need to stop the loop after one iteration
-        with patch("asyncio.sleep", side_effect=[None, asyncio.CancelledError]):
-            from src.core.agent_runner import start_memory_loop
-            extractor = MagicMock()
-            try:
-                await start_memory_loop(session, extractor)
-            except asyncio.CancelledError:
-                pass
-            extractor.run.assert_called()
+    with patch("asyncio.sleep", side_effect=[None, asyncio.CancelledError]):
+        from src.core.agent_runner import start_memory_loop
+        extractor = AsyncMock()
+        try:
+            await start_memory_loop(assistant, extractor)
+        except asyncio.CancelledError:
+            pass
+        extractor.run.assert_called()
 
 
 @pytest.mark.asyncio

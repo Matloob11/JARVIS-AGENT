@@ -313,6 +313,13 @@ async def notify_bridge(data: dict[str, Any], request: Request) -> dict[str, str
     elif event_type == "persona_change":
         await bridge_manager.update_state("active_persona", payload)
         await sio.emit("persona_update", {"persona": payload})
+    elif event_type == "task_alert":
+        # Proactive task notification for the UI
+        logger.info("🔔 Notifying UI of due task: %s", payload.get('description'))
+        await sio.emit("task_notification", payload)
+    elif event_type == "task_update":
+        # General task list sync
+        await sio.emit("task_sync", payload)
     elif event_type == "memory_update":
         await bridge_manager.append_log("memories", payload, limit=10)
         await sio.emit("memory_sync", payload)
@@ -386,7 +393,9 @@ async def vitals_heartbeat() -> None:
             logger.error("Vitals Heartbeat error: %s", e)
         except Exception:  # pylint: disable=broad-exception-caught
             logger.exception("Unexpected Vitals error")
-        await asyncio.sleep(2.0)
+        
+        # 🔋 PERFORMANCE: 12 seconds is plenty for UI bars, saves massive CPU/Network resources
+        await asyncio.sleep(12.0)
 
 
 async def telemetry_heartbeat() -> None:
@@ -403,7 +412,9 @@ async def telemetry_heartbeat() -> None:
             logger.error("Telemetry Heartbeat error: %s", e)
         except Exception:  # pylint: disable=broad-exception-caught
             logger.exception("Unexpected Telemetry Heartbeat error")
-        await asyncio.sleep(10.0)
+        
+        # 🔋 PERFORMANCE: 60 seconds for analytics is efficient
+        await asyncio.sleep(60.0)
 
 
 async def user_speaking_monitor() -> None:
@@ -422,7 +433,9 @@ async def user_speaking_monitor() -> None:
             logger.error("User speaking monitor data error: %s", e)
         except Exception: # pylint: disable=broad-exception-caught
             logger.exception("Unexpected User speaking monitor error")
-        await asyncio.sleep(0.5)
+        
+        # 🔋 PERFORMANCE: Slightly longer check interval
+        await asyncio.sleep(1.5)
 
 
 @sio.on("connect") # type: ignore[untyped-decorator]

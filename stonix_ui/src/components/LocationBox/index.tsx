@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { MapPin, Globe } from 'lucide-react';
+import { MapPin, Compass } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -33,23 +33,24 @@ const MapController: React.FC<{ center: [number, number] }> = ({ center }) => {
 
 const LocationBox: React.FC<LocationBoxProps> = ({ location }) => {
   const { activePersona } = useNeuralNetwork();
-  const themeClass = activePersona === 'jarvis' ? 'text-jarvis-cyan' : 'text-anna-magenta';
-  const themeBgClass = activePersona === 'jarvis' ? 'bg-jarvis-cyan' : 'bg-anna-magenta';
-  const themeBorderClass = activePersona === 'jarvis' ? 'border-jarvis-cyan' : 'border-anna-magenta';
+  const isJarvis = activePersona === 'jarvis';
+  
+  const accentColor = isJarvis ? 'text-[#00f2ff]' : 'text-[#ff8c00]';
+  const bgColor = isJarvis ? 'bg-[#00f2ff]' : 'bg-[#ff8c00]';
 
   const center: [number, number] = [location.lat || 0, location.lng || 0];
 
   return (
-    <div className="glass-panel relative overflow-hidden rounded-xl p-3 flex flex-col justify-between min-h-[160px] transition-colors duration-500">
-      {/* Real Interactive Map */}
-      <div className="absolute inset-0 opacity-40 grayscale contrast-[1.2] brightness-[0.7] hover:opacity-70 transition-opacity duration-700">
+    <div className={`relative overflow-hidden rounded-xl bg-[#050608] border border-white/[0.05] h-full flex flex-col justify-between p-4 transition-all duration-700 shadow-2xl`}>
+      {/* Background Interactive Map - Hardware Integrated Feel */}
+      <div className="absolute inset-0 opacity-[0.25] grayscale contrast-[1.1] brightness-[0.8] mix-blend-screen pointer-events-none">
         <MapContainer 
           center={center} 
           zoom={13} 
           scrollWheelZoom={false} 
           zoomControl={false}
           attributionControl={false}
-          className="h-full w-full bg-transparent"
+          className="h-full w-full bg-[#050608]"
         >
           <TileLayer
             url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
@@ -59,37 +60,48 @@ const LocationBox: React.FC<LocationBoxProps> = ({ location }) => {
         </MapContainer>
       </div>
 
-      <div className="relative z-10 pointer-events-none">
-        <div className="flex items-center gap-2 mb-3">
-          <div className={`p-1 rounded-md ${themeBgClass}/10 border ${themeBorderClass}/20 backdrop-blur-md`}>
-            <Globe size={10} className={themeClass} />
-          </div>
-          <span className="text-[9px] font-black tracking-[0.2em] text-white/50 uppercase drop-shadow-lg">Geo-Spatial Hub</span>
+      {/* Internal Grid Overlay */}
+      <div className="absolute inset-0 opacity-[0.03] pointer-events-none neural-grid scale-[0.5]" />
+
+      <div className="relative z-10 pointer-events-none flex-1">
+        <div className="flex items-center justify-between mb-4">
+           <div className="flex items-center gap-2.5">
+             <div className={`w-1.5 h-1.5 rounded-full ${bgColor} animate-pulse shadow-2xl`} />
+             <span className="text-[9px] font-orbitron font-black tracking-[0.3em] text-white/30 uppercase">NAV_REGISTRY</span>
+           </div>
+           <Compass size={12} className="text-white/10" />
         </div>
 
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <MapPin size={12} className={`${themeClass} flex-shrink-0 drop-shadow-md`} />
-            <p className="text-[14px] font-bold text-white tracking-wide truncate drop-shadow-md">
-              {location.city || 'Detecting Area...'}
-            </p>
+        <div className="space-y-4 pt-2">
+          <div className="flex flex-col gap-1">
+             <div className="flex items-center gap-2">
+                <MapPin size={12} className={`${accentColor} opacity-70`} />
+                <h4 className="text-[13px] font-bold text-white tracking-wide truncate">
+                  {location.city || 'Detecting Area...'}
+                </h4>
+             </div>
+             <p className="text-[9px] font-mono text-white/20 tracking-widest pl-5 uppercase">Target_Point_Alpha</p>
           </div>
-          <div className="flex items-center gap-2 pl-5">
-            <div className={`h-1 w-1 rounded-full ${themeBgClass} animate-pulse`} />
-            <p className="text-[10px] font-mono text-white/60 tracking-tighter drop-shadow-md">
-              {location.lat.toFixed(4)}°N / {location.lng.toFixed(4)}°E
-            </p>
+
+          <div className="flex items-center gap-6 pl-5">
+             <div className="flex flex-col gap-0.5">
+                <span className="text-[8px] font-orbitron text-white/20 uppercase tracking-tighter">Latitude</span>
+                <span className="text-[11px] font-mono text-white/80 font-bold">{location.lat.toFixed(4)}°N</span>
+             </div>
+             <div className="flex flex-col gap-0.5">
+                <span className="text-[8px] font-orbitron text-white/20 uppercase tracking-tighter">Longitude</span>
+                <span className="text-[11px] font-mono text-white/80 font-bold">{location.lng.toFixed(4)}°E</span>
+             </div>
           </div>
         </div>
       </div>
       
-      {/* Real-time Sync Progress */}
-      <div className="relative z-10 mt-2 h-0.5 w-full bg-white/5 rounded-full overflow-hidden">
+      {/* Real-time Tracking Progress Bar */}
+      <div className="relative z-10 mt-6 h-1 w-full bg-white/[0.03] rounded-full overflow-hidden border border-white/[0.05]">
         <motion.div 
-          initial={{ width: 0 }}
-          animate={{ width: "100%" }}
-          transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
-          className={`h-full bg-gradient-to-r from-transparent via-${activePersona === 'jarvis' ? 'cyan-400' : 'magenta-400'} to-transparent opacity-80`}
+          animate={{ x: ["-100%", "100%"] }}
+          transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
+          className={`h-full w-1/3 bg-gradient-to-r from-transparent ${isJarvis ? 'via-[#00f2ff]/40' : 'via-[#ff8c00]/40'} to-transparent`}
         />
       </div>
     </div>

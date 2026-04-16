@@ -29,6 +29,7 @@ from services.ai_core.voice_fingerprint import voice_id_engine
 from services.utils.jarvis_adaptive import adaptive_engine
 from services.utils.jarvis_audit import jarvis_audit
 from services.utils.jarvis_autonomous import resilient_tool
+from services.utils.jarvis_config import config
 from services.utils.jarvis_health import health_monitor
 from services.utils.jarvis_logger import setup_logger
 from services.utils.jarvis_security import vortex_guard
@@ -42,6 +43,8 @@ except (ImportError, ValueError):
     from src.core.bridge_notifier import bridge_notifier
     from src.core.persona_manager import PersonaManager
     from src.core.vision_handler import VisionHandler
+
+from services.automation.jarvis_task_manager import task_manager
 
 logger = setup_logger("JARVIS-CORE")
 # pylint: disable=unused-import
@@ -77,9 +80,17 @@ class BrainAssistant(Agent):
         identity_context = jarvis_id.get_context()
         prompt_with_info = f"{INSTRUCTIONS_PROMPT}\n{identity_context}"
 
+        # Real-time Project Age Calculation
+        project_start_date = datetime(2025, 8, 2)
+        days_since_start = (datetime.now() - project_start_date).days
+
         # Use format_map with defaultdict to safely handle any extra curly braces in prompt
         prompt_with_info = prompt_with_info.format_map(
-            defaultdict(str, current_date=current_date or '', current_city=current_city or ''),
+            defaultdict(str, 
+                current_date=current_date or datetime.now().strftime("%Y-%m-%d"), 
+                current_city=current_city or '',
+                project_age_days=str(days_since_start)
+            ),
         )
 
         # Initializing core agent state
@@ -120,7 +131,7 @@ class BrainAssistant(Agent):
 
         # Discovering plugins once centrally
         self.plugin_manager = JarvisPluginManager()
-        package_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'services'))
+        package_path = os.path.join(config.project_root, "services")
         self.plugin_manager.discover_plugins(package_path)
 
         # Initialize Modular Handlers
@@ -130,6 +141,9 @@ class BrainAssistant(Agent):
         self._background_tasks: set[asyncio.Task[Any]] = set()
         self._spawned_tasks: set[asyncio.Task[Any]] = set()
         self.last_vision_frame: bytes | None = None
+        
+        # Start Advanced Task Monitor
+        self._run_back(self._task_monitor_loop())
 
         # --- Wrap internal tools within this scope to capture 'self' ---
         @resilient_tool("set_wake_word_mode")
@@ -209,7 +223,8 @@ class BrainAssistant(Agent):
 
     async def tool_toggle_gf_mode(self, active: bool) -> dict[str, Any]:
         """Toggle GF (Anna) persona mode."""
-        return await self.persona_manager.set_persona(active)
+        await self.persona_manager.set_persona(active)
+        return {"status": "success", "mode": "Anna" if active else "Jarvis"}
 
     async def tool_set_wake_word_mode(self, active: bool) -> dict[str, Any]:
         """Toggle the strict wake word enforcement mode."""
@@ -345,6 +360,35 @@ class BrainAssistant(Agent):
         """Link the active session to this assistant."""
         self._active_session = session
         self.vision_handler.start_loop()
+
+    async def _task_monitor_loop(self):
+        """Background loop focused on proactive task execution."""
+        logger.info("📅 Task Monitor initialized. System is now Proactive.")
+        while True:
+            try:
+                due_tasks = await asyncio.to_thread(task_manager.get_due_tasks)
+                for task in due_tasks:
+                    logger.info("🔔 Task Due: %s", task['description'])
+                    
+                    # Notify UI Bridge
+                    await self.bridge_notifier.notify_event("task_alert", {
+                        "id": task['id'],
+                        "description": task['description'],
+                        "action": task['action']
+                    })
+                    
+                    # Proactive Speech (Simulated injection or notification)
+                    # For now, we notify the user via the UI bridge which can trigger a speak event
+                    # or we can directly inject a system message to the agent to 'speak' next time user interacts
+                    # But for a true JARVIS feel, we want it to interrupt or alert.
+                    
+                    # Update status in DB
+                    await asyncio.to_thread(task_manager.mark_completed, task['id'])
+                    
+                await asyncio.sleep(45) # Check every 45s
+            except Exception as e:
+                logger.error("Task Monitor Error: %s", e)
+                await asyncio.sleep(60)
 
     async def process_with_reasoning(self, user_input: str) -> str:
         """Process user input with advanced reasoning pipeline."""

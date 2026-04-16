@@ -82,10 +82,11 @@ from speechbrain.inference.speaker import (
     SpeakerRecognition,  # pylint: disable=import-error
 )
 
+from services.utils.jarvis_config import config
 from services.utils.jarvis_logger import setup_logger
 
 logger = setup_logger("VOICE-ID")
-# pylint: enable=wrong-import-position
+
 
 class VoiceFingerprintEngine:
     def __init__(self, master_voice_path: str) -> None:
@@ -94,7 +95,7 @@ class VoiceFingerprintEngine:
         """
         self.master_voice_path: str = master_voice_path
         self.model_source: str = "speechbrain/spkrec-ecapa-voxceleb"
-        self.save_dir: str = os.path.join(os.getcwd(), "pretrained_models", "spkrec-ecapa-voxceleb")
+        self.save_dir: str = os.path.join(config.pretrained_models_dir, "spkrec-ecapa-voxceleb")
         self._pending_enroll: str | None = None
         self.master_embedding: torch.Tensor | None = None
         self.verification: SpeakerRecognition | None = None
@@ -329,7 +330,5 @@ class VoiceFingerprintEngine:
                     pass
 
 # Singleton instance
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-# Expected path: d:/Personal-Assistant-main/data/identity/master_voice.wav
-MASTER_VOICE_PATH = os.path.join(BASE_DIR, "data", "identity", "master_voice.wav")
+MASTER_VOICE_PATH = os.path.join(config.project_root, "data", "identity", "master_voice.wav")
 voice_id_engine = VoiceFingerprintEngine(MASTER_VOICE_PATH)

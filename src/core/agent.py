@@ -53,7 +53,53 @@ from livekit import agents
 # Use absolute import since root_dir is in sys.path
 from src.core.agent_runner import entrypoint
 
+def play_startup_voice():
+    """
+    Plays the Ironman Jarvis startup voice from the assets folder
+    after a 10-second delay as requested by the user.
+    Runs separately in a background thread to avoid blocking agent connection.
+    """
+    def _run_sequence():
+        import threading
+        import time
+        import os
+        try:
+            # 1. Wait 10 seconds after command starts (User's specific requirement)
+            time.sleep(10)
+            
+            # 2. Resolve absolute path to the audio file
+            # Root is 2 levels up from src/core/agent.py
+            current_path = os.path.dirname(os.path.abspath(__file__))
+            p_root = os.path.abspath(os.path.join(current_path, "..", ".."))
+            # File: assets/audio/Installing... Ironman Jarvis Ai.mp3
+            voice_file = os.path.join(p_root, "assets", "audio", "Installing... Ironman Jarvis Ai.mp3")
+
+            if os.path.exists(voice_file):
+                print(f"[JARVIS-SYSTEM] initializing neural voice: {os.path.basename(voice_file)}")
+                import pygame
+                pygame.mixer.init()
+                pygame.mixer.music.load(voice_file)
+                pygame.mixer.music.set_volume(0.85) # Premium volume
+                pygame.mixer.music.play()
+                
+                # Keep thread alive during playback
+                while pygame.mixer.music.get_busy():
+                    time.sleep(1)
+            else:
+                # Silently log error to console for Matloob to see but don't stop system
+                print(f"[JARVIS-WARN] Startup voice not found at: {voice_file}")
+        except Exception as ex:
+            # Catch-all to prevent startup crash
+            print(f"[JARVIS-ERROR] System voice fail: {ex}")
+
+    # Launch daemon thread
+    import threading
+    threading.Thread(target=_run_sequence, daemon=True).start()
+
 if __name__ == "__main__":
+    # Initiate startup voice sequence (Background)
+    play_startup_voice()
+    
     # Ensure UTF-8 for Windows console
     if sys.platform == "win32":
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')

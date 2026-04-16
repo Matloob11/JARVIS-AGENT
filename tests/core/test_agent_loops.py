@@ -25,7 +25,7 @@ async def test_start_memory_storage_loop():
 @pytest.mark.asyncio
 async def test_start_reminder_loop():
     mock_session = MagicMock()
-    mock_session.say = MagicMock()
+    mock_session.say = AsyncMock()
 
     # Mock check_due_reminders to return one item
     mock_due = [{"message": "Test Reminder"}]
@@ -41,14 +41,18 @@ async def test_start_reminder_loop():
 @pytest.mark.asyncio
 async def test_start_bug_hunter_loop():
     mock_session = MagicMock()
-    mock_session.say = MagicMock()
+    mock_session.say = AsyncMock()
 
-    # Mock monitor_logs to call the callback once
+    # Mock monitor_logs to call the callback once and then escape loop
     async def mock_monitor(callback):
         await callback("Test Error")
+        raise asyncio.CancelledError()
 
     with patch("services.ai_core.agent_loops.monitor_logs", side_effect=mock_monitor):
-        await start_bug_hunter_loop(mock_session)
+        try:
+            await start_bug_hunter_loop(mock_session)
+        except asyncio.CancelledError:
+            pass
 
     mock_session.say.assert_called()
 
@@ -62,11 +66,9 @@ async def test_start_ui_command_listener():
     mock_sio.wait = AsyncMock()
     
     handlers = {}
-    def mock_on(event):
-        def decorator(f):
-            handlers[event] = f
-            return f
-        return decorator
+    def mock_on(event, handler):
+        handlers[event] = handler
+        return handler
     mock_sio.on.side_effect = mock_on
 
     with patch("socketio.AsyncClient", return_value=mock_sio):

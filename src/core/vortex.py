@@ -12,6 +12,13 @@ import threading
 import time
 import urllib.request
 from typing import Any
+# --- Bootstrap: Ensure src is findable even if run as a script ---
+current_file_path = os.path.abspath(__file__)
+# src/core/vortex.py -> up 3 levels to get project root
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file_path)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+# -------------------------------------------------------------
 
 logging.basicConfig(level=logging.INFO, format="[VORTEX] %(message)s")
 logger = logging.getLogger("VORTEX")
@@ -22,8 +29,19 @@ def start_process(command: str, name: str, extra_env: dict[str, str] | None = No
     print(f"Starting {name}...")
     # Build env: inherit current env and inject PYTHONPATH so modules resolve
     env = os.environ.copy()
-    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    python_path_parts = [root_dir, os.path.join(root_dir, 'src'), os.path.join(root_dir, 'services')]
+    # Attempt to find project root by looking for 'src' folder
+    # Current file is at (root)/src/core/vortex.py
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    root_dir = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))
+    
+    # If the above doesn't have 'src', fallback to CWD if it looks like project root
+    if not os.path.isdir(os.path.join(root_dir, 'src')):
+        cwd = os.getcwd()
+        if os.path.isdir(os.path.join(cwd, 'src')):
+            root_dir = cwd
+            
+    print(f"[VORTEX] Root Directory detected: {root_dir}")
+    python_path_parts = [root_dir]
     existing = env.get('PYTHONPATH', '')
     if existing:
         python_path_parts.append(existing)

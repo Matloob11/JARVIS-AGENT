@@ -39,9 +39,10 @@ def run_command(cmd, description=""):
 
 def run_unit_tests(coverage=True, verbose=True):
     """Run unit tests"""
-    cmd = ["python", "-m", "pytest", "-m", "unit"]
+    cmd = [sys.executable, "-m", "pytest", "-m", "unit"]
 
     if verbose:
+    
         cmd.append("-v")
 
     if coverage:
@@ -59,7 +60,7 @@ def run_unit_tests(coverage=True, verbose=True):
 
 def run_integration_tests(verbose=True):
     """Run integration tests"""
-    cmd = ["python", "-m", "pytest", "-m", "integration"]
+    cmd = [sys.executable, "-m", "pytest", "-m", "integration"]
 
     if verbose:
         cmd.append("-v")
@@ -69,7 +70,7 @@ def run_integration_tests(verbose=True):
 
 def run_security_tests(verbose=True):
     """Run security tests"""
-    cmd = ["python", "-m", "pytest", "-m", "security"]
+    cmd = [sys.executable, "-m", "pytest", "-m", "security"]
 
     if verbose:
         cmd.append("-v")
@@ -79,7 +80,7 @@ def run_security_tests(verbose=True):
 
 def run_all_tests(coverage=True, parallel=False, verbose=True):
     """Run all tests"""
-    cmd = ["python", "-m", "pytest"]
+    cmd = [sys.executable, "-m", "pytest"]
 
     if verbose:
         cmd.append("-v")
@@ -102,7 +103,7 @@ def run_all_tests(coverage=True, parallel=False, verbose=True):
 
 def run_specific_tests(test_path, coverage=True, verbose=True):
     """Run specific test file or directory"""
-    cmd = ["python", "-m", "pytest", test_path]
+    cmd = [sys.executable, "-m", "pytest", test_path]
 
     if verbose:
         cmd.append("-v")
@@ -120,7 +121,7 @@ def run_specific_tests(test_path, coverage=True, verbose=True):
 
 def run_performance_tests():
     """Run performance tests"""
-    cmd = ["python", "-m", "pytest", "-m", "slow", "--durations=0"]
+    cmd = [sys.executable, "-m", "pytest", "-m", "slow", "--durations=0"]
     return run_command(cmd, "Running Performance Tests")
 
 
@@ -150,7 +151,7 @@ def generate_test_report():
 
     # Run tests with detailed reporting
     cmd = [
-        "python", "-m", "pytest",
+        sys.executable, "-m", "pytest",
         "--cov=services",
         "--cov=agent_core",
         "--cov=agent_runner",

@@ -186,10 +186,11 @@ class WhatsAppAutomation:
 whatsapp_bot = WhatsAppAutomation()
 
 
-@jarvis_tool
+@jarvis_tool(execution_timeout=45.0)
 async def automate_whatsapp(contact_name: str, message: str, close_after: bool = True) -> dict:
     """
     Automates WhatsApp Desktop to send a message.
+    Enhanced with 45s timeout for high-load systems.
     """
     try:
         await whatsapp_bot.open_whatsapp()
@@ -203,8 +204,9 @@ async def automate_whatsapp(contact_name: str, message: str, close_after: bool =
         await whatsapp_bot.send_text_message(message)
 
         if close_after:
-            # Wait longer for success delivery (2x buffer)
-            await asyncio.sleep(5.0)
+            # Wait for success delivery (Adaptive wait)
+            logger.info("Message sent, waiting for final processing...")
+            await asyncio.sleep(3.0) 
             await whatsapp_bot.close_whatsapp()
             msg = f"Message sent to '{contact_name}' and WhatsApp closed."
             return {"status": "success", "contact": contact_name, "message": msg}

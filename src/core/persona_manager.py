@@ -48,11 +48,18 @@ class PersonaManager:
         """Applies current persona settings to the assistant."""
         if self._gf_mode_active:
             state = jarvis_id.get_anna_state()
+            
+            # Real-time project age calculation
+            from datetime import datetime
+            project_start_date = datetime(2025, 8, 2)
+            days_since_start = (datetime.now() - project_start_date).days
+
             instr = ANNA_BEHAVIOR_PROMPT.format(
                 mood=state["mood"],
                 is_upset=state["is_upset"],
                 user_background=jarvis_id.data.get("user_background"),
                 sir_background=jarvis_id.data.get("sir_background"),
+                project_age_days=str(days_since_start)
             )
             voice = "Aoede" # Standard Capitalized Gemini Voice
         else:

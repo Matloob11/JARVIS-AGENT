@@ -227,6 +227,9 @@ class SafeController:
                 logger.warning("Clipboard fast-typing failed, falling back to character typing: %s", e)
 
         # Traditional typing for short strings or if force_typing is True
+        # Visible typing speed adjustment: Default to 0.02 for visibility
+        actual_interval = interval if interval > 0 else 0.02
+
         for char in text:
             try:
                 if char == "\n":
@@ -239,15 +242,13 @@ class SafeController:
                     self.keyboard.press(char)
                     self.keyboard.release(char)
 
-                # Dynamic interval for "2x speed" animation
-                actual_interval = interval if interval > 0 else 0.005 # Default fast but readable
                 if actual_interval > 0:
                     await asyncio.sleep(actual_interval)
             except (ValueError, KeyError, AttributeError):
                 continue
 
-        self.log(f"Typed text: {text}")
-        return f"Typed: {text}"
+        self.log(f"Typed text: {text[:30]}...")
+        return f"Typed: {text[:30]}..."
 
     async def press_key(self, key: str):
         """
@@ -377,12 +378,24 @@ class SafeController:
 controller = SafeController()
 
 
+async def _safe_notify(notify_func, *args, **kwargs):
+    """Helper to run notifications in the background to prevent blocking critical logic."""
+    try:
+        t = asyncio.create_task(notify_func(*args, **kwargs))
+        _bg_tasks.add(t)
+        t.add_done_callback(_bg_tasks.discard)
+    except Exception:
+        pass
+
+
 async def with_temporary_activation(fn, *args, **kwargs):
     """
     Activates the controller temporarily for the duration of a single function call.
     Fixed: Removed the 2-second sleep to improve responsiveness.
     """
+    from services.utils.jarvis_bridge import notify_thinking
     print(f"TEMP ACTIVATION: {fn.__name__} | args: {args}")
+    await _safe_notify(notify_thinking, f"Sir, main controller action perform kar raha hoon: {fn.__name__}")
     controller.activate(DEFAULT_TOKEN)
     try:
         result = await fn(*args, **kwargs)
@@ -474,8 +487,8 @@ async def type_code_animation_tool(code: str):
     Types code with a visible 'hacker style' speed animation.
     Useful for Notepad/Writing demonstrations.
     """
-    # 0.005 is extremely fast (3x+ feel)
-    return await with_temporary_activation(controller.type_text, code, interval=0.005, force_typing=True)
+    # 0.015 is fast but visually distinct
+    return await with_temporary_activation(controller.type_text, code, interval=0.015, force_typing=True)
 
 
 @jarvis_tool

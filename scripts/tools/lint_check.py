@@ -3,7 +3,7 @@ import os
 
 def run_pylint():
     print("--- Pylint Project Audit ---")
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     pylint_config = os.path.join(project_root, ".pylintrc")
 
     # Target directories

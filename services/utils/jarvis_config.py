@@ -71,9 +71,19 @@ class JarvisConfig:
         self.user_name = os.getenv("USER_NAME", "Sir Matloob")
         self.user_city = os.getenv("USER_CITY", "Lahore")
 
+        # Root Directory
+        self.project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
         # Logging
         self.log_level = os.getenv("LOG_LEVEL", "INFO")
-        self.log_file = os.getenv("LOG_FILE", "logs/jarvis.log")
+        log_rel_path = os.getenv("LOG_FILE", "logs/jarvis.log")
+        self.log_file = os.path.join(self.project_root, log_rel_path)
+
+        # Standard Directories (Absolute Paths)
+        self.conversations_dir = os.path.join(self.project_root, "conversations")
+        self.chroma_db_dir = os.path.join(self.project_root, "chroma_db")
+        self.pretrained_models_dir = os.path.join(self.project_root, "pretrained_models")
+        self.backups_dir = os.path.join(self.project_root, "backups")
 
         # Network
         origins: str = os.getenv(
@@ -120,6 +130,12 @@ class JarvisConfig:
 
 # Global singleton instance
 config: JarvisConfig = JarvisConfig()
+
+# Standardized Directory Ensuring (Self-Healing during startup)
+for d in [config.conversations_dir, config.chroma_db_dir, 
+          config.pretrained_models_dir, config.backups_dir, 
+          os.path.dirname(config.log_file)]:
+    os.makedirs(d, exist_ok=True)
 
 # 📱 Application Mappings (App Name -> Path or URL)
 APP_MAPPINGS: dict[str, str] = {

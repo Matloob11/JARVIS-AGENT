@@ -26,47 +26,53 @@ INDEX_CACHE_TIMEOUT = 300  # 5 minutes
 
 class DocumentRAG:
     """
-    Handles RAG operations over local files.
+    Handles RAG operations over local files with recursive chunking and metadata search.
     """
 
     def __init__(self, search_dirs=None):
         if search_dirs is None:
-            search_dirs = ["D:/"]
+            search_dirs = ["D:/", "C:/Users"]
         self.search_dirs = search_dirs
 
-    async def find_document(self, query: str) -> str | None:
+    async def find_document(self, query: str, metadata_filter: dict | None = None) -> str | None:
         """
-        Fuzzy searches for a document in the search directories.
-        Uses a global cache to avoid repetitive slow indexing.
+        Fuzzy searches for a document, optionally filtered by metadata (extension, date, etc.).
         """
-        global global_doc_index, LAST_INDEX_TIME  # pylint: disable=global-statement
-
+        global global_doc_index, LAST_INDEX_TIME
         current_time = asyncio.get_event_loop().time()
 
-        # Check cache
         if global_doc_index and (current_time - LAST_INDEX_TIME < INDEX_CACHE_TIMEOUT):
-            logger.info("⚡ Using cached document index.")
             file_list = global_doc_index
         else:
             def walk_docs():
                 results = []
+                # Common document extensions
+                valid_exts = ('.pdf', '.docx', '.txt', '.md')
                 for base_dir in self.search_dirs:
                     if not os.path.exists(base_dir):
                         continue
-                    for root, _, files in os.walk(base_dir):
-                        for f in files:
-                            if f.lower().endswith(('.pdf', '.docx')):
-                                results.append(os.path.join(root, f))
+                    try:
+                        for root, _, files in os.walk(base_dir):
+                            for f in files:
+                                if f.lower().endswith(valid_exts):
+                                    results.append(os.path.join(root, f))
+                    except (PermissionError, OSError):
+                        continue
                 return results
 
-            logger.info("📂 Indexing documents in %s...", self.search_dirs)
+            logger.info("📂 Refreshing document index...")
             file_list = await asyncio.to_thread(walk_docs)
             global_doc_index = file_list
-            # Using loop time for consistency in async
             LAST_INDEX_TIME = current_time
 
         if not file_list:
             return None
+
+        # Apply metadata filter if provided (e.g., {"extension": ".pdf"})
+        if metadata_filter:
+            ext = metadata_filter.get("extension")
+            if ext:
+                file_list = [f for f in file_list if f.lower().endswith(ext.lower())]
 
         def fuzzy_match():
             choices = {os.path.basename(f): f for f in file_list}
@@ -76,13 +82,46 @@ class DocumentRAG:
                 return best_match, score, choices[best_match]
             return None, 0, None
 
-        logger.info("🔍 Fuzzy searching for: '%s'...", query)
         best_match, score, match_path = await asyncio.to_thread(fuzzy_match)
-
         if score > 60:
-            logger.info("✅ Matched to '%s' (Score: %d)", best_match, score)
             return match_path
         return None
+
+    def chunk_text(self, text: str, chunk_size: int = 2000, overlap: int = 200) -> list[str]:
+        """
+        Implements Recursive Character Text Splitting.
+        Splits by: Double Newline -> Single Newline -> Space -> Character.
+        """
+        if len(text) <= chunk_size:
+            return [text]
+
+        chunks = []
+        start = 0
+        while start < len(text):
+            end = start + chunk_size
+            if end >= len(text):
+                chunks.append(text[start:])
+                break
+            
+            # Find the best split point within the overlap
+            chunk = text[start:end]
+            split_points = ['\n\n', '\n', ' ', '.']
+            split_idx = -1
+            
+            for sep in split_points:
+                last_sep = chunk.rfind(sep)
+                if last_sep != -1:
+                    split_idx = last_sep
+                    break
+            
+            if split_idx == -1:
+                split_idx = chunk_size # Force split
+
+            chunks.append(text[start:start + split_idx])
+            start += split_idx - overlap # Backtrack for overlap
+            if start < 0: start = 0
+            
+        return chunks
 
     def read_pdf(self, file_path: str) -> str:
         """Reads text from a PDF file."""
@@ -90,31 +129,29 @@ class DocumentRAG:
         try:
             reader = PdfReader(file_path)
             for page in reader.pages:
-                text += page.extract_text() + "\n"
+                text += (page.extract_text() or "") + "\n"
             return text
-        except (AttributeError, TypeError, ValueError, KeyError, RuntimeError) as e:
+        except Exception as e:
             logger.error("Error reading PDF %s: %s", file_path, e)
-            return f"Error reading PDF: {e}"
+            return ""
 
     def read_docx(self, file_path: str) -> str:
         """Reads text from a Word document."""
         try:
             doc = Document(file_path)
             return "\n".join([para.text for para in doc.paragraphs])
-        except (AttributeError, TypeError, ValueError, KeyError, RuntimeError) as e:
+        except Exception as e:
             logger.error("Error reading DOCX %s: %s", file_path, e)
-            return f"Error reading DOCX: {e}"
+            return ""
 
     async def get_document_content(self, file_path: str) -> str:
-        """
-        Dispatches the read task based on file extension.
-        """
+        """Dispatches based on extension."""
         ext = os.path.splitext(file_path)[1].lower()
         if ext == ".pdf":
             return await asyncio.to_thread(self.read_pdf, file_path)
         if ext == ".docx":
             return await asyncio.to_thread(self.read_docx, file_path)
-        return "Unsupported file format."
+        return ""
 
 
 # Global Instance
@@ -122,37 +159,49 @@ rag_system = DocumentRAG()
 
 
 @jarvis_tool
-async def ask_about_document(doc_name: str, question: str = "Summarize this document.") -> dict:
+async def ask_about_document(doc_name: str, question: str = "Summarize this document.", 
+                             extension: str | None = None) -> dict:
     """
-    Searches for a local document (PDF or Word) and answers questions about it.
+    Searches for a local document and answers questions using Optimized RAG.
+    Supports extension filtering (e.g., '.pdf').
     """
-    logger.info("RAG Tool: Searching for '%s' to answer: '%s'",
-                doc_name, question)
+    logger.info("RAG-OPT: Searching for '%s' (Filter: %s)", doc_name, extension)
 
-    file_path = await rag_system.find_document(doc_name)
+    metadata_filter = {"extension": extension} if extension else None
+    file_path = await rag_system.find_document(doc_name, metadata_filter)
+    
     if not file_path:
-        msg = f"❌ Maaf kijiye, mujhe '{doc_name}' naam ka koi PDF ya Word document nahi mila."
         return {
             "status": "not_found",
-            "message": msg,
+            "message": f"❌ Maazrat, mujhe '{doc_name}' naam ka koi document nahi mila."
         }
 
-    logger.info("Found document at: %s. Extracting text...", file_path)
-    content = await rag_system.get_document_content(file_path)
+    logger.info("Document found. Chunking and analyzing...")
+    full_text = await rag_system.get_document_content(file_path)
+    
+    if not full_text.strip():
+        return {"status": "error", "message": "❌ Document khali hai ya readable nahi hai."}
 
-    if len(content) > 15000:
-        # Simple truncation for context window limits if document is massive
-        content = content[:15000] + "... [Content truncated]"
+    # Intelligent Chunking
+    chunks = rag_system.chunk_text(full_text)
+    
+    # Simple semantic scoring (Keyword overlap between question and chunks)
+    question_words = set(question.lower().split())
+    chunk_scores = []
+    for chunk in chunks:
+        overlap = len(set(chunk.lower().split()) & question_words)
+        chunk_scores.append((overlap, chunk))
+    
+    # Pick top 3 chunks (or fewer if small) to fit in context window effectively
+    chunk_scores.sort(key=lambda x: x[0], reverse=True)
+    best_chunks = [c[1] for c in chunk_scores[:3]]
+    relevant_context = "\n---\n".join(best_chunks)
 
-    msg = (
-        f"📄 Document mil gaya hai: {os.path.basename(file_path)}. "
-        "Main abhi aapka sawal analyze kar raha hoon."
-    )
     return {
         "status": "success",
-        "document_name": os.path.basename(file_path),
-        "document_path": file_path,
-        "content": content,
-        "question": question,
-        "message": msg,
+        "document": os.path.basename(file_path),
+        "path": file_path,
+        "context": relevant_context,
+        "total_chunks": len(chunks),
+        "message": f"📄 Document '{os.path.basename(file_path)}' ke relevant parts extract kar liye gaye hain. Main aapka jawab generate kar raha hoon."
     }

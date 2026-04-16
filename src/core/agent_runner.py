@@ -29,6 +29,19 @@ from livekit.plugins import google, silero
 for logger_name in ["livekit", "livekit.agents", "livekit.rtc"]:
     logging.getLogger(logger_name).setLevel(logging.WARNING)
 
+# [Safeguard] Patch for LiveKit internal KeyError on flaky reconnections (Sir Matloob's PC)
+# The SDK 1.1.2 has a race condition where local_track_published is emitted before local state sync.
+_original_on_room_event = rtc.Room._on_room_event
+def _safe_on_room_event(self, event):
+    try:
+        return _original_on_room_event(self, event)
+    except KeyError as e:
+        if "TR_" in str(e):
+             logging.warning("🛡️ Safeguard: Blocked internal LiveKit KeyError for track %s", e)
+             return None
+        raise
+rtc.Room._on_room_event = _safe_on_room_event
+
 from services.ai_core.agent_loops import (
     start_adaptation_loop,
     start_bug_hunter_loop,
@@ -47,6 +60,7 @@ from services.utils.jarvis_autonomous import autonomous_protector
 from services.utils.jarvis_diagnostics import diagnostics as diagnostics_instance
 from services.utils.jarvis_healing import healing_engine
 from services.utils.jarvis_health import health_monitor
+from services.utils.jarvis_config import config
 from services.utils.jarvis_logger import setup_logger
 
 # Notification functions moved inside entrypoint to handle potential scope/import issues
@@ -94,7 +108,7 @@ async def start_memory_loop(assistant: BrainAssistant, memory_extractor: MemoryE
             if history_items:
                 logger.debug("Running memory extraction for %s", assistant.user_id)
                 await memory_extractor.run(history_items)
-            await asyncio.sleep(60) # Memory extraction doesn't need to be every 15s
+            await asyncio.sleep(120) # Throttled to 2 minutes to ensure smoothness
         except Exception as e:
             logger.error("Memory loop error: %s", e)
             await asyncio.sleep(60)
@@ -110,7 +124,7 @@ async def start_heartbeat_loop() -> None:
             health_monitor.record_heartbeat("autonomous_protector")
         except Exception as e:
             logger.error("Heartbeat loop error: %s", e)
-        await asyncio.sleep(10)
+        await asyncio.sleep(30) # Reduced frequency to save resources
 
 
 async def perform_startup_diagnostics() -> None:
@@ -294,7 +308,7 @@ async def entrypoint(ctx: agents.JobContext):
             from services.ai_core.jarvis_plugin_manager import JarvisPluginManager
             plugin_manager = JarvisPluginManager()
             # Root-level services directory
-            package_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'services'))
+            package_path = os.path.join(config.project_root, "services")
             plugin_manager.discover_plugins(package_path)
             external_tools = plugin_manager.get_livekit_tools()
             logger.info("🛠️ Discovered %d external tools from plugins.", len(external_tools))
@@ -399,18 +413,23 @@ async def entrypoint(ctx: agents.JobContext):
                         # Skip UI broadcast if muted
                         return
 
-                    logger.info("🎤 User Transcription: %s", event.transcript)
-
-                    # Generate or reuse ID
-                    if current_user_msg_id is None:
-                        current_user_msg_id = str(uuid.uuid4())
-
-                    track(notify_transcription(
-                        "user", event.transcript, is_final=event.is_final,
-                        msg_id=current_user_msg_id))
-
+                    # 🔋 PERFORMANCE OPTIMIZATION: Only notify UI of FINAL user transcriptions
+                    # This prevents the UI from over-rendering one word at a time, which was causing hangs.
                     if event.is_final:
+                        logger.info("🎤 User Transcription (Final): %s", event.transcript)
+
+                        # Generate or reuse ID
+                        if current_user_msg_id is None:
+                            current_user_msg_id = str(uuid.uuid4())
+
+                        track(notify_transcription(
+                            "user", event.transcript, is_final=True,
+                            msg_id=current_user_msg_id))
+
                         current_user_msg_id = None # Reset for next turn
+                    else:
+                        # Optional: Just log locally for debugging, don't flood the UI
+                        logger.debug("🎤 Partial Input: %s", event.transcript)
 
             @session.on("conversation_item_added")
             def on_conversation_item_added(event: agents.voice.ConversationItemAddedEvent):

@@ -5,34 +5,32 @@ export default {
       colors: {
         jarvis: {
           cyan: '#00f2ff',
+          deep: '#0a0d14',
         },
         anna: {
-          magenta: '#ff00ff',
-        },
-        accent: {
-          purple: '#7000ff',
+          amber: '#ffb300',
+          orange: '#ff8c00',
         },
         bg: {
-          deep: '#020205',
+          deep: '#050608',
+          panel: '#0e1117',
         }
       },
       boxShadow: {
-        'neon-blue': '0 0 10px rgba(0, 242, 255, 0.5), 0 0 20px rgba(0, 242, 255, 0.2)',
-        'neon-purple': '0 0 10px rgba(112, 0, 255, 0.5), 0 0 20px rgba(112, 0, 255, 0.2)',
-        'neon-cyan': '0 0 15px rgba(0, 242, 255, 0.6), 0 0 30px rgba(0, 242, 255, 0.3)',
-        'neon-magenta': '0 0 15px rgba(255, 0, 255, 0.6), 0 0 30px rgba(255, 0, 255, 0.3)',
+        'hardware': '0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.05)',
+        'neon-cyan': '0 0 15px rgba(0, 242, 255, 0.25), 0 0 30px rgba(0, 242, 255, 0.1)',
+        'neon-amber': '0 0 15px rgba(255, 179, 0, 0.25), 0 0 30px rgba(255, 179, 0, 0.1)',
       },
       fontFamily: {
-        mono: ['Space Mono', 'Roboto Mono', 'monospace'],
+        mono: ['JetBrains Mono', 'Space Mono', 'monospace'],
         orbitron: ['Orbitron', 'sans-serif'],
-        rajdhani: ['Rajdhani', 'sans-serif'],
         outfit: ['Outfit', 'sans-serif'],
+        rajdhani: ['Rajdhani', 'sans-serif'],
       },
       animation: {
-        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        'spin-slow': 'spin 8s linear infinite',
-        'scan': 'scan 4s linear infinite',
-        'glitch': 'glitch 0.2s linear infinite',
+        'pulse-slow': 'pulse 6s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'spin-slow': 'spin 15s linear infinite',
+        'scan': 'scan 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
       },
     },
   },

@@ -27,8 +27,8 @@ logger = setup_logger("JARVIS-ADVANCED")
 async def download_images(query: str, count: int = 5,
                           folder_name: str = "Downloaded_Images") -> dict:
     """
-    Simulates searching and downloading images from the internet into a local folder.
-    Use this when the user asks to download pictures or photos.
+    Searches and downloads images from the internet into a local folder.
+    Cascades through: DuckDuckGo -> Google Custom Search.
     """
     try:
         base_path = os.path.join(os.getcwd(), "Jarvis_Outputs", "Downloads")
@@ -37,26 +37,45 @@ async def download_images(query: str, count: int = 5,
 
         logger.info("Searching for %d images for query: '%s'...", count, query)
 
-        def search_images():
-            results = []
-            with DDGS() as ddgs:
-                ddgs_results = ddgs.images(query, max_results=count)
-                for r in ddgs_results:
-                    results.append(r['image'])
-            return results
-
-        results = await asyncio.to_thread(search_images)
+        results = []
+        
+        # 1. Try DuckDuckGo
+        try:
+            def search_images_ddg():
+                ddg_results = []
+                with DDGS() as ddgs:
+                    for r in ddgs.images(query, max_results=count):
+                        ddg_results.append(r['image'])
+                return ddg_results
+            
+            results = await asyncio.to_thread(search_images_ddg)
+            logger.info("DuckDuckGo found %d images.", len(results))
+        except Exception as e:
+            logger.warning("DuckDuckGo Image Search failed (likely rate limit): %s", e)
+            
+            # 2. Fallback to Google Custom Search
+            google_key = os.getenv("GOOGLE_SEARCH_API_KEY")
+            google_cx = os.getenv("SEARCH_ENGINE_ID")
+            
+            if google_key and google_cx:
+                logger.info("Attempting Google Image Search fallback...")
+                results = await _search_images_google(query, count, google_key, google_cx)
+                logger.info("Google Image Search found %d images.", len(results))
+            else:
+                logger.error("No Google Search credentials found for fallback.")
 
         if not results:
             return {
                 "status": "error",
-                "message": f"❌ Maazrat, '{query}' ke liye koi images nahi mileen.",
+                "message": f"❌ Maazrat, '{query}' ke liye koi images nahi mileen (Search engines limited).",
             }
 
-        logger.info("Downloading %d images to %s", len(results), target_dir)
+        logger.info("Downloading images to %s", target_dir)
 
         downloaded_count = 0
         for i, url in enumerate(results, 1):
+            if downloaded_count >= count:
+                break
             downloaded_count += await _download_single_image(url, i, query, target_dir)
 
         return {
@@ -76,6 +95,25 @@ async def download_images(query: str, count: int = 5,
             "message": f"❌ Error downloading images: {e!s}",
             "error": str(e),
         }
+
+
+async def _search_images_google(query: str, count: int, api_key: str, cx: str) -> list[str]:
+    """Helper to search images using Google Custom Search API."""
+    try:
+        from urllib.parse import quote
+        url = (
+            f"https://www.googleapis.com/customsearch/v1"
+            f"?key={api_key}&cx={cx}&q={quote(query)}&searchType=image&num={count}"
+        )
+        
+        response = await asyncio.to_thread(requests.get, url, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        
+        return [item['link'] for item in data.get('items', [])]
+    except Exception as e:
+        logger.error("Google Image Search failed: %s", e)
+        return []
 
 
 async def _download_single_image(url: str, index: int, query: str, target_dir: str) -> int:

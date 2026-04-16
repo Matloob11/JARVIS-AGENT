@@ -11,8 +11,7 @@ from typing import Any
 
 import chromadb
 from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
-from dotenv import load_dotenv
-
+from services.utils.jarvis_config import config
 from services.utils.jarvis_logger import setup_logger
 
 # Late-bound Phoenix import to avoid startup lag
@@ -38,7 +37,7 @@ def get_px() -> Any:
         return None
 
 
-load_dotenv()
+
 
 
 # --- Aggressive Log Suppression ---
@@ -56,7 +55,7 @@ logger = setup_logger("JARVIS-VECTOR-MEMORY")
 
 
 # --- Configuration ---
-DB_PATH = os.path.join(os.getcwd(), "chroma_db")
+DB_PATH = config.chroma_db_dir
 COLLECTION_NAME = "jarvis_memory"
 
 

@@ -49,7 +49,8 @@ class JarvisPluginManager:
             self._tool_semaphore = asyncio.Semaphore(5)
 
     def register_tool(self, func: F, permissions: list[str] | None = None,
-                      retry_attempts: int = 0, retry_delay: float = 1.0) -> F:
+                      retry_attempts: int = 0, retry_delay: float = 1.0,
+                      execution_timeout: float = 15.0) -> F:
         """Registers a function as a tool for autonomous discovery."""
 
         # Resolve required permissions
@@ -77,7 +78,7 @@ class JarvisPluginManager:
                 return error_msg
 
             # RECOVERY & RESILIENCE ENFORCEMENT
-            breaker = resilience_manager.get_breaker(func.__name__)
+            breaker = resilience_manager.get_breaker(func.__name__, execution_timeout=execution_timeout)
 
             async def _execute_with_retries(*a: Any, **k: Any) -> Any:
                 # Apply Tool Parameter Validation (Self-Defense)
@@ -195,7 +196,8 @@ plugin_manager = JarvisPluginManager()
 
 
 def jarvis_tool(permissions: list[str] | Callable[..., Any] | None = None,
-                retry_attempts: int = 0, retry_delay: float = 1.0) -> Any:
+                retry_attempts: int = 0, retry_delay: float = 1.0,
+                execution_timeout: float = 15.0) -> Any:
     """
     Decorator to register a function as a Jarvis AI tool.
     Supports optional retries for delicate operations like API calls and permission controls.
@@ -214,6 +216,7 @@ def jarvis_tool(permissions: list[str] | Callable[..., Any] | None = None,
         perms = cast(list[str] | None, permissions)
         return plugin_manager.register_tool(func, permissions=perms,
                                             retry_attempts=retry_attempts,
-                                            retry_delay=retry_delay)
+                                            retry_delay=retry_delay,
+                                            execution_timeout=execution_timeout)
 
     return decorator

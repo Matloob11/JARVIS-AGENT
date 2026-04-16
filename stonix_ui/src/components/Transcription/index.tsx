@@ -14,18 +14,33 @@ interface TranscriptionProps {
 }
 
 const Typewriter: React.FC<{ text: string }> = ({ text }) => {
+  // 🔋 PERFORMANCE OPTIMIZATION: Skip complex animations for very long directive outputs
+  // This prevents React from creating thousands of individual animation-tracked spans.
+  if (text.length > 500) {
+    return (
+      <motion.p 
+        initial={{ opacity: 0 }} 
+        animate={{ opacity: 1 }} 
+        transition={{ duration: 0.8 }}
+        className="whitespace-pre-wrap"
+      >
+        {text}
+      </motion.p>
+    );
+  }
+
   const words = text.split(' ');
   
   return (
-    <div className="flex flex-wrap gap-x-1">
+    <div className="flex flex-wrap gap-x-1.5 leading-relaxed">
       {words.map((word, i) => (
         <motion.span
           key={`${word}-${i}`}
-          initial={{ opacity: 0, filter: 'blur(4px)' }}
-          animate={{ opacity: 1, filter: 'blur(0px)' }}
+          initial={{ opacity: 0, y: 5 }}
+          animate={{ opacity: 1, y: 0 }}
           transition={{
             duration: 0.15,
-            delay: i * 0.02,
+            delay: i * 0.01, // ⚡ FASTER: snappy elite feel
             ease: "easeOut"
           }}
           className="inline-block"
@@ -39,55 +54,63 @@ const Typewriter: React.FC<{ text: string }> = ({ text }) => {
 
 const Transcription: React.FC<TranscriptionProps> = ({ messages, activePersona }) => {
   return (
-    <div className="space-y-6 pb-4 flex flex-col">
+    <div className="space-y-8 pb-6 flex flex-col">
       <AnimatePresence initial={false} mode="popLayout">
         {messages.map((message) => {
           const isUser = message.role === 'user';
-          const personaColor = activePersona === 'jarvis' ? 'border-jarvis-cyan/30 bg-jarvis-cyan/5' : 'border-anna-magenta/30 bg-anna-magenta/5';
+          const isJarvis = activePersona === 'jarvis';
           
+          const bubbleTheme = isUser 
+             ? 'bg-white/[0.02] border-white/[0.05] rounded-tr-none' 
+             : (isJarvis 
+                 ? 'bg-[#00f2ff]/[0.03] border-[#00f2ff]/20 rounded-tl-none shadow-[0_0_20px_rgba(0,242,255,0.05)]' 
+                 : 'bg-[#ff8c00]/[0.03] border-[#ff8c00]/20 rounded-tl-none shadow-[0_0_20px_rgba(255,140,0,0.05)]');
+
           return (
             <motion.div
               key={message.id}
               layout
-              initial={{ opacity: 0, y: 10, filter: 'blur(10px)' }}
-              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-              exit={{ opacity: 0, scale: 0.95 }}
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.98 }}
               transition={{ 
                 type: "spring", 
-                damping: 30, 
-                stiffness: 250,
-                layout: { duration: 0.2 }
+                damping: 25, 
+                stiffness: 200,
+                layout: { duration: 0.3 }
               }}
-              className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} shrink-0`}
+              className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} shrink-0 group`}
             >
-              {/* Header Info */}
-              <div className="flex items-center gap-2 mb-2 px-1 opacity-40">
-                <span className="text-[10px] font-black tracking-widest uppercase font-mono">
-                  {isUser ? 'BIO_TRANSCRIPT' : `${activePersona.toUpperCase()}_LOG`}
+              {/* Timeline Header */}
+              <div className="flex items-center gap-3 mb-2.5 px-2 opacity-30 group-hover:opacity-60 transition-opacity duration-500">
+                <div className={`h-px w-6 ${isUser ? 'bg-white/10' : (isJarvis ? 'bg-[#00f2ff]/20' : 'bg-[#ff8c00]/20')}`} />
+                <span className="text-[9px] font-orbitron font-black tracking-[0.2em] uppercase font-mono">
+                  {isUser ? 'Neural_Link_Input' : `${activePersona.toUpperCase()}_Directive`}
                 </span>
-                <span className="text-[9px] font-mono">
+                <span className="text-[8px] font-mono opacity-50 px-2 py-0.5 border border-white/[0.05] rounded bg-white/[0.02]">
                   {new Date(message.timestamp * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
                 </span>
               </div>
               
-              {/* Message Bubble */}
-              <div className={`max-w-[90%] p-4 rounded-2xl relative transition-all duration-500 border shadow-2xl overflow-hidden ${
-                isUser 
-                  ? 'bg-white/5 border-white/10 rounded-tr-none' 
-                  : `${personaColor} rounded-tl-none`
-              }`}>
-                <div className={`text-[14px] leading-relaxed tracking-wide min-h-[1.5em] ${
-                  isUser ? 'text-white/70' : 'text-white font-medium'
+              {/* Structural Message Bubble */}
+              <div className={`max-w-[85%] p-5 rounded-xl border backdrop-blur-3xl transition-all duration-700 relative overflow-hidden ${bubbleTheme}`}>
+                {/* Physical Texture Overlay */}
+                <div className="absolute inset-0 opacity-[0.02] pointer-events-none neural-grid" />
+                
+                <div className={`text-[13px] leading-relaxed tracking-wide min-h-[1.5em] transition-colors duration-500 ${
+                  isUser ? 'text-white/60 font-light' : 'text-white font-medium'
                 }`}>
                   {!isUser ? (
                     <Typewriter text={message.text} />
                   ) : (
-                    <p>{message.text}</p>
+                    <p className="whitespace-pre-wrap">{message.text}</p>
                   )}
                 </div>
                 
-                {/* Decorative Corner */}
-                <div className={`absolute top-0 ${isUser ? '-right-1' : '-left-1'} w-2 h-2 rotate-45 ${isUser ? 'bg-transparent border-t border-r border-white/20' : (activePersona === 'jarvis' ? 'bg-transparent border-t border-l border-jarvis-cyan/40' : 'bg-transparent border-t border-l border-anna-magenta/40')}`} />
+                {/* Visual Status Indicator */}
+                <div className="absolute top-0 right-0 w-8 h-8 opacity-[0.03] pointer-events-none">
+                   <div className={`absolute top-2 right-2 w-1.5 h-1.5 rounded-full ${isUser ? 'bg-white' : (isJarvis ? 'bg-[#00f2ff]' : 'bg-[#ff8c00]')}`} />
+                </div>
               </div>
             </motion.div>
           );

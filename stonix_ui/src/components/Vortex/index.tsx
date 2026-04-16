@@ -7,8 +7,11 @@ import { useNeuralNetwork } from '@/hooks/useNeuralNetwork';
 const ParticleSphere = ({ isSpeaking, isThinking, dataRef, activePersona }: { isSpeaking: boolean, isThinking: boolean, dataRef: React.MutableRefObject<number[]>, activePersona: 'jarvis' | 'anna' }) => {
   const pointsRef = useRef<THREE.Points>(null);
   const nebulaRef = useRef<THREE.Points>(null);
-  const coreCount = 1000;
-  const nebulaCount = 2500;
+  const coreCount = 1200;
+  const nebulaCount = 3000;
+
+  const isJarvis = activePersona === 'jarvis';
+  const themeColor = isJarvis ? '#00f2ff' : '#ff8c00'; // Amber/Orange for Anna
 
   // Stable positions
   const [corePos, nebPos] = useMemo(() => {
@@ -17,7 +20,7 @@ const ParticleSphere = ({ isSpeaking, isThinking, dataRef, activePersona }: { is
     for (let i = 0; i < coreCount; i++) {
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(Math.random() * 2 - 1);
-      const r = 2.4 + Math.random() * 0.2;
+      const r = 2.2 + Math.random() * 0.15;
       cp[i * 3] = r * Math.sin(phi) * Math.cos(theta);
       cp[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
       cp[i * 3 + 2] = r * Math.cos(phi);
@@ -25,9 +28,9 @@ const ParticleSphere = ({ isSpeaking, isThinking, dataRef, activePersona }: { is
     for (let i = 0; i < nebulaCount; i++) {
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(Math.random() * 2 - 1);
-      const r = 3.5 + Math.random() * 2.5; 
+      const r = 3.2 + Math.random() * 2.0; 
       np[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-      np[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta) * 0.8; 
+      np[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta) * 0.9; 
       np[i * 3 + 2] = r * Math.cos(phi);
     }
     return [cp, np];
@@ -37,23 +40,22 @@ const ParticleSphere = ({ isSpeaking, isThinking, dataRef, activePersona }: { is
     const cc = new Float32Array(coreCount * 3);
     const nc = new Float32Array(nebulaCount * 3);
     const color = new THREE.Color();
-    const isJarvis = activePersona === 'jarvis';
 
     for (let i = 0; i < coreCount; i++) {
-      color.set(isJarvis ? '#00f2ff' : '#ff00ff');
-      if (Math.random() > 0.8) color.lerp(new THREE.Color('#ffffff'), 0.5);
+      color.set(themeColor);
+      if (Math.random() > 0.85) color.lerp(new THREE.Color('#ffffff'), 0.4);
       cc[i * 3] = color.r;
       cc[i * 3 + 1] = color.g;
       cc[i * 3 + 2] = color.b;
     }
     for (let i = 0; i < nebulaCount; i++) {
-      color.set(Math.random() > 0.2 ? (isJarvis ? '#00f2ff' : '#ff00ff') : '#ffffff');
-      nc[i * 3] = color.r * 0.3;
-      nc[i * 3 + 1] = color.g * 0.3;
-      nc[i * 3 + 2] = color.b * 0.3;
+      color.set(Math.random() > 0.2 ? themeColor : '#ffffff');
+      nc[i * 3] = color.r * 0.25;
+      nc[i * 3 + 1] = color.g * 0.25;
+      nc[i * 3 + 2] = color.b * 0.25;
     }
     return [cc, nc];
-  }, [activePersona]);
+  }, [themeColor]);
 
   useFrame((state) => {
     const time = state.clock.getElapsedTime();
@@ -61,44 +63,34 @@ const ParticleSphere = ({ isSpeaking, isThinking, dataRef, activePersona }: { is
     const average = data && data.length > 0 ? (data.reduce((a, b) => a + b) / data.length) / 100 : 0;
     
     if (pointsRef.current) {
-        const rotationSpeed = isThinking ? 0.01 : 0.002;
+        const rotationSpeed = isThinking ? 0.008 : 0.0015;
         pointsRef.current.rotation.y += rotationSpeed;
-        pointsRef.current.rotation.z += rotationSpeed / 2;
-        const s = isThinking ? 0.85 + Math.sin(time * 10) * 0.08 : 1 + (isSpeaking ? average * 2.5 : 0);
-        pointsRef.current.scale.setScalar(THREE.MathUtils.lerp(pointsRef.current.scale.x, s, 0.1));
-        
-        // Glimmer effect when thinking
-        if (isThinking && Math.random() > 0.9) {
-           pointsRef.current.scale.setScalar(s * 1.1);
-        }
+        const s = isThinking ? 0.9 + Math.sin(time * 8) * 0.05 : 1 + (isSpeaking ? average * 2 : 0);
+        pointsRef.current.scale.setScalar(THREE.MathUtils.lerp(pointsRef.current.scale.x, s, 0.15));
     }
 
     if (nebulaRef.current) {
-        nebulaRef.current.rotation.y -= 0.001;
-        nebulaRef.current.rotation.x += 0.0005;
-        const ns = 1 + Math.sin(time * 0.5) * 0.1;
+        nebulaRef.current.rotation.y -= 0.0008;
+        const ns = 1 + Math.sin(time * 0.4) * 0.05;
         nebulaRef.current.scale.setScalar(ns);
     }
   });
 
   return (
     <group>
-      {/* Core Particles */}
       <points ref={pointsRef}>
         <bufferGeometry>
           <bufferAttribute attach="attributes-position" count={coreCount} array={corePos} itemSize={3} />
           <bufferAttribute attach="attributes-color" count={coreCount} array={coreCol} itemSize={3} />
         </bufferGeometry>
-        <pointsMaterial size={0.03} vertexColors transparent opacity={0.8} blending={THREE.AdditiveBlending} />
+        <pointsMaterial size={0.035} vertexColors transparent opacity={0.7} blending={THREE.AdditiveBlending} />
       </points>
-      
-      {/* Nebula Cloud */}
       <points ref={nebulaRef}>
         <bufferGeometry>
           <bufferAttribute attach="attributes-position" count={nebulaCount} array={nebPos} itemSize={3} />
           <bufferAttribute attach="attributes-color" count={nebulaCount} array={nebCol} itemSize={3} />
         </bufferGeometry>
-        <pointsMaterial size={0.015} vertexColors transparent opacity={0.2} blending={THREE.AdditiveBlending} />
+        <pointsMaterial size={0.012} vertexColors transparent opacity={0.15} blending={THREE.AdditiveBlending} />
       </points>
     </group>
   );
@@ -106,24 +98,30 @@ const ParticleSphere = ({ isSpeaking, isThinking, dataRef, activePersona }: { is
 
 const Vortex = () => {
   const { isSpeaking, isThinking, spectralDataRef, activePersona, voiceMatch, isUserSpeaking } = useNeuralNetwork();
-
   const matchPercent = Math.round(voiceMatch * 100);
   const isVerified = matchPercent >= 70;
-  // Show the badge only when we have a real score (>0) or user is actively speaking
   const showBadge = matchPercent > 0 || isUserSpeaking;
+
+  const isJarvis = activePersona === 'jarvis';
+  const themeGlow = isJarvis ? 'shadow-[0_0_40px_rgba(0,242,255,0.2)]' : 'shadow-[0_0_40px_rgba(255,140,0,0.2)]';
 
   return (
     <div className="w-full h-full relative flex items-center justify-center overflow-hidden">
-      {/* Deep Background Glows */}
-      <div className={`absolute w-[800px] h-[800px] rounded-full blur-[180px] transition-all duration-1000 ${
-        activePersona === 'jarvis' ? 'bg-jarvis-cyan/10' : 'bg-anna-magenta/10'
-      }`} />
+      {/* Physical Hardware Frame Overlay */}
+      <div className="absolute inset-0 z-20 pointer-events-none border-[20px] border-[#050608] opacity-50" />
       
-      <div className={`absolute w-[400px] h-[400px] rounded-full blur-[100px] transition-all duration-700 ${
-        isSpeaking ? (activePersona === 'jarvis' ? 'bg-jarvis-cyan/30' : 'bg-anna-magenta/30') : 'bg-transparent'
-      }`} />
-
-      <Canvas camera={{ position: [0, 0, 10], fov: 40 }} dpr={[1, 2]}>
+      {/* Background Depth Ambient */}
+      <motion.div 
+        animate={{ 
+          opacity: (isSpeaking || isThinking) ? 0.15 : 0.05,
+          scale: (isSpeaking || isThinking) ? 1.1 : 1
+        }}
+        className={`absolute w-[600px] h-[600px] rounded-full blur-[140px] transition-colors duration-1000 ${
+          isJarvis ? 'bg-[#00f2ff]' : 'bg-[#ff8c00]'
+        }`} 
+      />
+      
+      <Canvas camera={{ position: [0, 0, 9], fov: 40 }} dpr={[1, 2]}>
         <ParticleSphere 
           isSpeaking={isSpeaking} 
           isThinking={isThinking}
@@ -132,132 +130,94 @@ const Vortex = () => {
         />
       </Canvas>
       
-      {/* Central Interactive UI */}
-      <div className="absolute flex flex-col items-center justify-center pointer-events-none gap-4">
+      <div className="absolute flex flex-col items-center justify-center pointer-events-none">
         
-        {/* Core Frame */}
+        {/* The Core "Nucleus" - Hardware Aesthetic */}
         <motion.div 
-          animate={{ rotate: isThinking ? [0, 10, -10, 0] : 0 }}
-          transition={{ repeat: Infinity, duration: 2 }}
-          className={`w-40 h-40 relative flex items-center justify-center`}
+          animate={{ scale: (isSpeaking || isThinking) ? 1.05 : 1 }}
+          className="relative flex items-center justify-center w-52 h-52"
         >
-          {/* Main Glass Circle */}
-          <div className={`w-36 h-36 border border-white/10 rounded-full flex items-center justify-center transition-all duration-500 glass-card !bg-black/60 shadow-[inset_0_0_20px_rgba(0,242,255,0.1)] ${
-            (isSpeaking || isThinking) ? 'scale-110 !border-white/20' : 'scale-100'
-          }`}>
-             <div className={`w-32 h-32 border-2 rounded-full flex flex-col items-center justify-center transition-all duration-300 relative overflow-hidden ${
-               (isSpeaking || isThinking)
-                 ? (activePersona === 'jarvis' ? 'border-jarvis-cyan shadow-[0_0_30px_rgba(0,242,255,0.4)]' : 'border-anna-magenta shadow-[0_0_30px_rgba(255,0,255,0.4)]') 
-                 : 'border-white/10'
-             }`}>
-                {/* Glow Overlay */}
-                <div className={`absolute inset-0 opacity-20 transition-colors ${activePersona === 'jarvis' ? 'bg-jarvis-cyan' : 'bg-anna-magenta'}`} />
-                
-                <span className={`text-[12px] font-black tracking-[0.4em] mb-2 relative z-10 transition-all duration-500 ${
-                  (isSpeaking || isThinking) ? 'text-white translate-y-0' : 'text-white/40 translate-y-1'
-                }`}>
-                  {isThinking ? 'PROCESSING' : (activePersona === 'jarvis' ? 'JARVIS' : 'ANNA')}
+          {/* External Mechanical Rings */}
+          <div className="absolute inset-0 border border-white/[0.05] rounded-full opacity-20" />
+          <motion.div 
+            animate={{ rotate: 360 }}
+            transition={{ repeat: Infinity, duration: 40, ease: "linear" }}
+            className="absolute inset-4 border border-dashed border-white/[0.05] rounded-full" 
+          />
+          
+          {/* The Glass Lens */}
+          <div className={`w-32 h-32 rounded-full bg-black/40 backdrop-blur-3xl border border-white/10 flex items-center justify-center shadow-2xl relative overflow-hidden group ${themeGlow}`}>
+             {/* Internal Technical HUD Elements */}
+             <div className="absolute top-4 left-1/2 -translate-x-1/2 w-10 h-[1px] bg-white/20" />
+             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-10 h-[1px] bg-white/20" />
+             
+             {/* Persona Tag */}
+             <motion.div
+               key={activePersona}
+               initial={{ opacity: 0, y: 5 }}
+               animate={{ opacity: 1, y: 0 }}
+               className="flex flex-col items-center gap-1 z-10"
+             >
+                <span className={`text-[11px] font-orbitron font-black tracking-[0.4em] ${isJarvis ? 'text-[#00f2ff]' : 'text-[#ff8c00]'}`}>
+                  {isThinking ? 'LINKING' : activePersona.toUpperCase()}
                 </span>
                 
-                <div className="flex gap-1 relative z-10">
+                {/* Audio Reactivity Bars */}
+                <div className="flex gap-1 h-3 items-end">
                    {[...Array(5)].map((_, i) => (
                      <motion.div 
-                          key={i} 
-                          className={`w-1 rounded-full transition-all duration-300 ${
-                            isSpeaking 
-                              ? (activePersona === 'jarvis' ? 'bg-jarvis-cyan' : 'bg-anna-magenta') 
-                              : 'bg-white/20'
-                          }`} 
-                          animate={{ 
-                            height: isSpeaking ? [`${10 + Math.random() * 15}px`, `${5 + Math.random() * 20}px`] : '4px',
-                            opacity: isSpeaking ? [0.6, 1, 0.6] : 1
-                          }}
-                          transition={{ repeat: Infinity, duration: 0.5, delay: i * 0.1 }}
+                        key={i} 
+                        className={`w-0.5 rounded-full ${isJarvis ? 'bg-[#00f2ff]' : 'bg-[#ff8c00]'}`} 
+                        animate={{ 
+                          height: isSpeaking ? [`${4 + Math.random() * 12}px`, `${2 + Math.random() * 8}px`] : '4px',
+                          opacity: isSpeaking ? [0.4, 1, 0.4] : 0.3
+                        }}
+                        transition={{ repeat: Infinity, duration: 0.6, delay: i * 0.1 }}
                      />
                    ))}
                 </div>
-             </div>
-          </div>
+             </motion.div>
 
-          {/* orbital UI - Ring 1 (Dashed) */}
-          <div className="absolute w-[180px] h-[180px] border border-dashed border-white/10 rounded-full animate-[spin_20s_linear_infinite]" />
-          
-          {/* Orbital UI - Ring 2 (Tech Accents) */}
-          <div className="absolute w-[220px] h-[220px] border border-white/5 rounded-full animate-[spin_30s_linear_infinite_reverse]">
-             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-jarvis-cyan rounded-full shadow-neon-cyan" />
-             <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-anna-magenta rounded-full shadow-neon-magenta" />
+             {/* Internal Glow Pulse */}
+             <motion.div 
+               animate={{ opacity: isSpeaking ? [0.1, 0.3, 0.1] : 0.05 }}
+               className={`absolute inset-0 ${isJarvis ? 'bg-[#00f2ff]' : 'bg-[#ff8c00]'}`} 
+             />
           </div>
         </motion.div>
 
-        {/* ─── Voice ID Security Badge ─── */}
+        {/* ─── Security Authorization Module ─── */}
         <AnimatePresence>
           {showBadge && (
             <motion.div
-              initial={{ opacity: 0, y: -8, scale: 0.9 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -8, scale: 0.9 }}
-              transition={{ duration: 0.3 }}
-              className="relative flex flex-col items-center gap-1"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="mt-8 flex flex-col items-center gap-3"
             >
-              {/* Outer scanning ring when user is speaking */}
-              {isUserSpeaking && (
-                <motion.div
-                  className={`absolute -inset-3 rounded-full border ${isVerified ? 'border-green-400/40' : 'border-red-500/40'}`}
-                  animate={{ scale: [1, 1.15, 1], opacity: [0.6, 0.2, 0.6] }}
-                  transition={{ repeat: Infinity, duration: 1.4 }}
-                />
-              )}
-
-              {/* Badge body */}
-              <div className={`
-                relative flex items-center gap-2 px-3 py-1.5 rounded-full border backdrop-blur-md
-                transition-all duration-500
-                ${isVerified
-                  ? 'border-green-400/50 bg-green-900/20 shadow-[0_0_14px_rgba(74,222,128,0.3)]'
-                  : 'border-red-500/50 bg-red-900/20 shadow-[0_0_14px_rgba(239,68,68,0.3)]'}
-              `}>
-                {/* Icon */}
-                <span className={`text-[11px] transition-colors ${isVerified ? 'text-green-400' : 'text-red-400'}`}>
-                  {isVerified ? '🔓' : '🔒'}
-                </span>
-
-                {/* Label */}
-                <span className="text-[9px] font-black tracking-[0.2em] text-white/50 uppercase">
-                  Voice ID
-                </span>
-
-                {/* Separator */}
-                <span className="text-white/20">|</span>
-
-                {/* Score */}
-                <motion.span
-                  key={matchPercent}
-                  initial={{ scale: 1.3, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ duration: 0.25 }}
-                  className={`text-[13px] font-black tabular-nums transition-colors ${
-                    isVerified ? 'text-green-400' : 'text-red-400'
-                  }`}
-                >
-                  {matchPercent}%
-                </motion.span>
-              </div>
-
-              {/* Progress bar */}
-              <div className="w-28 h-[3px] bg-white/10 rounded-full overflow-hidden">
-                <motion.div
-                  className={`h-full rounded-full ${isVerified ? 'bg-green-400' : 'bg-red-500'}`}
-                  animate={{ width: `${matchPercent}%` }}
-                  transition={{ duration: 0.4, ease: 'easeOut' }}
-                />
-              </div>
-
-              {/* Status text */}
-              <span className={`text-[8px] font-bold tracking-widest uppercase ${
-                isVerified ? 'text-green-400/70' : 'text-red-400/70'
+              <div className={`px-5 py-2 rounded-lg border backdrop-blur-xl flex items-center gap-4 transition-all duration-500 ${
+                isVerified ? 'border-emerald-500/30 bg-emerald-500/5 shadow-[0_0_20px_rgba(16,185,129,0.1)]' : 'border-red-500/30 bg-red-500/5'
               }`}>
-                {isUserSpeaking ? 'SCANNING...' : (isVerified ? 'AUTHORIZED' : 'DENIED')}
-              </span>
+                <div className="flex flex-col items-start leading-none gap-1">
+                   <span className="text-[8px] font-orbitron font-bold text-white/30 uppercase tracking-widest">Biometric_Uplink</span>
+                   <span className={`text-[10px] font-mono font-black ${isVerified ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {isUserSpeaking ? 'ANALYZING VOICE...' : (isVerified ? 'ACCESS_GRANTED' : 'ACCESS_DENIED')}
+                   </span>
+                </div>
+                <div className="w-px h-6 bg-white/10" />
+                <span className={`text-sm font-mono font-black ${isVerified ? 'text-emerald-400' : 'text-red-400'}`}>
+                   {matchPercent}%
+                </span>
+              </div>
+              
+              {/* Stability Gauge */}
+              <div className="w-40 h-[2px] bg-white/5 rounded-full overflow-hidden">
+                <motion.div
+                  className={`h-full rounded-full ${isVerified ? 'bg-emerald-500' : 'bg-red-500'}`}
+                  initial={{ width: 0 }}
+                  animate={{ width: `${matchPercent}%` }}
+                />
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -267,4 +227,3 @@ const Vortex = () => {
 };
 
 export default Vortex;
-

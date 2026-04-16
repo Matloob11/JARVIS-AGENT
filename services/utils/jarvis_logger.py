@@ -86,14 +86,83 @@ class UIBridgeHandler(logging.Handler):
             UIBridgeHandler._emitting = False
 
 
+# Global log queue for batch writing (Sir Matloob's PC Performance Patch)
+_log_queue: asyncio.Queue[tuple[str, str]] = asyncio.Queue()
+
+async def _batch_writer_worker():
+    """Background task that writes logs in batches with context-switching awareness."""
+    while True:
+        try:
+            # Wait for at least one log
+            name, formatted_msg = await _log_queue.get()
+            batch = [(name, formatted_msg)]
+            
+            # Try to grab up to 9 more if they are ready (Batch size: 10)
+            for _ in range(9):
+                try:
+                    if _log_queue.empty():
+                        break
+                    batch.append(_log_queue.get_nowait())
+                except asyncio.QueueEmpty:
+                    break
+            
+            # Map batches to handlers
+            by_logger = {}
+            for l_name, msg in batch:
+                if l_name not in by_logger:
+                    by_logger[l_name] = []
+                by_logger[l_name].append(msg)
+            
+            # Write each logger's batch in one thread hop
+            def _write_batches(payloads):
+                for l_name, msgs in payloads.items():
+                    log_obj = logging.getLogger(l_name)
+                    for handler in log_obj.handlers:
+                        if isinstance(handler, (logging.FileHandler, RotatingFileHandler)):
+                            with open(handler.baseFilename, 'a', encoding=handler.encoding) as f:
+                                for m in msgs:
+                                    f.write(m + '\n')
+            
+            await asyncio.to_thread(_write_batches, by_logger)
+            
+            for _ in range(len(batch)):
+                _log_queue.task_done()
+                
+        except Exception:
+            await asyncio.sleep(1)
+
+_writer_task = None
+
 def setup_logger(name: str, log_file: str | Path | None = None,
                  level: int | None = None, json_format: bool = False) -> logging.Logger:
     """
     Sets up a logger with console and rotating file handlers.
     Integration with JarvisConfig for levels and paths.
     """
+    global _writer_task
+    if _writer_task is None:
+        try:
+            loop = asyncio.get_running_loop()
+            _writer_task = loop.create_task(_batch_writer_worker())
+        except RuntimeError:
+            pass
+
+    # Custom Handler to feed the queue instead of direct writing
+    class BatchedFileHandler(logging.Handler):
+        def emit(self, record):
+            try:
+                msg = self.format(record)
+                # We can't await in sync emit, so use call_soon_threadsafe or ignore if loop isn't up
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.call_soon_threadsafe(_log_queue.put_nowait, (name, msg))
+                except (RuntimeError, asyncio.QueueFull):
+                    pass
+            except Exception:
+                self.handleError(record)
+
+    # Rest of original setup_logger logic (simplified for diff)
     if json_format is False:
-        # Default to True ONLY if environment variable is set
         import os
         json_format = os.getenv("LOG_STRUCTURED", "false").lower() == "true"
 
@@ -106,13 +175,14 @@ def setup_logger(name: str, log_file: str | Path | None = None,
             level = logging.INFO
 
     if log_file is None:
-        import os
         if _HAS_CONFIG:
-            log_file = os.getenv("LOG_FILE", "logs/jarvis_main.log")
+            log_file = config.log_file
         else:
             log_file = "logs/jarvis_default.log"
 
     log_path: Path = Path(log_file)
+    
+    # Phase 7: Ensure log directory exists
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Create formatter

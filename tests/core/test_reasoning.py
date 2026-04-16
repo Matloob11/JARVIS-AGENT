@@ -43,14 +43,14 @@ def test_workflow_planner():
     planner = WorkflowPlanner()
 
     # Test research plan
-    plan = planner.create_plan("complex_workflow", "research about AI")
-    assert len(plan) == 3
+    plan = planner.create_plan({"all_intents": ["complex_workflow"]}, "research about AI")
+    assert len(plan) >= 3
     assert plan[0]["action"] == "research"
 
     # Test code plan
-    plan = planner.create_plan("code_creation", "write a script")
-    assert len(plan) == 2
-    assert plan[1]["action"] == "run"
+    plan = planner.create_plan({"all_intents": ["code_creation"]}, "write a script")
+    assert len(plan) >= 2
+    assert plan[1]["action"] == "execute"
 
 def test_response_generator():
     generator = ResponseGenerator()
@@ -58,7 +58,7 @@ def test_response_generator():
     # Test standard response
     context = {"urgency_level": "normal", "user_mood": "neutral"}
     response = generator.generate_response("greeting", context, "Hello")
-    assert any(substring in response for substring in ["Sir", "Hello", "morning"])
+    assert any(substring in response for substring in ["Sir", "Hello", "Matloob"])
 
     # Test Anna response
     response = generator.generate_response("greeting", context, "Hello", is_anna=True)

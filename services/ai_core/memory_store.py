@@ -18,6 +18,7 @@ except ImportError:
     InvalidToken = _FallbackInvalidToken  # type: ignore
 
 from services.ai_core.jarvis_vector_memory import jarvis_vector_db
+from services.utils.jarvis_config import config
 from services.utils.jarvis_crypto import jarvis_crypto
 from services.utils.jarvis_logger import setup_logger
 
@@ -29,18 +30,17 @@ _background_tasks: set[asyncio.Task[Any]] = set()
 class ConversationMemory:
     """Handles persistent conversation memory for users with LRU caching."""
 
-    def __init__(self, user_id: str, storage_path: str = "conversations"):
+    def __init__(self, user_id: str, storage_path: str | None = None):
         self.user_id = user_id
-        self.storage_path = storage_path
-        self.memory_file = os.path.join(storage_path, f"{user_id}_memory.json")
+        self.storage_path = storage_path or config.conversations_dir
+        self.memory_file = os.path.join(self.storage_path, f"{user_id}_memory.json")
         self.lock = asyncio.Lock()
 
         # Phase 5: Fast Retrieval LRU Cache (Threshold: 50 messages)
         self.cache: OrderedDict[str, Any] = OrderedDict()
         self._mem_cache_size = 50
 
-        # Create storage directory if it doesn't exist
-        os.makedirs(storage_path, exist_ok=True)
+        # Note: Directory is now ensured by jarvis_config singleton
         logger.info(
             "ConversationMemory initialized for user: %s (Cache: Enabled)", user_id)
         logger.info("Memory file path: %s", os.path.abspath(self.memory_file))
@@ -63,9 +63,11 @@ class ConversationMemory:
                 # Phase 6: Check if data is encrypted or legacy JSON
                 try:
                     # Try decrypting
-                    decrypted = jarvis_crypto.decrypt(data)
-                    return json.loads(decrypted)
-                except (ValueError, RuntimeError, InvalidToken):
+                    if isinstance(data, (bytes, str)) and data:
+                        decrypted = jarvis_crypto.decrypt(data)
+                        return json.loads(decrypted)
+                    return []
+                except (ValueError, RuntimeError, InvalidToken, TypeError):
                     # Fallback for legacy migration or key mismatch
                     logger.warning(
                         "Decryption failed or invalid token. Attempting legacy JSON load or resetting.")

@@ -24,7 +24,7 @@ def create_test_assistant(mock_mem_inst):
         mock_llm.voice = "charon"
         mock_llm_prop.return_value = mock_llm
         
-        assistant = BrainAssistant(chat_ctx=chat_ctx)
+        assistant = BrainAssistant(chat_ctx=chat_ctx, llm_instance=mock_llm, tools=[])
         assistant._instructions = "Test Context"
         # Fix the property access error by providing the underlying private attribute
         assistant._llm = mock_llm
@@ -36,7 +36,7 @@ def create_test_assistant(mock_mem_inst):
 async def test_brain_assistant_init(mock_agent_deps):
     assistant, _ = create_test_assistant(mock_agent_deps)
     assert assistant._wake_word_mode is True
-    assert assistant._gf_mode_active is False
+    assert assistant.persona_manager.is_anna is False
     assert assistant._instructions == "Test Context"
 
 @pytest.mark.asyncio
@@ -49,11 +49,11 @@ async def test_tool_set_wake_word_mode(mock_agent_deps):
 @pytest.mark.asyncio
 async def test_tool_toggle_gf_mode(mock_agent_deps):
     assistant, _ = create_test_assistant(mock_agent_deps)
-    with patch.object(assistant, "update_instructions", new_callable=AsyncMock) as mock_update:
-        # Persona switch calls _update_persona_instructions which uses self.llm
+    with patch.object(assistant.persona_manager, "update_assistant_persona", new_callable=AsyncMock) as mock_update:
+        # Persona switch calls set_persona which uses update_assistant_persona
         result = await assistant.tool_toggle_gf_mode(True)
         assert result["status"] == "success"
-        assert assistant._gf_mode_active is True
+        assert assistant.persona_manager.is_anna is True
         mock_update.assert_called_once()
 
 @pytest.mark.asyncio
@@ -66,7 +66,7 @@ async def test_extract_text_from_message(mock_agent_deps):
 @pytest.mark.asyncio
 async def test_handle_wake_word(mock_agent_deps):
     assistant, _ = create_test_assistant(mock_agent_deps)
-    with patch.object(assistant, "_update_persona_instructions", new_callable=AsyncMock) as mock_update:
+    with patch.object(assistant.persona_manager, "set_persona", new_callable=AsyncMock) as mock_update:
         detected, is_anna = await assistant._handle_wake_word("Hey Jarvis")
         assert detected is True
         assert is_anna is False
@@ -74,24 +74,24 @@ async def test_handle_wake_word(mock_agent_deps):
 @pytest.mark.asyncio
 async def test_inject_emotional_context(mock_agent_deps):
     assistant, _ = create_test_assistant(mock_agent_deps)
-    assistant._gf_mode_active = True
+    assistant.persona_manager._gf_mode_active = True
     turn_ctx = MagicMock()
     turn_ctx.chat_ctx.messages = []
     with patch("services.ai_core.jarvis_reasoning.context_analyzer.analyze_context", return_value={"user_mood": "upset"}):
-        await assistant._inject_emotional_context("I am sad", turn_ctx)
+        await assistant.persona_manager.inject_emotional_context("I am sad", turn_ctx, assistant.conversation_history)
         assert len(turn_ctx.chat_ctx.messages) == 1
         assert "Manao him." in turn_ctx.chat_ctx.messages[0].content[0]
 
 @pytest.mark.asyncio
 async def test_handle_anna_upset_state(mock_agent_deps):
     assistant, _ = create_test_assistant(mock_agent_deps)
-    assistant._gf_mode_active = True
+    assistant.persona_manager._gf_mode_active = True
     turn_ctx = MagicMock()
     turn_ctx.chat_ctx.messages = []
     with patch("services.ai_core.jarvis_identity.jarvis_id.get_anna_state", return_value={"is_upset": True}):
         with patch("services.ai_core.jarvis_identity.jarvis_id.set_anna_mood", new_callable=AsyncMock) as mock_set_mood:
-            with patch.object(assistant, "tool_toggle_gf_mode", new_callable=AsyncMock) as mock_toggle:
-                await assistant._handle_anna_upset_state("I am sorry", turn_ctx)
+            with patch.object(assistant.persona_manager, "set_persona", new_callable=AsyncMock) as mock_toggle:
+                await assistant.persona_manager.handle_anna_upset_state("I am sorry", turn_ctx)
                 mock_set_mood.assert_called_with("loving", False)
                 mock_toggle.assert_called_with(True)
 
@@ -123,7 +123,7 @@ async def test_tool_change_voice(mock_agent_deps):
 @pytest.mark.asyncio
 async def test_handle_persona_switch(mock_agent_deps):
     assistant, _ = create_test_assistant(mock_agent_deps)
-    with patch.object(assistant, "_update_persona_instructions", new_callable=AsyncMock) as mock_update:
+    with patch.object(assistant.persona_manager, "update_assistant_persona", new_callable=AsyncMock) as mock_update:
         await assistant._handle_persona_switch(is_anna=True, is_jarvis=False)
-        assert assistant._gf_mode_active is True
+        assert assistant.persona_manager.is_anna is True
         mock_update.assert_called()

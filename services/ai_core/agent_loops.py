@@ -10,7 +10,9 @@ from typing import TYPE_CHECKING, Any
 import socketio
 
 from services.ai_core.jarvis_vision import vision_system
+from services.ai_core.swarm_manager import swarm_coordinator
 from services.automation.jarvis_reminders import check_due_reminders
+from services.ai_core.jarvis_vector_memory import jarvis_vector_db
 from services.utils.jarvis_adaptive import adaptive_engine
 from services.utils.jarvis_autonomous import autonomous_protector
 from services.utils.jarvis_bridge import notify_transcription, notify_ui
@@ -60,6 +62,11 @@ async def start_adaptation_loop() -> None:
                     logger.info("🚀 Self-Healing: Restarting %s", task_name)
                     if autonomous_protector.restart_task(task_name):
                         _throttled_tasks.remove(task_name)
+                
+                # Predictive Optimization: Pre-load heavy AI models during idle time
+                if jarvis_vector_db.client is None:
+                    logger.info("🧠 Idle time detected: Pre-loading Vector Memory models...")
+                    await jarvis_vector_db._ensure_initialized()
 
             # Re-evaluation interval (Dynamic based on load)
             sleep_time = 30 if stress != "HEALTHY" else 90
@@ -165,6 +172,12 @@ class UIBridgeListener:
                     new_task = asyncio.create_task(self._task_wrapper(payload))
                     self.assistant._spawned_tasks.add(new_task) # type: ignore[attr-defined]
                     new_task.add_done_callback(self.assistant._spawned_tasks.discard) # type: ignore[attr-defined]
+            elif cmd_type == "swarm":
+                if payload:
+                    logger.info("🌀 Swarm Mode triggered with: %s", payload)
+                    swarm_task = asyncio.create_task(swarm_coordinator.execute_swarm(payload))
+                    self.assistant._spawned_tasks.add(swarm_task) # type: ignore[attr-defined]
+                    swarm_task.add_done_callback(self.assistant._spawned_tasks.discard) # type: ignore[attr-defined]
         except Exception as e:
             logger.error("❌ Error processing UI command %s: %s", cmd_type, e, exc_info=True)
 

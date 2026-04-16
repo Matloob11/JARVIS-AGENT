@@ -72,6 +72,7 @@ class CircuitBreaker:
 
         try:
             # 3. Execution with STRICT TIMEOUT (Chaos Resilience)
+            # Use asyncio.wait_for correctly
             result = await asyncio.wait_for(
                 coro_func(*args, **kwargs),
                 timeout=self.execution_timeout,
@@ -82,20 +83,29 @@ class CircuitBreaker:
                 logger.info("✅ Circuit %s CLOSED: Recovery confirmed.", self.name)
                 self.state = CircuitState.CLOSED
                 self.fail_count = 0
+            elif self.state == CircuitState.CLOSED:
+                self.fail_count = 0  # Progressive reset
 
             return result
-        except (TimeoutError, Exception) as e:
+
+        except (asyncio.TimeoutError, TimeoutError) as e:
             self.fail_count += 1
             self.last_failure_time = time.time()
 
-            error_type = "TIMEOUT" if isinstance(e, asyncio.TimeoutError) else "FAILURE"
             if self.state == CircuitState.HALF_OPEN or self.fail_count >= self.fail_threshold:
-                logger.error("🛑 Circuit %s OPENED! Threshold reached. (Reason: %s | Error: %s)",
-                             self.name, error_type, str(e))
+                logger.error("🛑 Circuit %s OPENED! Threshold reached. (Reason: TIMEOUT)", self.name)
                 self.state = CircuitState.OPEN
 
-            if isinstance(e, asyncio.TimeoutError):
-                raise RuntimeError(f"TOOL_TIMEOUT: {self.name} failed to respond in {self.execution_timeout}s.") from e
+            raise RuntimeError(f"TOOL_TIMEOUT: {self.name} failed to respond in {self.execution_timeout}s.") from e
+        
+        except Exception as e:
+            self.fail_count += 1
+            self.last_failure_time = time.time()
+
+            if self.state == CircuitState.HALF_OPEN or self.fail_count >= self.fail_threshold:
+                logger.error("🛑 Circuit %s OPENED! Threshold reached. (Reason: FAILURE | Error: %s)",
+                             self.name, str(e))
+                self.state = CircuitState.OPEN
             raise e
 
 class ResilienceManager:
@@ -103,9 +113,15 @@ class ResilienceManager:
     def __init__(self) -> None:
         self._breakers: dict[str, CircuitBreaker] = {}
 
-    def get_breaker(self, name: str) -> CircuitBreaker:
+    def get_breaker(self, name: str, **kwargs: Any) -> CircuitBreaker:
         if name not in self._breakers:
-            self._breakers[name] = CircuitBreaker(name)
+            self._breakers[name] = CircuitBreaker(name, **kwargs)
+        else:
+            # Update configuration if new settings are provided (Fixes stale timeout bug)
+            breaker = self._breakers[name]
+            for key, value in kwargs.items():
+                if hasattr(breaker, key):
+                    setattr(breaker, key, value)
         return self._breakers[name]
 
 # Global Singleton
