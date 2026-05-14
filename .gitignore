@@ -1,20 +1,37 @@
-# ════════════════════════════════════════
-# JARVIS — Personal Assistant .gitignore
-# ════════════════════════════════════════
+# JARVIS Personal Assistant - repository hygiene
 
-# ── Security & Secrets ──────────────────
+# Security and secrets
 .env
 .env.local
 .env.*.local
+.env.encrypted
+.env*.encrypted
 secrets.json
 *.pem
 *.key
 *.p12
+*.crt
+*.cer
 
-# ── Python Runtime ───────────────────────
+# Personal/private artifacts
+CV/
+data/identity/
+conversations/
+*.wav
+*.flac
+*.mp3
+
+# Agent/editor local state
+.agent/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python runtime
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
 *.pyd
 *.so
 *.egg
@@ -24,11 +41,8 @@ build/
 .Python
 pip-log.txt
 pip-delete-this-directory.txt
-.mypy_cache/
-.dmypy.json
-dmypy.json
 
-# ── Virtual Environments ─────────────────
+# Virtual environments
 env/
 venv/
 .venv/
@@ -36,68 +50,66 @@ venv/
 final_verify_env/
 ENV/
 
-# ── Testing & Linting Cache ──────────────
+# Testing, typing, linting caches
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
+.pyre/
+.dmypy.json
+dmypy.json
 .coverage
 htmlcov/
 coverage.xml
 *.cover
 .hypothesis/
 
-# ── IDEs ────────────────────────────────
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# ── Logs ────────────────────────────────
-*.log
+# Logs and telemetry
 logs/
+*.log
 control_log.txt
 telemetry.jsonl
 
-# ── Runtime / Generated Data ─────────────
-conversations/
+# Runtime/generated data
+assets/tests/
 chroma_db/
 Jarvis_Outputs/
+Jarvis_Workspace/
 generated_images/
 backups/
 tmp/
 temp/
+test_conversations/
 
-# ── ML Models (large binary files) ───────
+# Local ML assets and model downloads
 pretrained_models/
 *.pt
 *.pth
+*.ckpt
 *.onnx
 *.safetensors
 
-# ── Node / Frontend ──────────────────────
+# Node/frontend
 node_modules/
 stonix_ui/node_modules/
 stonix_ui/dist/
 stonix_ui/.vite/
 *.tsbuildinfo
 
-# ── Electron Build Outputs ───────────────
+# Electron build outputs
 stonix_ui/out/
 stonix_ui/release/
 stonix_ui/electron-dist/
 
-# ── OS Files ────────────────────────────
+# OS files
 .DS_Store
 Thumbs.db
 desktop.ini
 ehthumbs.db
 
-# ── Misc ─────────────────────────────────
+# Misc local scratch
 *.tmp
 *.bak
 *.orig
-*.swp
 repro_self_error.py
 test_bridge.py
 KMS/
-test_conversations/

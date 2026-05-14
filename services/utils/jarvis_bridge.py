@@ -188,18 +188,25 @@ async def notify_tool_action(tool_name: str, action_details: str) -> None:
     })
 
 
-async def notify_sim_data(records: list[Any], phone_number: str = "") -> None:
+async def notify_sim_data(
+    records: list[Any],
+    phone_number: str = "",
+    status: str = "success",
+    message: str = "",
+) -> None:
     """Pushes SIM lookup results to the UI SimInfoBox in real-time."""
     await notify_event("sim_data_result", {
         "records": records,
         "phone": phone_number,
+        "status": status,
+        "message": message,
         "timestamp": time.time(),
     })
 
 
-async def notify_sim_loading() -> None:
+async def notify_sim_loading(payload: dict[str, Any] | None = None) -> None:
     """Notifies the UI that a SIM data lookup is in progress."""
-    await notify_event("sim_data_loading", {})
+    await notify_event("sim_data_loading", payload or {})
 
 
 async def notify_user_speaking(is_speaking: bool) -> None:

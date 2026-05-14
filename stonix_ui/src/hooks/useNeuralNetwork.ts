@@ -109,6 +109,10 @@ export const useNeuralNetwork = () => {
   const [reasoning, setReasoning] = useState<ReasoningPlan | null>(null);
   const [simRecords, setSimRecords] = useState<SimRecord[]>([]);
   const [simLoading, setSimLoading] = useState(false);
+  const [simQueryMasked, setSimQueryMasked] = useState('');
+  const [simStatus, setSimStatus] = useState('idle');
+  const [simMessage, setSimMessage] = useState('');
+  const [isSimPanelOpen, setIsSimPanelOpen] = useState(false);
   const [socketVersion, setSocketVersion] = useState(0);
 
   useEffect(() => {
@@ -180,13 +184,23 @@ export const useNeuralNetwork = () => {
     const onVoiceMatchUpdate = (data: { confidence: number; timestamp: number }) => {
       setVoiceMatch(data.confidence);
     };
-    const onSimDataResult = (data: { records: SimRecord[] }) => {
+    const onSimDataResult = (data: { records: SimRecord[]; phone?: string; status?: string; message?: string }) => {
       setSimRecords(data.records || []);
       setSimLoading(false);
+      setSimQueryMasked(data.phone || '');
+      setSimStatus(data.status || 'success');
+      setSimMessage(data.message || '');
+      setIsSimPanelOpen(true);
     };
-    const onSimDataLoading = () => {
+    const onSimDataLoading = (data: { query_masked?: string } = {}) => {
       setSimLoading(true);
+      setSimStatus('loading');
+      setSimQueryMasked(data.query_masked || '');
       setSimRecords([]);
+    };
+    const onSimPanelOpen = (data: { message?: string }) => {
+      setIsSimPanelOpen(true);
+      if (data?.message) setSimMessage(data.message);
     };
 
     socket.on('connect', onConnect);
@@ -207,13 +221,20 @@ export const useNeuralNetwork = () => {
     socket.on('voice_match_update', onVoiceMatchUpdate);
     socket.on('sim_data_result', onSimDataResult);
     socket.on('sim_data_loading', onSimDataLoading);
-    socket.on('init_state', (state: { messages?: Message[]; persona?: 'jarvis' | 'anna'; muted?: boolean; wake_word_active?: boolean; location?: LocationData; vortex_logs?: VortexLog[]; voice_match?: number; [key: string]: unknown }) => {
+    socket.on('sim_panel_open', onSimPanelOpen);
+    socket.on('init_state', (state: { messages?: Message[]; persona?: 'jarvis' | 'anna'; muted?: boolean; wake_word_active?: boolean; location?: LocationData; vortex_logs?: VortexLog[]; voice_match?: number; sim_records?: SimRecord[]; sim_loading?: boolean; sim_query_masked?: string; sim_status?: string; sim_message?: string; sim_panel_open?: boolean; [key: string]: unknown }) => {
       onInitState(state as { messages?: Message[]; persona?: 'jarvis' | 'anna' });
       setIsMuted(state.muted || false);
       setIsWakeWordActive(state.wake_word_active !== false);
       if (state.location) setLocation(state.location);
       if (state.vortex_logs) setVortexLogs(state.vortex_logs.reverse());
       if (state.voice_match !== undefined) setVoiceMatch(state.voice_match);
+      if (state.sim_records) setSimRecords(state.sim_records);
+      if (state.sim_loading !== undefined) setSimLoading(state.sim_loading);
+      if (state.sim_query_masked) setSimQueryMasked(state.sim_query_masked);
+      if (state.sim_status) setSimStatus(state.sim_status);
+      if (state.sim_message) setSimMessage(state.sim_message);
+      if (state.sim_panel_open !== undefined) setIsSimPanelOpen(state.sim_panel_open);
     });
     socket.on('new_message', onNewMessage);
     socket.on('update_message', onUpdateMessage);
@@ -239,6 +260,7 @@ export const useNeuralNetwork = () => {
       socket.off('voice_match_update', onVoiceMatchUpdate);
       socket.off('sim_data_result', onSimDataResult);
       socket.off('sim_data_loading', onSimDataLoading);
+      socket.off('sim_panel_open', onSimPanelOpen);
       socket.off('init_state');
       socket.off('new_message', onNewMessage);
       socket.off('update_message', onUpdateMessage);
@@ -292,6 +314,25 @@ export const useNeuralNetwork = () => {
     emitCommand('wake_word_toggle', nextActive);
   };
 
+  const openSimPanel = () => {
+    setIsSimPanelOpen(true);
+    emitCommand('open_sim_panel');
+  };
+
+  const closeSimPanel = () => {
+    setIsSimPanelOpen(false);
+  };
+
+  const requestSimLookup = (query: string) => {
+    const normalized = query.trim();
+    if (!normalized) return;
+    setIsSimPanelOpen(true);
+    setSimLoading(true);
+    setSimStatus('loading');
+    setSimMessage('');
+    emitCommand('sim_lookup', normalized);
+  };
+
   // Mock Spectral Data Generator for animation reactivity
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
@@ -329,12 +370,19 @@ export const useNeuralNetwork = () => {
     voiceMatch,
     simRecords,
     simLoading,
+    simQueryMasked,
+    simStatus,
+    simMessage,
+    isSimPanelOpen,
     changePersona,
     updateSettings,
     emitCommand,
     sendMessage,
     toggleMute,
     toggleWakeWord,
+    openSimPanel,
+    closeSimPanel,
+    requestSimLookup,
     reconnect: () => {
       disconnectSocket();
       setIsConnected(false);

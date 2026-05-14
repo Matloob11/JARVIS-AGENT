@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Settings, Send, Mic, MicOff, Wifi } from 'lucide-react';
+import { Settings, Send, Mic, MicOff, Wifi, ShieldCheck, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // Core Components
@@ -11,6 +11,7 @@ import SettingsPanel from '@/components/SettingsPanel';
 import CameraView from '@/components/CameraView';
 import LocationBox from '@/components/LocationBox';
 import SystemLogs from '@/components/SystemLogs';
+import SimInfoBox from '@/components/SimInfoBox';
 
 import { useNeuralNetwork } from '@/hooks/useNeuralNetwork';
 
@@ -26,7 +27,16 @@ const Dashboard: React.FC = () => {
     messages,
     sendMessage,
     location,
+    simRecords,
+    simLoading,
+    simQueryMasked,
+    simStatus,
+    simMessage,
+    isSimPanelOpen,
     toggleMute,
+    openSimPanel,
+    closeSimPanel,
+    requestSimLookup,
     reconnect,
   } = useNeuralNetwork();
 
@@ -117,6 +127,15 @@ const Dashboard: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 pr-2 border-r border-white/[0.05]">
+            <button
+              onClick={openSimPanel}
+              className={`p-2 rounded-md transition-all duration-300 ${
+                isSimPanelOpen ? `${theme.text} bg-white/[0.06]` : 'text-white/40 hover:text-white hover:bg-white/5'
+              }`}
+              title="SIM lookup workspace"
+            >
+              <ShieldCheck size={14} />
+            </button>
             <button
               onClick={toggleMute}
               className={`p-2 rounded-md transition-all duration-300 ${isMuted ? 'text-red-400 bg-red-500/10' : 'text-white/40 hover:text-white hover:bg-white/5'}`}
@@ -278,6 +297,50 @@ const Dashboard: React.FC = () => {
 
       <AnimatePresence>
         {activePanel === 'settings' && <SettingsPanel onClose={() => setActivePanel(null)} />}
+        {isSimPanelOpen && (
+          <motion.div
+            key="sim-lookup-panel"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 backdrop-blur-xl px-5 no-drag"
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 18, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 18, scale: 0.98 }}
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+              className={`relative w-full max-w-[560px] rounded-lg border ${theme.border} bg-[#07090D]/95 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.55)]`}
+            >
+              <div className="mb-4 flex items-center justify-between border-b border-white/[0.04] pb-4">
+                <div className="flex items-center gap-3">
+                  <div className={`flex h-8 w-8 items-center justify-center rounded-lg border ${theme.border} bg-white/[0.03]`}>
+                    <ShieldCheck size={15} className={theme.text} />
+                  </div>
+                  <span className="font-orbitron text-[10px] font-black uppercase tracking-[0.35em] text-white/55">
+                    SIM_Access
+                  </span>
+                </div>
+                <button
+                  onClick={closeSimPanel}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-white/35 transition hover:bg-white/[0.05] hover:text-white"
+                  title="Close"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+              <SimInfoBox
+                records={simRecords}
+                isLoading={simLoading}
+                queryMasked={simQueryMasked}
+                status={simStatus}
+                message={simMessage}
+                activePersona={activePersona}
+                onSearch={requestSimLookup}
+              />
+            </motion.div>
+          </motion.div>
+        )}
       </AnimatePresence>
     </div>
   );

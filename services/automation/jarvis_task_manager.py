@@ -9,12 +9,13 @@ import sqlite3
 import os
 from datetime import datetime
 from typing import Any, List, Dict
+from services.utils.jarvis_config import config
 from services.utils.jarvis_logger import setup_logger
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
 
 logger = setup_logger("JARVIS-TASKS")
 
-DB_PATH = os.path.join("conversations", "tasks.db")
+DB_PATH = os.path.join(config.project_root, "conversations", "tasks.db")
 
 class TaskManager:
     def __init__(self):

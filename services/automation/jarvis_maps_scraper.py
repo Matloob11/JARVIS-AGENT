@@ -37,12 +37,17 @@ class Place:
     socials: str = ""
 
 class MapsScraper:
-    def __init__(self):
-        # Resolve path relative to project root
-        current_dir = os.path.dirname(os.path.abspath(__file__))
+    def _get_abs_output_dir(self):
+        # Always resolve relative to this file's location to find project root
+        current_dir = os.path.dirname(os.path.abspath(__file__)) # services/automation
         project_root = os.path.abspath(os.path.join(current_dir, "..", ".."))
-        self.output_dir = os.path.join(project_root, "Jarvis_Outputs", "leads")
-        os.makedirs(self.output_dir, exist_ok=True)
+        path = os.path.join(project_root, "Jarvis_Outputs", "leads")
+        os.makedirs(path, exist_ok=True)
+        return path
+
+    def __init__(self):
+        # Initialize output directory using robust path resolution
+        self.output_dir = self._get_abs_output_dir()
 
     async def _extract_text(self, page, selector):
         try:
@@ -131,10 +136,11 @@ class MapsScraper:
     def save_results(self, places: List[Place], filename: str, format: str = "csv"):
         if not places: return None
         
+        output_dir = self._get_abs_output_dir()
         df = pd.DataFrame([asdict(p) for p in places])
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         safe_name = re.sub(r'[^\w\s-]', '', filename).strip().replace(' ', '_')
-        base_path = os.path.join(self.output_dir, f"{safe_name}_{timestamp}")
+        base_path = os.path.join(output_dir, f"{safe_name}_{timestamp}")
         
         final_file = ""
         if format.lower() == "csv":
@@ -195,7 +201,8 @@ async def open_leads_file(name: str) -> dict[str, Any]:
     """
     Sir, agar aap ne pehle koi leads scrape ki hain, to unka naam bataein, main file open kar doon ga.
     """
-    output_dir = os.path.join(os.getcwd(), "Jarvis_Outputs", "leads")
+    # Use the shared logic from the service to find the correct directory
+    output_dir = scraper_service._get_abs_output_dir()
     if not os.path.exists(output_dir):
         return {"status": "error", "message": "❌ Abhi tak koi leads folder nahi bana."}
         

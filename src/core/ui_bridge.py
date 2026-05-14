@@ -97,6 +97,10 @@ class BridgeStateManager:
             "voice_match": 0.0,
             "sim_records": [],
             "sim_loading": False,
+            "sim_query_masked": "",
+            "sim_status": "idle",
+            "sim_message": "",
+            "sim_panel_open": False,
         }
 
     async def get_state(self) -> dict[str, Any]:
@@ -328,13 +332,26 @@ async def notify_bridge(data: dict[str, Any], request: Request) -> dict[str, str
         await sio.emit("tool_update", payload)
     elif event_type == "sim_data_result":
         records: list[Any] = payload.get("records", []) if isinstance(payload, dict) else []
+        query_masked: str = payload.get("phone", "") if isinstance(payload, dict) else ""
+        status: str = payload.get("status", "success") if isinstance(payload, dict) else "success"
+        message: str = payload.get("message", "") if isinstance(payload, dict) else ""
         await bridge_manager.update_state("sim_records", records)
         await bridge_manager.update_state("sim_loading", False)
+        await bridge_manager.update_state("sim_query_masked", query_masked)
+        await bridge_manager.update_state("sim_status", status)
+        await bridge_manager.update_state("sim_message", message)
         await sio.emit("sim_data_result", payload)
     elif event_type == "sim_data_loading":
+        query_masked: str = payload.get("query_masked", "") if isinstance(payload, dict) else ""
         await bridge_manager.update_state("sim_loading", True)
         await bridge_manager.update_state("sim_records", [])
+        await bridge_manager.update_state("sim_query_masked", query_masked)
+        await bridge_manager.update_state("sim_status", "loading")
+        await bridge_manager.update_state("sim_message", "Secure lookup workflow started.")
         await sio.emit("sim_data_loading", payload)
+    elif event_type == "sim_panel_open":
+        await bridge_manager.update_state("sim_panel_open", True)
+        await sio.emit("sim_panel_open", payload)
     else:
         logger.warning("⚠️ UNKNOWN EVENT: %s", event_type)
 

@@ -13,6 +13,7 @@ from services.ai_core.jarvis_vision import vision_system
 from services.ai_core.swarm_manager import swarm_coordinator
 from services.automation.jarvis_reminders import check_due_reminders
 from services.ai_core.jarvis_vector_memory import jarvis_vector_db
+from services.info.jarvis_sim_lookup import lookup_sim_data, open_sim_lookup_panel
 from services.utils.jarvis_adaptive import adaptive_engine
 from services.utils.jarvis_autonomous import autonomous_protector
 from services.utils.jarvis_bridge import notify_transcription, notify_ui
@@ -166,6 +167,13 @@ class UIBridgeListener:
             elif cmd_type == "clear_memory":
                 logger.info("🧠 Clearing short-term memory...")
                 await self.assistant.memory_extractor.memory.clear()
+            elif cmd_type == "open_sim_panel":
+                logger.info("Opening SIM lookup panel via UI command.")
+                await open_sim_lookup_panel()
+            elif cmd_type == "sim_lookup":
+                if payload:
+                    logger.info("SIM lookup workflow requested from UI.")
+                    await lookup_sim_data(str(payload))
             elif cmd_type == "chat":
                 if payload:
                     logger.info("💬 Chat message received: %s", payload)

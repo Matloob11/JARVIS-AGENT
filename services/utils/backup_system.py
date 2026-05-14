@@ -8,6 +8,7 @@ import datetime
 import os
 import shutil
 
+from services.utils.jarvis_config import config
 from services.utils.jarvis_logger import jarvis_log as log
 
 
@@ -19,11 +20,11 @@ class JarvisBackup:
     def __init__(self, source_dirs=None, backup_root="backups"):
         """Initializes the backup system with source and destination."""
         self.source_dirs = source_dirs or [
-            "Jarvis_Outputs",
-            "conversations/identity.json",
-            "services/utils/jarvis_config.py",
+            os.path.join(config.project_root, "Jarvis_Outputs"),
+            os.path.join(config.project_root, "conversations", "identity.json"),
+            os.path.join(config.project_root, "services", "utils", "jarvis_config.py"),
         ]
-        self.backup_root = backup_root
+        self.backup_root = os.path.join(config.project_root, backup_root)
         os.makedirs(self.backup_root, exist_ok=True)
 
     def perform_backup(self) -> str:

@@ -1,6 +1,6 @@
 [tool.ruff]
 # Target Python version
-target-version = "py311"
+target-version = "py312"
 
 # Exclude directories that contain debug, profiling, or temporary tools
 exclude = [

@@ -14,6 +14,7 @@ import pyautogui
 
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
 from services.utils.jarvis_bridge import notify_thinking, notify_tool_action
+from services.utils.jarvis_config import config
 from services.utils.jarvis_logger import setup_logger
 from services.utils.jarvis_win32 import WIN32_ERRORS, pywintypes, win32con, win32gui
 
@@ -142,8 +143,7 @@ class NotepadAutomation:
         try:
             # Set dedicated workspace folder as Jarvis_Outputs
             if not folder_path:
-                project_root = os.getcwd()
-                folder_path = os.path.join(project_root, "Jarvis_Outputs")
+                folder_path = os.path.join(config.project_root, "Jarvis_Outputs")
 
             os.makedirs(folder_path, exist_ok=True)
 

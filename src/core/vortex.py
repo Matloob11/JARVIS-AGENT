@@ -31,16 +31,21 @@ def start_process(command: str, name: str, extra_env: dict[str, str] | None = No
     env = os.environ.copy()
     # Attempt to find project root by looking for 'src' folder
     # Current file is at (root)/src/core/vortex.py
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    root_dir = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))
+    current_dir = os.path.dirname(os.path.abspath(__file__)) # src/core
+    # Go up 2 levels: src/core -> src -> root
+    root_dir = os.path.abspath(os.path.join(current_dir, "..", ".."))
     
-    # If the above doesn't have 'src', fallback to CWD if it looks like project root
+    # Validation: Check if 'src' exists in the resolved root
     if not os.path.isdir(os.path.join(root_dir, 'src')):
-        cwd = os.getcwd()
-        if os.path.isdir(os.path.join(cwd, 'src')):
-            root_dir = cwd
+        # Fallback to searching upwards if we're deeper than expected
+        search_root = current_dir
+        while search_root and os.path.dirname(search_root) != search_root:
+            if os.path.isdir(os.path.join(search_root, 'src')):
+                root_dir = search_root
+                break
+            search_root = os.path.dirname(search_root)
             
-    print(f"[VORTEX] Root Directory detected: {root_dir}")
+    print(f"[VORTEX] Project Root: {root_dir}")
     python_path_parts = [root_dir]
     existing = env.get('PYTHONPATH', '')
     if existing:

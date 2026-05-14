@@ -24,7 +24,7 @@ from fuzzywuzzy import process
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
 from services.automation.jarvis_whatsapp_automation import whatsapp_bot
 from services.automation.keyboard_mouse_ctrl import type_text_tool
-from services.utils.jarvis_config import APP_MAPPINGS, FOCUS_TITLES
+from services.utils.jarvis_config import APP_MAPPINGS, FOCUS_TITLES, config
 from services.utils.jarvis_logger import setup_logger
 
 # First-party imports
@@ -540,7 +540,7 @@ async def open_outputs_folder(subfolder: str = "") -> dict:
     Opens the Jarvis_Outputs folder or a specific subfolder.
     """
     try:
-        base_dir = os.path.join(os.getcwd(), "Jarvis_Outputs")
+        base_dir = os.path.join(config.project_root, "Jarvis_Outputs")
         target_path = base_dir
 
         if subfolder:
