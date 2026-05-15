@@ -66,7 +66,7 @@ class JarvisCrypto:
             path = Path(env_file_path)
             if not path.exists():
                 logger.warning("⚠️ Environment file %s not found", path)
-                return ""
+                raise FileNotFoundError(f"Environment file not found: {path}")
 
             # Read and parse env file
             env_data = {}

@@ -32,6 +32,17 @@ async def test_controller_activation(clean_controller):
 @pytest.mark.asyncio
 async def test_inactive_returns(clean_controller):
     # Test all methods when inactive
+    inactive = "\U0001f6d1 Controller is inactive."
+    assert await clean_controller.move_cursor("up") == inactive
+    assert await clean_controller.mouse_click() == inactive
+    assert await clean_controller.scroll_cursor("up") == inactive
+    assert await clean_controller.type_text("test") == inactive
+    assert await clean_controller.press_key("enter") == inactive
+    assert await clean_controller.press_hotkey(["ctrl", "c"]) == inactive
+    assert await clean_controller.control_volume("up") == inactive
+    assert await clean_controller.set_volume_percentage(50) == inactive
+    assert await clean_controller.swipe_gesture("up") == inactive
+    return
     assert await clean_controller.move_cursor("up") == "ðŸ›‘ Controller is inactive."
     assert await clean_controller.mouse_click() == "ðŸ›‘ Controller is inactive."
     assert await clean_controller.scroll_cursor("up") == "ðŸ›‘ Controller is inactive."

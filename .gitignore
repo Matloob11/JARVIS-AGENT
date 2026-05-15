@@ -93,6 +93,8 @@ node_modules/
 stonix_ui/node_modules/
 stonix_ui/dist/
 stonix_ui/.vite/
+stonix_ui/test-results/
+stonix_ui/playwright-report/
 *.tsbuildinfo
 
 # Electron build outputs

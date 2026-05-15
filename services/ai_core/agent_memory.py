@@ -4,6 +4,7 @@ Memory extraction and processing for the JARVIS agent.
 """
 
 import asyncio
+import inspect
 import os
 from datetime import datetime
 from typing import Any
@@ -39,16 +40,26 @@ class MemoryExtractor:
     async def _audit_memory(self) -> None:
         """Audits memory structure and logs stale context count."""
         try:
-            is_valid: bool = await self.memory.validate_integrity()
+            integrity_result = self.memory.validate_integrity()
+            is_valid: bool = (
+                await integrity_result
+                if inspect.isawaitable(integrity_result)
+                else bool(integrity_result)
+            )
             if not is_valid:
                 logger.warning(
                     "⚠️ Memory Integrity Compromised for user: %s", self.user_id)
 
-            stale_count: int = await self.memory.archive_stale_context()
+            stale_result = self.memory.archive_stale_context()
+            stale_count: int = (
+                await stale_result
+                if inspect.isawaitable(stale_result)
+                else int(stale_result or 0)
+            )
             if stale_count > 0:
                 logger.info(
                     "🧠 Memory Optimizer: %d stale contexts identified.", stale_count)
-        except (OSError, ValueError, RuntimeError, AttributeError) as e:
+        except (OSError, ValueError, RuntimeError, AttributeError, TypeError) as e:
             logger.debug("Memory audit failed: %s", e)
 
     async def run(self, chat_ctx: list[Any]) -> None:

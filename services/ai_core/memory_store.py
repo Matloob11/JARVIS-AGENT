@@ -118,17 +118,26 @@ class ConversationMemory:
 
         new_timestamp = new_conv_data.get('timestamp')
         new_messages = new_conv_data.get('messages', [])
+        new_fingerprint = self._conversation_fingerprint(new_conv_data)
 
         for existing_conv in existing_conversations:
             existing_timestamp = existing_conv.get('timestamp')
             existing_messages = existing_conv.get('messages', [])
 
-            # Compare by timestamp and message count
-            if (existing_timestamp == new_timestamp and
+            if self._conversation_fingerprint(existing_conv) == new_fingerprint:
+                return True
+
+            # Compare timestamped message bundles without treating unrelated flat
+            # records as duplicates just because they have no messages field.
+            if (existing_timestamp == new_timestamp and new_messages and existing_messages and
                     len(existing_messages) == len(new_messages)):
                 return True
 
         return False
+
+    def _conversation_fingerprint(self, conversation: dict[str, Any]) -> str:
+        """Create a stable duplicate key for both session bundles and flat records."""
+        return json.dumps(conversation, sort_keys=True, default=str, ensure_ascii=False)
 
     async def save_conversation(self, conversation: dict | object) -> bool:
         """Atomic save - returns True if successful. Updates LRU cache."""
@@ -278,18 +287,18 @@ class ConversationMemory:
 
     async def clear_duplicates(self) -> int:
         """Remove duplicate conversations atomically under the lock."""
-        async with self.lock:
-            memory = await self._load_memory_unlocked()
-            unique_conversations = []
-            removed_count = 0
+        memory = await self.load_memory()
+        unique_conversations = []
+        removed_count = 0
 
-            for conv in memory:
-                if not self._conversation_exists(conv, unique_conversations):
-                    unique_conversations.append(conv)
-                else:
-                    removed_count += 1
+        for conv in memory:
+            if not self._conversation_exists(conv, unique_conversations):
+                unique_conversations.append(conv)
+            else:
+                removed_count += 1
 
-            if removed_count > 0:
+        if removed_count > 0:
+            async with self.lock:
                 def _write_unique():
                     temp_file = f"{self.memory_file}.tmp"
                     data = json.dumps(unique_conversations, indent=2, ensure_ascii=False)

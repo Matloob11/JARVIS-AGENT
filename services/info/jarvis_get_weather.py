@@ -43,6 +43,7 @@ async def get_weather(city: str = "Lahore") -> str | dict[str, Any]:
         logger.error("OpenWeather API key missing hai.")
         return {
             "status": "error",
+            "error": "OpenWeather API key missing",
             "message": "Maazrat Sir! OpenWeather API key nahi mili. .env file check karein.",
         }
 

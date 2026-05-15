@@ -117,13 +117,18 @@ class TaskProtector:
     async def cancel_all(self) -> None:
         """Cancels all protected tasks and waits for completion."""
         logger.info("🛑 Cancelling all protected tasks...")
+        real_tasks = []
         for task in self._tasks.values():
+            if not isinstance(task, asyncio.Future):
+                logger.debug("Skipping non-asyncio task during cleanup: %s", type(task))
+                continue
+            real_tasks.append(task)
             if not task.done():
                 task.cancel()
 
         # Wait for all tasks to finish cancellation
-        if self._tasks:
-            await asyncio.gather(*self._tasks.values(), return_exceptions=True)
+        if real_tasks:
+            await asyncio.gather(*real_tasks, return_exceptions=True)
         self._tasks.clear()
 
     def get_task_status(self) -> dict[str, dict[str, Any]]:

@@ -10,9 +10,14 @@ from livekit.agents import StopResponse
 def mock_agent_deps():
     with patch("livekit.agents.Agent.update_instructions", new_callable=AsyncMock):
         with patch("livekit.agents.Agent.__init__", return_value=None):
-            with patch("livekit.plugins.google.realtime.RealtimeModel"):
-                with patch("jarvis_identity.jarvis_id.get_context", return_value="Test Context"):
-                    with patch("agent_memory.MemoryExtractor"):
+            with patch("src.core.agent_core.jarvis_id.get_context", return_value="Test Context"):
+                with patch("src.core.agent_core.JarvisPluginManager") as mock_plugins:
+                    mock_plugins.return_value.discover_plugins.return_value = None
+                    with patch("src.core.agent_core.MemoryExtractor") as mock_mem:
+                        inst = mock_mem.return_value
+                        inst.memory = MagicMock()
+                        inst.memory.get_recent_context = AsyncMock(return_value=[])
+                        inst.memory.get_semantic_context = AsyncMock(return_value=[])
                         yield
 
 
@@ -152,6 +157,16 @@ async def test_inject_reasoning_and_memory_exception(mock_agent_deps):
 async def test_on_user_turn_completed_exhaustive(mock_agent_deps):
     assistant = BrainAssistant(chat_ctx=MagicMock())
     assistant._wake_word_mode = True
+    assistant.vision_handler.handle_vision_query = AsyncMock()
+    assistant.vision_handler.inject_window_context = AsyncMock()
+    assistant._handle_anna_upset_state = AsyncMock()
+    assistant._inject_emotional_context = AsyncMock()
+    assistant._inject_reasoning_and_memory = AsyncMock()
+    assistant.prune_chat_context = AsyncMock()
+    def close_background(coro):
+        if hasattr(coro, "close"):
+            coro.close()
+    assistant._run_back = close_background
     turn_ctx = MagicMock()
     new_message = MagicMock()
 

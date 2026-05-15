@@ -85,10 +85,12 @@ async def test_analyze_content_fallback(mock_pg, mock_genai):
     mock_pg.screenshot.return_value = Image.new('RGB', (10, 10))
 
     with patch.object(ScreenPerceiver, 'analyze_via_google', side_effect=ValueError("RESOURCE_EXHAUSTED")):
-        with patch.object(ScreenPerceiver, 'analyze_via_openrouter', new_callable=AsyncMock) as m_fallback:
-            m_fallback.return_value = "Fallback result"
-            res = await perceiver.analyze_content()
-            assert res == "Fallback result"
+        with patch.object(ScreenPerceiver, 'analyze_via_groq', new_callable=AsyncMock) as m_groq:
+            with patch.object(ScreenPerceiver, 'analyze_via_openrouter', new_callable=AsyncMock) as m_fallback:
+                m_groq.return_value = "Error: Groq unavailable"
+                m_fallback.return_value = "Fallback result"
+                res = await perceiver.analyze_content()
+                assert res == "Fallback result"
 
 
 @pytest.mark.asyncio

@@ -44,6 +44,10 @@ class JarvisDiagnostics:
         logger.info("Diagnostics complete: %d checks performed.", len(results))
         return results
 
+    async def run_full_diagnostics(self) -> list[dict[str, Any]]:
+        """Backward-compatible alias for older diagnostics callers/tests."""
+        return await self.run_all()
+
     async def check_network(self) -> dict[str, Any]:
         """Checks Internet connectivity via ping."""
         import sys  # pylint: disable=import-outside-toplevel

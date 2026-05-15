@@ -8,9 +8,10 @@ def mock_agent_deps():
     # Mocking Agent.__init__ to avoid real LiveKit setup
     with patch("livekit.agents.Agent.__init__", return_value=None):
         with patch("livekit.agents.Agent.update_instructions", new_callable=AsyncMock):
-            with patch("livekit.plugins.google.realtime.RealtimeModel"):
-                with patch("services.ai_core.jarvis_identity.jarvis_id.get_context", return_value="Test Context"):
-                    with patch("services.ai_core.agent_memory.MemoryExtractor") as mock_mem:
+            with patch("src.core.agent_core.jarvis_id.get_context", return_value="Test Context"):
+                with patch("src.core.agent_core.JarvisPluginManager") as mock_plugins:
+                    mock_plugins.return_value.discover_plugins.return_value = None
+                    with patch("src.core.agent_core.MemoryExtractor") as mock_mem:
                         inst = mock_mem.return_value
                         inst.memory = MagicMock()
                         inst.memory.get_recent_context = AsyncMock(return_value=[])

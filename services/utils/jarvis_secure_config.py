@@ -26,6 +26,9 @@ class SecureConfigManager:
             encrypted_env_file: Path to encrypted environment file
         """
         self.encrypted_env_file = encrypted_env_file
+        self._uses_default_file = os.path.normcase(os.path.abspath(encrypted_env_file)) == os.path.normcase(
+            os.path.abspath(".env.encrypted")
+        )
         self._config_cache: dict[str, str] = {}
         self._crypto = JarvisCrypto()
 
@@ -41,12 +44,13 @@ class SecureConfigManager:
                 logger.info("🔓 Loaded configuration from encrypted file")
 
             # Fallback to regular .env if encrypted doesn't exist
-            elif os.path.exists(".env"):
+            elif self._uses_default_file and os.path.exists(".env"):
                 logger.warning("⚠️ Using unencrypted .env file. Consider encrypting it.")
                 self._load_plain_env()
 
             # Load from environment variables as final fallback
-            self._load_from_environment()
+            if self._uses_default_file:
+                self._load_from_environment()
 
         except Exception as e: # pylint: disable=broad-exception-caught
             logger.error("❌ Failed to load configuration: %s", e)
@@ -127,8 +131,11 @@ class SecureConfigManager:
 
     def get_weather_config(self) -> dict[str, str]:
         """Get weather API configuration"""
+        api_key = self.get('WEATHER_API_KEY') or self.get('OPENWEATHER_API_KEY')
+        if not api_key:
+            self.get_required('WEATHER_API_KEY')
         return {
-            'api_key': self.get_required('WEATHER_API_KEY') or self.get_required('OPENWEATHER_API_KEY'),
+            'api_key': api_key or '',
         }
 
     def get_user_config(self) -> dict[str, str]:
@@ -154,6 +161,8 @@ class SecureConfigManager:
         validation_results = {}
         for key in required_keys:
             validation_results[key] = bool(self.get(key))
+        if not validation_results['WEATHER_API_KEY']:
+            validation_results['WEATHER_API_KEY'] = bool(self.get('OPENWEATHER_API_KEY'))
 
         # Overall validation status
         all_valid = all(validation_results.values())

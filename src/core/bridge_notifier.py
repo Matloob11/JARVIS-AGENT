@@ -24,13 +24,18 @@ class BridgeNotifier:
 
     async def notify_reasoning(self, reasoning_result: dict[str, Any]) -> None:
         """Sends intelligence/reasoning metadata to the UI Bridge."""
+        if not isinstance(reasoning_result, dict):
+            reasoning_result = {"intent_analysis": {}, "plan": [], "raw": str(reasoning_result)}
+
+        intent_analysis = reasoning_result.get("intent_analysis", {})
+        if not isinstance(intent_analysis, dict):
+            intent_analysis = {"primary_intent": str(intent_analysis)}
+
         await self.notify_event("reasoning", {
-            "intent": reasoning_result.get("intent_analysis", {}).get("primary_intent"),
-            "confidence": reasoning_result.get(
-                "intent_analysis", {}).get("confidence_scores", {}),
+            "intent": intent_analysis.get("primary_intent"),
+            "confidence": intent_analysis.get("confidence_scores", {}),
             "plan": reasoning_result.get("plan", []),
-            "is_ambiguous": reasoning_result.get(
-                "intent_analysis", {}).get("is_ambiguous", False),
+            "is_ambiguous": intent_analysis.get("is_ambiguous", False),
         })
 
     async def notify_thinking(self, state: str) -> None:

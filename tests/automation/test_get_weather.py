@@ -41,7 +41,8 @@ async def test_get_weather_api_failure_search_fallback():
 async def test_get_weather_no_api_key():
     with patch("os.getenv", return_value=None):
         result = await get_weather("London")
-        assert "OpenWeather API key" in result
+        assert result["status"] == "error"
+        assert "OpenWeather API key" in result["message"]
 
 @pytest.mark.asyncio
 async def test_get_weather_via_search_success():

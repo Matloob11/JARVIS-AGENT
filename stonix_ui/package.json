@@ -14,6 +14,10 @@
     "prod-build": "npm run build",
     "prod-serve": "npx serve -s dist -l 5173",
     "prod-run": "SET ELECTRON_IS_DEV=0 && npx concurrently -k \"npm run prod-serve\" \"wait-on http://127.0.0.1:5173 && electron .\"",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "smoke:electron": "node scripts/electron-prod-smoke.cjs",
+    "verify:prod": "npm run build && npm run test:e2e && npm run smoke:electron",
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "tauri": "tauri"
@@ -44,6 +48,7 @@
     "zustand": "^4.3.8"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@tauri-apps/cli": "^1.5.0",
     "@types/node": "^20.19.37",
     "@types/react": "^18.3.28",
@@ -63,11 +68,11 @@
     "postcss": "^8.4.23",
     "prettier": "^2.8.8",
     "prettier-plugin-tailwindcss": "^0.2.8",
+    "serve": "^14.2.3",
     "tailwindcss": "^3.3.2",
     "typescript": "^5.9.3",
     "vite": "^6.4.1",
-    "wait-on": "^7.2.0",
-    "serve": "^14.2.3"
+    "wait-on": "^7.2.0"
   },
   "overrides": {
     "minimatch": "^3.1.2",

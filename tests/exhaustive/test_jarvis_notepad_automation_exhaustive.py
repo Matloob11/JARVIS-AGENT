@@ -56,7 +56,7 @@ async def test_simulate_typing_success(notepad_automation):
         res = await notepad_automation.simulate_typing("hello\nworld")
         assert res is True
         assert mock_write.call_count == 2
-        assert mock_press.call_count == 2
+        assert mock_press.call_count == 1
 
 
 @pytest.mark.asyncio
@@ -94,7 +94,7 @@ async def test_close_active_notepad_force(notepad_automation):
         res = await notepad_automation.close_active_notepad(force=True)
         assert res is True
         mock_run.assert_called_with(
-            ["taskkill", "/f", "/im", "notepad.exe"], check=False, capture_output=True)
+            [r"C:\Windows\System32\taskkill.exe", "/f", "/im", "notepad.exe"], check=False, capture_output=True)
 
 
 @pytest.mark.asyncio
@@ -162,7 +162,7 @@ async def test_save_file_safely_desktop_fallback(notepad_automation):
 
         success, path = await notepad_automation.save_file_safely("c", "f", folder_path=None)
         assert success is True
-        assert "C:\\Home" in path
+        assert "Jarvis_Outputs" in path
 
 
 @pytest.mark.asyncio
@@ -271,7 +271,7 @@ async def test_open_notepad_simple_failure():
 async def test_create_template_code_full_flow():
     with patch("jarvis_notepad_automation.notepad_automation") as mock_auto, \
             patch("subprocess.Popen") as mock_popen, \
-            patch("os.startfile") as mock_startfile, \
+            patch("webbrowser.open") as mock_open_browser, \
             patch("pyautogui.hotkey") as mock_hotkey:
 
         mock_auto.save_file_safely = AsyncMock(
@@ -283,7 +283,7 @@ async def test_create_template_code_full_flow():
         res = await create_template_code("html_login", "test.html", auto_run=True)
         assert res["status"] == "success"
         mock_auto.simulate_typing.assert_called()
-        mock_startfile.assert_called()
+        mock_open_browser.assert_called()
         mock_hotkey.assert_called_with('ctrl', 's')
 
 
@@ -334,7 +334,7 @@ async def test_open_notepad_simple_success():
     with patch("subprocess.Popen") as mock_popen:
         res = await open_notepad_simple()
         assert res["status"] == "success"
-        mock_popen.assert_called_with(['notepad.exe'])
+        mock_popen.assert_called_with([r"C:\Windows\System32\notepad.exe"])
 
 
 @pytest.mark.asyncio
@@ -375,7 +375,9 @@ def test_notepad_automation_no_win32_class():
     from importlib import reload
     import jarvis_notepad_automation
 
-    with patch.dict(sys.modules, {'win32gui': None, 'win32con': None, 'pywintypes': None}):
+    with patch("services.utils.jarvis_win32.win32gui", None), \
+            patch("services.utils.jarvis_win32.win32con", None), \
+            patch("services.utils.jarvis_win32.pywintypes", None):
         reload(jarvis_notepad_automation)
         # Should run without error
         assert jarvis_notepad_automation.win32gui is None

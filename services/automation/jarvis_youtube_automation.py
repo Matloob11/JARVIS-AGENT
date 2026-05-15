@@ -13,9 +13,7 @@ from urllib.parse import quote
 
 try:
     from youtube_search import YoutubeSearch
-    _HAS_YT_SEARCH = True
 except ImportError:
-    _HAS_YT_SEARCH = False
     YoutubeSearch = None
 
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
@@ -35,13 +33,13 @@ class YouTubeAutomation:
 
     async def get_video_url(self, query: str) -> str | None:
         """
-        Searches for a YouTube video and returns a direct embed URL for ad-minimal playback.
+        Searches for a YouTube video and returns the canonical watch URL.
         Falls back to a YouTube search URL if youtube_search package is not installed.
         """
         try:
             logger.info("Searching for video URL: %s", query)
 
-            if _HAS_YT_SEARCH and YoutubeSearch:
+            if YoutubeSearch is not None:
                 from typing import cast
                 def perform_search() -> list[dict[str, Any]]:
                     results: Any = YoutubeSearch(query, max_results=1).to_dict()
@@ -52,8 +50,8 @@ class YouTubeAutomation:
                 if results:
                     video_id: Any = results[0].get('id')
                     if video_id:
-                        url: str = f"https://www.youtube.com/watch?v={video_id}&autoplay=1&rel=0&modestbranding=1"
-                        logger.info("Found High-Compatibility URL: %s", url)
+                        url: str = f"https://www.youtube.com/watch?v={video_id}"
+                        logger.info("Found YouTube URL: %s", url)
                         return url
             else:
                 # Fallback: open YouTube search page directly

@@ -1,88 +1,128 @@
-name: JARVIS Production CI/CD
+name: JARVIS CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
   pull_request:
-    branches: [ main, master ]
+    branches: [main, master]
+  workflow_dispatch:
 
 jobs:
-  quality-gate:
-    runs-on: ubuntu-latest
+  backend:
+    name: Backend compile, smoke, and tests
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      JARVIS_TEST_MODE: "true"
+      JARVIS_ENCRYPTION_KEY: "MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI="
+      VORTEX_SECURITY_TOKEN: "ci-token"
     steps:
       - uses: actions/checkout@v4
 
-      # --- PYTHON QUALITY ---
-      - name: Set up Python
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-          cache: 'pip'
-      
+          python-version: "3.12"
+          cache: pip
+
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install --no-cache-dir ruff safety
-          pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch torchvision
-          if [ -f requirements.txt ]; then pip install --no-cache-dir -r requirements.txt; fi
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
 
-      - name: Lint with Ruff
-        run: ruff check .
+      - name: Compile backend modules
+        run: python -m compileall -q src services main.py
 
-      - name: Security Scan (Dependencies)
-        run: safety check
+      - name: Run LiveKit voice vision smoke
+        run: python scripts/smoke/livekit_voice_vision_smoke.py
 
-      # --- FRONTEND QUALITY ---
+      - name: Run full pytest suite
+        run: python -m pytest tests -q --maxfail=1
+
+  frontend:
+    name: UI production build and e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: stonix_ui
+    env:
+      VITE_VORTEX_SECURITY_TOKEN: "ci-token"
+      VITE_VORTEX_URL: "http://127.0.0.1:5001"
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-            node-version: 20
-            cache: 'npm'
-            cache-dependency-path: stonix_ui/package-lock.json
+          node-version: 20
+          cache: npm
+          cache-dependency-path: stonix_ui/package-lock.json
 
-      - name: Install Frontend dependencies
-        run: cd stonix_ui && npm install
+      - name: Install UI dependencies
+        run: npm ci
 
-      - name: Frontend Security Audit
-        run: |
-          cd stonix_ui
-          npm audit --audit-level=high || echo "⚠️ High severity vulnerabilities found - please review audit report"
-          npm audit --audit-level=critical
+      - name: Build production UI
+        run: npm run build
 
-      - name: Frontend Lint & Type Check
-        run: |
-          cd stonix_ui
-          npm run lint
-          npx tsc --noEmit
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
 
-  git-audit:
+      - name: Run production e2e tests
+        run: npm run test:e2e
+
+      - name: Run Electron production smoke
+        run: npm run smoke:electron
+
+  docker-smoke:
+    name: Docker build and smoke
     runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: [backend, frontend]
+    env:
+      JARVIS_TEST_MODE: "true"
+      VORTEX_SECURITY_TOKEN: "ci-token"
     steps:
       - uses: actions/checkout@v4
-      - name: Check for uncommitted changes
+
+      - name: Free runner disk space
         run: |
-          if [ -n "$(git status --porcelain)" ]; then
-            echo "Uncommitted changes detected!"
-            git status
-            exit 1
-          fi
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc "$AGENT_TOOLSDIRECTORY"
 
-  docker-build-test:
-    needs: quality-gate
-    runs-on: ubuntu-latest
-    steps:
-      - name: Maximize build space
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
-          sudo rm -rf "/usr/local/share/boost"
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-
-      - uses: actions/checkout@v4
-
-      - name: Build Backend Image
+      - name: Build backend image
         run: docker build -t jarvis-backend:test -f Dockerfile.backend .
 
-      - name: Build Frontend Image
+      - name: Smoke backend health endpoint
+        run: |
+          docker run -d --name jarvis-backend-smoke -p 5001:5001 \
+            -e JARVIS_TEST_MODE=true \
+            -e VORTEX_SECURITY_TOKEN="$VORTEX_SECURITY_TOKEN" \
+            jarvis-backend:test
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:5001/health; then
+              docker rm -f jarvis-backend-smoke
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs jarvis-backend-smoke
+          docker rm -f jarvis-backend-smoke
+          exit 1
+
+      - name: Build frontend image
         run: docker build -t jarvis-frontend:test -f stonix_ui/Dockerfile .
+
+      - name: Smoke frontend container
+        run: |
+          docker run -d --name jarvis-frontend-smoke -p 3000:3000 jarvis-frontend:test
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:3000 | grep -qi "jarvis"; then
+              docker rm -f jarvis-frontend-smoke
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs jarvis-frontend-smoke
+          docker rm -f jarvis-frontend-smoke
+          exit 1

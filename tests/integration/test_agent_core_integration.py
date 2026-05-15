@@ -285,7 +285,7 @@ class TestErrorHandling:
             
             # Test error handling
             with pytest.raises(Exception):
-                mock_get("https://api.example.com")
+                await mock_get("https://api.example.com")
     
     def test_configuration_error_handling(self):
         """Test handling of configuration errors"""

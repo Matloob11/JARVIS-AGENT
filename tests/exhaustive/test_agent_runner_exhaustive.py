@@ -1,7 +1,6 @@
 import pytest
 import asyncio
 import socket
-import json
 from unittest.mock import MagicMock, patch, AsyncMock
 from services.utils.jarvis_bridge import notify_ui
 from src.core.agent_runner import start_memory_loop, perform_startup_diagnostics, _start_background_tasks, _cleanup_session_resources, entrypoint
@@ -9,17 +8,15 @@ from src.core.agent_runner import start_memory_loop, perform_startup_diagnostics
 
 @pytest.mark.asyncio
 async def test_notify_ui_success():
-    with patch("socket.socket") as mock_sock_cls:
-        mock_sock = MagicMock()
-        mock_sock_cls.return_value = mock_sock
-        notify_ui("START")
-        mock_sock.sendto.assert_called()
+    with patch("services.utils.jarvis_bridge.httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        await notify_ui("START")
+        mock_post.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_notify_ui_failure():
-    with patch("socket.socket", side_effect=socket.error("Fail")):
-        notify_ui("STOP")
+    with patch("services.utils.jarvis_bridge.httpx.AsyncClient.post", side_effect=socket.error("Fail")):
+        await notify_ui("STOP")
 
 
 @pytest.mark.asyncio

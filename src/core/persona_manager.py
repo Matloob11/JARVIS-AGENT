@@ -68,8 +68,9 @@ class PersonaManager:
 
         await self._assistant.update_instructions(instr)
         # Update underlying LLM model property
-        if hasattr(self._assistant.llm, "voice"):
-             self._assistant.llm.voice = voice
+        llm_obj = getattr(self._assistant, "llm", None) or getattr(self._assistant, "_local_llm", None)
+        if hasattr(llm_obj, "voice"):
+             llm_obj.voice = voice
 
         # Update session modality and voice
         active_session = getattr(self._assistant, "_active_session", None)

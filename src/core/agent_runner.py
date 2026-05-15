@@ -76,11 +76,13 @@ logger = setup_logger("AGENT-RUNNER")
 # Notification functions moved to services.utils.jarvis_bridge
 
 
-async def start_memory_loop(assistant: BrainAssistant, memory_extractor: MemoryExtractor) -> None:
+async def start_memory_loop(assistant: BrainAssistant | Any, memory_extractor: MemoryExtractor | None = None) -> None:
     """Continuous memory extraction loop."""
+    memory_extractor = memory_extractor or MemoryExtractor(getattr(assistant, "user_id", None))
     while True:
         try:
             # Fetch latest history from ChatContext messages
+            history_items = []
             history_list = getattr(assistant, 'chat_ctx', None)
             if history_list and hasattr(history_list, 'messages'):
                 # Handle both property, synchronous method, and asynchronous coroutine
@@ -102,11 +104,21 @@ async def start_memory_loop(assistant: BrainAssistant, memory_extractor: MemoryE
                         messages = []
 
                 history_items = list(messages)[-20:] if messages else []
-            else:
-                history_items = []
+
+            if not history_items:
+                history = getattr(assistant, "history", None)
+                items = getattr(history, "items", None)
+                if callable(items):
+                    items = items()
+                if asyncio.iscoroutine(items) or hasattr(items, "__await__"):
+                    items = await items
+                if isinstance(items, list):
+                    history_items = items[-20:]
+                elif items and hasattr(items, "__iter__"):
+                    history_items = list(items)[-20:]
 
             if history_items:
-                logger.debug("Running memory extraction for %s", assistant.user_id)
+                logger.debug("Running memory extraction for %s", getattr(assistant, "user_id", "User"))
                 await memory_extractor.run(history_items)
             await asyncio.sleep(120) # Throttled to 2 minutes to ensure smoothness
         except Exception as e:
@@ -257,10 +269,14 @@ async def _cleanup_session_resources(session: AgentSession, tasks: list[asyncio.
 
     if tasks:
         logger.info("🛑 Cleaning up background tasks...")
+        real_tasks = []
         for task in tasks:
             if task and isinstance(task, asyncio.Task) and not task.done():
                 task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
+            if isinstance(task, asyncio.Future):
+                real_tasks.append(task)
+        if real_tasks:
+            await asyncio.gather(*real_tasks, return_exceptions=True)
 
 
 def _print_startup_banner() -> None:
@@ -327,11 +343,12 @@ async def entrypoint(ctx: agents.JobContext):
 
             # Try to resolve participant identity for memory/context
             user_id = "User"
-            if ctx.room.remote_participants:
+            remote_participants = list(getattr(ctx.room, "remote_participants", {}).values())
+            if remote_participants:
                 # Take the first remote participant if available
-                first_participant = next(iter(ctx.room.remote_participants.values()))
+                first_participant = remote_participants[0]
                 user_id = first_participant.identity
-            elif ctx.room.local_participant:
+            elif getattr(ctx.room, "local_participant", None):
                 # Fallback to local participant identity if remote not found yet
                 user_id = ctx.room.local_participant.identity
 

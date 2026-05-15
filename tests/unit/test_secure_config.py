@@ -114,7 +114,7 @@ class TestSecureConfigManager:
             f.write("TEST_KEY=test_value\n")
         
         with patch('builtins.open', mock_open(read_data="TEST_KEY=test_value\n")):
-            config = SecureConfigManager("non_existent.encrypted")
+            config = SecureConfigManager()
             assert config.get('TEST_KEY') == 'test_value'
     
     def test_reload_configuration(self, secure_config_manager):

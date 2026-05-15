@@ -7,7 +7,6 @@ import os
 import shlex
 import subprocess
 import time
-import time
 from typing import Any, Optional
 
 import pyautogui
@@ -131,8 +130,12 @@ class NotepadAutomation:
     async def simulate_typing(self, text: str) -> bool:
         """Simulate typing text with visible animation (0.01s interval)"""
         try:
-            # 0.01 is fast but visually distinct
-            pyautogui.write(text, interval=0.01)
+            lines = text.split("\n")
+            for index, line in enumerate(lines):
+                if line:
+                    pyautogui.write(line, interval=0.01)
+                if index < len(lines) - 1:
+                    pyautogui.press("enter")
             return True
         except (pyautogui.FailSafeException, RuntimeError, AttributeError) as e:
             logger.exception("Typing simulation failed: %s", e)
@@ -166,6 +169,7 @@ class NotepadAutomation:
         """Closes the currently active Notepad window gracefully first."""
         try:
             logger.info("Closing Notepad window...")
+            closed_any = False
             
             # Find and close the window titled "Notepad" specifically
             if gw:
@@ -174,7 +178,25 @@ class NotepadAutomation:
                 if windows:
                     for w in windows:
                         w.close() # Graceful close
+                        closed_any = True
                         await asyncio.sleep(0.2)
+
+            if not closed_any and win32gui:
+                handles = []
+
+                def _collect_notepad(hwnd, _param):
+                    title = win32gui.GetWindowText(hwnd)
+                    if win32gui.IsWindowVisible(hwnd) and title and "notepad" in title.lower():
+                        handles.append(hwnd)
+
+                win32gui.EnumWindows(_collect_notepad, None)
+                for hwnd in handles:
+                    win32gui.PostMessage(hwnd, getattr(win32con, "WM_CLOSE", 0x0010), 0, 0)
+                    closed_any = True
+                    await asyncio.sleep(0.2)
+
+            if not closed_any and not force:
+                pyautogui.hotkey('alt', 'f4')
 
             if force:
                 # If still open, taskkill safely
@@ -244,7 +266,7 @@ HTML_LOGIN_TEMPLATE = '''<!DOCTYPE html>
 </head>
 <body>
     <div class="card">
-        <h1>JARVIS CORE</h1>
+        <h1>JARVIS LOGIN</h1>
         <p>Security Identity: Verified</p>
         <button id="mainBtn">ACTIVATE SYSTEM</button>
     </div>
@@ -309,12 +331,19 @@ async def _safe_notify(notify_func, *args, **kwargs):
         pass
 
 
+async def _maybe_await(value):
+    """Await async collaborators while tolerating sync mocks and fallbacks."""
+    if asyncio.iscoroutine(value) or hasattr(value, "__await__"):
+        return await value
+    return value
+
+
 async def _process_notepad_automation(content: str, filename: str, auto_run: bool) -> dict[str, Any]:
     """Unified logic for writing and running code via Notepad."""
     try:
         # Step 1: Initialize File
         await _safe_notify(notify_thinking, "Sir, main file ki details prepare kar raha hoon...")
-        success, full_path = await notepad_automation.save_file_safely("", filename)
+        success, full_path = await _maybe_await(notepad_automation.save_file_safely("", filename))
         if not success:
             return {"status": "error", "message": f"❌ File initialization failed: {full_path}"}
 
@@ -324,6 +353,44 @@ async def _process_notepad_automation(content: str, filename: str, auto_run: boo
         # Step 2: Open and Focus Notepad
         await _safe_notify(notify_thinking, "Sir, Notepad open karke focus set kar raha hoon...")
         subprocess.Popen([r"C:\Windows\System32\notepad.exe", full_path])
+
+        try:
+            if await _maybe_await(notepad_automation.ensure_notepad_focus()):
+                await _safe_notify(notify_thinking, "Sir, aapka code Notepad mein type kar raha hoon...")
+                typed = await _maybe_await(notepad_automation.simulate_typing(content))
+                if not typed:
+                    raise RuntimeError("Typing failed")
+
+                await _safe_notify(notify_thinking, "Sir, code save karke Notepad close kar raha hoon...")
+                pyautogui.hotkey('ctrl', 's')
+                await _maybe_await(notepad_automation.handle_save_as_dialog(full_path))
+                await asyncio.sleep(1.0)
+                await _maybe_await(notepad_automation.close_active_notepad())
+                msg = f"Code successfully written to '{filename}' using Notepad focus logic.\n"
+            else:
+                await _maybe_await(notepad_automation.save_file_safely(content, filename))
+                msg = "Notepad focus failed. Focus failed. File saved programmatically.\n"
+        except Exception as gui_error:
+            logger.warning("GUI automation failed, saving directly: %s", gui_error)
+            await _maybe_await(notepad_automation.save_file_safely(content, filename))
+            msg = "GUI automation failed. File saved programmatically.\n"
+
+        if auto_run:
+            await _safe_notify(notify_thinking, f"Sir, ab main {filename} ko execute kar raha hoon...")
+            if filename.endswith('.html'):
+                import webbrowser
+                webbrowser.open(full_path)
+                msg += "HTML page browser mein open ho gayi hai."
+            elif filename.endswith('.py'):
+                subprocess.Popen(['cmd', '/c', 'start', 'cmd', '/k', 'python', full_path])
+                msg += "Python script run ho rahi hai."
+
+        return {
+            "status": "success",
+            "filename": filename,
+            "path": full_path,
+            "message": msg,
+        }
         
         if await notepad_automation.ensure_notepad_focus():
             # Step 3: Type Code (Visible)
@@ -370,7 +437,11 @@ async def create_template_code(code_type: str, filename: str = "", auto_run: boo
     Sir, is tool ki madad se main template code (HTML/Python) Notepad mein likh kar automatically run kar deta hoon.
     Har step par main aapko inform karunga.
     """
-    content, filename = get_template_content(code_type, filename)
+    try:
+        content, filename = get_template_content(code_type, filename)
+    except Exception as e:
+        logger.exception("create_template_code error: %s", e)
+        return {"status": "error", "message": f"Error: {e}"}
     if not content:
         return {"status": "error", "message": "❌ Unsupported code type. Use 'html_login' or 'python_hello'."}
     

@@ -1,5 +1,5 @@
 # --- STAGE 1: Build ---
-FROM python:3.11-slim AS builder
+FROM python:3.12-slim AS builder
 
 WORKDIR /app
 
@@ -14,7 +14,7 @@ RUN pip install --user --no-cache-dir --index-url https://download.pytorch.org/w
     pip install --user --no-cache-dir -r requirements.txt
 
 # --- STAGE 2: Runtime ---
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
@@ -34,4 +34,4 @@ EXPOSE 5001
 
 # Note: In production, we typically use a process manager or entrypoint script
 # to start both the bridge and the runner if they reside in the same container.
-CMD ["python", "ui_bridge.py"]
+CMD ["python", "-m", "src.core.ui_bridge"]
