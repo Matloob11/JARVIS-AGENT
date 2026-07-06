@@ -3,18 +3,18 @@ export default {
   theme: {
     extend: {
       colors: {
-        jarvis: {
-          cyan: '#00f2ff',
-          deep: '#0a0d14',
+        command: {
+          bg: '#05070A',
+          panel: '#0B1116',
+          soft: '#101820',
+          border: 'rgba(255,255,255,0.07)',
+          text: '#E6EDF3',
+          muted: '#7D8896',
+          accent: '#24E0A4',
+          blue: '#38BDF8',
+          danger: '#EF4444',
+          warning: '#F59E0B',
         },
-        anna: {
-          amber: '#ffb300',
-          orange: '#ff8c00',
-        },
-        bg: {
-          deep: '#050608',
-          panel: '#0e1117',
-        }
       },
       boxShadow: {
         'hardware': '0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.05)',

@@ -43,6 +43,7 @@ class JarvisTelemetry:
 
     async def start_interaction(self, session_id: str, user_input: str) -> None:
         """Records the start of a user interaction."""
+        should_cleanup = time.time() % 10 < 1
         async with self._lock:
             self.session_data[session_id] = {
                 "start_time": time.time(),
@@ -52,9 +53,10 @@ class JarvisTelemetry:
                 "confusion_detected": False,
                 "steps": [],
             }
-            # Proactive cleanup (10% chance per start)
-            if time.time() % 10 < 1:
-                await self.cleanup_stale_sessions()
+        # Proactive cleanup (10% chance per start). Run outside the lock because
+        # cleanup_stale_sessions acquires the same lock.
+        if should_cleanup:
+            await self.cleanup_stale_sessions()
 
     async def cleanup_stale_sessions(self) -> None:
         """Prunes orphaned sessions from memory atomically."""

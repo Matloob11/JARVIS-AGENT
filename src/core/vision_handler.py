@@ -27,7 +27,11 @@ class VisionHandler:
     def start_loop(self) -> None:
         """Starts the proactive awareness loop."""
         if not self._proactive_vision_task:
-            self._proactive_vision_task = asyncio.create_task(self._proactive_vision_loop())
+            try:
+                asyncio.get_running_loop()
+                self._proactive_vision_task = asyncio.create_task(self._proactive_vision_loop())
+            except RuntimeError:
+                logger.debug("VisionHandler: Loop start deferred; no running event loop.")
 
     async def stop_loop(self) -> None:
         """Cancels the proactive awareness loop."""
@@ -46,7 +50,9 @@ class VisionHandler:
                 ctx: dict[str, Any] = await get_active_window_context()
                 if ctx.get("status") == "success":
                     self.active_window_context = ctx
-            except (asyncio.CancelledError, RuntimeError) as e:
+            except asyncio.CancelledError:
+                raise
+            except RuntimeError as e:
                 logger.error("Vision loop error: %s", e)
             await asyncio.sleep(60)
 
@@ -55,7 +61,7 @@ class VisionHandler:
         kw: list[str] = ["vision", "dekh", "see", "view", "camera", "nazar", "peeche", "pic", "click", "tasveer", "environment", "surroundings"]
         is_vision: bool = any(w in text.lower() for w in kw)
 
-        if is_vision and self.last_vision_frame:
+        if is_vision and self._current_frame():
             logger.info("Vision query detected. Injecting frame.")
             b64_data: str | None = self._get_b64_frame()
             if not b64_data:
@@ -64,16 +70,22 @@ class VisionHandler:
             try:
                 img_content: llm.ImageContent = llm.ImageContent(image=b64_data, mime_type="image/jpeg")
                 new_message.content = [text, img_content]
-                turn_ctx.chat_ctx.messages.append(llm.ChatMessage(
+                self._append_context_message(turn_ctx, llm.ChatMessage(
                     role="system",
                     content=["[VISION SYSTEM ACTIVE] User is asking about the camera. Describe the frame provided."],
                 ))
             except (ValueError, TypeError, RuntimeError) as e:
                 logger.error("Failed to inject vision frame: %s", e)
 
+    def _current_frame(self) -> str | None:
+        frame = self.last_vision_frame
+        if not frame:
+            frame = getattr(self._assistant, "last_vision_frame", None)
+        return frame if isinstance(frame, str) else None
+
     def _get_b64_frame(self) -> str | None:
         """Extracts base64 data from last_vision_frame."""
-        raw_data: str | None = self.last_vision_frame
+        raw_data: str | None = self._current_frame()
         if not raw_data:
             return None
 
@@ -81,6 +93,17 @@ class VisionHandler:
             parts: list[str] = raw_data.split(",")
             return parts[1] if len(parts) > 1 else raw_data
         return str(raw_data)
+
+    def _append_context_message(self, turn_ctx: Any, message: llm.ChatMessage) -> bool:
+        """Append to either LiveKit's messages list or older test-style items list."""
+        chat_ctx = getattr(turn_ctx, "chat_ctx", None)
+        for attr in ("messages", "items"):
+            target = getattr(chat_ctx, attr, None)
+            if isinstance(target, list):
+                target.append(message)
+                return True
+        logger.debug("VisionHandler: no appendable chat context found.")
+        return False
 
     async def analyze_current_frame(self, prompt: str) -> str:
         """Analyze the current frame using the jarvis_vision system."""
@@ -102,6 +125,6 @@ class VisionHandler:
         if self.active_window_context and self.active_window_context.get("status") == "success":
             title: str = str(self.active_window_context.get("title", "Unknown"))
             system_msg: str = f"[ENVIRONMENT]: User is focused on: '{title}'."
-            turn_ctx.chat_ctx.messages.append(llm.ChatMessage(
+            self._append_context_message(turn_ctx, llm.ChatMessage(
                 role="system", content=[system_msg],
             ))

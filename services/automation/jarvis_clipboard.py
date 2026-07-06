@@ -9,7 +9,10 @@ import re
 from typing import Any
 
 import pyperclip
-from duckduckgo_search import DDGS
+try:
+    from ddgs import DDGS
+except ImportError:
+    from duckduckgo_search import DDGS
 
 from services.utils.jarvis_logger import setup_logger
 

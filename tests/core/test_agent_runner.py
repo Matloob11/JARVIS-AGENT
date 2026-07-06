@@ -39,7 +39,13 @@ async def test_start_background_tasks(mock_runner_deps):
 
     with patch("src.core.agent_runner.autonomous_protector.run_protected", new_callable=AsyncMock) as mock_run_protected:
         with patch("asyncio.create_task") as mock_create:
-            with patch("services.automation.jarvis_clipboard.ClipboardMonitor"):
+            def close_task_coro(coro):
+                if hasattr(coro, "close"):
+                    coro.close()
+                return MagicMock()
+
+            mock_create.side_effect = close_task_coro
+            with patch("src.core.agent_runner.ClipboardMonitor"):
                 tasks = await _start_background_tasks(session, assistant)
                 assert mock_run_protected.call_count == 8
                 assert mock_create.call_count == 1
@@ -101,7 +107,7 @@ async def test_on_clipboard_detected_logic():
     assistant.chat_ctx.messages = []
 
     with patch("asyncio.create_task"):
-        with patch("services.automation.jarvis_clipboard.ClipboardMonitor.start") as mock_start:
+        with patch("src.core.agent_runner.ClipboardMonitor.start") as mock_start:
             await _start_background_tasks(session, assistant)
             # The callback is the first positional argument to start()
             assert mock_start.called

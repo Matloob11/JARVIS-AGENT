@@ -177,7 +177,8 @@ async def test_close_active_notepad_no_win32(notepad_automation):
 
 @pytest.mark.asyncio
 async def test_close_active_notepad_exception(notepad_automation):
-    with patch("jarvis_notepad_automation.win32gui.EnumWindows", side_effect=AttributeError("Fail")):
+    with patch("jarvis_notepad_automation.gw", None), \
+            patch("jarvis_notepad_automation.win32gui.EnumWindows", side_effect=AttributeError("Fail")):
         res = await notepad_automation.close_active_notepad(force=False)
         assert res is False
 

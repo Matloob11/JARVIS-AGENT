@@ -72,20 +72,18 @@ class TestBrainAssistantIntegration:
     @pytest.mark.asyncio
     async def test_agent_llm_integration(self, agent_instance):
         """Test agent LLM integration"""
-        # Mock LLM responses
-        with patch('livekit.plugins.google.LLM') as mock_llm_class:
-            mock_llm = Mock()
-            mock_llm_class.return_value = mock_llm
-            
-            # Mock chat completion
-            mock_response = Mock()
-            mock_response.choices = [Mock()]
-            mock_response.choices[0].message.content = "Test response"
-            mock_llm.achat = AsyncMock(return_value=mock_response)
-            
-            # Test LLM interaction
-            response = await mock_llm.achat("Test prompt")
-            assert response.choices[0].message.content == "Test response"
+        # Keep this offline: importing livekit.plugins.google can be very slow
+        # because it imports Google Cloud speech packages.
+        mock_llm = Mock()
+        agent_instance._local_llm = mock_llm
+
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[0].message.content = "Test response"
+        mock_llm.achat = AsyncMock(return_value=mock_response)
+
+        response = await agent_instance._local_llm.achat("Test prompt")
+        assert response.choices[0].message.content == "Test response"
 
 
 @pytest.mark.integration

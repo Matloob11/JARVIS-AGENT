@@ -13,7 +13,10 @@ from urllib.parse import quote
 
 import requests  # type: ignore
 from dotenv import load_dotenv
-from duckduckgo_search import DDGS
+try:
+    from ddgs import DDGS
+except ImportError:
+    from duckduckgo_search import DDGS
 
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
 from services.utils.jarvis_logger import setup_logger

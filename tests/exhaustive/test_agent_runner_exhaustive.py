@@ -72,35 +72,9 @@ async def test_cleanup_session_resources_robust():
 @pytest.mark.asyncio
 async def test_entrypoint_retry_logic():
     ctx = MagicMock()
-    from livekit import rtc
-    ctx.room.connection_state = rtc.ConnectionState.CONN_DISCONNECTED
-    ctx.connect = AsyncMock()
-    ctx.room.sid = "test_sid"
+    ctx.connect = AsyncMock(side_effect=[TimeoutError("handshake timeout"), asyncio.CancelledError()])
 
-    # Mocking dependencies that come BEFORE ctx.connect logic
-    with patch("src.core.agent_runner.get_formatted_datetime", AsyncMock(return_value={"formatted": "now"})), \
-            patch("src.core.agent_runner.get_current_city", AsyncMock(return_value="NY")), \
-            patch("src.core.agent_runner.AgentSession") as mock_session_cls, \
-            patch("src.core.agent_runner.perform_startup_diagnostics", AsyncMock(return_value=None)), \
-            patch("src.core.agent_runner.llm.ChatContext") as mock_chat_ctx_cls, \
-            patch("src.core.agent_runner.BrainAssistant") as mock_assistant_cls, \
-            patch("src.core.agent_runner._start_background_tasks", AsyncMock(return_value=[])), \
-            patch("src.core.agent_runner._print_startup_banner"), \
-            patch("asyncio.sleep", AsyncMock()), \
-            patch("asyncio.Event", return_value=AsyncMock(wait=AsyncMock(side_effect=asyncio.CancelledError()))):
+    with patch("asyncio.sleep", AsyncMock()):
+        await entrypoint(ctx)
 
-        mock_session = AsyncMock()
-        # session.on is used as a decorator, it should return a function that returns the original function
-        mock_session.on = MagicMock(return_value=lambda x: x)
-        mock_session.history.items = []
-        mock_session.start = AsyncMock()
-        mock_session_cls.return_value = mock_session
-
-        mock_assistant = MagicMock()
-        mock_assistant_cls.return_value = mock_assistant
-
-        try:
-            await entrypoint(ctx)
-        except asyncio.CancelledError:
-            pass
-        ctx.connect.assert_called()
+    assert ctx.connect.await_count == 2

@@ -3,11 +3,11 @@ import { expect, test } from '@playwright/test';
 test('production dashboard renders and accepts a command', async ({ page }) => {
   await page.goto('/');
 
-  await expect(page.getByText(/JARVIS/i).first()).toBeVisible();
-  await expect(page.getByText(/DATA_STREAM/i)).toBeVisible();
-  await expect(page.getByText(/NEURAL_TRACE/i)).toBeVisible();
+  await expect(page.getByText(/STONIX/i).first()).toBeVisible();
+  await expect(page.getByText(/System Flow/i)).toBeVisible();
+  await expect(page.getByText(/System Logs/i)).toBeVisible();
 
-  const commandInput = page.getByPlaceholder(/Direct signal to JARVIS|Establish link with Anna/i);
+  const commandInput = page.getByPlaceholder(/Message JARVIS|Message ANNA/i);
   await expect(commandInput).toBeVisible();
 
   await commandInput.fill('status check');
@@ -21,8 +21,8 @@ test('SIM lookup panel opens and closes without backend connection', async ({ pa
   await page.goto('/');
 
   await page.getByTitle('SIM lookup workspace').click();
-  await expect(page.getByText(/SIM_Access/i)).toBeVisible();
+  await expect(page.getByText(/SIM Access/i)).toBeVisible();
 
-  await page.getByRole('button', { name: 'Close', exact: true }).click();
-  await expect(page.getByText(/SIM_Access/i)).toBeHidden();
+  await page.getByTitle('Close SIM access').click();
+  await expect(page.getByText(/SIM Access/i)).toBeHidden();
 });

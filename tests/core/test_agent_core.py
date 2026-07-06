@@ -1,5 +1,6 @@
 import pytest
 import asyncio
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch, AsyncMock, PropertyMock
 from src.core.agent_core import BrainAssistant
 
@@ -64,6 +65,12 @@ async def test_extract_text_from_message(mock_agent_deps):
     msg_simple.content = "Hello Jarvis"
     assert assistant._extract_text_from_message(msg_simple) == "hello jarvis"
 
+    msg_mixed = MagicMock()
+    msg_mixed.content = ["Hello", SimpleNamespace(text="Camera"), SimpleNamespace(content="Context")]
+    extracted = assistant._extract_text_from_message(msg_mixed)
+    assert "hello" in extracted
+    assert "camera" in extracted
+
 @pytest.mark.asyncio
 async def test_handle_wake_word(mock_agent_deps):
     assistant, _ = create_test_assistant(mock_agent_deps)
@@ -120,6 +127,22 @@ async def test_tool_change_voice(mock_agent_deps):
     result = await assistant.tool_change_voice("Ash")
     assert result["status"] == "success"
     assert mock_llm.voice == "ash"
+
+
+@pytest.mark.asyncio
+async def test_verify_speaker_identity_uses_audio_sample_rate(mock_agent_deps, monkeypatch):
+    monkeypatch.setenv("JARVIS_TEST_MODE", "false")
+    assistant, _ = create_test_assistant(mock_agent_deps)
+    assistant._audio_sample_rate = 48000
+    assistant._audio_buffer.extend(b"\1" * 96000)
+    assistant.voice_id_engine = MagicMock()
+    assistant.voice_id_engine.verify_bytes = AsyncMock(return_value=(True, 0.91))
+
+    assert await assistant.verify_speaker_identity() is True
+    assistant.voice_id_engine.verify_bytes.assert_awaited_once()
+    _, kwargs = assistant.voice_id_engine.verify_bytes.await_args
+    assert kwargs["sample_rate"] == 48000
+    assert kwargs["threshold"] == 0.65
 
 @pytest.mark.asyncio
 async def test_handle_persona_switch(mock_agent_deps):

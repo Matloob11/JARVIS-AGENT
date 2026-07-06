@@ -492,10 +492,29 @@ class BrainAssistant(Agent):
         try:
             raw = getattr(message, 'content', '')
             if isinstance(raw, list):
-                return " ".join([getattr(p, 'text', str(p)) for p in raw]).lower()
+                parts = []
+                for part in raw:
+                    if isinstance(part, str):
+                        parts.append(part)
+                    elif hasattr(part, "text"):
+                        parts.append(str(part.text))
+                    elif hasattr(part, "content"):
+                        parts.append(str(part.content))
+                return " ".join(parts).lower()
             return str(raw).lower()
         except (AttributeError, TypeError, ValueError):
             return ""
+
+    def _append_turn_context_message(self, turn_ctx: Any, message: llm.ChatMessage) -> bool:
+        """Append a system/context message across LiveKit and legacy test contexts."""
+        chat_ctx = getattr(turn_ctx, "chat_ctx", None)
+        for attr in ("messages", "items"):
+            target = getattr(chat_ctx, attr, None)
+            if isinstance(target, list):
+                target.append(message)
+                return True
+        logger.debug("No appendable turn chat context found for message injection.")
+        return False
 
     async def _handle_wake_word(self, text: str) -> tuple[bool, bool]:
         """Checks for wake words."""
@@ -544,7 +563,7 @@ class BrainAssistant(Agent):
 
         if filtered_sem:
             context_str = "\n".join(filtered_sem)
-            turn_ctx.chat_ctx.messages.append(llm.ChatMessage(
+            self._append_turn_context_message(turn_ctx, llm.ChatMessage(
                 role="system", content=[f"[LONG-TERM MEMORY CONTEXT]: {context_str}"]))
             logger.info("🧠 Scored Memory Injected: %d items",
                         len(filtered_sem))
@@ -559,7 +578,7 @@ class BrainAssistant(Agent):
 
             self._run_back(self.bridge_notifier.notify_reasoning(res))
             if res.get("is_agentic") and res.get("plan"):
-                turn_ctx.chat_ctx.messages.append(llm.ChatMessage(
+                self._append_turn_context_message(turn_ctx, llm.ChatMessage(
                     role="system", content=[f"[EXECUTION PLAN]: {res['plan']}"]))
         except Exception as e:
             logger.error("Reasoning injection error: %s", e)
@@ -637,14 +656,21 @@ class BrainAssistant(Agent):
             logger.warning("🛡️ Voice ID: No audio captured in buffer. ACCESS DENIED.")
             return False
 
-        # Require at least 1.0 seconds of audio for a reliable check
-        if len(self._audio_buffer) < 32000:
+        sample_rate = int(getattr(self, "_audio_sample_rate", 16000) or 16000)
+        required_bytes = sample_rate * 2
+
+        # Require at least 1.0 seconds of 16-bit PCM audio for a reliable check.
+        if len(self._audio_buffer) < required_bytes:
             logger.warning("🛡️ Voice ID: Audio segment too short for verification. ACCESS DENIED.")
             return False
 
         # Convert deque of integers (bytes) back to a single bytes object
         audio_payload = bytes(self._audio_buffer)
-        is_match, score = await self.voice_id_engine.verify_bytes(audio_payload, threshold=0.65)
+        is_match, score = await self.voice_id_engine.verify_bytes(
+            audio_payload,
+            sample_rate=sample_rate,
+            threshold=0.65,
+        )
         
         self._last_speaker_verified = is_match
         self._last_verification_score = score
@@ -662,6 +688,7 @@ class BrainAssistant(Agent):
     # pylint: disable=too-many-locals
     async def on_user_turn_completed(self, turn_ctx, new_message):
         """Called when user turn completed with full system integration."""
+        thinking_started = False
         text = self._extract_text_from_message(new_message)
         sanitized_text = vortex_guard.sanitize_input(text)
         threat = vortex_guard.detect_threat(sanitized_text)
@@ -693,19 +720,26 @@ class BrainAssistant(Agent):
             is_anna = False
 
         self._run_back(self.bridge_notifier.notify_thinking("START"))
+        thinking_started = True
         if self._muted:
             raise StopResponse()
 
         try:
             # Parallelize non-blocking context injections to reduce turnaround time
             async def run_prep():
-                await asyncio.gather(
+                results = await asyncio.gather(
                     self._handle_anna_upset_state(sanitized_text, turn_ctx),
                     self._inject_emotional_context(sanitized_text, turn_ctx),
                     self.vision_handler.handle_vision_query(sanitized_text, new_message, turn_ctx),
                     self.vision_handler.inject_window_context(turn_ctx),
                     self._inject_reasoning_and_memory(sanitized_text, turn_ctx, is_anna),
+                    return_exceptions=True,
                 )
+                for result in results:
+                    if isinstance(result, asyncio.CancelledError):
+                        raise result
+                    if isinstance(result, Exception):
+                        logger.warning("Turn preparation step failed: %s", result)
 
             await run_prep()
 
@@ -736,6 +770,9 @@ class BrainAssistant(Agent):
             logger.critical("Turn Error (unexpected): %s", e, exc_info=True)
             await telemetry.end_interaction("ERROR_TURN", success=False)
             raise StopResponse() from e
+        finally:
+            if thinking_started:
+                self._run_back(self.bridge_notifier.notify_thinking("STOP"))
 
     async def shutdown(self):
         """Gracefully shuts down the assistant and its modular services."""

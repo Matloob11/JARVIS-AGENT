@@ -37,7 +37,12 @@ if os.name == 'nt':
 else:
     venv_python = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".venv_312", "bin", "python"))
 
-if os.path.exists(venv_python) and os.path.abspath(sys.executable).lower() != venv_python.lower():
+running_under_pytest = "pytest" in sys.modules or "PYTEST_CURRENT_TEST" in os.environ
+if (
+    not running_under_pytest
+    and os.path.exists(venv_python)
+    and os.path.abspath(sys.executable).lower() != venv_python.lower()
+):
     print("[JARVIS] Environment mismatch. Auto-activating: .venv_312")
     # Using os.execv to replace current process smoothly on Linux/Windows
     sys.exit(subprocess.call([venv_python] + sys.argv))
