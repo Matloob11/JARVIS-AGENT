@@ -1,25 +1,21 @@
 # JARVIS Personal Assistant
 
-JARVIS is a local-first desktop assistant project with a Python backend, a LiveKit-based agent core, Windows automation tools, memory/search utilities, and a Vite/Electron UI in `stonix_ui`.
+Local-first desktop assistant: Python backend, LiveKit agent core, Windows automation, memory/search utilities, and a Vite / Electron UI in `stonix_ui`.
 
-This repository is real and runnable, but it is not a polished production product yet. The backend test suite is green locally, while real voice, LiveKit RTC, vision analysis, and desktop automation still depend on local hardware, credentials, and Windows desktop permissions.
+The repository is runnable. It is not a polished production product. The backend test suite is green locally. Real voice, LiveKit RTC, vision, and desktop automation still need hardware, API keys, and an interactive Windows desktop.
 
-## Current Reality
+UI homepage field: [jarvis-agent-sigma.vercel.app](https://jarvis-agent-sigma.vercel.app) (static UI only; the Python bridge is not on Vercel).
 
-Last verified locally on Windows with Python 3.12:
+## Current reality
+
+Last verified on Windows with Python 3.12:
 
 ```powershell
 python -m compileall -q src services main.py
 python -m pytest tests -q --maxfail=30
 ```
 
-Result:
-
-```text
-263 passed, 4 skipped, 13 warnings
-```
-
-The UI production build and e2e smoke path are now part of `stonix_ui`:
+Result: **263 passed, 4 skipped**.
 
 ```powershell
 cd stonix_ui
@@ -28,37 +24,39 @@ npm run test:e2e
 npm run smoke:electron
 ```
 
-## What Works
+`main.py` re-exports `src.core.ui_bridge.app` so host scanners that look for FastAPI can see the bridge.
 
-- Python backend modules compile and the test suite passes locally.
-- UI bridge runs from `src.core.ui_bridge` and exposes a health endpoint.
-- React/Vite UI builds for production.
-- Playwright e2e smoke verifies the production dashboard can render and accept a command.
-- Electron production smoke verifies the built `dist` output and Electron entry wiring.
-- Memory, reasoning, weather, search, Notepad, keyboard/mouse, YouTube, and vision unit/integration tests are covered.
-- Dockerfiles exist for backend and frontend, with CI smoke checks configured.
+## What works
 
-## What Still Needs Care
+- Backend modules compile; pytest is green
+- UI bridge (`python -m src.core.ui_bridge`) exposes a health endpoint
+- React/Vite production build
+- Playwright e2e: dashboard renders and accepts a command
+- Electron smoke on the built `dist`
+- Unit/integration coverage for memory, reasoning, weather, search, Notepad, keyboard/mouse, YouTube, vision
+- Dockerfiles + CI smoke
 
-- LiveKit voice sessions require real `LIVEKIT_URL`, `LIVEKIT_API_KEY`, and `LIVEKIT_API_SECRET`.
-- Gemini/vision calls require `GOOGLE_API_KEY`; fallback providers require their own keys.
-- Voice fingerprinting can download and load a SpeechBrain model; first run is heavy.
-- Windows GUI automation is best-effort and depends on focus, permissions, installed apps, and an interactive desktop.
-- Docker backend image is large because ML/audio/vision dependencies are heavy.
-- `npm audit` currently reports dependency vulnerabilities in the UI dependency tree. Review before public deployment.
-- Some tests are intentionally smoke-level and do not prove real microphone, camera, LiveKit room, or OS window behavior.
+## What still needs care
+
+- LiveKit needs `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`
+- Gemini/vision needs `GOOGLE_API_KEY`; other providers need their own keys
+- Voice fingerprinting can download a SpeechBrain model (first run is heavy)
+- Windows GUI automation is best-effort (focus, permissions, installed apps)
+- Backend Docker image is large (ML / audio / vision)
+- `npm audit` reports UI dependency issues — review before a public ship
+- Some tests are smoke-level and do not prove a real mic, camera, LiveKit room, or OS window
 
 ## Requirements
 
-- Windows 10/11 recommended for full local automation behavior.
-- Python 3.12.
-- Node.js 20.
-- Docker Desktop if using container smoke tests.
-- Optional: LiveKit Cloud project, Google AI Studio key, OpenWeather key, browser/camera/microphone access.
+- Windows 10/11 for full automation
+- Python 3.12
+- Node.js 20
+- Docker Desktop for container smoke
+- Optional: LiveKit Cloud, Google AI Studio, OpenWeather, camera/mic
 
 ## Environment
 
-Create `.env` from `.env.example` and fill only what you use:
+Copy `.env.example` → `.env`. Fill only what you use:
 
 ```env
 LIVEKIT_URL=wss://your-project.livekit.cloud
@@ -70,16 +68,18 @@ VORTEX_SECURITY_TOKEN=local-dev-token
 USER_NAME=User
 ```
 
-For the UI:
+UI:
 
 ```env
 VITE_VORTEX_URL=http://127.0.0.1:5001
 VITE_VORTEX_SECURITY_TOKEN=local-dev-token
 ```
 
+Other names in `.env.example`: `VORTEX_ENV`, `LOG_LEVEL`, `LOG_FILE`, `USER_CITY`, `CONTROLLER_TOKEN`, `JARVIS_ENCRYPTION_KEY`, `UI_BRIDGE_URL`, `ALLOWED_ORIGINS`, `GOOGLE_SEARCH_API_KEY`, `SEARCH_ENGINE_ID`, `TAVILY_API_KEY`, `OPENROUTER_API_KEY`, `GROQ_API_KEY`, `HF_TOKEN`, `OPENWEATHER_API_KEY`, `EMAIL_USER`, `EMAIL_APP_PASSWORD`, `JARVIS_SHARED_DIR`.
+
 Do not commit `.env` or encrypted secrets.
 
-## Backend Setup
+## Backend
 
 ```powershell
 python -m venv .venv_312
@@ -87,115 +87,66 @@ python -m venv .venv_312
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 pip install -r requirements-dev.txt
-```
 
-Run verification:
-
-```powershell
 python -m compileall -q src services main.py
 python scripts\smoke\livekit_voice_vision_smoke.py
 python -m pytest tests -q
-```
 
-Run the UI bridge:
-
-```powershell
 python -m src.core.ui_bridge
 ```
 
-## UI Setup
+Helpers: `dev.bat`, `prod.bat`, `install_production.*`.
+
+## UI
 
 ```powershell
 cd stonix_ui
 npm ci
-npm run build
-npm run test:e2e
-npm run smoke:electron
-```
-
-Development mode:
-
-```powershell
 npm run vite-dev
-```
-
-Electron development mode:
-
-```powershell
+# or
 npm run electron-dev
 ```
 
-## Smoke Tests
-
-Offline, CI-safe smoke:
+## Smoke
 
 ```powershell
 python scripts\smoke\livekit_voice_vision_smoke.py
-```
-
-Credential-required readiness smoke:
-
-```powershell
 python scripts\smoke\livekit_voice_vision_smoke.py --require-secrets
-```
-
-Heavy voice fingerprint import path:
-
-```powershell
 python scripts\smoke\livekit_voice_vision_smoke.py --include-voice-id
 ```
 
 ## Docker
 
-Build and run both services:
-
 ```powershell
 docker compose up --build
 ```
 
-Backend only:
+Bridge `:5001`, frontend `:3000`.
 
 ```powershell
 docker build -t jarvis-backend:test -f Dockerfile.backend .
 docker run --rm -p 5001:5001 --env-file .env jarvis-backend:test
-```
 
-Frontend only:
-
-```powershell
 docker build -t jarvis-frontend:test -f stonix_ui/Dockerfile .
 docker run --rm -p 3000:3000 jarvis-frontend:test
 ```
 
 ## CI
 
-`.github/workflows/production.yml` runs:
+`.github/workflows/production.yml`: Windows deps, compile, LiveKit smoke, pytest, UI build, Playwright e2e, Electron smoke, Docker build/run.
 
-- Backend dependency install on Windows.
-- Python compile check.
-- LiveKit/voice/vision smoke script.
-- Full pytest suite.
-- UI production build.
-- Playwright e2e smoke.
-- Electron production smoke.
-- Backend and frontend Docker build/run smoke.
-
-## Project Layout
+## Layout
 
 ```text
-src/core/                 LiveKit agent, bridge, runner, persona, vision handler
-services/                 Automation, AI core, multimedia, info, utility modules
-stonix_ui/                Vite React and Electron desktop UI
-tests/                    Unit, integration, exhaustive, infrastructure, vision tests
-scripts/smoke/            Local and CI smoke checks
-Dockerfile.backend        Backend container
-docker-compose.yml        Backend plus frontend containers
+src/core/              LiveKit agent, bridge, runner, persona, vision
+services/              ai_core, automation, info, multimedia, system, utils
+stonix_ui/             Vite React + Electron
+tests/
+scripts/smoke/
+Dockerfile.backend
+docker-compose.yml
 ```
 
-## Recommended Next Work
+## License
 
-1. Split heavyweight ML/audio dependencies into optional extras.
-2. Add a real LiveKit room smoke that runs only with secrets and an explicit CI label.
-3. Add Windows-only GUI automation smoke tests outside the default CI path.
-4. Fix UI dependency audit findings without force-upgrading blindly.
-5. Add release packaging for Electron after the app has a stable backend launch story.
+See the repository.
