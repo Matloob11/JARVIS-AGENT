@@ -1,9 +1,11 @@
+import { useMemo, type MutableRefObject } from 'react';
 import { motion } from 'framer-motion';
 import { Activity, Ear, EarOff, Mic, MicOff, Power, ShieldCheck } from 'lucide-react';
 import { personaAccent } from '@/shared/theme/commandTheme';
 import { useLiveKit } from '@/features/voice/LiveKitProvider';
 import { useSettings } from '@/features/settings/useSettings';
 import { deriveVoiceMeterView, type VoiceMatchLive } from '@/features/voice/voiceMeter';
+import { SPECTRAL_BIN_COUNT } from '@/features/voice/useAudioLevels';
 import { emitUiCommandWithAck, useAgentListeningMuted } from '@/features/status/AgentControls';
 
 interface AssistantCoreProps {
@@ -11,6 +13,11 @@ interface AssistantCoreProps {
   isConnected: boolean;
   isSpeaking: boolean;
   isThinking: boolean;
+  isUserSpeaking: boolean;
+  agentAudioActive: boolean;
+  agentLevel: number;
+  spectralDataRef: MutableRefObject<number[]>;
+  vizFrame: number;
   voiceMatchLive: VoiceMatchLive;
   onOpenVoiceEnroll: () => void;
 }
@@ -27,6 +34,11 @@ const AssistantCore = ({
   isConnected,
   isSpeaking,
   isThinking,
+  isUserSpeaking,
+  agentAudioActive,
+  agentLevel,
+  spectralDataRef,
+  vizFrame,
   voiceMatchLive,
   onOpenVoiceEnroll,
 }: AssistantCoreProps) => {
@@ -46,6 +58,19 @@ const AssistantCore = ({
   const voiceLive = voice.roomState === 'connected';
   const voiceConnecting = voice.roomState === 'connecting' || voice.roomState === 'reconnecting';
   const agentLabel = voice.agentState ? voice.agentState : voiceLive ? 'linked' : 'offline';
+  const showUserSpeaking = isUserSpeaking && voice.micEnabled;
+
+  const spectralBars = useMemo(() => {
+    void vizFrame;
+    const bins = spectralDataRef.current;
+    if (bins.length >= SPECTRAL_BIN_COUNT) {
+      return bins.slice(0, SPECTRAL_BIN_COUNT);
+    }
+    return Array.from({ length: SPECTRAL_BIN_COUNT }, (_, i) => bins[i] ?? 0);
+  }, [spectralDataRef, vizFrame]);
+
+  const orbPulse = agentAudioActive;
+  const orbScale = 1 + Math.min(agentLevel, 1) * 0.08;
 
   const stateLabel = voiceConnecting
     ? 'Joining voice…'
@@ -66,32 +91,68 @@ const AssistantCore = ({
       <div className="assistant-core__grid" />
       <motion.div
         className="assistant-core__halo"
-        animate={{ scale: isThinking || isSpeaking || voiceLive ? [1, 1.05, 1] : 1, opacity: isConnected ? 1 : 0.4 }}
+        animate={{
+          scale: isThinking || orbPulse ? [1, 1.05, 1] : 1,
+          opacity: isConnected ? 1 : 0.4,
+        }}
         transition={{ duration: 2.8, repeat: Infinity }}
       />
 
-      <div className="assistant-core__orb-wrap">
-        <motion.div
-          className="assistant-core__ring assistant-core__ring--outer"
-          animate={{ rotate: 360 }}
-          transition={{ duration: 42, repeat: Infinity, ease: 'linear' }}
-        />
-        <motion.div
-          className="assistant-core__ring assistant-core__ring--inner"
-          animate={{ rotate: -360 }}
-          transition={{ duration: 34, repeat: Infinity, ease: 'linear' }}
-        />
-        <motion.div
-          className={`assistant-core__orb ${accent.shadow}`}
-          animate={{ scale: isSpeaking || voiceLive ? [1, 1.035, 1] : 1 }}
-          transition={{ duration: 1.4, repeat: isSpeaking || voiceLive ? Infinity : 0 }}
+      <div className="assistant-core__viz-wrap">
+        <div
+          className="assistant-core__spectral"
+          data-testid="agent-audio-visualizer"
+          aria-hidden={!agentAudioActive}
         >
-          <span className={`assistant-core__pulse ${accent.bg}`} />
-          <span className="assistant-core__label">{persona.toUpperCase()}</span>
-          <span className="assistant-core__sublabel" data-testid="voice-status">
-            {stateLabel}
-          </span>
-        </motion.div>
+          {spectralBars.map((value, index) => {
+            const heightPct = Math.max(4, Math.round((value / 255) * 100));
+            return (
+              <span
+                key={index}
+                className="assistant-core__spectral-bar"
+                style={{ height: `${heightPct}%` }}
+              />
+            );
+          })}
+        </div>
+
+        <div className="assistant-core__orb-wrap">
+          {showUserSpeaking ? (
+            <motion.div
+              className="assistant-core__user-speaking-ring"
+              data-testid="user-speaking-indicator"
+              animate={{ scale: [1, 1.06, 1], opacity: [0.85, 1, 0.85] }}
+              transition={{ duration: 1.2, repeat: Infinity }}
+            />
+          ) : null}
+          <motion.div
+            className="assistant-core__ring assistant-core__ring--outer"
+            animate={{ rotate: 360 }}
+            transition={{ duration: 42, repeat: Infinity, ease: 'linear' }}
+          />
+          <motion.div
+            className="assistant-core__ring assistant-core__ring--inner"
+            animate={{ rotate: -360 }}
+            transition={{ duration: 34, repeat: Infinity, ease: 'linear' }}
+          />
+          <motion.div
+            className={`assistant-core__orb ${accent.shadow}`}
+            animate={{ scale: orbPulse ? [orbScale, orbScale * 1.04, orbScale] : orbScale }}
+            transition={{ duration: 1.4, repeat: orbPulse ? Infinity : 0 }}
+          >
+            <span className={`assistant-core__pulse ${accent.bg}`} />
+            <span className="assistant-core__label">{persona.toUpperCase()}</span>
+            <span className="assistant-core__sublabel" data-testid="voice-status">
+              {stateLabel}
+            </span>
+          </motion.div>
+        </div>
+
+        {showUserSpeaking ? (
+          <p className="assistant-core__user-speaking-label" data-testid="user-speaking-label">
+            You are speaking
+          </p>
+        ) : null}
       </div>
 
       <div className="assistant-core__footer">

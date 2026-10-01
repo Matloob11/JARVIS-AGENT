@@ -178,7 +178,38 @@ button {
   }
 
   .status-chip {
-    @apply flex max-w-[9rem] items-center gap-1.5 rounded-md border border-command-border bg-white/[0.03] px-2 py-1 text-[10px] capitalize text-command-text sm:max-w-none;
+    @apply flex max-w-[9rem] shrink-0 items-center gap-1.5 rounded-md border border-command-border bg-white/[0.03] px-2 py-1 text-[10px] capitalize text-command-text sm:max-w-none;
+  }
+
+  .status-chip--compact {
+    @apply max-w-none gap-1 px-1.5 py-1 sm:gap-1.5 sm:px-2;
+  }
+
+  .topbar-chips {
+    @apply overflow-x-auto custom-scrollbar;
+    scrollbar-width: none;
+  }
+
+  .topbar-chips::-webkit-scrollbar {
+    display: none;
+  }
+
+  .ops-drawer-toggle {
+    display: none;
+  }
+
+  .ops-drawer-backdrop {
+    @apply fixed inset-0 z-30 border-0 bg-black/45 p-0;
+    display: none;
+  }
+
+  .mobile-tab-bar {
+    display: none;
+  }
+
+  .layout-zone--core,
+  .layout-zone--trace {
+    @apply flex min-h-0 flex-col gap-3;
   }
 
   .window-button,
@@ -291,8 +322,28 @@ button {
     background: radial-gradient(circle, rgba(36,224,164,0.22), rgba(36,224,164,0.03) 42%, transparent 70%);
   }
 
+  .assistant-core__viz-wrap {
+    @apply relative flex flex-col items-center justify-center gap-3;
+  }
+
+  .assistant-core__spectral {
+    @apply flex h-10 w-56 items-end justify-center gap-[3px];
+  }
+
+  .assistant-core__spectral-bar {
+    @apply w-[5px] min-h-[2px] rounded-sm bg-command-accent/70 transition-[height] duration-75 ease-out;
+  }
+
   .assistant-core__orb-wrap {
     @apply relative flex h-56 w-56 items-center justify-center;
+  }
+
+  .assistant-core__user-speaking-ring {
+    @apply pointer-events-none absolute inset-0 rounded-full border-2 border-sky-400/80 shadow-[0_0_24px_rgba(56,189,248,0.35)];
+  }
+
+  .assistant-core__user-speaking-label {
+    @apply text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-300;
   }
 
   .assistant-core__ring {
@@ -791,6 +842,119 @@ button {
     @apply border-command-border text-command-muted hover:bg-white/[0.04];
   }
 
+  .tasks-panel {
+    @apply flex min-h-[200px] flex-col gap-3;
+  }
+
+  .tasks-panel__toolbar {
+    @apply flex justify-end;
+  }
+
+  .tasks-panel__refresh {
+    @apply rounded-md border border-command-border bg-white/[0.04] px-3 py-1.5 text-[11px] font-semibold text-command-text transition hover:bg-white/[0.07];
+  }
+
+  .tasks-panel__btn {
+    @apply rounded-md border border-command-border px-3 py-1.5 text-[11px] font-semibold text-command-muted transition hover:bg-white/[0.04];
+  }
+
+  .tasks-panel__btn--danger {
+    @apply border-red-500/40 text-red-300 hover:bg-red-500/10;
+  }
+
+  .tasks-cancel-confirm {
+    @apply rounded-md border border-amber-500/30 bg-amber-500/10 p-3;
+  }
+
+  .task-row {
+    @apply rounded-md border border-command-border bg-white/[0.025] p-3;
+  }
+
+  .task-row__head {
+    @apply mb-2 flex flex-wrap items-center gap-2;
+  }
+
+  .task-row__countdown {
+    @apply text-[11px] font-semibold text-command-accent;
+  }
+
+  .task-row__due {
+    @apply ml-auto font-mono text-[10px] text-command-muted/70;
+  }
+
+  .task-row__description {
+    @apply text-xs leading-5 text-command-text/85;
+  }
+
+  .task-row__cancel {
+    @apply mt-2 text-[11px] font-semibold text-red-300 hover:underline;
+  }
+
+  .task-pill {
+    @apply inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize;
+  }
+
+  .task-pill--task {
+    @apply bg-sky-500/15 text-sky-200;
+  }
+
+  .task-pill--reminder {
+    @apply bg-violet-500/15 text-violet-200;
+  }
+
+  .task-pill--pending {
+    @apply bg-command-accent/15 text-command-accent;
+  }
+
+  .task-pill--running {
+    @apply bg-amber-500/15 text-amber-200;
+  }
+
+  .task-pill--done {
+    @apply bg-emerald-500/15 text-emerald-300;
+  }
+
+  .task-pill--failed {
+    @apply bg-red-500/15 text-red-300;
+  }
+
+  .task-pill--cancelled {
+    @apply bg-white/10 text-command-muted;
+  }
+
+  .task-bell-badge {
+    @apply absolute -right-1 -top-1 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-command-accent px-1 text-[9px] font-bold text-black;
+  }
+
+  .task-bell-menu {
+    @apply absolute right-0 top-[calc(100%+6px)] z-50 w-[min(320px,90vw)] rounded-lg border border-command-border p-3 shadow-2xl backdrop-blur-xl;
+    background-color: rgb(11 17 22 / 0.98);
+  }
+
+  .task-bell-menu__title {
+    @apply mb-2 text-[10px] font-semibold uppercase tracking-wide text-command-muted;
+  }
+
+  .task-bell-menu__empty {
+    @apply text-xs text-command-muted;
+  }
+
+  .task-bell-menu__list {
+    @apply max-h-[280px] space-y-2 overflow-y-auto;
+  }
+
+  .task-bell-row {
+    @apply rounded-md border border-command-border/60 bg-white/[0.03] p-2;
+  }
+
+  .task-bell-row__text {
+    @apply text-xs font-medium text-command-text;
+  }
+
+  .task-bell-row__meta {
+    @apply mt-1 text-[10px] text-command-muted;
+  }
+
   .memory-clear-btn--danger {
     @apply border-command-danger/40 bg-command-danger/15 text-command-danger hover:bg-command-danger/25;
   }
@@ -1140,11 +1304,61 @@ button {
   }
 }
 
-@media (max-width: 1180px) {
+@media (min-width: 1180px) {
+  .command-topbar {
+    @apply px-5;
+  }
+}
+
+@media (max-width: 1179px) and (min-width: 900px) {
   .command-layout {
-    grid-template-columns: 270px minmax(360px, 1fr) 360px;
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
   }
 
+  .command-center-stage {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+  }
+
+  .chat-panel {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0;
+  }
+
+  .operations-rail {
+    grid-column: 1;
+    grid-row: 1;
+    position: fixed;
+    top: 3.5rem;
+    left: 0;
+    bottom: 0;
+    z-index: 40;
+    width: min(320px, 88vw);
+    overflow-y: auto;
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(8, 12, 18, 0.97);
+    padding: 12px;
+    transform: translateX(-105%);
+    transition: transform 0.22s ease;
+    box-shadow: 12px 0 40px rgba(0, 0, 0, 0.35);
+  }
+
+  .command-layout[data-ops-drawer='open'] .operations-rail {
+    transform: translateX(0);
+  }
+
+  .ops-drawer-toggle {
+    display: flex;
+  }
+
+  .ops-drawer-backdrop {
+    display: block;
+  }
+}
+
+@media (max-width: 1180px) {
   .system-trace__tabs {
     display: flex;
   }
@@ -1155,5 +1369,95 @@ button {
 
   .system-trace__grid .is-hidden-narrow {
     display: none !important;
+  }
+}
+
+@media (max-width: 899px) {
+  .ops-drawer-backdrop {
+    display: none !important;
+  }
+
+  .command-topbar {
+    @apply px-4;
+  }
+
+  .command-layout {
+    @apply relative gap-4 p-4;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    padding-bottom: calc(4rem + 56px);
+    overflow-x: hidden;
+  }
+
+  .command-center-stage {
+    display: contents;
+  }
+
+  .command-layout .layout-zone {
+    visibility: hidden;
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    opacity: 0;
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  .command-layout .layout-zone--core,
+  .command-layout .layout-zone--trace {
+    @apply flex flex-col gap-3;
+  }
+
+  .command-layout .layout-zone--ops,
+  .command-layout .layout-zone--chat {
+    @apply flex min-h-0 flex-col;
+  }
+
+  .command-layout[data-mobile-tab='core'] .layout-zone--core,
+  .command-layout[data-mobile-tab='chat'] .layout-zone--chat,
+  .command-layout[data-mobile-tab='ops'] .layout-zone--ops,
+  .command-layout[data-mobile-tab='trace'] .layout-zone--trace {
+    visibility: visible;
+    pointer-events: auto;
+    position: relative;
+    z-index: 1;
+    opacity: 1;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .mobile-tab-bar {
+    @apply fixed bottom-0 left-0 right-0 z-50 flex items-stretch justify-around border-t border-command-border bg-command-bg/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl;
+    display: flex;
+  }
+
+  .mobile-tab-bar__item {
+    @apply flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-md px-1 py-1.5 text-[10px] font-medium uppercase tracking-wide text-command-muted transition;
+  }
+
+  .mobile-tab-bar__item--active {
+    @apply bg-white/[0.06] text-command-accent;
+  }
+
+  .operations-rail {
+    position: static;
+    transform: none;
+    width: auto;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    box-shadow: none;
+  }
+}
+
+@media (max-width: 639px) {
+  .command-topbar {
+    @apply h-auto min-h-14 flex-wrap gap-y-2 py-2;
+  }
+
+  .topbar-chips {
+    @apply order-3 w-full basis-full justify-start;
   }
 }

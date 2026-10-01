@@ -3,7 +3,9 @@ import { toast } from '@/toast';
 import { normalizePlan, toEpochMs, type NormalizedPlan } from '@/shared/contracts/events';
 import { useChat } from '@/features/chat/useChat';
 import type { ChatMessage } from '@/features/chat/types';
-import type { LiveKitContextValue } from '@/features/voice/LiveKitProvider';
+import { useLiveKit, type LiveKitContextValue } from '@/features/voice/LiveKitProvider';
+import { useAudioLevels } from '@/features/voice/useAudioLevels';
+import { RoomEvent, type Participant } from 'livekit-client';
 import type { MapFocusData } from '@/features/location/MapFocus';
 import {
   type IntelligenceItem,
@@ -15,10 +17,16 @@ import type { TelemetrySnapshot } from '@/features/telemetry/TelemetryCard';
 import { useConfirmQueue } from '@/features/confirm/useConfirmQueue';
 import { useJobs } from '@/features/jobs/useJobs';
 import { useMemories, type MemoryItem } from '@/features/memory/useMemories';
+import { useTasks } from '@/features/tasks/useTasks';
 import { useSettings } from '@/features/settings/useSettings';
 import { useToolLogs, type ToolLogEntry } from '@/features/tools/useToolLogs';
 import { disconnectSocket, getSocket } from '@/shared/realtime/socket';
 import { parseVoiceMatchPayload, type VoiceMatchLive } from '@/features/voice/voiceMeter';
+import {
+  mergeModuleHealth,
+  normalizeModuleHealth,
+  type ModuleHealthSnapshot,
+} from '../flowMapStatus';
 
 export { disconnectSocket, getSocket } from '@/shared/realtime/socket';
 
@@ -320,12 +328,18 @@ export function simProviderBannerText(provider?: string, configured?: boolean): 
 export const useCommandCenter = () => {
   const chat = useChat();
   const settings = useSettings();
+  const liveKit = useLiveKit();
   const [isConnected, setIsConnected] = useState(false);
   const [status, setStatus] = useState('idle');
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isUserSpeaking, setIsUserSpeaking] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
   const spectralDataRef = useRef<number[]>([]);
+  const { agentLevel, agentAudioActive, vizFrame } = useAudioLevels({
+    getRoom: liveKit.getRoom,
+    roomState: liveKit.roomState,
+    spectralDataRef,
+  });
   const [vitalsPc, setVitalsPc] = useState<VitalsSnapshot>(EMPTY_VITALS);
   const [vitalsVps, setVitalsVps] = useState<VitalsSnapshot>(EMPTY_VITALS);
   const sawVitalsVpsRef = useRef(false);
@@ -362,6 +376,7 @@ export const useCommandCenter = () => {
   );
   const [simRequiresPurpose, setSimRequiresPurpose] = useState(false);
   const [isSimPanelOpen, setIsSimPanelOpen] = useState(false);
+  const [moduleHealth, setModuleHealth] = useState<ModuleHealthSnapshot | null>(null);
   const simLookupTimerRef = useRef<number | null>(null);
   const [socketVersion, setSocketVersion] = useState(0);
   const confirmQueue = useConfirmQueue();
@@ -380,7 +395,17 @@ export const useCommandCenter = () => {
     seedToolLogsFromInit,
   } = useToolLogs();
   const { jobs, seedJobsFromInit, cancelJob, openJobArtifact } = useJobs(emitCommand);
-  const { memories, seedMemoriesFromInit, clearShortTermMemory } = useMemories(emitCommand);
+  const { memories, lastMemorySyncMs, seedMemoriesFromInit, clearShortTermMemory } =
+    useMemories(emitCommand);
+  const {
+    tasks,
+    taskNotifications,
+    taskUnreadCount,
+    seedTasksFromInit,
+    cancelTask,
+    refreshTasks,
+    openTaskBell,
+  } = useTasks(emitCommand);
 
   const pushSystemFeed = useCallback((entry: SystemFeedEntry) => {
     setSystemFeed(prev => [entry, ...prev].slice(0, SYSTEM_FEED_CAP));
@@ -492,7 +517,6 @@ export const useCommandCenter = () => {
     const onSystemAlert = (data: Record<string, unknown>) => {
       setSystemAlerts(prev => [normalizeSystemAlert(data), ...prev].slice(0, 30));
     };
-    const onUserStatusChange = (data: { speaking: boolean }) => setIsUserSpeaking(data.speaking);
     const onIntelligenceUpdate = (data: unknown) => {
       const item = normalizeIntelligenceItem(data);
       if (!item) return;
@@ -584,6 +608,12 @@ export const useCommandCenter = () => {
     const onVoiceMatchUpdate = (data: Record<string, unknown>) => {
       setVoiceMatchLive(prev => ({ ...prev, ...parseVoiceMatchPayload(data) }));
     };
+    const onModuleHealth = (payload: unknown) => {
+      const next = normalizeModuleHealth(payload);
+      if (next) {
+        setModuleHealth(prev => mergeModuleHealth(prev, next) ?? next);
+      }
+    };
     const applySimProvider = (provider?: string, configured?: boolean) => {
       if (provider !== undefined) setSimProvider(provider);
       if (configured !== undefined) {
@@ -634,7 +664,6 @@ export const useCommandCenter = () => {
     socket.on('disconnect', onDisconnect);
     socket.on('status_update', onStatusUpdate);
     socket.on('status_change', onStatusChange);
-    socket.on('user_status_change', onUserStatusChange);
     socket.on('vitals_pc', onVitalsPc);
     socket.on('vitals_vps', onVitalsVps);
     socket.on('vitals_update', onVitalsLegacy);
@@ -658,6 +687,7 @@ export const useCommandCenter = () => {
     socket.on('sim_data_result', onSimDataResult);
     socket.on('sim_data_loading', onSimDataLoading);
     socket.on('sim_panel_open', onSimPanelOpen);
+    socket.on('module_health', onModuleHealth);
     socket.on('init_state', (state: {
       messages?: unknown[];
       persona?: 'jarvis' | 'anna';
@@ -682,6 +712,7 @@ export const useCommandCenter = () => {
       pending_confirmations?: unknown[];
       pending_confirms?: unknown[];
       intelligence?: unknown;
+      module_health?: unknown;
     }) => {
       if (state.server_time != null) {
         confirmApiRef.current.setServerTime(state.server_time);
@@ -690,6 +721,7 @@ export const useCommandCenter = () => {
       seedToolLogsFromInit(state as Record<string, unknown>);
       seedJobsFromInit(state as Record<string, unknown>);
       seedMemoriesFromInit(state as Record<string, unknown>);
+      seedTasksFromInit(state as Record<string, unknown>);
       if (state.map_focus) {
         const focus = parseMapFocusPayload(state.map_focus);
         if (focus) setMapFocus(focus);
@@ -746,6 +778,10 @@ export const useCommandCenter = () => {
         setIntelligenceHistory(seeded);
         if (seeded[0]) setIntelligence(seeded[0]);
       }
+      if (state.module_health !== undefined) {
+        const seeded = normalizeModuleHealth(state.module_health);
+        if (seeded) setModuleHealth(prev => mergeModuleHealth(prev, seeded) ?? seeded);
+      }
     });
 
     return () => {
@@ -753,7 +789,6 @@ export const useCommandCenter = () => {
       socket.off('disconnect', onDisconnect);
       socket.off('status_update', onStatusUpdate);
       socket.off('status_change', onStatusChange);
-      socket.off('user_status_change', onUserStatusChange);
       socket.off('vitals_pc', onVitalsPc);
       socket.off('vitals_vps', onVitalsVps);
       socket.off('vitals_update', onVitalsLegacy);
@@ -769,6 +804,7 @@ export const useCommandCenter = () => {
       socket.off('sim_data_result', onSimDataResult);
       socket.off('sim_data_loading', onSimDataLoading);
       socket.off('sim_panel_open', onSimPanelOpen);
+      socket.off('module_health', onModuleHealth);
       socket.off('init_state');
     };
   }, [
@@ -778,6 +814,7 @@ export const useCommandCenter = () => {
     seedToolLogsFromInit,
     seedJobsFromInit,
     seedMemoriesFromInit,
+    seedTasksFromInit,
     ingestVortexLogs,
     pushSystemFeed,
   ]);
@@ -883,16 +920,27 @@ export const useCommandCenter = () => {
   );
 
   useEffect(() => {
-    if (!isSpeaking) {
-      spectralDataRef.current = [];
+    if (liveKit.roomState !== 'connected') {
+      setIsUserSpeaking(false);
       return undefined;
     }
+    const room = liveKit.getRoom();
+    if (!room) return undefined;
 
-    const interval = window.setInterval(() => {
-      spectralDataRef.current = Array.from({ length: 32 }, () => Math.floor(Math.random() * 100));
-    }, 50);
-    return () => window.clearInterval(interval);
-  }, [isSpeaking]);
+    const syncActiveSpeakers = (speakers: Participant[]) => {
+      if (!liveKit.micEnabled) {
+        setIsUserSpeaking(false);
+        return;
+      }
+      const localId = room.localParticipant.identity;
+      setIsUserSpeaking(speakers.some(s => s.identity === localId));
+    };
+
+    room.on(RoomEvent.ActiveSpeakersChanged, syncActiveSpeakers);
+    return () => {
+      room.off(RoomEvent.ActiveSpeakersChanged, syncActiveSpeakers);
+    };
+  }, [liveKit.roomState, liveKit.micEnabled, liveKit.getRoom]);
 
   return {
     isConnected,
@@ -903,6 +951,9 @@ export const useCommandCenter = () => {
     isMuted: settings.muted,
     isWakeWordActive: settings.wakeWord,
     spectralDataRef,
+    agentLevel,
+    agentAudioActive,
+    vizFrame,
     vitalsPc,
     vitalsVps,
     telemetry,
@@ -912,9 +963,17 @@ export const useCommandCenter = () => {
     activePersona: settings.persona,
     memories,
     clearShortTermMemory,
+    tasks,
+    taskNotifications,
+    taskUnreadCount,
+    cancelTask,
+    refreshTasks,
+    openTaskBell,
     toolLogs,
     toolRunningCount,
     toolLastError,
+    moduleHealth,
+    lastMemorySyncMs,
     jobs,
     cancelJob,
     openJobArtifact,

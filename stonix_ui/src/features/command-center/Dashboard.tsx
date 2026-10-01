@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import AssistantCore from './components/AssistantCore';
 import ChatPanel from './components/ChatPanel';
@@ -11,6 +11,7 @@ import VoiceEnrollDialog from '@/features/voice/VoiceEnrollDialog';
 import ConfirmDialog from '@/features/confirm/ConfirmDialog';
 import SystemTrace from './components/SystemTrace';
 import TopBar from './components/TopBar';
+import MobileTabBar, { type MobileTab } from './components/MobileTabBar';
 import { useCommandCenter } from './hooks/useCommandCenter';
 import { ErrorBoundary } from '@/shared/ui/ErrorBoundary';
 import { useAuth } from '@/features/auth/AuthProvider';
@@ -27,6 +28,16 @@ const DashboardInner = () => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [voiceEnrollOpen, setVoiceEnrollOpen] = useState(false);
   const [cameraState, setCameraState] = useState<CameraState>(defaultCameraState);
+  const [mobileTab, setMobileTab] = useState<MobileTab>('core');
+  const [opsDrawerOpen, setOpsDrawerOpen] = useState(false);
+
+  const toggleOpsDrawer = useCallback(() => {
+    setOpsDrawerOpen(prev => !prev);
+  }, []);
+
+  const closeOpsDrawer = useCallback(() => {
+    setOpsDrawerOpen(false);
+  }, []);
 
   const openVoiceEnroll = () => {
     setVoiceEnrollOpen(true);
@@ -54,14 +65,33 @@ const DashboardInner = () => {
           onReconnect={handleReconnect}
           onOpenSettings={() => setSettingsOpen(true)}
           onOpenSim={command.openSimPanel}
+          onToggleOpsDrawer={toggleOpsDrawer}
+          opsDrawerOpen={opsDrawerOpen}
           onLogout={() => {
             void liveKit.disconnectRoom();
             void logout();
           }}
+          taskUnreadCount={command.taskUnreadCount}
+          taskNotifications={command.taskNotifications}
+          onOpenTaskBell={command.openTaskBell}
         />
       </ErrorBoundary>
 
-      <main className="command-layout">
+      {opsDrawerOpen ? (
+        <button
+          type="button"
+          className="ops-drawer-backdrop"
+          aria-label="Close operations panel"
+          data-testid="ops-drawer-backdrop"
+          onClick={closeOpsDrawer}
+        />
+      ) : null}
+
+      <main
+        className="command-layout"
+        data-mobile-tab={mobileTab}
+        data-ops-drawer={opsDrawerOpen ? 'open' : 'closed'}
+      >
         <ErrorBoundary name="OperationsRail">
           <OperationsRail
             persona={command.activePersona}
@@ -77,43 +107,60 @@ const DashboardInner = () => {
         </ErrorBoundary>
 
         <section className="command-center-stage">
-          <ErrorBoundary name="FlowMap">
+          <div className="layout-zone layout-zone--core" data-testid="layout-zone-core">
+            <ErrorBoundary name="FlowMap">
             <FlowMap
               persona={command.activePersona}
-              isConnected={command.isConnected}
+              roomState={liveKit.roomState}
+              micEnabled={liveKit.micEnabled}
+              agentState={liveKit.agentState}
               isMuted={command.isMuted}
-              isThinking={command.isThinking}
               cameraState={cameraState}
+              moduleHealth={command.moduleHealth}
+              lastMemorySyncMs={command.lastMemorySyncMs}
+              toolRunningCount={command.toolRunningCount}
+              toolLastError={command.toolLastError}
+              agentOnline={agentStatus.online}
+              agentPaused={agentStatus.paused}
+              agentSession={agentStatus.session}
             />
-          </ErrorBoundary>
-          <ErrorBoundary name="AssistantCore">
+            </ErrorBoundary>
+            <ErrorBoundary name="AssistantCore">
             <AssistantCore
               persona={command.activePersona}
               isConnected={command.isConnected}
               isSpeaking={command.isSpeaking}
               isThinking={command.isThinking}
+              isUserSpeaking={command.isUserSpeaking}
+              agentAudioActive={command.agentAudioActive}
+              agentLevel={command.agentLevel}
+              spectralDataRef={command.spectralDataRef}
+              vizFrame={command.vizFrame}
               voiceMatchLive={command.voiceMatchLive}
               onOpenVoiceEnroll={openVoiceEnroll}
             />
-          </ErrorBoundary>
-          <ErrorBoundary name="IntelligencePanel">
-            <IntelligencePanel
-              latest={command.intelligence}
-              history={command.intelligenceHistory}
-            />
-          </ErrorBoundary>
-          <ErrorBoundary name="SystemTrace">
-            <SystemTrace
-              logs={command.vortexLogs}
-              reasoning={command.reasoning}
-              reasoningHistory={command.reasoningHistory}
-              planProgress={command.planProgress}
-              systemFeed={command.systemFeed}
-              logDroppedCount={command.logDroppedCount}
-              isConnected={command.isConnected}
-              onLogsPausedChange={command.setTraceLogsPaused}
-            />
-          </ErrorBoundary>
+            </ErrorBoundary>
+            <ErrorBoundary name="IntelligencePanel">
+              <IntelligencePanel
+                latest={command.intelligence}
+                history={command.intelligenceHistory}
+              />
+            </ErrorBoundary>
+          </div>
+          <div className="layout-zone layout-zone--trace" data-testid="layout-zone-trace">
+            <ErrorBoundary name="SystemTrace">
+              <SystemTrace
+                logs={command.vortexLogs}
+                reasoning={command.reasoning}
+                reasoningHistory={command.reasoningHistory}
+                planProgress={command.planProgress}
+                systemFeed={command.systemFeed}
+                logDroppedCount={command.logDroppedCount}
+                isConnected={command.isConnected}
+                onLogsPausedChange={command.setTraceLogsPaused}
+              />
+            </ErrorBoundary>
+          </div>
         </section>
 
         <ErrorBoundary name="ChatPanel">
@@ -127,6 +174,9 @@ const DashboardInner = () => {
             jobs={command.jobs}
             onCancelJob={command.cancelJob}
             onOpenJobArtifact={command.openJobArtifact}
+            tasks={command.tasks}
+            onCancelTask={command.cancelTask}
+            onRefreshTasks={command.refreshTasks}
             onSend={command.sendMessage}
             liveCaptions={command.chatLiveCaptions}
             fallbackTranscription={command.transcription}
@@ -137,6 +187,8 @@ const DashboardInner = () => {
           />
         </ErrorBoundary>
       </main>
+
+      <MobileTabBar active={mobileTab} onChange={setMobileTab} />
 
       <AnimatePresence>
         {settingsOpen && (
