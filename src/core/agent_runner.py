@@ -100,6 +100,7 @@ from services.utils.jarvis_healing import healing_engine
 from services.utils.jarvis_health import health_monitor
 from services.utils.jarvis_config import config
 from services.utils.jarvis_logger import setup_logger
+from services.utils.jarvis_loopwatch import LoopWatchdog
 
 # Notification functions moved inside entrypoint to handle potential scope/import issues
 
@@ -246,6 +247,21 @@ async def _start_background_tasks(session: AgentSession, assistant: BrainAssista
     managed_tasks = list(autonomous_protector._tasks.values())
     managed_tasks.append(clip_task)
     return managed_tasks
+
+
+def _start_loop_watchdog(ctx: agents.JobContext,
+                         track_task: Callable[[Coroutine[Any, Any, Any]], asyncio.Task[Any]],
+                         running_tools: Callable[[], set[str]]) -> LoopWatchdog:
+    """
+    C-31: the event-loop stall watchdog of this session, started on the running loop. Its task is
+    one of the session's tasks, so _cleanup_session_resources cancels it. When the room
+    disconnects, LiveKit ends the job without cancelling this entrypoint, so the cleanup never
+    runs; the job's shutdown stops the watchdog then. Either way its watcher thread ends too.
+    """
+    watchdog = LoopWatchdog(context=running_tools, name="agent")
+    track_task(watchdog.run())
+    ctx.add_shutdown_callback(watchdog.stop)
+    return watchdog
 
 
 async def _process_user_audio(publication: rtc.TrackPublication, assistant: BrainAssistant) -> None:
@@ -519,6 +535,7 @@ async def entrypoint(ctx: agents.JobContext):
                 logger.error("⚠️ Session Error: %s", err)
 
             _print_startup_banner()
+            _start_loop_watchdog(ctx, track, plugin_manager.running_tools)
             bg_tasks = await _start_background_tasks(session, assistant)
             for bt in bg_tasks:
                 active_tasks.add(bt)
