@@ -8,9 +8,7 @@ import {
   type RemoteTrack,
   type RemoteTrackPublication,
 } from 'livekit-client';
-
-const VORTEX_URL = import.meta.env.VITE_VORTEX_URL || 'http://localhost:5001';
-const VORTEX_TOKEN = import.meta.env.VITE_VORTEX_SECURITY_TOKEN || '';
+import { bridgeUrl } from '@/shared/config/runtime';
 
 export type LiveKitStatus = 'idle' | 'connecting' | 'connected' | 'error';
 
@@ -19,7 +17,6 @@ async function requestMicrophonePermission(): Promise<MediaStream> {
     throw new Error('Browser mic API missing — HTTPS site use karein (Chrome/Edge).');
   }
 
-  // Permissions API (best-effort): surface blocked state before popup
   try {
     const perm = await navigator.permissions.query({ name: 'microphone' as PermissionName });
     if (perm.state === 'denied') {
@@ -29,7 +26,6 @@ async function requestMicrophonePermission(): Promise<MediaStream> {
     }
   } catch (err) {
     if (err instanceof Error && err.message.includes('BLOCKED')) throw err;
-    /* permissions.query not supported for mic in some browsers — continue */
   }
 
   try {
@@ -112,24 +108,16 @@ export function useLiveKitVoice() {
   );
 
   const connect = useCallback(async () => {
-    if (!VORTEX_TOKEN) {
-      setError('Missing VITE_VORTEX_SECURITY_TOKEN');
-      setStatus('error');
-      return;
-    }
     setError(null);
     setStatus('connecting');
     try {
       await detachRoom();
 
-      // 1) Explicit mic prompt FIRST so Chrome shows Microphone in site permissions
       const micStream = await requestMicrophonePermission();
       preloadMicRef.current = micStream;
 
-      // 2) LiveKit token
-      const identity = `web-${Math.random().toString(36).slice(2, 8)}`;
-      const tokenUrl = `${VORTEX_URL.replace(/\/$/, '')}/livekit/token?identity=${encodeURIComponent(identity)}`;
-      const res = await fetch(tokenUrl, { headers: { 'X-Vortex-Token': VORTEX_TOKEN } });
+      // Cookie session — fresh token per connect (K-01 / C-LK-1); no header auth
+      const res = await fetch(bridgeUrl('/livekit/token'), { credentials: 'include' });
       if (!res.ok) {
         const body = await res.text().catch(() => '');
         throw new Error(`Token HTTP ${res.status}${body ? `: ${body.slice(0, 120)}` : ''}`);
@@ -161,7 +149,6 @@ export function useLiveKitVoice() {
 
       await room.connect(data.url, data.token);
 
-      // Release preload tracks; LiveKit will open its own mic capture
       stopPreloadMic();
       await room.localParticipant.setMicrophoneEnabled(true);
 

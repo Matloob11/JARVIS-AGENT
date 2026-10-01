@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
-import { Globe, Key, RefreshCw, Settings, Shield, X } from 'lucide-react';
+import { Globe, RefreshCw, Settings, Shield, X } from 'lucide-react';
+import { BRIDGE_BASE } from '@/shared/config/runtime';
 
 interface SettingsPanelProps {
   isConnected: boolean;
@@ -8,8 +9,6 @@ interface SettingsPanelProps {
 }
 
 const SettingsPanel = ({ isConnected, onClose, onReconnect }: SettingsPanelProps) => {
-  const vortexUrl = import.meta.env.VITE_VORTEX_URL || 'http://localhost:5001';
-
   return (
     <motion.aside
       initial={{ x: 360, opacity: 0 }}
@@ -32,8 +31,8 @@ const SettingsPanel = ({ isConnected, onClose, onReconnect }: SettingsPanelProps
       </div>
 
       <div className="settings-drawer__body custom-scrollbar">
-        <SettingBlock icon={Globe} label="Bridge URL" value={vortexUrl} />
-        <SettingBlock icon={Key} label="Security token" value="********************" />
+        <SettingBlock icon={Globe} label="Bridge URL" value={BRIDGE_BASE} />
+        <SettingBlock icon={Shield} label="Session" value="secure cookie (httpOnly)" />
 
         <section className={isConnected ? 'connection-card connection-card--ok' : 'connection-card connection-card--down'}>
           <Shield size={16} />

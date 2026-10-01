@@ -1,65 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { io, Socket } from 'socket.io-client';
+import { normalizeMessage } from '@/shared/contracts/events';
+import { disconnectSocket, getSocket } from '@/shared/realtime/socket';
 
-const VORTEX_TOKEN = import.meta.env.VITE_VORTEX_SECURITY_TOKEN || '';
-const VORTEX_URL = (import.meta.env.VITE_VORTEX_URL || 'http://localhost:5001').replace(/\/$/, '');
-
-/** When VITE_VORTEX_URL is https://host/vortex, Socket.IO must use path /vortex/socket.io (not a namespace). */
-function vortexSocketOptions() {
-  try {
-    const parsed = new URL(VORTEX_URL);
-    const prefix = parsed.pathname.replace(/\/$/, '');
-    const origin = parsed.origin;
-    if (prefix && prefix !== '/') {
-      return {
-        url: origin,
-        options: {
-          path: `${prefix}/socket.io`,
-          auth: { token: VORTEX_TOKEN },
-          reconnection: true,
-          reconnectionAttempts: 5,
-          reconnectionDelay: 1000,
-        },
-      };
-    }
-  } catch {
-    /* fall through */
-  }
-  return {
-    url: VORTEX_URL,
-    options: {
-      auth: { token: VORTEX_TOKEN },
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-    },
-  };
-}
-
-if (!VORTEX_TOKEN) {
-  console.error('VITE_VORTEX_SECURITY_TOKEN is missing from the UI environment.');
-}
-
-if (!import.meta.env.VITE_VORTEX_URL) {
-  console.warn('VITE_VORTEX_URL is not set; using http://localhost:5001.');
-}
-
-let sharedSocket: Socket | null = null;
-
-export const getSocket = () => {
-  if (!sharedSocket) {
-    const { url, options } = vortexSocketOptions();
-    sharedSocket = io(url, options);
-  }
-  return sharedSocket;
-};
-
-export const disconnectSocket = () => {
-  if (sharedSocket) {
-    sharedSocket.disconnect();
-    sharedSocket = null;
-  }
-};
+export { disconnectSocket, getSocket } from '@/shared/realtime/socket';
 
 export interface NeuralMemory {
   id: string;
@@ -76,7 +19,7 @@ export interface ToolLog {
 
 export interface Message {
   id: string;
-  role: 'agent' | 'user';
+  role: 'agent' | 'user' | 'assistant' | 'system';
   text: string;
   timestamp: number;
 }
@@ -105,6 +48,16 @@ export interface SimRecord {
   cnic?: string;
   address?: string;
   phone?: string;
+}
+
+function toUiMessage(raw: unknown): Message {
+  const n = normalizeMessage(raw);
+  return {
+    id: n.id || Math.random().toString(36).slice(2, 11),
+    role: n.role === 'assistant' ? 'assistant' : n.role === 'system' ? 'system' : n.role,
+    text: n.text,
+    timestamp: n.ts < 1e12 ? n.ts : Math.floor(n.ts / 1000),
+  };
 }
 
 export const useCommandCenter = () => {
@@ -174,15 +127,16 @@ export const useCommandCenter = () => {
     const onMemorySync = (data: NeuralMemory) => setMemories(prev => [data, ...prev].slice(0, 50));
     const onToolUpdate = (data: ToolLog) => setToolLogs(prev => [data, ...prev].slice(0, 20));
     const onTranscriptionUpdate = (data: { text: string }) => setTranscription(data.text);
-    const onInitState = (state: { messages?: Message[]; persona?: 'jarvis' | 'anna' }) => {
-      if (state.messages) setMessages(state.messages);
+    const onInitState = (state: { messages?: unknown[]; persona?: 'jarvis' | 'anna' }) => {
+      if (state.messages) setMessages(state.messages.map(toUiMessage));
       if (state.persona) setActivePersona(state.persona);
     };
-    const onUpdateMessage = (msg: Record<string, unknown>) => {
-      setMessages(prev => prev.map(m => (m.id === msg.id ? { ...m, ...(msg as unknown as Message) } : m)));
+    const onUpdateMessage = (msg: unknown) => {
+      const normalized = toUiMessage(msg);
+      setMessages(prev => prev.map(m => (m.id === normalized.id ? { ...m, ...normalized } : m)));
     };
-    const onNewMessage = (msg: Record<string, unknown>) => {
-      setMessages(prev => [...prev, msg as unknown as Message].slice(-50));
+    const onNewMessage = (msg: unknown) => {
+      setMessages(prev => [...prev, toUiMessage(msg)].slice(-50));
     };
     const onMuteUpdate = (muted: boolean) => setIsMuted(muted);
     const onWakeWordUpdate = (active: boolean) => setIsWakeWordActive(active);
@@ -236,7 +190,7 @@ export const useCommandCenter = () => {
     socket.on('sim_data_loading', onSimDataLoading);
     socket.on('sim_panel_open', onSimPanelOpen);
     socket.on('init_state', (state: {
-      messages?: Message[];
+      messages?: unknown[];
       persona?: 'jarvis' | 'anna';
       muted?: boolean;
       wake_word_active?: boolean;

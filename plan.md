@@ -466,8 +466,8 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | C-34 | claude | P0 | UI command registry, (type,id) dedupe and a job-scoped bridge listener | C-33, K-60 (CT-VC-CONTROL) | TODO |
 | C-35 | claude | P0 | RoomIO relink: voice survives page reloads, Voice off/on and new browser identities | C-33, C-34, K-56 (CT-VC-ROOMIO-LINK), K-04 (DASH-LIVEKIT-UI) | TODO |
 | X-03 | cursor | P0 | Shared desktop helpers module (windows, focus, safe paths, clipboard, redaction) | C-04, K-25 (DesktopCommonHelpers), K-12 (ToolResult) | DONE (01 Oct 12:35) |
-| X-06 | cursor | P0 | UI foundation: relative /vortex runtime config, cookie socket, tolerant event types, per-panel ErrorBoundary, no secrets in the bundle | K-01 (DASH-UI-RUNTIME), K-02 (DASH-UI-EVENTS) | DOING (cursor, 01 Oct 12:35) |
-| X-07 | cursor | P0 | Mock bridge (Node) for local dev and e2e, built from the adopted contracts, with exported fixtures | X-06, K-10 (DASH-MOCK-BRIDGE), K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS) | TODO |
+| X-06 | cursor | P0 | UI foundation: relative /vortex runtime config, cookie socket, tolerant event types, per-panel ErrorBoundary, no secrets in the bundle | K-01 (DASH-UI-RUNTIME), K-02 (DASH-UI-EVENTS) | DONE (01 Oct 12:40) |
+| X-07 | cursor | P0 | Mock bridge (Node) for local dev and e2e, built from the adopted contracts, with exported fixtures | X-06, K-10 (DASH-MOCK-BRIDGE), K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS) | DOING (cursor, 01 Oct 12:40) |
 | X-08 | cursor | P0 | Login screen, AuthProvider and session lifecycle (password + TOTP, recovery code, robust expiry) | X-06, X-07, K-01 (DASH-UI-RUNTIME), K-36 (C-AUTH-1), K-37 (C-LK-1), K-38 (C-SOCK-1), K-49 (C-ORIGIN-1) | TODO |
 | X-11 | cursor | P0 | No-real-side-effect test harness (tests/tools) + helper tests | C-06, X-03, K-27 (TestSideEffectGuard) | TODO |
 | X-12 | cursor | P0 | Apply the side-effect guard to legacy desktop test folders and gate live GUI scripts | X-11, K-27 (TestSideEffectGuard) | TODO |
