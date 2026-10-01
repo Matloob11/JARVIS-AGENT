@@ -272,3 +272,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `npm run build` pass · `npx playwright test tests/e2e/voiceid.spec.ts` 3 passed
 - **Commit:** pending · **Deploy:** no
 - **Doosre agent ke liye:** Live enrollment backend VCR-24/UI-34; mock path chalta hai jab LiveKit unavailable ho.
+
+### ✅ [cursor] X-20 · SystemTrace reasoning + logs terminal · 2026-10-01 16:45 PKT
+- **Kya kiya:** Reasoning card ab `normalizePlan` se safe strings, confidence bars, history select, plan progress line; turn_rejected Roman Urdu toast + trace. Logs terminal: WARN+ default, INFO toggle, filter, pause/clear, 300 cap, repeat ×N, dropped count; System feed for telemetry/diagnostics/audit. Narrow width par Reasoning tab (1180px).
+- **Files:** stonix_ui/src/features/command-center/components/SystemTrace.tsx, hooks/useCommandCenter.ts, Dashboard.tsx, src/assets/styles/index.css, tests/e2e/trace.spec.ts, plan.md
+- **Verify:** `npm run build` pass · `npx playwright test tests/e2e/trace.spec.ts` 5 passed
+- **Commit:** pending · **Deploy:** no
+- **Doosre agent ke liye:** X-49 / X-51 ab SystemTrace par depend kar sakte hain; live `vortex_log_batch` + plan_progress bridge emit abhi Claude side.
+
+### ✅ [cursor] X-22 · Settings drawer advanced controls · 2026-10-01 16:55 PKT
+- **Kya kiya:** Settings drawer me Conversation (turn mode + restart badge, follow-up 0–30s, transcript Roman/Native), Automation toggles (merged `settings_update.automation`), Vision live/on_request, read-only guarded-tools list; `useSettings` agent-key grace + “Agent update pending”. Mock `settings_sync` on connect + e2e for har advanced control.
+- **Files:** stonix_ui/src/features/settings/useSettings.ts, command-center/components/SettingsPanel.tsx, tests/e2e/settings.spec.ts, tests/mock-bridge/fixtures/settings_sync.json, tests/mock-bridge/server.mjs, plan.md
+- **Verify:** `npm run build` pass · `npx playwright test tests/e2e/settings.spec.ts` 10 passed (serial)
+- **Commit:** pending · **Deploy:** no
+- **Doosre agent ke liye:** X-52 voice/conversation settings delta ab shuru ho sakta hai; live desktop-control gate UI-34.

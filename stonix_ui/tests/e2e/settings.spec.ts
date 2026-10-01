@@ -102,3 +102,108 @@ test('settings_sync errors.voice is shown in the drawer', async ({ page }) => {
   await expect(page.getByTestId('settings-status-voice')).toHaveAttribute('data-state', 'error');
   await expect(page.getByTestId('settings-status-voice')).toContainText('Voice abhi apply nahi ho saki');
 });
+
+test('advanced settings show guarded tools from settings_sync', async ({ page }) => {
+  await openSettingsDrawer(page);
+  const list = page.getByTestId('settings-guarded-tools-list');
+  await expect(list).toContainText('keyboard_type');
+  await expect(list).toContainText('mouse_click');
+});
+
+test('turn mode fast emits settings_update and applies after sync', async ({ page }) => {
+  await openSettingsDrawer(page);
+  await page.getByTestId('settings-turn-mode').getByRole('button', { name: 'Fast' }).click();
+
+  await expect
+    .poll(async () =>
+      (await uiCommands(page)).some(
+        cmd => cmd.type === 'settings_update' && cmd.payload?.turn_mode === 'fast',
+      ),
+    )
+    .toBe(true);
+
+  await expect(page.getByTestId('settings-status-turnMode')).toHaveAttribute('data-state', 'applied', {
+    timeout: 10_000,
+  });
+});
+
+test('follow-up window 20s emits wake_followup_s', async ({ page }) => {
+  await openSettingsDrawer(page);
+  await page.getByTestId('settings-wake-followup-select').selectOption('20');
+
+  await expect
+    .poll(async () =>
+      (await uiCommands(page)).some(
+        cmd =>
+          cmd.type === 'settings_update' && Number(cmd.payload?.wake_followup_s) === 20,
+      ),
+    )
+    .toBe(true);
+
+  await expect(page.getByTestId('settings-status-wakeFollowupS')).toHaveAttribute(
+    'data-state',
+    'applied',
+    { timeout: 10_000 },
+  );
+});
+
+test('transcript native emits transcript_script', async ({ page }) => {
+  await openSettingsDrawer(page);
+  await page.getByTestId('settings-transcript-script').getByRole('button', { name: 'Native' }).click();
+
+  await expect
+    .poll(async () =>
+      (await uiCommands(page)).some(
+        cmd => cmd.type === 'settings_update' && cmd.payload?.transcript_script === 'native',
+      ),
+    )
+    .toBe(true);
+
+  await expect(page.getByTestId('settings-status-transcriptScript')).toHaveAttribute(
+    'data-state',
+    'applied',
+    { timeout: 10_000 },
+  );
+});
+
+test('desktop control off emits automation partial', async ({ page }) => {
+  await openSettingsDrawer(page);
+  await page.getByTestId('settings-automationDesktopControl').click();
+
+  await expect
+    .poll(async () => {
+      const cmds = await uiCommands(page);
+      return cmds.some(cmd => {
+        if (cmd.type !== 'settings_update') return false;
+        const auto = cmd.payload?.automation as Record<string, unknown> | undefined;
+        return auto?.desktop_control === false;
+      });
+    })
+    .toBe(true);
+
+  await expect(page.getByTestId('settings-status-automationDesktopControl')).toHaveAttribute(
+    'data-state',
+    'applied',
+    { timeout: 10_000 },
+  );
+});
+
+test('vision on_request emits vision_mode', async ({ page }) => {
+  await openSettingsDrawer(page);
+  await page
+    .getByTestId('settings-vision-mode')
+    .getByRole('button', { name: 'Sirf poochne par' })
+    .click();
+
+  await expect
+    .poll(async () =>
+      (await uiCommands(page)).some(
+        cmd => cmd.type === 'settings_update' && cmd.payload?.vision_mode === 'on_request',
+      ),
+    )
+    .toBe(true);
+
+  await expect(page.getByTestId('settings-status-visionMode')).toHaveAttribute('data-state', 'applied', {
+    timeout: 10_000,
+  });
+});

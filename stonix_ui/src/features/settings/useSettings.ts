@@ -29,6 +29,7 @@ export type SettingsUpdatePayload = Record<string, unknown>;
 export type FieldApplyState = 'applied' | 'pending' | 'error' | 'idle';
 
 const SYNC_TIMEOUT_MS = 5000;
+const AGENT_KEY_GRACE_MS = 10_000;
 
 const DEFAULTS = {
   persona: 'jarvis' as Persona,
@@ -40,7 +41,23 @@ const DEFAULTS = {
   voiceIdThreshold: 0.45,
   voiceIdEnrolled: false,
   turnMode: 'gated',
+  wakeFollowupS: 0,
+  transcriptScript: 'roman' as 'roman' | 'native',
+  visionMode: 'live' as 'live' | 'on_request',
+  automationDesktopControl: true,
+  automationClipboardHelper: true,
+  automationClipboardSpeak: false,
+  automationVoiceConfirmHigh: false,
 };
+
+const AUTOMATION_PAYLOAD_KEYS = {
+  automationDesktopControl: 'desktop_control',
+  automationClipboardHelper: 'clipboard_helper',
+  automationClipboardSpeak: 'clipboard_speak',
+  automationVoiceConfirmHigh: 'voice_confirm_high',
+} as const;
+
+type AutomationField = keyof typeof AUTOMATION_PAYLOAD_KEYS;
 
 type UiCommandAck = {
   status: 'sent' | 'queued' | 'agent_offline' | 'no_agent' | 'rejected';
@@ -72,6 +89,82 @@ function asNumber(value: unknown, fallback: number): number {
   return fallback;
 }
 
+function asTranscriptScript(value: unknown, fallback: 'roman' | 'native'): 'roman' | 'native' {
+  const s = String(value ?? fallback).toLowerCase();
+  return s === 'native' ? 'native' : 'roman';
+}
+
+function asVisionMode(value: unknown, fallback: 'live' | 'on_request'): 'live' | 'on_request' {
+  const s = String(value ?? fallback).toLowerCase();
+  return s === 'on_request' ? 'on_request' : 'live';
+}
+
+function readAutomationBlock(
+  settings: Record<string, unknown>,
+  syncAutomation: unknown,
+  prev: typeof DEFAULTS,
+) {
+  const auto =
+    (settings.automation && typeof settings.automation === 'object'
+      ? settings.automation
+      : syncAutomation && typeof syncAutomation === 'object'
+        ? syncAutomation
+        : {}) as Record<string, unknown>;
+  return {
+    automationDesktopControl: asBool(auto.desktop_control, prev.automationDesktopControl),
+    automationClipboardHelper: asBool(auto.clipboard_helper, prev.automationClipboardHelper),
+    automationClipboardSpeak: asBool(auto.clipboard_speak, prev.automationClipboardSpeak),
+    automationVoiceConfirmHigh: asBool(auto.voice_confirm_high, prev.automationVoiceConfirmHigh),
+  };
+}
+
+function buildAutomationPayload(values: typeof DEFAULTS): Record<string, boolean> {
+  return {
+    desktop_control: values.automationDesktopControl,
+    clipboard_helper: values.automationClipboardHelper,
+    clipboard_speak: values.automationClipboardSpeak,
+    voice_confirm_high: values.automationVoiceConfirmHigh,
+  };
+}
+
+function recordSettingsSyncKeys(
+  normalized: ReturnType<typeof normalizeSettings>,
+  seen: Set<string>,
+) {
+  for (const key of Object.keys(normalized.settings ?? {})) {
+    seen.add(key);
+  }
+  if (normalized.guarded_tools != null) seen.add('guarded_tools');
+  if (normalized.automation != null) {
+    seen.add('automation');
+    if (typeof normalized.automation === 'object') {
+      for (const sub of Object.keys(normalized.automation as Record<string, unknown>)) {
+        seen.add(`automation.${sub}`);
+      }
+    }
+  }
+  if (normalized.vision_mode != null) seen.add('vision_mode');
+}
+
+function agentSyncKeyForField(field: string): string {
+  const automationEntry = Object.entries(AUTOMATION_PAYLOAD_KEYS).find(([f]) => f === field);
+  if (automationEntry) return `automation.${automationEntry[1]}`;
+  if (field === 'turnMode') return 'turn_mode';
+  if (field === 'wakeFollowupS') return 'wake_followup_s';
+  if (field === 'transcriptScript') return 'transcript_script';
+  if (field === 'visionMode') return 'vision_mode';
+  if (field === 'guardedTools') return 'guarded_tools';
+  return field;
+}
+
+function isAgentSyncKeyPresent(field: string, seen: Set<string>): boolean {
+  const key = agentSyncKeyForField(field);
+  if (key.startsWith('automation.')) {
+    return seen.has('automation') || seen.has(key);
+  }
+  return seen.has(key);
+}
+
 function readWakeWord(settings: Record<string, unknown>, fallback: boolean): boolean {
   if (typeof settings.wake_word === 'boolean') return settings.wake_word;
   if (typeof settings.wake_word_active === 'boolean') return settings.wake_word_active;
@@ -98,6 +191,10 @@ function mergeFromInit(raw: Record<string, unknown>) {
     voiceIdThreshold: asNumber(block.voice_id_threshold, DEFAULTS.voiceIdThreshold),
     voiceIdEnrolled: asBool(block.voice_id_enrolled, DEFAULTS.voiceIdEnrolled),
     turnMode: String(block.turn_mode ?? DEFAULTS.turnMode),
+    wakeFollowupS: asNumber(block.wake_followup_s, DEFAULTS.wakeFollowupS),
+    transcriptScript: asTranscriptScript(block.transcript_script, DEFAULTS.transcriptScript),
+    visionMode: asVisionMode(block.vision_mode, DEFAULTS.visionMode),
+    ...readAutomationBlock(block, undefined, DEFAULTS),
   };
 }
 
@@ -106,6 +203,10 @@ function payloadKeyForField(field: string): string {
   if (field === 'voiceId') return 'voice_id';
   if (field === 'voiceIdThreshold') return 'voice_id_threshold';
   if (field === 'turnMode') return 'turn_mode';
+  if (field === 'wakeFollowupS') return 'wake_followup_s';
+  if (field === 'transcriptScript') return 'transcript_script';
+  if (field === 'visionMode') return 'vision_mode';
+  if (field in AUTOMATION_PAYLOAD_KEYS) return 'automation';
   return field;
 }
 
@@ -114,14 +215,32 @@ function fieldFromPayloadKey(key: string): string | null {
   if (key === 'voice_id') return 'voiceId';
   if (key === 'voice_id_threshold') return 'voiceIdThreshold';
   if (key === 'turn_mode') return 'turnMode';
+  if (key === 'wake_followup_s') return 'wakeFollowupS';
+  if (key === 'transcript_script') return 'transcriptScript';
+  if (key === 'vision_mode') return 'visionMode';
   if (key === 'emotional_intelligence') return 'emotionalIntelligence';
   if (['persona', 'voice', 'language', 'muted', 'style'].includes(key)) return key;
   return null;
 }
 
+function automationFieldFromPayloadKey(subKey: string): AutomationField | null {
+  const entry = Object.entries(AUTOMATION_PAYLOAD_KEYS).find(([, v]) => v === subKey);
+  return entry ? (entry[0] as AutomationField) : null;
+}
+
 function valuesEqual(field: string, a: unknown, b: unknown): boolean {
-  if (field === 'persona' || field === 'voice' || field === 'language' || field === 'turnMode') {
+  if (
+    field === 'persona' ||
+    field === 'voice' ||
+    field === 'language' ||
+    field === 'turnMode' ||
+    field === 'transcriptScript' ||
+    field === 'visionMode'
+  ) {
     return String(a).toLowerCase() === String(b).toLowerCase();
+  }
+  if (field === 'wakeFollowupS') {
+    return Number(a) === Number(b);
   }
   if (typeof a === 'boolean' || typeof b === 'boolean') {
     return Boolean(a) === Boolean(b);
@@ -158,10 +277,20 @@ interface SettingsContextValue {
   voiceIdThreshold: number;
   voiceIdEnrolled: boolean;
   turnMode: string;
+  wakeFollowupS: number;
+  transcriptScript: 'roman' | 'native';
+  visionMode: 'live' | 'on_request';
+  automationDesktopControl: boolean;
+  automationClipboardHelper: boolean;
+  automationClipboardSpeak: boolean;
+  automationVoiceConfirmHigh: boolean;
+  guardedTools: string[];
   availableVoices: readonly string[];
   enforcedWakeWord: boolean;
   enforcedVoiceId: boolean;
   restartRequired: string[];
+  isAgentUpdatePending: (field: string) => boolean;
+  updateAutomation: (partial: Partial<Record<keyof typeof AUTOMATION_PAYLOAD_KEYS, boolean>>) => void;
   update: (partial: SettingsUpdatePayload) => void;
   changePersona: (persona: Persona) => void;
   toggleMute: () => void;
@@ -194,8 +323,16 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [availableVoices, setAvailableVoices] = useState<readonly string[]>(GEMINI_VOICES);
   const [enforcedRaw, setEnforcedRaw] = useState<unknown>(undefined);
   const [syncAppliedAll, setSyncAppliedAll] = useState(false);
+  const [guardedTools, setGuardedTools] = useState<string[]>([]);
+  const [agentKeyGraceElapsed, setAgentKeyGraceElapsed] = useState(false);
+  const seenSyncKeysRef = useRef<Set<string>>(new Set());
 
   const revertRef = useRef<Map<string, { value: unknown; timer: number }>>(new Map());
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setAgentKeyGraceElapsed(true), AGENT_KEY_GRACE_MS);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const clearRevertTimer = useCallback((field: string) => {
     const entry = revertRef.current.get(field);
@@ -248,9 +385,23 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         voiceIdThreshold: asNumber(settings.voice_id_threshold, prev.voiceIdThreshold),
         voiceIdEnrolled: asBool(settings.voice_id_enrolled, prev.voiceIdEnrolled),
         turnMode: String(settings.turn_mode ?? prev.turnMode),
+        wakeFollowupS: asNumber(settings.wake_followup_s, prev.wakeFollowupS),
+        transcriptScript: asTranscriptScript(settings.transcript_script, prev.transcriptScript),
+        visionMode: asVisionMode(
+          settings.vision_mode ?? syncMeta?.vision_mode,
+          prev.visionMode,
+        ),
+        ...readAutomationBlock(settings, syncMeta?.automation, prev),
       }));
 
       if (syncMeta) {
+        recordSettingsSyncKeys(syncMeta, seenSyncKeysRef.current);
+        if (Array.isArray(syncMeta.guarded_tools)) {
+          setGuardedTools(syncMeta.guarded_tools.map(String).filter(Boolean));
+        } else if (syncMeta.guarded_tools == null && syncMeta.settings?.guarded_tools != null) {
+          const gt = syncMeta.settings.guarded_tools;
+          if (Array.isArray(gt)) setGuardedTools(gt.map(String).filter(Boolean));
+        }
         if (syncMeta.available_voices != null) {
           setAvailableVoices(resolveVoiceList(syncMeta.available_voices));
         }
@@ -283,6 +434,18 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       const confirmed = valuesRef.current;
       const cleared: string[] = [];
       for (const [key, val] of Object.entries(partial)) {
+        if (key === 'automation' && val && typeof val === 'object') {
+          for (const [subKey, subVal] of Object.entries(val as Record<string, unknown>)) {
+            const field = automationFieldFromPayloadKey(subKey);
+            if (!field) continue;
+            const current = (confirmed as Record<string, unknown>)[field];
+            if (valuesEqual(field, current, subVal)) {
+              cleared.push(field);
+              clearRevertTimer(field);
+            }
+          }
+          continue;
+        }
         const field = fieldFromPayloadKey(key);
         if (!field) continue;
         const current =
@@ -391,14 +554,72 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       if (partial.wake_word != null) next.wakeWord = asBool(partial.wake_word, prev.wakeWord);
       if (partial.muted != null) next.muted = asBool(partial.muted, prev.muted);
       if (partial.voice_id != null) next.voiceId = asBool(partial.voice_id, prev.voiceId);
+      if (partial.turn_mode != null) next.turnMode = String(partial.turn_mode);
+      if (partial.wake_followup_s != null) {
+        next.wakeFollowupS = asNumber(partial.wake_followup_s, prev.wakeFollowupS);
+      }
+      if (partial.transcript_script != null) {
+        next.transcriptScript = asTranscriptScript(partial.transcript_script, prev.transcriptScript);
+      }
+      if (partial.vision_mode != null) {
+        next.visionMode = asVisionMode(partial.vision_mode, prev.visionMode);
+      }
+      if (partial.automation && typeof partial.automation === 'object') {
+        const auto = partial.automation as Record<string, unknown>;
+        if (auto.desktop_control != null) {
+          next.automationDesktopControl = asBool(auto.desktop_control, prev.automationDesktopControl);
+        }
+        if (auto.clipboard_helper != null) {
+          next.automationClipboardHelper = asBool(auto.clipboard_helper, prev.automationClipboardHelper);
+        }
+        if (auto.clipboard_speak != null) {
+          next.automationClipboardSpeak = asBool(auto.clipboard_speak, prev.automationClipboardSpeak);
+        }
+        if (auto.voice_confirm_high != null) {
+          next.automationVoiceConfirmHigh = asBool(
+            auto.voice_confirm_high,
+            prev.automationVoiceConfirmHigh,
+          );
+        }
+      }
       return next;
     });
   }, []);
+
+  const updateAutomation = useCallback(
+    (partial: Partial<Record<AutomationField, boolean>>) => {
+      const keys = Object.keys(partial) as AutomationField[];
+      if (!keys.length) return;
+      const automationPartial: Record<string, boolean> = {};
+      const pendingFields: AutomationField[] = [];
+      for (const field of keys) {
+        const payloadKey = AUTOMATION_PAYLOAD_KEYS[field];
+        if (payloadKey == null || typeof partial[field] !== 'boolean') continue;
+        automationPartial[payloadKey] = partial[field] as boolean;
+        pendingFields.push(field);
+      }
+      if (!pendingFields.length) return;
+      const merged = {
+        ...buildAutomationPayload(valuesRef.current),
+        ...automationPartial,
+      };
+      applyOptimistic({ automation: merged });
+      emitSettingsUpdate({ automation: merged }, pendingFields);
+    },
+    [applyOptimistic, emitSettingsUpdate],
+  );
 
   const update = useCallback(
     (partial: SettingsUpdatePayload) => {
       const pendingFields: string[] = [];
       for (const key of Object.keys(partial)) {
+        if (key === 'automation' && partial.automation && typeof partial.automation === 'object') {
+          for (const subKey of Object.keys(partial.automation as Record<string, unknown>)) {
+            const field = automationFieldFromPayloadKey(subKey);
+            if (field) pendingFields.push(field);
+          }
+          continue;
+        }
         const field = fieldFromPayloadKey(key);
         if (field) pendingFields.push(field);
       }
@@ -456,6 +677,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       if (localPending.has(field)) return 'pending';
       if (serverPending[payloadKey] != null || serverPending[field] != null) return 'pending';
       const applied = appliedMap[payloadKey] ?? appliedMap[field];
+      if (field in AUTOMATION_PAYLOAD_KEYS && appliedMap.automation === 'applied') {
+        return 'applied';
+      }
       if (applied === 'applied') return 'applied';
       if (applied === 'pending_restart' || applied === 'unsupported') return 'error';
       if (syncAppliedAll && !localPending.has(field)) return 'applied';
@@ -472,6 +696,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const isFieldPending = useCallback(
     (field: string) => fieldStatus(field) === 'pending',
     [fieldStatus],
+  );
+
+  const isAgentUpdatePending = useCallback(
+    (field: string) =>
+      agentKeyGraceElapsed && !isAgentSyncKeyPresent(field, seenSyncKeysRef.current),
+    [agentKeyGraceElapsed],
   );
 
   const enforcedWakeWord = readEnforced(
@@ -498,10 +728,20 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       voiceIdThreshold: values.voiceIdThreshold,
       voiceIdEnrolled: values.voiceIdEnrolled,
       turnMode: values.turnMode,
+      wakeFollowupS: values.wakeFollowupS,
+      transcriptScript: values.transcriptScript,
+      visionMode: values.visionMode,
+      automationDesktopControl: values.automationDesktopControl,
+      automationClipboardHelper: values.automationClipboardHelper,
+      automationClipboardSpeak: values.automationClipboardSpeak,
+      automationVoiceConfirmHigh: values.automationVoiceConfirmHigh,
+      guardedTools,
       availableVoices,
       enforcedWakeWord,
       enforcedVoiceId,
       restartRequired,
+      isAgentUpdatePending,
+      updateAutomation,
       update,
       changePersona,
       toggleMute,
@@ -519,6 +759,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       enforcedWakeWord,
       enforcedVoiceId,
       restartRequired,
+      guardedTools,
+      isAgentUpdatePending,
+      updateAutomation,
       update,
       changePersona,
       toggleMute,
