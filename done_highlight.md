@@ -451,3 +451,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `.venv_312/Scripts/python.exe -m pytest tests/tools/test_keyboard_mouse_tools.py tests/automation/test_keyboard_mouse.py -q -p no:cacheprovider` → 19 passed
 - **Commit:** abhi commit ho raha hai · **Deploy:** no
 - **Doosre agent ke liye:** `run_cancellable` ab `asyncio.shield(fut)` use karta hai — Claude ka shield request already merged; manual voice checks (Urdu typing, F5, Alt+F4, volume 30%) abhi user par.
+
+### ✅ [cursor] X-37 · Weather auto-city + 24h forecast · 2026-10-01 21:10 PKT
+- **Kya kiya:** `get_weather(city='', forecast=False)` ab khali city par IP/USER_CITY detect karta hai; 24h forecast (OpenWeather cnt=8) me barish % aur mm; HTTP 401 par clear Hinglish key message + search fallback; `execution_timeout=25` aur `redact_secrets` on errors.
+- **Files:** `services/info/jarvis_get_weather.py`, `tests/automation/test_get_weather.py`, `plan.md`
+- **Verify:** `pytest tests/automation/test_get_weather.py -q -p no:cacheprovider` → 7 passed · live Lahore forecast → `success`, rain_probability_pct 0
+- **Commit:** abhi commit ho raha hai · **Deploy:** no
+- **Doosre agent ke liye:** LLM ko barish/kal ke sawal par `forecast=True` pass karna docstring me likha hai.
+
+### ✅ [cursor] X-36 · Search chain hardening (Tavily/Google/DDG) · 2026-10-01 21:06 PKT
+- **Kya kiya:** Tavily ab Bearer header se auth hota hai (body me api_key nahi); Google key sirf `x-goog-api-key` header me, 400/403 par process-wide skip; Tavily 401/429 par 10 min cooldown; `search_internet` me `providers_tried`, 6000-char message cap, 40s timeout; naye `search_urls` aur `search_images` helpers; errors `redact_secrets` se.
+- **Files:** `services/info/jarvis_search.py`, `tests/tools/test_search_chain.py`, `tests/automation/test_search.py`, `plan.md`
+- **Verify:** pytest 15 passed; live `search_internet('Lahore weather today')` → success tavily ['tavily']
+- **Commit:** abhi commit ho raha hai · **Deploy:** no
+- **Doosre agent ke liye:** X-55/X-57 ab `search_urls` / `search_images` import kar sakte hain (TI-08); researcher abhi purana Google-only `get_search_urls` use karta hai — X-57 me switch hoga.

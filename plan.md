@@ -573,7 +573,7 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | X-34 | cursor | P3 | YouTube play: real watch URL via yt-dlp search, browser paths from config | C-24, C-26, X-11, K-22 (YouTubeVideoUrl) | DONE (01 Oct 17:40 PKT) |
 | X-35 | cursor | P3 | File opener: config media dirs (+D:/ when present), background index outside outputs, safe open/close | C-24, C-26, X-03, X-11, K-16 (DesktopToolPolicy) | DONE (01 Oct 17:40 PKT) |
 | X-36 | cursor | P3 | Search chain hardening: Tavily Bearer, Google header + auto-disable, DDG, shared helpers | C-25, K-29 (redact_secrets) | BLOCKED (waiting C-25) |
-| X-37 | cursor | P3 | Weather: auto-detected city + 24 h forecast + clear key errors | C-25 | BLOCKED (waiting C-25) |
+| X-37 | cursor | P3 | Weather: auto-detected city + 24 h forecast + clear key errors | C-25 | DONE (cursor, 01 Oct 21:10 PKT) |
 | X-38 | cursor | P3 | SIM lookup: authorized-API source with a clear 'provider not configured' mode | C-25, C-24, C-28, K-34 (sim_authorized_source) | BLOCKED (waiting C-25,C-24,C-28) |
 | X-39 | cursor | P3 | QR generator: exact data (raw policy), safe filename, open_file parameter | C-24, C-28, K-28 (tool_arg_policies) | BLOCKED (waiting C-24,C-28) |
 | X-40 | cursor | P3 | Image generation: FLUX.1-schnell via HF with Pollinations fallback and clear errors | C-25, C-24 | BLOCKED (waiting C-25,C-24) |
