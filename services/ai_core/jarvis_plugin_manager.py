@@ -19,7 +19,7 @@ import types
 import typing
 import uuid
 import weakref
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any, Optional, TypeVar, cast
 
 from livekit.agents import llm
@@ -59,6 +59,14 @@ _CONTROL_RUN = re.compile(r"[\x00-\x1f\x7f]+")
 _DESKTOP_DISABLED_MESSAGE = "Sir, desktop control abhi band hai, settings mein on kar dein."
 _DESKTOP_BUSY_MESSAGE = ("Sir, desktop par abhi doosra kaam chal raha hai, "
                          "thori der baad dobara koshish karein.")
+
+# K-14 ConfirmFlow: the risk levels that wait for Sir's approval, the internal flag of an approved
+# re-run (never part of an LLM schema) and the confirm_summary limits.
+CONFIRM_RISKS = ("medium", "high")
+CONFIRMED_KWARG = "_confirmed"
+CONFIRM_SUMMARY_TIMEOUT_S = 5.0
+CONFIRM_SUMMARY_MAX = 300
+_CONFIRM_FAILED_MESSAGE = "Sir, confirmation shuru nahi ho saki, is liye yeh kaam nahi kiya."
 
 # Tool status words (K-12 plus legacy returns) -> K-13 end status; anything else is 'error'.
 _SYNC_STATUS = {
@@ -363,12 +371,49 @@ def _sync_status(result: Any) -> str:
     code = result.get("error_code")
     if code == "DESKTOP_CONTROL_DISABLED":
         return "blocked"
-    if code in ("TIMEOUT", "TOOL_TIMEOUT"):
+    # The wrapper's own error dict for a timeout carries error_type and a TOOL_TIMEOUT message.
+    if code in ("TIMEOUT", "TOOL_TIMEOUT") or ("error_type" in result and str(
+            result.get("message", "")).startswith("TOOL_TIMEOUT")):
         return "timeout"
     status = result.get("status")
     if status is None:
         return "error" if "error" in result else "success"
     return _SYNC_STATUS.get(str(status).strip().lower(), "error")
+
+
+# Shared with the ConfirmFlow broker (services/ai_core/jarvis_confirm.py).
+one_line = _one_line
+result_status = _sync_status
+
+
+class _TemplateArgs(dict):
+    """Values of a confirm_summary template; an unknown {field} stays as written."""
+
+    def __missing__(self, key: str) -> str:
+        return "{" + key + "}"
+
+
+async def _confirm_summary(spec: Any, arguments: dict[str, Any], tool_name: str, details: str,
+                           label: str) -> str:
+    """
+    K-11 confirm_summary of one call: a str template filled from the bound arguments, or a sync
+    or async callable (async capped at CONFIRM_SUMMARY_TIMEOUT_S). None, a failure or an empty
+    answer gives '<tool> (<args preview>) chalana hai'. One line, secrets redacted.
+    """
+    text: Any = None
+    try:
+        if isinstance(spec, str):
+            text = spec.format_map(_TemplateArgs(arguments))
+        elif callable(spec):
+            text = spec(dict(arguments))
+            if inspect.isawaitable(text):
+                text = await asyncio.wait_for(text, CONFIRM_SUMMARY_TIMEOUT_S)
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.warning("confirm_summary of %s failed (%s); using the default summary", label, e)
+        text = None
+    if not isinstance(text, str) or not text.strip():
+        text = f"{tool_name} ({details}) chalana hai" if details else f"{tool_name} chalana hai"
+    return _one_line(text, CONFIRM_SUMMARY_MAX)
 
 
 def _sync_event(call_id: str, tool_name: str, *, phase: str, status: str, details: str,
@@ -487,6 +532,18 @@ async def _run_sync_tool(func: Callable[..., Any], args: tuple[Any, ...],
         raise
 
 
+async def _run_confirmed(wrapper: Callable[..., Any], args: tuple[Any, ...],
+                         kwargs: dict[str, Any]) -> Any:
+    """
+    The run of an approved call (K-14): the wrapper again with _confirmed=True, so the timeout,
+    exclusive lock, kill switch, tool_sync and audit apply. It runs in the broker's own task and
+    holds no lock or tool call of whoever approved it.
+    """
+    _held_exclusive.set(())
+    current_tool_call.set(None)
+    return await wrapper(*args, **kwargs, **{CONFIRMED_KWARG: True})
+
+
 class JarvisPluginManager:
     """
     Manages the lifecycle of AI tools, including registration and discovery.
@@ -534,9 +591,11 @@ class JarvisPluginManager:
         the risk (a risk callable gets the bound arguments with defaults), takes the exclusive
         lock (and the desktop_input kill switch) outside the timeout (else execution_timeout),
         applies max_output_chars, emits one tool_sync start and end event (K-13) and audits
-        medium/high calls. confirm, voice_confirm and long_running are metadata only here.
-        An unknown or invalid option logs ERROR and is ignored, so a module never loses its
-        tools at import.
+        medium/high calls. A medium/high call does not run: it returns needs_confirmation from
+        the ConfirmFlow broker (K-14, jarvis_confirm; confirm_summary and voice_confirm feed
+        it) and runs once Sir approves it, as a re-entry with the internal _confirmed flag.
+        long_running is metadata only here. An unknown or invalid option logs ERROR and is
+        ignored, so a module never loses its tools at import.
         """
         module = getattr(func, "__module__", "unknown")
         label = f"{module}.{getattr(func, '__qualname__', func.__name__)}"
@@ -589,6 +648,7 @@ class JarvisPluginManager:
         module_name = getattr(func, "__module__", "unknown")
         exclusive_name = meta["exclusive"]
         is_async = inspect.iscoroutinefunction(func)
+        voice_option = None if voice_confirm is None else bool(voice_confirm)
 
         async def _execute_with_retries(*a: Any, **k: Any) -> Any:
             attempts = 0
@@ -634,8 +694,30 @@ class JarvisPluginManager:
                 }, "timeout" if timed_out else "error"
             return result, _sync_status(result)
 
+        async def _ask_confirmation(call: tuple[tuple[Any, ...], dict[str, Any]],
+                                    arguments: dict[str, Any], details: str,
+                                    call_risk: str) -> tuple[Any, str]:
+            # K-14: the call becomes a pending action; the tool runs only after Sir approves it.
+            summary = await _confirm_summary(meta["confirm_summary"], arguments, tool_name,
+                                             details, label)
+            try:
+                # Loaded at call time: jarvis_confirm itself imports this module.
+                broker = importlib.import_module(
+                    "services.ai_core.jarvis_confirm").confirmation_broker
+                result = await broker.create_pending(
+                    tool_name, summary, call_risk, voice_confirm=voice_option,
+                    args_preview=details, arguments=arguments,
+                    run=functools.partial(_run_confirmed, tool_wrapper, *call))
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                logger.error("Confirmation of '%s' failed: %s", tool_name, e, exc_info=True)
+                result = _refusal(tool_name, "CONFIRM_UI_UNREACHABLE", _CONFIRM_FAILED_MESSAGE)
+            result = vortex_guard.validate_tool_output(tool_name, result, max_chars=max_chars)
+            return result, _sync_status(result)
+
         async def _guarded_call(args: tuple[Any, ...], kwargs: dict[str, Any],
-                                rejected: ArgPolicyError | None) -> tuple[Any, str]:
+                                rejected: ArgPolicyError | None,
+                                confirm: Callable[[], Awaitable[tuple[Any, str]]] | None = None
+                                ) -> tuple[Any, str]:
             # SECURITY ENFORCEMENT
             missing = required_perms - get_permissions_for_module(module_name)
             if missing:
@@ -655,9 +737,10 @@ class JarvisPluginManager:
                 return _refusal(tool_name, rejected.code, rejected.message), "error"
 
             # The lock is taken outside the breaker's timeout and released only after a
-            # timed-out or cancelled tool has unwound (K-11).
+            # timed-out or cancelled tool has unwound (K-11). A call that only asks for Sir's
+            # approval (confirm) takes no lock and starts no timeout.
             hold = None
-            if exclusive_name and not _holds_exclusive(exclusive_name):
+            if exclusive_name and confirm is None and not _holds_exclusive(exclusive_name):
                 hold = await _acquire_exclusive(exclusive_name)
                 if hold is None:
                     logger.warning("Tool '%s' waited %.0fs for the '%s' lock; DESKTOP_BUSY",
@@ -668,13 +751,17 @@ class JarvisPluginManager:
                     # Switched off while this call waited for the lock.
                     return _refusal(tool_name, "DESKTOP_CONTROL_DISABLED",
                                     _DESKTOP_DISABLED_MESSAGE), "blocked"
-                return await _execute(args, kwargs)
+                return await (_execute(args, kwargs) if confirm is None else confirm())
             finally:
                 if hold is not None:
                     _release_exclusive(hold)
 
         @functools.wraps(func)
         async def tool_wrapper(*args: Any, **kwargs: Any) -> Any:
+            # Only an approved re-run (_run_confirmed) passes _confirmed=True; LiveKit drops
+            # argument names outside the signature, so the model cannot set it.
+            confirmed = kwargs.pop(CONFIRMED_KWARG, None) is True
+            call = (args, kwargs)  # as received, so an approved re-run sanitizes them only once
             call_id = uuid.uuid4().hex
             started = time.monotonic()
             arguments = _bind_arguments(sig, positional_names, args, kwargs)
@@ -699,7 +786,11 @@ class JarvisPluginManager:
                     call_id, tool_name, phase="start", status="running", details=details,
                     risk=call_risk))
                 start_sent = True
-                result, status = await _guarded_call(args, kwargs, rejected)
+                confirm = None
+                if call_risk in CONFIRM_RISKS and not confirmed:
+                    confirm = functools.partial(_ask_confirmation, call, arguments, details,
+                                                call_risk)
+                result, status = await _guarded_call(args, kwargs, rejected, confirm)
                 return result
             except asyncio.CancelledError:
                 status = "cancelled"

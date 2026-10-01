@@ -4,6 +4,8 @@ Tools are registered under unique 'c27_' names and removed again after every tes
 made exactly like LiveKit makes them (function_tool + prepare_function_arguments). The bridge's
 notify_event and jarvis_audit.log_tool are replaced by recorders and a security.log written by a
 test goes to tmp_path, so nothing reaches the network, the desktop, the live agent or logs/.
+Since C-28 a medium/high call only asks for confirmation, so the medium/high calls here are made
+as the approved re-run (_confirmed=True); test_confirm_broker.py covers the confirmation itself.
 """
 from __future__ import annotations
 
@@ -78,10 +80,16 @@ def _wrapper(name: str) -> Any:
     return found[0]
 
 
-async def _call_like_livekit(name: str, arguments: dict[str, Any]) -> Any:
-    """Calls the tool as LiveKit does (prepare_function_arguments binds arguments positionally)."""
+async def _call_like_livekit(name: str, arguments: dict[str, Any], *,
+                             confirmed: bool = False) -> Any:
+    """
+    Calls the tool as LiveKit does (prepare_function_arguments binds arguments positionally);
+    confirmed=True makes it the approved re-run of a medium/high call (C-28, K-14).
+    """
     lk_tool = function_tool(_wrapper(name))
     args, kwargs = prepare_function_arguments(fnc=lk_tool, json_arguments=json.dumps(arguments))
+    if confirmed:
+        kwargs = {**kwargs, "_confirmed": True}
     return await lk_tool(*args, **kwargs)
 
 
@@ -141,9 +149,10 @@ async def test_defaults_reach_the_risk_callable(events, audits):
         """
         return {"status": "success", "message": f"{filename} likh di"}
 
-    assert await _call_like_livekit("c27_write_code", {"content": "print(1)\n", "filename": "a.py"}) \
+    assert await _call_like_livekit("c27_write_code", {"content": "print(1)\n", "filename": "a.py"},
+                                    confirmed=True) \
         == {"status": "success", "message": "a.py likh di"}
-    await _wrapper("c27_write_code")(content="x = 1", filename="b.py")
+    await _wrapper("c27_write_code")(content="x = 1", filename="b.py", _confirmed=True)
     await _wrapper("c27_write_code")("y", "c.py", False)
 
     assert seen == [
@@ -167,8 +176,8 @@ async def test_a_failing_or_invalid_risk_callable_counts_as_high(events, audits)
         """Risk callable with an unknown answer."""
         return "ran"
 
-    assert await _call_like_livekit("c27_risk_raises", {}) == "ran"
-    assert await _call_like_livekit("c27_risk_invalid", {}) == "ran"
+    assert await _call_like_livekit("c27_risk_raises", {}, confirmed=True) == "ran"
+    assert await _call_like_livekit("c27_risk_invalid", {}, confirmed=True) == "ran"
     await _drain_tool_sync()
     assert {e["risk"] for e in events} == {"high"}
     assert [row[:3] for row in audits] == [("c27_risk_raises", "high", "success"),
@@ -575,7 +584,8 @@ async def test_each_call_emits_one_start_and_one_end_event_with_the_same_id(monk
 
     secret_text = "password TOPSECRET-123\nline two"
     for _ in range(2):
-        await _call_like_livekit("c27_type_text", {"text": secret_text, "window": "Word"})
+        await _call_like_livekit("c27_type_text", {"text": secret_text, "window": "Word"},
+                                 confirmed=True)
     await _drain_tool_sync()
 
     assert len(events) == 4
@@ -780,7 +790,7 @@ async def test_risky_calls_are_audited_without_argument_values(audits):
         return query
 
     command = "del /q C:\\Users\\Sir\\private-notes\\*.txt"
-    await _call_like_livekit("c27_run_cmd", {"command": command})
+    await _call_like_livekit("c27_run_cmd", {"command": command}, confirmed=True)
     await _call_like_livekit("c27_low_tool", {"query": "weather"})
 
     assert len(audits) == 1
@@ -808,7 +818,8 @@ async def test_security_log_gets_a_tool_exec_line_without_raw_values(tmp_path, m
     log_path = tmp_path / "security.log"
     with _security_log_at(log_path):
         await _call_like_livekit("c27_whatsapp", {"contact": "Ali Raza",
-                                                  "message": "Mera PIN 4455 hai\nEVENT=FAKE"})
+                                                  "message": "Mera PIN 4455 hai\nEVENT=FAKE"},
+                                 confirmed=True)
     lines = log_path.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 1
     assert "EVENT=TOOL_EXEC | TOOL=c27_whatsapp | RISK=medium | STATUS=success | ARGS=sha256:" \
