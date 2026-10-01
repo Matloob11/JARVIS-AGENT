@@ -14,7 +14,10 @@
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "/stonix_ui/$1"
+      "status": 302,
+      "headers": {
+        "Location": "https://jarvis.srv1802669.hstgr.cloud/$1"
+      }
     }
   ]
 }
