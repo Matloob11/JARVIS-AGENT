@@ -507,6 +507,138 @@ button {
     @apply rounded-md border border-command-border bg-white/[0.025] p-3;
   }
 
+  .tool-panel-empty {
+    @apply flex min-h-[120px] flex-col items-center justify-center rounded-md border border-dashed border-command-border/70 px-4 py-6 text-center;
+  }
+
+  .tool-panel-empty--compact {
+    @apply min-h-0 py-4;
+  }
+
+  .tool-log-list__filters {
+    @apply mb-3 flex items-center justify-end gap-2;
+  }
+
+  .tool-log-filter {
+    @apply rounded-md border border-command-border bg-black/20 px-2 py-1 text-[11px] text-command-text outline-none;
+  }
+
+  .tool-row {
+    @apply rounded-md border border-command-border bg-white/[0.025] p-3;
+  }
+
+  .tool-row__head {
+    @apply flex w-full items-center gap-2 text-left;
+  }
+
+  .tool-row__chevron {
+    @apply shrink-0 text-command-muted;
+  }
+
+  .tool-row__name {
+    @apply min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-wide text-command-accent;
+  }
+
+  .tool-row__meta {
+    @apply font-mono text-[10px] text-command-muted/70;
+  }
+
+  .tool-row__summary {
+    @apply mt-2 flex items-center gap-3 text-[10px] text-command-muted;
+  }
+
+  .tool-row__progress {
+    @apply font-semibold text-command-accent;
+  }
+
+  .tool-row__duration {
+    @apply font-mono;
+  }
+
+  .tool-row__preview {
+    @apply mt-2 truncate text-xs text-command-text/75;
+  }
+
+  .tool-row__body {
+    @apply mt-3 space-y-2 border-t border-command-border/60 pt-3;
+  }
+
+  .tool-row__label {
+    @apply text-[10px] font-semibold uppercase tracking-wide text-command-muted;
+  }
+
+  .tool-row__text {
+    @apply text-xs leading-5 text-command-text/85;
+  }
+
+  .tool-pill {
+    @apply inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize;
+  }
+
+  .tool-pill--running {
+    @apply bg-command-accent/15 text-command-accent;
+  }
+
+  .tool-pill--success {
+    @apply bg-emerald-500/15 text-emerald-300;
+  }
+
+  .tool-pill--error {
+    @apply bg-red-500/15 text-red-300;
+  }
+
+  .tool-pill--warn {
+    @apply bg-amber-500/15 text-amber-200;
+  }
+
+  .jobs-list__title {
+    @apply text-[10px] font-semibold uppercase tracking-[0.14em] text-command-muted;
+  }
+
+  .job-row {
+    @apply rounded-md border border-command-border bg-white/[0.03] p-3;
+  }
+
+  .job-row__head {
+    @apply flex items-center justify-between gap-2;
+  }
+
+  .job-row__title {
+    @apply text-sm font-medium text-command-text;
+  }
+
+  .job-row__status {
+    @apply text-[10px] font-semibold uppercase tracking-wide text-command-muted;
+  }
+
+  .job-row__tool {
+    @apply mt-1 text-[11px] text-command-muted;
+  }
+
+  .job-row__bar {
+    @apply mt-2 h-1.5 overflow-hidden rounded-full bg-white/10;
+  }
+
+  .job-row__bar-fill {
+    @apply h-full rounded-full bg-command-accent transition-[width] duration-300;
+  }
+
+  .job-row__message {
+    @apply mt-2 text-xs text-command-text/80;
+  }
+
+  .job-row__actions {
+    @apply mt-2 flex flex-wrap gap-2;
+  }
+
+  .job-row__btn {
+    @apply rounded-md border border-command-border px-2.5 py-1 text-[11px] font-semibold text-command-text transition hover:bg-white/[0.05];
+  }
+
+  .job-row__btn--cancel {
+    @apply border-red-500/40 text-red-200 hover:bg-red-500/10;
+  }
+
   .command-input {
     @apply m-4 flex shrink-0 items-center gap-2 rounded-lg border border-command-border bg-black/25 p-2;
   }
@@ -546,6 +678,46 @@ button {
 
   .setting-value {
     @apply truncate rounded-md border border-command-border bg-black/20 px-3 py-2 font-mono text-xs text-command-text/80;
+  }
+
+  .setting-select {
+    @apply w-full rounded-md border border-command-border bg-black/20 px-3 py-2 text-xs text-command-text outline-none;
+  }
+
+  .setting-row {
+    @apply flex items-start justify-between gap-3 border-t border-command-border/60 pt-3 first:border-t-0 first:pt-0;
+  }
+
+  .settings-segmented {
+    @apply flex rounded-md border border-command-border p-0.5;
+  }
+
+  .settings-segmented__btn {
+    @apply flex-1 rounded px-3 py-2 text-[11px] font-medium text-command-muted transition hover:text-command-text;
+  }
+
+  .settings-segmented__btn--active {
+    @apply bg-command-accent/15 text-command-accent;
+  }
+
+  .settings-field-status {
+    @apply mt-1 block text-[10px] capitalize;
+  }
+
+  .settings-field-status--applied {
+    @apply text-command-accent;
+  }
+
+  .settings-field-status--pending {
+    @apply text-command-muted;
+  }
+
+  .settings-field-status--error {
+    @apply text-command-danger;
+  }
+
+  .settings-connection-chip {
+    @apply inline-flex items-center gap-1.5 rounded-md border border-command-border px-2 py-1 text-[10px] text-command-muted;
   }
 
   .connection-card {

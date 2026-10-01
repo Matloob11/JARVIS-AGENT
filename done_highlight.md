@@ -230,3 +230,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Commit:** `3df312a` · **Deploy:** yes (Vercel, push ke zariye)
 - **User ke liye (optional):** sigma wala link bhi redirect karwana ho to Vercel dashboard me `jarvis-agent-sigma` project ko isi GitHub repo se connect karke redeploy karein. Na karein to bhi koi khatra nahi. README ka dead sigma link C-108 me theek hoga.
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-19 · Tools tab: live tool rows, jobs, toasts · 2026-10-01 14:50 PKT
+- **Kya kiya:** ChatPanel me alag **tools** tab (jobs upar, tool log list neeche); `useToolLogs` init_state + tool_update upsert (200 rows, runningCount/lastError); `useJobs` + Cancel/open artifact commands; medium-risk toast; tasks placeholder.
+- **Files:** stonix_ui/src/features/tools/*, stonix_ui/src/features/jobs/*, ChatPanel.tsx, useCommandCenter.ts, Dashboard.tsx, index.css, tests/e2e/tools.spec.ts
+- **Verify:** `npm run build` pass · `npx playwright test tests/e2e/tools.spec.ts` 3 passed
+- **Commit:** abhi nahi · **Deploy:** no
+- **Doosre agent ke liye:** FlowMap ko `toolRunningCount` / `toolLastError` export ho chuke hain (X-49).
+
+### ✅ [cursor] X-21 · Settings drawer core + confirmed sync · 2026-10-01 15:10 PKT
+- **Kya kiya:** `useSettings` (init_state + settings_sync + legacy mute/persona/wake), voices.ts (30 Gemini), Settings drawer sections (session, connection, voice, persona, wake, listening, voice-ID), TopBar wake/persona chips; 5s timeout revert + per-field applied/pending/error.
+- **Files:** stonix_ui/src/features/settings/useSettings.ts, stonix_ui/src/shared/voices.ts, SettingsPanel.tsx, TopBar.tsx, Dashboard.tsx, useCommandCenter.ts, index.css, tests/e2e/settings.spec.ts, tests/mock-bridge/server.mjs, plan.md
+- **Verify:** `npm run build` pass · `npx playwright test tests/e2e/settings.spec.ts` 4 passed
+- **Commit:** abhi nahi · **Deploy:** no
+- **Doosre agent ke liye:** X-22 advanced settings same drawer/useSettings extend kare; voice enroll link placeholder (`settings-voice-enroll-link`).

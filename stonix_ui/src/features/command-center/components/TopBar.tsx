@@ -1,9 +1,10 @@
-import { LogOut, Radar, Settings, ShieldCheck, Volume2, Wifi } from 'lucide-react';
+import { Loader2, LogOut, Radar, Settings, ShieldCheck, Volume2, Wifi, Zap } from 'lucide-react';
 import WindowControls from '@/shared/ui/WindowControls';
 import { StatusDot } from '@/shared/ui/Panel';
 import { personaAccent } from '@/shared/theme/commandTheme';
 import { useLiveKit } from '@/features/voice/LiveKitProvider';
 import { useAgentStatus } from '@/features/status/useAgentStatus';
+import { useSettings } from '@/features/settings/useSettings';
 import {
   AgentChipMenu,
   AgentListeningToggle,
@@ -12,7 +13,6 @@ import {
 } from '@/features/status/AgentControls';
 
 interface TopBarProps {
-  persona: 'jarvis' | 'anna';
   isConnected: boolean;
   onReconnect: () => void;
   onOpenSettings: () => void;
@@ -28,6 +28,8 @@ function StatusChip({
   active,
   tone = 'accent',
   title,
+  onClick,
+  pending,
 }: {
   testId: string;
   icon: typeof Wifi;
@@ -36,35 +38,45 @@ function StatusChip({
   active: boolean;
   tone?: 'accent' | 'danger' | 'blue' | 'muted';
   title?: string;
+  onClick?: () => void;
+  pending?: boolean;
 }) {
+  const Tag = onClick ? 'button' : 'div';
   return (
-    <div
-      className="status-chip"
+    <Tag
+      type={onClick ? 'button' : undefined}
+      className={`status-chip${onClick ? ' cursor-pointer transition hover:bg-white/[0.06]' : ''}`}
       data-testid={testId}
       data-active={active ? 'true' : 'false'}
       title={title}
+      onClick={onClick}
     >
       <Icon size={13} className="shrink-0 opacity-80" />
       <StatusDot active={active} tone={active ? tone : 'danger'} />
       <span className="hidden lg:inline">{label}</span>
       {detail ? <span className="hidden lg:inline text-command-muted">{detail}</span> : null}
-    </div>
+      {pending ? (
+        <Loader2 size={12} className="animate-spin text-command-accent" data-testid={`${testId}-spinner`} />
+      ) : null}
+    </Tag>
   );
 }
 
 const TopBar = ({
-  persona,
   isConnected,
   onReconnect,
   onOpenSettings,
   onOpenSim,
   onLogout,
 }: TopBarProps) => {
-  const accent = personaAccent(persona);
+  const settings = useSettings();
+  const accent = personaAccent(settings.persona);
   const voice = useLiveKit();
   const agent = useAgentStatus();
 
   const agentTone = agent.paused ? 'blue' : agent.online ? 'accent' : 'danger';
+
+  const nextPersona = settings.persona === 'jarvis' ? 'anna' : 'jarvis';
 
   return (
     <header className="command-topbar drag-handle">
@@ -108,6 +120,26 @@ const TopBar = ({
                 ? `Voice active (${agent.activityLabel})`
                 : 'Voice idle'
           }
+        />
+        <StatusChip
+          testId="chip-wake"
+          icon={Zap}
+          label="Wake"
+          active={settings.wakeWord}
+          tone="blue"
+          title={settings.wakeWord ? 'Wake word ON' : 'Wake word OFF'}
+          onClick={() => settings.toggleWakeWord()}
+          pending={settings.isWakeWordPending}
+        />
+        <StatusChip
+          testId="chip-persona"
+          icon={Radar}
+          label={settings.persona === 'jarvis' ? 'JARVIS' : 'ANNA'}
+          active
+          tone="accent"
+          title="Switch persona"
+          onClick={() => settings.changePersona(nextPersona)}
+          pending={settings.isPersonaPending}
         />
       </div>
 

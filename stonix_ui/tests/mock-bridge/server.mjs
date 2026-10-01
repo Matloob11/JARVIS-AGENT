@@ -21,6 +21,7 @@ const uiSockets = [];
 /** @type {{ ts: number, type?: string, payload?: unknown, raw: unknown }[]} */
 const receivedUiCommands = [];
 let agentOnline = true;
+let suppressSettingsSync = false;
 let ownerSessionActive = false;
 /** @type {Record<string, unknown>[]} */
 const persistedChatMessages = [];
@@ -224,11 +225,13 @@ function handleUiCommand(socket, cmd, cb) {
       break;
     case 'settings_update': {
       ackUi(socket, cb, 'sent');
-      const sync = loadFixture('settings_sync');
-      socket.emit('settings_sync', {
-        ...sync,
-        settings: { ...sync.settings, ...(payload || {}) },
-      });
+      if (!suppressSettingsSync) {
+        const sync = loadFixture('settings_sync');
+        socket.emit('settings_sync', {
+          ...sync,
+          settings: { ...sync.settings, ...(payload || {}) },
+        });
+      }
       break;
     }
     case 'confirm_response': {
@@ -347,6 +350,13 @@ async function handleMockControl(req, res, pathname, method) {
 
   if (pathname === '/__mock/emits' && method === 'GET') {
     json(res, 200, { ui_commands: receivedUiCommands });
+    return true;
+  }
+
+  if (pathname === '/__mock/suppress-settings-sync' && method === 'POST') {
+    const body = await readBody(req);
+    suppressSettingsSync = body?.suppress === true;
+    json(res, 200, { ok: true, suppress: suppressSettingsSync });
     return true;
   }
 

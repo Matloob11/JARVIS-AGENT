@@ -13,6 +13,9 @@ import {
 } from '@/features/intelligence/types';
 import type { TelemetrySnapshot } from '@/features/telemetry/TelemetryCard';
 import { useConfirmQueue } from '@/features/confirm/useConfirmQueue';
+import { useJobs } from '@/features/jobs/useJobs';
+import { useSettings } from '@/features/settings/useSettings';
+import { useToolLogs, type ToolLogEntry } from '@/features/tools/useToolLogs';
 import { disconnectSocket, getSocket } from '@/shared/realtime/socket';
 
 export { disconnectSocket, getSocket } from '@/shared/realtime/socket';
@@ -23,12 +26,7 @@ export interface NeuralMemory {
   timestamp: number;
 }
 
-export interface ToolLog {
-  tool: string;
-  action: string;
-  details: string;
-  timestamp: number;
-}
+export type ToolLog = ToolLogEntry;
 
 export type Message = ChatMessage;
 
@@ -210,13 +208,12 @@ export function simProviderBannerText(provider?: string, configured?: boolean): 
 
 export const useCommandCenter = () => {
   const chat = useChat();
+  const settings = useSettings();
   const [isConnected, setIsConnected] = useState(false);
   const [status, setStatus] = useState('idle');
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isUserSpeaking, setIsUserSpeaking] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isWakeWordActive, setIsWakeWordActive] = useState(true);
   const spectralDataRef = useRef<number[]>([]);
   const [vitalsPc, setVitalsPc] = useState<VitalsSnapshot>(EMPTY_VITALS);
   const [vitalsVps, setVitalsVps] = useState<VitalsSnapshot>(EMPTY_VITALS);
@@ -233,9 +230,7 @@ export const useCommandCenter = () => {
   const [voiceMatch, setVoiceMatch] = useState(0.0);
   const [intelligence, setIntelligence] = useState<IntelligenceItem | null>(null);
   const [intelligenceHistory, setIntelligenceHistory] = useState<IntelligenceItem[]>([]);
-  const [activePersona, setActivePersona] = useState<'jarvis' | 'anna'>('jarvis');
   const [memories, setMemories] = useState<NeuralMemory[]>([]);
-  const [toolLogs, setToolLogs] = useState<ToolLog[]>([]);
   const [transcription, setTranscription] = useState('');
   const [location, setLocation] = useState<LocationData>({ city: 'Detecting...', lat: 0, lng: 0 });
   const [mapFocus, setMapFocus] = useState<MapFocusData | null>(null);
@@ -257,6 +252,18 @@ export const useCommandCenter = () => {
   const loggedConfirmDecisions = useRef(new Set<string>());
   const confirmApiRef = useRef(confirmQueue);
   confirmApiRef.current = confirmQueue;
+
+  const emitCommand = useCallback((type: string, payload?: unknown) => {
+    getSocket().emit('ui_command', { type, payload });
+  }, []);
+
+  const {
+    toolLogs,
+    runningCount: toolRunningCount,
+    lastError: toolLastError,
+    seedToolLogsFromInit,
+  } = useToolLogs();
+  const { jobs, seedJobsFromInit, cancelJob, openJobArtifact } = useJobs(emitCommand);
 
   const pushConfirmLog = useCallback((text: string) => {
     setVortexLogs(prev => [
@@ -347,24 +354,8 @@ export const useCommandCenter = () => {
       setIntelligence(item);
       setIntelligenceHistory(prev => prependIntelligenceHistory(prev, item));
     };
-    const onPersonaUpdate = (data: { persona: 'jarvis' | 'anna' }) => setActivePersona(data.persona);
     const onMemorySync = (data: NeuralMemory) => setMemories(prev => [data, ...prev].slice(0, 50));
-    const onToolUpdate = (data: ToolLog) => setToolLogs(prev => [data, ...prev].slice(0, 20));
     const onTranscriptionUpdate = (data: { text: string }) => setTranscription(data.text);
-    const onInitState = (state: { persona?: 'jarvis' | 'anna' }) => {
-      if (state.persona) setActivePersona(state.persona);
-    };
-    const onMuteUpdate = (payload: boolean | { muted?: boolean }) => {
-      const muted =
-        typeof payload === 'boolean' ? payload : payload?.muted === true;
-      setIsMuted(muted);
-    };
-    const onSettingsSync = (payload: { settings?: { muted?: boolean } }) => {
-      if (typeof payload?.settings?.muted === 'boolean') {
-        setIsMuted(payload.settings.muted);
-      }
-    };
-    const onWakeWordUpdate = (active: boolean) => setIsWakeWordActive(active);
     const onLocationUpdate = (data: Record<string, unknown>) => {
       if (locationKind(data) === 'map') {
         const focus = parseMapFocusPayload(data);
@@ -441,9 +432,7 @@ export const useCommandCenter = () => {
     socket.on('telemetry_update', onTelemetryUpdate);
     socket.on('system_alert', onSystemAlert);
     socket.on('intelligence_update', onIntelligenceUpdate);
-    socket.on('persona_update', onPersonaUpdate);
     socket.on('memory_sync', onMemorySync);
-    socket.on('tool_update', onToolUpdate);
     socket.on('transcription_update', onTranscriptionUpdate);
     socket.on('location_update', onLocationUpdate);
     socket.on('map_focus_update', onMapFocusUpdate);
@@ -478,13 +467,12 @@ export const useCommandCenter = () => {
       pending_confirms?: unknown[];
       intelligence?: unknown;
     }) => {
-      onInitState(state);
       if (state.server_time != null) {
         confirmApiRef.current.setServerTime(state.server_time);
       }
       confirmApiRef.current.seedFromInit(state as Record<string, unknown>);
-      setIsMuted(state.muted || false);
-      setIsWakeWordActive(state.wake_word_active !== false);
+      seedToolLogsFromInit(state as Record<string, unknown>);
+      seedJobsFromInit(state as Record<string, unknown>);
       if (state.map_focus) {
         const focus = parseMapFocusPayload(state.map_focus);
         if (focus) setMapFocus(focus);
@@ -548,9 +536,6 @@ export const useCommandCenter = () => {
         if (seeded[0]) setIntelligence(seeded[0]);
       }
     });
-    socket.on('mute_update', onMuteUpdate);
-    socket.on('settings_sync', onSettingsSync);
-    socket.on('wake_word_update', onWakeWordUpdate);
 
     return () => {
       socket.off('connect', onConnect);
@@ -564,9 +549,7 @@ export const useCommandCenter = () => {
       socket.off('telemetry_update', onTelemetryUpdate);
       socket.off('system_alert', onSystemAlert);
       socket.off('intelligence_update', onIntelligenceUpdate);
-      socket.off('persona_update', onPersonaUpdate);
       socket.off('memory_sync', onMemorySync);
-      socket.off('tool_update', onToolUpdate);
       socket.off('transcription_update', onTranscriptionUpdate);
       socket.off('location_update', onLocationUpdate);
       socket.off('map_focus_update', onMapFocusUpdate);
@@ -577,47 +560,21 @@ export const useCommandCenter = () => {
       socket.off('sim_data_loading', onSimDataLoading);
       socket.off('sim_panel_open', onSimPanelOpen);
       socket.off('init_state');
-      socket.off('mute_update', onMuteUpdate);
-      socket.off('settings_sync', onSettingsSync);
-      socket.off('wake_word_update', onWakeWordUpdate);
     };
-  }, [socketVersion, clearSimLookupTimer, startSimLookupTimer]);
-
-  const emitCommand = (type: string, payload?: unknown) => {
-    getSocket().emit('ui_command', { type, payload });
-  };
+  }, [socketVersion, clearSimLookupTimer, startSimLookupTimer, seedToolLogsFromInit, seedJobsFromInit]);
 
   const respondConfirm = (id: string, allow: boolean) => {
     if (!confirmQueue.markResponded(id)) return;
     emitCommand('confirm_response', { id, allow });
   };
 
-  const changePersona = (persona: 'jarvis' | 'anna') => {
-    emitCommand('persona_change', persona);
-    setActivePersona(persona);
-  };
-
-  const updateSettings = (settings: {
-    language: string;
-    voice: string;
-    style: string;
-    emotionalIntelligence: boolean;
-  }) => {
-    emitCommand('settings_update', settings);
-  };
+  const changePersona = settings.changePersona;
+  const updateSettings = settings.updateSettings;
+  const toggleMute = settings.toggleMute;
+  const toggleWakeWord = settings.toggleWakeWord;
 
   const sendMessage = (text: string) => {
     chat.send(text);
-  };
-
-  const toggleMute = () => {
-    emitCommand(isMuted ? 'unmute' : 'mute');
-  };
-
-  const toggleWakeWord = () => {
-    const nextActive = !isWakeWordActive;
-    setIsWakeWordActive(nextActive);
-    emitCommand('wake_word_toggle', nextActive);
   };
 
   const openSimPanel = () => {
@@ -724,8 +681,8 @@ export const useCommandCenter = () => {
     isSpeaking,
     isUserSpeaking,
     isThinking,
-    isMuted,
-    isWakeWordActive,
+    isMuted: settings.muted,
+    isWakeWordActive: settings.wakeWord,
     spectralDataRef,
     vitalsPc,
     vitalsVps,
@@ -733,9 +690,14 @@ export const useCommandCenter = () => {
     systemAlerts,
     intelligence,
     intelligenceHistory,
-    activePersona,
+    activePersona: settings.persona,
     memories,
     toolLogs,
+    toolRunningCount,
+    toolLastError,
+    jobs,
+    cancelJob,
+    openJobArtifact,
     transcription,
     messages: chat.messages,
     chatHasMore: chat.hasMore,

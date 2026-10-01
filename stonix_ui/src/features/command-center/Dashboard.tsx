@@ -16,8 +16,9 @@ import { useAuth } from '@/features/auth/AuthProvider';
 import { useLiveKit } from '@/features/voice/LiveKitProvider';
 import { useAgentStatus } from '@/features/status/useAgentStatus';
 import IntelligencePanel from '@/features/intelligence/IntelligencePanel';
+import { SettingsProvider } from '@/features/settings/useSettings';
 
-const Dashboard = () => {
+const DashboardInner = () => {
   const { logout } = useAuth();
   const liveKit = useLiveKit();
   const agentStatus = useAgentStatus();
@@ -42,7 +43,6 @@ const Dashboard = () => {
       <div className="command-background" />
       <ErrorBoundary name="TopBar">
         <TopBar
-          persona={command.activePersona}
           isConnected={command.isConnected}
           onReconnect={handleReconnect}
           onOpenSettings={() => setSettingsOpen(true)}
@@ -109,7 +109,10 @@ const Dashboard = () => {
             messages={command.messages}
             logs={command.vortexLogs}
             memories={command.memories}
-            tools={command.toolLogs}
+            toolLogs={command.toolLogs}
+            jobs={command.jobs}
+            onCancelJob={command.cancelJob}
+            onOpenJobArtifact={command.openJobArtifact}
             onSend={command.sendMessage}
             liveCaptions={command.chatLiveCaptions}
             fallbackTranscription={command.transcription}
@@ -128,6 +131,10 @@ const Dashboard = () => {
               isConnected={command.isConnected}
               onClose={() => setSettingsOpen(false)}
               onReconnect={handleReconnect}
+              onLogout={() => {
+                void liveKit.disconnectRoom();
+                void logout();
+              }}
             />
           </ErrorBoundary>
         )}
@@ -152,5 +159,11 @@ const Dashboard = () => {
     </div>
   );
 };
+
+const Dashboard = () => (
+  <SettingsProvider>
+    <DashboardInner />
+  </SettingsProvider>
+);
 
 export default Dashboard;
