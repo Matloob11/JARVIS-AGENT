@@ -3,6 +3,7 @@ import '@/assets/styles/index.css';
 import { AuthProvider, useAuth } from '@/features/auth/AuthProvider';
 import LoginScreen from '@/features/auth/LoginScreen';
 import Dashboard from '@/features/command-center/Dashboard';
+import { LiveKitProvider } from '@/features/voice/LiveKitProvider';
 
 const AuthenticatedApp = () => {
   const { status } = useAuth();
@@ -19,7 +20,11 @@ const AuthenticatedApp = () => {
     return <LoginScreen />;
   }
 
-  return <Dashboard />;
+  return (
+    <LiveKitProvider>
+      <Dashboard />
+    </LiveKitProvider>
+  );
 };
 
 export const App = () => (

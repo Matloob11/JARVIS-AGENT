@@ -2,33 +2,32 @@ import { LogOut, Mic, MicOff, Radar, Settings, ShieldCheck, Wifi } from 'lucide-
 import WindowControls from '@/shared/ui/WindowControls';
 import { StatusDot } from '@/shared/ui/Panel';
 import { personaAccent } from '@/shared/theme/commandTheme';
+import { useLiveKit } from '@/features/voice/LiveKitProvider';
 
 interface TopBarProps {
   persona: 'jarvis' | 'anna';
   isConnected: boolean;
-  isMuted: boolean;
   isWakeWordActive: boolean;
   status: string;
   onReconnect: () => void;
   onOpenSettings: () => void;
   onOpenSim: () => void;
-  onToggleMute: () => void;
   onLogout: () => void;
 }
 
 const TopBar = ({
   persona,
   isConnected,
-  isMuted,
   isWakeWordActive,
   status,
   onReconnect,
   onOpenSettings,
   onOpenSim,
-  onToggleMute,
   onLogout,
 }: TopBarProps) => {
   const accent = personaAccent(persona);
+  const voice = useLiveKit();
+  const micOff = !voice.micEnabled;
 
   return (
     <header className="command-topbar drag-handle">
@@ -64,8 +63,14 @@ const TopBar = ({
         <button className="icon-button" onClick={onOpenSim} title="SIM lookup workspace">
           <ShieldCheck size={15} />
         </button>
-        <button className="icon-button" onClick={onToggleMute} title={isMuted ? 'Unmute' : 'Mute'}>
-          {isMuted ? <MicOff size={15} className="text-command-danger" /> : <Mic size={15} />}
+        <button
+          className="icon-button"
+          data-testid="topbar-mic-toggle"
+          onClick={() => void voice.toggleMic()}
+          title={micOff ? 'Mic on' : 'Mic off'}
+          disabled={voice.voiceUnavailable}
+        >
+          {micOff ? <MicOff size={15} className="text-command-danger" /> : <Mic size={15} />}
         </button>
         <button className="icon-button" onClick={onOpenSettings} title="Settings">
           <Settings size={15} />

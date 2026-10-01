@@ -157,6 +157,18 @@ button {
     @apply relative z-40 flex h-14 shrink-0 items-center justify-between border-b border-command-border bg-command-bg/90 px-5 backdrop-blur-xl;
   }
 
+  .voice-banner {
+    @apply relative z-50 flex flex-wrap items-center justify-center gap-3 border-b border-command-border bg-command-panel/95 px-4 py-2 text-[11px] text-command-text;
+  }
+
+  .voice-banner--warn {
+    @apply border-amber-500/30 bg-amber-500/10 text-amber-100;
+  }
+
+  .voice-banner button {
+    @apply rounded-md border border-command-border bg-white/[0.06] px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-command-text transition hover:bg-white/[0.1];
+  }
+
   .brand-mark {
     @apply flex h-8 w-8 items-center justify-center rounded-md border border-command-border bg-white/[0.035] text-command-accent;
   }
@@ -313,6 +325,70 @@ button {
 
   .assistant-core__terminate {
     @apply absolute right-5 top-5 flex items-center gap-2 rounded-md border border-command-danger/30 bg-command-danger/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-command-danger transition hover:bg-command-danger/15;
+  }
+
+  .intelligence-panel__body {
+    @apply space-y-3 p-3;
+  }
+
+  .intelligence-featured {
+    @apply space-y-2 rounded-md border border-command-border bg-white/[0.02] p-3;
+  }
+
+  .intelligence-kv {
+    @apply space-y-1.5;
+  }
+
+  .intelligence-kv__row {
+    @apply grid grid-cols-[120px_minmax(0,1fr)] gap-2 text-xs;
+  }
+
+  .intelligence-kv__row dt {
+    @apply font-semibold text-command-muted;
+  }
+
+  .intelligence-kv__row dd {
+    @apply break-all font-mono text-command-text/85;
+  }
+
+  .intelligence-link {
+    @apply break-all text-sm text-command-accent underline decoration-command-accent/40 underline-offset-2;
+  }
+
+  .intelligence-image-btn {
+    @apply block w-full overflow-hidden rounded-md border border-command-border bg-black/20;
+  }
+
+  .intelligence-image {
+    @apply max-h-40 w-full object-contain;
+  }
+
+  .intelligence-lan-url {
+    @apply block break-all rounded-md border border-command-border bg-black/30 px-2 py-1 font-mono text-[11px] text-command-text/80;
+  }
+
+  .intelligence-copy {
+    @apply mt-2 inline-flex items-center gap-1 rounded-md border border-command-border px-2 py-1 text-[11px] text-command-text transition hover:bg-white/[0.04];
+  }
+
+  .intelligence-history {
+    @apply flex gap-2 overflow-x-auto pb-1;
+  }
+
+  .intelligence-history__chip {
+    @apply flex shrink-0 items-center gap-1 rounded-md border border-command-border bg-white/[0.03] px-2 py-1 text-[10px] text-command-muted transition hover:bg-white/[0.06];
+  }
+
+  .intelligence-history__chip--active {
+    @apply border-command-accent/40 bg-command-accent/10 text-command-text;
+  }
+
+  .intelligence-lightbox {
+    @apply fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm;
+  }
+
+  .intelligence-lightbox__img {
+    @apply max-h-[85vh] max-w-[92vw] object-contain;
   }
 
   .system-trace {
@@ -518,6 +594,86 @@ button {
 
   .sim-meta span {
     @apply truncate rounded border border-command-border bg-black/20 px-2 py-1;
+  }
+
+  .confirm-backdrop {
+    @apply z-[80];
+  }
+
+  .confirm-dialog {
+    @apply w-full max-w-[560px] rounded-lg border border-command-border bg-command-panel/95 p-5 shadow-[0_24px_90px_rgba(0,0,0,0.50)];
+  }
+
+  .confirm-dialog__header {
+    @apply mb-4 flex items-start justify-between gap-3 border-b border-command-border pb-4;
+  }
+
+  .confirm-dialog__header h2 {
+    @apply text-sm font-semibold text-command-text;
+  }
+
+  .confirm-dialog__header p {
+    @apply text-xs leading-5 text-command-muted;
+  }
+
+  .confirm-dialog__icon {
+    @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-md border bg-black/20;
+  }
+
+  .confirm-dialog__risk {
+    @apply rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em];
+  }
+
+  .confirm-dialog__risk--high {
+    @apply border-command-danger/40 bg-command-danger/10 text-command-danger;
+  }
+
+  .confirm-dialog__risk--medium {
+    @apply border-command-warning/35 bg-command-warning/10 text-command-warning;
+  }
+
+  .confirm-dialog__notice {
+    @apply mb-3 rounded-md border border-command-warning/30 bg-command-warning/10 px-3 py-2 text-xs text-command-text/90;
+  }
+
+  .confirm-dialog__body {
+    @apply space-y-3 text-sm text-command-text/90;
+  }
+
+  .confirm-dialog__row strong {
+    @apply mt-1 block font-mono text-sm text-command-text;
+  }
+
+  .confirm-dialog__args {
+    @apply max-h-32 overflow-auto rounded-md border border-command-border bg-black/30 p-3 font-mono text-xs leading-5 text-command-muted;
+  }
+
+  .confirm-dialog__meta {
+    @apply flex items-center justify-between gap-2 text-xs text-command-muted;
+  }
+
+  .confirm-dialog__voice {
+    @apply flex items-center gap-2 rounded-md border border-command-accent/25 bg-command-accent/5 px-3 py-2 text-xs text-command-accent;
+  }
+
+  .confirm-dialog__actions {
+    @apply mt-5 flex items-center justify-end gap-3;
+  }
+
+  .confirm-dialog__deny {
+    @apply rounded-md border border-command-border bg-black/25 px-4 py-2 text-sm font-semibold text-command-text transition hover:bg-white/[0.06];
+  }
+
+  .confirm-dialog__allow {
+    @apply relative min-w-[140px] overflow-hidden rounded-md border border-command-danger/35 bg-command-danger/15 px-4 py-2 text-sm font-semibold text-command-danger transition hover:bg-command-danger/20;
+  }
+
+  .confirm-dialog__hold {
+    @apply relative z-[1] block;
+  }
+
+  .confirm-dialog__hold-bar {
+    @apply absolute bottom-0 left-0 h-0.5 w-full origin-left bg-command-danger transition-transform duration-75;
   }
 }
 

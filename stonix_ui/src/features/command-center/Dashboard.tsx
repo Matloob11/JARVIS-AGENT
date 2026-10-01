@@ -6,32 +6,46 @@ import FlowMap from './components/FlowMap';
 import OperationsRail from './components/OperationsRail';
 import SettingsPanel from './components/SettingsPanel';
 import SimAccessDialog from './components/SimAccessDialog';
+import ConfirmDialog from '@/features/confirm/ConfirmDialog';
 import SystemTrace from './components/SystemTrace';
 import TopBar from './components/TopBar';
 import { useCommandCenter } from './hooks/useCommandCenter';
 import { ErrorBoundary } from '@/shared/ui/ErrorBoundary';
 import { useAuth } from '@/features/auth/AuthProvider';
+import { useLiveKit } from '@/features/voice/LiveKitProvider';
+import IntelligencePanel from '@/features/intelligence/IntelligencePanel';
 
 const Dashboard = () => {
   const { logout } = useAuth();
+  const liveKit = useLiveKit();
   const command = useCommandCenter();
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   return (
     <div className="command-root">
+      <ErrorBoundary name="ConfirmDialog">
+        <ConfirmDialog
+          current={command.confirmCurrent}
+          queueCount={command.confirmQueueCount}
+          cancelNotice={command.confirmCancelNotice}
+          onAllow={command.respondConfirmAllow}
+          onDeny={command.respondConfirmDeny}
+        />
+      </ErrorBoundary>
       <div className="command-background" />
       <ErrorBoundary name="TopBar">
         <TopBar
           persona={command.activePersona}
           isConnected={command.isConnected}
-          isMuted={command.isMuted}
           isWakeWordActive={command.isWakeWordActive}
           status={command.status}
           onReconnect={command.reconnect}
           onOpenSettings={() => setSettingsOpen(true)}
           onOpenSim={command.openSimPanel}
-          onToggleMute={command.toggleMute}
-          onLogout={() => void logout()}
+          onLogout={() => {
+            void liveKit.disconnectRoom();
+            void logout();
+          }}
         />
       </ErrorBoundary>
 
@@ -41,7 +55,10 @@ const Dashboard = () => {
             persona={command.activePersona}
             isMuted={command.isMuted}
             location={command.location}
-            vitals={command.vitals}
+            vitalsPc={command.vitalsPc}
+            vitalsVps={command.vitalsVps}
+            telemetry={command.telemetry}
+            systemAlerts={command.systemAlerts}
             logs={command.vortexLogs}
           />
         </ErrorBoundary>
@@ -62,10 +79,12 @@ const Dashboard = () => {
               isSpeaking={command.isSpeaking}
               isThinking={command.isThinking}
               voiceMatch={command.voiceMatch}
-              isMuted={command.isMuted}
-              onEnsureUnmuted={() => {
-                if (command.isMuted) command.toggleMute();
-              }}
+            />
+          </ErrorBoundary>
+          <ErrorBoundary name="IntelligencePanel">
+            <IntelligencePanel
+              latest={command.intelligence}
+              history={command.intelligenceHistory}
             />
           </ErrorBoundary>
           <ErrorBoundary name="SystemTrace">

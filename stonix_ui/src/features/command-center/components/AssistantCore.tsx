@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { Activity, Mic, MicOff, Power, ShieldCheck } from 'lucide-react';
 import { personaAccent } from '@/shared/theme/commandTheme';
-import { useLiveKitVoice } from '../hooks/useLiveKitVoice';
+import { useLiveKit } from '@/features/voice/LiveKitProvider';
 
 interface AssistantCoreProps {
   persona: 'jarvis' | 'anna';
@@ -9,8 +9,6 @@ interface AssistantCoreProps {
   isSpeaking: boolean;
   isThinking: boolean;
   voiceMatch: number;
-  isMuted?: boolean;
-  onEnsureUnmuted?: () => void;
 }
 
 const AssistantCore = ({
@@ -19,31 +17,27 @@ const AssistantCore = ({
   isSpeaking,
   isThinking,
   voiceMatch,
-  isMuted = false,
-  onEnsureUnmuted,
 }: AssistantCoreProps) => {
   const accent = personaAccent(persona);
   const matchPercent = Math.round(voiceMatch * 100);
-  const livekit = useLiveKitVoice();
-  const voiceLive = livekit.status === 'connected';
-  const voiceConnecting = livekit.status === 'connecting';
+  const voice = useLiveKit();
+  const voiceLive = voice.roomState === 'connected';
+  const voiceConnecting = voice.roomState === 'connecting' || voice.roomState === 'reconnecting';
+  const agentLabel = voice.agentState ? voice.agentState : voiceLive ? 'linked' : 'offline';
 
   const stateLabel = voiceConnecting
     ? 'Joining voice…'
-    : voiceLive
-      ? `Voice connected (${livekit.roomName || 'jarvis-hybrid'})`
-      : isThinking
-        ? 'Processing'
-        : isSpeaking
-          ? 'Speaking'
-          : isConnected
-            ? 'System active'
-            : 'Offline';
-
-  const startVoice = () => {
-    if (isMuted) onEnsureUnmuted?.();
-    void livekit.connect();
-  };
+    : voice.voiceUnavailable
+      ? 'Voice unavailable'
+      : voiceLive
+        ? `Voice (${voice.roomName || 'jarvis-hybrid'}) · ${agentLabel}`
+        : isThinking
+          ? 'Processing'
+          : isSpeaking
+            ? 'Speaking'
+            : isConnected
+              ? 'System active'
+              : 'Offline';
 
   return (
     <div className="assistant-core">
@@ -72,7 +66,9 @@ const AssistantCore = ({
         >
           <span className={`assistant-core__pulse ${accent.bg}`} />
           <span className="assistant-core__label">{persona.toUpperCase()}</span>
-          <span className="assistant-core__sublabel">{stateLabel}</span>
+          <span className="assistant-core__sublabel" data-testid="voice-status">
+            {stateLabel}
+          </span>
         </motion.div>
       </div>
 
@@ -83,30 +79,32 @@ const AssistantCore = ({
             {stateLabel}
           </div>
           <p className="mt-1 text-[11px] text-command-muted">
-            {voiceLive
-              ? 'Mic live — bolo, agent sunega aur bolega. Chat text alag hai (awaaz nahi).'
-              : isMuted
-                ? 'Top-right mic unmute karo, phir Voice on — browser Microphone Allow karega.'
-                : 'Voice on dabao → browser popup mein Microphone Allow. Site settings mein Camera ke saath Microphone dikhna chahiye.'}
+            {voice.voiceUnavailable
+              ? 'LiveKit abhi available nahi — chat aur bridge controls chalte rahenge.'
+              : voice.micEnabled
+                ? 'Mic live — bolo, agent sunega aur bolega. Chat text alag hai (awaaz nahi).'
+                : voiceLive
+                  ? 'Mic off — room linked hai. Mic on dabao jab bolna ho; room disconnect nahi hota.'
+                  : 'Login ke baad room auto-link hota hai (mic off). Mic on = permission allow.'}
           </p>
-          {livekit.error && (
-            <p className="mt-1 max-w-md text-[11px] text-red-400">Voice error: {livekit.error}</p>
+          {voice.error && (
+            <p className="mt-1 max-w-md text-[11px] text-red-400" role="alert">
+              Voice: {voice.error}
+            </p>
           )}
         </div>
         <div className="flex items-center gap-2">
           <button
             type="button"
             className="icon-button"
-            title={voiceLive ? 'Disconnect voice' : 'Connect LiveKit voice'}
-            onClick={() => {
-              if (voiceLive) void livekit.disconnect();
-              else startVoice();
-            }}
-            disabled={voiceConnecting}
+            data-testid="voice-toggle"
+            title={voice.micEnabled ? 'Mic off' : 'Mic on'}
+            onClick={() => void voice.toggleMic()}
+            disabled={voiceConnecting || voice.voiceUnavailable}
           >
-            {voiceLive ? <MicOff size={14} /> : <Mic size={14} />}
+            {voice.micEnabled ? <Mic size={14} /> : <MicOff size={14} />}
             <span className="ml-1 text-[10px] uppercase tracking-wide">
-              {voiceConnecting ? 'Joining…' : voiceLive ? 'Connected' : 'Voice on'}
+              {voiceConnecting ? 'Joining…' : voice.micEnabled ? 'Mic on' : 'Mic off'}
             </span>
           </button>
           <div className="flex items-center gap-2 rounded-md border border-white/10 bg-white/[0.03] px-3 py-2">

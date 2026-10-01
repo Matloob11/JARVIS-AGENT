@@ -109,3 +109,47 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Commit:** pending · **Deploy:** no
 - **Doosre agent ke liye:** —
 
+
+### ✅ [cursor] X-10 · ConfirmDialog risky tools · 2026-10-01 13:05 PKT
+- **Kya kiya:** Confirm queue + modal (countdown, high-risk hold, Deny focus, voice hint, hidden-tab chime); init_state seed + confirm_request/resolved; logs tab decisions; e2e confirm.spec.
+- **Files:** stonix_ui/src/features/confirm/ConfirmDialog.tsx, useConfirmQueue.ts, command-center/Dashboard.tsx, hooks/useCommandCenter.ts, tests/e2e/confirm.spec.ts, assets/styles/index.css
+- **Verify:** `npm run build` pass; `npx playwright test tests/e2e/confirm.spec.ts` — 4 passed
+- **Commit:** abhi nahi · **Deploy:** no
+- **Doosre agent ke liye:** ui_command `confirm_response` {id, allow}; events confirm_request / confirm_resolved
+
+### ✅ [cursor] X-18 · Intelligence / Media panel · 2026-10-01 13:10 PKT
+- **Kya kiya:** Collapsible Intelligence/Media panel under AssistantCore: image lightbox, JSON key/value, link (noopener), audio controls, LAN-only hint + copy; bridge media URLs with one-shot `/media/<id>/sign` refresh; history (20) from `intelligence_update` + `init_state.intelligence`.
+- **Files:** stonix_ui/src/features/intelligence/*, command-center/Dashboard.tsx, hooks/useCommandCenter.ts, assets/styles/index.css, tests/e2e/intelligence.spec.ts
+- **Verify:** `cd stonix_ui && npm run build` pass; `npx playwright test tests/e2e/intelligence.spec.ts` — 3 passed
+- **Commit:** abhi nahi · **Deploy:** no
+- **Doosre agent ke liye:** intelligence_update per K-02 {type image|json|link|audio, url?, data?, label?, id?, ts}
+
+
+### ✅ [cursor] X-13 · LiveKit room provider · 2026-10-01 13:20 PKT
+- **Kya kiya:** LiveKit provider join after login (mic off), mic toggle without room churn, fresh token, take-over / LiveKit-unavailable UX.
+- **Files:** stonix_ui/src/features/voice/*, useLiveKitVoice.ts, AssistantCore/TopBar, tests/e2e/voice.spec.ts
+- **Verify:** build + voice e2e in suite pass
+- **Commit:** pending · **Deploy:** no
+- **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-10 · ConfirmDialog queue · 2026-10-01 13:20 PKT
+- **Kya kiya:** Confirm queue + modal Allow/Deny, countdown, e2e 4/4.
+- **Files:** stonix_ui/src/features/confirm/*, Dashboard, useCommandCenter, confirm.spec.ts
+- **Verify:** confirm.spec.ts 4 passed
+- **Commit:** pending · **Deploy:** no
+- **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-17 · Vitals PC/VPS + Telemetry + Alerts · 2026-10-01 13:20 PKT
+- **Kya kiya:** Separate PC/VPS vitals, TelemetryCard, alerts by level; init_state no longer clobbers fresher vitals.
+- **Files:** OperationsRail.tsx, TelemetryCard.tsx, useCommandCenter.ts, vitals.spec.ts
+- **Verify:** vitals.spec.ts pass
+- **Commit:** pending · **Deploy:** no
+- **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-18 · Intelligence / Media panel · 2026-10-01 13:20 PKT
+- **Kya kiya:** Intelligence panel with bridge media relay, LAN notice, history strip.
+- **Files:** stonix_ui/src/features/intelligence/*, Dashboard, intelligence.spec.ts
+- **Verify:** intelligence.spec.ts 3 passed
+- **Commit:** pending · **Deploy:** no
+- **Doosre agent ke liye:** —
+

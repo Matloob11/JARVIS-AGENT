@@ -508,9 +508,9 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | C-73 | claude | P1 | Voice-ID in the turn gate, CLI enrollment, calibration and reject flow | C-72, C-69, C-56, K-62 (CT-VC-TURN-GATE) | TODO |
 | C-74 | claude | P1 | Transcript language and script: A/B test, STT config, Roman Urdu display with original kept | C-71, C-73, C-44 | TODO |
 | C-75 | claude | P1 | Verify spoken confirmations against real user transcripts | C-28, C-74 | TODO |
-| X-13 | cursor | P1 | LiveKit room provider: join after login with mic off, mic toggle without churn, fresh token per connect, take-over UI | X-08, K-04 (DASH-LIVEKIT-UI) | DOING (cursor, 01 Oct 12:53) |
+| X-13 | cursor | P1 | LiveKit room provider: join after login with mic off, mic toggle without churn, fresh token per connect, take-over UI | X-08, K-04 (DASH-LIVEKIT-UI) | DONE (01 Oct 13:20) |
 | X-14 | cursor | P1 | ChatPanel unified: one bubble per message id, Socket.IO send, history paging, live captions from lk.transcription | X-13, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS), K-04 (DASH-LIVEKIT-UI) | TODO |
-| X-25 | cursor | P1 | Clipboard monitor: structured, redacted, rate-limited suggestions with self-write ignore | C-26, X-03, X-11, K-19 (ClipboardSuggestion) | TODO |
+| X-25 | cursor | P1 | Clipboard monitor: structured, redacted, rate-limited suggestions with self-write ignore | C-26, X-03, X-11, K-19 (ClipboardSuggestion) | BLOCKED (waiting C-26,X-11) |
 | C-57 | claude | P2 | Background jobs API (single module) + list/cancel tools | C-29, C-55, K-20 (BackgroundJobsAPI) | TODO |
 | C-58 | claude | P2 | Job progress routing: bridge tool_progress + init_state.jobs + job_cancel/open_job_artifact | C-29, C-57, C-13, C-14, C-19, K-31 (job_progress_routing) | TODO |
 | C-59 | claude | P2 | Automation flags as a branch of the single agent settings service (owner-only, audited) | C-27, C-26, C-29, C-54, C-14, C-19, K-24 (AutomationSettings) | TODO |
@@ -522,7 +522,7 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | C-76 | claude | P2 | Live Fast <-> Gated switch without restarting the agent | C-70, C-73, C-54 | TODO |
 | C-77 | claude | P2 | Voice session state in the agent heartbeat, probe silence, local health interval fix | C-33, C-39, C-23, C-63, K-68 (CT-VC-AGENT-HEARTBEAT) | TODO |
 | X-15 | cursor | P2 | Status bar: Bridge / Agent PC / Voice chips at every width, real agent state, working Reconnect | X-13, K-02 (DASH-UI-EVENTS), K-44 (C-ROOM-1), K-43 (C-STATUS-1) | TODO |
-| X-16 | cursor | P2 | Agent controls: Stop speaking, Pause/Start (Wake), separate Mic vs 'Agent listening', offline message queue | X-14, X-15, K-03 (DASH-UI-COMMANDS), K-60 (CT-VC-CONTROL), K-62 (CT-VC-TURN-GATE) | TODO |
+| X-16 | cursor | P2 | Agent controls: Stop speaking, Pause/Start (Wake), separate Mic vs 'Agent listening', offline message queue | X-14, X-15, K-03 (DASH-UI-COMMANDS), K-60 (CT-VC-CONTROL), K-62 (CT-VC-TURN-GATE) | BLOCKED (waiting X-14,X-15) |
 | C-47 | claude | P3 | Media toolchain deps in .venv_312: yt-dlp[default] (yt-dlp-ejs) + pylint (+ imageio-ffmpeg only if chosen) | C-26, C-09, K-15 (DesktopConfigKeys) | DONE (01 Oct 12:30) |
 | C-78 | claude | P3 | Document Q&A: scoped persistent index, terminating chunker, work off the event loop | C-24 | TODO |
 | C-79 | claude | P3 | SIM ui_command payload {query, purpose}: agent handler + bridge validator | X-38, C-13, C-14, C-19, K-34 (sim_authorized_source) | TODO |
@@ -547,43 +547,43 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | X-02 | cursor | P3 | Original startup chime asset (Cursor part of the startup-voice split) | — | DONE (01 Oct 12:55) |
 | X-04 | cursor | P3 | jarvis_audio real implementation (gTTS/pyttsx3 TTS, SpeechRecognition STT, local playback) | K-50 (C-AUDIO-1) | DONE (01 Oct 12:58) |
 | X-05 | cursor | P3 | Map tool: Nominatim usage policy (1 req/s, proper user agent) + zoom | K-08 (DASH-LOCATION) | DONE (01 Oct 12:56) |
-| X-10 | cursor | P3 | ConfirmDialog for risky tools: queue, server-corrected countdown, Allow/Deny, closes on any resolution | X-06, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS), K-14 (ConfirmFlow), K-45 (C-CONFIRM-1) | TODO |
-| X-17 | cursor | P3 | Vitals cards PC (agent) vs VPS (server), Telemetry card, Alerts by level | X-06, K-02 (DASH-UI-EVENTS) | TODO |
-| X-18 | cursor | P3 | Intelligence / Media panel: generated images, QR codes and files over HTTPS through the bridge media relay | X-06, K-02 (DASH-UI-EVENTS) | TODO |
-| X-19 | cursor | P3 | Tools tab: live tool rows for every call (upsert by id), jobs with progress and cancel, medium-risk toasts | X-14, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS), K-13 (ToolSyncEvent), K-31 (job_progress_routing) | TODO |
-| X-20 | cursor | P3 | SystemTrace: crash-proof reasoning card, plan progress, turn_rejected feed, logs terminal with level filters, diagnostics/audit | X-19, K-02 (DASH-UI-EVENTS), K-62 (CT-VC-TURN-GATE), K-67 (CT-VC-REASONING) | TODO |
-| X-21 | cursor | P3 | Settings drawer (core): session, connection, voice, persona, wake word, agent listening, voice-ID with confirmed state | X-15, X-16, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS) | TODO |
-| X-22 | cursor | P3 | Settings drawer (advanced): turn mode, follow-up window, transcript script, automation toggles, vision mode, guarded-tools list | X-10, X-21, K-05 (DASH-CAMERA-VISION), K-03 (DASH-UI-COMMANDS), K-24 (AutomationSettings) | TODO |
-| X-23 | cursor | P3 | Memory (Notes) tab: restore, stream, search, confirmed clear | X-19, X-10, K-07 (DASH-MEMORY-EVENTS) | TODO |
-| X-24 | cursor | P3 | Tasks & Reminders tab with countdown and Cancel, due-item toasts and a notification bell | X-23, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS) | TODO |
-| X-28 | cursor | P3 | System info: battery + CPU/RAM/disk ToolResult and collect_pc_vitals() | C-24, X-11, K-26 (VitalsPCHelper) | TODO |
-| X-32 | cursor | P3 | TaskStore v2: schema columns, parse_when, schedule_task with args + confirm, cancel tool | C-24, C-28, C-30, K-66 (CT-VC-PROACTIVE), K-33 (task_store_v2), K-32 (scheduled_action_runner) | TODO |
-| X-33 | cursor | P3 | Voice-ID meter with real states and the voice enrollment wizard | X-21, X-13, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS) | TODO |
-| X-34 | cursor | P3 | YouTube play: real watch URL via yt-dlp search, browser paths from config | C-24, C-26, X-11, K-22 (YouTubeVideoUrl) | TODO |
-| X-35 | cursor | P3 | File opener: config media dirs (+D:/ when present), background index outside outputs, safe open/close | C-24, C-26, X-03, X-11, K-16 (DesktopToolPolicy) | TODO |
-| X-36 | cursor | P3 | Search chain hardening: Tavily Bearer, Google header + auto-disable, DDG, shared helpers | C-25, K-29 (redact_secrets) | TODO |
-| X-37 | cursor | P3 | Weather: auto-detected city + 24 h forecast + clear key errors | C-25 | TODO |
-| X-38 | cursor | P3 | SIM lookup: authorized-API source with a clear 'provider not configured' mode | C-25, C-24, C-28, K-34 (sim_authorized_source) | TODO |
-| X-39 | cursor | P3 | QR generator: exact data (raw policy), safe filename, open_file parameter | C-24, C-28, K-28 (tool_arg_policies) | TODO |
-| X-40 | cursor | P3 | Image generation: FLUX.1-schnell via HF with Pollinations fallback and clear errors | C-25, C-24 | TODO |
-| X-41 | cursor | P3 | WhatsApp: install check, process-based window match, confirmed Unicode send, safe close | C-27, C-28, C-26, X-03, X-11, C-30, X-26, K-16 (DesktopToolPolicy) | TODO |
-| X-42 | cursor | P3 | Window control 1/3: close_window (tool 'close' kept as routed alias), minimize/maximize, active-window context | C-27, X-03, X-11, X-41, K-17 (ToolNamesV2), K-21 (ActiveWindowContext), K-16 (DesktopToolPolicy) | TODO |
-| X-43 | cursor | P3 | Window control 2/3: open_app with a universal app index and Chrome/YouTube/WhatsApp/Office/VLC routing | C-26, X-26, X-34, X-41, X-42 | TODO |
-| X-44 | cursor | P3 | Window control 3/3: save_notepad, open_notepad_file, folder_file (+cv alias), create_folder, open_outputs_folder | C-26, X-03, C-30, X-27, X-43 | TODO |
+| X-10 | cursor | P3 | ConfirmDialog for risky tools: queue, server-corrected countdown, Allow/Deny, closes on any resolution | X-06, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS), K-14 (ConfirmFlow), K-45 (C-CONFIRM-1) | DONE (01 Oct 13:20) |
+| X-17 | cursor | P3 | Vitals cards PC (agent) vs VPS (server), Telemetry card, Alerts by level | X-06, K-02 (DASH-UI-EVENTS) | DONE (01 Oct 13:20) |
+| X-18 | cursor | P3 | Intelligence / Media panel: generated images, QR codes and files over HTTPS through the bridge media relay | X-06, K-02 (DASH-UI-EVENTS) | DONE (01 Oct 13:20) |
+| X-19 | cursor | P3 | Tools tab: live tool rows for every call (upsert by id), jobs with progress and cancel, medium-risk toasts | X-14, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS), K-13 (ToolSyncEvent), K-31 (job_progress_routing) | BLOCKED (waiting X-14) |
+| X-20 | cursor | P3 | SystemTrace: crash-proof reasoning card, plan progress, turn_rejected feed, logs terminal with level filters, diagnostics/audit | X-19, K-02 (DASH-UI-EVENTS), K-62 (CT-VC-TURN-GATE), K-67 (CT-VC-REASONING) | BLOCKED (waiting X-19) |
+| X-21 | cursor | P3 | Settings drawer (core): session, connection, voice, persona, wake word, agent listening, voice-ID with confirmed state | X-15, X-16, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS) | BLOCKED (waiting X-15,X-16) |
+| X-22 | cursor | P3 | Settings drawer (advanced): turn mode, follow-up window, transcript script, automation toggles, vision mode, guarded-tools list | X-10, X-21, K-05 (DASH-CAMERA-VISION), K-03 (DASH-UI-COMMANDS), K-24 (AutomationSettings) | BLOCKED (waiting X-10,X-21) |
+| X-23 | cursor | P3 | Memory (Notes) tab: restore, stream, search, confirmed clear | X-19, X-10, K-07 (DASH-MEMORY-EVENTS) | BLOCKED (waiting X-19,X-10) |
+| X-24 | cursor | P3 | Tasks & Reminders tab with countdown and Cancel, due-item toasts and a notification bell | X-23, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS) | BLOCKED (waiting X-23) |
+| X-28 | cursor | P3 | System info: battery + CPU/RAM/disk ToolResult and collect_pc_vitals() | C-24, X-11, K-26 (VitalsPCHelper) | BLOCKED (waiting C-24,X-11) |
+| X-32 | cursor | P3 | TaskStore v2: schema columns, parse_when, schedule_task with args + confirm, cancel tool | C-24, C-28, C-30, K-66 (CT-VC-PROACTIVE), K-33 (task_store_v2), K-32 (scheduled_action_runner) | BLOCKED (waiting C-24,C-28,C-30) |
+| X-33 | cursor | P3 | Voice-ID meter with real states and the voice enrollment wizard | X-21, X-13, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS) | BLOCKED (waiting X-21,X-13) |
+| X-34 | cursor | P3 | YouTube play: real watch URL via yt-dlp search, browser paths from config | C-24, C-26, X-11, K-22 (YouTubeVideoUrl) | BLOCKED (waiting C-24,C-26,X-11) |
+| X-35 | cursor | P3 | File opener: config media dirs (+D:/ when present), background index outside outputs, safe open/close | C-24, C-26, X-03, X-11, K-16 (DesktopToolPolicy) | BLOCKED (waiting C-24,C-26,X-11) |
+| X-36 | cursor | P3 | Search chain hardening: Tavily Bearer, Google header + auto-disable, DDG, shared helpers | C-25, K-29 (redact_secrets) | BLOCKED (waiting C-25) |
+| X-37 | cursor | P3 | Weather: auto-detected city + 24 h forecast + clear key errors | C-25 | BLOCKED (waiting C-25) |
+| X-38 | cursor | P3 | SIM lookup: authorized-API source with a clear 'provider not configured' mode | C-25, C-24, C-28, K-34 (sim_authorized_source) | BLOCKED (waiting C-25,C-24,C-28) |
+| X-39 | cursor | P3 | QR generator: exact data (raw policy), safe filename, open_file parameter | C-24, C-28, K-28 (tool_arg_policies) | BLOCKED (waiting C-24,C-28) |
+| X-40 | cursor | P3 | Image generation: FLUX.1-schnell via HF with Pollinations fallback and clear errors | C-25, C-24 | BLOCKED (waiting C-25,C-24) |
+| X-41 | cursor | P3 | WhatsApp: install check, process-based window match, confirmed Unicode send, safe close | C-27, C-28, C-26, X-03, X-11, C-30, X-26, K-16 (DesktopToolPolicy) | BLOCKED (waiting C-27,C-28,C-26,X-11,C-30,X-26) |
+| X-42 | cursor | P3 | Window control 1/3: close_window (tool 'close' kept as routed alias), minimize/maximize, active-window context | C-27, X-03, X-11, X-41, K-17 (ToolNamesV2), K-21 (ActiveWindowContext), K-16 (DesktopToolPolicy) | BLOCKED (waiting C-27,X-11,X-41) |
+| X-43 | cursor | P3 | Window control 2/3: open_app with a universal app index and Chrome/YouTube/WhatsApp/Office/VLC routing | C-26, X-26, X-34, X-41, X-42 | BLOCKED (waiting C-26,X-26,X-34,X-41,X-42) |
+| X-44 | cursor | P3 | Window control 3/3: save_notepad, open_notepad_file, folder_file (+cv alias), create_folder, open_outputs_folder | C-26, X-03, C-30, X-27, X-43 | BLOCKED (waiting C-26,X-03,C-30,X-27,X-43) |
 | X-45 | cursor | P3 | CameraPanel: opt-in camera, LiveKit publish, honest link badges, Socket.IO fallback only while sharing | X-13, K-05 (DASH-CAMERA-VISION) | TODO |
 | X-46 | cursor | P3 | Location card + Map panel: device location and map focus kept separate, OpenStreetMap view | X-17, K-08 (DASH-LOCATION) | TODO |
-| X-47 | cursor | P3 | SIM dialog: provider-not-configured state, purpose field, masked results, 20 s timeout | X-15, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS), K-34 (sim_authorized_source) | TODO |
-| X-48 | cursor | P3 | Controls: Terminate (guarded session restart), Swarm entry points, answer feedback thumbs | X-24, X-10, K-03 (DASH-UI-COMMANDS) | TODO |
-| X-49 | cursor | P3 | FlowMap from real state (Voice, Vision, Memory, Tools, Core); 'unknown' instead of a fake 'ready' | X-20, X-19, X-13, K-06 (DASH-MODULE-HEALTH) | TODO |
-| X-50 | cursor | P3 | Real audio visualizer and 'You are speaking' indicator | X-13, X-33 | TODO |
-| X-52 | cursor | P3 | Dashboard 'Voice & Conversation' settings and enrollment extras (delta on the dashboard drawer and dialog) | X-22, X-33, K-61 (CT-VC-SETTINGS), K-63 (CT-VC-VOICE-ENROLL) | TODO |
-| X-53 | cursor | P3 | Dashboard glue: spoken indicator on reminders, memory backup path, Terminate sends shutdown_agent | X-23, X-24, X-48, K-66 (CT-VC-PROACTIVE), K-60 (CT-VC-CONTROL) | TODO |
-| X-54 | cursor | P3 | Email tool: multi-line UTF-8 body, SMTP timeout, attachment allow-list, approval | C-25, C-24, C-28, C-29, C-30, C-55, X-10, K-28 (tool_arg_policies) | TODO |
-| X-55 | cursor | P3 | download_images + zip_files: contained paths, safe names, concurrent downloads, honoured zip_name | X-36, X-54, C-24, C-28, K-28 (tool_arg_policies) | TODO |
-| X-56 | cursor | P3 | Google Maps leads scraper: Chrome channel, background job, resilient selectors | C-06, C-26, X-11, C-57 | TODO |
-| X-57 | cursor | P3 | Deep research (multi-source + LLM report) and research-and-email as an approved background job | C-45, X-36, X-54, C-24, C-28, C-55, C-57, K-30 (llm_text), K-31 (job_progress_routing) | TODO |
-| X-58 | cursor | P3 | YouTube downloader as a background job (single task, absorbs desktop K16) | C-47, C-24, C-28, C-55, C-57, K-31 (job_progress_routing) | TODO |
-| X-62 | cursor | P3 | PinchTab Chrome tools: auth, autostart, profile/instance lifecycle, text + refs, degraded mode, untrusted page text | C-24, C-26, X-03, X-11, C-75, C-84, K-23 (PinchTabLocalServer), K-16 (DesktopToolPolicy) | TODO |
+| X-47 | cursor | P3 | SIM dialog: provider-not-configured state, purpose field, masked results, 20 s timeout | X-15, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS), K-34 (sim_authorized_source) | BLOCKED (waiting X-15) |
+| X-48 | cursor | P3 | Controls: Terminate (guarded session restart), Swarm entry points, answer feedback thumbs | X-24, X-10, K-03 (DASH-UI-COMMANDS) | BLOCKED (waiting X-24,X-10) |
+| X-49 | cursor | P3 | FlowMap from real state (Voice, Vision, Memory, Tools, Core); 'unknown' instead of a fake 'ready' | X-20, X-19, X-13, K-06 (DASH-MODULE-HEALTH) | BLOCKED (waiting X-20,X-19,X-13) |
+| X-50 | cursor | P3 | Real audio visualizer and 'You are speaking' indicator | X-13, X-33 | BLOCKED (waiting X-13,X-33) |
+| X-52 | cursor | P3 | Dashboard 'Voice & Conversation' settings and enrollment extras (delta on the dashboard drawer and dialog) | X-22, X-33, K-61 (CT-VC-SETTINGS), K-63 (CT-VC-VOICE-ENROLL) | BLOCKED (waiting X-22,X-33) |
+| X-53 | cursor | P3 | Dashboard glue: spoken indicator on reminders, memory backup path, Terminate sends shutdown_agent | X-23, X-24, X-48, K-66 (CT-VC-PROACTIVE), K-60 (CT-VC-CONTROL) | BLOCKED (waiting X-23,X-24,X-48) |
+| X-54 | cursor | P3 | Email tool: multi-line UTF-8 body, SMTP timeout, attachment allow-list, approval | C-25, C-24, C-28, C-29, C-30, C-55, X-10, K-28 (tool_arg_policies) | BLOCKED (waiting C-25,C-24,C-28,C-29,C-30,C-55,X-10) |
+| X-55 | cursor | P3 | download_images + zip_files: contained paths, safe names, concurrent downloads, honoured zip_name | X-36, X-54, C-24, C-28, K-28 (tool_arg_policies) | BLOCKED (waiting X-36,X-54,C-24,C-28) |
+| X-56 | cursor | P3 | Google Maps leads scraper: Chrome channel, background job, resilient selectors | C-06, C-26, X-11, C-57 | BLOCKED (waiting C-06,C-26,X-11,C-57) |
+| X-57 | cursor | P3 | Deep research (multi-source + LLM report) and research-and-email as an approved background job | C-45, X-36, X-54, C-24, C-28, C-55, C-57, K-30 (llm_text), K-31 (job_progress_routing) | BLOCKED (waiting C-45,X-36,X-54,C-24,C-28) |
+| X-58 | cursor | P3 | YouTube downloader as a background job (single task, absorbs desktop K16) | C-47, C-24, C-28, C-55, C-57, K-31 (job_progress_routing) | BLOCKED (waiting C-47,C-24,C-28,C-55,C-57) |
+| X-62 | cursor | P3 | PinchTab Chrome tools: auth, autostart, profile/instance lifecycle, text + refs, degraded mode, untrusted page text | C-24, C-26, X-03, X-11, C-75, C-84, K-23 (PinchTabLocalServer), K-16 (DesktopToolPolicy) | BLOCKED (waiting C-24+) |
 | C-100 | claude | P4 | TOOLS.md for info/media tools (env, providers, timeouts, approvals, outputs) | C-46, X-61 | TODO |
 | C-101 | claude | P4 | OpsSupervisor: one entry point for health, healing, adaptation, bug hunter, startup diagnostics, checkpoints, daily backups | C-11, C-63, C-64, C-71, C-76, C-77, C-83 | TODO |
 | C-102 | claude | P4 | Optional monitoring profile: PerformanceMonitor + metrics server on 127.0.0.1:8765 + Phoenix/OpenTelemetry tracing | C-101, C-29 | TODO |
@@ -598,12 +598,12 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | C-97 | claude | P4 | Voice and conversation regression suite + runbook | C-56, C-74, C-76, C-77, C-87, C-89, C-90, C-91, C-09 | TODO |
 | C-98 | claude | P4 | Internal-tool regression checks after the voice/dashboard fixes (change_voice, wake word, persona, identity, analyze_surroundings) | C-48, C-50, C-54, C-69, C-87 | TODO |
 | C-99 | claude | P4 | Live desktop-tools smoke run on the PC with Sir | C-31, C-75, C-55, C-84, C-85, X-63, C-96 | TODO |
-| X-09 | cursor | P4 | Electron shell: canonical VPS URL, offline page, hybrid-safe opt-in backend via agent_ctl, browser-hidden window controls, real Electron test | X-07, X-08, C-09, K-01 (DASH-UI-RUNTIME), K-49 (C-ORIGIN-1) | TODO |
-| X-51 | cursor | P4 | Responsive layout for tablet and phone (bottom tabs, chips always visible, camera kept mounted) | X-20, X-45, X-15 | TODO |
-| X-59 | cursor | P4 | Complete mock-bridge e2e suite and verify:prod | X-08, X-13, X-14, X-15, X-16, X-19, X-10, X-21, X-22, X-17, X-20, X-49, X-23, X-24, X-33, X-45, X-46, X-47, X-18, X-48, X-51, X-09 | TODO |
-| X-60 | cursor | P4 | Opt-in live smoke suite against the VPS (session-cookie storageState, no stored TOTP seed) | X-59, C-65 | TODO |
-| X-61 | cursor | P4 | Info/media tools smoke harness (--dry / --live) | C-48, X-36, X-37, X-57, X-40, X-39, X-58, C-78, X-04 | TODO |
-| X-63 | cursor | P4 | Tool registry/policy tests + legacy test-script cleanup | X-29, X-30, X-26, X-27, X-31, X-25, X-34, X-41, X-42, X-43, X-44, X-62, X-56, X-35, X-28, K-16 (DesktopToolPolicy) | TODO |
+| X-09 | cursor | P4 | Electron shell: canonical VPS URL, offline page, hybrid-safe opt-in backend via agent_ctl, browser-hidden window controls, real Electron test | X-07, X-08, C-09, K-01 (DASH-UI-RUNTIME), K-49 (C-ORIGIN-1) | BLOCKED (waiting C-09) |
+| X-51 | cursor | P4 | Responsive layout for tablet and phone (bottom tabs, chips always visible, camera kept mounted) | X-20, X-45, X-15 | BLOCKED (waiting X-20,X-45,X-15) |
+| X-59 | cursor | P4 | Complete mock-bridge e2e suite and verify:prod | X-08, X-13, X-14, X-15, X-16, X-19, X-10, X-21, X-22, X-17, X-20, X-49, X-23, X-24, X-33, X-45, X-46, X-47, X-18, X-48, X-51, X-09 | BLOCKED (waiting many UI deps) |
+| X-60 | cursor | P4 | Opt-in live smoke suite against the VPS (session-cookie storageState, no stored TOTP seed) | X-59, C-65 | BLOCKED (waiting X-59,C-65) |
+| X-61 | cursor | P4 | Info/media tools smoke harness (--dry / --live) | C-48, X-36, X-37, X-57, X-40, X-39, X-58, C-78, X-04 | BLOCKED (waiting C-48,X-36+) |
+| X-63 | cursor | P4 | Tool registry/policy tests + legacy test-script cleanup | X-29, X-30, X-26, X-27, X-31, X-25, X-34, X-41, X-42, X-43, X-44, X-62, X-56, X-35, X-28, K-16 (DesktopToolPolicy) | BLOCKED (waiting many tool deps) |
 
 ---
 
