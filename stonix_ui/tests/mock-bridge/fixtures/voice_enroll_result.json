@@ -1,5 +1,7 @@
 {
   "ok": true,
   "enrolled": true,
+  "samples": 42,
+  "self_score": 0.88,
   "message": "Voice profile saved (mock)."
 }

@@ -2,6 +2,8 @@ import { motion } from 'framer-motion';
 import { Activity, Ear, EarOff, Mic, MicOff, Power, ShieldCheck } from 'lucide-react';
 import { personaAccent } from '@/shared/theme/commandTheme';
 import { useLiveKit } from '@/features/voice/LiveKitProvider';
+import { useSettings } from '@/features/settings/useSettings';
+import { deriveVoiceMeterView, type VoiceMatchLive } from '@/features/voice/voiceMeter';
 import { emitUiCommandWithAck, useAgentListeningMuted } from '@/features/status/AgentControls';
 
 interface AssistantCoreProps {
@@ -9,18 +11,36 @@ interface AssistantCoreProps {
   isConnected: boolean;
   isSpeaking: boolean;
   isThinking: boolean;
-  voiceMatch: number;
+  voiceMatchLive: VoiceMatchLive;
+  onOpenVoiceEnroll: () => void;
 }
+
+const METER_TONE_CLASS: Record<string, string> = {
+  muted: 'text-command-muted',
+  monitor: 'text-sky-400',
+  pass: 'text-command-accent',
+  fail: 'text-command-danger',
+};
 
 const AssistantCore = ({
   persona,
   isConnected,
   isSpeaking,
   isThinking,
-  voiceMatch,
+  voiceMatchLive,
+  onOpenVoiceEnroll,
 }: AssistantCoreProps) => {
   const accent = personaAccent(persona);
-  const matchPercent = Math.round(voiceMatch * 100);
+  const settings = useSettings();
+  const meter = deriveVoiceMeterView(
+    {
+      voiceId: settings.voiceId,
+      voiceIdEnrolled: settings.voiceIdEnrolled,
+      voiceIdThreshold: settings.voiceIdThreshold,
+      enforcedVoiceId: settings.enforcedVoiceId,
+    },
+    voiceMatchLive,
+  );
   const voice = useLiveKit();
   const agentMuted = useAgentListeningMuted();
   const voiceLive = voice.roomState === 'connected';
@@ -122,9 +142,37 @@ const AssistantCore = ({
               {agentMuted ? 'Not listening' : 'Listening'}
             </span>
           </button>
-          <div className="flex items-center gap-2 rounded-md border border-white/10 bg-white/[0.03] px-3 py-2">
-            <ShieldCheck size={14} className={matchPercent >= 70 ? 'text-command-accent' : 'text-command-muted'} />
-            <span className="font-mono text-[11px] text-command-text">{matchPercent}%</span>
+          <div
+            className="flex flex-col gap-1 rounded-md border border-white/10 bg-white/[0.03] px-3 py-2"
+            data-testid="voice-id-meter"
+            data-state={meter.displayMode}
+          >
+            <div className="flex items-center gap-2">
+              <ShieldCheck size={14} className={METER_TONE_CLASS[meter.tone]} />
+              <span
+                className="text-[10px] font-semibold uppercase tracking-wide text-command-text"
+                data-testid="voice-id-meter-label"
+              >
+                {meter.label}
+              </span>
+              {meter.displayMode !== 'not_enrolled' ? (
+                <span className="font-mono text-[11px] text-command-text">{meter.scorePercent}%</span>
+              ) : null}
+            </div>
+            {meter.showEnrollLink ? (
+              <button
+                type="button"
+                className="text-left text-[10px] text-command-accent hover:underline"
+                data-testid="voice-id-enroll-link"
+                onClick={onOpenVoiceEnroll}
+              >
+                Enroll
+              </button>
+            ) : (
+              <span className="text-[10px] text-command-muted">
+                Threshold {(meter.threshold * 100).toFixed(0)}%
+              </span>
+            )}
           </div>
         </div>
       </div>

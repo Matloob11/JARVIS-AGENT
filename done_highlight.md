@@ -265,3 +265,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `npm run build` pass · `npx playwright test tests/e2e/memory.spec.ts` 3 passed
 - **Commit:** abhi nahi · **Deploy:** no
 - **Doosre agent ke liye:** X-24 tasks tab ab unblock; agent `memory_update` / clear still C-94 bridge side.
+
+### ✅ [cursor] X-33 · Voice-ID meter + enrollment wizard · 2026-10-01 16:45 PKT
+- **Kya kiya:** Dashboard meter ab settings + `voice_match_update` se Not enrolled / Monitor / Enforcing dikhata hai (threshold settings se). `VoiceEnrollDialog`: Roman Urdu prompts, start/commit/cancel, progress, mic level, agent-mute guard; settings + meter enroll links wired. Mock bridge start vs commit alag; `voiceid.spec.ts` e2e.
+- **Files:** stonix_ui/src/features/voice/VoiceEnrollDialog.tsx, voiceMeter.ts, useLocalMicLevel.ts, AssistantCore.tsx, SettingsPanel.tsx, Dashboard.tsx, useCommandCenter.ts, tests/e2e/voiceid.spec.ts, tests/mock-bridge/server.mjs, tests/mock-bridge/fixtures/voice_enroll_result.json, plan.md
+- **Verify:** `npm run build` pass · `npx playwright test tests/e2e/voiceid.spec.ts` 3 passed
+- **Commit:** pending · **Deploy:** no
+- **Doosre agent ke liye:** Live enrollment backend VCR-24/UI-34; mock path chalta hai jab LiveKit unavailable ho.

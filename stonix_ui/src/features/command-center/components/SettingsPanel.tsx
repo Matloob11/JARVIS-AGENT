@@ -1,7 +1,10 @@
 import { motion } from 'framer-motion';
 import {
+  Bot,
+  Eye,
   Globe,
   LogOut,
+  MessageSquare,
   RefreshCw,
   Settings,
   Shield,
@@ -20,6 +23,7 @@ interface SettingsPanelProps {
   isConnected: boolean;
   onClose: () => void;
   onReconnect: () => void | Promise<void>;
+  onOpenVoiceEnroll: () => void;
   onLogout: () => void;
 }
 
@@ -52,6 +56,16 @@ function FieldStatusBadge({ field, label }: { field: string; label?: string }) {
   );
 }
 
+function AgentPendingHint({ field }: { field: string }) {
+  const { isAgentUpdatePending } = useSettings();
+  if (!isAgentUpdatePending(field)) return null;
+  return (
+    <span className="text-[10px] text-command-muted" data-testid={`settings-agent-pending-${field}`}>
+      Agent update pending
+    </span>
+  );
+}
+
 function ToggleRow({
   field,
   label,
@@ -67,11 +81,14 @@ function ToggleRow({
   onChange: (next: boolean) => void;
   hint?: string;
 }) {
+  const { isAgentUpdatePending } = useSettings();
+  const blocked = disabled || isAgentUpdatePending(field);
   return (
     <div className="setting-row">
       <div className="flex flex-col gap-1">
         <span className="text-xs font-medium text-command-text">{label}</span>
         {hint ? <span className="text-[10px] text-command-muted">{hint}</span> : null}
+        <AgentPendingHint field={field} />
         <FieldStatusBadge field={field} />
       </div>
       <label className="flex cursor-pointer items-center gap-2">
@@ -79,7 +96,7 @@ function ToggleRow({
           type="checkbox"
           data-testid={`settings-${field}`}
           checked={checked}
-          disabled={disabled}
+          disabled={blocked}
           onChange={event => onChange(event.target.checked)}
         />
       </label>
@@ -91,6 +108,7 @@ const SettingsPanel = ({
   isConnected,
   onClose,
   onReconnect,
+  onOpenVoiceEnroll,
   onLogout,
 }: SettingsPanelProps) => {
   const { user } = useAuth();
@@ -222,6 +240,188 @@ const SettingsPanel = ({
           <FieldStatusBadge field="persona" />
         </section>
 
+        <section className="setting-block">
+          <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-command-muted">
+            <MessageSquare size={14} />
+            Conversation
+          </div>
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <span className="text-[11px] text-command-muted">Turn mode</span>
+            {settings.restartRequired.includes('turn_mode') ? (
+              <span
+                className="rounded bg-command-muted/20 px-1.5 py-0.5 text-[10px] text-command-muted"
+                data-testid="settings-turn-mode-restart-badge"
+              >
+                restart required
+              </span>
+            ) : null}
+          </div>
+          <div className="settings-segmented" data-testid="settings-turn-mode">
+            {(
+              [
+                { key: 'gated', label: 'Secure gated' },
+                { key: 'fast', label: 'Fast' },
+              ] as const
+            ).map(opt => (
+              <button
+                key={opt.key}
+                type="button"
+                className={
+                  settings.turnMode === opt.key
+                    ? 'settings-segmented__btn settings-segmented__btn--active'
+                    : 'settings-segmented__btn'
+                }
+                data-active={settings.turnMode === opt.key ? 'true' : 'false'}
+                disabled={!isConnected || settings.isAgentUpdatePending('turnMode')}
+                onClick={() => settings.update({ turn_mode: opt.key })}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <AgentPendingHint field="turnMode" />
+          <FieldStatusBadge field="turnMode" />
+
+          <label className="mb-2 mt-3 block text-[11px] text-command-muted">Follow-up window</label>
+          <select
+            className="setting-select"
+            data-testid="settings-wake-followup-select"
+            value={String(settings.wakeFollowupS)}
+            disabled={!isConnected || settings.isAgentUpdatePending('wakeFollowupS')}
+            onChange={event =>
+              settings.update({ wake_followup_s: Number(event.target.value) })
+            }
+          >
+            {[0, 10, 20, 30].map(sec => (
+              <option key={sec} value={sec}>
+                {sec}s
+              </option>
+            ))}
+          </select>
+          <AgentPendingHint field="wakeFollowupS" />
+          <FieldStatusBadge field="wakeFollowupS" />
+
+          <p className="mb-2 mt-3 text-[11px] text-command-muted">Transcript script</p>
+          <div className="settings-segmented" data-testid="settings-transcript-script">
+            {(
+              [
+                { key: 'roman', label: 'Roman' },
+                { key: 'native', label: 'Native' },
+              ] as const
+            ).map(opt => (
+              <button
+                key={opt.key}
+                type="button"
+                className={
+                  settings.transcriptScript === opt.key
+                    ? 'settings-segmented__btn settings-segmented__btn--active'
+                    : 'settings-segmented__btn'
+                }
+                data-active={settings.transcriptScript === opt.key ? 'true' : 'false'}
+                disabled={!isConnected || settings.isAgentUpdatePending('transcriptScript')}
+                onClick={() => settings.update({ transcript_script: opt.key })}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <AgentPendingHint field="transcriptScript" />
+          <FieldStatusBadge field="transcriptScript" />
+        </section>
+
+        <section className="setting-block space-y-3">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-command-muted">
+            <Bot size={14} />
+            Automation
+          </div>
+          <ToggleRow
+            field="automationDesktopControl"
+            label="Desktop control"
+            checked={settings.automationDesktopControl}
+            disabled={!isConnected}
+            onChange={next => settings.updateAutomation({ automationDesktopControl: next })}
+          />
+          <ToggleRow
+            field="automationClipboardHelper"
+            label="Clipboard helper"
+            checked={settings.automationClipboardHelper}
+            disabled={!isConnected}
+            onChange={next => settings.updateAutomation({ automationClipboardHelper: next })}
+          />
+          <ToggleRow
+            field="automationClipboardSpeak"
+            label="Speak clipboard tips"
+            checked={settings.automationClipboardSpeak}
+            disabled={!isConnected}
+            onChange={next => settings.updateAutomation({ automationClipboardSpeak: next })}
+          />
+          <ToggleRow
+            field="automationVoiceConfirmHigh"
+            label="Voice may confirm high-risk actions"
+            checked={settings.automationVoiceConfirmHigh}
+            disabled={!isConnected}
+            onChange={next => settings.updateAutomation({ automationVoiceConfirmHigh: next })}
+          />
+        </section>
+
+        <section className="setting-block">
+          <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-command-muted">
+            <Eye size={14} />
+            Vision
+          </div>
+          <p className="mb-2 text-[11px] text-command-muted">Vision</p>
+          <div className="settings-segmented" data-testid="settings-vision-mode">
+            {(
+              [
+                { key: 'live', label: 'Live' },
+                { key: 'on_request', label: 'Sirf poochne par' },
+              ] as const
+            ).map(opt => (
+              <button
+                key={opt.key}
+                type="button"
+                className={
+                  settings.visionMode === opt.key
+                    ? 'settings-segmented__btn settings-segmented__btn--active'
+                    : 'settings-segmented__btn'
+                }
+                data-active={settings.visionMode === opt.key ? 'true' : 'false'}
+                disabled={!isConnected || settings.isAgentUpdatePending('visionMode')}
+                onClick={() => settings.update({ vision_mode: opt.key })}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <AgentPendingHint field="visionMode" />
+          <FieldStatusBadge field="visionMode" />
+        </section>
+
+        <section className="setting-block">
+          <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-command-muted">
+            <Shield size={14} />
+            Confirmations
+          </div>
+          <p className="mb-2 text-[11px] text-command-muted">
+            list .env (JARVIS_CONFIRM_EXTRA/SKIP) se badalti hai
+          </p>
+          <ul
+            className="space-y-1 text-xs text-command-text"
+            data-testid="settings-guarded-tools-list"
+          >
+            {settings.guardedTools.length ? (
+              settings.guardedTools.map(tool => (
+                <li key={tool} className="rounded bg-command-muted/10 px-2 py-1 font-mono text-[11px]">
+                  {tool}
+                </li>
+              ))
+            ) : (
+              <li className="text-[11px] text-command-muted">—</li>
+            )}
+          </ul>
+          <AgentPendingHint field="guardedTools" />
+        </section>
+
         <section className="setting-block space-y-3">
           <ToggleRow
             field="wakeWord"
@@ -255,6 +455,7 @@ const SettingsPanel = ({
               type="button"
               className="text-xs text-command-accent hover:underline"
               data-testid="settings-voice-enroll-link"
+              onClick={onOpenVoiceEnroll}
             >
               Not enrolled — Enroll
             </button>
