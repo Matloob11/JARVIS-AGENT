@@ -1,4 +1,4 @@
-import { Mic, MicOff, Radar, Settings, ShieldCheck, Wifi } from 'lucide-react';
+import { LogOut, Mic, MicOff, Radar, Settings, ShieldCheck, Wifi } from 'lucide-react';
 import WindowControls from '@/shared/ui/WindowControls';
 import { StatusDot } from '@/shared/ui/Panel';
 import { personaAccent } from '@/shared/theme/commandTheme';
@@ -13,6 +13,7 @@ interface TopBarProps {
   onOpenSettings: () => void;
   onOpenSim: () => void;
   onToggleMute: () => void;
+  onLogout: () => void;
 }
 
 const TopBar = ({
@@ -25,6 +26,7 @@ const TopBar = ({
   onOpenSettings,
   onOpenSim,
   onToggleMute,
+  onLogout,
 }: TopBarProps) => {
   const accent = personaAccent(persona);
 
@@ -67,6 +69,14 @@ const TopBar = ({
         </button>
         <button className="icon-button" onClick={onOpenSettings} title="Settings">
           <Settings size={15} />
+        </button>
+        <button
+          className="icon-button"
+          onClick={onLogout}
+          title="Logout"
+          data-testid="logout"
+        >
+          <LogOut size={15} />
         </button>
         <WindowControls />
       </div>

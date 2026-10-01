@@ -101,8 +101,19 @@ export const useCommandCenter = () => {
   useEffect(() => {
     const socket = getSocket();
 
-    const onConnect = () => setIsConnected(true);
+    const requestState = () => {
+      socket.emit('ui_command', { type: 'request_state', payload: {} });
+    };
+    const onConnect = () => {
+      setIsConnected(true);
+      // Re-pull init_state if AuthProvider connected the socket before listeners existed
+      requestState();
+    };
     const onDisconnect = () => setIsConnected(false);
+    if (socket.connected) {
+      setIsConnected(true);
+      requestState();
+    }
     const onStatusUpdate = (data: Record<string, unknown>) => {
       if (typeof data.status === 'string') setStatus(data.status);
       setIsSpeaking(data.speaking === true);
@@ -209,7 +220,15 @@ export const useCommandCenter = () => {
       setIsWakeWordActive(state.wake_word_active !== false);
       if (state.location) setLocation(state.location);
       if (state.vortex_logs) setVortexLogs([...state.vortex_logs].reverse());
-      if (state.voice_match !== undefined) setVoiceMatch(state.voice_match);
+      if (typeof state.voice_match === 'number') {
+        setVoiceMatch(state.voice_match);
+      } else if (
+        state.voice_match &&
+        typeof state.voice_match === 'object' &&
+        typeof (state.voice_match as { confidence?: number }).confidence === 'number'
+      ) {
+        setVoiceMatch((state.voice_match as { confidence: number }).confidence);
+      }
       if (state.sim_records) setSimRecords(state.sim_records);
       if (state.sim_loading !== undefined) setSimLoading(state.sim_loading);
       if (state.sim_query_masked) setSimQueryMasked(state.sim_query_masked);

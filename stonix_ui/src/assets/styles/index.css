@@ -76,6 +76,62 @@ button {
     border-radius: 999px;
   }
 
+  .login-root {
+    @apply relative flex h-full min-h-screen items-center justify-center bg-command-bg p-6;
+  }
+
+  .login-card {
+    @apply w-full max-w-md rounded-xl border border-command-border bg-command-panel/[0.92] p-8 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl;
+  }
+
+  .login-brand {
+    @apply mb-8 flex items-center gap-4;
+  }
+
+  .login-form {
+    @apply flex flex-col gap-4;
+  }
+
+  .login-label {
+    @apply flex flex-col gap-2 text-[11px] font-medium uppercase tracking-[0.12em] text-command-muted;
+  }
+
+  .login-input {
+    @apply w-full rounded-md border border-command-border bg-white/[0.03] px-3 py-2.5 text-sm text-command-text outline-none transition placeholder:text-command-muted/60 focus:border-command-accent/50 focus:ring-1 focus:ring-command-accent/30;
+  }
+
+  .login-password-row {
+    @apply relative flex items-center;
+  }
+
+  .login-toggle-password {
+    @apply absolute right-1 top-1/2 -translate-y-1/2;
+  }
+
+  .login-password-row .login-input {
+    @apply pr-10;
+  }
+
+  .login-totp-input {
+    @apply font-mono tracking-[0.35em];
+  }
+
+  .login-recovery-toggle {
+    @apply -mt-1 self-start text-left text-[11px] text-command-blue underline-offset-2 hover:underline;
+  }
+
+  .login-error {
+    @apply rounded-md border border-command-danger/30 bg-command-danger/10 px-3 py-2 text-xs text-command-danger;
+  }
+
+  .login-hint {
+    @apply mb-4 rounded-md border border-command-warning/25 bg-command-warning/10 px-3 py-2 text-xs text-command-text/80;
+  }
+
+  .login-submit {
+    @apply mt-2;
+  }
+
   .video-mirror {
     transform: scaleX(-1);
   }

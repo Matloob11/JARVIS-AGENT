@@ -6,7 +6,8 @@ export default defineConfig({
   expect: {
     timeout: 7_500,
   },
-  fullyParallel: true,
+  fullyParallel: false,
+  workers: 1,
   reporter: process.env.CI ? [['list'], ['github']] : 'list',
   use: {
     baseURL: 'http://127.0.0.1:4173',

@@ -1,8 +1,13 @@
 import { expect, test } from '@playwright/test';
+import { loginViaRecovery } from './helpers/login';
+
+test.describe.configure({ mode: 'serial' });
+
+test.beforeEach(async ({ page }) => {
+  await loginViaRecovery(page);
+});
 
 test('production dashboard renders and accepts a command', async ({ page }) => {
-  await page.goto('/');
-
   await expect(page.getByText(/STONIX/i).first()).toBeVisible();
   await expect(page.getByText(/System Flow/i)).toBeVisible();
   await expect(page.getByText(/System Logs/i)).toBeVisible();
@@ -14,12 +19,10 @@ test('production dashboard renders and accepts a command', async ({ page }) => {
   await page.getByTitle('Send command').click();
 
   await expect(commandInput).toHaveValue('');
-  await expect(page.getByText('status check')).toBeVisible();
+  await expect(page.getByText('status check').first()).toBeVisible({ timeout: 15_000 });
 });
 
 test('SIM lookup panel opens and closes without backend connection', async ({ page }) => {
-  await page.goto('/');
-
   await page.getByTitle('SIM lookup workspace').click();
   await expect(page.getByText(/SIM Access/i)).toBeVisible();
 

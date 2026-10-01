@@ -10,8 +10,10 @@ import SystemTrace from './components/SystemTrace';
 import TopBar from './components/TopBar';
 import { useCommandCenter } from './hooks/useCommandCenter';
 import { ErrorBoundary } from '@/shared/ui/ErrorBoundary';
+import { useAuth } from '@/features/auth/AuthProvider';
 
 const Dashboard = () => {
+  const { logout } = useAuth();
   const command = useCommandCenter();
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -29,6 +31,7 @@ const Dashboard = () => {
           onOpenSettings={() => setSettingsOpen(true)}
           onOpenSim={command.openSimPanel}
           onToggleMute={command.toggleMute}
+          onLogout={() => void logout()}
         />
       </ErrorBoundary>
 

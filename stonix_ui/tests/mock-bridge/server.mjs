@@ -21,6 +21,7 @@ const uiSockets = [];
 /** @type {{ ts: number, type?: string, payload?: unknown, raw: unknown }[]} */
 const receivedUiCommands = [];
 let agentOnline = true;
+let ownerSessionActive = false;
 
 /** @type {Map<string, { count: number, resetAt: number }>} */
 const loginRate = new Map();
@@ -49,6 +50,7 @@ function parseCookies(header) {
 }
 
 function hasSession(req) {
+  if (!ownerSessionActive) return false;
   const cookies = parseCookies(req.headers.cookie);
   return cookies.jarvis_session === SESSION_COOKIE;
 }
@@ -264,12 +266,15 @@ function handleUiCommand(socket, cmd, cb) {
       });
       break;
     }
+    case 'request_state':
+      ackUi(socket, cb, 'sent');
+      socket.emit('init_state', loadFixture('init_state'));
+      break;
     case 'stop':
     case 'start':
     case 'pause_agent':
     case 'shutdown_agent':
     case 'tasks_refresh':
-    case 'request_state':
     case 'feedback':
     case 'sim_lookup':
     case 'open_sim_panel':
@@ -313,7 +318,14 @@ async function handleMockControl(req, res, pathname, method) {
     return true;
   }
 
+  if (pathname === '/__mock/reset-login-rate' && method === 'POST') {
+    loginRate.clear();
+    json(res, 200, { ok: true });
+    return true;
+  }
+
   if (pathname === '/__mock/expire' && method === 'POST') {
+    ownerSessionActive = false;
     const body = await readBody(req);
     const reason = body?.reason || loadFixture('session_expired').reason || 'session_expired';
     const payload = { ...loadFixture('session_expired'), reason };
@@ -373,6 +385,7 @@ async function handleVortex(req, res, subPath, method, url) {
       return;
     }
     const expires_at = Math.floor(Date.now() / 1000) + SESSION_TTL_S;
+    ownerSessionActive = true;
     setSessionCookie(res);
     json(res, 200, {
       ok: true,
@@ -398,6 +411,7 @@ async function handleVortex(req, res, subPath, method, url) {
   }
 
   if (subPath === '/auth/logout' && method === 'POST') {
+    ownerSessionActive = false;
     clearSessionCookie(res);
     json(res, 200, { ok: true });
     return;
@@ -483,6 +497,9 @@ const io = new Server(server, {
 });
 
 io.use((socket, next) => {
+  if (!ownerSessionActive) {
+    return next(new Error('unauthorized'));
+  }
   const cookies = parseCookies(socket.handshake.headers.cookie);
   if (cookies.jarvis_session !== SESSION_COOKIE) {
     return next(new Error('unauthorized'));
