@@ -343,3 +343,40 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `cd stonix_ui && npm run build` pass · `npm run lint` (2 purani repo errors, X-53 files clean) · `npx playwright test tests/e2e/voice-glue.spec.ts` 4 passed
 - **Commit:** abhi nahi · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-28 · Battery + PC vitals ToolResult · 2026-10-01 17:40 PKT
+- **Kya kiya:** `collect_pc_vitals()` (K-26) sync helper; `get_laptop_info` ab Roman-Urdu battery jawab + `tool_result` data (cpu/ram/disk/battery); CPU/RAM jab poochein ya ≥85%; low-battery warning; tests battery/desktop/low-battery.
+- **Files:** services/system/jarvis_system_info.py, tests/tools/test_system_info_tool.py, plan.md
+- **Verify:** `.\.venv_312\Scripts\python.exe -m pytest tests/tools/test_system_info_tool.py -q -p no:cacheprovider` — 7 passed
+- **Commit:** abhi nahi · **Deploy:** no
+- **Doosre agent ke liye:** C-63 / OPS-16 `snapshot_vitals()` is helper ko consume kar sakta hai.
+
+### ✅ [claude] C-24 · Tool decorator v2: naye options, arg policies, output limits · 2026-10-01 14:31–17:35 PKT
+- **Kya kiya:** `@jarvis_tool` ab naye options leta hai (timeout, raw_args, arg_policies, risk, confirm, exclusive, long_running waghera). Ghalat ya anjaan option se tool gum nahi hota, sirf ERROR log hota hai. 'raw' args me code aur Urdu text bilkul waisa hi pohanchta hai. 'path' policy wale argument me `..`, network/device path ya CON/NUL jaisa naam ho to PATH_NOT_ALLOWED. Lamba tool output ab poora replace nahi hota; 12000 chars par kat kar `…[truncated N chars]` lagta hai.
+- **Files:** `services/ai_core/jarvis_plugin_manager.py`, `services/utils/jarvis_security.py`, `tests/unit/test_plugin_manager_v2.py`, `tests/unit/test_tool_policies.py`, `docs/CONTRACTS.md` (v2: K-11, K-28)
+- **Verify:** naye tests 135 passed · full suite 420 passed, 0 failed · offline discovery 78 tools, 0 problems · saare 78 tool schemas pehle jaise (byte-identical) · review: 1 major + 3 minor theek, recheck approve · live restart ke baad worker ne bridge ko "Discovered 78 external tools" bheja
+- **Commit:** `b601873` · **Deploy:** PC agent restart (17:22)
+- **Doosre agent ke liye:** LiveKit har argument positional bhejta hai; jis argument par policy declare nahi woh abhi bhi bina sanitize ke aata hai (pehle jaisa). Apne tools ke har free-text argument par K-16 policy declare karo.
+
+### ✅ [claude] C-26 · Desktop config keys + no-echo `env_set.py` · 2026-10-01 14:31–17:35 PKT
+- **Kya kiya:** Desktop tools ki saari settings (outputs, media folders, Chrome/Edge, PinchTab, ffmpeg, WhatsApp, CV) ab ek hi config me hain (K-15). Purane D: drive aur `Personal-Assistant-main` paths hata diye; sab C: par chalta hai (D: drive lagi to khud shamil ho jayegi). Home folder kabhi "open root" nahi banta. Naya `scripts/ops/env_set.py` dono .env files me sirf missing keys add karta hai aur kabhi value nahi dikhata. 9 desktop keys aur naya PinchTab token dono files me add hue.
+- **Files:** `services/utils/jarvis_config.py`, `scripts/ops/env_set.py`, `tests/unit/test_config_desktop_keys.py`, `.env.example`, `.env.production.example`, `scripts/tools/verify_all_fixes.py`, `scripts/tools/jarvis_extended_test.py`, `scripts/tools/jarvis_live_test.py`, `test_agent_tools.py`; dono .env files (git me nahi)
+- **Backups:** `%USERPROFILE%\JARVIS-backups\local\env-pre-C-26-20261001_1430\` (dono .env, badalne se pehle)
+- **Verify:** naye tests 76 passed · `env_set.py --check`: 40/40 keys dono files me · .env: purani har line wahi, sirf 9 keys aakhir me · Chrome path + 6 media folders + token mila · restart ke baad "shared directory" warning nahi
+- **Commit:** `99ed754` · **Deploy:** PC agent restart (17:22)
+- **Doosre agent ke liye:** `services/system/jarvis_file_server.py` abhi D:/ hard-code karta hai; `config.file_server_root` use karo. PINCHTAB_TOKEN sirf env se do.
+
+### ✅ 🔁 [claude] C-08 · Sirf ek agent worker (OS lock) + live restart · 2026-10-01 14:31–17:35 PKT
+- **Kya kiya:** Ab sirf ek JARVIS agent worker chal sakta hai: agent `run/agent.lock` par OS lock lagata hai, aur doosri dafa start karne par ~1 second me exit 3 ke saath batata hai ke kaun sa worker chal raha hai. Worker ka health port sirf `127.0.0.1:8081` par hai. `vortex.py` (Electron) hybrid mode me koi worker nahi chalata aur exit 3 ko crash nahi samajhta. Phir PC agent restart kiya: purana worker band, `start-agent.bat` se naya.
+- **Files:** `src/core/agent_lock.py`, `src/core/agent.py`, `src/core/agent_runner.py`, `src/core/vortex.py`, `tests/unit/test_agent_lock.py`, `tests/core/test_agent_entry.py`, `docs/CONTRACTS.md` (v2: K-53)
+- **Verify:** tests 20 passed · live: naye worker (pid 31500, git `3fe76e6`) ne lock liya · doosra `python -m src.core.agent start` → exit 3 in 1.24 s · port 8081 sirf 127.0.0.1 · LiveKit par sirf 1 "worker registered" · agent room `jarvis-hybrid` me join · restart ke baad log me koi ERROR nahi
+- **Commit:** `3fe76e6` · **Deploy:** PC agent restart 17:22 PKT (RUNTIME LOCK le kar, phir free)
+- **Note:** Is session se launch karne par `start-agent.bat` ka `timeout /t 30` nahi ruka, is liye `ensure_room.py` worker register hone se 3 s pehle chal gaya aur room ko job nahi mili. `ensure_room.py` dobara chalane se agent join ho gaya. C-09 (`agent_ctl wait`) yeh andha intezar hata dega.
+- **Doosre agent ke liye:** Agent kabhi khud start mat karo. Check: `.venv_312/Scripts/python.exe -c "from src.core import agent_lock; print(agent_lock.is_locked())"`.
+
+### ✅ [claude] C-05 follow-up · `plan.md` ke 921 characters wapas + ENCODING_LOSS guard · 2026-10-01 17:35 PKT
+- **Kya kiya:** Cursor ke X-19 commit (`6d0871b`, 14:51) ne `plan.md` ASCII me save kar di thi, is liye saare `·`, `→`, `—` waghera (921 characters) `?` ban gaye the, aur baad ke Cursor commits isi file ke saath gaye. Claude ne last achhe version (`e75b22a`) se sirf woh `?` asal characters me badle. Cursor ki saari status lines aur nayi lines wahi rahin (check: `?` ke ilawa ek byte bhi nahi badla). Hook ab aisa commit rokta hai (`ENCODING_LOSS`), aur naya tool `scripts/coord/restore_unicode.py <file> --write` aisi file khud theek kar deta hai.
+- **Files:** `plan.md`, `scripts/coord/precommit.py`, `scripts/coord/restore_unicode.py` (naya), `tests/unit/test_check_lane.py`
+- **Verify:** `tests/unit/test_check_lane.py` 70 passed (7 naye) · guard 14:51 wale ASCII version ko 606 lines par pakadta, restored file par 0
+- **Commit:** `03ba097` · **Deploy:** no
+- **Doosre agent ke liye:** `plan.md` / `done_highlight.md` sirf editor ke UTF-8 edit tool se badlo. Hook `ENCODING_LOSS` kahe to `python scripts/coord/restore_unicode.py plan.md --write` chalao, phir dobara stage karo.
