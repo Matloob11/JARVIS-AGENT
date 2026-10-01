@@ -18,6 +18,8 @@ CV/
 data/identity/
 conversations/
 *.wav
+# Generated UI sounds are not private (X-02 chime); recordings elsewhere stay ignored.
+!assets/audio/*.wav
 *.flac
 *.mp3
 
