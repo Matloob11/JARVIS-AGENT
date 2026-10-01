@@ -1,0 +1,14 @@
+{
+  "records": [
+    {
+      "full_name": "A*** K***",
+      "cnic_masked": "*****1234",
+      "phone_masked": "03********1"
+    }
+  ],
+  "phone": "03********1",
+  "status": "success",
+  "message": "Authorized masked match",
+  "provider": "authorized_api",
+  "configured": true
+}

@@ -182,8 +182,30 @@ function normalizeSystemAlert(raw: Record<string, unknown>): SystemAlert {
 export interface SimRecord {
   full_name?: string;
   cnic?: string;
+  cnic_masked?: string;
   address?: string;
   phone?: string;
+  phone_masked?: string;
+}
+
+export const SIM_LOOKUP_TIMEOUT_MS = 20_000;
+
+export const SIM_PROVIDER_NOT_CONFIGURED =
+  'Authorized source configure nahi hua (SIM_LOOKUP_API_URL / SIM_LOOKUP_API_KEY)';
+
+export function isSimProviderConfigured(provider?: string, configured?: boolean): boolean {
+  if (configured === false) return false;
+  if (configured === true) return true;
+  const normalized = (provider ?? '').trim().toLowerCase();
+  if (!normalized) return false;
+  return !['none', 'not_configured', 'not configured', 'disabled'].includes(normalized);
+}
+
+export function simProviderBannerText(provider?: string, configured?: boolean): string {
+  if (isSimProviderConfigured(provider, configured)) {
+    return (provider ?? '').trim() || 'Authorized source';
+  }
+  return SIM_PROVIDER_NOT_CONFIGURED;
 }
 
 export const useCommandCenter = () => {
@@ -223,7 +245,13 @@ export const useCommandCenter = () => {
   const [simQueryMasked, setSimQueryMasked] = useState('');
   const [simStatus, setSimStatus] = useState('idle');
   const [simMessage, setSimMessage] = useState('');
+  const [simProvider, setSimProvider] = useState('');
+  const [simProviderConfigured, setSimProviderConfigured] = useState<boolean | undefined>(
+    undefined,
+  );
+  const [simRequiresPurpose, setSimRequiresPurpose] = useState(false);
   const [isSimPanelOpen, setIsSimPanelOpen] = useState(false);
+  const simLookupTimerRef = useRef<number | null>(null);
   const [socketVersion, setSocketVersion] = useState(0);
   const confirmQueue = useConfirmQueue();
   const loggedConfirmDecisions = useRef(new Set<string>());
@@ -236,6 +264,26 @@ export const useCommandCenter = () => {
       ...prev,
     ].slice(0, 50));
   }, []);
+
+  const clearSimLookupTimer = useCallback(() => {
+    if (simLookupTimerRef.current != null) {
+      window.clearTimeout(simLookupTimerRef.current);
+      simLookupTimerRef.current = null;
+    }
+  }, []);
+
+  const startSimLookupTimer = useCallback(() => {
+    clearSimLookupTimer();
+    simLookupTimerRef.current = window.setTimeout(() => {
+      simLookupTimerRef.current = null;
+      setSimLoading(false);
+      setSimStatus('offline');
+      setSimMessage('Agent offline ya jawab nahi');
+      setSimRecords([]);
+    }, SIM_LOOKUP_TIMEOUT_MS);
+  }, [clearSimLookupTimer]);
+
+  useEffect(() => () => clearSimLookupTimer(), [clearSimLookupTimer]);
 
   useEffect(() => {
     for (const decision of confirmQueue.decisions) {
@@ -306,7 +354,16 @@ export const useCommandCenter = () => {
     const onInitState = (state: { persona?: 'jarvis' | 'anna' }) => {
       if (state.persona) setActivePersona(state.persona);
     };
-    const onMuteUpdate = (muted: boolean) => setIsMuted(muted);
+    const onMuteUpdate = (payload: boolean | { muted?: boolean }) => {
+      const muted =
+        typeof payload === 'boolean' ? payload : payload?.muted === true;
+      setIsMuted(muted);
+    };
+    const onSettingsSync = (payload: { settings?: { muted?: boolean } }) => {
+      if (typeof payload?.settings?.muted === 'boolean') {
+        setIsMuted(payload.settings.muted);
+      }
+    };
     const onWakeWordUpdate = (active: boolean) => setIsWakeWordActive(active);
     const onLocationUpdate = (data: Record<string, unknown>) => {
       if (locationKind(data) === 'map') {
@@ -327,17 +384,30 @@ export const useCommandCenter = () => {
     const onVoiceMatchUpdate = (data: { confidence: number; timestamp: number }) => {
       setVoiceMatch(data.confidence);
     };
+    const applySimProvider = (provider?: string, configured?: boolean) => {
+      if (provider !== undefined) setSimProvider(provider);
+      if (configured !== undefined) {
+        setSimProviderConfigured(configured);
+      } else if (provider !== undefined) {
+        setSimProviderConfigured(isSimProviderConfigured(provider));
+      }
+    };
+
     const onSimDataResult = (data: {
       records: SimRecord[];
       phone?: string;
       status?: string;
       message?: string;
+      provider?: string;
+      configured?: boolean;
     }) => {
+      clearSimLookupTimer();
       setSimRecords(data.records || []);
       setSimLoading(false);
       setSimQueryMasked(data.phone || '');
       setSimStatus(data.status || 'success');
       setSimMessage(data.message || '');
+      applySimProvider(data.provider, data.configured);
       setIsSimPanelOpen(true);
     };
     const onSimDataLoading = (data: { query_masked?: string } = {}) => {
@@ -345,10 +415,20 @@ export const useCommandCenter = () => {
       setSimStatus('loading');
       setSimQueryMasked(data.query_masked || '');
       setSimRecords([]);
+      startSimLookupTimer();
     };
-    const onSimPanelOpen = (data: { message?: string }) => {
+    const onSimPanelOpen = (data: {
+      message?: string;
+      provider?: string;
+      configured?: boolean;
+      requires_purpose?: boolean;
+    }) => {
       setIsSimPanelOpen(true);
       if (data?.message) setSimMessage(data.message);
+      applySimProvider(data.provider, data.configured);
+      if (data?.requires_purpose !== undefined) {
+        setSimRequiresPurpose(data.requires_purpose === true);
+      }
     };
     socket.on('connect', onConnect);
     socket.on('disconnect', onDisconnect);
@@ -469,6 +549,7 @@ export const useCommandCenter = () => {
       }
     });
     socket.on('mute_update', onMuteUpdate);
+    socket.on('settings_sync', onSettingsSync);
     socket.on('wake_word_update', onWakeWordUpdate);
 
     return () => {
@@ -497,9 +578,10 @@ export const useCommandCenter = () => {
       socket.off('sim_panel_open', onSimPanelOpen);
       socket.off('init_state');
       socket.off('mute_update', onMuteUpdate);
+      socket.off('settings_sync', onSettingsSync);
       socket.off('wake_word_update', onWakeWordUpdate);
     };
-  }, [socketVersion]);
+  }, [socketVersion, clearSimLookupTimer, startSimLookupTimer]);
 
   const emitCommand = (type: string, payload?: unknown) => {
     getSocket().emit('ui_command', { type, payload });
@@ -529,9 +611,7 @@ export const useCommandCenter = () => {
   };
 
   const toggleMute = () => {
-    const nextMuted = !isMuted;
-    setIsMuted(nextMuted);
-    emitCommand(nextMuted ? 'mute' : 'unmute');
+    emitCommand(isMuted ? 'unmute' : 'mute');
   };
 
   const toggleWakeWord = () => {
@@ -545,16 +625,31 @@ export const useCommandCenter = () => {
     emitCommand('open_sim_panel');
   };
 
-  const closeSimPanel = () => setIsSimPanelOpen(false);
+  const closeSimPanel = () => {
+    clearSimLookupTimer();
+    setSimLoading(false);
+    setIsSimPanelOpen(false);
+  };
 
-  const requestSimLookup = (query: string) => {
+  const requestSimLookup = (query: string, purpose?: string) => {
     const normalized = query.trim();
     if (!normalized) return;
+    const trimmedPurpose = purpose?.trim() ?? '';
+    if (simRequiresPurpose && trimmedPurpose.length < 5) {
+      setSimStatus('validation_error');
+      setSimMessage('Purpose kam az kam 5 characters hona chahiye');
+      return;
+    }
     setIsSimPanelOpen(true);
     setSimLoading(true);
     setSimStatus('loading');
     setSimMessage('');
-    emitCommand('sim_lookup', normalized);
+    startSimLookupTimer();
+    if (trimmedPurpose.length >= 5) {
+      emitCommand('sim_lookup', { query: normalized, purpose: trimmedPurpose });
+    } else {
+      emitCommand('sim_lookup', normalized);
+    }
   };
 
   const waitForSocketConnect = useCallback(async (timeoutMs = 15_000) => {
@@ -657,6 +752,9 @@ export const useCommandCenter = () => {
     simQueryMasked,
     simStatus,
     simMessage,
+    simProvider,
+    simProviderConfigured,
+    simRequiresPurpose,
     isSimPanelOpen,
     confirmCurrent: confirmQueue.current,
     confirmQueueCount: confirmQueue.queueCount,

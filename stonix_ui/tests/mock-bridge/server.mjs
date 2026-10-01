@@ -213,7 +213,7 @@ function handleUiCommand(socket, cmd, cb) {
     return;
   }
 
-  if (!agentOnline && type !== 'request_state') {
+  if (!agentOnline && type !== 'request_state' && type !== 'start') {
     ackUi(socket, cb, 'agent_offline');
     return;
   }

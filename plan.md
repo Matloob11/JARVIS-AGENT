@@ -522,7 +522,7 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | C-76 | claude | P2 | Live Fast <-> Gated switch without restarting the agent | C-70, C-73, C-54 | TODO |
 | C-77 | claude | P2 | Voice session state in the agent heartbeat, probe silence, local health interval fix | C-33, C-39, C-23, C-63, K-68 (CT-VC-AGENT-HEARTBEAT) | TODO |
 | X-15 | cursor | P2 | Status bar: Bridge / Agent PC / Voice chips at every width, real agent state, working Reconnect | X-13, K-02 (DASH-UI-EVENTS), K-44 (C-ROOM-1), K-43 (C-STATUS-1) | DONE (01 Oct 13:35) |
-| X-16 | cursor | P2 | Agent controls: Stop speaking, Pause/Start (Wake), separate Mic vs 'Agent listening', offline message queue | X-14, X-15, K-03 (DASH-UI-COMMANDS), K-60 (CT-VC-CONTROL), K-62 (CT-VC-TURN-GATE) | TODO |
+| X-16 | cursor | P2 | Agent controls: Stop speaking, Pause/Start (Wake), separate Mic vs 'Agent listening', offline message queue | X-14, X-15, K-03 (DASH-UI-COMMANDS), K-60 (CT-VC-CONTROL), K-62 (CT-VC-TURN-GATE) | DONE (01 Oct 13:50) |
 | C-47 | claude | P3 | Media toolchain deps in .venv_312: yt-dlp[default] (yt-dlp-ejs) + pylint (+ imageio-ffmpeg only if chosen) | C-26, C-09, K-15 (DesktopConfigKeys) | DONE (01 Oct 12:30) |
 | C-78 | claude | P3 | Document Q&A: scoped persistent index, terminating chunker, work off the event loop | C-24 | TODO |
 | C-79 | claude | P3 | SIM ui_command payload {query, purpose}: agent handler + bridge validator | X-38, C-13, C-14, C-19, K-34 (sim_authorized_source) | TODO |
@@ -572,8 +572,8 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | X-44 | cursor | P3 | Window control 3/3: save_notepad, open_notepad_file, folder_file (+cv alias), create_folder, open_outputs_folder | C-26, X-03, C-30, X-27, X-43 | BLOCKED (waiting C-26,X-03,C-30,X-27,X-43) |
 | X-45 | cursor | P3 | CameraPanel: opt-in camera, LiveKit publish, honest link badges, Socket.IO fallback only while sharing | X-13, K-05 (DASH-CAMERA-VISION) | DONE (01 Oct 13:35) |
 | X-46 | cursor | P3 | Location card + Map panel: device location and map focus kept separate, OpenStreetMap view | X-17, K-08 (DASH-LOCATION) | DONE (01 Oct 13:35) |
-| X-47 | cursor | P3 | SIM dialog: provider-not-configured state, purpose field, masked results, 20 s timeout | X-15, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS), K-34 (sim_authorized_source) | TODO |
-| X-48 | cursor | P3 | Controls: Terminate (guarded session restart), Swarm entry points, answer feedback thumbs | X-24, X-10, K-03 (DASH-UI-COMMANDS) | BLOCKED (waiting X-24,X-10) |
+| X-47 | cursor | P3 | SIM dialog: provider-not-configured state, purpose field, masked results, 20 s timeout | X-15, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS), K-34 (sim_authorized_source) | DONE (01 Oct 13:50) |
+| X-48 | cursor | P3 | Controls: Terminate (guarded session restart), Swarm entry points, answer feedback thumbs | X-24, X-10, K-03 (DASH-UI-COMMANDS) | BLOCKED (waiting X-24,X-10; X-10 done but X-24 still blocked) |
 | X-49 | cursor | P3 | FlowMap from real state (Voice, Vision, Memory, Tools, Core); 'unknown' instead of a fake 'ready' | X-20, X-19, X-13, K-06 (DASH-MODULE-HEALTH) | BLOCKED (waiting X-20,X-19,X-13) |
 | X-50 | cursor | P3 | Real audio visualizer and 'You are speaking' indicator | X-13, X-33 | BLOCKED (waiting X-13,X-33) |
 | X-52 | cursor | P3 | Dashboard 'Voice & Conversation' settings and enrollment extras (delta on the dashboard drawer and dialog) | X-22, X-33, K-61 (CT-VC-SETTINGS), K-63 (CT-VC-VOICE-ENROLL) | BLOCKED (waiting X-22,X-33) |

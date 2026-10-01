@@ -592,6 +592,45 @@ button {
     @apply flex h-9 w-9 items-center justify-center rounded-md border border-command-accent/25 bg-command-accent/10 text-command-accent;
   }
 
+  .sim-provider-banner {
+    @apply mb-3 rounded-md border border-command-border bg-black/20 px-3 py-2 text-xs leading-5 text-command-muted;
+  }
+
+  .sim-provider-banner[data-configured='false'] {
+    @apply border-amber-500/35 bg-amber-500/10 text-amber-100/90;
+  }
+
+  .sim-status-chip {
+    @apply mb-3 inline-flex rounded-full border border-command-border bg-black/25 px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-wide text-command-muted;
+  }
+
+  .sim-status-chip[data-status='loading'] {
+    @apply border-command-accent/35 text-command-accent;
+  }
+
+  .sim-status-chip[data-status='success'] {
+    @apply border-emerald-500/35 text-emerald-300;
+  }
+
+  .sim-status-chip[data-status='offline'],
+  .sim-status-chip[data-status='blocked'],
+  .sim-status-chip[data-status='validation_error'],
+  .sim-status-chip[data-status='rate_limited'] {
+    @apply border-red-500/35 text-red-300;
+  }
+
+  .sim-purpose {
+    @apply mb-3 flex flex-col gap-1.5 text-xs text-command-muted;
+  }
+
+  .sim-purpose input {
+    @apply h-10 rounded-md border border-command-border bg-black/25 px-3 text-sm text-command-text outline-none placeholder:text-command-muted/50;
+  }
+
+  .sim-offline-hint {
+    @apply mt-2 text-xs text-red-300/90;
+  }
+
   .sim-search {
     @apply flex items-center gap-2 rounded-lg border border-command-border bg-black/25 p-2;
   }

@@ -57,7 +57,9 @@ export function useChat() {
 
   const pendingDeliveryRef = useRef(new Map<string, number>());
   const awaitingReplyRef = useRef(new Set<string>());
+  const resendWhenOnlineRef = useRef(new Set<string>());
   const captionTimersRef = useRef(new Map<'user' | 'assistant', number>());
+  const agentOnlineRef = useRef(true);
   const voice = useLiveKit();
 
   const syncFromMap = useCallback(() => {
@@ -175,8 +177,11 @@ export function useChat() {
   useEffect(() => {
     const socket = getSocket();
 
-    const onInit = (state: { messages?: unknown[] }) => {
+    const onInit = (state: { messages?: unknown[]; agent_status?: { online?: boolean } }) => {
       if (Array.isArray(state.messages)) mergeHistory(state.messages);
+      if (state.agent_status && typeof state.agent_status.online === 'boolean') {
+        agentOnlineRef.current = state.agent_status.online;
+      }
     };
     const onNew = (msg: unknown) => upsertRaw(msg);
     const onUpdate = (msg: unknown) => upsertRaw(msg);
@@ -253,13 +258,23 @@ export function useChat() {
             return;
           }
 
-          if (
-            ack?.status === 'agent_offline' ||
-            ack?.status === 'no_agent' ||
-            ack?.status === 'rejected'
-          ) {
+          if (ack?.status === 'agent_offline' || ack?.status === 'no_agent') {
             pendingDeliveryRef.current.delete(id);
             window.clearTimeout(timer);
+            resendWhenOnlineRef.current.add(id);
+            mapRef.current.set(id, {
+              ...row,
+              status: 'queued',
+              statusHint: 'Queued (agent offline)',
+            });
+            syncFromMap();
+            return;
+          }
+
+          if (ack?.status === 'rejected') {
+            pendingDeliveryRef.current.delete(id);
+            window.clearTimeout(timer);
+            resendWhenOnlineRef.current.delete(id);
             mapRef.current.set(id, {
               ...row,
               status: 'failed',
@@ -272,6 +287,37 @@ export function useChat() {
     },
     [markFailed, syncFromMap],
   );
+
+  const flushResendQueue = useCallback(() => {
+    if (!agentOnlineRef.current) return;
+    for (const id of [...resendWhenOnlineRef.current]) {
+      const row = mapRef.current.get(id);
+      if (!row || row.status !== 'queued') {
+        resendWhenOnlineRef.current.delete(id);
+        continue;
+      }
+      resendWhenOnlineRef.current.delete(id);
+      sendInternal(id, row.text);
+    }
+  }, [sendInternal]);
+
+  useEffect(() => {
+    const socket = getSocket();
+
+    const onAgentStatus = (payload: { online?: boolean }) => {
+      const wasOnline = agentOnlineRef.current;
+      const nextOnline = payload?.online === true;
+      agentOnlineRef.current = nextOnline;
+      if (!wasOnline && nextOnline) {
+        flushResendQueue();
+      }
+    };
+
+    socket.on('agent_status', onAgentStatus);
+    return () => {
+      socket.off('agent_status', onAgentStatus);
+    };
+  }, [flushResendQueue]);
 
   const send = useCallback(
     (text: string) => {
@@ -301,6 +347,7 @@ export function useChat() {
     awaitingReplyRef.current.clear();
     pendingDeliveryRef.current.forEach(t => window.clearTimeout(t));
     pendingDeliveryRef.current.clear();
+    resendWhenOnlineRef.current.clear();
     await fetchPage();
   }, [fetchPage]);
 

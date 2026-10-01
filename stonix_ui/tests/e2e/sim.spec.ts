@@ -1,0 +1,145 @@
+import { expect, test } from '@playwright/test';
+import { loginViaRecovery } from './helpers/login';
+
+const MOCK = 'http://127.0.0.1:5199';
+
+test.describe.configure({ mode: 'serial', timeout: 90_000 });
+
+async function mockEmit(
+  page: import('@playwright/test').Page,
+  event: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  const res = await page.request.post(`${MOCK}/__mock/emit`, {
+    data: { event, payload },
+  });
+  expect(res.ok()).toBeTruthy();
+}
+
+const SIM_PANEL_OPEN = {
+  message: 'SIM panel',
+  provider: 'none',
+  requires_purpose: true,
+};
+
+const SIM_DATA_RESULT_SUCCESS = {
+  records: [
+    {
+      full_name: 'A*** K***',
+      cnic_masked: '*****1234',
+      phone_masked: '03********1',
+    },
+  ],
+  phone: '03********1',
+  status: 'success',
+  message: 'Authorized masked match',
+  provider: 'authorized_api',
+  configured: true,
+};
+
+async function simLookups(page: import('@playwright/test').Page) {
+  const res = await page.request.get(`${MOCK}/__mock/emits`);
+  expect(res.ok()).toBeTruthy();
+  const body = (await res.json()) as {
+    ui_commands: { type?: string; payload?: unknown }[];
+  };
+  return body.ui_commands.filter(cmd => cmd.type === 'sim_lookup');
+}
+
+async function openSimDialog(page: import('@playwright/test').Page) {
+  await page.getByTitle('SIM lookup workspace').click();
+  await expect(page.getByTestId('sim-dialog')).toBeVisible();
+}
+
+test.beforeEach(async ({ page }) => {
+  await loginViaRecovery(page);
+  await expect(page.getByTestId('chip-bridge')).toBeVisible({ timeout: 15_000 });
+});
+
+test('SIM lookup panel opens and closes', async ({ page }) => {
+  await openSimDialog(page);
+  await expect(page.getByText(/SIM Access/i)).toBeVisible();
+  await page.getByTitle('Close SIM access').click();
+  await expect(page.getByTestId('sim-dialog')).toBeHidden();
+});
+
+test('not-configured provider banner from sim_panel_open', async ({ page }) => {
+  await openSimDialog(page);
+  await mockEmit(page, 'sim_panel_open', { ...SIM_PANEL_OPEN, configured: false });
+
+  const banner = page.getByTestId('sim-provider-banner');
+  await expect(banner).toHaveAttribute('data-configured', 'false');
+  await expect(banner).toContainText('SIM_LOOKUP_API_URL');
+  await expect(banner).toContainText('SIM_LOOKUP_API_KEY');
+});
+
+test('purpose required before sim_lookup emits object payload', async ({ page }) => {
+  await openSimDialog(page);
+  await mockEmit(page, 'sim_panel_open', SIM_PANEL_OPEN);
+
+  await expect(page.getByTestId('sim-purpose-input')).toBeVisible();
+
+  const searchBtn = page.getByTestId('sim-dialog').locator('.sim-search button');
+  await page.getByTestId('sim-query-input').fill('03001234567');
+  await page.getByTestId('sim-purpose-input').fill('abc');
+  await expect(searchBtn).toBeDisabled();
+
+  const before = (await simLookups(page)).length;
+  await page.getByTestId('sim-purpose-input').fill('audit purpose');
+  await expect(searchBtn).toBeEnabled();
+  await searchBtn.click();
+
+  const lookups = await simLookups(page);
+  expect(lookups.length).toBeGreaterThanOrEqual(before + 1);
+  const last = lookups[lookups.length - 1];
+  expect(last.payload).toMatchObject({
+    query: '03001234567',
+    purpose: 'audit purpose',
+  });
+
+  await mockEmit(page, 'sim_data_result', {
+    records: [],
+    phone: '03*******67',
+    status: 'empty',
+    message: 'done',
+    provider: 'none',
+    configured: false,
+  });
+  await page.getByTitle('Close SIM access').click();
+});
+
+test('lookup timeout shows offline message after 20s', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-01T12:00:00Z') });
+  await openSimDialog(page);
+
+  await page.getByTestId('sim-query-input').fill('03009998877');
+  await page.getByTestId('sim-dialog').locator('.sim-search button').click();
+  await expect(page.getByTestId('sim-status-chip')).toHaveAttribute('data-status', 'loading');
+
+  await page.clock.fastForward(20_000);
+  await expect(page.getByTestId('sim-status-chip')).toHaveAttribute('data-status', 'offline');
+  await expect(page.getByTestId('sim-result-message')).toContainText('Agent offline ya jawab nahi');
+});
+
+test('masked success fixture renders masked identity fields', async ({ page }) => {
+  await openSimDialog(page);
+  await mockEmit(page, 'sim_data_result', SIM_DATA_RESULT_SUCCESS);
+
+  await expect(page.getByTestId('sim-status-chip')).toHaveAttribute('data-status', 'success');
+  await expect(page.getByTestId('sim-identity-title')).toHaveText('A*** K***');
+  await expect(page.getByTestId('sim-cnic-masked')).toHaveText('*****1234');
+  await expect(page.getByTestId('sim-phone-masked')).toHaveText('03********1');
+  await expect(page.getByTestId('sim-provider-banner')).toContainText('authorized_api');
+});
+
+test('search disabled when agent is offline', async ({ page }) => {
+  await page.request.post(`${MOCK}/__mock/agent`, { data: { online: false } });
+  await expect(page.getByTestId('chip-agent')).toHaveAttribute('data-active', 'false');
+
+  await openSimDialog(page);
+  await expect(page.getByTestId('sim-agent-offline-hint')).toBeVisible();
+  await expect(page.getByTestId('sim-query-input')).toBeDisabled();
+  await expect(page.getByTestId('sim-dialog').locator('.sim-search button')).toBeDisabled();
+
+  await page.request.post(`${MOCK}/__mock/agent`, { data: { online: true } });
+});

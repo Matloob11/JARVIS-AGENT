@@ -174,3 +174,14 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** location.spec.ts pass
 - **Commit:** pending · **Deploy:** no · **Doosre agent ke liye:** —
 
+
+### ✅ [cursor] X-16 · Agent controls Stop/Pause/Mic/queue · 2026-10-01 13:50 PKT
+- **Kya kiya:** Stop, Pause/Wake, Mic vs Agent listening, offline chat queue+resend.
+- **Verify:** controls-agent.spec.ts 4 passed
+- **Commit:** pending · **Deploy:** no · **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-47 · SIM dialog purpose + not-configured · 2026-10-01 13:50 PKT
+- **Kya kiya:** Provider banner, purpose field, 20s timeout, masked results, sim.spec.ts.
+- **Verify:** sim+dashboard e2e pass
+- **Commit:** pending · **Deploy:** no · **Doosre agent ke liye:** —
+

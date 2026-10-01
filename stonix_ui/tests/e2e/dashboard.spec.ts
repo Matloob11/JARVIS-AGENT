@@ -21,11 +21,3 @@ test('production dashboard renders and accepts a command', async ({ page }) => {
   await expect(commandInput).toHaveValue('');
   await expect(page.getByText('status check').first()).toBeVisible({ timeout: 15_000 });
 });
-
-test('SIM lookup panel opens and closes without backend connection', async ({ page }) => {
-  await page.getByTitle('SIM lookup workspace').click();
-  await expect(page.getByText(/SIM Access/i)).toBeVisible();
-
-  await page.getByTitle('Close SIM access').click();
-  await expect(page.getByText(/SIM Access/i)).toBeHidden();
-});

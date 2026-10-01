@@ -141,6 +141,10 @@ const Dashboard = () => {
           queryMasked={command.simQueryMasked}
           status={command.simStatus}
           message={command.simMessage}
+          provider={command.simProvider}
+          providerConfigured={command.simProviderConfigured}
+          requiresPurpose={command.simRequiresPurpose}
+          agentOnline={agentStatus.online}
           onClose={command.closeSimPanel}
           onSearch={command.requestSimLookup}
         />

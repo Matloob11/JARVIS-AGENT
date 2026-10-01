@@ -1,7 +1,8 @@
 import { motion } from 'framer-motion';
-import { Activity, Mic, MicOff, Power, ShieldCheck } from 'lucide-react';
+import { Activity, Ear, EarOff, Mic, MicOff, Power, ShieldCheck } from 'lucide-react';
 import { personaAccent } from '@/shared/theme/commandTheme';
 import { useLiveKit } from '@/features/voice/LiveKitProvider';
+import { emitUiCommandWithAck, useAgentListeningMuted } from '@/features/status/AgentControls';
 
 interface AssistantCoreProps {
   persona: 'jarvis' | 'anna';
@@ -21,6 +22,7 @@ const AssistantCore = ({
   const accent = personaAccent(persona);
   const matchPercent = Math.round(voiceMatch * 100);
   const voice = useLiveKit();
+  const agentMuted = useAgentListeningMuted();
   const voiceLive = voice.roomState === 'connected';
   const voiceConnecting = voice.roomState === 'connecting' || voice.roomState === 'reconnecting';
   const agentLabel = voice.agentState ? voice.agentState : voiceLive ? 'linked' : 'offline';
@@ -84,7 +86,7 @@ const AssistantCore = ({
               : voice.micEnabled
                 ? 'Mic live — bolo, agent sunega aur bolega. Typed sawal ka jawab text me aur (voice on ho to) awaaz me.'
                 : voiceLive
-                  ? 'Mic off — room linked hai. Mic on dabao jab bolna ho; room disconnect nahi hota.'
+                  ? 'Mic off — room linked hai. Mic on dabao jab bolna ho; Agent listening alag control hai (mute = sirf awaaz band, typed chat chalti rahegi).'
                   : 'Login ke baad room auto-link hota hai (mic off). Mic on = permission allow.'}
           </p>
           {voice.error && (
@@ -98,13 +100,26 @@ const AssistantCore = ({
             type="button"
             className="icon-button"
             data-testid="voice-toggle"
-            title={voice.micEnabled ? 'Mic off' : 'Mic on'}
+            title={voice.micEnabled ? 'Mic off (browser publish)' : 'Mic on (browser publish)'}
             onClick={() => void voice.toggleMic()}
             disabled={voiceConnecting || voice.voiceUnavailable}
           >
             {voice.micEnabled ? <Mic size={14} /> : <MicOff size={14} />}
             <span className="ml-1 text-[10px] uppercase tracking-wide">
               {voiceConnecting ? 'Joining…' : voice.micEnabled ? 'Mic on' : 'Mic off'}
+            </span>
+          </button>
+          <button
+            type="button"
+            className="icon-button"
+            data-testid="assistant-agent-listening"
+            data-muted={agentMuted ? 'true' : 'false'}
+            title="JARVIS mic se nahi sunega; typed chat chalti rahegi"
+            onClick={() => emitUiCommandWithAck(agentMuted ? 'unmute' : 'mute')}
+          >
+            {agentMuted ? <EarOff size={14} className="text-command-danger" /> : <Ear size={14} />}
+            <span className="ml-1 text-[10px] uppercase tracking-wide">
+              {agentMuted ? 'Not listening' : 'Listening'}
             </span>
           </button>
           <div className="flex items-center gap-2 rounded-md border border-white/10 bg-white/[0.03] px-3 py-2">

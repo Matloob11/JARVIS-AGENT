@@ -1,19 +1,15 @@
-import {
-  Cpu,
-  LogOut,
-  Mic,
-  MicOff,
-  Radar,
-  Settings,
-  ShieldCheck,
-  Volume2,
-  Wifi,
-} from 'lucide-react';
+import { LogOut, Radar, Settings, ShieldCheck, Volume2, Wifi } from 'lucide-react';
 import WindowControls from '@/shared/ui/WindowControls';
 import { StatusDot } from '@/shared/ui/Panel';
 import { personaAccent } from '@/shared/theme/commandTheme';
 import { useLiveKit } from '@/features/voice/LiveKitProvider';
 import { useAgentStatus } from '@/features/status/useAgentStatus';
+import {
+  AgentChipMenu,
+  AgentListeningToggle,
+  MicToggleButton,
+  TopBarStopButton,
+} from '@/features/status/AgentControls';
 
 interface TopBarProps {
   persona: 'jarvis' | 'anna';
@@ -67,7 +63,6 @@ const TopBar = ({
   const accent = personaAccent(persona);
   const voice = useLiveKit();
   const agent = useAgentStatus();
-  const micOff = !voice.micEnabled;
 
   const agentTone = agent.paused ? 'blue' : agent.online ? 'accent' : 'danger';
 
@@ -92,14 +87,12 @@ const TopBar = ({
           tone="accent"
           title={isConnected ? 'Socket bridge connected' : 'Bridge offline'}
         />
-        <StatusChip
-          testId="chip-agent"
-          icon={Cpu}
+        <AgentChipMenu
           label="Agent PC"
           detail={agent.agentChipLabel}
           active={agent.online && !agent.paused}
           tone={agentTone}
-          title={agent.agentTooltip}
+          tooltip={agent.agentTooltip}
         />
         <StatusChip
           testId="chip-voice"
@@ -119,6 +112,7 @@ const TopBar = ({
       </div>
 
       <div className="no-drag flex items-center gap-2">
+        <TopBarStopButton />
         <button
           className="icon-button"
           data-testid="topbar-reconnect"
@@ -130,15 +124,8 @@ const TopBar = ({
         <button className="icon-button" onClick={onOpenSim} title="SIM lookup workspace">
           <ShieldCheck size={15} />
         </button>
-        <button
-          className="icon-button"
-          data-testid="topbar-mic-toggle"
-          onClick={() => void voice.toggleMic()}
-          title={micOff ? 'Mic on' : 'Mic off'}
-          disabled={voice.voiceUnavailable}
-        >
-          {micOff ? <MicOff size={15} className="text-command-danger" /> : <Mic size={15} />}
-        </button>
+        <MicToggleButton />
+        <AgentListeningToggle />
         <button className="icon-button" onClick={onOpenSettings} title="Settings">
           <Settings size={15} />
         </button>
