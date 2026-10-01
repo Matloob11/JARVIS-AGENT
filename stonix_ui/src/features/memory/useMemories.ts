@@ -77,10 +77,12 @@ function backupPathFromCleared(payload: Record<string, unknown>): string | null 
 
 export function useMemories(emitCommand: (type: string, payload?: unknown) => void) {
   const [rows, setRows] = useState<MemoryItem[]>([]);
+  const [lastMemorySyncMs, setLastMemorySyncMs] = useState<number | null>(null);
 
   const applySync = useCallback((raw: unknown) => {
     const entry = normalizeMemory(raw);
     if (!entry) return;
+    setLastMemorySyncMs(entry.ts);
     setRows(prev => prependRow(prev, entry));
   }, []);
 
@@ -101,6 +103,8 @@ export function useMemories(emitCommand: (type: string, payload?: unknown) => vo
       .filter((row): row is MemoryItem => row != null);
     if (!seeded.length) return;
     setRows(prev => mergeSeed(prev, seeded));
+    const newest = seeded.reduce((max, row) => (row.ts > max ? row.ts : max), seeded[0].ts);
+    setLastMemorySyncMs(prev => (prev == null || newest > prev ? newest : prev));
   }, []);
 
   const clearShortTermMemory = useCallback(() => {
@@ -121,6 +125,7 @@ export function useMemories(emitCommand: (type: string, payload?: unknown) => vo
 
   return {
     memories: rows,
+    lastMemorySyncMs,
     seedMemoriesFromInit: seedFromInit,
     clearShortTermMemory,
   };

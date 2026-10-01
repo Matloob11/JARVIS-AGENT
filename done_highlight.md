@@ -307,3 +307,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `cd stonix_ui && npm run build` pass · `npx playwright test tests/e2e/tasks.spec.ts` 4 passed
 - **Commit:** pending · **Deploy:** no
 - **Doosre agent ke liye:** X-48/X-53 ab X-24 par unblock; live task store UI-34/C-62.
+
+### ✅ [cursor] X-49 · FlowMap live module state · 2026-10-01 17:10 PKT
+- **Kya kiya:** System Flow ab LiveKit voice, camera, `module_health`, memory sync age, tool running/error, aur agent status se labels banata hai — static “ready” hata diya; missing data par grey *unknown*. `trace.spec.ts` me agent offline, running tool, aur vision fault checks.
+- **Files:** stonix_ui/src/features/command-center/flowMapStatus.ts, components/FlowMap.tsx, hooks/useCommandCenter.ts, memory/useMemories.ts, tests/e2e/trace.spec.ts, plan.md
+- **Verify:** `cd stonix_ui && npm run build` pass · `npx playwright test tests/e2e/trace.spec.ts` 8 passed
+- **Commit:** pending · **Deploy:** no
+- **Doosre agent ke liye:** —

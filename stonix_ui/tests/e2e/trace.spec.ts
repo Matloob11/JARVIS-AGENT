@@ -33,13 +33,7 @@ async function ensureDashboard(page: import('@playwright/test').Page) {
   if (await page.getByText(/System Flow/i).isVisible({ timeout: 1500 }).catch(() => false)) {
     return;
   }
-  await page.goto('/');
-  const loginPassword = page.getByTestId('login-password');
-  if (await loginPassword.isVisible({ timeout: 3000 }).catch(() => false)) {
-    await loginViaRecovery(page);
-    return;
-  }
-  await expect(page.getByText(/System Flow/i)).toBeVisible({ timeout: 15_000 });
+  await loginViaRecovery(page);
 }
 
 test.beforeEach(async ({ page }) => {
@@ -131,6 +125,31 @@ test('INFO logs stay hidden until toggled', async ({ page }) => {
   await expect(
     terminal.getByTestId('trace-log-line').filter({ hasText: 'info-toggle-test-hidden' }),
   ).toHaveCount(1);
+});
+
+test('FlowMap core shows offline when agent goes offline', async ({ page }) => {
+  await page.request.post(`${MOCK}/__mock/agent`, { data: { online: false } });
+  await expect(page.getByTestId('flow-core-status')).toContainText(/offline/i, { timeout: 10_000 });
+  await page.request.post(`${MOCK}/__mock/agent`, { data: { online: true } });
+  await expect(page.getByTestId('flow-core-status')).toContainText(/online/i, { timeout: 10_000 });
+});
+
+test('FlowMap tools node reflects a running tool', async ({ page }) => {
+  await mockEmit(page, 'tool_update', {
+    id: 'flowmap-running-tool',
+    tool: 'web_search',
+    status: 'running',
+    ts: Math.floor(Date.now() / 1000),
+  });
+  await expect(page.getByTestId('flow-tools-status')).toContainText(/running/i, { timeout: 10_000 });
+});
+
+test('FlowMap vision node reflects module_health vision fault', async ({ page }) => {
+  await mockEmit(page, 'module_health', {
+    vision: { ok: false, detail: 'camera offline', model: 'gemini', camera_source: 'none' },
+    ts: Math.floor(Date.now() / 1000),
+  });
+  await expect(page.getByTestId('flow-vision-status')).toContainText(/fault/i, { timeout: 10_000 });
 });
 
 test('reasoning tab visible below 1180px width', async ({ page }) => {
