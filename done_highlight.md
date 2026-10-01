@@ -380,3 +380,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `tests/unit/test_check_lane.py` 70 passed (7 naye) · guard 14:51 wale ASCII version ko 606 lines par pakadta, restored file par 0
 - **Commit:** `03ba097` · **Deploy:** no
 - **Doosre agent ke liye:** `plan.md` / `done_highlight.md` sirf editor ke UTF-8 edit tool se badlo. Hook `ENCODING_LOSS` kahe to `python scripts/coord/restore_unicode.py plan.md --write` chalao, phir dobara stage karo.
+
+### ✅ [cursor] X-25 · Clipboard monitor K-19 payloads · 2026-10-01 17:38 PKT
+- **Kya kiya:** Clipboard monitor ab structured `ClipboardSuggestion` payload deta hai (redacted excerpt, DDGS query/solution, rate-limit 60s, dedupe 10 min, self-write SHA256 ignore, `clipboard_helper_enabled` gate). Crypto address-only paste trigger nahi karta.
+- **Files:** services/automation/jarvis_clipboard.py, tests/tools/test_clipboard_monitor.py, plan.md
+- **Verify:** `.\.venv_312\Scripts\python.exe -m pytest tests/tools/test_clipboard_monitor.py -q -p no:cacheprovider` — 8 passed
+- **Commit:** pending · **Deploy:** no
+- **Doosre agent ke liye:** C-55 agent_runner callback ab dict payload accept kare (K-19); plain str transition ab bhi chalega.
