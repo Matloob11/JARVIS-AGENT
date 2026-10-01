@@ -4,19 +4,28 @@ Handles dynamic discovery and registration of AI tools.
 """
 
 import asyncio
+import contextvars
 import functools
+import hashlib
 import importlib
 import inspect
+import json
 import pkgutil
+import re
 import sys
 import threading
+import time
 import types
 import typing
+import uuid
+import weakref
 from collections.abc import Callable
 from typing import Any, Optional, TypeVar, cast
 
 from livekit.agents import llm
 
+from services.utils import jarvis_audit, jarvis_security
+from services.utils.jarvis_config import config
 from services.utils.jarvis_logger import setup_logger
 from services.utils.jarvis_resilience import resilience_manager
 from services.utils.jarvis_security import (
@@ -34,6 +43,64 @@ F = TypeVar("F", bound=Callable[..., Any])
 RISK_LEVELS = ("low", "medium", "high")
 _POSITIONAL_KINDS = (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
 _VARIADIC_KINDS = (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+
+# K-11: how long a call waits for its exclusive lock before DESKTOP_BUSY, and (as K-25
+# run_cancellable does) how long a cancelled or timed-out sync tool waits for its worker thread.
+EXCLUSIVE_WAIT_S = 30.0
+WORKER_GRACE_S = 5.0
+DESKTOP_INPUT = "desktop_input"
+# K-13 ToolSyncEvent limits.
+SYNC_DETAILS_MAX = 160
+SYNC_RESULT_MAX = 200
+_PREVIEW_VALUE_MAX = 60
+_FREE_TEXT_POLICIES = frozenset({"raw", "multiline"})
+_CONTROL_RUN = re.compile(r"[\x00-\x1f\x7f]+")
+
+_DESKTOP_DISABLED_MESSAGE = "Sir, desktop control abhi band hai, settings mein on kar dein."
+_DESKTOP_BUSY_MESSAGE = ("Sir, desktop par abhi doosra kaam chal raha hai, "
+                         "thori der baad dobara koshish karein.")
+
+# Tool status words (K-12 plus legacy returns) -> K-13 end status; anything else is 'error'.
+_SYNC_STATUS = {
+    "success": "success", "ok": "success", "done": "success", "completed": "success",
+    "empty": "success", "info": "success", "pass": "success", "active": "success",
+    "not_found": "not_found", "degraded": "degraded", "partial_success": "degraded",
+    "warning": "degraded", "started": "started", "pending": "started",
+    "needs_confirmation": "needs_confirmation", "cancelled": "cancelled",
+    "blocked": "blocked", "denied": "blocked", "timeout": "timeout",
+}
+# A legacy tool reports a failure as plain text: '❌ ...', 'Error: ...' or 'ERROR: ...'.
+_FAILURE_TEXT = re.compile(r"\s*(?:❌|error\b)", re.IGNORECASE)
+
+# The LLM tool call running in this context: {'id': K-13 event id, 'tool': name}.
+current_tool_call: contextvars.ContextVar[dict[str, str] | None] = contextvars.ContextVar(
+    "jarvis_current_tool_call", default=None)
+
+_running_calls: dict[str, str] = {}  # call id -> tool name (running_tools)
+_running_lock = threading.Lock()
+_sync_tasks: set[asyncio.Task[None]] = set()  # fire-and-forget tool_sync posts, kept referenced
+
+# One asyncio.Lock per lock name and event loop: an asyncio.Lock can only be awaited in one loop.
+_exclusive_locks: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, dict[str, asyncio.Lock]] = \
+    weakref.WeakKeyDictionary()
+_exclusive_guard = threading.Lock()
+
+
+class _ExclusiveHold:
+    """An exclusive lock held by one tool call."""
+    __slots__ = ("active", "lock", "name", "token")
+
+    def __init__(self, name: str, lock: asyncio.Lock) -> None:
+        self.name = name
+        self.lock = lock
+        self.active = True
+        self.token: contextvars.Token[tuple[_ExclusiveHold, ...]] | None = None
+
+
+# Locks held in this context, so a tool that awaits another tool's wrapper under the same lock
+# name does not wait for itself.
+_held_exclusive: contextvars.ContextVar[tuple[_ExclusiveHold, ...]] = contextvars.ContextVar(
+    "jarvis_held_exclusive", default=())
 
 
 def _is_str_hint(hint: Any) -> bool:
@@ -186,6 +253,240 @@ def _apply_arg_policies(tool_name: str, positional_names: list[str], policies: d
     return clean_args + args[len(clean_args):], clean_kwargs
 
 
+def _bind_arguments(sig: inspect.Signature, positional_names: list[str], args: tuple[Any, ...],
+                    kwargs: dict[str, Any]) -> dict[str, Any]:
+    """
+    The call's arguments by name with omitted ones at their defaults (K-11:
+    sig.bind_partial(...).apply_defaults()), so an omitted auto_run reads as True.
+    """
+    try:
+        bound = sig.bind_partial(*args, **kwargs)
+    except TypeError:  # a call the tool itself will reject; keep what can be named
+        return {**dict(zip(positional_names, args)), **kwargs}
+    bound.apply_defaults()
+    return dict(bound.arguments)
+
+
+def _call_risk(risk: Any, arguments: dict[str, Any], label: str) -> str:
+    """
+    K-11 risk of one call: the fixed level, or what the risk callable answers for the call's
+    arguments. A callable that raises or answers anything but low/medium/high counts as 'high'.
+    """
+    if not callable(risk):
+        return cast(str, risk)
+    try:
+        level = risk(dict(arguments))
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.warning("risk callable of %s failed (%s); the call counts as high risk", label, e)
+        return "high"
+    if inspect.iscoroutine(level):
+        level.close()
+    clean = level.strip().lower() if isinstance(level, str) else None
+    if clean not in RISK_LEVELS:
+        logger.warning("risk callable of %s returned %r; the call counts as high risk",
+                       label, type(level).__name__ if inspect.isawaitable(level) else level)
+        return "high"
+    return clean
+
+
+def _redact(text: str) -> str:
+    """K-29 redact_secrets when jarvis_security has it (C-25); unchanged text before that."""
+    redactor = getattr(jarvis_security, "redact_secrets", None)
+    if not callable(redactor):
+        return text
+    try:
+        return str(redactor(text))
+    except Exception:  # pylint: disable=broad-exception-caught
+        return "[redaction failed]"
+
+
+def _one_line(text: str, limit: int) -> str:
+    """text on one line, secrets redacted, cut to limit chars (redacted before it is cut)."""
+    text = " ".join(_CONTROL_RUN.sub(" ", text[:limit + 1024]).split())
+    text = _redact(text)
+    return text if len(text) <= limit else text[:limit - 1] + "…"
+
+
+def _is_default(value: Any, default: Any) -> bool:
+    try:
+        return value is default or (type(value) is type(default) and bool(value == default))
+    except Exception:  # pylint: disable=broad-exception-caught
+        return False
+
+
+def _args_preview(arguments: dict[str, Any], policies: dict[str, str],
+                  defaults: dict[str, Any]) -> str:
+    """
+    K-13 details: name=value for every argument that differs from its default; a raw or
+    multiline (free-text) value shows only as '<N chars>'.
+    """
+    parts: list[str] = []
+    try:
+        for name, value in arguments.items():
+            if name in defaults and _is_default(value, defaults[name]):
+                continue
+            if isinstance(value, str) and policies.get(name) in _FREE_TEXT_POLICIES:
+                shown = f"<{len(value)} chars>"
+            else:
+                shown = _one_line(value if isinstance(value, str) else repr(value),
+                                  _PREVIEW_VALUE_MAX)
+            parts.append(f"{name}={shown}")
+    except Exception:  # pylint: disable=broad-exception-caught
+        return ""
+    text = ", ".join(parts)
+    return text if len(text) <= SYNC_DETAILS_MAX else text[:SYNC_DETAILS_MAX - 1] + "…"
+
+
+def _result_summary(result: Any) -> str:
+    """K-13 result_summary: the result's message (or the result itself), one line, redacted."""
+    try:
+        if isinstance(result, dict):
+            text = result.get("message") or result.get("error") or result
+        else:
+            text = result
+        if text is None:
+            return ""
+        return _one_line(text if isinstance(text, str) else repr(text), SYNC_RESULT_MAX)
+    except Exception:  # pylint: disable=broad-exception-caught
+        return ""
+
+
+def _sync_status(result: Any) -> str:
+    """
+    K-13 end status for a tool's own return value. Text counts as success unless it starts like
+    a legacy failure ('❌ ...', 'Error ...'); any other non-dict return counts as success.
+    """
+    if isinstance(result, str):
+        return "error" if _FAILURE_TEXT.match(result) else "success"
+    if not isinstance(result, dict):
+        return "success"
+    code = result.get("error_code")
+    if code == "DESKTOP_CONTROL_DISABLED":
+        return "blocked"
+    if code in ("TIMEOUT", "TOOL_TIMEOUT"):
+        return "timeout"
+    status = result.get("status")
+    if status is None:
+        return "error" if "error" in result else "success"
+    return _SYNC_STATUS.get(str(status).strip().lower(), "error")
+
+
+def _sync_event(call_id: str, tool_name: str, *, phase: str, status: str, details: str,
+                risk: str) -> dict[str, Any]:
+    return {"id": call_id, "tool": tool_name, "action": tool_name, "phase": phase,
+            "status": status, "details": details, "risk": risk, "source": "plugin",
+            "timestamp": time.time()}
+
+
+def _emit_tool_sync(payload: dict[str, Any],
+                    after: asyncio.Task[None] | None = None) -> asyncio.Task[None] | None:
+    """Posts one K-13 tool_sync event in the background; it never delays or fails the tool."""
+    try:
+        task = asyncio.get_running_loop().create_task(_post_tool_sync(payload, after))
+    except RuntimeError:  # no running event loop
+        return None
+    _sync_tasks.add(task)
+    task.add_done_callback(_sync_tasks.discard)
+    return task
+
+
+async def _post_tool_sync(payload: dict[str, Any], after: asyncio.Task[None] | None) -> None:
+    if after is not None:
+        # The bridge relays events in arrival order and the UI keeps the last one per id, so the
+        # end event waits for its start event's post however long that takes; notify_event
+        # bounds each post with its HTTP timeouts.
+        await asyncio.wait({after})
+    logger.info("tool_sync %s %s id=%s status=%s", payload["phase"], payload["tool"],
+                payload["id"], payload["status"])
+    try:
+        # pylint: disable=import-outside-toplevel
+        from services.utils import jarvis_bridge
+        await jarvis_bridge.notify_event("tool_sync", payload)
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.debug("tool_sync for %s not sent: %s", payload["tool"], e)
+
+
+def _audit_tool_call(tool_name: str, risk: str, status: str, arguments: dict[str, Any], *,
+                     call_id: str, duration_ms: int) -> None:
+    """TOOL_EXEC line in logs/security.log; the arguments only as a sha256 prefix and a length."""
+    try:
+        encoded = json.dumps(arguments, sort_keys=True, ensure_ascii=False, default=repr)
+    except (TypeError, ValueError):
+        encoded = repr(arguments)
+    digest = hashlib.sha256(encoded.encode("utf-8", "surrogatepass")).hexdigest()[:16]
+    try:
+        jarvis_audit.log_tool(tool_name, risk, status,
+                              f"ARGS=sha256:{digest} len={len(encoded)} | ID={call_id} | "
+                              f"DURATION_MS={duration_ms}")
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.warning("Audit of tool '%s' failed: %s", tool_name, e)
+
+
+def _desktop_control_enabled() -> bool:
+    """K-15 central kill switch of every exclusive='desktop_input' tool."""
+    return bool(getattr(config, "desktop_control_enabled", True))
+
+
+def _refusal(tool_name: str, error_code: str, message: str) -> dict[str, Any]:
+    return {"status": "error", "tool": tool_name, "error_code": error_code, "message": message}
+
+
+def _exclusive_lock(name: str) -> asyncio.Lock:
+    loop = asyncio.get_running_loop()
+    with _exclusive_guard:
+        # A lock that has had a waiter references its loop, which keeps the weak key alive.
+        for closed in [other for other in list(_exclusive_locks) if other.is_closed()]:
+            del _exclusive_locks[closed]
+        locks = _exclusive_locks.get(loop)
+        if locks is None:
+            locks = _exclusive_locks[loop] = {}
+        lock = locks.get(name)
+        if lock is None:
+            lock = locks[name] = asyncio.Lock()
+        return lock
+
+
+def _holds_exclusive(name: str) -> bool:
+    return any(hold.active and hold.name == name for hold in _held_exclusive.get())
+
+
+async def _acquire_exclusive(name: str) -> _ExclusiveHold | None:
+    """Waits up to EXCLUSIVE_WAIT_S for the named lock; None when it stays busy."""
+    lock = _exclusive_lock(name)
+    try:
+        async with asyncio.timeout(EXCLUSIVE_WAIT_S):
+            await lock.acquire()
+    except TimeoutError:
+        return None
+    hold = _ExclusiveHold(name, lock)
+    hold.token = _held_exclusive.set((*_held_exclusive.get(), hold))
+    return hold
+
+
+def _release_exclusive(hold: _ExclusiveHold) -> None:
+    hold.active = False
+    if hold.token is not None:
+        try:
+            _held_exclusive.reset(hold.token)
+        except ValueError:  # set in another context; the inactive hold is ignored anyway
+            pass
+    hold.lock.release()
+
+
+async def _run_sync_tool(func: Callable[..., Any], args: tuple[Any, ...],
+                         kwargs: dict[str, Any]) -> Any:
+    """
+    Runs a sync tool in a worker thread. A cancelled or timed-out call waits up to WORKER_GRACE_S
+    for the thread (like K-25 run_cancellable), so its exclusive lock outlives the thread's work.
+    """
+    worker = asyncio.ensure_future(asyncio.to_thread(func, *args, **kwargs))
+    try:
+        return await asyncio.shield(worker)
+    except asyncio.CancelledError:
+        await asyncio.wait({worker}, timeout=WORKER_GRACE_S)
+        raise
+
+
 class JarvisPluginManager:
     """
     Manages the lifecycle of AI tools, including registration and discovery.
@@ -229,10 +530,13 @@ class JarvisPluginManager:
         """
         Registers a function as a tool for autonomous discovery.
         The keyword-only options are contract K-11 (JarvisToolDecoratorV2) and are kept as
-        metadata (get_tool_meta). The wrapper applies timeout (else execution_timeout), the
-        arg policies and max_output_chars; risk, confirm, voice_confirm, exclusive and
-        long_running are metadata only here. An unknown or invalid option logs ERROR and is
-        ignored, so a module never loses its tools at import.
+        metadata (get_tool_meta). Per LLM call the wrapper applies the arg policies, resolves
+        the risk (a risk callable gets the bound arguments with defaults), takes the exclusive
+        lock (and the desktop_input kill switch) outside the timeout (else execution_timeout),
+        applies max_output_chars, emits one tool_sync start and end event (K-13) and audits
+        medium/high calls. confirm, voice_confirm and long_running are metadata only here.
+        An unknown or invalid option logs ERROR and is ignored, so a module never loses its
+        tools at import.
         """
         module = getattr(func, "__module__", "unknown")
         label = f"{module}.{getattr(func, '__qualname__', func.__name__)}"
@@ -275,69 +579,150 @@ class JarvisPluginManager:
                            if name in policies and isinstance(param.default, str)}
         max_chars = meta["max_output_chars"]
         positional_names = [p.name for p in sig.parameters.values() if p.kind in _POSITIONAL_KINDS]
+        # What apply_defaults() fills in for an omitted argument (*args and **kwargs: empty).
+        param_defaults: dict[str, Any] = {
+            name: () if param.kind is inspect.Parameter.VAR_POSITIONAL
+            else {} if param.kind is inspect.Parameter.VAR_KEYWORD else param.default
+            for name, param in sig.parameters.items()
+            if param.default is not inspect.Parameter.empty or param.kind in _VARIADIC_KINDS}
+        tool_name = func.__name__
+        module_name = getattr(func, "__module__", "unknown")
+        exclusive_name = meta["exclusive"]
+        is_async = inspect.iscoroutinefunction(func)
 
-        @functools.wraps(func)
-        async def tool_wrapper(*args: Any, **kwargs: Any) -> Any:
-            # SECURITY ENFORCEMENT
-            module_name = getattr(func, "__module__", "unknown")
-            allowed_perms = get_permissions_for_module(module_name)
+        async def _execute_with_retries(*a: Any, **k: Any) -> Any:
+            attempts = 0
+            while True:
+                try:
+                    async with self._tool_semaphore:
+                        if is_async:
+                            return await func(*a, **k)
+                        result = await _run_sync_tool(func, a, k)
+                        return await result if inspect.isawaitable(result) else result
+                except asyncio.CancelledError:
+                    logger.warning("Tool '%s' execution CANCELLED.", tool_name)
+                    raise
+                except (ValueError, KeyError, RuntimeError, TypeError, OSError) as e:
+                    attempts += 1
+                    if attempts <= retry_attempts:
+                        logger.warning(
+                            "Tool '%s' failed (Attempt %d/%d). Retrying in %.1fs... Error: %s",
+                            tool_name, attempts, retry_attempts + 1, retry_delay, e)
+                        await asyncio.sleep(retry_delay)
+                        continue
+                    raise e
 
-            missing = required_perms - allowed_perms
-            if missing:
-                error_msg = f"SECURITY BLOCK: Tool '{func.__name__}' requires permissions {missing} which are not granted."
-                logger.critical(error_msg)
-                return error_msg
-
-            # Tool Parameter Validation (Self-Defense), before the breaker: a rejected
-            # argument is the caller's mistake and must not count as a tool failure.
-            try:
-                args, kwargs = _apply_arg_policies(func.__name__, positional_names, policies,
-                                                   args, kwargs, defaults=policy_defaults)
-            except ArgPolicyError as e:
-                logger.warning("Tool '%s' argument '%s' rejected: %s", func.__name__, e.arg, e.code)
-                return {"status": "error", "tool": func.__name__,
-                        "error_code": e.code, "message": e.message}
-
+        async def _execute(args: tuple[Any, ...], kwargs: dict[str, Any]) -> tuple[Any, str]:
             # RECOVERY & RESILIENCE ENFORCEMENT
-            breaker = resilience_manager.get_breaker(func.__name__, execution_timeout=effective_timeout)
-
-            async def _execute_with_retries(*a: Any, **k: Any) -> Any:
-                attempts = 0
-                while True:
-                    try:
-                        async with self._tool_semaphore:
-                            if asyncio.iscoroutinefunction(func):
-                                return await func(*a, **k)
-                            return func(*a, **k)
-                    except asyncio.CancelledError:
-                        logger.warning("Tool '%s' execution CANCELLED.", func.__name__)
-                        raise
-                    except (ValueError, KeyError, RuntimeError, TypeError, OSError) as e:
-                        attempts += 1
-                        if attempts <= retry_attempts:
-                            logger.warning(
-                                "Tool '%s' failed (Attempt %d/%d). Retrying in %.1fs... Error: %s",
-                                func.__name__, attempts, retry_attempts + 1, retry_delay, e)
-                            await asyncio.sleep(retry_delay)
-                            continue
-                        raise e
-
+            breaker = resilience_manager.get_breaker(tool_name, execution_timeout=effective_timeout)
             try:
                 # Wrap execution in Circuit Breaker (Self-Healing)
                 raw_result = await breaker.call(_execute_with_retries, *args, **kwargs)
 
                 # Apply Tool Output Validation (Self-Defense)
-                return vortex_guard.validate_tool_output(func.__name__, raw_result, max_chars=max_chars)
-            except Exception as e:
-                error_summary = f"Tool '{func.__name__}' failure: {e!s}"
+                result = vortex_guard.validate_tool_output(tool_name, raw_result, max_chars=max_chars)
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                error_summary = f"Tool '{tool_name}' failure: {e!s}"
                 logger.error(error_summary, exc_info=True)
+                timed_out = isinstance(e, RuntimeError) and str(e).startswith("TOOL_TIMEOUT")
                 # Standardized JSON-like error response for stable agent parsing
                 return {
                     "status": "error",
-                    "tool": func.__name__,
+                    "tool": tool_name,
                     "error_type": type(e).__name__,
-                    "message": str(e),
-                }
+                    "message": _redact(str(e)),  # skips validate_tool_output, so mask secrets here (K-29)
+                }, "timeout" if timed_out else "error"
+            return result, _sync_status(result)
+
+        async def _guarded_call(args: tuple[Any, ...], kwargs: dict[str, Any],
+                                rejected: ArgPolicyError | None) -> tuple[Any, str]:
+            # SECURITY ENFORCEMENT
+            missing = required_perms - get_permissions_for_module(module_name)
+            if missing:
+                error_msg = f"SECURITY BLOCK: Tool '{tool_name}' requires permissions {missing} which are not granted."
+                logger.critical(error_msg)
+                return error_msg, "blocked"
+
+            if exclusive_name == DESKTOP_INPUT and not _desktop_control_enabled():
+                return _refusal(tool_name, "DESKTOP_CONTROL_DISABLED",
+                                _DESKTOP_DISABLED_MESSAGE), "blocked"
+
+            # Tool Parameter Validation (Self-Defense) ran before the breaker: a rejected
+            # argument is the caller's mistake and must not count as a tool failure.
+            if rejected is not None:
+                logger.warning("Tool '%s' argument '%s' rejected: %s", tool_name, rejected.arg,
+                               rejected.code)
+                return _refusal(tool_name, rejected.code, rejected.message), "error"
+
+            # The lock is taken outside the breaker's timeout and released only after a
+            # timed-out or cancelled tool has unwound (K-11).
+            hold = None
+            if exclusive_name and not _holds_exclusive(exclusive_name):
+                hold = await _acquire_exclusive(exclusive_name)
+                if hold is None:
+                    logger.warning("Tool '%s' waited %.0fs for the '%s' lock; DESKTOP_BUSY",
+                                   tool_name, EXCLUSIVE_WAIT_S, exclusive_name)
+                    return _refusal(tool_name, "DESKTOP_BUSY", _DESKTOP_BUSY_MESSAGE), "error"
+            try:
+                if exclusive_name == DESKTOP_INPUT and not _desktop_control_enabled():
+                    # Switched off while this call waited for the lock.
+                    return _refusal(tool_name, "DESKTOP_CONTROL_DISABLED",
+                                    _DESKTOP_DISABLED_MESSAGE), "blocked"
+                return await _execute(args, kwargs)
+            finally:
+                if hold is not None:
+                    _release_exclusive(hold)
+
+        @functools.wraps(func)
+        async def tool_wrapper(*args: Any, **kwargs: Any) -> Any:
+            call_id = uuid.uuid4().hex
+            started = time.monotonic()
+            arguments = _bind_arguments(sig, positional_names, args, kwargs)
+            details = _args_preview(arguments, policies, param_defaults)
+            call_risk = level if isinstance(level, str) else "high"
+            start_task: asyncio.Task[None] | None = None
+            start_sent = False
+            status, result = "error", None
+            context_token = current_tool_call.set({"id": call_id, "tool": tool_name})
+            with _running_lock:
+                _running_calls[call_id] = tool_name
+            try:
+                rejected: ArgPolicyError | None = None
+                try:
+                    args, kwargs = _apply_arg_policies(tool_name, positional_names, policies,
+                                                       args, kwargs, defaults=policy_defaults)
+                    arguments = _bind_arguments(sig, positional_names, args, kwargs)
+                except ArgPolicyError as e:
+                    rejected = e
+                call_risk = _call_risk(level, arguments, label)
+                start_task = _emit_tool_sync(_sync_event(
+                    call_id, tool_name, phase="start", status="running", details=details,
+                    risk=call_risk))
+                start_sent = True
+                result, status = await _guarded_call(args, kwargs, rejected)
+                return result
+            except asyncio.CancelledError:
+                status = "cancelled"
+                raise
+            finally:
+                duration_ms = int((time.monotonic() - started) * 1000)
+                with _running_lock:
+                    _running_calls.pop(call_id, None)
+                current_tool_call.reset(context_token)
+                if not start_sent:  # an unexpected error came before the start event
+                    start_task = _emit_tool_sync(_sync_event(
+                        call_id, tool_name, phase="start", status="running", details=details,
+                        risk=call_risk))
+                end_event = _sync_event(call_id, tool_name, phase="end", status=status,
+                                        details=details, risk=call_risk)
+                end_event["duration_ms"] = duration_ms
+                summary = _result_summary(result)
+                if summary:
+                    end_event["result_summary"] = summary
+                _emit_tool_sync(end_event, after=start_task)
+                if call_risk in ("medium", "high"):
+                    _audit_tool_call(tool_name, call_risk, status, arguments,
+                                     call_id=call_id, duration_ms=duration_ms)
 
         # Preserving original name and signature for LLM understanding
         tool_wrapper.__is_jarvis_tool__ = True
@@ -378,6 +763,11 @@ class JarvisPluginManager:
                         return None
                     return {**meta, "arg_policies": dict(meta["arg_policies"])}
         return None
+
+    def running_tools(self) -> set[str]:
+        """Names of the tools with an LLM call in progress (K-11)."""
+        with _running_lock:
+            return set(_running_calls.values())
 
     def get_livekit_tools(self) -> list[llm.FunctionTool]:
         """Converts raw tools into LiveKit-compatible FunctionTool objects."""
