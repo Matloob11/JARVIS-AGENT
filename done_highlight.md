@@ -387,3 +387,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `.\.venv_312\Scripts\python.exe -m pytest tests/tools/test_clipboard_monitor.py -q -p no:cacheprovider` — 8 passed
 - **Commit:** pending · **Deploy:** no
 - **Doosre agent ke liye:** C-55 agent_runner callback ab dict payload accept kare (K-19); plain str transition ab bhi chalega.
+
+### ✅ [cursor] X-25 · commit hash · 2026-10-01 17:39 PKT
+- **Kya kiya:** X-25 entry upar; yeh sirf commit ref.
+- **Files:** —
+- **Verify:** —
+- **Commit:** `7ae9b21` · **Deploy:** no
+- **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-35 · File opener: config media dirs, safe index, open/close · 2026-10-01 17:42 PKT
+- **Kya kiya:** `play_*` ab `config.media_dirs` (+ D: jab maujood) se index karte hain; index `%LOCALAPPDATA%/JARVIS/file_index.json` par save/load hota hai aur 60s baad background refresh (har 10 min). Executables auto-open nahi; `close_file_window_tool` protected windows chhod kar graceful close + medium risk jab >1 match; `list_generated_media_tool` images/qr/downloads/leads.
+- **Files:** services/multimedia/jarvis_file_opener.py, tests/tools/test_file_opener_tools.py, plan.md
+- **Verify:** `.\.venv_312\Scripts\python.exe -m pytest tests/tools/test_file_opener_tools.py -q -p no:cacheprovider` — 12 passed
+- **Commit:** pending · **Deploy:** no
+- **Doosre agent ke liye:** —
