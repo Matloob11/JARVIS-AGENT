@@ -464,12 +464,13 @@ async def run_cancellable(fn: Callable[..., Any], *a: Any, **kw: Any) -> Any:
     """
     Run sync fn in a worker thread with cancel_event as the first positional arg.
     On CancelledError, set the event and wait up to 5 s for the worker.
+    Shield the future so a cancel does not drop the worker mid-type.
     """
     cancel_event = threading.Event()
     loop = asyncio.get_running_loop()
     fut = loop.run_in_executor(None, lambda: fn(cancel_event, *a, **kw))
     try:
-        return await fut
+        return await asyncio.shield(fut)
     except asyncio.CancelledError:
         cancel_event.set()
         try:

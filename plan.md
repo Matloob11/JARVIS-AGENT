@@ -468,7 +468,7 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | C-25 | claude | P0 | Secret redaction for logs and tool outputs + API keys out of URLs | C-24, K-29 (redact_secrets) | DONE (01 Oct 21:00; live restart OK; user voice check pending) |
 | C-26 | claude | P0 | Desktop config keys, .env keys via a no-echo script, stale D:/ paths in Claude-lane files | C-06, K-15 (DesktopConfigKeys) | DONE (01 Oct 17:35) |
 | C-27 | claude | P0 | Tool execution core: per-tool timeout, cancel-safe exclusive desktop lock, central kill switch, tool_sync events, audit | C-24, K-13 (ToolSyncEvent), K-12 (ToolResult) | DONE (01 Oct 21:00; live restart OK; user voice check pending) |
-| C-28 | claude | P0 | Non-blocking confirmation broker + confirm_action tool (single broker for all areas) | C-27, K-14 (ConfirmFlow), K-12 (ToolResult) | TODO |
+| C-28 | claude | P0 | Non-blocking confirmation broker + confirm_action tool (single broker for all areas) | C-27, K-14 (ConfirmFlow), K-12 (ToolResult) | DOING (claude, 01 Oct 21:05) |
 | C-29 | claude | P0 | Bridge + agent routing for ConfirmFlow and tool events (authenticated ui/agent rooms), bridge-only deploy | C-28, C-13, C-14, C-15, C-19, K-14 (ConfirmFlow), K-13 (ToolSyncEvent), K-45 (C-CONFIRM-1) | TODO |
 | C-30 | claude | P0 | Deploy the STONIX frontend with the ConfirmDialog to the VPS + live selftest | C-29, X-10, C-12, C-22 | TODO |
 | C-31 | claude | P0 | Event-loop stall watchdog | C-27 | TODO |
@@ -482,7 +482,7 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | X-08 | cursor | P0 | Login screen, AuthProvider and session lifecycle (password + TOTP, recovery code, robust expiry) | X-06, X-07, K-01 (DASH-UI-RUNTIME), K-36 (C-AUTH-1), K-37 (C-LK-1), K-38 (C-SOCK-1), K-49 (C-ORIGIN-1) | DONE (01 Oct 12:52) |
 | X-11 | cursor | P0 | No-real-side-effect test harness (tests/tools) + helper tests | C-06, X-03, K-27 (TestSideEffectGuard) | DONE (01 Oct 15:20) |
 | X-12 | cursor | P0 | Apply the side-effect guard to legacy desktop test folders and gate live GUI scripts | X-11, K-27 (TestSideEffectGuard) | DONE (01 Oct 15:30) |
-| X-26 | cursor | P0 | Keyboard/mouse tools: no hard-coded token, Unicode-safe typing, full key set, protected-window hotkeys, new volume API | C-24, C-27, C-26, X-03, X-11, K-16 (DesktopToolPolicy) | BLOCKED (waiting C-24,C-27,C-26,X-11) |
+| X-26 | cursor | P0 | Keyboard/mouse tools: no hard-coded token, Unicode-safe typing, full key set, protected-window hotkeys, new volume API | C-24, C-27, C-26, X-03, X-11, K-16 (DesktopToolPolicy) | DONE (cursor, 01 Oct 21:05 PKT) |
 | X-27 | cursor | P0 | Notepad automation: safe paths, PID-bound window, threaded typing, verified save, graceful close | C-24, C-27, C-28, C-26, X-03, X-11, K-16 (DesktopToolPolicy) | BLOCKED (waiting C-24,C-27,C-28,C-26,X-11) |
 | X-29 | cursor | P0 | System control guards: confirmation, cancel_shutdown, real sleep vs hibernate, non-blocking recycle bin | C-24, C-27, C-28, X-11, C-30, K-16 (DesktopToolPolicy), K-17 (ToolNamesV2) | BLOCKED (waiting C-24,C-27,C-28,C-30,X-11) |
 | X-30 | cursor | P0 | File access server: allow-listed root (D:/ kept when present), LAN bind, token path, TTL, audit | C-24, C-28, C-26, X-03, X-11, C-30, K-15 (DesktopConfigKeys), K-45 (C-CONFIRM-1) | BLOCKED (waiting C-24,C-28,C-26,C-30,X-11) |

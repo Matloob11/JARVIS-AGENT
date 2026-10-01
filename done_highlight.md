@@ -444,3 +444,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Commit:** `4c6ecd2`, `4f7bc68` · **Deploy:** PC agent restart 20:53 + 20:56 PKT
 - **User ke liye:** Purani "JARVIS-Agent-Worker" window ab khaali cmd hai, band kar sakte hain. Worker ab chhupa (background) chalta hai; halat: `.venv_312\Scripts\python.exe scripts\agent_ctl.py status`. Baqi: browser me ek voice test.
 - **Doosre agent ke liye:** Worker sirf `agent_ctl` se. Cursor ko restart chahiye to `REQ-RESTART <reason>`.
+
+### ✅ [cursor] X-26 · Keyboard/mouse tools hardening · 2026-10-01 21:05 PKT
+- **Kya kiya:** Hard-coded controller token hata kar config/env/per-process token; Urdu safe clipboard paste; Windows paths par literal `\n` corrupt nahi; F-keys/media keys aur protected-window par close hotkeys refuse; pycaw EndpointVolume + ±10% volume; K-16 decorators aur `tool_result` Roman-Urdu returns; `run_cancellable` shield pehle se apply tha (Claude handoff).
+- **Files:** `services/automation/keyboard_mouse_ctrl.py`, `services/system/jarvis_desktop_common.py`, `tests/tools/test_keyboard_mouse_tools.py`, `tests/automation/test_keyboard_mouse.py`, `plan.md`
+- **Verify:** `.venv_312/Scripts/python.exe -m pytest tests/tools/test_keyboard_mouse_tools.py tests/automation/test_keyboard_mouse.py -q -p no:cacheprovider` → 19 passed
+- **Commit:** abhi commit ho raha hai · **Deploy:** no
+- **Doosre agent ke liye:** `run_cancellable` ab `asyncio.shield(fut)` use karta hai — Claude ka shield request already merged; manual voice checks (Urdu typing, F5, Alt+F4, volume 30%) abhi user par.

@@ -5,17 +5,18 @@ Keyboard and mouse control tools for the JARVIS agent.
 
 # pylint: disable=no-member, protected-access, broad-exception-caught
 
+from __future__ import annotations
+
 import asyncio
-import codecs
 import os
+import re
+import secrets
 import time
 from ctypes import POINTER, cast
 from datetime import datetime
+from typing import Any, Callable, Optional
 
 import pyautogui
-import pyperclip
-
-# Third-party imports
 import pythoncom
 import pywintypes
 from comtypes import CLSCTX_ALL
@@ -26,15 +27,162 @@ from pynput.mouse import Button
 from pynput.mouse import Controller as MouseController
 
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
-
-# First-party imports
+from services.system.jarvis_desktop_common import (
+    WindowInfo,
+    clipboard_paste_text,
+    desktop_control_enabled,
+    is_browser_window,
+    is_protected_window,
+    tool_result,
+)
+from services.utils.jarvis_config import config
 from services.utils.jarvis_logger import setup_logger
 
-# Setup logging
 logger = setup_logger("JARVIS-KEYBOARD-MOUSE")
 
-# Security Token fallback
-DEFAULT_TOKEN = os.getenv("CONTROLLER_TOKEN", "JARVIS_SECURE_TOKEN_2024")
+_bg_tasks: set[asyncio.Task[Any]] = set()
+
+_TOKEN_WARNING_EMITTED = False
+
+_WINDOWS_PATH_RE = re.compile(r"(?:[A-Za-z]:\\|\\\\)")
+
+_CLOSE_COMBOS = frozenset(
+    {
+        frozenset({"alt", "f4"}),
+        frozenset({"ctrl", "w"}),
+        frozenset({"ctrl", "q"}),
+        frozenset({"ctrl", "shift", "w"}),
+    }
+)
+
+_KEY_ALIASES = {
+    "control": "ctrl",
+    "escape": "esc",
+    "return": "enter",
+    "del": "delete",
+    "pgup": "page_up",
+    "pgdn": "page_down",
+    "windows": "win",
+}
+
+
+def _init_default_token() -> str:
+    global _TOKEN_WARNING_EMITTED
+    tok = getattr(config, "controller_token", None) or os.getenv("CONTROLLER_TOKEN")
+    if tok:
+        return str(tok)
+    if not _TOKEN_WARNING_EMITTED:
+        logger.warning("CONTROLLER_TOKEN missing; using per-process token")
+        _TOKEN_WARNING_EMITTED = True
+    return secrets.token_urlsafe(32)
+
+
+DEFAULT_TOKEN = _init_default_token()
+
+
+def _normalize_key_name(key: str) -> str:
+    k = (key or "").lower().strip()
+    return _KEY_ALIASES.get(k, k)
+
+
+def _is_valid_key_token(key: str) -> bool:
+    k = _normalize_key_name(key)
+    if len(key) == 1 and key.isprintable():
+        return True
+    return k in SafeController.BASE_SPECIAL_KEYS or k in SafeController.LETTER_KEYS
+
+
+def _is_close_combo(keys: list[str]) -> bool:
+    norm = frozenset(_normalize_key_name(k) for k in keys)
+    return norm in _CLOSE_COMBOS
+
+
+def _maybe_unescape_literals(text: str) -> str:
+    if "\n" in text or "\r" in text:
+        return text
+    if _WINDOWS_PATH_RE.search(text):
+        return text
+    if "\\n" in text or "\\t" in text:
+        text = text.replace("\\n", "\n").replace("\\t", "\t")
+    return text
+
+
+def _process_name_for_pid(pid: int) -> str:
+    try:
+        import psutil
+
+        return psutil.Process(pid).name() or ""
+    except Exception:
+        return ""
+
+
+def _foreground_window_info() -> Optional[WindowInfo]:
+    try:
+        import win32gui
+        import win32process
+    except Exception:
+        return None
+    try:
+        hwnd = win32gui.GetForegroundWindow()
+        if not hwnd:
+            return None
+        title = win32gui.GetWindowText(hwnd) or ""
+        _tid, pid = win32process.GetWindowThreadProcessId(hwnd)
+        return WindowInfo(
+            hwnd=int(hwnd),
+            title=title,
+            pid=int(pid),
+            process_name=_process_name_for_pid(int(pid)),
+        )
+    except Exception:
+        return None
+
+
+def _press_hotkey_risk(args: dict[str, Any]) -> str:
+    keys = args.get("keys")
+    if isinstance(keys, list) and _is_close_combo(keys):
+        fg = _foreground_window_info()
+        if fg and is_browser_window(fg):
+            return "medium"
+    return "low"
+
+
+def _tool_out(tool: str, raw: Any) -> dict[str, Any]:
+    if isinstance(raw, dict) and raw.get("status"):
+        if raw.get("tool") is None:
+            raw = {**raw, "tool": tool}
+        return raw
+    if isinstance(raw, tuple) and len(raw) == 2:
+        msg, data = raw
+        return tool_result("success", str(msg), tool=tool, data=data if isinstance(data, dict) else None)
+    if isinstance(raw, str):
+        if raw.startswith("❌") or "Invalid key" in raw or "Failed key" in raw:
+            return tool_result("error", raw.replace("❌", "").strip(), tool=tool)
+        if raw.startswith("🛑"):
+            return tool_result(
+                "error",
+                "Controller abhi active nahi hai.",
+                tool=tool,
+                error_code="DESKTOP_CONTROL_DISABLED",
+            )
+        return tool_result("success", raw, tool=tool)
+    return tool_result("success", str(raw), tool=tool)
+
+
+def _close_combo_guard(keys: list[str], tool: str) -> Optional[dict[str, Any]]:
+    if not _is_close_combo(keys):
+        return None
+    fg = _foreground_window_info()
+    if fg and is_protected_window(fg):
+        return tool_result(
+            "error",
+            "Yeh shortcut protected window par allowed nahi hai.",
+            tool=tool,
+            error_code="DESKTOP_CONTROL_DISABLED",
+            hint="JARVIS UI ya dev tool focus mein close shortcut refuse hota hai.",
+        )
+    return None
+
 
 # ---------------------
 # SafeController Class
@@ -47,21 +195,93 @@ class SafeController:
     Requires activation token for security.
     """
 
+    LETTER_KEYS = set("abcdefghijklmnopqrstuvwxyz1234567890")
+
+    BASE_SPECIAL_KEYS = {
+        "enter",
+        "space",
+        "tab",
+        "shift",
+        "ctrl",
+        "alt",
+        "esc",
+        "backspace",
+        "delete",
+        "up",
+        "down",
+        "left",
+        "right",
+        "caps_lock",
+        "cmd",
+        "win",
+        "home",
+        "end",
+        "page_up",
+        "page_down",
+        "insert",
+        "menu",
+        "print_screen",
+        "pause",
+        "num_lock",
+        "scroll_lock",
+        "media_play_pause",
+        "media_volume_mute",
+        "media_volume_down",
+        "media_volume_up",
+        "media_next",
+        "media_previous",
+    }
+
     def __init__(self):
         self.active = False
         self.activation_time = None
         self.keyboard = KeyboardController()
         self.mouse = MouseController()
-        self.valid_keys = set("abcdefghijklmnopqrstuvwxyz1234567890")
         self.special_keys = {
-            "enter": Key.enter, "space": Key.space, "tab": Key.tab,
-            "shift": Key.shift, "ctrl": Key.ctrl, "alt": Key.alt,
-            "esc": Key.esc, "backspace": Key.backspace, "delete": Key.delete,
-            "up": Key.up, "down": Key.down, "left": Key.left, "right": Key.right,
-            "caps_lock": Key.caps_lock, "cmd": Key.cmd, "win": Key.cmd,
-            "home": Key.home, "end": Key.end,
-            "page_up": Key.page_up, "page_down": Key.page_down,
+            "enter": Key.enter,
+            "space": Key.space,
+            "tab": Key.tab,
+            "shift": Key.shift,
+            "ctrl": Key.ctrl,
+            "alt": Key.alt,
+            "esc": Key.esc,
+            "backspace": Key.backspace,
+            "delete": Key.delete,
+            "up": Key.up,
+            "down": Key.down,
+            "left": Key.left,
+            "right": Key.right,
+            "caps_lock": Key.caps_lock,
+            "cmd": Key.cmd,
+            "win": Key.cmd,
+            "home": Key.home,
+            "end": Key.end,
+            "page_up": Key.page_up,
+            "page_down": Key.page_down,
+            "insert": Key.insert,
+            "menu": Key.menu,
+            "print_screen": Key.print_screen,
+            "pause": Key.pause,
+            "num_lock": Key.num_lock,
+            "scroll_lock": Key.scroll_lock,
+            "media_play_pause": Key.media_play_pause,
+            "media_volume_mute": Key.media_volume_mute,
+            "media_volume_down": Key.media_volume_down,
+            "media_volume_up": Key.media_volume_up,
+            "media_next": Key.media_next,
+            "media_previous": Key.media_previous,
+            "control": Key.ctrl,
+            "escape": Key.esc,
+            "return": Key.enter,
+            "del": Key.delete,
+            "pgup": Key.page_up,
+            "pgdn": Key.page_down,
+            "windows": Key.cmd,
         }
+        for i in range(1, 13):
+            name = f"f{i}"
+            self.special_keys[name] = getattr(Key, name)
+            self.BASE_SPECIAL_KEYS.add(name)
 
     async def _get_volume_interface(self):
         """
@@ -69,46 +289,46 @@ class SafeController:
         Ensures COM is initialized properly.
         """
         try:
-            # Initialize COM for the current thread
             try:
                 pythoncom.CoInitialize()
             except pywintypes.error:
-                # Already initialized or other COM error
                 pass
 
             devices = AudioUtilities.GetSpeakers()
-            if hasattr(devices, 'volume'):
+            endpoint = getattr(devices, "EndpointVolume", None)
+            if endpoint is not None:
+                return endpoint
+
+            if hasattr(devices, "volume"):
                 return devices.volume
 
-            interface = devices.Activate(
-                IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+            interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
             return cast(interface, POINTER(IAudioEndpointVolume))
         except (pywintypes.error, AttributeError, OSError) as e:
             logger.warning("Volume interface error: %s", e)
             try:
                 device_enumerator = AudioUtilities.GetDeviceEnumerator()
-                default_device = device_enumerator.GetDefaultAudioEndpoint(
-                    0, 1)
-                interface = default_device.Activate(
-                    IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+                default_device = device_enumerator.GetDefaultAudioEndpoint(0, 1)
+                interface = default_device.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
                 return cast(interface, POINTER(IAudioEndpointVolume))
             except (pywintypes.error, AttributeError, OSError, Exception) as final_e:
                 logger.warning("Volume interface fallback error: %s", final_e)
                 return None
 
-    def resolve_key(self, key):
+    def resolve_key(self, key: str):
         """
         Resolves a string key name to a pynput Key object or returns the original character.
         """
-        return self.special_keys.get(key.lower(), key)
+        return self.special_keys.get(_normalize_key_name(key), key)
 
     def log(self, action: str):
         """
-        Logs a controller action.
+        Logs a controller action (names and lengths only — never typed text or tokens).
         """
         logger.info("Controller Action: %s", action)
-        # Move log to unified logs directory
-        log_path = os.path.join("logs", "control_log.txt")
+        log_dir = os.path.join(getattr(config, "project_root", os.getcwd()), "logs")
+        os.makedirs(log_dir, exist_ok=True)
+        log_path = os.path.join(log_dir, "control_log.txt")
         with open(log_path, "a", encoding="utf-8") as f:
             f.write(f"{datetime.now()}: {action}\n")
 
@@ -117,7 +337,7 @@ class SafeController:
         Activates the controller if the provided token matches the environment token.
         """
         if token != DEFAULT_TOKEN:
-            self.log(f"Activation attempt failed. Provided: {token}")
+            self.log("activation refused")
             return
         self.active = True
         self.activation_time = time.time()
@@ -137,13 +357,9 @@ class SafeController:
         return self.active
 
     async def move_cursor(self, direction: str, distance: int = 100):
-        """
-        Moves the mouse cursor in the specified direction by a given distance.
-        """
         if not self.is_active():
             return "🛑 Controller is inactive."
         x, y = self.mouse.position
-        # Get screen size to clamp coordinates
         screen_width, screen_height = pyautogui.size()
         target_x, target_y = x, y
 
@@ -159,12 +375,9 @@ class SafeController:
         self.mouse.position = (target_x, target_y)
         await asyncio.sleep(0.2)
         self.log(f"Mouse moved {direction}")
-        return f"Moved mouse {direction}."
+        return f"Mouse {direction} move ho gaya."
 
     async def mouse_click(self, button: str = "left"):
-        """
-        Performs a mouse click with the specified button.
-        """
         if not self.is_active():
             return "🛑 Controller is inactive."
         if button == "left":
@@ -175,12 +388,9 @@ class SafeController:
             self.mouse.click(Button.left, 2)
         await asyncio.sleep(0.2)
         self.log(f"Mouse clicked: {button}")
-        return f"{button.capitalize()} click."
+        return f"{button.capitalize()} click ho gaya."
 
     async def scroll_cursor(self, direction: str, amount: int = 10):
-        """
-        Scrolls the mouse wheel in the specified direction.
-        """
         if not self.is_active():
             return "🛑 Controller is inactive."
         try:
@@ -193,43 +403,24 @@ class SafeController:
             pyautogui.scroll(amount * 100)
         await asyncio.sleep(0.2)
         self.log(f"Mouse scrolled {direction}")
-        return f"Scrolled {direction}"
+        return f"Scroll {direction} ho gaya."
 
     async def type_text(self, text: str, interval: float = 0.0, force_typing: bool = False):
-        """
-        Simulates typing text. For long strings (> 50 chars), uses clipboard (Ctrl+V) unless force_typing is True.
-        """
         if not self.is_active():
             return "🛑 Controller is inactive."
 
-        # Fix: convert escaped sequences into real ones
-        text = codecs.decode(text, "unicode_escape")
-
-        # Check for non-ASCII (Unicode/Urdu) characters
+        text = _maybe_unescape_literals(text)
         is_unicode = any(ord(char) > 127 for char in text)
 
         if not force_typing and (len(text) > 50 or is_unicode):
-            # Use clipboard for fast entry of long text or reliable Unicode support
-            try:
-                pyperclip.copy(text)
-                await asyncio.sleep(0.1)
-                self.keyboard.press(Key.ctrl)
-                self.keyboard.press('v')
-                self.keyboard.release('v')
-                self.keyboard.release(Key.ctrl)
-                await asyncio.sleep(0.1)
-                reason = "Unicode" if is_unicode else "length"
-                self.log(
-                    f"Fast-typed (clipboard) due to {reason}: {len(text)} chars.")
-                return f"Fast-typed {len(text)} characters using clipboard ({reason})."
-            except (ImportError, OSError) as e:
-                # Fallback if pyperclip is somehow missing or fails
-                logger.warning("Clipboard fast-typing failed, falling back to character typing: %s", e)
+            pasted = await clipboard_paste_text(text, restore=True)
+            if pasted:
+                reason = "unicode" if is_unicode else "length"
+                self.log(f"type_text clipboard ({reason}) len={len(text)}")
+                return f"Text paste ho gaya ({len(text)} characters)."
+            logger.warning("Clipboard paste failed; falling back to per-char typing")
 
-        # Traditional typing for short strings or if force_typing is True
-        # Visible typing speed adjustment: Default to 0.02 for visibility
         actual_interval = interval if interval > 0 else 0.02
-
         for char in text:
             try:
                 if char == "\n":
@@ -241,22 +432,30 @@ class SafeController:
                 elif char.isprintable():
                     self.keyboard.press(char)
                     self.keyboard.release(char)
-
                 if actual_interval > 0:
                     await asyncio.sleep(actual_interval)
             except (ValueError, KeyError, AttributeError):
                 continue
 
-        self.log(f"Typed text: {text[:30]}...")
-        return f"Typed: {text[:30]}..."
+        self.log(f"type_text typed len={len(text)}")
+        return f"Text type ho gaya ({len(text)} characters)."
 
-    async def press_key(self, key: str):
-        """
-        Simulates a single key press.
-        """
+    async def type_code_animation(self, code: str, interval: float = 0.015):
         if not self.is_active():
             return "🛑 Controller is inactive."
-        if key.lower() not in self.special_keys and key.lower() not in self.valid_keys:
+        code = (code or "")[:6000]
+        head = code[:1500]
+        tail = code[1500:]
+        await self.type_text(head, interval=interval, force_typing=True)
+        if tail:
+            await self.type_text(tail, force_typing=False)
+        self.log(f"type_code_animation total len={len(code)}")
+        return f"Code animation complete ({len(code)} characters)."
+
+    async def press_key(self, key: str):
+        if not self.is_active():
+            return "🛑 Controller is inactive."
+        if not _is_valid_key_token(key):
             return f"❌ Invalid key: {key}"
         k = self.resolve_key(key)
         try:
@@ -265,18 +464,15 @@ class SafeController:
         except (ValueError, KeyError, AttributeError) as e:
             return f"❌ Failed key: {key} — {e}"
         await asyncio.sleep(0.2)
-        self.log(f"Pressed key: {key}")
-        return f"Key '{key}' pressed."
+        self.log(f"Pressed key: {_normalize_key_name(key)}")
+        return f"Key '{key}' press ho gaya."
 
     async def press_hotkey(self, keys: list[str]):
-        """
-        Simulates a hotkey combination (e.g., Ctrl+C).
-        """
         if not self.is_active():
             return "🛑 Controller is inactive."
         resolved = []
         for k in keys:
-            if k.lower() not in self.special_keys and k.lower() not in self.valid_keys:
+            if not _is_valid_key_token(k):
                 return f"❌ Invalid key in hotkey: {k}"
             resolved.append(self.resolve_key(k))
 
@@ -285,50 +481,57 @@ class SafeController:
         for k in reversed(resolved):
             self.keyboard.release(k)
         await asyncio.sleep(0.3)
-        self.log(f"Pressed hotkey: {' + '.join(keys)}")
-        return f"Hotkey {' + '.join(keys)} pressed."
+        combo = " + ".join(_normalize_key_name(k) for k in keys)
+        self.log(f"Pressed hotkey: {combo}")
+        return f"Hotkey {combo} press ho gaya."
 
     async def control_volume(self, action: str):
-        """
-        Controls system volume (up, down, mute, unmute).
-        """
         if not self.is_active():
             return "🛑 Controller is inactive."
 
+        action = (action or "").lower().strip()
         volume = await self._get_volume_interface()
-        if volume:
+        data: dict[str, Any] = {}
+
+        if volume and action in {"mute", "unmute", "up", "down"}:
             try:
                 if action == "mute":
                     volume.SetMute(1, None)
                     self.log("Volume muted")
-                    return "🔊 Volume mute kar diya gaya hai."
+                    return "Volume mute ho gaya.", data
                 if action == "unmute":
                     volume.SetMute(0, None)
                     self.log("Volume unmuted")
-                    return "🔊 Volume unmute kar diya gaya hai."
+                    return "Volume unmute ho gaya.", data
+                if action in {"up", "down"}:
+                    current = float(volume.GetMasterVolumeLevelScalar())
+                    delta = 0.10 if action == "up" else -0.10
+                    new_val = max(0.0, min(1.0, current + delta))
+                    volume.SetMasterVolumeLevelScalar(new_val, None)
+                    pct = int(round(new_val * 100))
+                    data["percent"] = pct
+                    self.log(f"Volume {action} to {pct}%")
+                    return f"Volume ab {pct} percent hai.", data
             except (pywintypes.error, AttributeError) as e:
-                self.log(f"Volume action error: {e}")
+                logger.debug("Volume scalar path failed: %s", e)
 
-        # Up/Down or fallback
         if action == "up":
             pyautogui.press("volumeup")
         elif action == "down":
             pyautogui.press("volumedown")
         elif action == "mute":
             pyautogui.press("volumemute")
+        else:
+            return f"❌ Unknown volume action: {action}", data
 
         await asyncio.sleep(0.2)
-        self.log(f"Volume control: {action}")
-        return f"Volume {action}."
+        self.log(f"Volume control fallback: {action}")
+        return f"Volume {action} (media key fallback).", data
 
     async def set_volume_percentage(self, percentage: int):
-        """
-        Sets system volume to a specific percentage (0-100).
-        """
         if not self.is_active():
             return "🛑 Controller is inactive."
 
-        # Ensure COM is initialized for this call
         try:
             pythoncom.CoInitialize()
         except pywintypes.error:
@@ -337,20 +540,17 @@ class SafeController:
         try:
             volume = await self._get_volume_interface()
             if not volume:
-                return "❌ Volume control interface nahi mila."
+                return "❌ Volume control interface nahi mila.", {}
 
-            percentage = max(0, min(100, percentage))
+            percentage = max(0, min(100, int(percentage)))
             volume.SetMasterVolumeLevelScalar(percentage / 100, None)
             self.log(f"Volume set to {percentage}%")
-            return f"Volume {percentage} percent par set kar diya gaya hai."
+            return f"Volume {percentage} percent par set ho gaya.", {"percent": percentage}
         except (pywintypes.error, AttributeError, ValueError, OSError) as set_e:
-            self.log(f"Volume set error: {set_e}")
-            return f"❌ Volume set nahi ho paaya: {set_e}"
+            self.log(f"Volume set error: {set_e!s}")
+            return f"❌ Volume set nahi ho paaya: {set_e}", {}
 
     async def swipe_gesture(self, direction: str):
-        """
-        Simulates a mouse swipe gesture in a given direction.
-        """
         if not self.is_active():
             return "🛑 Controller is inactive."
         screen_width, screen_height = pyautogui.size()
@@ -372,7 +572,7 @@ class SafeController:
             logger.warning("Swipe gesture failed or aborted: %s", e)
         await asyncio.sleep(0.5)
         self.log(f"Swipe gesture: {direction}")
-        return f"Swipe {direction} done."
+        return f"Swipe {direction} complete ho gaya."
 
 
 controller = SafeController()
@@ -388,186 +588,105 @@ async def _safe_notify(notify_func, *args, **kwargs):
         pass
 
 
-async def with_temporary_activation(fn, *args, **kwargs):
+async def with_temporary_activation(
+    fn: Callable[..., Any],
+    *args: Any,
+    tool: str = "",
+    **kwargs: Any,
+) -> Any:
     """
     Activates the controller temporarily for the duration of a single function call.
-    Fixed: Removed the 2-second sleep to improve responsiveness.
     """
+    if not desktop_control_enabled():
+        return tool_result(
+            "error",
+            "Desktop control band hai; keyboard/mouse abhi use nahi ho sakta.",
+            tool=tool or getattr(fn, "__name__", "desktop_tool"),
+            error_code="DESKTOP_CONTROL_DISABLED",
+        )
+
     from services.utils.jarvis_bridge import notify_thinking
-    print(f"TEMP ACTIVATION: {fn.__name__} | args: {args}")
+
+    logger.debug(fn.__name__)
     await _safe_notify(notify_thinking, f"Sir, main controller action perform kar raha hoon: {fn.__name__}")
     controller.activate(DEFAULT_TOKEN)
     try:
-        result = await fn(*args, **kwargs)
-        return result
+        return await fn(*args, **kwargs)
     finally:
-        # Ensure deactivation even on failure
         controller.deactivate()
 
 
-@jarvis_tool
+@jarvis_tool(timeout=10, risk="low", exclusive="desktop_input")
 async def move_cursor_tool(direction: str, distance: int = 100):
-    """
-    Temporarily activates the controller and moves the mouse cursor in a specified direction.
-
-    Args:
-        direction (str): Direction to move. e.g. ["up", "down", "left", "right"].
-        distance (int, optional): Pixels to move. Defaults to 100.
-
-    Returns:
-        str: A message describing the mouse movement action.
-
-    Note:
-        The controller is automatically activated before the action and deactivated afterward.
-    """
-
-    return await with_temporary_activation(controller.move_cursor, direction, distance)
+    raw = await with_temporary_activation(
+        controller.move_cursor, direction, distance, tool="move_cursor_tool"
+    )
+    return _tool_out("move_cursor_tool", raw)
 
 
-@jarvis_tool
+@jarvis_tool(timeout=10, risk="low", exclusive="desktop_input")
 async def mouse_click_tool(button: str = "left"):
-    """
-    Temporarily activates the controller and performs a mouse click.
-
-    Simulates clicking behavior for automation or voice command triggers.
-
-    Args:
-        button (str, optional): Type of mouse click to perform.
-            Must be one of ["left", "right", "double"]. Defaults to "left".
-
-    Returns:
-        str: A message indicating the type of mouse click performed.
-
-    Notes:
-        - "double" simulates a double left-click.
-        - Useful for GUI automation or hands-free system interaction.
-    """
-
-    return await with_temporary_activation(controller.mouse_click, button)
+    raw = await with_temporary_activation(controller.mouse_click, button, tool="mouse_click_tool")
+    return _tool_out("mouse_click_tool", raw)
 
 
-@jarvis_tool
+@jarvis_tool(timeout=10, risk="low", exclusive="desktop_input")
 async def scroll_cursor_tool(direction: str, amount: int = 10):
-    """
-    Scrolls the screen vertically in the specified direction.
-
-    Useful for commands like "scroll down" or "upar karo".
-
-    Args:
-        direction (str): The scroll direction. Must be either "up" or "down".
-        amount (int, optional): The scroll intensity or number of scroll steps. Defaults to 10.
-
-    Returns:
-        str: A message indicating the direction and magnitude of the scroll action.
-
-    Notes:
-        - Positive `amount` values scroll further; can be tuned for smooth or fast scrolling.
-        - Designed for fuzzy natural language control.
-    """
-
-    return await with_temporary_activation(controller.scroll_cursor, direction, amount)
+    raw = await with_temporary_activation(
+        controller.scroll_cursor, direction, amount, tool="scroll_cursor_tool"
+    )
+    return _tool_out("scroll_cursor_tool", raw)
 
 
-@jarvis_tool
+@jarvis_tool(timeout=60, risk="low", raw_args=("text",), exclusive="desktop_input")
 async def type_text_tool(text: str, interval: float = 0.0, force_typing: bool = False):
-    """
-    Simulates typing text.
-    
-    Args:
-        text (str): String to type.
-        interval (float, optional): Typing speed between chars.
-        force_typing (bool, optional): Skip clipboard, always type.
-    """
-    return await with_temporary_activation(controller.type_text, text, interval, force_typing)
+    raw = await with_temporary_activation(
+        controller.type_text, text, interval, force_typing, tool="type_text_tool"
+    )
+    return _tool_out("type_text_tool", raw)
 
 
-@jarvis_tool
+@jarvis_tool(timeout=180, risk="low", raw_args=("code",), exclusive="desktop_input")
 async def type_code_animation_tool(code: str):
-    """
-    Types code with a visible 'hacker style' speed animation.
-    Useful for Notepad/Writing demonstrations.
-    """
-    # 0.015 is fast but visually distinct
-    return await with_temporary_activation(controller.type_text, code, interval=0.015, force_typing=True)
+    raw = await with_temporary_activation(
+        controller.type_code_animation, code, tool="type_code_animation_tool"
+    )
+    return _tool_out("type_code_animation_tool", raw)
 
 
-@jarvis_tool
+@jarvis_tool(timeout=10, risk="low", exclusive="desktop_input")
 async def press_key_tool(key: str):
-    """
-    Simulates pressing a single key on the keyboard, like Enter, Esc, or any letter/number.
-
-    Useful for commands like "Enter dabao", "Escape dabao", or "A press karo".
-
-    Args:
-        key (str): The name of the key to press (e.g., "enter", "a", "ctrl", "esc").
-
-    Returns:
-        str: A message confirming the key press or an error if the key is invalid.
-    """
-
-    return await with_temporary_activation(controller.press_key, key)
+    blocked = _close_combo_guard([key], "press_key_tool")
+    if blocked:
+        return blocked
+    raw = await with_temporary_activation(controller.press_key, key, tool="press_key_tool")
+    return _tool_out("press_key_tool", raw)
 
 
-@jarvis_tool
+@jarvis_tool(timeout=10, risk=_press_hotkey_risk, exclusive="desktop_input")
 async def press_hotkey_tool(keys: list[str]):
-    """
-    Simulates pressing a keyboard shortcut like Ctrl+S, Alt+F4, etc.
-
-    Use this when the user says something like "save karo", "window band karo",
-    or "refresh kar do".
-
-    Args:
-        keys (List[str]): List of key names to press together (e.g., ["ctrl", "s"]).
-
-    Returns:
-        str: A message indicating which hotkey combination was pressed.
-    """
-
-    return await with_temporary_activation(controller.press_hotkey, keys)
+    blocked = _close_combo_guard(keys, "press_hotkey_tool")
+    if blocked:
+        return blocked
+    raw = await with_temporary_activation(controller.press_hotkey, keys, tool="press_hotkey_tool")
+    return _tool_out("press_hotkey_tool", raw)
 
 
-@jarvis_tool
+@jarvis_tool(timeout=10, risk="low")
 async def control_volume_tool(action: str):
-    """
-    Changes the system volume using keyboard emulation.
-
-    Use this when the user says something like "volume badhao", "mute kar do",
-    or "lower the sound".
-
-    Args:
-        action (str): One of ["up", "down", "mute"].
-
-    Returns:
-        str: A message confirming the volume change.
-    """
-
-    return await with_temporary_activation(controller.control_volume, action)
+    raw = await with_temporary_activation(controller.control_volume, action, tool="control_volume_tool")
+    return _tool_out("control_volume_tool", raw)
 
 
-@jarvis_tool
+@jarvis_tool(timeout=10, risk="low")
 async def set_volume_tool(percentage: int):
-    """
-    Sets the system volume to a specific percentage.
-
-    Args:
-        percentage (int): The volume level to set (0 to 100).
-    """
-    return await with_temporary_activation(controller.set_volume_percentage, percentage)
+    raw = await with_temporary_activation(
+        controller.set_volume_percentage, percentage, tool="set_volume_tool"
+    )
+    return _tool_out("set_volume_tool", raw)
 
 
-@jarvis_tool
+@jarvis_tool(timeout=10, risk="low", exclusive="desktop_input")
 async def swipe_gesture_tool(direction: str):
-    """
-    Simulates a swipe gesture on the screen using the mouse.
-
-    Use this when the user wants to swipe in a direction like up, down, left, or right —
-    for example: "neeche scroll karo", "left swipe karo", or "screen upar karo".
-
-    Args:
-        direction (str): One of ["up", "down", "left", "right"].
-
-    Returns:
-        str: A message describing the swipe action.
-    """
-
-    return await with_temporary_activation(controller.swipe_gesture, direction)
+    raw = await with_temporary_activation(controller.swipe_gesture, direction, tool="swipe_gesture_tool")
+    return _tool_out("swipe_gesture_tool", raw)

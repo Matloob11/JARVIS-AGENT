@@ -1,45 +1,49 @@
 import pytest
-import asyncio
-from unittest.mock import MagicMock, patch
-import keyboard_mouse_ctrl
-from keyboard_mouse_ctrl import (
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import services.automation.keyboard_mouse_ctrl as keyboard_mouse_ctrl
+from services.automation.keyboard_mouse_ctrl import (
     SafeController,
+    control_volume_tool,
     move_cursor_tool,
     mouse_click_tool,
+    press_hotkey_tool,
+    press_key_tool,
     scroll_cursor_tool,
     type_text_tool,
-    press_key_tool,
-    press_hotkey_tool,
-    control_volume_tool,
-    DEFAULT_TOKEN
 )
+
+
+@pytest.fixture(autouse=True)
+def _stable_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(keyboard_mouse_ctrl, "DEFAULT_TOKEN", "test-controller-token")
 
 
 @pytest.fixture
 def mock_pyautogui():
-    with patch("keyboard_mouse_ctrl.pyautogui") as mock:
+    with patch("services.automation.keyboard_mouse_ctrl.pyautogui") as mock:
         mock.size.return_value = (1920, 1080)
         yield mock
 
 
 @pytest.fixture
 def mock_pynput():
-    with patch("keyboard_mouse_ctrl.KeyboardController") as mock_kb:
-        with patch("keyboard_mouse_ctrl.MouseController") as mock_mouse:
+    with patch("services.automation.keyboard_mouse_ctrl.KeyboardController") as mock_kb:
+        with patch("services.automation.keyboard_mouse_ctrl.MouseController") as mock_mouse:
             yield mock_kb, mock_mouse
 
 
 @pytest.fixture
 def mock_volume():
-    with patch("keyboard_mouse_ctrl.AudioUtilities") as mock_audio:
-        with patch("keyboard_mouse_ctrl.cast") as mock_cast:
+    with patch("services.automation.keyboard_mouse_ctrl.AudioUtilities") as mock_audio:
+        with patch("services.automation.keyboard_mouse_ctrl.cast") as mock_cast:
             yield mock_audio, mock_cast
 
 
 @pytest.mark.asyncio
 async def test_activate_deactivate():
     controller = SafeController()
-    token = DEFAULT_TOKEN
+    token = keyboard_mouse_ctrl.DEFAULT_TOKEN
     assert controller.is_active() is False
     controller.activate("wrong_token")
     assert controller.is_active() is False
@@ -90,70 +94,90 @@ async def test_type_text_method():
     controller.keyboard = MagicMock()
 
     await controller.type_text("Hi")
-    # type_text calls press/release for each char
     assert controller.keyboard.press.call_count == 2
     assert controller.keyboard.release.call_count == 2
 
 
 @pytest.mark.asyncio
 async def test_move_cursor_tool(mock_pyautogui):
-    with patch("keyboard_mouse_ctrl.controller.activate"):
-        with patch("keyboard_mouse_ctrl.controller.is_active", return_value=True):
+    with patch("services.automation.keyboard_mouse_ctrl.controller.activate"):
+        with patch("services.automation.keyboard_mouse_ctrl.controller.is_active", return_value=True):
             res = await move_cursor_tool("up", 50)
-            assert "Moved mouse up" in res
-            # Directional moves are absolute positions in the code, but it uses self.mouse.position
-            # Actually, I should check the return string mostly as moveRel isn't directly called in move_cursor
-            # It sets self.mouse.position instead.
+            assert res["status"] == "success"
+            assert "move" in res["message"].lower()
 
 
 @pytest.mark.asyncio
 async def test_mouse_click_tool(mock_pyautogui):
-    with patch("keyboard_mouse_ctrl.controller.activate"):
-        with patch("keyboard_mouse_ctrl.controller.is_active", return_value=True):
-            res = await mouse_click_tool("left")
-            assert "Left click" in res
+    with patch.object(
+        keyboard_mouse_ctrl.controller,
+        "mouse_click",
+        new=AsyncMock(return_value="Left click ho gaya."),
+    ):
+        res = await mouse_click_tool("left")
+        assert res["status"] == "success"
+        assert "click" in res["message"].lower()
 
 
 @pytest.mark.asyncio
 async def test_scroll_cursor_tool(mock_pyautogui):
-    with patch("keyboard_mouse_ctrl.controller.activate"):
-        with patch("keyboard_mouse_ctrl.controller.is_active", return_value=True):
-            res = await scroll_cursor_tool("down", 10)
-            assert "Scrolled down" in res
+    with patch.object(
+        keyboard_mouse_ctrl.controller,
+        "scroll_cursor",
+        new=AsyncMock(return_value="Scroll down ho gaya."),
+    ):
+        res = await scroll_cursor_tool("down", 10)
+        assert res["status"] == "success"
+        assert "scroll" in res["message"].lower()
 
 
 @pytest.mark.asyncio
 async def test_type_text_tool():
-    with patch("keyboard_mouse_ctrl.controller.activate"):
-        with patch("keyboard_mouse_ctrl.controller.is_active", return_value=True):
-            res = await type_text_tool("Hello World")
-            assert "Typed: Hello World" in res
+    with patch.object(
+        keyboard_mouse_ctrl.controller,
+        "type_text",
+        new=AsyncMock(return_value="Text type ho gaya (11 characters)."),
+    ):
+        res = await type_text_tool("Hello World")
+        assert res["status"] == "success"
+        assert "characters" in res["message"]
 
 
 @pytest.mark.asyncio
 async def test_press_key_tool():
-    with patch("keyboard_mouse_ctrl.controller.activate"):
-        with patch("keyboard_mouse_ctrl.controller.is_active", return_value=True):
-            res = await press_key_tool("enter")
-            assert "Key 'enter' pressed" in res
+    with patch.object(
+        keyboard_mouse_ctrl.controller,
+        "press_key",
+        new=AsyncMock(return_value="Key 'enter' press ho gaya."),
+    ):
+        res = await press_key_tool("enter")
+        assert res["status"] == "success"
+        assert "enter" in res["message"].lower()
 
 
 @pytest.mark.asyncio
 async def test_press_hotkey_tool():
-    with patch("keyboard_mouse_ctrl.controller.activate"):
-        with patch("keyboard_mouse_ctrl.controller.is_active", return_value=True):
-            res = await press_hotkey_tool(["ctrl", "c"])
-            assert "Hotkey ctrl + c pressed" in res
+    with patch.object(
+        keyboard_mouse_ctrl.controller,
+        "press_hotkey",
+        new=AsyncMock(return_value="Hotkey ctrl + c press ho gaya."),
+    ):
+        res = await press_hotkey_tool(["ctrl", "c"])
+        assert res["status"] == "success"
+        assert "ctrl" in res["message"].lower()
 
 
 @pytest.mark.asyncio
 async def test_control_volume_tool(mock_volume):
-    with patch("keyboard_mouse_ctrl.controller.activate"):
-        with patch("keyboard_mouse_ctrl.controller.is_active", return_value=True):
-            with patch("keyboard_mouse_ctrl.SafeController._get_volume_interface") as mock_get_iface:
+    with patch("services.automation.keyboard_mouse_ctrl.controller.activate"):
+        with patch("services.automation.keyboard_mouse_ctrl.controller.is_active", return_value=True):
+            with patch(
+                "services.automation.keyboard_mouse_ctrl.SafeController._get_volume_interface"
+            ) as mock_get_iface:
                 mock_iface = MagicMock()
                 mock_get_iface.return_value = mock_iface
 
                 res = await control_volume_tool("mute")
-                assert "mute kar diya gaya hai" in res
+                assert res["status"] == "success"
+                assert "mute" in res["message"].lower()
                 mock_iface.SetMute.assert_called_with(1, None)
