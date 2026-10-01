@@ -845,6 +845,26 @@ def test_status_wait_and_logs_need_no_by_but_actions_do():
     assert agent_ctl.parse_args(["logs"]).lines == 50
 
 
+def test_fresh_path_adds_registry_entries_the_old_shell_lacks(monkeypatch):
+    monkeypatch.setenv("C09_ROOT", r"C:\Win")
+    current = os.pathsep.join([r"C:\a", r"C:\Python312"])
+    registry = [r"C:\A;%C09_ROOT%\System32;", r'"C:\Users\me\WinGet\ffmpeg\bin";C:\Python312\\']
+    expected = [r"C:\a", r"C:\Python312", r"C:\Win\System32", r"C:\Users\me\WinGet\ffmpeg\bin"]
+    if os.name != "nt":
+        expected = [r"C:\a", r"C:\Python312", r"C:\A", r"C:\Win\System32", r"C:\Users\me\WinGet\ffmpeg\bin",
+                    "C:\\Python312\\\\"]
+    assert agent_ctl.fresh_path(current, registry).split(os.pathsep) == expected
+    assert agent_ctl.fresh_path(current, []) == current
+
+
+def test_worker_env_gets_the_registry_path(monkeypatch):
+    monkeypatch.setattr(agent_ctl, "_registry_path_values", lambda: [r"C:\new\tool\bin"])
+    monkeypatch.setenv("PATH", r"C:\old")
+    env = agent_ctl.agent_env("claude", "test", background=True)
+    assert env["PATH"].split(os.pathsep)[-1] == r"C:\new\tool\bin"
+    assert env["JARVIS_STARTED_BY"] == "claude" and env["JARVIS_HYBRID"] == "1"
+
+
 # --------------------------------------------------------------------------- root .env as the single source
 
 

@@ -311,11 +311,43 @@ def agent_python() -> Path:
     return Path(sys.executable)
 
 
+def _registry_path_values() -> list[str]:
+    """Machine and user PATH strings as stored in the registry (Windows only)."""
+    if sys.platform != "win32":
+        return []
+    import winreg  # pylint: disable=import-outside-toplevel
+    values = []
+    for hive, sub_key in ((winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment"),
+                          (winreg.HKEY_CURRENT_USER, "Environment")):
+        try:
+            with winreg.OpenKey(hive, sub_key) as key:
+                values.append(str(winreg.QueryValueEx(key, "Path")[0]))
+        except OSError:
+            continue
+    return values
+
+
+def fresh_path(current: str, registry_values: list[str]) -> str:
+    """current PATH plus registry PATH entries it lacks, so a worker started from an old shell still
+    finds programs installed after that shell started (winget ffmpeg, npm -g pinchtab)."""
+    parts = [p for p in current.split(os.pathsep) if p]
+    seen = {os.path.normcase(os.path.normpath(p)) for p in parts}
+    for value in registry_values:
+        for part in value.split(";"):
+            part = os.path.expandvars(part.strip().strip('"'))
+            key = os.path.normcase(os.path.normpath(part)) if part else ""
+            if part and key not in seen:
+                seen.add(key)
+                parts.append(part)
+    return os.pathsep.join(parts)
+
+
 def agent_env(by: str, reason: str, *, background: bool) -> dict[str, str]:
     env = dict(os.environ)
     # A worker started here always takes the lock.
     for name in ("JARVIS_NO_LOCK", "PYTEST_CURRENT_TEST"):
         env.pop(name, None)
+    env["PATH"] = fresh_path(env.get("PATH", ""), _registry_path_values())
     env.update(JARVIS_STARTED_BY=by, JARVIS_START_REASON=reason, PYTHONPATH=str(ROOT),
                PYTHONIOENCODING="utf-8", JARVIS_HYBRID="1")
     if background:
@@ -358,9 +390,8 @@ def wait_healthy(timeout: float, proc: subprocess.Popen[Any] | None = None, *,
         elif seen_lock:
             return False, "the worker exited (run/agent.lock was released)"
         elif now - started >= LOCK_GRACE_S:
-            if code == 200:
-                return False, "port 8081 answers but no worker holds run/agent.lock"
-            return False, f"no worker took run/agent.lock within {LOCK_GRACE_S} s"
+            return False, ("port 8081 answers but no worker holds run/agent.lock" if code == 200
+                           else f"no worker took run/agent.lock within {LOCK_GRACE_S} s")
         if now - started >= timeout:
             last = code if code is not None else "no answer"
             return False, f"no health 200 within {timeout:g} s (last: {last})"
