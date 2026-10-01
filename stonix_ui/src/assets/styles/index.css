@@ -379,7 +379,35 @@ button {
   }
 
   .assistant-core__terminate {
-    @apply absolute right-5 top-5 flex items-center gap-2 rounded-md border border-command-danger/30 bg-command-danger/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-command-danger transition hover:bg-command-danger/15;
+    @apply absolute right-5 top-5 flex items-center gap-2 rounded-md border border-command-danger/30 bg-command-danger/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-command-danger transition hover:bg-command-danger/15 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-command-danger/10;
+  }
+
+  .assistant-core__restart-banner {
+    @apply absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-md border border-command-accent/40 bg-command-accent/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-command-accent;
+  }
+
+  .command-input__swarm {
+    @apply flex shrink-0 items-center gap-1 rounded-md border border-white/10 bg-white/[0.03] px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-command-muted transition hover:bg-white/[0.06];
+  }
+
+  .command-input__swarm--on {
+    @apply border-command-accent/40 bg-command-accent/10 text-command-accent;
+  }
+
+  .chat-feedback {
+    @apply mt-3 flex items-center gap-1;
+  }
+
+  .chat-feedback__btn {
+    @apply rounded-md border border-white/10 p-1.5 text-command-muted transition hover:border-command-accent/40 hover:text-command-accent disabled:cursor-default disabled:opacity-80;
+  }
+
+  .chat-feedback__btn[data-selected='true'] {
+    @apply border-command-accent/50 bg-command-accent/15 text-command-accent;
+  }
+
+  .task-bell-row__spoken {
+    @apply ml-1 inline-flex items-center gap-1 text-[10px] text-command-muted;
   }
 
   .intelligence-panel__body {

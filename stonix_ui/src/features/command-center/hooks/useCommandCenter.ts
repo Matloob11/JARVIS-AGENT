@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from '@/toast';
-import { normalizePlan, toEpochMs, type NormalizedPlan } from '@/shared/contracts/events';
+import {
+  normalizeConfirm,
+  normalizePlan,
+  toEpochMs,
+  type NormalizedPlan,
+} from '@/shared/contracts/events';
 import { useChat } from '@/features/chat/useChat';
 import type { ChatMessage } from '@/features/chat/types';
 import { useLiveKit, type LiveKitContextValue } from '@/features/voice/LiveKitProvider';
@@ -383,6 +388,8 @@ export const useCommandCenter = () => {
   const loggedConfirmDecisions = useRef(new Set<string>());
   const confirmApiRef = useRef(confirmQueue);
   confirmApiRef.current = confirmQueue;
+  const [sessionRestartBanner, setSessionRestartBanner] = useState(false);
+  const pendingShutdownConfirmIdRef = useRef<string | null>(null);
 
   const emitCommand = useCallback((type: string, payload?: unknown) => {
     getSocket().emit('ui_command', { type, payload });
@@ -821,8 +828,38 @@ export const useCommandCenter = () => {
 
   const respondConfirm = (id: string, allow: boolean) => {
     if (!confirmQueue.markResponded(id)) return;
+    if (allow && pendingShutdownConfirmIdRef.current === id) {
+      setSessionRestartBanner(true);
+      pendingShutdownConfirmIdRef.current = null;
+    }
     emitCommand('confirm_response', { id, allow });
   };
+
+  useEffect(() => {
+    const socket = getSocket();
+    const onConfirmRequest = (raw: unknown) => {
+      const item = normalizeConfirm(raw);
+      if (item.tool === 'shutdown_agent' && item.id) {
+        pendingShutdownConfirmIdRef.current = item.id;
+      }
+    };
+    const onAgentStatus = (payload: unknown) => {
+      if (!payload || typeof payload !== 'object') return;
+      const data = payload as Record<string, unknown>;
+      if (data.restarting === true) {
+        setSessionRestartBanner(true);
+      }
+      if (data.online === true && data.restarting !== true) {
+        setSessionRestartBanner(prev => (prev ? false : prev));
+      }
+    };
+    socket.on('confirm_request', onConfirmRequest);
+    socket.on('agent_status', onAgentStatus);
+    return () => {
+      socket.off('confirm_request', onConfirmRequest);
+      socket.off('agent_status', onAgentStatus);
+    };
+  }, []);
 
   const changePersona = settings.changePersona;
   const updateSettings = settings.updateSettings;
@@ -832,6 +869,22 @@ export const useCommandCenter = () => {
   const sendMessage = (text: string) => {
     chat.send(text);
   };
+
+  const sendSwarmTask = useCallback(
+    (task: string) => {
+      const trimmed = task.trim();
+      if (!trimmed) return;
+      emitCommand('swarm', { task: trimmed });
+    },
+    [emitCommand],
+  );
+
+  const sendAnswerFeedback = useCallback(
+    (messageId: string, score: 1 | -1) => {
+      emitCommand('feedback', { message_id: messageId, score });
+    },
+    [emitCommand],
+  );
 
   const openSimPanel = () => {
     setIsSimPanelOpen(true);
@@ -1007,6 +1060,10 @@ export const useCommandCenter = () => {
     confirmCancelNotice: confirmQueue.cancelNotice,
     respondConfirmAllow: (id: string) => respondConfirm(id, true),
     respondConfirmDeny: (id: string) => respondConfirm(id, false),
+    sessionRestartBanner,
+    setSessionRestartBanner,
+    sendSwarmTask,
+    sendAnswerFeedback,
     changePersona,
     updateSettings,
     emitCommand,

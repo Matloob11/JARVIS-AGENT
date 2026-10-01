@@ -329,3 +329,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **REAL SIDE EFFECT fails (owning tool tasks fix):** test_keyboard_mouse.py::test_mouse_click_tool, test_scroll_cursor_tool, test_type_text_tool, test_press_key_tool, test_press_hotkey_tool (X-26); test_whatsapp_automation.py::test_ensure_whatsapp_focus (X-41); test_window_ctrl_extra.py::test_focus_window, test_close_window (X-42). Also test_save_notepad_success failed on stale D:/ path (not guard; C-26/X-27).
 - **Commit:** pending · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-48 · Terminate, Swarm, feedback thumbs · 2026-10-01 17:28 PKT
+- **Kya kiya:** Terminate ab `shutdown_agent {restart:true}` bhejta hai (reject par disabled + “Agent update pending”); confirm ke baad restart banner jab tak agent online na ho. Chat par Swarm toggle (`ui_command swarm`) aur assistant bubbles par ek-dafa thumbs (`feedback` score ±1). Mock bridge shutdown confirm + `controls.spec.ts`.
+- **Files:** stonix_ui/src/features/command-center/components/AssistantCore.tsx, ChatPanel.tsx, hooks/useCommandCenter.ts, status/AgentControls.tsx, Dashboard.tsx, src/assets/styles/index.css, tests/e2e/controls.spec.ts, tests/mock-bridge/server.mjs, plan.md
+- **Verify:** `cd stonix_ui && npm run build` pass · `npx playwright test tests/e2e/controls.spec.ts` 3 passed
+- **Commit:** abhi nahi · **Deploy:** no
+- **Doosre agent ke liye:** X-53/X-59 controls spec include; live `shutdown_agent` bridge allow-list UI-11/C-62 par depend.
+
+### ✅ [cursor] X-53 · Voice glue: spoken, backup, Terminate · 2026-10-01 17:30 PKT
+- **Kya kiya:** Task reminder toast/bell par spoken vs screen-only icons; `memory_cleared` toast me scope + backup path; Terminate alag TopBar Stop se `shutdown_agent` (X-48). Typed `/swarm …` normal chat; naya `voice-glue.spec.ts`.
+- **Files:** stonix_ui/src/features/command-center/components/TopBar.tsx, memory/useMemories.ts, tasks/useTasks.ts, tests/e2e/voice-glue.spec.ts, plan.md (+ X-48 shared UI files)
+- **Verify:** `cd stonix_ui && npm run build` pass · `npm run lint` (2 purani repo errors, X-53 files clean) · `npx playwright test tests/e2e/voice-glue.spec.ts` 4 passed
+- **Commit:** abhi nahi · **Deploy:** no
+- **Doosre agent ke liye:** —

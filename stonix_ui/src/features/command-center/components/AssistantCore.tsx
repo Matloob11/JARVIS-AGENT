@@ -1,4 +1,4 @@
-import { useMemo, type MutableRefObject } from 'react';
+import { useEffect, useMemo, useState, type MutableRefObject } from 'react';
 import { motion } from 'framer-motion';
 import { Activity, Ear, EarOff, Mic, MicOff, Power, ShieldCheck } from 'lucide-react';
 import { personaAccent } from '@/shared/theme/commandTheme';
@@ -7,6 +7,7 @@ import { useSettings } from '@/features/settings/useSettings';
 import { deriveVoiceMeterView, type VoiceMatchLive } from '@/features/voice/voiceMeter';
 import { SPECTRAL_BIN_COUNT } from '@/features/voice/useAudioLevels';
 import { emitUiCommandWithAck, useAgentListeningMuted } from '@/features/status/AgentControls';
+import { useAgentStatus } from '@/features/status/useAgentStatus';
 
 interface AssistantCoreProps {
   persona: 'jarvis' | 'anna';
@@ -20,6 +21,8 @@ interface AssistantCoreProps {
   vizFrame: number;
   voiceMatchLive: VoiceMatchLive;
   onOpenVoiceEnroll: () => void;
+  sessionRestartBanner: boolean;
+  onSessionRestartBannerChange: (active: boolean) => void;
 }
 
 const METER_TONE_CLASS: Record<string, string> = {
@@ -41,9 +44,13 @@ const AssistantCore = ({
   vizFrame,
   voiceMatchLive,
   onOpenVoiceEnroll,
+  sessionRestartBanner,
+  onSessionRestartBannerChange,
 }: AssistantCoreProps) => {
   const accent = personaAccent(persona);
   const settings = useSettings();
+  const agentStatus = useAgentStatus();
+  const [shutdownAgentSupported, setShutdownAgentSupported] = useState(true);
   const meter = deriveVoiceMeterView(
     {
       voiceId: settings.voiceId,
@@ -72,6 +79,31 @@ const AssistantCore = ({
   const orbPulse = agentAudioActive;
   const orbScale = 1 + Math.min(agentLevel, 1) * 0.08;
 
+  useEffect(() => {
+    if (agentStatus.restarting) {
+      onSessionRestartBannerChange(true);
+    }
+  }, [agentStatus.restarting, onSessionRestartBannerChange]);
+
+  useEffect(() => {
+    if (sessionRestartBanner && agentStatus.online && !agentStatus.restarting) {
+      onSessionRestartBannerChange(false);
+    }
+  }, [
+    sessionRestartBanner,
+    agentStatus.online,
+    agentStatus.restarting,
+    onSessionRestartBannerChange,
+  ]);
+
+  const onTerminateSession = () => {
+    emitUiCommandWithAck('shutdown_agent', { restart: true }, ack => {
+      if (ack?.status === 'rejected') {
+        setShutdownAgentSupported(false);
+      }
+    });
+  };
+
   const stateLabel = voiceConnecting
     ? 'Joining voice…'
     : voice.voiceUnavailable
@@ -88,6 +120,15 @@ const AssistantCore = ({
 
   return (
     <div className="assistant-core">
+      {sessionRestartBanner ? (
+        <div
+          className="assistant-core__restart-banner"
+          data-testid="agent-session-restart-banner"
+          role="status"
+        >
+          Agent session restart ho raha hai
+        </div>
+      ) : null}
       <div className="assistant-core__grid" />
       <motion.div
         className="assistant-core__halo"
@@ -238,7 +279,14 @@ const AssistantCore = ({
         </div>
       </div>
 
-      <button className="assistant-core__terminate" title="Terminate session">
+      <button
+        type="button"
+        className="assistant-core__terminate"
+        data-testid="terminate-session"
+        title={shutdownAgentSupported ? 'Terminate session (restart agent)' : 'Agent update pending'}
+        disabled={!shutdownAgentSupported}
+        onClick={onTerminateSession}
+      >
         <Power size={14} />
         Terminate
       </button>

@@ -80,7 +80,7 @@ Doosri lane ki file me tabdeeli chahiye? Khud edit mat karo. Section 11 me reque
 
 ### 2.6 Runtime lock (sirf EK agent worker chalega)
 
-`RUNTIME LOCK: free`
+`RUNTIME LOCK: claude · agent restart (C-08 lock, C-24/C-26 checks) · 01 Oct 17:22 PKT`
 
 - Windows agent worker (`start-agent.bat` / `python -m src.core.agent`) ya UI dev server (`npm run vite-dev`) start/restart karne se pehle upar wali line ko `RUNTIME LOCK: claude|cursor ? kya chal raha ? time` karo. Kaam ke baad wapas `free` karo.
 - Restart se pehle `tasklist | findstr python` se purane workers band karo. Do workers = duplicate jawab.
@@ -581,11 +581,11 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | X-45 | cursor | P3 | CameraPanel: opt-in camera, LiveKit publish, honest link badges, Socket.IO fallback only while sharing | X-13, K-05 (DASH-CAMERA-VISION) | DONE (01 Oct 13:35) |
 | X-46 | cursor | P3 | Location card + Map panel: device location and map focus kept separate, OpenStreetMap view | X-17, K-08 (DASH-LOCATION) | DONE (01 Oct 13:35) |
 | X-47 | cursor | P3 | SIM dialog: provider-not-configured state, purpose field, masked results, 20 s timeout | X-15, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS), K-34 (sim_authorized_source) | DONE (01 Oct 13:50) |
-| X-48 | cursor | P3 | Controls: Terminate (guarded session restart), Swarm entry points, answer feedback thumbs | X-24, X-10, K-03 (DASH-UI-COMMANDS) | DOING (cursor, 01 Oct 17:20) |
+| X-48 | cursor | P3 | Controls: Terminate (guarded session restart), Swarm entry points, answer feedback thumbs | X-24, X-10, K-03 (DASH-UI-COMMANDS) | DONE (cursor, 01 Oct 17:28 PKT) |
 | X-49 | cursor | P3 | FlowMap from real state (Voice, Vision, Memory, Tools, Core); 'unknown' instead of a fake 'ready' | X-20, X-19, X-13, K-06 (DASH-MODULE-HEALTH) | DONE (01 Oct 17:05) |
 | X-50 | cursor | P3 | Real audio visualizer and 'You are speaking' indicator | X-13, X-33 | DONE (01 Oct 17:00) |
 | X-52 | cursor | P3 | Dashboard 'Voice & Conversation' settings and enrollment extras (delta on the dashboard drawer and dialog) | X-22, X-33, K-61 (CT-VC-SETTINGS), K-63 (CT-VC-VOICE-ENROLL) | DONE (cursor, 01 Oct 17:12 PKT) |
-| X-53 | cursor | P3 | Dashboard glue: spoken indicator on reminders, memory backup path, Terminate sends shutdown_agent | X-23, X-24, X-48, K-66 (CT-VC-PROACTIVE), K-60 (CT-VC-CONTROL) | BLOCKED (waiting X-23,X-24,X-48) |
+| X-53 | cursor | P3 | Dashboard glue: spoken indicator on reminders, memory backup path, Terminate sends shutdown_agent | X-23, X-24, X-48, K-66 (CT-VC-PROACTIVE), K-60 (CT-VC-CONTROL) | DONE (cursor, 01 Oct 17:30 PKT) |
 | X-54 | cursor | P3 | Email tool: multi-line UTF-8 body, SMTP timeout, attachment allow-list, approval | C-25, C-24, C-28, C-29, C-30, C-55, X-10, K-28 (tool_arg_policies) | BLOCKED (waiting C-25,C-24,C-28,C-29,C-30,C-55,X-10) |
 | X-55 | cursor | P3 | download_images + zip_files: contained paths, safe names, concurrent downloads, honoured zip_name | X-36, X-54, C-24, C-28, K-28 (tool_arg_policies) | BLOCKED (waiting X-36,X-54,C-24,C-28) |
 | X-56 | cursor | P3 | Google Maps leads scraper: Chrome channel, background job, resilient selectors | C-06, C-26, X-11, C-57 | BLOCKED (waiting C-06,C-26,X-11,C-57) |

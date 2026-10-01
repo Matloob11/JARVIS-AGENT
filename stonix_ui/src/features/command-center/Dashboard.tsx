@@ -138,6 +138,8 @@ const DashboardInner = () => {
               vizFrame={command.vizFrame}
               voiceMatchLive={command.voiceMatchLive}
               onOpenVoiceEnroll={openVoiceEnroll}
+              sessionRestartBanner={command.sessionRestartBanner}
+              onSessionRestartBannerChange={command.setSessionRestartBanner}
             />
             </ErrorBoundary>
             <ErrorBoundary name="IntelligencePanel">
@@ -178,6 +180,8 @@ const DashboardInner = () => {
             onCancelTask={command.cancelTask}
             onRefreshTasks={command.refreshTasks}
             onSend={command.sendMessage}
+            onSendSwarm={command.sendSwarmTask}
+            onFeedback={command.sendAnswerFeedback}
             liveCaptions={command.chatLiveCaptions}
             fallbackTranscription={command.transcription}
             voiceConnected={liveKit.roomState === 'connected'}

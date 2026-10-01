@@ -21,6 +21,8 @@ const uiSockets = [];
 /** @type {{ ts: number, type?: string, payload?: unknown, raw: unknown }[]} */
 const receivedUiCommands = [];
 let agentOnline = true;
+/** @type {string | null} */
+let pendingShutdownConfirmId = null;
 let suppressSettingsSync = false;
 let ownerSessionActive = false;
 /** @type {Record<string, unknown>[]} */
@@ -300,11 +302,34 @@ function handleUiCommand(socket, cmd, cb) {
     case 'confirm_response': {
       ackUi(socket, cb, 'sent');
       const resolved = loadFixture('confirm_resolved');
+      const confirmId = payload?.id != null ? String(payload.id) : resolved.id;
+      const allow = Boolean(payload?.allow);
       socket.emit('confirm_resolved', {
         ...resolved,
-        id: payload?.id != null ? String(payload.id) : resolved.id,
-        allow: Boolean(payload?.allow),
+        id: confirmId,
+        allow,
       });
+      if (allow && pendingShutdownConfirmId && confirmId === pendingShutdownConfirmId) {
+        pendingShutdownConfirmId = null;
+        agentOnline = false;
+        emitToUi('agent_status', {
+          ...loadFixture('agent_status'),
+          online: false,
+          restarting: true,
+          voice_ready: false,
+          in_room: false,
+        });
+        setTimeout(() => {
+          agentOnline = true;
+          emitToUi('agent_status', {
+            ...loadFixture('agent_status'),
+            online: true,
+            restarting: false,
+            voice_ready: true,
+            in_room: true,
+          });
+        }, 1200);
+      }
       break;
     }
     case 'clear_memory': {
@@ -344,10 +369,23 @@ function handleUiCommand(socket, cmd, cb) {
       ackUi(socket, cb, 'sent');
       socket.emit('init_state', buildInitState());
       break;
+    case 'shutdown_agent': {
+      ackUi(socket, cb, 'sent');
+      pendingShutdownConfirmId = `mock-shutdown-${Date.now()}`;
+      setTimeout(() => {
+        socket.emit('confirm_request', {
+          id: pendingShutdownConfirmId,
+          tool: 'shutdown_agent',
+          summary: 'Restart JARVIS agent session?',
+          risk: 'high',
+          ttl_ms: 120_000,
+        });
+      }, 40);
+      break;
+    }
     case 'stop':
     case 'start':
     case 'pause_agent':
-    case 'shutdown_agent':
     case 'tasks_refresh':
     case 'feedback':
     case 'sim_lookup':

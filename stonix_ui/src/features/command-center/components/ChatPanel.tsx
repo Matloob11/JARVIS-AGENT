@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { Bell, Keyboard, Mic, Send } from 'lucide-react';
+import { Bell, Hexagon, Keyboard, Mic, Send, ThumbsDown, ThumbsUp } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { ChatMessage, LiveCaption } from '@/features/chat/types';
 import { Message, VortexLog } from '../hooks/useCommandCenter';
@@ -29,6 +29,8 @@ interface ChatPanelProps {
   onCancelTask: (id: string, source: TaskSource) => void;
   onRefreshTasks: () => void;
   onSend: (text: string) => void;
+  onSendSwarm: (task: string) => void;
+  onFeedback: (messageId: string, score: 1 | -1) => void;
   liveCaptions?: { user: LiveCaption | null; assistant: LiveCaption | null };
   fallbackTranscription?: string;
   voiceConnected?: boolean;
@@ -104,6 +106,8 @@ const ChatPanel = ({
   onCancelTask,
   onRefreshTasks,
   onSend,
+  onSendSwarm,
+  onFeedback,
   liveCaptions,
   fallbackTranscription,
   voiceConnected = false,
@@ -113,6 +117,8 @@ const ChatPanel = ({
 }: ChatPanelProps) => {
   const [activeTab, setActiveTab] = useState<ChatTab>('chat');
   const [text, setText] = useState('');
+  const [swarmMode, setSwarmMode] = useState(false);
+  const [feedbackByMessageId, setFeedbackByMessageId] = useState<Record<string, 1 | -1>>({});
   const scrollRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);
   const accent = personaAccent(persona);
@@ -142,10 +148,20 @@ const ChatPanel = ({
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!text.trim()) return;
-    onSend(text);
+    if (swarmMode) {
+      onSendSwarm(text);
+    } else {
+      onSend(text);
+    }
     setText('');
     setActiveTab('chat');
     atBottomRef.current = true;
+  };
+
+  const submitFeedback = (messageId: string, score: 1 | -1) => {
+    if (feedbackByMessageId[messageId] != null) return;
+    setFeedbackByMessageId(prev => ({ ...prev, [messageId]: score }));
+    onFeedback(messageId, score);
   };
 
   return (
@@ -183,6 +199,8 @@ const ChatPanel = ({
                       key={`group-${block.turnId}`}
                       persona={persona}
                       messages={block.messages}
+                      feedbackScore={feedbackByMessageId[block.messages[0]?.id]}
+                      onFeedback={submitFeedback}
                     />
                   );
                 }
@@ -192,6 +210,8 @@ const ChatPanel = ({
                     persona={persona}
                     message={block.message}
                     onRetry={onRetry}
+                    feedbackScore={feedbackByMessageId[block.message.id]}
+                    onFeedback={submitFeedback}
                   />
                 );
               })
@@ -246,6 +266,17 @@ const ChatPanel = ({
       </div>
 
       <form onSubmit={submit} className="command-input">
+        <button
+          type="button"
+          className={swarmMode ? 'command-input__swarm command-input__swarm--on' : 'command-input__swarm'}
+          data-testid="swarm-mode-toggle"
+          data-active={swarmMode ? 'true' : 'false'}
+          title={swarmMode ? 'Swarm on — Send runs swarm task' : 'Swarm off — normal chat'}
+          onClick={() => setSwarmMode(prev => !prev)}
+        >
+          <Hexagon size={14} />
+          <span>Swarm</span>
+        </button>
         <input
           value={text}
           onChange={event => setText(event.target.value)}
@@ -265,12 +296,53 @@ const ChatPanel = ({
   );
 };
 
+const AnswerFeedback = ({
+  messageId,
+  score,
+  onFeedback,
+}: {
+  messageId: string;
+  score?: 1 | -1;
+  onFeedback: (messageId: string, score: 1 | -1) => void;
+}) => (
+  <div className="chat-feedback" data-testid="chat-feedback">
+    <button
+      type="button"
+      className="chat-feedback__btn"
+      data-testid="chat-feedback-up"
+      data-selected={score === 1 ? 'true' : 'false'}
+      disabled={score != null}
+      title="Helpful answer"
+      aria-pressed={score === 1}
+      onClick={() => onFeedback(messageId, 1)}
+    >
+      <ThumbsUp size={13} />
+    </button>
+    <button
+      type="button"
+      className="chat-feedback__btn"
+      data-testid="chat-feedback-down"
+      data-selected={score === -1 ? 'true' : 'false'}
+      disabled={score != null}
+      title="Not helpful"
+      aria-pressed={score === -1}
+      onClick={() => onFeedback(messageId, -1)}
+    >
+      <ThumbsDown size={13} />
+    </button>
+  </div>
+);
+
 const MessageGroup = ({
   persona,
   messages,
+  feedbackScore,
+  onFeedback,
 }: {
   persona: 'jarvis' | 'anna';
   messages: ChatMessage[];
+  feedbackScore?: 1 | -1;
+  onFeedback: (messageId: string, score: 1 | -1) => void;
 }) => {
   const head = messages[0];
   const badge = sourceBadge(head.source);
@@ -299,6 +371,7 @@ const MessageGroup = ({
             </p>
           ))}
         </div>
+        <AnswerFeedback messageId={head.id} score={feedbackScore} onFeedback={onFeedback} />
       </div>
     </motion.div>
   );
@@ -308,10 +381,14 @@ const MessageBubble = ({
   persona,
   message,
   onRetry,
+  feedbackScore,
+  onFeedback,
 }: {
   persona: 'jarvis' | 'anna';
   message: ChatMessage;
   onRetry?: (id: string) => void;
+  feedbackScore?: 1 | -1;
+  onFeedback?: (messageId: string, score: 1 | -1) => void;
 }) => {
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system' || message.source === 'system';
@@ -366,6 +443,9 @@ const MessageBubble = ({
             Retry
           </button>
         )}
+        {!isUser && !isSystem && onFeedback ? (
+          <AnswerFeedback messageId={message.id} score={feedbackScore} onFeedback={onFeedback} />
+        ) : null}
       </div>
     </motion.div>
   );

@@ -42,9 +42,14 @@ function useUiCommandAck() {
   }, []);
 }
 
-export function emitUiCommandWithAck(type: string, payload: Record<string, unknown> = {}) {
+export function emitUiCommandWithAck(
+  type: string,
+  payload: Record<string, unknown> = {},
+  onAck?: (ack: UiCommandAck) => void,
+) {
   getSocket().emit('ui_command', { type, payload }, (ack: UiCommandAck) => {
     handleUiCommandAck(ack);
+    onAck?.(ack);
   });
 }
 
