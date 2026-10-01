@@ -190,7 +190,7 @@ export function AgentChipMenu({
     <div className="relative" ref={menuRef}>
       <button
         type="button"
-        className="status-chip cursor-pointer transition hover:bg-white/[0.06]"
+        className="status-chip status-chip--compact cursor-pointer transition hover:bg-white/[0.06]"
         data-testid="chip-agent"
         data-active={active ? 'true' : 'false'}
         title={tooltip}

@@ -286,3 +286,24 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `npm run build` pass · `npx playwright test tests/e2e/settings.spec.ts` 10 passed (serial)
 - **Commit:** pending · **Deploy:** no
 - **Doosre agent ke liye:** X-52 voice/conversation settings delta ab shuru ho sakta hai; live desktop-control gate UI-34.
+
+### ✅ [cursor] X-50 · Real audio visualizer + you are speaking · 2026-10-01 17:00 PKT
+- **Kya kiya:** Agent remote track par Web Audio analyser (32 bins, ~30 fps) se spectral bars aur orb pulse; random spectral data hata di. “You are speaking” ring/label LiveKit `ActiveSpeakersChanged` + mic on se; `user_status_change` fallback hata diya. Reduced-motion par analysers band.
+- **Files:** stonix_ui/src/features/voice/useAudioLevels.ts, command-center/components/AssistantCore.tsx, hooks/useCommandCenter.ts, Dashboard.tsx, src/assets/styles/index.css, plan.md
+- **Verify:** `cd stonix_ui && npm run build` pass · manual live dashboard (mic on + speak + agent reply) plan UI-34
+- **Commit:** pending · **Deploy:** no
+- **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-51 · Responsive phone/tablet dashboard · 2026-10-01 17:15 PKT
+- **Kya kiya:** 1180px+ 3-column; 900–1179px 2-column + ops slide-in drawer; &lt;900px single column + bottom tabs (Core/Chat/Ops/Trace), 16px gutters. Status chips compact icons har width par; Ops/Camera CSS hide (unmount nahi) taake LiveKit/camera restart na ho.
+- **Files:** stonix_ui/src/assets/styles/index.css, features/command-center/Dashboard.tsx, components/MobileTabBar.tsx, TopBar.tsx, ChatPanel.tsx, OperationsRail.tsx, hooks/useCommandCenter.ts, tests/e2e/responsive.spec.ts, plan.md
+- **Verify:** `cd stonix_ui && npm run build` pass · `npx playwright test tests/e2e/responsive.spec.ts` 3 passed
+- **Commit:** abhi nahi · **Deploy:** no
+- **Doosre agent ke liye:** X-59 responsive spec include ho sakta hai; C-108 deploy ke waqt phone layout check karein.
+
+### ✅ [cursor] X-24 · Tasks tab + notification bell · 2026-10-01 17:05 PKT
+- **Kya kiya:** Tasks tab ab `task_sync`/`init_state.tasks` se countdown + Cancel/Refresh; `task_notification` par 10s toast, TopBar bell counter/dropdown (open par clear), browser Notification jab permission ho. Mock e2e dono sync shapes + cancel command cover karta hai.
+- **Files:** stonix_ui/src/features/tasks/useTasks.ts, TasksPanel.tsx, command-center/components/ChatPanel.tsx, TopBar.tsx, hooks/useCommandCenter.ts, Dashboard.tsx, src/assets/styles/index.css, tests/e2e/tasks.spec.ts, plan.md
+- **Verify:** `cd stonix_ui && npm run build` pass · `npx playwright test tests/e2e/tasks.spec.ts` 4 passed
+- **Commit:** pending · **Deploy:** no
+- **Doosre agent ke liye:** X-48/X-53 ab X-24 par unblock; live task store UI-34/C-62.

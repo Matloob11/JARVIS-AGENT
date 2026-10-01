@@ -1,4 +1,6 @@
-import { Loader2, LogOut, Radar, Settings, ShieldCheck, Volume2, Wifi, Zap } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Bell, Loader2, LogOut, PanelLeft, Radar, Settings, ShieldCheck, Volume2, Wifi, Zap } from 'lucide-react';
+import type { TaskNotification } from '@/features/tasks/useTasks';
 import WindowControls from '@/shared/ui/WindowControls';
 import { StatusDot } from '@/shared/ui/Panel';
 import { personaAccent } from '@/shared/theme/commandTheme';
@@ -17,7 +19,22 @@ interface TopBarProps {
   onReconnect: () => void;
   onOpenSettings: () => void;
   onOpenSim: () => void;
+  onToggleOpsDrawer?: () => void;
+  opsDrawerOpen?: boolean;
   onLogout: () => void;
+  taskUnreadCount: number;
+  taskNotifications: TaskNotification[];
+  onOpenTaskBell: () => void;
+}
+
+function formatNotifTime(tsMs: number): string {
+  return new Date(tsMs).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
 }
 
 function StatusChip({
@@ -45,7 +62,7 @@ function StatusChip({
   return (
     <Tag
       type={onClick ? 'button' : undefined}
-      className={`status-chip${onClick ? ' cursor-pointer transition hover:bg-white/[0.06]' : ''}`}
+      className={`status-chip status-chip--compact${onClick ? ' cursor-pointer transition hover:bg-white/[0.06]' : ''}`}
       data-testid={testId}
       data-active={active ? 'true' : 'false'}
       title={title}
@@ -67,12 +84,35 @@ const TopBar = ({
   onReconnect,
   onOpenSettings,
   onOpenSim,
+  onToggleOpsDrawer,
+  opsDrawerOpen = false,
   onLogout,
+  taskUnreadCount,
+  taskNotifications,
+  onOpenTaskBell,
 }: TopBarProps) => {
   const settings = useSettings();
   const accent = personaAccent(settings.persona);
   const voice = useLiveKit();
   const agent = useAgentStatus();
+  const [bellOpen, setBellOpen] = useState(false);
+  const bellWrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!bellOpen) return undefined;
+    const onDocClick = (event: MouseEvent) => {
+      if (!bellWrapRef.current?.contains(event.target as Node)) {
+        setBellOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [bellOpen]);
+
+  const toggleTaskBell = () => {
+    onOpenTaskBell();
+    setBellOpen(open => !open);
+  };
 
   const agentTone = agent.paused ? 'blue' : agent.online ? 'accent' : 'danger';
 
@@ -90,7 +130,7 @@ const TopBar = ({
         </div>
       </div>
 
-      <div className="no-drag flex min-w-0 flex-1 items-center justify-center gap-1.5 px-2 sm:gap-2">
+      <div className="topbar-chips no-drag flex min-w-0 flex-1 items-center justify-center gap-1 px-1 sm:gap-1.5 sm:px-2">
         <StatusChip
           testId="chip-bridge"
           icon={Wifi}
@@ -143,7 +183,57 @@ const TopBar = ({
         />
       </div>
 
-      <div className="no-drag flex items-center gap-2">
+      <div className="no-drag flex items-center gap-1 sm:gap-2">
+        <button
+          type="button"
+          className="icon-button ops-drawer-toggle"
+          data-testid="ops-drawer-toggle"
+          aria-expanded={opsDrawerOpen}
+          title="Operations panel"
+          onClick={() => onToggleOpsDrawer?.()}
+        >
+          <PanelLeft size={15} />
+        </button>
+        <div className="task-bell-wrap relative" ref={bellWrapRef}>
+          <button
+            type="button"
+            className="icon-button relative"
+            data-testid="topbar-task-bell"
+            onClick={toggleTaskBell}
+            title="Task notifications"
+          >
+            <Bell size={15} />
+            {taskUnreadCount > 0 ? (
+              <span className="task-bell-badge" data-testid="task-bell-count">
+                {taskUnreadCount > 99 ? '99+' : taskUnreadCount}
+              </span>
+            ) : null}
+          </button>
+          {bellOpen ? (
+            <div className="task-bell-menu" data-testid="task-bell-menu">
+              <p className="task-bell-menu__title">Recent alerts</p>
+              {taskNotifications.length === 0 ? (
+                <p className="task-bell-menu__empty">No task alerts yet</p>
+              ) : (
+                <ul className="task-bell-menu__list">
+                  {taskNotifications.map(note => (
+                    <li
+                      key={`${note.id}-${note.ts}`}
+                      className="task-bell-row"
+                      data-testid="task-notif-row"
+                    >
+                      <p className="task-bell-row__text">{note.description}</p>
+                      <p className="task-bell-row__meta">
+                        {note.due_at ? `Due ${formatNotifTime(note.due_at)}` : formatNotifTime(note.ts)}
+                        {note.spoken === true ? ' · 🔊' : note.spoken === false ? ' · screen only' : ''}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ) : null}
+        </div>
         <TopBarStopButton />
         <button
           className="icon-button"

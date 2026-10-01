@@ -9,6 +9,8 @@ import type { MemoryItem } from '@/features/memory/useMemories';
 import JobsList from '@/features/tools/JobsList';
 import ToolLogList from '@/features/tools/ToolLogList';
 import type { ToolLogEntry } from '@/features/tools/useToolLogs';
+import TasksPanel from '@/features/tasks/TasksPanel';
+import type { TaskItem, TaskSource } from '@/features/tasks/useTasks';
 import { personaAccent } from '@/shared/theme/commandTheme';
 
 type ChatTab = 'chat' | 'logs' | 'notes' | 'tools' | 'tasks';
@@ -23,6 +25,9 @@ interface ChatPanelProps {
   jobs: JobEntry[];
   onCancelJob: (jobId: string) => void;
   onOpenJobArtifact: (jobId: string) => void;
+  tasks: TaskItem[];
+  onCancelTask: (id: string, source: TaskSource) => void;
+  onRefreshTasks: () => void;
   onSend: (text: string) => void;
   liveCaptions?: { user: LiveCaption | null; assistant: LiveCaption | null };
   fallbackTranscription?: string;
@@ -95,6 +100,9 @@ const ChatPanel = ({
   jobs,
   onCancelJob,
   onOpenJobArtifact,
+  tasks,
+  onCancelTask,
+  onRefreshTasks,
   onSend,
   liveCaptions,
   fallbackTranscription,
@@ -141,7 +149,7 @@ const ChatPanel = ({
   };
 
   return (
-    <section className="command-panel chat-panel">
+    <section className="command-panel chat-panel layout-zone layout-zone--chat" data-testid="chat-panel">
       <div className="chat-tabs">
         {tabs.map(tab => (
           <button
@@ -229,9 +237,10 @@ const ChatPanel = ({
         )}
 
         {activeTab === 'tasks' && (
-          <EmptyState
-            title="Tasks coming soon"
-            body="Scheduled tasks and reminders will appear here after UI-25."
+          <TasksPanel
+            rows={tasks}
+            onCancelConfirmed={onCancelTask}
+            onRefresh={onRefreshTasks}
           />
         )}
       </div>

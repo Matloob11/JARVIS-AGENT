@@ -563,7 +563,7 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | X-21 | cursor | P3 | Settings drawer (core): session, connection, voice, persona, wake word, agent listening, voice-ID with confirmed state | X-15, X-16, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS) | DONE (cursor, 01 Oct 2026 15:10 PKT) |
 | X-22 | cursor | P3 | Settings drawer (advanced): turn mode, follow-up window, transcript script, automation toggles, vision mode, guarded-tools list | X-10, X-21, K-05 (DASH-CAMERA-VISION), K-03 (DASH-UI-COMMANDS), K-24 (AutomationSettings) | DONE (cursor, 01 Oct 2026 16:55 PKT) |
 | X-23 | cursor | P3 | Memory (Notes) tab: restore, stream, search, confirmed clear | X-19, X-10, K-07 (DASH-MEMORY-EVENTS) | DONE (01 Oct 16:35 PKT) |
-| X-24 | cursor | P3 | Tasks & Reminders tab with countdown and Cancel, due-item toasts and a notification bell | X-23, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS) | DOING (cursor, 01 Oct 15:25) |
+| X-24 | cursor | P3 | Tasks & Reminders tab with countdown and Cancel, due-item toasts and a notification bell | X-23, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS) | DONE (01 Oct 17:05) |
 | X-28 | cursor | P3 | System info: battery + CPU/RAM/disk ToolResult and collect_pc_vitals() | C-24, X-11, K-26 (VitalsPCHelper) | BLOCKED (waiting C-24,X-11) |
 | X-32 | cursor | P3 | TaskStore v2: schema columns, parse_when, schedule_task with args + confirm, cancel tool | C-24, C-28, C-30, K-66 (CT-VC-PROACTIVE), K-33 (task_store_v2), K-32 (scheduled_action_runner) | BLOCKED (waiting C-24,C-28,C-30) |
 | X-33 | cursor | P3 | Voice-ID meter with real states and the voice enrollment wizard | X-21, X-13, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS) | DONE (01 Oct 16:45 PKT) |
@@ -607,7 +607,7 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | C-98 | claude | P4 | Internal-tool regression checks after the voice/dashboard fixes (change_voice, wake word, persona, identity, analyze_surroundings) | C-48, C-50, C-54, C-69, C-87 | TODO |
 | C-99 | claude | P4 | Live desktop-tools smoke run on the PC with Sir | C-31, C-75, C-55, C-84, C-85, X-63, C-96 | TODO |
 | X-09 | cursor | P4 | Electron shell: canonical VPS URL, offline page, hybrid-safe opt-in backend via agent_ctl, browser-hidden window controls, real Electron test | X-07, X-08, C-09, K-01 (DASH-UI-RUNTIME), K-49 (C-ORIGIN-1) | BLOCKED (waiting C-09) |
-| X-51 | cursor | P4 | Responsive layout for tablet and phone (bottom tabs, chips always visible, camera kept mounted) | X-20, X-45, X-15 | DOING (cursor, 01 Oct 15:25) |
+| X-51 | cursor | P4 | Responsive layout for tablet and phone (bottom tabs, chips always visible, camera kept mounted) | X-20, X-45, X-15 | DONE (cursor, 01 Oct 17:15 PKT) |
 | X-59 | cursor | P4 | Complete mock-bridge e2e suite and verify:prod | X-08, X-13, X-14, X-15, X-16, X-19, X-10, X-21, X-22, X-17, X-20, X-49, X-23, X-24, X-33, X-45, X-46, X-47, X-18, X-48, X-51, X-09 | BLOCKED (waiting many UI deps) |
 | X-60 | cursor | P4 | Opt-in live smoke suite against the VPS (session-cookie storageState, no stored TOTP seed) | X-59, C-65 | BLOCKED (waiting X-59,C-65) |
 | X-61 | cursor | P4 | Info/media tools smoke harness (--dry / --live) | C-48, X-36, X-37, X-57, X-40, X-39, X-58, C-78, X-04 | BLOCKED (waiting C-48,X-36+) |

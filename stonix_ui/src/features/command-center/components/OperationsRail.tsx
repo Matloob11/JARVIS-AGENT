@@ -109,7 +109,7 @@ const OperationsRail = ({
   const hasAlerts = systemAlerts.length > 0 || logAlerts.length > 0;
 
   return (
-    <aside className="operations-rail">
+    <aside className="operations-rail layout-zone layout-zone--ops" data-testid="operations-rail">
       <CameraPanel onCameraStateChange={onCameraStateChange} />
 
       <Panel title="Location">
