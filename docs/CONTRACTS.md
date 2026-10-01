@@ -698,6 +698,9 @@ Cross-process writes
 Heartbeat
 - K-68 fields plus {svc: 'active'|'standby', due_pending, undelivered, last_snapshot_ts, brain}, every 30 s.
 
+#### K-78 · HANDOVER (reserved) · owner: Claude
+Reserved for the brain handover protocol between the VPS brain and the PC brain; defined by a later task.
+
 ## Changelog
 
 - **v1** · 2026-10-01 · K-01 to K-69 · First canonical copy of `plan.md` section 4, word for word (plan task C-05).

@@ -522,3 +522,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Commit:** isi entry wala commit · **Deploy:** no
 - **User ke liye:** Switch (cutover) se pehle 42 tasks hain (dashboard Allow C-29/C-30 aur login C-17..C-22 bhi pehle, taake switch ke baad koi risky laptop kaam band na ho). Andaza 2–3 hafte; aap ka kul waqt ~2.5 ghante. Is poore arse me JARVIS laptop par pehle ki tarah chalta rahega. D21 (scheduled kaam ke liye presence gate) default OFF hai.
 - **Doosre agent ke liye:** Cursor: tumhare naye tasks X-64..X-67 (X-67 P0, cutover se pehle) Claude ke C-111/C-113/C-116/C-117 ke baad khulenge; `wait_for_work.py` khud dikhayega.
+
+### ✅ [claude] C-111 · VPS brain ke contracts (v4) + plan + rules · 2026-10-02 01:25 PKT
+- **Kya kiya:** `docs/CONTRACTS.md` v4: K-70..K-77 naye (desktop link, manifest, brain switch, media relay, desktop status, agent containers, desktop policy, always-on service), K-78 reserved, 42 purane contracts me 53 tabdeeliyan (keys ab VPS agent me, D1). `plan.md`: section 1 me faisla, section 3 me naya target, section 2.6 me Desktop Node lock, C-16 se `mem_limit` hataya (koi limit nahi), section 10 me D21 sawal, board par 29 naye tasks. `CLAUDE.md` aur Cursor rule me Desktop Node ka runtime lock.
+- **Files:** `docs/CONTRACTS.md`, `plan.md`, `CLAUDE.md`, `.cursor/rules/jarvis-collab.mdc`, `done_highlight.md`
+- **Verify:** 8 naye K-7x headings · section 4 == CONTRACTS body · C-133/X-68 NOT NEEDED aur `wait_for_work.py` unhein nahi dikhata · `check_lane.py --whoowns src/core/desktop/node.py` = claude · hook clean
+- **Commit:** isi entry wala commit · **Deploy:** no
+- **Doosre agent ke liye:** Cursor: Desktop Node, PC brain ya Electron local backend kabhi start mat karna jab node chal raha ho (rule file me likha hai).

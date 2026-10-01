@@ -44,6 +44,7 @@
 | Memory (1 Oct) | FA exam wali purani yaad hatani hai (koi exam nahi). Memory baat-cheet se **zaroori points khud nikaal kar yaad rakhe** aur jawab unhi ki buniyad par de |
 | Tests ki lane | `tests/exhaustive/**` = Claude lane; `tests/test_whatsapp.py` = Cursor lane (orderer ka faisla) |
 | Emergency (30 Sep 23:40–23:50) | ✅ Ho gaya: backup, token rotation, UI par temporary browser password (user `matloob`), port 5100 localhost-only, VPS permissions. Tafseel `done_highlight.md` me |
+| VPS brain (1-2 Oct) | Bhaari kaam **VPS par**: agent, memory, search/info, images, YouTube/ffmpeg, reminders. Laptop par sirf halka **Desktop Node** (desktop tools). **Koi CPU/RAM limit nahi.** D1-D20 defaults; D3/D14 user ne badle: laptop par koi Allow click ya arming nahi, approval sirf agent ka ConfirmFlow (dashboard Allow ya bola hua "haan"). Tafseel aur tasks: section 13 |
 
 ---
 
@@ -89,6 +90,7 @@ Doosri lane ki file me tabdeeli chahiye? Khud edit mat karo. Section 11 me reque
 - User ke liye: `deploy/windows-local/start-agent.bat` (worker window + `agent_ctl wait` + `ensure_room.py`).
 - Restart par room abhi bhi reset hota hai (C-23 tak), is liye restart se pehle browser me voice band karo.
 - UI dev server (`npm run vite-dev`, Cursor) is lock ka hissa nahi.
+- **VPS brain ke baad (section 13):** laptop ka Desktop Node bhi sirf `agent_ctl node ...` (C-123) se start/stop hota hai aur isi lock ke neeche hai. Cursor kabhi node, PC brain (`agent_ctl brain pc`) ya Electron local backend start nahi karta jab node chal raha ho. VPS ke `jarvis-agent` / `jarvis-agent-svc` containers sirf Claude deploy/restart karta hai.
 
 ### 2.7 Contracts (section 4)
 
@@ -106,6 +108,8 @@ Koi feature hatana ya disable karna pade (aam tor par nahi karna); koi paid serv
 ---
 
 ## 3. Aaj ki haqeeqat aur target (khulasa)
+
+**Naya target (2 Oct, user ka faisla):** JARVIS ka dimagh (agent + saare non-desktop kaam) VPS par; laptop par sirf halka Desktop Node. Tafseel, faislay aur tasks: section 13 (cutover se pehle 42 tasks). Tab tak PC brain chalta hai.
 
 **Aaj (audit, 30 Sep):**
 - Voice chal raha hai: browser → LiveKit → PC agent → Gemini Live.
@@ -821,6 +825,8 @@ Cross-process writes
 Heartbeat
 - K-68 fields plus {svc: 'active'|'standby', due_pending, undelivered, last_snapshot_ts, brain}, every 30 s.
 
+#### K-78 · HANDOVER (reserved) · owner: Claude
+Reserved for the brain handover protocol between the VPS brain and the PC brain; defined by a later task.
 
 ---
 
@@ -1002,7 +1008,7 @@ Heartbeat
 | C-108 | claude | P4 | Final dashboard deploy, live suite run, CI frontend job env, Vercel entry check, README dashboard section | C-96, X-51, X-09, X-59, C-107, X-60, C-37, C-22, C-106 | TODO |
 | C-109 | claude | P4 | Final ops acceptance run + README, RUNBOOK, CONTRACTS changelog and SECURITY docs; CSP enforcing | C-22, C-23, C-63, C-64, C-60, C-92, C-101, C-102, C-103, C-104, C-105, C-106, C-29, X-15, X-10, C-108, C-97, C-99, C-98, C-100, C-05, X-12, C-61, C-82, C-10, C-36 | TODO |
 | C-110 | claude | P4 | Enable self-repair apply mode after the two-agent build-out | C-46, C-83, C-109 | TODO |
-| C-111 | claude | P0 | Contracts v4 (K-70..K-77) + plan, CLAUDE.md and Cursor rules for the VPS brain | — | TODO |
+| C-111 | claude | P0 | Contracts v4 (K-70..K-77) + plan, CLAUDE.md and Cursor rules for the VPS brain | — | DONE (02 Oct 01:25) |
 | C-112 | claude | P0 | Linux-importable agent with role/brain/mode gating, validate by (role, mode), stable user id, reconnecting UI listener | C-111 | TODO |
 | C-113 | claude | P0 | Compat layer: location provider, delivery helper, startfile/webbrowser shims with a startup self-test | C-112 | TODO |
 | C-114 | claude | P0 | 24/7 voice session safety: compression, real truncation, re-seed, liveness attribute, idle close and recycle | C-33, C-35, C-111 | TODO |
@@ -1506,7 +1512,7 @@ Steps:
 3. PC env via rotate_env_secret.py --value-from-stdin (root .env + overlay): LIVEKIT_URL=wss://jarvis.srv1802669.hstgr.cloud and UI_BRIDGE_URL=https://jarvis.srv1802669.hstgr.cloud/vortex
 4. start-agent.bat: delete the raw-IP 'set LIVEKIT_URL=ws://187.127.123.235:7880' overrides; checks become GET https://jarvis.srv1802669.hstgr.cloud/vortex/health == 200 and GET .../rtc/validate == 401; same checks in start_hybrid_agent.py and agent_ctl.py; test_chat_once.py uses socketio_path 'vortex/socket.io' for /vortex URLs
 5. agent_ctl restart --by claude --reason OP-13; confirm LiveKit 'worker registered', bridge 'role=agent', and voice + chat through the domain
-6. Compose: ui-bridge ports '127.0.0.1:5101:5001', livekit '127.0.0.1:7880:7880' (7881 and 50000-50050/udp stay public); mem_limit livekit 1g, ui-bridge 512m, frontend 256m; logging json-file max-size 10m max-file 3 on all three
+6. Compose: ui-bridge ports '127.0.0.1:5101:5001', livekit '127.0.0.1:7880:7880' (7881 and 50000-50050/udp stay public); no mem_limit (user decision 2026-10-01); logging json-file max-size 10m max-file 3 on all three
 7. deploy_from_pc.sh --services 'livekit ui-bridge frontend' (smoke pre/post runs inside), then agent_ctl restart --by claude --reason OP-13-ports
 8. Commit [claude] OP-13 + done_highlight entry with the rollback (rollback.sh <TS> and revert the two PC env lines)
 
@@ -6661,6 +6667,8 @@ Verify:
 - Answer the CV path question.
 
 ## 10. Faislay aur sawal
+
+**VPS brain faislay (2 Oct):** D1-D20 ki final values section 13.1 me hain (D3 aur D14 user ne badle: laptop par koi Allow click ya arming nahi). **Khula sawal D21:** scheduled ya background laptop kaam (typing, click, app kholna) jab user ne 10 min se laptop use na kiya ho: chalne dein ya user ke aane tak rokein? Jawab tak: chalne do (D3 "seedha chale"); rokna ho to `JARVIS_ORIGIN_PRESENCE_GATE=1`.
 
 **Default faislay** (specs ki recommendation; user jo badalna chahe chat me bataye):
 - UI ownership: every stonix_ui/** change for these features is done in this area's UI-xx tasks, and the other areas' UI tasks are merged into them: infra OPS-C1 -> UI-05/UI-09, OPS-C2 -> UI-36, OPS-C3 -> UI-10/12/13/17/19/22/25, OPS-C4 -> UI-15/UI-16; voice VCR-14 -> UI-10, VCR-15 -> UI-17, VCR-16 -> UI-22/UI-26, VCR-20 (UI part) -> UI-25, VCR-25 -> UI-26, VCR-26 -> UI-24/UI-32, VCR-29 -> UI-37, VCR-33 -> UI-32; tools K13 -> UI-15/UI-16, K15 -> UI-18; tools-info 'ConfirmDialog UI' -> UI-16, 'Dashboard panels' -> UI-15/19/25/29/31/32, 'SIM dialog purpose + provider UI' -> UI-30 (why: one owner for useCommandCenter.ts, ChatPanel.tsx, TopBar.tsx and SettingsPanel.tsx avoids five plans editing the same files)
