@@ -9,6 +9,8 @@
 
 ## 0. Pehle yeh padho
 
+**2 Oct 2026: VPS brain plan.** Laptop ka bhaari kaam VPS par ja raha hai (user ka faisla). Pehle section 13 parho; naye tasks C-111+ aur X-64+.
+
 **Maqsad:** JARVIS ka **har** feature, tool, panel aur module asal me kaam kare. **Kuch bhi remove ya disable nahi hoga.** Jo cheez khatarnak hai us par guard lagega (login, confirm dialog, token, allow-list), hatayi nahi jayegi. Jo modules overlap karte hain, dono files rahengi; ek doosre ke through route hoga.
 
 **Do agents, ek folder, ek VPS:**
@@ -128,19 +130,19 @@ Poori tafseel: architecture page v2, `C:\Users\Matloob\AppData\Local\Temp\claude
 
 ## 4. Contracts
 
-**Canonical copy: `docs/CONTRACTS.md` (v3, 2026-10-01).** Asal wahi hai; yeh section us ki copy hai. Tabdeeli sirf Claude karega, section 11 me `REQ-CONTRACT <contract> <proposal>` ke baad (naya version + Changelog line + yahan copy).
+**Canonical copy: `docs/CONTRACTS.md` (v4, 2026-10-02).** Asal wahi hai; yeh section us ki copy hai. Tabdeeli sirf Claude karega, section 11 me `REQ-CONTRACT <contract> <proposal>` ke baad (naya version + Changelog line + yahan copy).
 
 #### K-01 · DASH-UI-RUNTIME (config+http-client) · owner: Claude
 Owner: Cursor (UI), built on Claude's C-AUTH-1 / C-SOCK-1 / C-ORIGIN-1 (infra). Browser base BRIDGE_BASE = VITE_BRIDGE_BASE || VITE_VORTEX_URL || '/vortex' (relative, same origin; the bundle never contains a secret). Every fetch uses credentials 'include': POST /auth/login {password, totp} | {password, recovery_code}; GET /auth/me; POST /auth/logout; GET /livekit/token (a NEW token before every connect and reconnect); GET /messages?before=&limit=; GET /media/<id> and /media/<id>/sign; POST /feedback. Socket.IO: io(origin, {path: BRIDGE_BASE + '/socket.io', withCredentials: true, transports: ['websocket','polling'], tryAllTransports: true, reconnectionAttempts: Infinity, reconnectionDelayMax: 10000}) with no auth payload. Session expiry: on any connect_error or a 'session_expired' {reason} event the UI calls /auth/me, and a 401 shows the login screen, so it never depends on the refusal text. Dev: Vite proxies /vortex (http + ws) to VITE_DEV_BRIDGE: the mock on 5199, the local bridge on 5001 with VITE_DEV_BRIDGE_STRIP=1, or the VPS with the Origin header rewritten. Electron loads JARVIS_UI_URL (default https://jarvis.srv1802669.hstgr.cloud); file:// dist only with JARVIS_ELECTRON_BACKEND=local or JARVIS_UI_OFFLINE=1.
 
 #### K-02 · DASH-UI-EVENTS (socketio-consumer) · owner: Claude
-Owner: Claude for the emitters (infra C-EVT-1/C-STATE-1, voice CT-VC-*, tools X0); Cursor for the reader. Every field is optional and unknown fields are ignored; the readers accept all three variants. init_state: C-STATE-1 plus optional memories, tool_logs, tasks, notifications, intelligence, map_focus, module_health, confirmations|pending_confirmations|pending_confirms, settings, agent_status, vitals_pc, vitals_vps, telemetry, server_time. new_message/update_message: Message {id, role 'user'|'assistant' (legacy 'agent'), text, source 'voice'|'text'|'system', final|is_final, ts|timestamp in s or ms, turn_id?}. transcription_update: live caption only. agent_status {online, voice_ready|in_room, paused, since, last_heartbeat|last_seen, session?, mode?, restarting?}. status_change {speaking, thinking} and legacy status_update. vitals_pc {cpu, ram, disk, disk_label?, host, ts}; vitals_vps; legacy vitals_update. telemetry_update {success_rate, avg_latency, confusion_rate, total_samples, status, source}. tool_update {id, tool, status, phase?, args_summary|details, result_summary?, duration_ms?, progress?, risk?, ts|timestamp}. tool_progress {job_id, tool, title, status, percent, message, artifact?}. confirm_request {id, tool, summary, risk, args_preview?, voice_allowed?, expires_at|expires_ts, ttl_ms?}; confirm_resolved {id, allow|allowed, by|reason}. settings_sync: flat CT-VC-SETTINGS or {settings, applied}, plus optional enforced, available_voices, guarded_tools, automation, vision_mode, errors, pending, restart_required. Legacy persona_update, wake_word_update and mute_update. memory_sync and memory_cleared (DASH-MEMORY-EVENTS). reasoning_update {intent, confidence, is_ambiguous, plan: string[], plan_steps?: [{step, action, description}], source, msg_id|turn_id, ts}. plan_progress|plan_progress_update {current, total, action, status}. turn_rejected {reason, score?, threshold?}. voice_match_update {confidence, accepted?, threshold?, enrolled?, mode?}. voice_enroll_progress; voice_enroll_result. task_sync {tasks}|{pending}; task_notification {id, source|kind, description, action?, due_at?, spoken?, ts}. location_update and map_focus_update (DASH-LOCATION). intelligence_update {id?, type 'image'|'json'|'link'|'audio', label, url?, data?, ts}. new_log {text, category, level?, source?, count?, ts} and batch forms. system_alert; diagnostics_update; audit_update. module_health (DASH-MODULE-HEALTH). voice_link {identity, reason}. sim_panel_open {message, provider?, requires_purpose?}; sim_data_loading; sim_data_result {records, phone, status, message, provider?}. session_expired {reason}. Legacy events stay readable forever.
+Owner: Claude for the emitters (infra C-EVT-1/C-STATE-1, voice CT-VC-*, tools X0); Cursor for the reader. Every field is optional and unknown fields are ignored; the readers accept all three variants. init_state: C-STATE-1 plus optional memories, tool_logs, tasks, notifications, intelligence, map_focus, module_health, confirmations|pending_confirmations|pending_confirms, settings, agent_status, vitals_pc, vitals_vps, telemetry, server_time, desktop_status (v4, K-74). new_message/update_message: Message {id, role 'user'|'assistant' (legacy 'agent'), text, source 'voice'|'text'|'system', final|is_final, ts|timestamp in s or ms, turn_id?}. transcription_update: live caption only. agent_status {online, voice_ready|in_room, paused, since, last_heartbeat|last_seen, session?, mode?, restarting?}. status_change {speaking, thinking} and legacy status_update. vitals_pc {cpu, ram, disk, disk_label?, host, ts}; vitals_vps; legacy vitals_update. telemetry_update {success_rate, avg_latency, confusion_rate, total_samples, status, source}. tool_update {id, tool, status, phase?, args_summary|details, result_summary?, duration_ms?, progress?, risk?, ts|timestamp}. tool_progress {job_id, tool, title, status, percent, message, artifact?}. confirm_request {id, tool, summary, risk, args_preview?, voice_allowed?, expires_at|expires_ts, ttl_ms?}; confirm_resolved {id, allow|allowed, by|reason}. settings_sync: flat CT-VC-SETTINGS or {settings, applied}, plus optional enforced, available_voices, guarded_tools, automation, vision_mode, errors, pending, restart_required. Legacy persona_update, wake_word_update and mute_update. memory_sync and memory_cleared (DASH-MEMORY-EVENTS). reasoning_update {intent, confidence, is_ambiguous, plan: string[], plan_steps?: [{step, action, description}], source, msg_id|turn_id, ts}. plan_progress|plan_progress_update {current, total, action, status}. turn_rejected {reason, score?, threshold?}. voice_match_update {confidence, accepted?, threshold?, enrolled?, mode?}. voice_enroll_progress; voice_enroll_result. task_sync {tasks}|{pending}; task_notification {id, source|kind, description, action?, due_at?, spoken?, ts}. location_update and map_focus_update (DASH-LOCATION). intelligence_update {id?, type 'image'|'json'|'link'|'audio', label, url?, data?, ts}. new_log {text, category, level?, source?, count?, ts} and batch forms. system_alert; diagnostics_update; audit_update. module_health (DASH-MODULE-HEALTH). voice_link {identity, reason}. sim_panel_open {message, provider?, requires_purpose?}; sim_data_loading; sim_data_result {records, phone, status, message, provider?}. session_expired {reason}. v4 (VPS brain): desktop_status (K-74) drives the Laptop chip (online, stale, offline, locked, panic, read-only), and reminder_due (K-77, same shape as task_notification) stays in init_state.notifications until the UI sends notification_ack {id}. Legacy events stay readable forever.
 
 #### K-03 · DASH-UI-COMMANDS (socketio-producer+bridge-allow-list) · owner: Claude
-Owner: Claude for the bridge allow-list and handlers (UI-11, on top of infra OPS-08 and voice VCR-02); Cursor for sending. ui_command {type, payload} gets ack {status: 'sent'|'queued'|'agent_offline'|'no_agent'|'rejected', reason?}. Types: chat {id uuid, text 1-4000} (legacy string accepted; text starting '/swarm ' is routed by the agent); stop (interrupt current speech only, CT-VC-CONTROL); shutdown_agent (Terminate: the agent asks with confirm_request, the job ends, and the bridge reconciler starts a fresh session unless paused); pause_agent (bridge kv paused=1, agent kept out of the room); start (paused=0 plus ensure; also used as 'Wake'); mute/unmute (agent stops/starts hearing; typed chat still answered); settings_update (partial settings incl. automation {desktop_control, clipboard_helper, clipboard_speak, voice_confirm_high} and vision_mode); confirm_response {id, allow}; clear_memory; task_cancel {id, source 'task'|'reminder'}; tasks_refresh; voice_take_over {identity}; voice_enroll {action 'start'|'cancel'|'commit', target_seconds?}; feedback {message_id, score 1|-1}; sim_lookup {query <=20 chars, purpose?} (legacy string); open_sim_panel; swarm {task} (legacy string); job_cancel {job_id}; open_job_artifact {job_id}; request_state; legacy wake_word_toggle (bool) and persona_change ('jarvis'|'anna'). Only role 'ui' sockets may send them; the bridge validates each payload, forwards to room 'agent' only and rejects unknown types; rate limit per C-SOCK-1.
+Owner: Claude for the bridge allow-list and handlers (UI-11, on top of infra OPS-08 and voice VCR-02); Cursor for sending. ui_command {type, payload} gets ack {status: 'sent'|'queued'|'agent_offline'|'no_agent'|'rejected', reason?}. Types: chat {id uuid, text 1-4000} (legacy string accepted; text starting '/swarm ' is routed by the agent); stop (interrupt current speech only, CT-VC-CONTROL); shutdown_agent (Terminate: the agent asks with confirm_request, the job ends, and the bridge reconciler starts a fresh session unless paused); pause_agent (bridge kv paused=1, agent kept out of the room); start (paused=0 plus ensure; also used as 'Wake'); mute/unmute (agent stops/starts hearing; typed chat still answered); settings_update (partial settings incl. automation {desktop_control, clipboard_helper, clipboard_speak, voice_confirm_high} and vision_mode); confirm_response {id, allow}; clear_memory; task_cancel {id, source 'task'|'reminder'}; tasks_refresh; voice_take_over {identity}; voice_enroll {action 'start'|'cancel'|'commit', target_seconds?}; feedback {message_id, score 1|-1}; sim_lookup {query <=20 chars, purpose?} (legacy string); open_sim_panel; swarm {task} (legacy string); job_cancel {job_id}; open_job_artifact {job_id}; request_state; desktop_stop (v4, tighten-only: the laptop goes read-only and in-flight laptop calls are cancelled; switching back to full happens only at the laptop, K-74/K-76); notification_ack {id} (v4, the K-77 delivery ledger); legacy wake_word_toggle (bool) and persona_change ('jarvis'|'anna'). Only role 'ui' sockets may send them; the bridge validates each payload, forwards to room 'agent' only and rejects unknown types; rate limit per C-SOCK-1.
 
 #### K-04 · DASH-LIVEKIT-UI (livekit) · owner: Claude
-Owner: Claude (token endpoint per C-LK-1 and the agent link policy in UI-08); consumer: Cursor (UI-09/UI-10/UI-28). After login the browser fetches GET /vortex/livekit/token (identity chosen by the server, stable per session; the UI never parses its prefix) and joins room 'jarvis-hybrid' with mic and camera OFF, fetching a NEW token before every connect and automatic reconnect. Mic = localParticipant.setMicrophoneEnabled(true|false); camera = setCameraEnabled. The room is disconnected only on logout or unload. DUPLICATE_IDENTITY (same session in two tabs) leads to a 'Take over' reconnect. Typed chat is NOT sent on lk.chat; Socket.IO is canonical, though the agent still accepts lk.chat. lk.transcription is read only for live captions: user streams are full snapshots per lk.segment_id (final when the header lk.transcription_final == 'true'); agent streams are deltas (final at stream end). Agent participant attributes: lk.agent.state (initializing|listening|thinking|speaking) and jarvis.linked_identity. Link policy: link the first STANDARD participant; when it leaves, re-link the most recent remaining one; switch to an unlinked participant that publishes or unmutes a mic (3 s debounce); ui_command voice_take_over {identity} switches explicitly. Every switch sets jarvis.linked_identity and sends notify 'voice_link' {identity, reason, ts}.
+Owner: Claude (token endpoint per C-LK-1 and the agent link policy in UI-08); consumer: Cursor (UI-09/UI-10/UI-28). After login the browser fetches GET /vortex/livekit/token (identity chosen by the server, stable per session; the UI never parses its prefix) and joins room 'jarvis-hybrid' with mic and camera OFF, fetching a NEW token before every connect and automatic reconnect. Mic = localParticipant.setMicrophoneEnabled(true|false); camera = setCameraEnabled. The room is disconnected only on logout or unload. DUPLICATE_IDENTITY (same session in two tabs) leads to a 'Take over' reconnect. Typed chat is NOT sent on lk.chat; Socket.IO is canonical, though the agent still accepts lk.chat. lk.transcription is read only for live captions: user streams are full snapshots per lk.segment_id (final when the header lk.transcription_final == 'true'); agent streams are deltas (final at stream end). Agent participant attributes: lk.agent.state (initializing|listening|thinking|speaking) and jarvis.linked_identity. Link policy (v4: only K-56 eligible participants, i.e. STANDARD with an 'owner-' identity): link the first eligible participant; when it leaves, re-link the most recent remaining one; switch to an unlinked participant that publishes or unmutes a mic (3 s debounce); ui_command voice_take_over {identity} switches explicitly. Every switch sets jarvis.linked_identity and sends notify 'voice_link' {identity, reason, ts}.
 
 #### K-05 · DASH-CAMERA-VISION (livekit+socketio+settings) · owner: Claude
 Owner: Claude (agent/bridge, UI-27); consumer: Cursor (UI-28, UI-18). The camera never starts before login and stops on logout. Primary path: a LiveKit camera track (640x480, at most 10 fps) published only after the user turns it on; agent RoomOptions(video_input=True). settings vision_mode: 'live' (default; Gemini samples frames while the camera is on) or 'on_request' (session.input.set_video_enabled(True) only for about 5 s around an analyze request). VisionHandler keeps the latest frame of the linked participant's camera, at most 1 per second, for analyze_surroundings. Fallback when LiveKit is not connected: Socket.IO 'vision_frame' {frame: 'data:image/jpeg;base64,...' within the bridge size limit, ts epoch ms} every 2 s, only while 'Share with agent' is on; the bridge forwards it to room 'agent' only (C-SOCK-1 / OPS-18); the agent uses it only if it is at most 10 s old. module_health.vision.camera_source = 'livekit'|'socket'|'none'.
@@ -152,7 +154,7 @@ Owner: Claude (UI-20). The agent sends notify 'module_health' at session start, 
 Owner: Claude (UI-21, on top of voice VCR-07/VCR-08). The agent's notify 'memory_update' {id, content (<=500), role? 'user'|'assistant', source 'extractor'|'fact'|'vector', user_id?, ts} becomes UI 'memory_sync' with the same payload; the bridge keeps the last 200 and puts the last 50 in init_state.memories. After clear_memory the agent sends 'memory_cleared' {scope: 'short_term', backup?, ts}, which becomes UI 'memory_cleared', and the bridge empties its stored short-term memories. memory_sync never carries the clear result.
 
 #### K-08 · DASH-LOCATION (socketio-event) · owner: Claude
-Owner: Claude (UI-20); the map tool emitter belongs to tools-info. Device: the agent's notify 'location_sync' {city, lat, lng, kind: 'device', source: 'ipinfo', ts}, sent at session start and every 600 s, becomes UI 'location_update' and init_state.location. Map focus: the map tool's 'map_focus' becomes UI 'map_focus_update' {query, display_name, lat, lng, zoom, ts} and init_state.map_focus (tools-info routing). For compatibility, a location_sync with kind 'map' is treated as map focus, and a missing kind means device.
+Owner: Claude (UI-20); the map tool emitter belongs to tools-info. Device: the agent's notify 'location_sync' {city, lat, lng, kind: 'device', source: 'ipinfo'|'device'|'user_city' (v4), ts}, sent at session start and every 600 s (v4, vps mode: the Desktop Node pushes the laptop's location over K-70 at start and every 600 s, agent-svc caches it in conversations/location.json, and the agent sends location_sync from that cache, or USER_CITY with source 'user_city'; ipinfo is never called on the VPS), becomes UI 'location_update' and init_state.location. Map focus: the map tool's 'map_focus' becomes UI 'map_focus_update' {query, display_name, lat, lng, zoom, ts} and init_state.map_focus (tools-info routing). For compatibility, a location_sync with kind 'map' is treated as map focus, and a missing kind means device.
 
 #### K-09 · DASH-LOCAL-AUTH (http+env) · owner: Claude
 Owner: Claude (UI-07, on top of infra OPS-08/OPS-09). COOKIE_SECURE=auto|1|0 on the bridge: auto sets Secure only for HTTPS requests, judged from the ASGI scheme or from X-Forwarded-Proto sent by a trusted proxy peer. Local mode (vortex.py bridge on http://127.0.0.1:5001, used by npm run dev and Electron local) reads SESSION_JWT_SECRET, OWNER_PASSWORD_HASH and OWNER_TOTP_SECRET from the PC root .env, written by the owner-credential script with --target local. Without them, /auth/login returns 503 {error: 'owner_not_enrolled'} and the UI shows a setup hint.
@@ -172,14 +174,15 @@ Owner: Cursor (stonix_ui/tests/mock-bridge, UI-04); checked by Claude (UI-38). s
 - plugin_manager.get_tool_meta(name) -> {timeout, risk, arg_policies, exclusive, voice_confirm, max_output_chars, long_running, confirm_summary} (None for an unknown name; voice_confirm is the explicit value, else True for a fixed 'medium', False for a fixed 'high' and None when risk is 'low' or a callable); plugin_manager.running_tools() -> set of names. The internal kwarg _confirmed never appears in the schema.
 - TD-02 (C-24) is merged since 2026-10-01: Cursor modules may use the new kwargs now; an unknown or invalid kwarg logs ERROR and never drops the module's tools.
 - v2 transition: LiveKit passes every LLM argument positionally. An argument with a declared policy (raw_args or arg_policies) gets that policy however it is passed. An argument without one keeps the pre-v2 behaviour (passed positionally: unchanged; by keyword: plain) until every tool module declares its K-16 policies; then Claude makes 'plain' the default for every argument and announces it in plan.md section 11. Declare a policy for every free-text argument now.
+- v4 (VPS brain): in remote mode the laptop tools are K-71 proxies (exclusive None, retry_attempts 0, timeout = the K-70 link cap). The desktop_input lock and the JARVIS_DESKTOP_CONTROL kill switch apply inside the Desktop Node, whose executor runs the real tools through this wrapper without asking again: a confirm-class call runs there only with the agent's ConfirmFlow approval reference (K-76).
 
 #### K-12 · ToolResult (data-schema (every desktop tool return value)) · owner: Claude
 dict {status: 'success'|'error'|'not_found'|'cancelled'|'needs_confirmation'|'degraded'|'started'|'empty', message: str (one short Roman-Urdu sentence Jarvis can speak), tool: str, data?: object (path, url, count, output, elements, job_id, untrusted...), error_code?: UPPER_SNAKE str, hint?: str, confirm_id?: str (only with needs_confirmation)}.
-Known error_codes: PATH_NOT_ALLOWED, WHATSAPP_NOT_INSTALLED, FOCUS_LOST, PINCHTAB_UNAVAILABLE, DESKTOP_CONTROL_DISABLED, DESKTOP_BUSY, CONTROLLER_TOKEN_MISSING (reserved), NO_LAN, FILE_SERVER_ROOT_MISSING, NOT_CONFIRMED, UI_CONFIRM_REQUIRED, CONFIRM_UI_UNREACHABLE, NO_USER_AFFIRMATION, CV_PATH_NOT_SET, BROWSER_MISSING, TIMEOUT.
+Known error_codes: PATH_NOT_ALLOWED, WHATSAPP_NOT_INSTALLED, FOCUS_LOST, PINCHTAB_UNAVAILABLE, DESKTOP_CONTROL_DISABLED, DESKTOP_BUSY, CONTROLLER_TOKEN_MISSING (reserved), NO_LAN, FILE_SERVER_ROOT_MISSING, NOT_CONFIRMED, UI_CONFIRM_REQUIRED, CONFIRM_UI_UNREACHABLE, NO_USER_AFFIRMATION, CV_PATH_NOT_SET, BROWSER_MISSING, TIMEOUT. v4 adds the Desktop Link, node, approval and media codes listed in K-76 (for example DESKTOP_OFFLINE, DESKTOP_RESULT_UNKNOWN, DESKTOP_LOCKED, APPROVAL_REQUIRED and MEDIA_DISK_LOW).
 Legacy top-level keys tools return today (file_path, path, url, files, media, count, title, is_maximized, is_minimized, app, contact, qr_path, opened_file, filename, action, query) stay for backward compatibility. Built with services.system.jarvis_desktop_common.tool_result(). The wrapper's own error dict {status:'error', tool, error_type, message} is unchanged.
 
 #### K-13 · ToolSyncEvent (event: agent POST /notify {type:'tool_sync'} -> bridge emits 'tool_update' (and 'tool_progress' for progress) to room ui) · owner: Claude
-payload {id: str (uuid per call or job id), tool: str, action: str (tool name or sub-action; the UI ToolLog needs it), phase: 'start'|'progress'|'end', status: 'running'|'success'|'error'|'not_found'|'cancelled'|'needs_confirmation'|'degraded'|'started'|'timeout'|'blocked', details: str (<=160 chars; args preview, raw args as '<N chars>', secrets redacted), result_summary?: str (end only, <=200, redacted), progress?: int 0-100, duration_ms?: int (end only), risk: 'low'|'medium'|'high', source: 'plugin'|'internal'|'job', timestamp: float epoch s}.
+payload {id: str (uuid per call or job id), tool: str, action: str (tool name or sub-action; the UI ToolLog needs it), phase: 'start'|'progress'|'end', status: 'running'|'success'|'error'|'not_found'|'cancelled'|'needs_confirmation'|'degraded'|'started'|'timeout'|'blocked', details: str (<=160 chars; args preview, raw args as '<N chars>', secrets redacted), result_summary?: str (end only, <=200, redacted), progress?: int 0-100, duration_ms?: int (end only), risk: 'low'|'medium'|'high', source: 'plugin'|'internal'|'job'|'desktop' (v4: a laptop tool run through the K-70 link; one start and one end per call under the proxy's id), timestamp: float epoch s}.
 The TD-03 wrapper emits exactly one start and one end per LLM tool call; jobs/tools add progress via notify_tool_action(tool, details, phase='progress', progress=N, id=<call or job id>). The bridge keeps the last 20 by id and relays 'tool_update'; for phase 'progress' it also emits 'tool_progress' {job_id, tool, title, status, percent, message, ts}. DASH-C11 (internal tools + upsert) and VCR-23 reuse these ids so there is one UI row per call.
 
 #### K-14 · ConfirmFlow (events + broker + internal tool (one implementation for all areas)) · owner: Claude
@@ -193,6 +196,7 @@ The TD-03 wrapper emits exactly one start and one end per LLM tool call; jobs/to
 - Expiry: config.confirm_timeout_s = JARVIS_CONFIRM_TIMEOUT_S = 60 for every area.
 - Approved runs go through the normal wrapper (timeout, lock, tool_sync).
 - Risk levels of desktop tools come from DesktopToolPolicy via get_tool_meta; other risk maps (tool_risk_policy.py, jarvis_guard.RISK) read it instead of overriding it; a confirm_level setting may only make confirmation stricter.
+- v4 (VPS brain, user decision D3): this flow is the only approval path for laptop actions. The agent asks (dashboard Allow or a spoken yes) before it sends a confirm-class exec, then puts approval {confirm_id, channel, risk, args_sha256} into the signed exec (K-70, K-76); the laptop shows no prompt. create_pending(desktop=True) also takes the node's APPROVAL_REQUIRED (dynamic risk), and the summary of a laptop action shows the normalised arguments and names any path. The voice check fails closed while the TD-19 transcript check is unwired (C-75); a spoken yes approves a laptop action only for medium risk, never code_exec, and only on a voice-ID-verified turn (D20).
 
 #### K-15 · DesktopConfigKeys (env + config attributes (services/utils/jarvis_config.py, Claude-owned)) · owner: Claude
 deploy/windows-local/.env and root .env get the same keys via scripts/ops/env_set.py (set-if-missing, --secret generates token_urlsafe(32), never prints values). ENV -> attribute (default):
@@ -201,7 +205,7 @@ deploy/windows-local/.env and root .env get the same keys via scripts/ops/env_se
 - JARVIS_MEDIA_DIRS (';' list, %VARS% and ~ expanded) -> media_dirs (~/Music;~/Videos;~/Downloads;~/Desktop;~/Documents;<shared_dir>; plus D:/ when it exists; missing folders skipped)
 - JARVIS_OPEN_ROOTS -> open_roots (~/Desktop;~/Documents;~/Downloads;~/Music;~/Videos;<project_root>/Jarvis_Outputs;<shared_dir>; plus D:/ when it exists; never the whole home)
 - JARVIS_FILE_SERVER_ROOT -> file_server_root (explicit value, else D:/ when it exists, else shared_dir); JARVIS_FILE_SERVER_PORT -> file_server_port (8000); JARVIS_FILE_SERVER_TTL_MIN -> file_server_ttl_min (30)
-- JARVIS_DESKTOP_CONTROL -> desktop_control_enabled (true); JARVIS_CLIPBOARD_HELPER -> clipboard_helper_enabled (true); JARVIS_CLIPBOARD_SPEAK -> clipboard_speak (false)
+- JARVIS_DESKTOP_CONTROL -> desktop_control_enabled (true; the kill switch, applied inside the Desktop Node in vps mode, K-76; v4: the node reads it and the other non-secret keys of this list from the PC root .env through its allow-listed settings parser, at start and on change, with relative paths resolved against JARVIS_DATA_ROOT, K-72); JARVIS_CLIPBOARD_HELPER -> clipboard_helper_enabled (true); JARVIS_CLIPBOARD_SPEAK -> clipboard_speak (false)
 - JARVIS_CONFIRM_TIMEOUT_S -> confirm_timeout_s (60); JARVIS_VOICE_CONFIRM_HIGH -> voice_confirm_high (false)
 - JARVIS_CHROME_PATH -> chrome_path (auto); JARVIS_EDGE_PATH -> edge_path (auto); JARVIS_PLAYWRIGHT_CHANNEL -> playwright_channel ('chrome')
 - PINCHTAB_URL -> pinchtab_url (http://127.0.0.1:9867); PINCHTAB_TOKEN (secret) -> pinchtab_token; PINCHTAB_BIN -> pinchtab_bin (auto); PINCHTAB_AUTOSTART -> pinchtab_autostart (true); PINCHTAB_ALLOWED_DOMAINS -> pinchtab_allowed_domains (['*'])
@@ -212,7 +216,7 @@ deploy/windows-local/.env and root .env get the same keys via scripts/ops/env_se
 Cursor code reads each attribute via getattr(config, name, <same default>) so a missing key never crashes.
 
 #### K-16 · DesktopToolPolicy (policy table: timeout(s) / risk / raw args / exclusive) · owner: Claude
-- open_app 30/low/-/desktop_input; save_notepad 25/low/-/desktop_input; open_notepad_file 10/dyn(medium for non-text types)/file_path/-
+- open_app 30/dyn(v4: high for an unmapped or executable target, which counts as code_exec per K-76)/-/desktop_input; save_notepad 25/low/-/desktop_input; open_notepad_file 10/dyn(medium for non-text types)/file_path/-
 - close_window 15/dyn(medium if force, >1 match or any browser window)/-/-; close = routed alias of close_window (same policy)
 - minimize_window, maximize_window 10/low; folder_file 15/dyn(high for EXEC_EXTS; files outside open_roots need confirmation)/path/-; create_folder 10/low; open_outputs_folder 10/low; get_active_window_context 5/low
 - create_template_code 90/low/-/desktop_input; write_custom_code 120/dyn(medium if auto_run (default True) and .py .bat .cmd .ps1 .js)/content/desktop_input
@@ -227,12 +231,14 @@ Cursor code reads each attribute via getattr(config, name, <same default>) so a 
 - start_file_access_server 20/medium; stop_file_access_server 10/low
 - shutdown_system 20/high; restart_system 20/high; sleep_system 15/medium; empty_recycle_bin 30/high (async summary); cancel_shutdown 10/low; get_laptop_info 5/low
 - retry_attempts stays 0 for every GUI tool: never auto-retry a send or typing action. desktop_input tools obey the central kill switch.
+- v4 (VPS brain): every tool also has a K-71 placement and, on the laptop, a K-76 class. The effective risk is the strictest of this table, K-45 and the class; messaging, code_exec, availability and exposure always go through ConfirmFlow in the agent before the exec is sent, and desktop_input tools return DESKTOP_LOCKED while Windows is locked.
 
 #### K-17 · ToolNamesV2 (naming (LLM-visible tool names)) · owner: Claude
 - Added: close_window(window_name: str, force: bool = False). The tool 'close' stays registered as a routed alias that calls close_window (nothing unregistered).
 - New tools: cancel_shutdown() (jarvis_system_ctrl, Cursor); confirm_action(confirm_id, allow=True) (jarvis_confirm, Claude); list_background_jobs() and cancel_background_job(job_id) (jarvis_jobs, Claude); confirm_selftest only when JARVIS_CONFIRM_SELFTEST=1.
 - Backward-compatible signature changes: sleep_system(mode='sleep'|'hibernate'), close_notepad_tool(force=False), run_cmd_command(command, capture=False).
 - No tool is removed. TD-36 updates the prompt (one change with VCR-06).
+- v4 count (2026-10-01): 83 LLM-visible names = 79 plugin tools (including confirm_action) + 4 internal wrap_* tools. The expected set comes from discovery plus the K-71 manifest, never a constant. In vps mode the laptop tools stay registered as K-71 proxies while the laptop is offline and answer DESKTOP_OFFLINE.
 
 #### K-18 · AnnouncerAPI (python-api (services/utils/jarvis_announcer.py, Claude-owned; re-exported by services/ai_core/announcer.py)) · owner: Claude
 - attach(session) / detach() (aliases set_session(session|None), set_assistant(assistant|None)) called by agent_runner.
@@ -247,6 +253,7 @@ Cursor code reads each attribute via getattr(config, name, <same default>) so a 
 - The consumer also accepts a plain str (old behaviour) during the transition.
 - services.automation.jarvis_clipboard.note_self_write(text: str) -> None marks clipboard content JARVIS wrote itself; the monitor ignores it.
 - config.clipboard_helper_enabled False stops detections; config.clipboard_speak decides whether tips are spoken.
+- v4 (VPS brain): in vps mode the Desktop Node runs the monitor and sends only {id, error_excerpt (redacted, <=200 chars), query, solution, source_url, ts} as a K-70 clipboard_suggestion event; the agent injects it as quoted, untrusted user-side data, never as a system message.
 
 #### K-20 · BackgroundJobsAPI (python-api (services/utils/jarvis_jobs.py, Claude-owned; re-exported by services/ai_core/background_jobs.py)) · owner: Claude
 - start_job(tool: str, title: str, factory: Callable[[JobContext], Awaitable[dict]], *, timeout: float = 1800, announce: bool = True) -> job_id
@@ -256,9 +263,10 @@ Cursor code reads each attribute via getattr(config, name, <same default>) so a 
 - Tools list_background_jobs() and cancel_background_job(job_id). ui_command job_cancel {job_id} and open_job_artifact {job_id} (opens only a finished job's existing file).
 - Memory-only: jobs are lost on agent restart and reported as such.
 - Cursor callers import lazily and run synchronously when the module is missing.
+- v4 (VPS brain): in vps mode jobs run in the agent container. An artifact under /app/Jarvis_Shared or /app/Jarvis_Outputs also carries {area, relpath, sha256}, and the laptop steps (pc.fetch and open, K-73) run when the job finishes.
 
 #### K-21 · ActiveWindowContext (python-api (Cursor-owned function, consumed by Claude's src/core/vision_handler.py:50)) · owner: Claude
-await get_active_window_context() -> {status: 'success'|'not_found'|'error', title: str, is_maximized: bool, is_minimized: bool, message: str, pid?: int, process_name?: str}. The keys status and title must not change.
+await get_active_window_context() -> {status: 'success'|'not_found'|'error', title: str, is_maximized: bool, is_minimized: bool, message: str, pid?: int, process_name?: str}. The keys status and title must not change. v4 (VPS brain): in vps mode the Desktop Node calls it every 5 s and pushes changes as a K-70 window_context event; the agent caches them (WindowContextProvider) and injects them as untrusted user-side data.
 
 #### K-22 · YouTubeVideoUrl (python-api (Cursor-owned, consumed by services/multimedia/jarvis_youtube_downloader.py)) · owner: Claude
 await yt_bot.get_video_url(query: str) -> 'https://www.youtube.com/watch?v=<id>' or None. It never returns a search-results URL (yt-dlp would expand one into a playlist). The merged downloader may instead pass 'ytsearch1:<query>' to yt-dlp directly.
@@ -277,6 +285,7 @@ PinchTab (github.com/pinchtab/pinchtab): a local open-source HTTP server that dr
 - Handled inside the VCR-09 settings service (no second handler); accepted only from authenticated ui sockets (OPS-08 roles). voice_confirm_high=true is accepted only when legacy token auth is off (after OPS-10); otherwise refused and audited.
 - Every change is audited (AUTOMATION_SETTING) and persisted in the settings store with {by, ts}; at startup .env applies first and the persisted block overrides it (voice_confirm_high=true only when set after the cut-over).
 - settings_sync (agent -> ui) includes the automation block on change and at UI connect.
+- v4 (VPS brain): desktop_control and the clipboard flags take effect on the Desktop Node: the node reads them from the PC root .env (allow-listed settings parser, at start and on change, K-72), and once C-59 is DONE the UI can also turn one off at once through a K-70 control; turning desktop_control back on happens only at the laptop (tray or the PC root .env), never from the UI or the bridge (K-76). voice_confirm_high stays agent-side under the rule above and never lets a spoken yes approve a high-risk laptop action.
 
 #### K-25 · DesktopCommonHelpers (python-api (services/system/jarvis_desktop_common.py; Cursor-internal)) · owner: Claude
 - tool_result(status, message, *, tool=None, data=None, error_code=None, hint=None, **legacy) -> dict
@@ -292,81 +301,82 @@ PinchTab (github.com/pinchtab/pinchtab): a local open-source HTTP server that dr
 - No import-time side effects.
 
 #### K-26 · VitalsPCHelper (python-api (Cursor provides, Claude may consume for vitals_pc)) · owner: Claude
-services.system.jarvis_system_info.collect_pc_vitals() -> {cpu: float, ram: float, disk: float, battery: int|None, plugged: bool|None, secs_left: int|None}. Synchronous, under 0.5 s, safe to call from asyncio.to_thread every 5-10 s; OPS-16 snapshot_vitals() may route through it.
+services.system.jarvis_system_info.collect_pc_vitals() -> {cpu: float, ram: float, disk: float, battery: int|None, plugged: bool|None, secs_left: int|None}. Synchronous, under 0.5 s, safe to call from asyncio.to_thread every 5-10 s; OPS-16 snapshot_vitals() may route through it. v4 (VPS brain): in vps mode the Desktop Node calls it every 10 s and sends vitals_pc over K-70; the bridge's own figures are vitals_vps.
 
 #### K-27 · TestSideEffectGuard (pytest fixture module (tests/tools/side_effect_guard.py, Cursor-owned; contract recorded by Claude)) · owner: Claude
 - Autouse fixture block_real_side_effects patches pyautogui input functions, pynput Controller methods, os.startfile, os.system, subprocess.Popen/run/call, asyncio.create_subprocess_exec/_shell, webbrowser.open, pyperclip, win32clipboard set/get, win32gui PostMessage/SetForegroundWindow/ShowWindow/BringWindowToTop, win32api keybd_event/PostMessage, ctypes user32 keybd_event/SendInput, shell32.SHEmptyRecycleBinW, smtplib.SMTP, requests.get/post and httpx get/post/AsyncClient to raise AssertionError('REAL SIDE EFFECT: <name>').
 - It points config.bridge_url to http://127.0.0.1:9 and removes UIBridgeHandler from all loggers.
 - Disabled only with JARVIS_LIVE_GUI_TESTS=1. Imported by conftest.py in tests/tools, tests/automation, tests/scripts, services/automation/tests (Cursor) and tests/exhaustive (Claude).
+- v4 (VPS brain): the same rule covers the Desktop Node in tests. Claude's desktop tests (tests/unit, tests/core) patch the link client's connects, mirror writes outside a temp root, pc.* operations and schtasks calls.
 
 #### K-28 · tool_arg_policies (python-api (Claude: services/utils/jarvis_security.py; wired by the single EXT X0/C1 jarvis_tool decorator)) · owner: Claude
 VortexGuard.sanitize_arg(value: str, policy='plain') -> str, raising ArgPolicyError(code='PATH_NOT_ALLOWED'|'INVALID_ARG', message). Policies: plain = today's sanitize_input, unchanged, and the default for every argument without a policy (v2 transition in K-11: an argument without a policy that LiveKit passes positionally is not sanitized yet); multiline = NFC, CRLF/CR to LF, control chars removed except LF/TAB, punctuation kept, max 20000; raw = NFC only (never NFKC), NUL and C0 control chars removed except TAB/LF/CR, max 20000 (identical to C1 sanitize_raw; raw_args=True means raw); url_or_text = an http(s) URL with a host is returned unchanged except control chars, anything else gets plain; path = NFC, control chars removed, '..' segments (also drive-relative 'C:..' and segments of only dots and spaces with two or more dots), UNC/device paths and DOS device names (CON, NUL, AUX, PRN, COM0-9, LPT0-9, CONIN$, CONOUT$, also followed by ':') raise PATH_NOT_ALLOWED (each tool still checks its allowed roots); email_list = 1-10 addresses split on comma/semicolon/whitespace, returned ', '-joined, else INVALID_ARG. validate_tool_args(tool, args, depth=0, policies=None) applies per-key policies to top-level strings; nested values stay plain. validate_tool_output(tool, output, depth=0, max_chars=12000): every str gets INJECTION_PATTERNS replaced by '[filtered]', then redact_secrets(), then truncation to max_chars plus a line '…[truncated N chars]'; a whole string is never replaced for length; the 500 KB, 100-key, 200-item and depth caps are unchanged; detect_threat (with its 5000-char rule) is for user input only. Wrapper duties for EXT C1: validate arguments BEFORE breaker.call; ArgPolicyError becomes {status:'error', tool, error_code, message} with no breaker failure counted; the decorator's max_output_chars is passed as max_chars.
 
 #### K-29 · redact_secrets (python-api + logging convention (Claude: services/utils/jarvis_security.py, services/utils/jarvis_logger.py)) · owner: Claude
-redact_secrets(text) -> str replaces with '***' the current values (length >= 8) of GOOGLE_API_KEY, GOOGLE_SEARCH_API_KEY, TAVILY_API_KEY, OPENROUTER_API_KEY, GROQ_API_KEY, HF_TOKEN, EMAIL_APP_PASSWORD, WEATHER_API_KEY, OPENWEATHER_API_KEY, VORTEX_SECURITY_TOKEN, CONTROLLER_TOKEN, JARVIS_ENCRYPTION_KEY, LIVEKIT_API_SECRET, AGENT_TOKEN, BRIDGE_HMAC_SECRET, SESSION_JWT_SECRET, POLLINATIONS_TOKEN, PINCHTAB_TOKEN, SIM_LOOKUP_API_KEY, VITE_VORTEX_SECURITY_TOKEN, OWNER_TOTP_SECRET, OWNER_PASSWORD_HASH and every value given to register_runtime_secret(value) (for example the per-start file-server token of EXT K2), and masks key=, api_key=, appid=, token=, sig= query values and 'Bearer <x>'. jarvis_logger.RedactingFormatter.format() returns redact_secrets(super().format(record)), covering messages, args, exc_info tracebacks and stack_info; every JARVIS handler (console, rotating file, UI bridge or batch) uses it, and later logger rewrites (EXT OPS-17, VCR-32) must keep it. httpx and httpcore loggers stay at WARNING. Conventions: Google keys go in the 'x-goog-api-key' header; Tavily, Pollinations and the SIM API use 'Authorization: Bearer'; HTTP errors are logged or returned only as redact_secrets(str(e)).
+redact_secrets(text) -> str replaces with '***' the current values (length >= 8) of GOOGLE_API_KEY, GOOGLE_SEARCH_API_KEY, TAVILY_API_KEY, OPENROUTER_API_KEY, GROQ_API_KEY, HF_TOKEN, EMAIL_APP_PASSWORD, WEATHER_API_KEY, OPENWEATHER_API_KEY, VORTEX_SECURITY_TOKEN, CONTROLLER_TOKEN, JARVIS_ENCRYPTION_KEY, LIVEKIT_API_SECRET, AGENT_TOKEN, BRIDGE_HMAC_SECRET, SESSION_JWT_SECRET, POLLINATIONS_TOKEN, PINCHTAB_TOKEN, SIM_LOOKUP_API_KEY, VITE_VORTEX_SECURITY_TOKEN, OWNER_TOTP_SECRET, OWNER_PASSWORD_HASH, DESKTOP_AGENT_SIGNING_KEY (v4) and every value given to register_runtime_secret(value) (v4: the node registers its unwrapped DESKTOP_PC_SIGNING_KEY this way) (for example the per-start file-server token of EXT K2), and masks key=, api_key=, appid=, token=, sig= query values and 'Bearer <x>'. jarvis_logger.RedactingFormatter.format() returns redact_secrets(super().format(record)), covering messages, args, exc_info tracebacks and stack_info; every JARVIS handler (console, rotating file, UI bridge or batch) uses it, and later logger rewrites (EXT OPS-17, VCR-32) must keep it. httpx and httpcore loggers stay at WARNING. Conventions: Google keys go in the 'x-goog-api-key' header; Tavily, Pollinations and the SIM API use 'Authorization: Bearer'; HTTP errors are logged or returned only as redact_secrets(str(e)).
 
 #### K-30 · llm_text (python-api (Claude: services/ai_core/llm_text.py)) · owner: Claude
 async generate_text(prompt, *, system=None, model=None, max_output_tokens=2048, temperature=0.4, timeout=60.0) -> LLMResult(text, provider, model); async generate_vision(prompt, image: PIL.Image | bytes, *, timeout=60.0) -> LLMResult; both raise LLMUnavailableError(reasons) when every tier fails; async list_gemini_models() for diagnostics. Tier 1 Gemini (google-genai, GOOGLE_API_KEY): the model argument or JARVIS_TEXT_MODEL (gemini-3.5-flash) / JARVIS_VISION_MODEL (gemini-3.8-flash), then gemini-3.8-flash, gemini-3.5-flash, gemini-3.1-flash-lite, gemini-2.5-flash; a 404 marks the id dead and tries the next one, 429/5xx moves to the next tier. Tier 2 Groq (OpenAI-compatible): JARVIS_GROQ_TEXT_MODEL openai/gpt-oss-120b with reasoning_effort 'low'; JARVIS_GROQ_VISION_MODEL qwen/qwen3.6-27b with reasoning_effort 'none'. Tier 3 OpenRouter: JARVIS_OPENROUTER_MODEL openrouter/free. Keys only via SDK or headers; failure reasons pass through redact_secrets. Consumers: vision (TI-05), research (TI-11, Cursor), swarm (TI-19), bug hunter (TI-20), self-repair (TI-21).
 
 #### K-31 · job_progress_routing (events (agent /notify -> bridge -> room 'ui') + ui_command) · owner: Claude
-Producer: EXT C6 jobs (JobContext.progress and job end) post /notify tool_sync {id: job id, tool, action: job title, phase: 'start'|'progress'|'end', status, details, progress?: 0-100, duration_ms?, job: true, artifact?: {kind: 'audio'|'video'|'image'|'file', path, name}, timestamp}. Bridge: keeps today's tool_logs and 'tool_update'; for job events it upserts state.jobs[id] (newest 20) and emits 'tool_progress' {job_id, tool, title, status: 'queued'|'running'|'done'|'error'|'cancelled' (success maps to done), percent: number|null, message, artifact?, ts} to room 'ui'; a direct /notify 'tool_progress' of the same shape is also accepted. init_state gains jobs (newest first). UI -> agent: ui_command {type:'job_cancel', payload:{job_id}} and {type:'open_job_artifact', payload:{job_id}}, added to the ui_command allow-list and forwarded only to room 'agent'. Agent: job_cancel -> jarvis_jobs.cancel_job(job_id); open_job_artifact -> os.startfile(artifact.path) only for a finished job whose file exists under <project_root>/Jarvis_Outputs or config.shared_dir, audited. Producers: YouTube (TI-15), research+email (TI-11), swarm (TI-19); consumer: Jobs panel (TI-27).
+Producer: EXT C6 jobs (JobContext.progress and job end) post /notify tool_sync {id: job id, tool, action: job title, phase: 'start'|'progress'|'end', status, details, progress?: 0-100, duration_ms?, job: true, artifact?: {kind: 'audio'|'video'|'image'|'file', path, name}, timestamp}. Bridge: keeps today's tool_logs and 'tool_update'; for job events it upserts state.jobs[id] (newest 20) and emits 'tool_progress' {job_id, tool, title, status: 'queued'|'running'|'done'|'error'|'cancelled' (success maps to done), percent: number|null, message, artifact?, ts} to room 'ui'; a direct /notify 'tool_progress' of the same shape is also accepted. init_state gains jobs (newest first). UI -> agent: ui_command {type:'job_cancel', payload:{job_id}} and {type:'open_job_artifact', payload:{job_id}}, added to the ui_command allow-list and forwarded only to room 'agent'. Agent: job_cancel -> jarvis_jobs.cancel_job(job_id); open_job_artifact -> services.utils.jarvis_delivery.open_artifact(artifact.path) only for a finished job whose file exists under <project_root>/Jarvis_Outputs or config.shared_dir, audited (pc mode: os.startfile; v4 vps mode: pc.fetch {open:true} on the laptop through K-73, DESKTOP_OFFLINE while the laptop is offline; os.startfile never runs on the agent host). Producers: YouTube (TI-15), research+email (TI-11), swarm (TI-19); consumer: Jobs panel (TI-27).
 
 #### K-32 · scheduled_action_runner (python-api (Claude: services/ai_core/scheduler_dispatcher.py)) · owner: Claude
-FORBIDDEN_SCHEDULED_ACTIONS = confirm_action, schedule_task, cancel_scheduled_task, set_reminder, plus autonomous_self_repair when apply is true. action_risk(action, args) -> 'forbidden'|'free_text'|'low'|'medium'|'high' (a registered tool returns its X0 decorator risk with defaults applied; an unknown name returns 'free_text'). async run_scheduled_action(row) -> {status: 'success'|'error'|'awaiting_confirmation'|'delegate'|'forbidden', message, result?}: tool actions run through the plugin-manager wrapper (arg policies, timeout and confirmation kept), never the raw function; 'delegate' means EXT VCR-19's ProactiveAnnouncer keeps its LLM action instruction. needs_confirmation sets the row to awaiting_confirmation with confirm_id; on the X0 broker resolution: allow + result -> completed (result JSON <= 4000 chars); deny -> failed 'denied'; expired or no UI -> stays awaiting, re-asked every 15 min, failed 'approval timeout' after 24 h and announced. Results are announced through EXT C5. Consumers: the EXT VCR-19 due loop; schedule_task (Cursor) imports action_risk lazily and treats a missing module as 'high' for any action.
+FORBIDDEN_SCHEDULED_ACTIONS = confirm_action, schedule_task, cancel_scheduled_task, set_reminder, plus autonomous_self_repair when apply is true. action_risk(action, args) -> 'forbidden'|'free_text'|'low'|'medium'|'high' (a registered tool returns its X0 decorator risk with defaults applied; an unknown name returns 'free_text'). async run_scheduled_action(row) -> {status: 'success'|'error'|'awaiting_confirmation'|'delegate'|'forbidden', message, result?}: tool actions run through the plugin-manager wrapper (arg policies, timeout and confirmation kept), never the raw function; 'delegate' means EXT VCR-19's ProactiveAnnouncer keeps its LLM action instruction. needs_confirmation sets the row to awaiting_confirmation with confirm_id; on the X0 broker resolution: allow + result -> completed (result JSON <= 4000 chars); deny -> failed 'denied'; expired or no UI -> stays awaiting, re-asked every 15 min, failed 'approval timeout' after 24 h and announced. Results are announced through EXT C5. Consumers: the EXT VCR-19 due loop; schedule_task (Cursor) imports action_risk lazily and treats a missing module as 'high' for any action. v4 (VPS brain): in vps mode jarvis-agent-svc hosts the due loop (K-77). A scheduled laptop action goes through the svc DesktopLink with origin 'scheduler' and carries the approval recorded at scheduling time; when the laptop is offline it waits 15 min (D16), then fails with an announcement.
 
 #### K-33 · task_store_v2 (python-api + sqlite schema (Cursor-owned services/automation/jarvis_task_manager.py and jarvis_reminders.py; contract owned by Claude)) · owner: Claude
-conversations/tasks.db table tasks gains kind TEXT DEFAULT 'task', action_args TEXT (JSON object), result TEXT, attempts INTEGER DEFAULT 0, updated_at TEXT and confirm_id TEXT, added only when missing (PRAGMA table_info); nothing is dropped. status is one of pending, triggered, running, awaiting_confirmation, completed, failed, cancelled. TaskManager: add_task(description, scheduled_time, action=None, action_args=None, kind='task') -> int; get_due_tasks() (marks triggered atomically, decodes action_args); list_triggered_tasks(); mark_running(id); mark_awaiting_confirmation(id, confirm_id); mark_completed(id, result=None); mark_failed(id, error); increment_attempts(id); cancel_task(id); get_task(id); list_pending_tasks(kind=None). Module parse_when(text, now=None) -> datetime | None (English and Roman-Urdu units and number words, HH:MM, h:mm am/pm, ISO, 'kal'/'tomorrow HH:MM'). Tools: schedule_task(time_str, description, action='', action_args_json='') and the new cancel_scheduled_task(task_id). Reminders stay in reminders.json (EXT DASH-U13/VCR-20); set_reminder uses parse_when. CONTRACT-TASKS TaskItem.status may carry the new statuses, and UIs render unknown statuses as plain text.
+conversations/tasks.db table tasks gains kind TEXT DEFAULT 'task', action_args TEXT (JSON object), result TEXT, attempts INTEGER DEFAULT 0, updated_at TEXT and confirm_id TEXT, added only when missing (PRAGMA table_info); nothing is dropped. status is one of pending, triggered, running, awaiting_confirmation, completed, failed, cancelled. TaskManager: add_task(description, scheduled_time, action=None, action_args=None, kind='task') -> int; get_due_tasks() (marks triggered atomically, decodes action_args); list_triggered_tasks(); mark_running(id); mark_awaiting_confirmation(id, confirm_id); mark_completed(id, result=None); mark_failed(id, error); increment_attempts(id); cancel_task(id); get_task(id); list_pending_tasks(kind=None). Module parse_when(text, now=None) -> datetime | None (English and Roman-Urdu units and number words, HH:MM, h:mm am/pm, ISO, 'kal'/'tomorrow HH:MM'). Tools: schedule_task(time_str, description, action='', action_args_json='') and the new cancel_scheduled_task(task_id). Reminders stay in reminders.json (EXT DASH-U13/VCR-20); set_reminder uses parse_when. CONTRACT-TASKS TaskItem.status may carry the new statuses, and UIs render unknown statuses as plain text. v4 (VPS brain): agent-svc reads reminders.json under services.utils.jarvis_filelock.locked and opens tasks.db with busy_timeout. After X-66 it uses list_due_reminders() and mark_reminder_delivered(id); until then it never writes reminders.json (K-77).
 
 #### K-34 · sim_authorized_source (python-api + env + event fields (Cursor-owned services/info/sim_providers.py on EXT DASH-U18's AuthorizedSimSource protocol; Claude routing)) · owner: Claude
-Exactly two sources: NotConfiguredSource (default: today's blocked result, SAFE_MESSAGE plus 'provider not configured') and AuthorizedApiSource. Leaked, scraped or 'SIM database' sources and any other source type are prohibited (a test asserts it). Selection: SIM_SOURCE='none' forces off; unset or empty = auto, AuthorizedApiSource only when SIM_LOOKUP_API_URL and SIM_LOOKUP_API_KEY are both set (user decision 30 Sep). AuthorizedApiSource.lookup(digits) -> list[{full_name, cnic_masked (last 4 digits visible), phone_masked, address? (only with SIM_LOOKUP_SHOW_ADDRESS=1)}] via POST SIM_LOOKUP_API_URL json {msisdn} with 'Authorization: Bearer <SIM_LOOKUP_API_KEY>' and a 10 s timeout; field names live in one FIELD_MAP that is confirmed against the provider's API doc. lookup_sim_data(phone_number, purpose=''): with a configured source a purpose of >= 5 chars and SIM_LOOKUP_DAILY_LIMIT (default 20 per day) are enforced; the audit row is {ts, provider, query_masked, status, count, purpose_sha256}, never the raw number or purpose. Events: sim_panel_open {message, provider, configured, requires_purpose}; sim_data_result gains provider. ui_command sim_lookup accepts the legacy string (<= 20 chars) or {query (<= 20 chars), purpose (<= 200 chars)}; the bridge allow-list (EXT OPS-08/DASH-C09) accepts both and forwards only to room 'agent'.
+Exactly two sources: NotConfiguredSource (default: today's blocked result, SAFE_MESSAGE plus 'provider not configured') and AuthorizedApiSource. Leaked, scraped or 'SIM database' sources and any other source type are prohibited (a test asserts it). Selection: SIM_SOURCE='none' forces off; unset or empty = auto, AuthorizedApiSource only when SIM_LOOKUP_API_URL and SIM_LOOKUP_API_KEY are both set (user decision 30 Sep). AuthorizedApiSource.lookup(digits) -> list[{full_name, cnic_masked (last 4 digits visible), phone_masked, address? (only with SIM_LOOKUP_SHOW_ADDRESS=1)}] via POST SIM_LOOKUP_API_URL json {msisdn} with 'Authorization: Bearer <SIM_LOOKUP_API_KEY>' and a 10 s timeout; field names live in one FIELD_MAP that is confirmed against the provider's API doc. lookup_sim_data(phone_number, purpose=''): with a configured source a purpose of >= 5 chars and SIM_LOOKUP_DAILY_LIMIT (default 20 per day) are enforced; the audit row is {ts, provider, query_masked, status, count, purpose_sha256}, never the raw number or purpose. Events: sim_panel_open {message, provider, configured, requires_purpose}; sim_data_result gains provider. ui_command sim_lookup accepts the legacy string (<= 20 chars) or {query (<= 20 chars), purpose (<= 200 chars)}; the bridge allow-list (EXT OPS-08/DASH-C09) accepts both and forwards only to room 'agent'. v4 (D1): in vps mode the lookup runs in the agent container with SIM_LOOKUP_API_URL and SIM_LOOKUP_API_KEY from .env.agent (never the bridge), and the audit file sits on the jarvis_outputs volume.
 
-#### K-35 · tools_info_env (env (PC only)) · owner: Claude
-Added by scripts/ops/env_defaults.py (append-only; never rewrites or prints values) to the root .env and deploy/windows-local/.env (start-agent.bat copies the latter over .env until EXT C-ENV-1 changes that) and listed in .env.example and .env.production.example: JARVIS_TEXT_MODEL=gemini-3.5-flash, JARVIS_VISION_MODEL=gemini-3.8-flash, JARVIS_GROQ_TEXT_MODEL=openai/gpt-oss-120b, JARVIS_GROQ_VISION_MODEL=qwen/qwen3.6-27b, JARVIS_OPENROUTER_MODEL=openrouter/free, JARVIS_IMAGE_MODEL=black-forest-labs/FLUX.1-schnell, JARVIS_IMAGE_PROVIDER=auto, POLLINATIONS_TOKEN= (optional secret), TAVILY_SEARCH_DEPTH=advanced, SMTP_HOST=smtp.gmail.com, SMTP_PORT=587, JARVIS_DOC_DIRS= (';' list, empty = defaults), JARVIS_RAG_WARM_DELAY_S=120, JARVIS_FRAME_MAX_AGE_S=10, JARVIS_SELF_REPAIR_APPLY=0 (TI-32 sets 1), SIM_SOURCE= (empty = auto), SIM_LOOKUP_API_URL=, SIM_LOOKUP_API_KEY= (secret, filled by the user), SIM_LOOKUP_DAILY_LIMIT=20, SIM_LOOKUP_SHOW_ADDRESS=0. Existing names stay and already match the code: GOOGLE_API_KEY, WEATHER_API_KEY (OPENWEATHER_API_KEY alias), GOOGLE_SEARCH_API_KEY, SEARCH_ENGINE_ID, TAVILY_API_KEY, OPENROUTER_API_KEY, GROQ_API_KEY, HF_TOKEN, EMAIL_USER, EMAIL_APP_PASSWORD, JARVIS_SHARED_DIR, USER_CITY, LOG_FILE. Owned elsewhere: JARVIS_CONFIRM_TIMEOUT_S (EXT X0/C3, one value), JARVIS_FILE_SERVER_* and FFMPEG_DIR (EXT C3/C7), media relay settings (EXT DASH-C21). --update is allowed only for non-secret switches. Nothing from this list goes to the VPS.
+#### K-35 · tools_info_env (env (PC root .env + VPS agent containers)) · owner: Claude
+Added by scripts/ops/env_defaults.py (append-only; never rewrites or prints values) to the root .env and deploy/windows-local/.env (start-agent.bat copies the latter over .env until EXT C-ENV-1 changes that) and listed in .env.example and .env.production.example: JARVIS_TEXT_MODEL=gemini-3.5-flash, JARVIS_VISION_MODEL=gemini-3.8-flash, JARVIS_GROQ_TEXT_MODEL=openai/gpt-oss-120b, JARVIS_GROQ_VISION_MODEL=qwen/qwen3.6-27b, JARVIS_OPENROUTER_MODEL=openrouter/free, JARVIS_IMAGE_MODEL=black-forest-labs/FLUX.1-schnell, JARVIS_IMAGE_PROVIDER=auto, POLLINATIONS_TOKEN= (optional secret), TAVILY_SEARCH_DEPTH=advanced, SMTP_HOST=smtp.gmail.com, SMTP_PORT=587, JARVIS_DOC_DIRS= (';' list, empty = defaults), JARVIS_RAG_WARM_DELAY_S=120, JARVIS_FRAME_MAX_AGE_S=10, JARVIS_SELF_REPAIR_APPLY=0 (TI-32 sets 1), SIM_SOURCE= (empty = auto), SIM_LOOKUP_API_URL=, SIM_LOOKUP_API_KEY= (secret, filled by the user), SIM_LOOKUP_DAILY_LIMIT=20, SIM_LOOKUP_SHOW_ADDRESS=0. Existing names stay and already match the code: GOOGLE_API_KEY, WEATHER_API_KEY (OPENWEATHER_API_KEY alias), GOOGLE_SEARCH_API_KEY, SEARCH_ENGINE_ID, TAVILY_API_KEY, OPENROUTER_API_KEY, GROQ_API_KEY, HF_TOKEN, EMAIL_USER, EMAIL_APP_PASSWORD, JARVIS_SHARED_DIR, USER_CITY, LOG_FILE. Owned elsewhere: JARVIS_CONFIRM_TIMEOUT_S (EXT X0/C3, one value), JARVIS_FILE_SERVER_* and FFMPEG_DIR (EXT C3/C7), media relay settings (EXT DASH-C21). --update is allowed only for non-secret switches. v4 (D1, VPS brain): the same names also live in the VPS agent containers. scripts/ops/push_agent_env.py copies them from the PC root .env into deploy/hostinger/.env.agent (root 600, over ssh stdin, never printed). None of them goes to bridge.env or the compose .env. The PC root .env keeps its copy for the PC fallback, DPAPI-wrapped in vps mode (D13).
 
 #### K-36 · C-AUTH-1 (http-api) · owner: Claude
 Owner session auth on the bridge (nginx /vortex/ strips the prefix). POST /vortex/auth/login JSON {password, totp:'6 digits'} or {password, recovery_code}; the Origin header must be in ALLOWED_ORIGINS. 200 -> {ok:true, user:'owner', session_id, expires_at:<epoch s>} + Set-Cookie jarvis_session=<JWT>; Path=/vortex; HttpOnly; Secure; SameSite=Strict; Max-Age=43200. 401 -> {ok:false, error:'invalid_credentials'} (same body for any wrong field). 429 -> {ok:false, error:'rate_limited', retry_after:<s>} after 5 failures per 15 min per IP or 20 per hour globally (after OP-21 nginx also applies limit_req 10r/m burst 5 on this path). 503 -> {error:'owner_not_enrolled'}. POST /vortex/auth/logout -> 200 {ok:true}, cookie cleared (Max-Age=0), session revoked. GET /vortex/auth/me -> 200 {authenticated:true, user:'owner', session_id, expires_at} or 401 {authenticated:false}. JWT HS256 with SESSION_JWT_SECRET, claims {sub:'owner', sid, iat, exp=iat+43200, v:1}, valid only while sid exists unrevoked in the sessions table. Password: bcrypt cost 12 (OWNER_PASSWORD_HASH). TOTP: RFC 6238, 30 s, 6 digits, window +-1 step (OWNER_TOTP_SECRET); the last accepted timecode is stored and never accepted again. Recovery: 10 single-use codes (OWNER_RECOVERY_HASHES, bcrypt). Hashes are stored base64url-encoded in bridge.env (no '$' for compose to interpolate). Session required (401 {error:'auth_required'} otherwise): GET /vortex/livekit/token, /vortex/status, /vortex/messages, GET/POST /vortex/settings, /vortex/telemetry/production, POST /vortex/feedback and the Socket.IO UI connection. Public: GET /vortex/health, POST /vortex/auth/login, GET /vortex/auth/me. Agent credentials (C-NOTIFY-1 headers) accepted on POST /vortex/notify, POST /vortex/livekit/ensure, GET /vortex/settings, GET /vortex/status. Root-only CLI inside the container: 'python -m src.core.bridge_auth hash-password | mint-session --ttl N --label X (prints jarvis_session=<JWT>) | revoke-all | enroll-check | audit-summary --prefix P'. Transition: while LEGACY_TOKEN_AUTH=1 the header X-Vortex-Token or Socket.IO auth.token = VORTEX_SECURITY_TOKEN is also accepted (identity 'owner-legacy'); set to 0 at cut-over (OP-21). Every login attempt, logout and session mint writes an audit row.
 
 #### K-37 · C-LK-1 (http-api) · owner: Claude
-GET /vortex/livekit/token (session cookie; legacy token only while LEGACY_TOKEN_AUTH=1) -> 200 {token, url:'wss://jarvis.srv1802669.hstgr.cloud', room:'jarvis-hybrid', identity:'owner-<first 8 chars of session id>' ('owner-legacy' in legacy mode), expires_at}. Token TTL 3600 s; grants room_join, room='jarvis-hybrid', can_publish, can_subscribe, can_publish_data; attributes {role:'owner'}, name 'Owner'. Any client 'identity' query parameter is ignored. The UI fetches a NEW token right before every connect and every automatic reconnect and never reuses one. Before answering, the bridge runs RoomManager.ensure('token') (create the room if missing, ensure a dispatch) and never deletes a room; 503 {error:'livekit_unavailable'} only when no token can be minted (dispatch problems are reported through agent_status). Room 'jarvis-hybrid'; agent_name 'jarvis' after OP-22. UI->agent typed text over LiveKit uses topic 'lk.chat' and agent->UI transcripts 'lk.transcription' (details belong to the voice/chat contract of the voice-runtime area).
+GET /vortex/livekit/token (session cookie; legacy token only while LEGACY_TOKEN_AUTH=1) -> 200 {token, url:'wss://jarvis.srv1802669.hstgr.cloud', room:'jarvis-hybrid', identity:'owner-<first 8 chars of session id>' ('owner-legacy' in legacy mode), expires_at}. Token TTL 3600 s; grants room_join, room='jarvis-hybrid', can_publish, can_subscribe, can_publish_data; attributes {role:'owner'}, name 'Owner'. Any client 'identity' query parameter is ignored. The UI fetches a NEW token right before every connect and every automatic reconnect and never reuses one. Before answering, the bridge runs RoomManager.ensure('token') (create the room if missing, ensure a dispatch) and never deletes a room; 503 {error:'livekit_unavailable'} only when no token can be minted (dispatch problems are reported through agent_status). Room 'jarvis-hybrid'; agent_name 'jarvis' after OP-22 (v4: the dispatch goes to the active brain, 'jarvis' for the VPS containers or 'jarvis-pc' for the PC fallback, K-72). UI->agent typed text over LiveKit uses topic 'lk.chat' and agent->UI transcripts 'lk.transcription' (details belong to the voice/chat contract of the voice-runtime area).
 
 #### K-38 · C-SOCK-1 (socketio) · owner: Claude
-Socket.IO path '/vortex/socket.io' on https://jarvis.srv1802669.hstgr.cloud (dev: the Vite proxy forwards /vortex with ws). UI client: io(<page origin>, {path:'/vortex/socket.io', withCredentials:true, transports:['websocket','polling'], reconnection:true, reconnectionAttempts:Infinity, reconnectionDelayMax:10000}); no auth payload, the server reads the jarvis_session cookie from the handshake. Agent client (python-socketio AsyncClient, reconnection=False, own loop that never exits, backoff 1->10 s; it lives inside the LiveKit job process): connect('https://jarvis.srv1802669.hstgr.cloud', socketio_path='vortex/socket.io', auth={agent_token: AGENT_TOKEN, agent_id: <hostname>, version: <git sha>}). Roles: valid cookie -> 'ui' (room 'ui', receives init_state); valid agent_token -> 'agent' (room 'agent'; agent_status online emitted to 'ui'); auth.token or ?token= equal to VORTEX_SECURITY_TOKEN only while LEGACY_TOKEN_AUTH=1 -> legacy role that joins BOTH rooms (today's broadcast behavior, so old agents/UIs keep working during the migration); anything else is refused (connect returns False, audit 'socket_auth_failed'). Routing: 'ui_command' (ui/legacy only, max 10/s per sid, C-EVT-1 allow-list) -> persistence side effects -> emit('agent_command', data, to='agent'); the sender gets ack {status:'sent'|'queued'|'agent_offline'|'rejected', reason?}. 'vision_frame' (ui/legacy only, max 1/s per sid, max 600 KB) -> emit('agent_vision_frame', data, to='agent'). Events from POST /notify and all bridge periodic events go to='ui' only. An agent socket may only emit 'agent_hello' {version, host}. When the last agent socket disconnects, agent_status {online:false} goes to 'ui'.
+Socket.IO path '/vortex/socket.io' on https://jarvis.srv1802669.hstgr.cloud (dev: the Vite proxy forwards /vortex with ws). UI client: io(<page origin>, {path:'/vortex/socket.io', withCredentials:true, transports:['websocket','polling'], reconnection:true, reconnectionAttempts:Infinity, reconnectionDelayMax:10000}); no auth payload, the server reads the jarvis_session cookie from the handshake. Agent client (python-socketio AsyncClient, reconnection=False, own loop that never exits, backoff 1->10 s; it lives inside the LiveKit job process): connect('https://jarvis.srv1802669.hstgr.cloud', socketio_path='vortex/socket.io', auth={agent_token: AGENT_TOKEN, agent_id: <hostname>, version: <git sha>}). Roles: valid cookie -> 'ui' (room 'ui', receives init_state); valid agent_token -> 'agent' (room 'agent'; agent_status online emitted to 'ui'); auth.token or ?token= equal to VORTEX_SECURITY_TOKEN only while LEGACY_TOKEN_AUTH=1 -> legacy role that joins BOTH rooms (today's broadcast behavior, so old agents/UIs keep working during the migration); anything else is refused (connect returns False, audit 'socket_auth_failed'). Routing: 'ui_command' (ui/legacy only, max 10/s per sid, C-EVT-1 allow-list) -> persistence side effects -> emit('agent_command', data, to='agent'); the sender gets ack {status:'sent'|'queued'|'agent_offline'|'rejected', reason?}. 'vision_frame' (ui/legacy only, max 1/s per sid, max 600 KB) -> emit('agent_vision_frame', data, to='agent'). Events from POST /notify and all bridge periodic events go to='ui' only. An agent socket may only emit 'agent_hello' {version, host}. When the last agent socket disconnects, agent_status {online:false} goes to 'ui'. v4 (VPS brain): the VPS agent containers connect to http://jarvis-bridge:5002 (socketio_path 'socket.io', auth {role:'agent', room, job_id}); the bridge accepts the agent role only on that jarvis-network listener, so no AGENT_TOKEN crosses the internet, and the PC fallback keeps the public path above. ui_command goes only to agent sockets whose declared room is JARVIS_ROOM_NAME (plus legacy sockets while LEGACY_TOKEN_AUTH=1); canary and probe peers never receive it. The Desktop Link uses the separate namespace '/desktop' (K-70), and nothing from '/' is relayed there.
 
 #### K-39 · C-NOTIFY-1 (http-api) · owner: Claude
-Agent -> bridge events: POST /vortex/notify with headers X-Agent-Token: AGENT_TOKEN; X-Agent-Timestamp: unix seconds (int); X-Agent-Nonce: at least 16 random hex chars; X-Agent-Signature: hex(HMAC-SHA256(BRIDGE_HMAC_SECRET, f'{timestamp}.{nonce}.'.encode() + raw_body_bytes)); Content-Type: application/json. The body is exactly the signed bytes of {'type': <event>, 'payload': <any>}, at most 256 KB. Server checks in order: token (401 bad_token), |now - ts| <= 60 s (401 stale), signature over the raw body (403 bad_signature), nonce unseen in the last 300 s (409 replay), size (413), rate buckets (429 with Retry-After; critical types 50/s, logs 10/s, others 20/s). Only after auth are last_runner_contact and the agent_link heartbeat updated. 200 -> {status:'ok'} or {status:'ignored', reason} for unknown types. The legacy headers X-Vortex-Token/X-Vortex-Signature (HMAC keyed with VORTEX_SECURITY_TOKEN over sorted JSON) are accepted only while LEGACY_TOKEN_AUTH=1. Agent side: services/utils/jarvis_bridge.notify_event signs the raw bytes once; critical types (transcription, confirm_request, settings_sync, tool_sync, agent_heartbeat) are retried up to 5 times with backoff 1->30 s from a bounded 500-item queue; signed_headers(raw) is reused by ensure_room.py and agent_ctl. POST /vortex/livekit/ensure uses the same headers with body {}.
+Agent -> bridge events: POST /vortex/notify with headers X-Agent-Token: AGENT_TOKEN; X-Agent-Timestamp: unix seconds (int); X-Agent-Nonce: at least 16 random hex chars; X-Agent-Signature: hex(HMAC-SHA256(BRIDGE_HMAC_SECRET, f'{timestamp}.{nonce}.'.encode() + raw_body_bytes)); Content-Type: application/json. The body is exactly the signed bytes of {'type': <event>, 'payload': <any>}, at most 256 KB. Server checks in order: token (401 bad_token), |now - ts| <= 60 s (401 stale), signature over the raw body (403 bad_signature), nonce unseen in the last 300 s (409 replay), size (413), rate buckets (429 with Retry-After; critical types 50/s, logs 10/s, others 20/s). Only after auth are last_runner_contact and the agent_link heartbeat updated. 200 -> {status:'ok'} or {status:'ignored', reason} for unknown types. The legacy headers X-Vortex-Token/X-Vortex-Signature (HMAC keyed with VORTEX_SECURITY_TOKEN over sorted JSON) are accepted only while LEGACY_TOKEN_AUTH=1. Agent side: services/utils/jarvis_bridge.notify_event signs the raw bytes once; critical types (transcription, confirm_request, settings_sync, tool_sync, agent_heartbeat) are retried up to 5 times with backoff 1->30 s from a bounded 500-item queue; signed_headers(raw) is reused by ensure_room.py and agent_ctl. POST /vortex/livekit/ensure uses the same headers with body {}. v4 (VPS brain): the VPS agent containers post to http://jarvis-bridge:5002/notify and /internal/livekit/ensure; the bridge accepts the agent role only on that jarvis-network listener (nginx answers 404 for /vortex/internal/), so AGENT_TOKEN never crosses the internet. The PC fallback keeps the signed public path above, and the laptop's /vortex/desktop/ensure uses K-70 PC-signed HTTP.
 
 #### K-40 · C-EVT-1 (socketio-events) · owner: Claude
-Agent->bridge notify types and what the bridge emits to room 'ui': transcription {id, role:'user'|'assistant' (legacy 'agent'), text, source?, final|is_final, ts|timestamp} -> normalized per C-MSG-1 -> new_message (first time the id is seen) or update_message, plus legacy transcription_update {text}. status 'START'|'STOP' and thinking 'START'|'STOP'|'REJECTED' -> status_change {speaking, thinking}. vitals_pc {cpu, ram, disk, cores, ram_total_gb, host, ts} -> vitals_pc and legacy vitals_update. agent_heartbeat {services, tasks:{name:{running, failures}}, version, ts} -> stored, refreshes agent_status. telemetry {total_samples, success_rate, avg_latency, confusion_rate, status, tools:{calls, failures}, ts} -> telemetry_update. tool_sync {tool, details, risk?, status?, duration_ms?, ts} -> tool_update. memory_update -> memory_sync. reasoning -> reasoning_update. intelligence_sync/intelligence_update -> intelligence_update. location_sync -> location_update. mute_sync (bool) -> mute_update. wake_word_sync (bool) -> wake_word_update. voice_id_sync {confidence, ts} -> voice_match_update. persona_change 'jarvis'|'anna' -> persona_update {persona}. task_alert -> task_notification. task_update -> task_sync. sim_data_result, sim_data_loading, sim_panel_open keep their names. vortex_log {text, category, ts} and vortex_log_batch {items:[<=50], dropped} -> new_log per item. confirm_request -> confirm_request (C-CONFIRM-1). settings_sync -> settings_sync (C-SETTINGS-1). diagnostics {checks, ts} -> diagnostics_update. audit_event {action, detail, ts} -> audit_update. qa_ping {n} -> counted only, never emitted. Legacy types kept working: 'token' -> token_stream; 'vitals' -> handled as vitals_pc (+ vitals_update); user_speaking_sync (bool) -> user_status_change {speaking} with the 1.5 s auto-reset. Bridge-originated (to 'ui'): init_state (C-STATE-1), agent_status (C-ROOM-1), vitals_vps {same shape as vitals_pc, host:'vps'} every 12 s, legacy vitals_update (latest vitals_pc if under 30 s old, else vitals_vps with source:'vps'), telemetry_update, confirm_resolved {id, allow, by:'owner'|'timeout'|'no_ui'}. UI->bridge ui_command types: chat {id, text} (a legacy plain string is accepted), mute, unmute, wake_word_toggle (bool), stop, start, persona_change, clear_memory, open_sim_panel, sim_lookup, swarm, confirm_response {id, allow}, settings_update (C-SETTINGS-1). Anything else gets ack {status:'rejected'}.
+Agent->bridge notify types and what the bridge emits to room 'ui': transcription {id, role:'user'|'assistant' (legacy 'agent'), text, source?, final|is_final, ts|timestamp} -> normalized per C-MSG-1 -> new_message (first time the id is seen) or update_message, plus legacy transcription_update {text}. status 'START'|'STOP' and thinking 'START'|'STOP'|'REJECTED' -> status_change {speaking, thinking}. vitals_pc {cpu, ram, disk, cores, ram_total_gb, host, ts} -> vitals_pc and legacy vitals_update. agent_heartbeat {services, tasks:{name:{running, failures}}, version, ts} -> stored, refreshes agent_status. telemetry {total_samples, success_rate, avg_latency, confusion_rate, status, tools:{calls, failures}, ts} -> telemetry_update. tool_sync {tool, details, risk?, status?, duration_ms?, ts} -> tool_update. memory_update -> memory_sync. reasoning -> reasoning_update. intelligence_sync/intelligence_update -> intelligence_update. location_sync -> location_update. mute_sync (bool) -> mute_update. wake_word_sync (bool) -> wake_word_update. voice_id_sync {confidence, ts} -> voice_match_update. persona_change 'jarvis'|'anna' -> persona_update {persona}. task_alert -> task_notification. task_update -> task_sync. sim_data_result, sim_data_loading, sim_panel_open keep their names. vortex_log {text, category, ts} and vortex_log_batch {items:[<=50], dropped} -> new_log per item. confirm_request -> confirm_request (C-CONFIRM-1). settings_sync -> settings_sync (C-SETTINGS-1). diagnostics {checks, ts} -> diagnostics_update. audit_event {action, detail, ts} -> audit_update. qa_ping {n} -> counted only, never emitted. Legacy types kept working: 'token' -> token_stream; 'vitals' -> handled as vitals_pc (+ vitals_update); user_speaking_sync (bool) -> user_status_change {speaking} with the 1.5 s auto-reset. Bridge-originated (to 'ui'): init_state (C-STATE-1), agent_status (C-ROOM-1), vitals_vps {same shape as vitals_pc, host:'vps'} every 12 s, legacy vitals_update (latest vitals_pc if under 30 s old, else vitals_vps with source:'vps'), telemetry_update, confirm_resolved {id, allow, by:'owner'|'timeout'|'no_ui'}; v4: desktop_status (K-74) on every change, and stored UI notifications (reminder_due, K-77) until notification_ack. UI->bridge ui_command types: chat {id, text} (a legacy plain string is accepted), mute, unmute, wake_word_toggle (bool), stop, start, persona_change, clear_memory, open_sim_panel, sim_lookup, swarm, confirm_response {id, allow}, settings_update (C-SETTINGS-1), desktop_stop (v4, tighten-only, K-74) and notification_ack {id} (v4, K-77). Anything else gets ack {status:'rejected'}.
 
 #### K-41 · C-MSG-1 (schema) · owner: Claude
 Message = {id: string (uuid; for typed chat the UI-generated id), role: 'user'|'assistant', text: string, source: 'voice'|'text'|'system', final: boolean, ts: number (epoch seconds, float)}. The bridge normalizes legacy input: role 'agent' -> 'assistant'; is_final -> final (default true); timestamp -> ts (default now); source defaults to 'voice' for session transcriptions, 'text' when the id matches a chat command id, 'system' for reminders, the bug hunter and probes (the agent should set it explicitly). Emitted messages also carry the legacy aliases timestamp (=ts) and is_final (=final) for older UIs. Messages are upserted by id (text replaced, final updated), persisted in SQLite and never auto-pruned. Typed chat: the UI generates the id -> ui_command chat {id, text} -> optimistic render with that id -> the agent accepts {id, text} or a legacy string, echoes the user message with the SAME id and source 'text' (a new id only for legacy strings) and replies with source 'text' -> the UI de-duplicates by id. History: GET /vortex/messages?before=<ts>&limit=<=100 -> {messages:[ascending ts], has_more}.
 
 #### K-42 · C-STATE-1 (schema) · owner: Claude
-init_state is emitted to a UI socket on connect: {messages: last 100 (C-MSG-1, ascending, with legacy aliases), logs: last 30, memories: last 10, tool_logs: last 20, settings (C-SETTINGS-1), persona (legacy key), muted, wake_word_active, voice_match, agent_status (C-ROOM-1), vitals_pc|null, vitals_vps, telemetry|null, location, sim_records, sim_loading, sim_query_masked, sim_status, sim_message, sim_panel_open, server_time}. Storage: SQLite at BRIDGE_DB_PATH=/app/data/bridge.db on the named volume jarvis_bridge_data (WAL). Tables: messages, events, settings, sessions, audit, kv, confirmations, pending_commands, schema_version; volatile flags (speaking, thinking, user_speaking) stay in memory. Everything survives bridge restarts and deploys. Event/log retention = BRIDGE_EVENT_RETENTION_DAYS (0 = keep forever until the user approves a value); messages are never auto-pruned. deploy/hostinger/backup_vps.sh takes an online SQLite backup; a corrupt DB is renamed (never deleted) and a fresh one is started with a CRITICAL log.
+init_state is emitted to a UI socket on connect: {messages: last 100 (C-MSG-1, ascending, with legacy aliases), logs: last 30, memories: last 10, tool_logs: last 20, settings (C-SETTINGS-1), persona (legacy key), muted, wake_word_active, voice_match, agent_status (C-ROOM-1), vitals_pc|null, vitals_vps, telemetry|null, location, sim_records, sim_loading, sim_query_masked, sim_status, sim_message, sim_panel_open, server_time, desktop_status (v4, K-74), notifications (v4: unacknowledged K-77 deliveries)}. Storage: SQLite at BRIDGE_DB_PATH=/app/data/bridge.db on the named volume jarvis_bridge_data (WAL). Tables: messages, events, settings, sessions, audit, kv, confirmations, pending_commands, schema_version (v4: kv also holds desktop_link, active_job and last_activity_ts, and the store keeps the K-70 seen ids for 24 h and the persisted K-77 UI notifications); volatile flags (speaking, thinking, user_speaking) stay in memory. Everything survives bridge restarts and deploys. Event/log retention = BRIDGE_EVENT_RETENTION_DAYS (0 = keep forever until the user approves a value); messages are never auto-pruned. deploy/hostinger/backup_vps.sh takes an online SQLite backup; a corrupt DB is renamed (never deleted) and a fresh one is started with a CRITICAL log.
 
 #### K-43 · C-STATUS-1 (http-api) · owner: Claude
-GET /vortex/health (public liveness; used by the Docker healthcheck and deploy.sh) -> 200 {status:'ok', version:<GIT_SHA>, uptime_s} whenever the process serves requests. GET /vortex/status (session cookie or agent credentials) -> 200 {status:'ok'|'degraded'|'down', ts, bridge:{ok, version, uptime_s}, db:{ok, size_bytes}, livekit:{ok, latency_ms, room_exists, participants, agent_in_room, dispatch_id, last_job_state}, agent:{online, voice_ready, paused, since, last_heartbeat, host, version, services, tasks}, vitals_vps, vitals_pc, ui_clients:int, qa:{pings}}. 'degraded' = agent offline or LiveKit unreachable; 'down' = DB unusable. The bridge never reports CRITICAL because of heartbeats that belong to the PC process (jarvis_health is role-aware via JARVIS_ROLE).
+GET /vortex/health (public liveness; used by the Docker healthcheck and deploy.sh) -> 200 {status:'ok', version:<GIT_SHA>, uptime_s} whenever the process serves requests. GET /vortex/status (session cookie or agent credentials) -> 200 {status:'ok'|'degraded'|'down', ts, bridge:{ok, version, uptime_s}, db:{ok, size_bytes}, livekit:{ok, latency_ms, room_exists, participants, agent_in_room, dispatch_id, last_job_state}, agent:{online, voice_ready, paused, since, last_heartbeat, host, version, services, tasks}, vitals_vps, vitals_pc, ui_clients:int, qa:{pings}, brain:'vps'|'pc' (v4), desktop:<K-74 desktop_status> (v4)}. 'degraded' = agent offline or LiveKit unreachable; 'down' = DB unusable. The bridge never reports CRITICAL because of heartbeats that belong to the PC process (jarvis_health is role-aware via JARVIS_ROLE). v4 (VPS brain): GET /vortex/status also accepts K-70 PC-signed HTTP (agent_ctl brain and node checks). The public /vortex/health keeps exactly {status, version, uptime_s} and never shows brain, presence or vitals.
 
 #### K-44 · C-ROOM-1 (process+http-api) · owner: Claude
-Room 'jarvis-hybrid' (JARVIS_ROOM_NAME) is created only by the bridge: CreateRoom(empty_timeout=3600, departure_timeout=3600, max_participants=10), no agents list. Nothing calls DeleteRoom except the audited admin CLI 'python -m src.core.bridge_rooms reset-room --confirm jarvis-hybrid' (a test enforces this; ensure_room.py never deletes). Worker: WorkerOptions(agent_name='jarvis', host='127.0.0.1', port=8081) = explicit dispatch. RoomManager.ensure(reason), serialized by one asyncio.Lock, runs every 20 s, on webhooks, on /livekit/token and on POST /vortex/livekit/ensure: create the room if missing; if not paused, no agent participant in the room, (no active dispatch, or the newest is older than 30 s with no running job), the last dispatch was more than 30 s ago and the dispatch mode allows it (AGENT_DISPATCH_MODE=always (default) | on_demand = only when a UI client was connected in the last 10 min) -> delete the stale DISPATCH only, then create_dispatch(agent_name='jarvis', room, metadata {reason, ts}). POST /vortex/livekit/ensure (agent auth per C-NOTIFY-1, body {}) -> {room, dispatch_id, agent_in_room, created:{room:bool, dispatch:bool}}; used by deploy/windows-local/ensure_room.py and scripts/agent_ctl.py (which waits up to 60 s for agent_in_room). Webhooks: LiveKit posts to http://jarvis-bridge:5001/livekit/webhook on the Docker network only (nginx returns 404 for /vortex/livekit/webhook), verified by WebhookReceiver(TokenVerifier(LIVEKIT_API_KEY, LIVEKIT_API_SECRET)); livekit.yaml webhook.urls plus env LIVEKIT_WEBHOOK_API_KEY. participant_joined/left kind AGENT -> voice_ready; kind STANDARD -> UI voice presence; room_finished -> ensure. agent_status (bridge -> 'ui', on every change and in init_state) = {online: agent socket connected, voice_ready: agent participant in room, paused, since: epoch s of last change, last_heartbeat, host, version}. ui_command 'stop' -> paused=true (kv) + forwarded; the agent ends its job with ctx.shutdown('paused_by_owner') instead of restarting the session, and nothing re-dispatches while paused. ui_command 'start' -> paused=false + immediate ensure.
+Room 'jarvis-hybrid' (JARVIS_ROOM_NAME) is created only by the bridge: CreateRoom(empty_timeout=3600, departure_timeout=3600, max_participants=10), no agents list. Nothing calls DeleteRoom except the audited admin CLI 'python -m src.core.bridge_rooms reset-room --confirm jarvis-hybrid' (a test enforces this; ensure_room.py never deletes). Worker: WorkerOptions(agent_name=<the brain target>, host='127.0.0.1', port=8081) = explicit dispatch (v4: 'jarvis' for the VPS containers, 'jarvis-pc' for the PC fallback, K-72; the bridge dispatches only to the active brain). RoomManager.ensure(reason), serialized by one asyncio.Lock, runs every 20 s, on webhooks, on /livekit/token and on POST /vortex/livekit/ensure: create the room if missing; if not paused, no agent participant in the room, (no active dispatch, or the newest is older than 30 s with no running job), the last dispatch was more than 30 s ago and the dispatch mode allows it (AGENT_DISPATCH_MODE=always (default) | on_demand = only when a UI client was connected in the last 10 min) -> delete the stale DISPATCH only, then create_dispatch(agent_name='jarvis', room, metadata {reason, ts}). POST /vortex/livekit/ensure (agent auth per C-NOTIFY-1, body {}) -> {room, dispatch_id, agent_in_room, created:{room:bool, dispatch:bool}}; used by deploy/windows-local/ensure_room.py and scripts/agent_ctl.py (which waits up to 60 s for agent_in_room). Webhooks: LiveKit posts to http://jarvis-bridge:5001/livekit/webhook on the Docker network only (nginx returns 404 for /vortex/livekit/webhook), verified by WebhookReceiver(TokenVerifier(LIVEKIT_API_KEY, LIVEKIT_API_SECRET)); livekit.yaml webhook.urls plus env LIVEKIT_WEBHOOK_API_KEY. participant_joined/left kind AGENT -> voice_ready; kind STANDARD -> UI voice presence; room_finished -> ensure. agent_status (bridge -> 'ui', on every change and in init_state) = {online: agent socket connected, voice_ready: agent participant in room, paused, since: epoch s of last change, last_heartbeat, host, version}. ui_command 'stop' -> paused=true (kv) + forwarded; the agent ends its job with ctx.shutdown('paused_by_owner') instead of restarting the session, and nothing re-dispatches while paused. ui_command 'start' -> paused=false + immediate ensure. v4 (VPS brain): in vps mode AGENT_DISPATCH_MODE=on_demand (a human in the room, a UI client connected in the last 10 min, or agent-svc asking for a voice session). ensure also runs every 5 s while a human or UI is present and no agent whose lk.agent.name is the brain target and whose jarvis.session is running is in the room. The newest dispatch is judged by its job state (pending or running counts as in flight; a stale one is deleted), under one lock plus a 30 s in-flight marker, with backoff. Extra triggers: agent hello, ui_command start, POST /internal/livekit/ensure (:5002 only) and the PC-signed POST /vortex/desktop/ensure. Surplus agent participants are removed and active_job is announced to the Desktop Node (K-70). Dispatch uses create_dispatch only, never create_room with an agents list.
 
 #### K-45 · C-CONFIRM-1 (socketio+python-api) · owner: Claude
-Policy in services/ai_core/jarvis_guard.py (Claude). HIGH risk (UI confirmation required): shutdown_system, restart_system, sleep_system, empty_recycle_bin, run_cmd_command, write_custom_code, autonomous_self_repair, send_email, autonomous_research_and_email, automate_whatsapp, start_file_access_server, zip_files, lookup_sim_data, guard_selftest (test only). MEDIUM (runs, with a UI toast and an audit row): type_text_tool, press_hotkey_tool, press_key_tool, mouse_click_tool, chrome_browser_perform_action, automate_chrome_browser, download_youtube_media, download_images, create_folder. Everything else is LOW. Env JARVIS_CONFIRM_EXTRA / JARVIS_CONFIRM_SKIP (comma lists) adjust the policy, but SKIP can never contain shutdown_system, restart_system or run_cmd_command. The gate sits in the LLM tool wrapper; direct Python calls for explicit UI actions (e.g. the SIM panel's ui_command sim_lookup) are not asked twice. HIGH flow: the agent sends notify confirm_request {id: uuid4, tool, summary (<=200 chars, secrets redacted), risk:'high', expires_ts: now+60}; the bridge stores it as pending; with no UI socket it immediately sends agent_command {type:'confirm_response', payload:{id, allow:false, reason:'no_ui'}}, otherwise it emits confirm_request to 'ui'. The UI answers ui_command {type:'confirm_response', payload:{id, allow:boolean}}; the bridge checks role ui + pending + not expired, records decided_by 'owner', forwards to the agent and emits confirm_resolved {id, allow, by}. The agent denies at expiry. A denied tool returns {status:'denied', tool, message:'User ne permission nahi di (confirmation required)'} and its body never runs. Confirmation happens outside the tool timeout and the circuit breaker. Every HIGH/MEDIUM execution is audited (PC logs/security.log via jarvis_audit.log_tool and the bridge audit table).
+Policy in services/ai_core/jarvis_guard.py (Claude). HIGH risk (UI confirmation required): shutdown_system, restart_system, sleep_system, empty_recycle_bin, run_cmd_command, write_custom_code, autonomous_self_repair, send_email, autonomous_research_and_email, automate_whatsapp, start_file_access_server, zip_files, lookup_sim_data, guard_selftest (test only). MEDIUM (runs, with a UI toast and an audit row): type_text_tool, press_hotkey_tool, press_key_tool, mouse_click_tool, chrome_browser_perform_action, automate_chrome_browser, download_youtube_media, download_images, create_folder. Everything else is LOW. Env JARVIS_CONFIRM_EXTRA / JARVIS_CONFIRM_SKIP (comma lists) adjust the policy, but SKIP can never contain shutdown_system, restart_system or run_cmd_command. The gate sits in the LLM tool wrapper; direct Python calls for explicit UI actions (e.g. the SIM panel's ui_command sim_lookup) are not asked twice. HIGH flow: the agent sends notify confirm_request {id: uuid4, tool, summary (<=200 chars, secrets redacted), risk:'high', expires_ts: now+60}; the bridge stores it as pending; with no UI socket it immediately sends agent_command {type:'confirm_response', payload:{id, allow:false, reason:'no_ui'}}, otherwise it emits confirm_request to 'ui'. The UI answers ui_command {type:'confirm_response', payload:{id, allow:boolean}}; the bridge checks role ui + pending + not expired, records decided_by 'owner', forwards to the agent and emits confirm_resolved {id, allow, by}. The agent denies at expiry. A denied tool returns {status:'denied', tool, message:'User ne permission nahi di (confirmation required)'} and its body never runs. Confirmation happens outside the tool timeout and the circuit breaker. Every HIGH/MEDIUM execution is audited (PC logs/security.log via jarvis_audit.log_tool and the bridge audit table). v4 (VPS brain, user decision D3): for laptop tools the effective risk is the strictest of this list, K-16 and the K-76 class. Messaging, code_exec (always HIGH, dashboard Allow only), availability and exposure are approved through this flow before the agent sends the exec, with no prompt on the laptop; MEDIUM input tools keep running with a toast and an audit row. Laptop executions are also audited by the node (logs/desktop_audit.jsonl).
 
 #### K-46 · C-SETTINGS-1 (socketio+schema) · owner: Claude
 ui_command {type:'settings_update', payload: partial {voice?: string (Gemini voice name, e.g. 'Charon'), language?: string (BCP-47, e.g. 'ur-PK', 'en-US'), persona?: 'jarvis'|'anna', wake_word?: boolean, voice_id?: boolean (voice-ID gate), style?: string, emotional_intelligence?: boolean}}; the camelCase key emotionalIntelligence is accepted and mapped. Defaults when nothing is stored: voice_id true (user decision), wake_word true (current behavior), persona 'jarvis', voice 'Charon'; other fields keep the current UI/agent defaults. The bridge merges into the settings table (updated_by 'ui', ts) even when the agent is offline, then forwards it to the agent or queues it. The agent applies what it can and answers notify settings_sync {settings: full object, applied: {field: 'applied'|'pending_restart'|'unsupported'}}; the bridge stores it (updated_by 'agent') and emits settings_sync to 'ui'. On agent connect the bridge sends agent_command {type:'settings_bootstrap', payload: settings}. init_state.settings is the stored object; GET /vortex/settings (cookie or agent credentials) returns it. The legacy commands persona_change and wake_word_toggle keep working and also update the stored settings.
 
 #### K-47 · C-ENV-1 (env) · owner: Claude
-PC root .env is the single source; deploy/windows-local/.env only fills missing keys (load_dotenv override=False) and is never copied over the root. PC keys: VORTEX_ENV, LOG_LEVEL, LOG_FILE, LOG_FILE_LEVEL, UI_LOG_LEVEL, UI_LOG_INFO_ALLOW, USER_NAME, USER_CITY, GOOGLE_API_KEY, WEATHER_API_KEY, GOOGLE_SEARCH_API_KEY, SEARCH_ENGINE_ID, TAVILY_API_KEY, OPENROUTER_API_KEY, GROQ_API_KEY, HF_TOKEN, EMAIL_USER, EMAIL_APP_PASSWORD, JARVIS_ENCRYPTION_KEY, CONTROLLER_TOKEN, SIM_LOOKUP_API_URL, SIM_LOOKUP_API_KEY (later, PC only), LIVEKIT_URL (wss://jarvis.srv1802669.hstgr.cloud after OP-13), LIVEKIT_API_KEY, LIVEKIT_API_SECRET, JARVIS_ROOM_NAME=jarvis-hybrid, JARVIS_AGENT_NAME (jarvis after OP-22), JARVIS_WORKER_HOST=127.0.0.1, JARVIS_WORKER_PORT=8081, UI_BRIDGE_URL (https://jarvis.srv1802669.hstgr.cloud/vortex after OP-13), AGENT_TOKEN, BRIDGE_HMAC_SECRET, JARVIS_SHARED_DIR (default ~/Jarvis_Shared), JARVIS_HYBRID=1, JARVIS_ROLE=agent; optional JARVIS_MONITORING, JARVIS_TRACING, JARVIS_METRICS_PORT=8765, JARVIS_BACKUP_DIR, JARVIS_BACKUP_DAILY, JARVIS_QA_DAILY, JARVIS_CONFIRM_EXTRA/SKIP, JARVIS_REMINDER_SPEAK_LOCAL, JARVIS_STARTUP_LINE, JARVIS_FILE_SERVER_TTL_MIN, AGENT_DISPATCH_MODE. VORTEX_SECURITY_TOKEN / VITE_VORTEX_SECURITY_TOKEN are legacy and dead after OP-21. VPS deploy/hostinger/.env (600) = compose interpolation only: LIVEKIT_API_KEY, LIVEKIT_API_SECRET, JARVIS_DOMAIN, plus VORTEX_SECURITY_TOKEN until OP-21 (frontend build arg). VPS deploy/hostinger/bridge.env (600, gitignored, the bridge env_file): AGENT_TOKEN, BRIDGE_HMAC_SECRET, SESSION_JWT_SECRET, OWNER_PASSWORD_HASH, OWNER_TOTP_SECRET, OWNER_RECOVERY_HASHES, LIVEKIT_API_KEY, LIVEKIT_API_SECRET, VORTEX_SECURITY_TOKEN (legacy, until OP-21), LEGACY_TOKEN_AUTH (1, then 0 at OP-21), BRIDGE_EVENT_RETENTION_DAYS (0). Non-secret bridge settings live in compose 'environment:': JARVIS_ROLE=bridge, VORTEX_ENV=production, LIVEKIT_URL=ws://jarvis-livekit:7880, LIVEKIT_PUBLIC_URL=wss://jarvis.srv1802669.hstgr.cloud, JARVIS_ROOM_NAME, JARVIS_AGENT_NAME, ALLOWED_ORIGINS=https://jarvis.srv1802669.hstgr.cloud,http://127.0.0.1:5173,http://localhost:5173, COOKIE_PATH=/vortex, COOKIE_SECURE=1, BRIDGE_DB_PATH=/app/data/bridge.db, JARVIS_SHARED_DIR, GIT_SHA (exported by deploy.sh). No LLM, search or email keys on the VPS. LiveKit container env: LIVEKIT_KEYS='<key>: <secret>' and LIVEKIT_WEBHOOK_API_KEY=<key> (auto-mapped from webhook.api_key). Frontend build args hold no secrets after OP-21: VITE_VORTEX_URL=/vortex, VITE_LIVEKIT_URL optional. Secrets are generated by scripts/ops/gen_secrets.py and rotated by scripts/ops/rotate_env_secret.py / rotate_livekit_keys.py; values travel over ssh stdin and are never printed.
+PC root .env is the single source; deploy/windows-local/.env only fills missing keys (load_dotenv override=False) and is never copied over the root. PC keys: VORTEX_ENV, LOG_LEVEL, LOG_FILE, LOG_FILE_LEVEL, UI_LOG_LEVEL, UI_LOG_INFO_ALLOW, USER_NAME, USER_CITY, GOOGLE_API_KEY, WEATHER_API_KEY, GOOGLE_SEARCH_API_KEY, SEARCH_ENGINE_ID, TAVILY_API_KEY, OPENROUTER_API_KEY, GROQ_API_KEY, HF_TOKEN, EMAIL_USER, EMAIL_APP_PASSWORD, JARVIS_ENCRYPTION_KEY, CONTROLLER_TOKEN, SIM_LOOKUP_API_URL, SIM_LOOKUP_API_KEY (later; also in .env.agent in vps mode, D1), LIVEKIT_URL (wss://jarvis.srv1802669.hstgr.cloud after OP-13), LIVEKIT_API_KEY, LIVEKIT_API_SECRET, JARVIS_ROOM_NAME=jarvis-hybrid, JARVIS_AGENT_NAME (jarvis after OP-22), JARVIS_WORKER_HOST=127.0.0.1, JARVIS_WORKER_PORT=8081, UI_BRIDGE_URL (https://jarvis.srv1802669.hstgr.cloud/vortex after OP-13), AGENT_TOKEN, BRIDGE_HMAC_SECRET, JARVIS_SHARED_DIR (default ~/Jarvis_Shared), JARVIS_HYBRID=1, JARVIS_ROLE=agent; optional JARVIS_MONITORING, JARVIS_TRACING, JARVIS_METRICS_PORT=8765, JARVIS_BACKUP_DIR, JARVIS_BACKUP_DAILY, JARVIS_QA_DAILY, JARVIS_CONFIRM_EXTRA/SKIP, JARVIS_REMINDER_SPEAK_LOCAL, JARVIS_STARTUP_LINE, JARVIS_FILE_SERVER_TTL_MIN, AGENT_DISPATCH_MODE. VORTEX_SECURITY_TOKEN / VITE_VORTEX_SECURITY_TOKEN are legacy and dead after OP-21. VPS deploy/hostinger/.env (600) = compose interpolation only: LIVEKIT_API_KEY, LIVEKIT_API_SECRET, JARVIS_DOMAIN, plus VORTEX_SECURITY_TOKEN until OP-21 (frontend build arg). VPS deploy/hostinger/bridge.env (600, gitignored, the bridge env_file): AGENT_TOKEN, BRIDGE_HMAC_SECRET, SESSION_JWT_SECRET, OWNER_PASSWORD_HASH, OWNER_TOTP_SECRET, OWNER_RECOVERY_HASHES, LIVEKIT_API_KEY, LIVEKIT_API_SECRET, VORTEX_SECURITY_TOKEN (legacy, until OP-21), LEGACY_TOKEN_AUTH (1, then 0 at OP-21), BRIDGE_EVENT_RETENTION_DAYS (0). Non-secret bridge settings live in compose 'environment:': JARVIS_ROLE=bridge, VORTEX_ENV=production, LIVEKIT_URL=ws://jarvis-livekit:7880, LIVEKIT_PUBLIC_URL=wss://jarvis.srv1802669.hstgr.cloud, JARVIS_ROOM_NAME, JARVIS_AGENT_NAME, ALLOWED_ORIGINS=https://jarvis.srv1802669.hstgr.cloud,http://127.0.0.1:5173,http://localhost:5173, COOKIE_PATH=/vortex, COOKIE_SECURE=1, BRIDGE_DB_PATH=/app/data/bridge.db, JARVIS_SHARED_DIR, GIT_SHA (exported by deploy.sh). v4 (D1, VPS brain): the LLM, search, email and SIM keys, JARVIS_ENCRYPTION_KEY and the agent link private key live only in VPS deploy/hostinger/.env.agent (root 600, gitignored, env_file of jarvis-agent and jarvis-agent-svc, never mounted) and in the PC root .env; never in bridge.env or the compose .env. .env.agent names: GOOGLE_API_KEY, WEATHER_API_KEY, GOOGLE_SEARCH_API_KEY, SEARCH_ENGINE_ID, TAVILY_API_KEY, OPENROUTER_API_KEY, GROQ_API_KEY, HF_TOKEN, EMAIL_USER, EMAIL_APP_PASSWORD, SIM_LOOKUP_API_URL, SIM_LOOKUP_API_KEY, POLLINATIONS_TOKEN, JARVIS_ENCRYPTION_KEY (the same value as the PC, compared by HMAC digest only), LIVEKIT_API_KEY, LIVEKIT_API_SECRET, DESKTOP_AGENT_SIGNING_KEY, DESKTOP_AGENT_PUBLIC_KEY, DESKTOP_PC_PUBLIC_KEY and BACKUP_RECIPIENT_PUBLIC_KEY, plus the K-35 switches. The compose .env adds JARVIS_BRAIN, COMPOSE_PROFILES and JARVIS_PC_AGENT_NAME; bridge.env adds DESKTOP_AGENT_PUBLIC_KEY and DESKTOP_PC_PUBLIC_KEY. In vps mode the PC fallback secrets move to the DPAPI-wrapped run/fallback.env.dpapi (D13), which only 'agent_ctl brain pc' loads. LiveKit container env: LIVEKIT_KEYS='<key>: <secret>' and LIVEKIT_WEBHOOK_API_KEY=<key> (auto-mapped from webhook.api_key). Frontend build args hold no secrets after OP-21: VITE_VORTEX_URL=/vortex, VITE_LIVEKIT_URL optional. Secrets are generated by scripts/ops/gen_secrets.py and rotated by scripts/ops/rotate_env_secret.py / rotate_livekit_keys.py; values travel over ssh stdin and are never printed.
 
 #### K-48 · C-NET-1 (network) · owner: Claude
-Public on 187.127.123.235 for JARVIS: 80/443 (nginx), 7881/tcp and 50000-50050/udp (LiveKit media). Loopback only: 5100 (frontend, done 30 Sep), 5101 (bridge) and 7880 (LiveKit signaling/API) from OP-13. /etc/nginx/conf.d/jarvis.conf, server jarvis.srv1802669.hstgr.cloud: 'location /' -> 127.0.0.1:5100 (temporary basic auth until OP-21, then the lines stay commented for emergency re-enable); 'location /vortex/' -> 127.0.0.1:5101/ (prefix stripped, WebSocket upgrade, read timeout 86400, never basic auth); 'location /rtc' -> 127.0.0.1:7880 (ws); 'location = /agent' -> 127.0.0.1:7880 (ws, worker registration); 'location /twirp/' -> 127.0.0.1:7880 (LiveKit server API); 'location = /vortex/livekit/webhook' -> 404; 'location = /vortex/auth/login' -> limit_req zone jarvis_login 10r/m burst 5 (zone declared at the top of jarvis.conf); the port-80 server keeps /.well-known/acme-challenge from /var/www/html. Headers on '/' after OP-21: HSTS max-age=31536000, X-Content-Type-Options nosniff, Referrer-Policy strict-origin-when-cross-origin, X-Frame-Options DENY, Permissions-Policy camera=(self) microphone=(self), CSP report-only (enforcing in OP-38). The PC agent uses only https/wss on the domain after OP-13. The PC worker health server binds 127.0.0.1:8081. UFW stays inactive (user decision); Docker-published ports bypass UFW anyway, so JARVIS relies only on loopback binds and jarvis.conf.
+Public on 187.127.123.235 for JARVIS: 80/443 (nginx), 7881/tcp and 50000-50050/udp (LiveKit media). Loopback only: 5100 (frontend, done 30 Sep), 5101 (bridge) and 7880 (LiveKit signaling/API) from OP-13. /etc/nginx/conf.d/jarvis.conf, server jarvis.srv1802669.hstgr.cloud: 'location /' -> 127.0.0.1:5100 (temporary basic auth until OP-21, then the lines stay commented for emergency re-enable); 'location /vortex/' -> 127.0.0.1:5101/ (prefix stripped, WebSocket upgrade, read timeout 86400, never basic auth); 'location /rtc' -> 127.0.0.1:7880 (ws); 'location = /agent' -> 127.0.0.1:7880 (ws, worker registration); 'location /twirp/' -> 127.0.0.1:7880 (LiveKit server API); 'location = /vortex/livekit/webhook' -> 404; 'location = /vortex/auth/login' -> limit_req zone jarvis_login 10r/m burst 5 (zone declared at the top of jarvis.conf); the port-80 server keeps /.well-known/acme-challenge from /var/www/html. Headers on '/' after OP-21: HSTS max-age=31536000, X-Content-Type-Options nosniff, Referrer-Policy strict-origin-when-cross-origin, X-Frame-Options DENY, Permissions-Policy camera=(self) microphone=(self), CSP report-only (enforcing in OP-38). The PC agent uses only https/wss on the domain after OP-13. The PC worker health server binds 127.0.0.1:8081. UFW stays inactive (user decision); Docker-published ports bypass UFW anyway, so JARVIS relies only on loopback binds and jarvis.conf. v4 (VPS brain): the bridge also listens on :5002 on jarvis-network only (never published; agent role and /internal/*). The agent containers publish no port and use ws://jarvis-livekit:7880 and http://jarvis-bridge:5002. jarvis.conf adds 'location = /vortex/desktop/blob' (client_max_body_size 30m, proxy_request_buffering off), 'location /vortex/internal/' -> 404, and limit_conn 20 per IP plus limit_req 120r/m burst 60 on /vortex/socket.io (zones declared at the top of jarvis.conf). The 5101/7880 loopback binds land in the V6 LiveKit window. The Desktop Node only connects out (wss on the domain) and serves health on 127.0.0.1:8082.
 
 #### K-49 · C-ORIGIN-1 (process) · owner: Claude
 The canonical UI is https://jarvis.srv1802669.hstgr.cloud, the same origin as /vortex, so cookie auth needs no CORS. Electron production loads that URL (JARVIS_UI_URL, default the canonical URL), not file://; file:// only as an offline fallback when JARVIS_UI_OFFLINE=1; Electron spawns the local backend only when JARVIS_LOCAL_BACKEND=1, and prod.bat's 'start backend = y' answer starts the hybrid worker through scripts/agent_ctl.py instead. Dev: the Vite server at http://127.0.0.1:5173 or http://localhost:5173 proxies /vortex (http + ws) to the domain, and ALLOWED_ORIGINS includes both dev origins. Vercel (jarvis-agent-three.vercel.app, jarvis-agent-sigma.vercel.app): vercel.json keeps 'builds' and its 'routes' becomes a single 302 to https://jarvis.srv1802669.hstgr.cloud/$1 (Vercel rejects 'redirects' next to 'routes'); these origins are NOT in ALLOWED_ORIGINS and there is no cross-site cookie mode (SameSite stays Strict). The hardcoded Vercel origin in ui_bridge.py:35-36 is replaced by the env-only list.
 
 #### K-50 · C-AUDIO-1 (python-api) · owner: Claude
-services/multimedia/jarvis_audio.py (Cursor): generate_speech(text: str, lang: str = 'ur') -> bytes (MP3 via gTTS; fallback WAV via pyttsx3 offline; empty text -> b''). process_audio_input(audio_data: bytes, sample_rate: int = 16000, lang: str = 'ur-PK') -> dict {'transcript': str, 'confidence': float, 'bytes': int, 'engine': str, 'error'?: str}, never raises. speak_locally(text: str, lang: str = 'ur') -> bool, plays on the PC speakers via pygame in a daemon thread and returns False on failure. With JARVIS_TEST_MODE=true it makes no network calls and returns deterministic stubs. Names and signatures stay backward compatible with the current stub. Callers (Claude): the reminder loop when no participant is in the room, the startup line when the MP3 is missing, and scripts/smoke.
+services/multimedia/jarvis_audio.py (Cursor): generate_speech(text: str, lang: str = 'ur') -> bytes (MP3 via gTTS; fallback WAV via pyttsx3 offline; empty text -> b''). process_audio_input(audio_data: bytes, sample_rate: int = 16000, lang: str = 'ur-PK') -> dict {'transcript': str, 'confidence': float, 'bytes': int, 'engine': str, 'error'?: str}, never raises. speak_locally(text: str, lang: str = 'ur') -> bool, plays on the PC speakers via pygame in a daemon thread and returns False on failure. With JARVIS_TEST_MODE=true it makes no network calls and returns deterministic stubs. Names and signatures stay backward compatible with the current stub. Callers (Claude): the reminder loop when no participant is in the room, the startup line when the MP3 is missing, and scripts/smoke. v4 (VPS brain): in vps mode only the Desktop Node calls speak_locally (pc.speak_local for the K-77 delivery ladder, and the startup line); the agent containers never call it.
 
 #### K-51 · COORD-1 (process) · owner: Claude
 Lanes (file ownership; a task edits only its own lane; machine-readable copy .coord/lanes.json, enforced by the pre-commit hook). CLAUDE: deploy/**; everything on the VPS; src/core/**; services/ai_core/**; services/utils/**; scripts/**; root config (requirements*.txt, pyproject.toml, pytest.ini, mypy.ini, .pylintrc, pyrightconfig.json, .pyre_configuration, .python-version, .env*, Dockerfile*, docker-compose.yml, vercel.json, main.py, dev.bat, prod.bat, install_production.*, test_agent_tools.py, .gitignore, .gitattributes, .dockerignore, .gitleaks.toml, .githooks/**, .github/**, .coord/**); git setup and pushes; CLAUDE.md; .cursor/rules/** (Cursor proposes changes in plan.md section 11); docs/**; README.md; tests/core, tests/unit, tests/infrastructure, tests/integration, tests/vision, tests/exhaustive, tests/conftest.py, tests/__init__.py and the other tests/*.py except the two below. CURSOR: stonix_ui/** (frontend + Electron, package.json, package-lock.json); services/automation/**; services/info/**; services/multimedia/**; services/system/**; assets/**; tests/automation/**; tests/scripts/**; tests/tools/** (new); tests/test_reminders.py; tests/test_whatsapp.py. SHARED: plan.md (each agent edits only its own task status lines and appends to section 11 'Handoff') and done_highlight.md (append-only). A change that needs both lanes is split into a Claude-owned contract in docs/CONTRACTS.md plus one task per lane.
@@ -375,19 +385,19 @@ Lanes (file ownership; a task edits only its own lane; machine-readable copy .co
 Git: one working tree, one index, single branch main, remote origin = https://github.com/Matloob11/JARVIS-AGENT (PUBLIC). One-time setup by Claude only: git init -b main, fetch origin, git reset --mixed origin/main (keeps the 3 existing commits). After that nobody switches branches, rebases, stashes, resets to a commit, cleans or force-pushes. Forbidden: git add -A, git add ., git commit -a, git stash*, git reset --hard|--soft|--mixed <commit>, git checkout <branch>, git switch, git rebase, git clean, git restore/checkout -- <path outside own lane>, git push --force, deleting a .git/index.lock younger than 10 min. Commit: 'git add <own new files>' then 'JARVIS_AGENT=<claude|cursor> git commit -m "[claude|cursor] <TASK-ID>: <summary>" -- <paths>' (PowerShell: $env:JARVIS_AGENT='cursor'). The pre-commit hook (.githooks via core.hooksPath) rejects a missing JARVIS_AGENT, other-lane paths, secret files, secret values, terms from the untracked .coord/private_terms.txt and removed lines in done_highlight.md. Commit only after the task's verify passes. Claude adds 'Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>'. On index.lock wait 5-10 s and retry. Only Claude pushes (origin main, never forced); Cursor commits locally only. Because the repo is public: never commit secrets, passwords, private keys, voice samples, logs, chat data or details of non-JARVIS apps on the VPS; a leaked secret is rotated at once (no history rewrite).
 
 #### K-53 · COORD-3 (process) · owner: Claude
-Runtime lock for the single Windows agent worker. Only scripts/agent_ctl.py starts, stops or restarts it: $PY scripts/agent_ctl.py status|start|stop|restart|wait|logs --by claude|cursor|user --reason '<TASK-ID or why>' (PY=.venv_312/Scripts/python.exe, Git Bash in the repo root). The worker holds an OS lock on run/agent.lock (released on exit) and writes run/agent.pid.json; a second 'python -m src.core.agent' exits 3. restart takes run/restart.lock (fails fast; stale after 10 min) and keeps a 120 s cooldown unless --force (logged). Never: taskkill /IM python.exe, killing PIDs not started through agent_ctl, starting the agent directly, running Electron with JARVIS_LOCAL_BACKEND=1 while the hybrid worker runs, or pip install into .venv_312 while the worker runs. Python dependencies are Claude-only (stop, install, start); Cursor asks with 'REQ-DEP python <pkg>==<ver> <why>' in plan.md section 11. scripts/agent_ctl.py is live (C-09): exit codes 0 ok, 1 failed, 2 usage, 3 already running, 4 refused (cooldown, restart.lock held, pid is not the agent, port 8081 answers without a lock holder); status exits 0 when a worker runs, else 1. restart takes run/restart.lock (stale after 10 min or when its holder is dead) and keeps a 120 s cooldown from run/last_restart.json unless --force. start (default: background, hidden window) writes logs/agent_stdout.log and logs/agent_stderr.log (rotated at 5 MB, keep 5), waits until health is 200 while a worker holds run/agent.lock plus a 5 s settle, then runs deploy/windows-local/ensure_room.py once; --foreground runs the worker in the current console (start-agent.bat). The worker's PATH gets the registry PATH entries the calling shell lacks. stop touches only the worker's own process tree (never apps JARVIS opened). Every start/stop/restart/wait appends a JSON line to logs/agent_ctl.log. plan.md section 2.6 points here. After any restart append a done_highlight.md entry. PC ports: 5173 vite and 4173 preview/e2e (Cursor); 8081 worker health (127.0.0.1); 8765 metrics (optional); 6006/4317 Phoenix (optional); 8000 file-server tool. Lock module src/core/agent_lock.py (C-08): JARVIS_RUN_DIR overrides the folder of agent.lock and agent.pid.json (tests only); JARVIS_NO_LOCK=1 and pytest skip the lock; the worker health server binds JARVIS_WORKER_HOST:JARVIS_WORKER_PORT (default 127.0.0.1:8081); src/core/vortex.py starts no worker when JARVIS_HYBRID=1 (environment or root .env) or the lock is held, and an agent exit code 3 means 'already running'.
+Runtime lock for the single Windows agent worker. Only scripts/agent_ctl.py starts, stops or restarts it: $PY scripts/agent_ctl.py status|start|stop|restart|wait|logs --by claude|cursor|user --reason '<TASK-ID or why>' (PY=.venv_312/Scripts/python.exe, Git Bash in the repo root). The worker holds an OS lock on run/agent.lock (released on exit) and writes run/agent.pid.json; a second 'python -m src.core.agent' exits 3. restart takes run/restart.lock (fails fast; stale after 10 min) and keeps a 120 s cooldown unless --force (logged). Never: taskkill /IM python.exe, killing PIDs not started through agent_ctl, starting the agent directly, running Electron with JARVIS_LOCAL_BACKEND=1 while the hybrid worker runs, or pip install into .venv_312 while the worker runs. Python dependencies are Claude-only (stop, install, start); Cursor asks with 'REQ-DEP python <pkg>==<ver> <why>' in plan.md section 11. scripts/agent_ctl.py is live (C-09): exit codes 0 ok, 1 failed, 2 usage, 3 already running, 4 refused (cooldown, restart.lock held, pid is not the agent, port 8081 answers without a lock holder); status exits 0 when a worker runs, else 1. restart takes run/restart.lock (stale after 10 min or when its holder is dead) and keeps a 120 s cooldown from run/last_restart.json unless --force. start (default: background, hidden window) writes logs/agent_stdout.log and logs/agent_stderr.log (rotated at 5 MB, keep 5), waits until health is 200 while a worker holds run/agent.lock plus a 5 s settle, then runs deploy/windows-local/ensure_room.py once; --foreground runs the worker in the current console (start-agent.bat). The worker's PATH gets the registry PATH entries the calling shell lacks. stop touches only the worker's own process tree (never apps JARVIS opened). Every start/stop/restart/wait appends a JSON line to logs/agent_ctl.log. plan.md section 2.6 points here. After any restart append a done_highlight.md entry. PC ports: 5173 vite and 4173 preview/e2e (Cursor); 8081 worker health (127.0.0.1); 8765 metrics (optional); 6006/4317 Phoenix (optional); 8000 file-server tool. Lock module src/core/agent_lock.py (C-08): JARVIS_RUN_DIR overrides the folder of agent.lock and agent.pid.json (tests only); JARVIS_NO_LOCK=1 and pytest skip the lock; the worker health server binds JARVIS_WORKER_HOST:JARVIS_WORKER_PORT (default 127.0.0.1:8081); src/core/vortex.py starts no worker when JARVIS_HYBRID=1 (environment or root .env) or the lock is held, and an agent exit code 3 means 'already running'. v4 (VPS brain, K-72): there are two runtimes. In vps mode (JARVIS_BRAIN=vps) the brain runs in the VPS containers jarvis-agent and jarvis-agent-svc, which only Claude starts, stops or deploys (K-54, K-75), and the laptop runs the Desktop Node: 'agent_ctl node start|stop|status|logs|update [--sha] [--canary]' (start, stop and update by Claude or the user; Cursor uses status). The node holds run/desktop_node.lock (a second node exits 3) and the shared run/desktop_actor.lock, which the PC brain, vortex.py and Electron local also take, so none of them runs while the node runs. In vps mode 'agent_ctl start|stop|restart' act on the node and a worker start is refused; 'agent_ctl brain vps|pc [--when-idle|--now]' switches the brain (journal run/brain_switch.json). In pc mode the worker is 'jarvis-pc' and the rules above apply. Cursor never starts the node, the PC brain or the Electron local backend; it asks with 'REQ-RESTART'. The node health server binds 127.0.0.1:8082.
 
 #### K-54 · COORD-4 (process) · owner: Claude
-VPS rules (Claude only; Cursor never runs ssh, scp or docker against the VPS). Allowed scope ONLY: Docker project jarvis (always 'docker compose -p jarvis'; code dir /opt/jarvis-agent, containers jarvis-*, volumes jarvis_*, network jarvis-network, images jarvis-*), /etc/nginx/conf.d/jarvis.conf, /etc/nginx/jarvis.htpasswd and /root/jarvis-backups (backups, deploy lock, deploy.log, scratch). Not allowed: enabling or changing UFW (stays inactive), any other app, container, volume, network, vhost, cert or config, /etc/nginx/snippets, /etc/letsencrypt (read-only checks only), new systemd units, docker system/image/volume/builder prune, 'docker compose down' without -p jarvis, apt upgrade, reboot, restarting nginx or the docker daemon (only 'nginx -t && systemctl reload nginx'), deleting files or backups on the server without the user's explicit OK. Every change: backup_vps.sh -> change -> nginx -t before reload -> health gate + smoke_other_apps.sh pre/post diff -> done_highlight.md entry with the rollback command. Deploys only through deploy/hostinger/deploy_from_pc.sh from the committed HEAD. Verify commands use VPS='ssh -i ~/.ssh/id_ed25519_hostinger -o BatchMode=yes root@187.127.123.235'.
+VPS rules (Claude only; Cursor never runs ssh, scp or docker against the VPS). Allowed scope ONLY: Docker project jarvis (always 'docker compose -p jarvis'; code dir /opt/jarvis-agent, containers jarvis-* (v4: including jarvis-agent and jarvis-agent-svc), volumes jarvis_* (v4: including jarvis_agent_*), network jarvis-network, images jarvis-* (v4: including jarvis-agent:hostinger)), the dedicated buildx builder 'jarvis-builder' (v4, D19: its buildkit container and state volume, created once with 'docker buildx create --name jarvis-builder --driver docker-container'; never pruned without the user's OK), /etc/nginx/conf.d/jarvis.conf, /etc/nginx/jarvis.htpasswd and /root/jarvis-backups (backups, deploy lock, deploy.log, scratch). Not allowed: enabling or changing UFW (stays inactive), any other app, container, volume, network, vhost, cert or config, /etc/nginx/snippets, /etc/letsencrypt (read-only checks only), new systemd units, docker system/image/volume/builder prune, 'docker compose down' without -p jarvis, apt upgrade, reboot, restarting nginx or the docker daemon (only 'nginx -t && systemctl reload nginx'), deleting files or backups on the server without the user's explicit OK. Every change: backup_vps.sh -> change -> nginx -t before reload -> health gate + smoke_other_apps.sh pre/post diff -> done_highlight.md entry with the rollback command. Deploys only through deploy/hostinger/deploy_from_pc.sh from the committed HEAD. Verify commands use VPS='ssh -i ~/.ssh/id_ed25519_hostinger -o BatchMode=yes root@187.127.123.235'.
 
 #### K-55 · COORD-5 (process) · owner: Claude
 Progress protocol (keeps the existing CLAUDE.md / .cursor/rules/jarvis-collab.mdc / done_highlight.md conventions). plan.md is generated by Claude; each agent claims a task by setting its status line to 'DOING (<agent>, <YYYY-MM-DD HH:MM PKT>)' and sets DONE only after verify passes. Requests go to plan.md section 11 'Handoff' as one line: 'REQ-DEPLOY <task> <sha> <what to verify>' | 'REQ-DEP python <pkg>==<ver> <why>' | 'REQ-RESTART <reason>' | 'REQ-CONTRACT <contract> <proposal>' | 'REQ-VPS <what>'; Claude answers in the same section (ACK / DEPLOYED <sha>) in the same working session. done_highlight.md is shared and append-only: re-read it right before appending, add one entry at the very end using the template at the top of that file, never edit or reorder existing lines. docs/CONTRACTS.md (canonical, versioned, changelog) changes only by Claude after a REQ-CONTRACT. Secrets and non-JARVIS server details are never written to plan.md, done_highlight.md, docs or commits.
 
 #### K-56 · CT-VC-ROOMIO-LINK (internal-api) · owner: Claude
-src/core/roomio_link.py (Claude). Eligible participant = kind STANDARD and identity not starting with 'agent-' or 'probe-' (works for 'owner-*', 'web-*' and legacy random ids). RoomOptions(close_on_disconnect=False, delete_room_on_close=False). The agent calls session.room_io.set_participant(identity) when an eligible participant connects and nobody is linked, when the linked participant leaves and another eligible one is present (newest first), or on ui_command voice_take_over {identity}; it never steals an active link. After every change it sets agent attribute 'jarvis.linked_identity' and logs ROOMIO_RELINK. Audio-output policy (same module): output audio is on only while an eligible participant is subscribed to agent audio and (speak_typed_replies='always' or the linked participant's mic is published and unmuted); 'never' keeps it off; logged as AUDIO_OUT.
+src/core/roomio_link.py (Claude). Eligible participant = kind STANDARD and identity starting with 'owner-' (v4: the bridge mints owner-<8 hex> for every token, 'owner-legacy' in legacy mode; 'web-*', 'agent-*', 'probe-*' and random ids are not eligible). Typed text (lk.chat) and the lk.agent.* RPCs are accepted only from the linked owner-* identity (v4). RoomOptions(close_on_disconnect=False, delete_room_on_close=False). The agent calls session.room_io.set_participant(identity) when an eligible participant connects and nobody is linked, when the linked participant leaves and another eligible one is present (newest first), or on ui_command voice_take_over {identity}; it never steals an active link. After every change it sets agent attribute 'jarvis.linked_identity' and logs ROOMIO_RELINK. Audio-output policy (same module): output audio is on only while an eligible participant is subscribed to agent audio and (speak_typed_replies='always' or the linked participant's mic is published and unmuted); 'never' keeps it off; logged as AUDIO_OUT.
 
 #### K-57 · CT-VC-PROBE (process+internal-api) · owner: Claude
-Probe rooms are 'jarvis-probe-<epoch>' with identity 'probe-<epoch>'; only scripts/smoke/voice_probe.py creates and deletes them (regex ^jarvis-probe-\d+$, never any other room). A job whose room matches sets ContextVar services.utils.jarvis_bridge.bridge_suppressed=True before creating any task. While set: notify_event and UIBridgeHandler send nothing; MemoryExtractor, identity saves and settings persistence are no-ops; no UI listener, reminder/bug-hunter/location/adaptation/heartbeat/vitals loops, clipboard or vision loop or task monitor run. jarvis_bridge keeps httpx clients and semaphores per event loop. JARVIS_PROBE_DISABLED=1 makes probes exit SKIP; a run is capped at 20 turns. Infra's no-room-delete test must allow this probe cleanup.
+Probe rooms are 'jarvis-probe-<epoch>' with identity 'probe-<epoch>'; only scripts/smoke/voice_probe.py creates and deletes them (regex ^jarvis-probe-\d+$, never any other room). A job whose room matches sets ContextVar services.utils.jarvis_bridge.bridge_suppressed=True before creating any task. While set: notify_event and UIBridgeHandler send nothing; MemoryExtractor, identity saves and settings persistence are no-ops; no UI listener, reminder/bug-hunter/location/adaptation/heartbeat/vitals loops, clipboard or vision loop or task monitor run. jarvis_bridge keeps httpx clients and semaphores per event loop. JARVIS_PROBE_DISABLED=1 makes probes exit SKIP; a run is capped at 20 turns. Infra's no-room-delete test must allow this probe cleanup. v4 (VPS brain): a second isolated room class 'jarvis-canary-<epoch>' (regex ^jarvis-canary-\d+$) is created and deleted only by scripts/smoke/vps_agent_canary.py and dispatched explicitly to 'jarvis'. It keeps every rule above, adds a tmpfs data dir and the memory user 'canary' (memory is read, never written), and the no-room-delete test allows that pattern too. The bridge never routes ui_command to canary or probe peers, and the Desktop Node refuses actuation from canary and probe rooms (K-76).
 
 #### K-58 · CT-VC-MESSAGE (event-schema) · owner: Claude
 Extends C-MSG-1. Agent notify 'transcription': {id, role:'user'|'assistant', text, source:'voice'|'text'|'system', final, ts (epoch seconds; the bridge normalizer converts units for the UI), turn_id? (user message that caused an assistant message), text_native? (original script when transliterated), score? (voice-ID score on voice user messages), persona?, legacy is_final/timestamp until no UI reads them}. Exactly once: typed user text by the router with the UI id; voice user text once (conversation_item_added in fast mode, TURN_ACCEPTED in gated mode); assistant text once from conversation_item_added with id = ChatMessage.id. An update with the same id carries changed fields and the bridge merges ALL fields. Live captions come from LiveKit 'lk.transcription' only.
@@ -396,7 +406,7 @@ Extends C-MSG-1. Agent notify 'transcription': {id, role:'user'|'assistant', tex
 Canonical typed chat: Socket.IO ui_command {type:'chat', payload: string | {id?|client_msg_id?, text}}. LiveKit 'lk.chat' (attributes 'jarvis.client_msg_id' or 'msg_id', else stream_id) is accepted only from the RoomIO-linked participant, so a UI uses it only when jarvis.linked_identity equals its own identity. ConversationRouter.handle_text(text, msg_id, origin): LRU dedupe 512 by id; NFKC + control-char strip (newline/tab kept), max 4000 chars; VortexGuard.detect_threat only (no sanitize_input); emits the user message (source 'text', same id); session.interrupt() then generate_reply(user_input='[typed] '+text); '/swarm <task>' dispatches the registered 'swarm' command; session not running -> '[offline] '+template as source 'system'. Typed text never needs the wake word and is never voice-ID checked (browser session authenticated by the P0 login).
 
 #### K-60 · CT-VC-CONTROL (command-schema+python-api) · owner: Claude
-Registry services/utils/ui_command_registry.py (no project imports): register_ui_command(name), dispatch(); agent_loops re-exports it; other areas register commands from their own modules instead of editing agent_loops. Dedupe per (type, payload.id|client_msg_id), LRU 512; unknown types logged and ignored. 'stop' = interrupt current and queued speech (AgentSession.interrupt; gated mode also activity_start to Gemini); JARVIS keeps listening. 'mute'/'unmute' = session.input.set_audio_enabled(False/True) + pause of the legacy audio tap; typed chat still answered; mute_sync emitted. 'shutdown_agent' {restart?:bool=true, confirm?, confirm_id?} = end the job (runtime.aclose -> ctx.shutdown); restart=false also asks the bridge to pause re-dispatch when supported; needs confirmation (broker when registered, else confirm:true from the authenticated UI) and is audited. 'clear_memory' {include_vector?, confirm?} = medium-risk confirmation, file moved to backups/memory/<ts>_<user>_memory.json, optional vector wipe after a second confirmation; agent emits 'memory_cleared' {scope:'short_term'|'all', backup, ts}. 'voice_take_over' per CT-VC-ROOMIO-LINK. Other areas that used 'stop' for restart or pause must send 'shutdown_agent'.
+Registry services/utils/ui_command_registry.py (no project imports): register_ui_command(name), dispatch(); agent_loops re-exports it; other areas register commands from their own modules instead of editing agent_loops. Dedupe per (type, payload.id|client_msg_id), LRU 512; unknown types logged and ignored. 'stop' = interrupt current and queued speech (AgentSession.interrupt; gated mode also activity_start to Gemini); JARVIS keeps listening; v4: 'stop' (or a spoken 'ruko') also cancels every in-flight laptop call and refuses new ones for 3 s with STOPPED_BY_USER, and a spoken or typed stop-desktop phrase ('desktop band karo', 'desktop control band karo' or 'stop desktop') sends desktop_stop, so the laptop goes read-only until its tray switches back to Full (K-74, K-76). 'mute'/'unmute' = session.input.set_audio_enabled(False/True) + pause of the legacy audio tap; typed chat still answered; mute_sync emitted. 'shutdown_agent' {restart?:bool=true, confirm?, confirm_id?} = end the job (runtime.aclose -> ctx.shutdown); restart=false also asks the bridge to pause re-dispatch when supported; needs confirmation (broker when registered, else confirm:true from the authenticated UI) and is audited. 'clear_memory' {include_vector?, confirm?} = medium-risk confirmation, file moved to backups/memory/<ts>_<user>_memory.json, optional vector wipe after a second confirmation; agent emits 'memory_cleared' {scope:'short_term'|'all', backup, ts}. 'voice_take_over' per CT-VC-ROOMIO-LINK. Other areas that used 'stop' for restart or pause must send 'shutdown_agent'.
 
 #### K-61 · CT-VC-SETTINGS (command+event-schema) · owner: Claude
 Agent is the single source of truth: data/settings/agent_settings.json (atomic, gitignored; probe jobs never write). Input: ui_command settings_update, or bridge settings_bootstrap treated as a validated update, with partial {voice (30 Gemini voices or aliases alloy/echo/shimmer/ash/ballad/coral/sage/verse), persona 'jarvis'|'anna', wake_word bool=true, wake_followup_s 0..60=0, voice_id bool=true (enforced only in gated mode after enrollment), voice_id_threshold 0.2..0.9=0.45, voice_id_reject 'silent'|'polite', turn_mode 'gated'|'fast' (default from VR-22), transcript_script 'roman'|'native', language 'auto'|'ur'|'hi'|'en' (BCP-47 mapped), speak_typed_replies 'auto'|'always'|'never', quiet_hours 'HH:MM-HH:MM'|'', confirm_level, style, emotional_intelligence (emotionalIntelligence accepted)}. Output notify 'settings_sync' = {settings:{all fields + muted + voice_id_enrolled}, applied:{field:'applied'|'pending_restart'|'unsupported'}, errors:{field:message}, pending_restart:[fields], available_voices, available_languages, ts} (C-SETTINGS-1 envelope; UIs read values from settings_sync.settings). Legacy wake_word_toggle, persona_change and mute/unmute also produce settings_sync. Voice/persona apply at the next safe point. Extension: register_settings_section(name, validate_fn, apply_fn).
@@ -408,7 +418,7 @@ Spoken turns only, in order: security -> muted -> enrolling -> voice_id (only if
 ui_command voice_enroll {action:'start'|'cancel'|'commit', target_seconds?:20} and alias voice_enroll_start {seconds} (start with auto-commit at target). Works in Fast and Gated mode: Gemini input disabled (session.input.set_audio_enabled(False)) and audio read from a dedicated stream on the linked participant's mic. Progress via voice_id_status {enrolling:true, collected_s, target_s, seconds_left, utterances, last_quality:'ok'|'too_short'|'noisy'|'clipped', error?:'mic_off'}; final 'voice_enroll_result' {ok, samples, self_score, error?}. Voice turns while enrolling -> turn_rejected 'enrolling'. Commit backs up data/identity/* to backups/identity/<ts>/ first. Auto-cancel after 3 min; input state restored on every exit. CLI equivalent scripts/voice/record_master.py writes the same files.
 
 #### K-64 · CT-VC-VOICE-ID-STORE (file-format+internal-api) · owner: Claude
-Files: data/identity/master_voice.wav (16 kHz mono int16, concatenated samples), data/identity/master_embedding.npy (L2-normalized mean ECAPA embedding), data/identity/samples/*.wav; backups in backups/identity/<ts>/. Model pretrained_models/spkrec-ecapa-voxceleb, downloaded only by scripts/models/download_voice_model.py (never implicitly). services/ai_core/voice_fingerprint.py: torchaudio shims installed before importing speechbrain; verify_pcm(pcm: bytes, sample_rate: int, threshold: float|None=None) -> (accepted, score) in memory (no temp files, no torchaudio.load); enroll(samples: list[tuple[bytes,int]]) -> {ok, self_score, samples}; is_enrolled; state 'model_missing'|'not_enrolled'|'ready'|'engine_error'; reload(). verify_bytes and verify_segment stay as wrappers. The gated check uses the exact VAD utterance frames captured by TeeSTT.
+Files: data/identity/master_voice.wav (16 kHz mono int16, concatenated samples), data/identity/master_embedding.npy (L2-normalized mean ECAPA embedding), data/identity/samples/*.wav; backups in backups/identity/<ts>/. Model pretrained_models/spkrec-ecapa-voxceleb, downloaded only by scripts/models/download_voice_model.py (never implicitly). services/ai_core/voice_fingerprint.py: torchaudio shims installed before importing speechbrain; verify_pcm(pcm: bytes, sample_rate: int, threshold: float|None=None) -> (accepted, score) in memory (no temp files, no torchaudio.load); enroll(samples: list[tuple[bytes,int]]) -> {ok, self_score, samples}; is_enrolled; state 'model_missing'|'not_enrolled'|'ready'|'engine_error'; reload(). verify_bytes and verify_segment stay as wrappers. The gated check uses the exact VAD utterance frames captured by TeeSTT. v4 (VPS brain): in vps mode these files live on the jarvis_agent_data volume (/app/data/identity, dir 700); the model is baked into the jarvis-agent image by the same download script at build time and loaded with HF_HUB_OFFLINE=1. Samples arrive by browser enrollment (K-63) or the CLI sample over ssh stdin.
 
 #### K-65 · CT-VC-GEMINI-GATE (internal-api) · owner: Claude
 src/core/gemini_gate.py: JarvisGeminiRealtimeModel(google.realtime.RealtimeModel) whose session() returns JarvisGatedRealtimeSession. Gated mode: automatic_activity_detection.disabled=True, input_audio_transcription=None, AgentSession(stt=TeeSTT, turn_detection='vad'); push_audio, start_user_activity and commit_audio are no-ops; interrupt() sends activity_start while a generation is active. submit_user_turn(frames, transcript, context_note, image_jpeg): note as LiveClientContent(role=None, turn_complete=False) -> activity_start (skipped if open) -> optional image Blob -> audio via base push_audio, then every frame returned by _bstream.flush() -> activity_end; arms the pending generation future; adds the transcript to _chat_ctx. generate_reply() returns that future (no '.' placeholder, 8 s timeout) when a turn is pending, else the plugin path. push_video keeps only the latest frame in gated mode. discard_user_turn(); send_context_note(text) in both modes; update_instructions() sends a '[SYSTEM UPDATE]' delta when the diff is < 30% (full text kept in _opts); reconnects with a resumption handle re-send only items added since the last handle. Fast mode = automatic activity detection with the same class. Pinned to livekit-plugins-google==1.4.6; tests/unit/test_gemini_gate_contract.py checks _send_client_event, _pending_generation_fut, _chat_ctx, _opts, _bstream, _manual_activity_detection, _handle_go_away, RealtimeModel._sessions.
@@ -420,10 +430,396 @@ src/core/voice_speak.py: async speak_proactive(text, *, kind, action=None, prior
 notify 'reasoning' for every accepted user message, typed and voice: {turn_id = msg_id, msg_id, intent, confidence (top 5, 0-1), is_ambiguous, plan: string[] ('Action: description', safe for today's UI), plan_steps: [{step, action, description}], source:'voice'|'text', ts}. Produced by jarvis_reasoning.process_with_advanced_reasoning in a background task (2 s timeout); it never produces the reply. The bridge passes both through; UIs render plan_steps when present, else plan strings, and never render objects as React children.
 
 #### K-68 · CT-VC-AGENT-HEARTBEAT (event-schema) · owner: Claude
-Fields the voice runtime adds, through a provider hook, to the agent heartbeat owned by infra OPS-16 / dashboard DASH-C08: {job_id, room, since, pid, mode:'gated'|'fast', session:'starting'|'running'|'restarting'|'closed', agent_state, linked_identity, worker_agent_name}. One heartbeat at runtime start and {session:'closed'} at teardown. Probe jobs send none.
+Fields the voice runtime adds, through a provider hook, to the agent heartbeat owned by infra OPS-16 / dashboard DASH-C08: {job_id, room, since, pid, mode:'gated'|'fast', session:'starting'|'running'|'restarting'|'idle'|'closed' ('idle' added in v4), agent_state, linked_identity, worker_agent_name}. One heartbeat at runtime start and {session:'closed'} at teardown. Probe jobs send none. v4 (VPS brain): the agent and agent-svc heartbeats also carry brain, git_sha, link {online, rtt_ms_p50, rtt_ms_p95}, pending_calls, unknowns_1h, cgroup {memory_current, cpu}, disk_free_gb, downloads_bytes and restarts (C-134); agent-svc adds the K-77 fields; canary jobs send none.
 
 #### K-69 · CT-VC-RUNTIME-ENV (config) · owner: Claude
-Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVIS_TURN_MODE (spike decision, else fast), JARVIS_REALTIME_MODEL (models/gemini-2.5-flash-native-audio-latest, pinned because typed chat needs mid-session client content), JARVIS_STT_PROVIDER, JARVIS_STT_MODEL (whisper-large-v3-turbo), JARVIS_STT_LANGUAGE (ur), JARVIS_STT_PROMPT, JARVIS_STT_FALLBACK_MODEL and JARVIS_TRANSLIT_MODEL (resolved at startup from a list), JARVIS_VOICE_JARVIS (Charon), JARVIS_VOICE_ANNA (Aoede), JARVIS_VOICE_ID_THRESHOLD (0.45), JARVIS_LOAD_THRESHOLD (inf), JARVIS_PREWARM_TIMEOUT (120), JARVIS_IDLE_PROCS (1), JARVIS_CTX_TRIGGER_TOKENS (24000), JARVIS_THINKING_BUDGET (unset), JARVIS_AAD_SILENCE_MS / JARVIS_AAD_EOS_SENSITIVITY / JARVIS_AAD_PREFIX_MS (unset), JARVIS_TOOL_DESC (short|full), JARVIS_TOOL_DRY_RUN (0), JARVIS_DEBUG_SAVE_AUDIO (0), JARVIS_CV_PATH, JARVIS_SPEAK_TYPED (auto), JARVIS_STARTUP_SOUND, JARVIS_PROBE_DISABLED (0), JARVIS_SMOKE (0), JARVIS_SPIKE (0). JARVIS_AGENT_NAME belongs to OPS-15/C-ENV-1. Since C-09 the root .env is the single settings source: services/utils/jarvis_config.py loads it first and deploy/windows-local/.env only fills keys missing from it; no launcher copies one file over the other (setup.bat and start-agent.bat copy deploy/windows-local/.env to the root only when no root .env exists).
+Names only in .env.example; values never logged. JARVIS_USER_ID (matloob; v4: set in every mode and role from stage V3, so the PC and the VPS share one memory file), JARVIS_TURN_MODE (spike decision, else fast), JARVIS_REALTIME_MODEL (models/gemini-2.5-flash-native-audio-latest, pinned because typed chat needs mid-session client content), JARVIS_STT_PROVIDER, JARVIS_STT_MODEL (whisper-large-v3-turbo), JARVIS_STT_LANGUAGE (ur), JARVIS_STT_PROMPT, JARVIS_STT_FALLBACK_MODEL and JARVIS_TRANSLIT_MODEL (resolved at startup from a list), JARVIS_VOICE_JARVIS (Charon), JARVIS_VOICE_ANNA (Aoede), JARVIS_VOICE_ID_THRESHOLD (0.45), JARVIS_LOAD_THRESHOLD (inf), JARVIS_PREWARM_TIMEOUT (120), JARVIS_IDLE_PROCS (1 on the PC; v4: 2 in the VPS agent container), JARVIS_CTX_TRIGGER_TOKENS (24000), JARVIS_THINKING_BUDGET (unset), JARVIS_AAD_SILENCE_MS / JARVIS_AAD_EOS_SENSITIVITY / JARVIS_AAD_PREFIX_MS (unset), JARVIS_TOOL_DESC (short|full), JARVIS_TOOL_DRY_RUN (0), JARVIS_DEBUG_SAVE_AUDIO (0), JARVIS_CV_PATH, JARVIS_SPEAK_TYPED (auto), JARVIS_STARTUP_SOUND, JARVIS_PROBE_DISABLED (0), JARVIS_SMOKE (0), JARVIS_SPIKE (0). JARVIS_AGENT_NAME belongs to OPS-15/C-ENV-1. Since C-09 the root .env is the single settings source: services/utils/jarvis_config.py loads it first and deploy/windows-local/.env only fills keys missing from it; no launcher copies one file over the other (setup.bat and start-agent.bat copy deploy/windows-local/.env to the root only when no root .env exists). v4 (VPS brain): the VPS agent containers read no root .env; they get these names from compose 'environment:' (TZ=Asia/Karachi, USER_CITY, JARVIS_USER_ID and the K-72 worker and session values) and secrets from .env.agent (K-47, K-75).
+
+#### K-70 · DESKTOP-LINK (socketio+crypto) · owner: Claude
+Transport
+- Socket.IO namespace '/desktop' on the bridge.
+- PC node:
+  - connects to wss://jarvis.srv1802669.hstgr.cloud, socketio_path 'vortex/socket.io', transports ['websocket'];
+  - TLS is verified, and an http:// JARVIS_LINK_URL is refused;
+  - reconnection=False with its own loop (backoff 1→30 s plus ≤1 s jitter, forever) and a fresh signed hello on every connect.
+- Agent peers (each job process and jarvis-agent-svc) connect to http://jarvis-bridge:5002, the internal listener that is never published. The role agent is accepted only on :5002.
+- Nothing from namespace '/' is ever relayed to '/desktop'.
+
+Keys
+- Ed25519 DESKTOP_AGENT_SIGNING_KEY: generated on the VPS; the private half lives only in .env.agent.
+- Ed25519 DESKTOP_PC_SIGNING_KEY: generated on the PC; the private half is kept DPAPI-wrapped in %LOCALAPPDATA%\JARVIS\node.
+- The public halves (DESKTOP_AGENT_PUBLIC_KEY, DESKTOP_PC_PUBLIC_KEY) go to bridge.env, .env.agent and the node config.
+- The bridge holds no private link key.
+
+Encryption
+- Each side sends an ephemeral X25519 key inside its signed hello.
+- session key = HKDF-SHA256(X25519, salt = node sess || agent peer_id, info 'jarvis/desktop/aead/v1').
+- The bodies of exec, ack-details, progress, result, result_resend, cancel and event messages, and every blob, are ChaCha20-Poly1305 encrypted (12-byte random nonce, AAD = the canonical header).
+- The bridge sees only the header fields.
+
+Envelope
+- Fields: {v:1, typ, id (32 hex), ts (sender epoch s), from ('agent:<peer>'|'pc:<node_id>'|'bridge'), to, sess (node session nonce, 32 hex, rotated per connect, required on every agent→pc message except agent_hello), room, origin ('llm'|'job'|'scheduler'|'internal'|'canary'), call_id?, tool?, seq? {speech_id, n}, start_by?, body, sig}.
+- Signed bytes = b'jarvis/desktop/msg/v1|' + canonical_json(envelope without sig), where canonical_json = json.dumps(sort_keys=True, separators=(',',':'), ensure_ascii=False).encode('utf-8').
+- HTTP requests are signed over method|path|query|ts|nonce|length|sha256(body), context 'jarvis/desktop/http/v1', in the headers X-Desk-Ts, X-Desk-Nonce, X-Desk-Len, X-Desk-Sha256 and X-Desk-Sig. They are verified before any body byte is read.
+
+Receiver checks, in order
+1. Size cap: exec 96 KB, result 256 KB, event 32 KB.
+2. v in the supported list.
+3. from/to match the link.
+4. Signature with the sender role's key.
+5. |own OS clock − ts| ≤ 120 s. The bridge clock is never used. The node refuses actuation with CLOCK_SKEW when the offset measured from agent-signed ping/pong exceeds 60 s.
+6. sess equals the node's current session.
+7. id unseen for 24 h (persisted: node run/desktop_link.db, agent conversations/desktop_seen.db, bridge store).
+8. typ allowed in that direction.
+
+A failure is dropped and audited as DL_REJECT. An exec that fails gets a signed refusal.
+
+Messages
+- hello (node): node_id, boot_id, proto [1], version, git_sha, manifest_sha256, param_schema_sha256, eph_pub, sess, mode, locked, presence_s, wal_report[{call_id, state: completed|interrupted|never_started|start_window_missed, finished_at}].
+- agent_hello: peer_id, job_id|'svc', room, eph_pub, sess.
+- welcome and status (bridge, unsigned hints): server_time, limits, brain, active_job, desktop_status, alert hints (K-74) and, after a UI desktop_stop, a stop_all hint to the agent peers (tighten-only: an agent only cancels its own in-flight laptop calls).
+- exec: call_id, tool or pc.* operation, args, args_sha256, param_schema_sha256, timeout_s, lock_wait_s, start_by (agent clock = send + 2.5 s, converted by the node with the measured offset), seq, room, origin, approval? {confirm_id, channel 'ui'|'voice', risk, args_sha256} (the agent's ConfirmFlow result for a confirm-class call, K-76; inside the signed, encrypted body).
+- ack: accepted, risk, cls, code?.
+- progress: at least every 10 s while running.
+- result: status, K-12 result, duration_ms, effect none|done|possible, blobs[{blob_id, sha256, size, mime}].
+- result_ack.
+- result_resend: a fresh envelope with call_id, original_ts, finished_at, result.
+- cancel: answered 'cancelled' within 5 s, or with the real result.
+- event: vitals_pc | location | window_context | clipboard_suggestion | desktop_state | power | log_batch | audit.
+- control:
+  - from the bridge, tighten-only kinds: desktop_stop (→ read), desktop_off, active_job, link_disabled;
+  - from an agent: tighten-only kinds plus stop_all.
+- ping/pong: agent↔node every 30 s; the offset is updated on every pong; deadlines use monotonic time.
+- sync_request: sent by an agent after it starts.
+- Internal operations (never LLM-visible; on an allow-list): pc.ping, pc.capture_screen, pc.capture_webcam, pc.read_file, pc.fetch, pc.open_url, pc.speak_local, pc.play_sound.
+
+Semantics and timers
+- At most once. call_id is the idempotency key. Retries happen only for the read class.
+- Timers:
+  - presence heartbeat 10 s, stale after 25 s;
+  - ack 3 s, then cancel plus a 2 s grace;
+  - stall 30 s without progress → cancel → DESKTOP_TIMEOUT;
+  - proxy cap = 3 + lock_wait + timeout + 10 s;
+  - outbox 10 min / 200 entries.
+- Dead-man switch: a link down for more than 5 s cancels running input-class calls; a messaging send step completes atomically.
+- Outcomes:
+  - 'Not executed' (DESKTOP_NOT_STARTED) only after an explicit refusal, tombstone or start_window_missed, or when the bridge reports dl_undeliverable{emitted:false}.
+  - A laptop that is offline before sending gives DESKTOP_OFFLINE.
+  - Every other loss gives DESKTOP_RESULT_UNKNOWN, reconciled on hello or sync_request; late outcomes are announced, and the tool_sync end is corrected under the same id.
+
+Versioning
+- The highest version common to both proto lists is used; none in common gives PROTO_MISMATCH.
+- Rolling order: bridge → agent → node.
+
+Logging
+- The bridge logs only call_id, tool, sizes and timings, never arguments, results or window titles.
+
+Rates (message rates, not CPU/RAM limits)
+- exec 10/s burst and 120/min; events 20/s; connects 10/min per IP. Only failed verifications count.
+
+#### K-71 · DESKTOP-MANIFEST + PLACEMENT (file-format+python-api) · owner: Claude
+Manifest file
+- services/ai_core/desktop_manifest.json is generated on Windows by scripts/desktop/export_manifest.py (JARVIS_TEST_MODE=true, dead bridge URL) from the committed tree, and baked into the agent image.
+- The node runs the same git SHA from a pinned snapshot and uses its live registry.
+- Top level: {version, git_sha, manifest_sha256}.
+- Per tool:
+  - name, module, doc (exact __doc__);
+  - params [{name, kind, annotation, default, required}];
+  - meta {timeout, risk 'low'|'medium'|'high'|'dynamic', arg_policies, exclusive, voice_confirm, max_output_chars, long_running};
+  - cls, placement, idempotent;
+  - param_schema_sha256 (names, annotations, required only);
+  - lk_schema_sha256 (the full LLM declaration).
+- pc.* operation schemas are listed too.
+- Annotation whitelist: str, int, float, bool, None, X | None, list[str|int], dict[str,str], Literal[str…]. Anything else fails the export.
+
+Placement table
+- services/ai_core/tool_placement.py, per tool: place 'vps'|'laptop'|'split'|route(args, presence), fallback, fallback_on [codes], idempotent, cls floor, arg_hooks, opens_urls, timeout_override.
+- JARVIS_TOOL_PLACEMENT_OVERRIDES='name=laptop,…' is validated: GUI tools never vps, wrap_* never laptop, laptop only for manifest tools. It applies from the next session.
+- PC brain mode ignores the table.
+
+VPS discovery (JARVIS_DESKTOP_MODE=remote)
+- Skip modules whose tools are all laptop-placed, plus the static deny-list: keyboard_mouse_ctrl, jarvis_window_ctrl, jarvis_whatsapp_automation, jarvis_notepad_automation, jarvis_system_ctrl, jarvis_system_info, jarvis_browser_pinchtab.
+- Laptop-placed tools in imported modules are swapped for proxies, and proxies are added for the remaining manifest tools.
+- Expected names = discovery ∪ manifest (never a constant). A mismatch logs ERROR and sets module_health degraded.
+- Counts on 2026-10-01: 83 names = vps 32 (including confirm_action and the 4 internal wrap_* tools), split 1 (analyze_screen), routed 2 (zip_files, list_generated_media_tool), laptop 48.
+
+Proxies
+- Built in prewarm with the same __name__, __qualname__, __module__, __doc__ and __signature__ (real type objects, nothing eval'd).
+- Registered once per session through register_tool, never through update_tools. Settings: exclusive None, retry_attempts 0, timeout = the K-70 link cap.
+- Link errors are returned as K-12 dicts and never count as circuit-breaker failures.
+- Repeat guard: the same messaging, code_exec, availability, exposure or typing call (same args_sha256) within 120 s needs ConfirmFlow.
+- seq is stamped synchronously at entry.
+
+Drift
+- At exec time the node compares param_schema_sha256: a mismatch gives MANIFEST_MISMATCH and the tool does not run. A docstring-only drift logs WARNING.
+- A manifest sent by the node is never adopted at runtime.
+- The deploy pre-flight and CI run with JARVIS_MANIFEST_STRICT=1 and refuse a stale committed manifest. tests/unit/test_desktop_manifest.py is advisory otherwise.
+- Fallback: a VPS result with a code in fallback_on and effect none gets one re-run on the laptop. VPS runs of that tool then back off for 6 h.
+
+#### K-72 · BRAIN-SWITCH + PLACEMENT-ENV + COMPAT (env+process) · owner: Claude
+Brain switch
+- JARVIS_BRAIN=vps|pc in the VPS deploy/hostinger/.env (mode 600) is the source of truth. Compose reads it as ${JARVIS_BRAIN:?}, so a missing value fails fast.
+- COMPOSE_PROFILES is derived from it (vps-brain or empty).
+- Only scripts/agent_ctl.py brain vps|pc [--when-idle|--now] writes it:
+  - states PREFLIGHT → BACKUP → STOP_OLD → SYNC_DATA → FLIP_ENV → START_NEW → ENSURE → VERIFY → DONE;
+  - a journal in run/brain_switch.json makes it resumable; a failure restores the previous brain automatically;
+  - success is declared only when /vortex/status shows the brain and an agent participant whose lk.agent.name equals the target and whose jarvis.session is running;
+  - env writers edit in place and keep unknown lines.
+- Idle = no final transcript, typed chat or tool call for 10 min (bridge last_activity_ts). --now gives a spoken 60 s notice.
+
+Agent names
+- 'jarvis' (VPS containers) and 'jarvis-pc' (PC fallback, JARVIS_PC_AGENT_NAME in the VPS .env).
+- The bridge dispatches only to the active brain.
+- In vps mode agent_ctl refuses to start a PC worker. In pc mode the agent and agent-svc are stopped and stay stopped (unless-stopped).
+
+Roles and modes
+- JARVIS_ROLE = agent | svc | bridge | desktop.
+- JARVIS_DESKTOP_MODE = remote (VPS) | local (PC brain).
+- config.validate(role, mode) requires only what that pair uses: agent+remote needs JARVIS_ENCRYPTION_KEY (fatal) and DESKTOP_AGENT_SIGNING_KEY; agent+local needs today's set.
+
+Env names
+- Placement and link: JARVIS_TOOL_PLACEMENT_OVERRIDES, JARVIS_LINK_URL (node, https only).
+- Node policy: JARVIS_PRESENCE_WINDOW_S=600, JARVIS_CAPTURE_PRESENCE_S=120, JARVIS_ORIGIN_PRESENCE_GATE=0 (D21, K-76 Origins) and the K-15 kill switch JARVIS_DESKTOP_CONTROL. The node starts in mode full and has no laptop-side approval setting (user decision D3).
+- Node settings source: the node runs from a read-only snapshot and makes dotenv a no-op, so an allow-listed parser (src/core/desktop/settings.py) reads only non-secret keys from the PC root .env, at start and again when the file changes: JARVIS_DESKTOP_CONTROL, JARVIS_CLIPBOARD_HELPER, JARVIS_CLIPBOARD_SPEAK, JARVIS_LINK_URL, the node policy keys above, WHATSAPP_TEST_NUMBERS and the K-15 path and app keys. Relative paths resolve against JARVIS_DATA_ROOT. PINCHTAB_TOKEN and CONTROLLER_TOKEN stay DPAPI-wrapped in %LOCALAPPDATA%\JARVIS\node and reach config in memory only.
+- Node data root: JARVIS_DATA_ROOT (the repo on the PC) and JARVIS_RUN_DIR (<data root>\run), set by the supervisor from %LOCALAPPDATA%\JARVIS\node\node_config.json (written by agent_ctl node update). run/, logs/ and Jarvis_Outputs are the repo's own, and run/desktop_actor.lock is the same file the PC brain takes.
+- Worker and session: JARVIS_IDLE_PROCS (VPS 2, PC 1), JARVIS_PREWARM_TIMEOUT=120, JARVIS_LOAD_THRESHOLD=inf, JARVIS_JOB_MEMORY_WARN_MB=3000, JARVIS_SHUTDOWN_PROC_TIMEOUT=20, JARVIS_IDLE_CLOSE_MIN=30, JARVIS_CTX_TRIGGER_TOKENS=24000.
+- Dispatch: AGENT_DISPATCH_MODE (on_demand in vps mode).
+- Media and network: JARVIS_MEDIA_PRIORITY=normal|low, JARVIS_NET_GUARD=1.
+- Reminders and backups: JARVIS_REMINDER_EMAIL_AFTER_MIN=0, BACKUP_RECIPIENT_PUBLIC_KEY.
+- Identity and time: TZ=Asia/Karachi, USER_CITY, JARVIS_USER_ID (every mode).
+- Manifest: JARVIS_MANIFEST_STRICT (deploy/CI).
+
+Compat layer
+- services/ai_core/remote_compat.py is active only when JARVIS_DESKTOP_MODE=remote and installed before discovery:
+  - os.startfile → services.utils.jarvis_delivery.open_artifact (raises OSError('DESKTOP_OFFLINE') when the laptop is offline);
+  - webbrowser.open → pc.open_url, only inside a tool flagged opens_urls and only for http(s) URLs;
+  - jarvis_search.get_current_city / get_current_city_data and every by-value consumer → services.utils.jarvis_location (device location cache, else USER_CITY; never ipinfo).
+- A startup self-test asserts every patched symbol; a missing one logs ERROR COMPAT_SHIM_MISSING and degrades module_health.
+- Cursor replaces the shims with hooks (X-64, X-65). The shimmed symbols are frozen until then.
+
+#### K-73 · MEDIA-RELAY + FILES + BLOBS (http-api) · owner: Claude
+Scope
+- This is the single media path (it fills DASH-C21 and DASH-C30). The UI and the laptop node both use it; no second file endpoint exists.
+
+Media relay
+- The bridge mounts jarvis_shared and jarvis_outputs read-only and serves:
+  - GET /vortex/media/index?area=shared|outputs&cursor=<ts>;
+  - GET /vortex/media/file?area=&path= (HTTP Range).
+- Auth: the owner session (the legacy token until C-22) for the UI, or K-70 PC-signed HTTP for the node.
+- Allowed paths:
+  - shared: Generated_Images/, QR_Codes/, Downloads/ (including YouTube/);
+  - outputs: Downloads/, leads/ and top-level *.zip.
+- Excluded: sim_lookup_history.jsonl, dotfiles, *.part, *.ytdl, *.tmp, and files modified less than 5 s ago.
+- Files are opened component by component with O_NOFOLLOW (directories via dir_fd and O_DIRECTORY). Only regular files are served; symlinks are never listed or streamed.
+- Index entries: {seq, relpath, size, mtime_ns, sha256?}. The node's cursor is the listing time − 5 s, with dedupe by relpath+size+mtime and a full reconcile every 15 min.
+
+Mirror (node)
+- Additive only, never deletes, into config.shared_dir and config.outputs_dir.
+- Every relpath component is validated: no '\\', ':', '..', control characters, CON/PRN/AUX/NUL/COM1-9/LPT1-9, or trailing dot or space.
+- Joined with safe_child_path; the final realpath must stay under the root.
+- Write order: .part → size check (plus sha256 when known) → Mark-of-the-Web (ZoneId=3) → rename without following reparse points. A clash gets a ' (n)' suffix.
+- Files over 20 MB are copied only while desktop_status.voice_active is false, or on an explicit open.
+
+pc.fetch
+- Body: {area, relpath, sha256 (agent-signed, required), size, open}.
+- Auto-open only for audio, video, image, pdf, txt, csv, json, xlsx, docx, pptx and html. Executables, scripts, shortcuts and archives are never opened; Explorer selects them instead.
+- open_artifact raises OSError('DESKTOP_OFFLINE') while the laptop is offline, so tools report the truth. Opens that finish later are announced.
+
+Blobs (laptop → VPS)
+- POST /vortex/desktop/blob. nginx allows client_max_body_size 30m on this location only, with request buffering off.
+- The signed headers (length ≤ 30 MB and sha256) are verified before the body is read.
+- The body is streamed and hashed under a hard cap, with at most 2 concurrent uploads.
+- Storage: in-memory only, ≤ 256 MB in total, TTL 15 min, deleted after the first fetch.
+- The body is AEAD-encrypted to the agent session.
+- The agent fetches GET /internal/blob/<id> on :5002 only (nginx answers 404 for /vortex/internal/) and re-hashes the bytes.
+- A bridge restart loses blobs in flight; the tool then returns UPLOAD_FAILED, which is retryable.
+
+Uses
+- analyze_screen capture.
+- The analyze_camera webcam fallback.
+- send_email attachments from Windows paths: a failed pull is an error, never a mail sent without the attachment.
+
+Backup pull
+- GET /vortex/desktop/backup/latest (PC-signed) streams the newest encrypted snapshot from jarvis_agent_snapshots (mounted read-only).
+
+#### K-74 · DESKTOP-STATUS (socketio-event+http-api) · owner: Claude
+Event
+- desktop_status = {online: bool, state: 'online'|'stale'|'offline'|'locked'|'panic', mode: 'off'|'read'|'full', locked: bool, presence_s?: int, voice_active: bool, node_id, version, git_sha, manifest_ok: bool, since, last_seen, rtt_ms_p50, busy_tool?, brain: 'vps'|'pc'}.
+- The bridge sends it:
+  - to K-70 agent peers as 'status';
+  - to UI sockets on '/' as 'desktop_status', and in init_state.desktop_status;
+  - inside GET /vortex/status as the 'desktop' block (session or agent credentials).
+- Public GET /vortex/health stays {status, version, uptime_s} (K-43). It never carries presence, brain or vitals.
+
+Vitals
+- The node sends vitals_pc every 10 s.
+- The legacy vitals_update prefers a vitals_pc reading less than 30 s old; the bridge's own psutil figures are vitals_vps.
+- The UI shows a stale state after 30 s.
+
+Commands from the UI (tighten-only)
+- ui_command 'desktop_stop' → node mode read and every in-flight laptop call cancelled. The bridge accepts it only from UI sockets (K-40 v4), persists it until the node reports read or off (re-sent after a node reconnect), sends the tighten-only control desktop_stop to the node and a stop_all hint to the agent peers, and emits desktop_status. Only the laptop tray switches back to full (K-76).
+- ui_command 'notification_ack' {id} → the K-77 delivery ledger.
+
+Alerts (system_alert to the UI, an audit row, and a local toast on the laptop)
+- critical: any signature or approval verification failure.
+- warning: desktop_replaced, a new node_id, manifest drift, clock skew above 60 s, duplicate agent participants, rate-limit trips, more than 3 agent restarts per hour, memory above 4 GiB (warn) or 6 GiB (critical), disk below 30 GB (warn) or 15 GB (critical).
+- info: laptop offline for more than 30 min while a UI is connected.
+- Who raises them: from cutover the bridge (C-116: signature failures on '/desktop', desktop_replaced, a new node_id, rate-limit trips) and the node (C-121: signature and approval failures, clock skew, manifest drift, cap trips); C-134 adds the restart, memory, disk, duplicate-agent and offline alerts.
+
+#### K-75 · AGENT-CONTAINERS (deploy) · owner: Claude
+Image
+- jarvis-agent:hostinger, built from deploy/hostinger/Dockerfile.agent:
+  - FROM python:3.12-slim-trixie@sha256:<pinned digest>;
+  - apt ffmpeg, nodejs, curl, ca-certificates, tzdata;
+  - torch, torchaudio and torchvision +cpu from the PyTorch CPU index;
+  - deploy/hostinger/requirements-agent.txt (the hybrid list without PyAudio, sounddevice, opencv-python/contrib, mediapipe, PyAutoGUI, pynput, pygetwindow, comtypes, pycaw, pywin32, pywhatkit, pygame, playsound; plus opencv-contrib-python-headless) with constraints-agent.txt;
+  - ECAPA (fixed download script) and MiniLM baked in, readable by uid 10001 and loaded with HF_HUB_OFFLINE=1;
+  - media wrappers in /usr/local/jarvis-bin (nice/ionice only when JARVIS_MEDIA_PRIORITY=low);
+  - USER 10001; WORKDIR /app.
+- It is built on the VPS from the committed HEAD by the dedicated buildx builder 'jarvis-builder' (docker-container driver, --load).
+- GIT_SHA is an image label and ENV only; it is never interpolated into compose 'environment:'.
+
+Services (compose profile vps-brain)
+- agent: container jarvis-agent, CMD python -m src.core.agent start --drain-timeout 20, health curl 127.0.0.1:8081/.
+- agent-svc: container jarvis-agent-svc, CMD python -m src.core.agent_services, health 127.0.0.1:8083/health.
+- Shared settings for both:
+  - user 10001, init true, env_file .env.agent (root 600, never mounted), environment per K-72, networks jarvis-net, no published ports;
+  - depends_on livekit started and ui-bridge healthy;
+  - restart unless-stopped, stop_grace_period 60s (drain 20 s + job shutdown 20 s);
+  - oom_score_adj 500, security_opt no-new-privileges, cap_drop ALL, logging json-file 10m×3;
+  - /tmp on the container disk (no tmpfs);
+  - NO mem_limit, cpus or cpu_shares (user decision 2026-10-01); pids_limit only when the user approves it.
+
+Volumes
+- jarvis_agent_conversations:/app/conversations, jarvis_agent_chroma:/app/chroma_db, jarvis_agent_data:/app/data (identity dir 700, settings), jarvis_agent_backups:/app/backups, jarvis_agent_logs:/app/logs, jarvis_agent_snapshots:/app/snapshots (svc rw), jarvis_outputs:/app/Jarvis_Outputs, jarvis_shared:/app/Jarvis_Shared (agent rw, svc ro).
+- The two existing shared volumes get a one-time chown to 10001 through 'docker compose -p jarvis run --rm --no-deps --user 0 --entrypoint chown agent'.
+
+Bridge
+- oom_score_adj 300; internal listener :5002 on jarvis-net only.
+- Mounts jarvis_shared, jarvis_outputs and jarvis_agent_snapshots read-only; no agent log mount.
+- env_file bridge.env after V2b.
+
+URLs
+- The agent uses LIVEKIT_URL ws://jarvis-livekit:7880 and UI_BRIDGE_URL http://jarvis-bridge:5002.
+- Media hairpins to the advertised IP. If the canary probe fails: rtc.advertise_internal_ip true; last resort, host networking for the agent only.
+
+Deploys
+- Always name the services ('up -d --no-deps <svc>').
+- The gate: healthy within 180 s, /worker agent_name, LiveKit 'worker registered', agent_hello on /desktop via :5002, net_guard self-test, offline model load, other-apps smoke diff identical.
+- Downloads are refused below 20 GB free disk; deploys warn below 30 GB and fail below 15 GB.
+
+#### K-76 · DESKTOP-POLICY + APPROVALS + STOPS (policy) · owner: Claude
+Authority
+- The Desktop Node enforces the laptop-side rules: classes, the Windows-lock pause, paths, captures, origins, stops and caps.
+- Approvals for risky laptop actions happen in the agent before the exec is sent: the C-28 ConfirmFlow (K-14), that is the dashboard Allow or, where this contract allows it, a spoken yes. User decision D3 (2026-10-02): the laptop shows no approval prompt and needs no manual step.
+- The effective risk is the strictest of: the node class, K-16 (decorator metadata) and K-45. A confirm_level setting may only make it stricter.
+- A call is confirm-class when its class is messaging, code_exec, availability or exposure, when its K-16 risk resolves to medium or high, or when K-45 lists it as HIGH. K-45 MEDIUM input tools keep running with a UI toast and an audit row.
+
+Modes and session state
+- Modes: off | read | full. The node starts in full as soon as it runs (logon autostart, D11), unless run/desktop_state.json holds a panic latch, a remote stop or a tray Off/Read choice: these survive a reboot or logon, the node then starts in that mode (off or read), and desktop_status shows it on the Laptop chip until the tray Full clears it.
+- Remote callers (UI 'desktop_stop', chat, agent, bridge) can only tighten. Loosening (full after a remote stop or a panic, desktop_control back on) happens only at the laptop (tray, or the PC root .env for desktop_control), never from the UI or the bridge.
+- Windows lock (WTS session notifications): while the session is locked, every call that needs the desktop_input lock (K-16) returns DESKTOP_LOCKED without running, because Windows blocks input injection then, and captures are refused; other calls run under their normal rules. Unlock resumes input automatically, with no user action. Sleep or logoff takes the node offline (DESKTOP_OFFLINE) until resume or logon.
+- Kill switch: JARVIS_DESKTOP_CONTROL=false (config.desktop_control_enabled, K-15) refuses every actuation with DESKTOP_CONTROL_DISABLED; de-escalation still runs. The node reads it from the PC root .env at start and within seconds of a change (K-72 settings source); the UI can only turn it off, and only after C-59.
+- Check order on the node: kill switch, panic, mode and Windows lock first, then class and approval, then origin, then paths. A canary or probe call therefore gets a state or approval refusal first, and nothing actuates.
+- Presence = genuine local input (keyboard/mouse hook events without LLKHF_INJECTED/LLMHF_INJECTED) within JARVIS_PRESENCE_WINDOW_S; captures use JARVIS_CAPTURE_PRESENCE_S.
+
+Classes
+- read: vitals, active window, Notepad list, page read, documents, pc.ping. Needs mode read or full.
+- capture: pc.capture_screen, pc.capture_webcam. Needs presence or a session opt-in, plus a toast (D15); refused while the foreground title shows a sensitive path or a password manager.
+- input: keys, mouse, typing, mapped open_app, Notepad typing, window min/max, play_*, automate_youtube, PinchTab actions. Needs mode full and adds no approval of its own (K-45 MEDIUM tools run with a toast). Calls that need the desktop_input lock pause while Windows is locked. Refused on protected windows (title prefixes 'JARVIS & ANNA', 'JARVIS-Agent-Worker', 'JARVIS-AGENT'; shells, terminals, IDEs).
+- messaging: automate_whatsapp, typing into messaging apps. Needs mode full + the ConfirmFlow approval; the WHATSAPP_TEST_NUMBERS guard applies in live tests.
+- code_exec: needs mode full + the ConfirmFlow approval as HIGH (dashboard Allow only). It covers:
+  - run_cmd_command (always high per K-45);
+  - write_custom_code with auto_run;
+  - open_app with an unmapped or executable target;
+  - Win+*, Ctrl+Shift+Esc, Alt+F11, F12, Ctrl+Shift+I/J;
+  - typing into the Run dialog, Explorer address bar, Start/Search, taskmgr, regedit, mmc, consoles, Office VBA or DevTools;
+  - opening executables, scripts, shortcuts or archives.
+- availability: shutdown, restart, sleep, recycle bin, force close, close with more than one match. Needs mode full + the ConfirmFlow approval.
+- exposure: file server, pc.read_file. Needs mode full + the ConfirmFlow approval, whose summary names the path.
+- de-escalation: cancel_shutdown, stop_file_access_server, chrome_browser_close. Always allowed, even during panic.
+
+Path policy (mandatory argument hooks)
+- edit/append_notepad_file: a basename only, inside Jarvis_Outputs.
+- open_notepad_file, folder_file, play_file, Windows zip_files and pc.read_file: resolve_in_roots(open_roots) plus is_sensitive_path, extended with the repo except Jarvis_Outputs, .venv*, any *.pth, the Startup folders, %LOCALAPPDATA%\JARVIS, ~/.ssh, *.env, id_*, .coord, chroma_db, conversations, logs and password-manager data. This keeps the node's own keys, pinned code and policy state out of reach.
+- pc.read_file is limited to 25 MB.
+
+Approvals (ConfirmFlow in the agent; no prompt on the laptop)
+- ui: the dashboard Allow (K-14 confirm_response), for any class.
+- voice: a spoken yes accepted by the broker on a final voice transcript (C-75), medium risk only, never code_exec, and for laptop actions only on a voice-ID-verified turn (D20), so it is refused until enrollment.
+- The agent sends a confirm-class exec only after the approval and puts approval {confirm_id, channel, risk, args_sha256} inside the signed, encrypted body. The node runs it only when args_sha256 matches the exec; a missing approval gives APPROVAL_REQUIRED and a mismatch gives APPROVAL_INVALID, and nothing runs.
+- Dynamic risk found on the node (a launch surface, an unmapped open_app target, a command outside the read-only allow-list) also returns APPROVAL_REQUIRED; the agent turns it into a ConfirmFlow item and re-sends the exec with the approval. Nothing is held or prompted on the laptop.
+- The ConfirmFlow summary for a laptop action shows the normalised arguments (control, bidi and zero-width characters escaped; whitespace collapsed; metacharacters highlighted).
+- The bridge never signs approvals or loosening controls, and it cannot forge an approval reference because it cannot sign as the agent. A dashboard Allow reaches the agent through the bridge's ConfirmFlow routing (C-29, live before cutover), so a compromised bridge could forge one for a pending item; laptop-verified owner approvals (C-133, X-68) would close that gap and are optional and deferred by D3.
+
+Origins
+- Actuation = a call in the input, messaging, code_exec, availability or exposure class. Not actuation: read and capture calls (capture keeps its D15 rule), de-escalation, pc.ping, pc.speak_local, pc.play_sound, pc.fetch without open, and pc.fetch that opens an auto-open allow-listed, non-executable file (K-73).
+- Actuation is refused from canary and probe rooms.
+- llm, scheduler, job and internal origins follow the same class rules. A confirm-class call carries a ConfirmFlow approval; for the scheduler it is the approval recorded at scheduling time (C-80, K-32).
+- D21 (open question; the default follows D3): with JARVIS_ORIGIN_PRESENCE_GATE=1, scheduler and job actuation also needs presence; with 0 (default) it does not.
+- The bridge's active_job control limits actuation to one agent peer.
+
+Stops
+- Panic hotkey Ctrl+Alt+Shift+F12 (genuine keypress): mode off and cancel all. Latched in run/desktop_state.json and cleared only at the laptop (tray).
+- Tray: Off / Read / Full (Full also clears a panic latch or a remote stop).
+- desktop_stop → read and every in-flight laptop call cancelled: from the UI or phone (ui_command through the bridge, K-74; the Stop desktop button, X-67), from chat or voice ('desktop band karo', 'desktop control band karo' or 'stop desktop', matched in the agent, C-119), or from the agent itself.
+- The JARVIS_DESKTOP_CONTROL kill switch (above).
+- agent_ctl node stop.
+- Bridge desktop_link off, persisted.
+
+Caps (message rates, not CPU/RAM limits)
+- input 600/min, messaging 60/h, approvals 30/h, uploads 60/h and 200 MB/h, deliveries 5 GB/day. A trip returns DESKTOP_RATE_LIMITED and shows a toast.
+
+Process rules
+- The node refuses an elevated token.
+- It runs only from the read-only snapshot of the deployed SHA, never from the working tree.
+- It scrubs secrets from its environment, makes dotenv a no-op, and checks before every spawn.
+- Its settings come only from the allow-listed parser and JARVIS_DATA_ROOT/JARVIS_RUN_DIR (K-72), so the audit log, the WAL, run/desktop_state.json and the shared run/desktop_actor.lock are the repo's files, never inside the snapshot.
+- Audit goes to logs/desktop_audit.jsonl (5 MB × 10), with no raw arguments; the write-ahead log run/desktop_link.db records every call (K-70).
+
+K-12 codes added
+- Link: DESKTOP_OFFLINE, DESKTOP_NOT_STARTED, DESKTOP_RESULT_UNKNOWN, DESKTOP_TIMEOUT, DESKTOP_REJECTED, DESKTOP_LINK_DISABLED, PROTO_MISMATCH, CLOCK_SKEW, START_WINDOW_MISSED, MANIFEST_MISMATCH, BAD_ARGS.
+- Node state and policy: DESKTOP_LOCKED, DESKTOP_PANIC, DESKTOP_READ_ONLY, DESKTOP_RATE_LIMITED, DESKTOP_ONLY, DESKTOP_DEGRADED, PROTECTED_WINDOW, LAUNCH_SURFACE, PRESENCE_REQUIRED, SENSITIVE_SCREEN (DESKTOP_CONTROL_DISABLED already exists in K-12).
+- Approvals: CONFIRM_PENDING, APPROVAL_REQUIRED, APPROVAL_INVALID, NO_VOICE_FOR_DESKTOP, STOPPED_BY_USER.
+- Files and media: UPLOAD_FAILED, DELIVERY_FAILED, MEDIA_DISK_LOW.
+- Shared-IP blocks: YT_BOT_CHECK, MAPS_BLOCKED.
+
+#### K-77 · ALWAYS-ON-SERVICE (process+python-api) · owner: Claude
+Process
+- jarvis-agent-svc runs src/core/agent_services.py with JARVIS_ROLE=svc.
+- It is active only when JARVIS_BRAIN=vps. Otherwise it stays in standby with health only (127.0.0.1:8083/health).
+- In vps mode, LiveKit jobs are conversation-only: they never run the reminder loop, the task monitor or the scheduler.
+
+Due checks and delivery
+- Reminders are checked every 30 s and tasks.db every 45 s.
+- Reminders are read under services.utils.jarvis_filelock.locked. After X-66 they are written only through Cursor's list_due_reminders / mark_reminder_delivered; until then the svc never writes reminders.json and keeps delivery state only in its ledger.
+- The ledger is conversations/delivery_ledger.json (file-locked): {id, kind, due_at, attempts[], delivered_at?, channel?}.
+- Delivery ladder:
+  1. the live job, through the bridge agent_command 'announce' (K-66);
+  2. the laptop: pc.speak_local plus a toast, when no participant is linked;
+  3. a bridge-stored UI notification plus the 'reminder_due' event;
+  4. an optional email to the owner's own address after JARVIS_REMINDER_EMAIL_AFTER_MIN (0 = off).
+- A reminder counts as delivered only on an ack (ui_command notification_ack, the node's speak_local result, or the live job's announce result). Otherwise it is retried on the next UI or node connect. It is never delivered twice.
+
+Scheduled actions
+- K-32 is hosted here (C-80). Desktop actions use the svc DesktopLink with origin 'scheduler'; when the laptop is offline they wait 15 min, then the failure is announced.
+
+Location
+- The svc writes conversations/location.json (≤ 30 min old counts as fresh) from node location events. services.utils.jarvis_location reads it.
+
+Snapshot
+- Daily at 03:30 PKT: SQLite online copies plus a tar of conversations, data and chroma.
+- Sealed to BACKUP_RECIPIENT_PUBLIC_KEY with X25519 + HKDF + ChaCha20-Poly1305; the PC holds the private key.
+- Written to /app/snapshots/daily/<date>.tar.enc. No env files or keys inside; never auto-deleted.
+- The node pulls the newest one daily (K-73).
+
+Cross-process writes
+- jarvis_filelock.locked(path) (fcntl/msvcrt) for identity.json, learning_state.json, delivery_ledger.json, desktop_outbox.json and location.json, and for reminders.json after X-66.
+- IdentityManager and the adaptive engine reload when mtime or inode changes.
+- Only the job serving jarvis-hybrid opens Chroma.
+
+Heartbeat
+- K-68 fields plus {svc: 'active'|'standby', due_pending, undelivered, last_snapshot_ts, brain}, every 30 s.
 
 
 ---
@@ -606,6 +1002,30 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | C-108 | claude | P4 | Final dashboard deploy, live suite run, CI frontend job env, Vercel entry check, README dashboard section | C-96, X-51, X-09, X-59, C-107, X-60, C-37, C-22, C-106 | TODO |
 | C-109 | claude | P4 | Final ops acceptance run + README, RUNBOOK, CONTRACTS changelog and SECURITY docs; CSP enforcing | C-22, C-23, C-63, C-64, C-60, C-92, C-101, C-102, C-103, C-104, C-105, C-106, C-29, X-15, X-10, C-108, C-97, C-99, C-98, C-100, C-05, X-12, C-61, C-82, C-10, C-36 | TODO |
 | C-110 | claude | P4 | Enable self-repair apply mode after the two-agent build-out | C-46, C-83, C-109 | TODO |
+| C-111 | claude | P0 | Contracts v4 (K-70..K-77) + plan, CLAUDE.md and Cursor rules for the VPS brain | — | TODO |
+| C-112 | claude | P0 | Linux-importable agent with role/brain/mode gating, validate by (role, mode), stable user id, reconnecting UI listener | C-111 | TODO |
+| C-113 | claude | P0 | Compat layer: location provider, delivery helper, startfile/webbrowser shims with a startup self-test | C-112 | TODO |
+| C-114 | claude | P0 | 24/7 voice session safety: compression, real truncation, re-seed, liveness attribute, idle close and recycle | C-33, C-35, C-111 | TODO |
+| C-115 | claude | P0 | Desktop Link protocol library (Ed25519, X25519/AEAD, replay, clock, resend) + key tooling | C-111 | TODO |
+| C-116 | claude | P0 | Bridge: internal listener :5002, '/desktop' relay, presence and desktop_status, persisted link switch, minimal public health | C-13, C-115 | TODO |
+| C-117 | claude | P0 | Media relay (single media path) + node file, blob and backup endpoints + nginx locations | C-116 | TODO |
+| C-118 | claude | P0 | Placement table, manifest exporter and placement-aware VPS discovery | C-112, C-111 | TODO |
+| C-119 | claude | P0 | Agent DesktopLink client and laptop-tool proxies (honest outcomes, repeat guard, ordering, stop, fallback) | C-115, C-118, C-32, C-28 | TODO |
+| C-120 | claude | P0 | Desktop Node runtime: supervisor, link, tool executor, WAL, dead-man switch, health, power events | C-115, C-111, C-31 | TODO |
+| C-121 | claude | P0 | Node policy: modes, Windows-lock pause and presence, class floors, launch surfaces, path policy, ConfirmFlow approval check, stops | C-120 | TODO |
+| C-122 | claude | P0 | Node capabilities, sensors, file mirror and encrypted backup pull | C-120, C-121, C-117 | TODO |
+| C-123 | claude | P0 | agent_ctl node and brain commands, pinned node snapshot, logon autostart (limited), brain journal | C-120, C-12 | TODO |
+| C-124 | claude | P0 | Agent hardening for the VPS: egress guard, child env, RPC and text owner-only, untrusted context, VPS argument hooks, encrypted Chroma | C-112, C-113 | TODO |
+| C-125 | claude | P0 | Always-on service jarvis-agent-svc: reminders/tasks with a delivery ledger, scheduler host, location cache, encrypted daily snapshot | C-112, C-119, C-13 | TODO |
+| C-126 | claude | P0 | Agent image and compose services (agent + agent-svc), no CPU/RAM limits, dedicated builder | C-112, C-118 | TODO |
+| C-127 | claude | P0 | Secrets split in two deploys, env-layout-aware rollback, DPAPI fallback secrets, second LiveKit key pair | C-12, C-116, C-112 | TODO |
+| C-128 | claude | P0 | Backup, deploy and rollback coverage for the agent containers (C-11/C-12 v2) | C-12, C-126, C-127 | TODO |
+| C-129 | claude | P0 | Data migration tool: merge per-job memories, laptop ↔ VPS copies with the agent stopped | C-112, C-124, C-126 | TODO |
+| C-130 | claude | P0 | Canary, failure-injection drills and security checks before cutover (V5) | C-23, C-39, C-114, C-117, C-119, C-121, C-122, C-123, C-124, C-125, C-126, C-127, C-128, C-129 | TODO |
+| C-131 | claude | P0 | Cutover to the VPS brain (V6) and 72 h burn-in (V7) | C-130, C-16, C-75, C-35, C-29, C-30, X-67 | TODO |
+| C-132 | claude | P3 | Heavy tools on the VPS (V8): YouTube job, headless maps scraper, media previews | C-131, C-57, X-65, X-56, X-58 | TODO |
+| C-133 | claude | P4 | (optional, deferred by user decision D3) Owner approval key: phone and UI approvals the laptop can verify (V9) | C-131, C-22, C-29, C-30, C-73 | NOT NEEDED (deferred by user decision D3; reopen only if local approvals return) |
+| C-134 | claude | P4 | Monitoring, alerts, incident runbook and VPS-brain documentation | C-131 | TODO |
 | C-97 | claude | P4 | Voice and conversation regression suite + runbook | C-56, C-74, C-76, C-77, C-87, C-89, C-90, C-91, C-09 | TODO |
 | C-98 | claude | P4 | Internal-tool regression checks after the voice/dashboard fixes (change_voice, wake word, persona, identity, analyze_surroundings) | C-48, C-50, C-54, C-69, C-87 | TODO |
 | C-99 | claude | P4 | Live desktop-tools smoke run on the PC with Sir | C-31, C-75, C-55, C-84, C-85, X-63, C-96 | TODO |
@@ -615,10 +1035,15 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | X-60 | cursor | P4 | Opt-in live smoke suite against the VPS (session-cookie storageState, no stored TOTP seed) | X-59, C-65 | BLOCKED (waiting X-59,C-65) |
 | X-61 | cursor | P4 | Info/media tools smoke harness (--dry / --live) | C-48, X-36, X-37, X-57, X-40, X-39, X-58, C-78, X-04 | BLOCKED (waiting C-48,X-36+) |
 | X-63 | cursor | P4 | Tool registry/policy tests + legacy test-script cleanup | X-29, X-30, X-26, X-27, X-31, X-25, X-34, X-41, X-42, X-43, X-44, X-62, X-56, X-35, X-28, K-16 (DesktopToolPolicy) | BLOCKED (waiting many tool deps) |
+| X-64 | cursor | P3 | Location hook for weather and search (replaces Claude's compat patch) | C-113, C-111 | TODO |
+| X-65 | cursor | P3 | VPS-safe Cursor modules: DESKTOP_ONLY guard, lazy GUI imports, delivery helper, safe names, stricter risks | C-113, C-111 | TODO |
+| X-66 | cursor | P3 | Reminders and tasks: cross-process locking, timezone-aware times, delivery hooks for agent-svc | C-125, C-111 | TODO |
+| X-67 | cursor | P0 | UI for the split: Laptop chip, Stop desktop, notification ack, media links, Electron 'desktop' mode | C-116, C-117, C-111 | TODO |
+| X-68 | cursor | P4 | (optional, deferred by user decision D3) Owner approval key in the browser: pairing and signed approvals over the arguments you see (V9) | C-111, C-116, X-67 | NOT NEEDED (deferred by user decision D3; reopen only if local approvals return) |
 
 ---
 
-## 6. Claude tasks (110)
+## 6. Claude tasks (134)
 
 ### P0 · Security aur buniyad
 _Darwaza band, git, backup, keys, room delete ka bug. Claude pehle; Cursor isi dauran apne tools lane me kaam karta hai._
@@ -809,6 +1234,7 @@ Verify:
 **Files:** `src/core/agent_lock.py`, `src/core/agent.py`, `src/core/agent_runner.py`, `src/core/vortex.py`, `tests/unit/test_agent_lock.py`
 **Depends on:** C-04, K-53 (COORD-3)
 **User se chahiye:** —
+**VPS brain (2 Oct):** DONE; follow-up only. The OS worker lock stays for pc mode. The VPS containers use per-container locks. The Desktop Node uses run/desktop_node.lock plus the shared run/desktop_actor.lock (C-120).
 
 Steps:
 1. Create src/core/agent_lock.py: acquire_or_exit() creates run/, opens run/agent.lock and locks byte 0 (msvcrt.locking LK_NBLCK on Windows, fcntl.flock LOCK_EX|LOCK_NB elsewhere), keeps the fd for the process lifetime and writes run/agent.pid.json {pid, started_at, by: JARVIS_STARTED_BY or 'manual', reason: JARVIS_START_REASON, argv, git_sha}; on failure prints '[JARVIS] Agent already running (pid X, by Y, since Z). Use: python scripts/agent_ctl.py restart --by <you> --reason <why>' and exits 3; is_locked() probes without holding; no-op under pytest or JARVIS_NO_LOCK=1
@@ -839,6 +1265,7 @@ Verify:
 **Files:** `scripts/agent_ctl.py`, `services/utils/jarvis_config.py`, `deploy/windows-local/start-agent.bat`, `deploy/windows-local/setup.bat`, `deploy/windows-local/start_hybrid_agent.py`, `dev.bat`, `prod.bat`, `install_production.bat`, `install_production.sh`, `CLAUDE.md`, `.cursor/rules/jarvis-collab.mdc`, `tests/unit/test_agent_ctl.py`
 **Depends on:** C-08, K-53 (COORD-3)
 **User se chahiye:** After Claude's restart test, say something to JARVIS in the browser and confirm you hear a reply.
+**VPS brain (2 Oct):** DONE; extended by C-123. agent_ctl gains the node and brain commands, and a worker start is refused while JARVIS_BRAIN=vps. Today's PC worker commands stay for pc mode.
 
 Steps:
 1. Create scripts/agent_ctl.py (stdlib + psutil + httpx): status | start [--foreground] [--mode start|dev] | stop [--timeout 20] | restart | wait [--timeout 60] | logs [-n 50]; --by {claude,cursor,user} required for start/stop/restart, plus --reason and --force
@@ -894,6 +1321,11 @@ Verify:
 **Files:** `services/utils/backup_system.py`, `scripts/ops/backup_local.py`, `deploy/hostinger/backup_vps.sh`, `deploy/hostinger/RUNBOOK.md`, `tests/unit/test_backup_system.py`
 **Depends on:** C-01, C-04, K-54 (COORD-4)
 **User se chahiye:** —
+**VPS brain (2 Oct):** DONE; extended by C-128:
+- agent volumes in the backup, encrypted to a PC-held key;
+- env copies in a separate folder;
+- the env layout recorded in MANIFEST;
+- Jarvis_Shared/Downloads excluded unless --with-media.
 
 Steps:
 1. services/utils/backup_system.py (keep the API): JarvisBackup(source_dirs=None, backup_root=None, *, exclude_globs=None); default sources .env, deploy/windows-local/.env, conversations/, chroma_db/, data/identity/, Jarvis_Outputs/, backups/checkpoints/, logs/*.log, logs/telemetry.jsonl, plan.md, done_highlight.md (missing ones only warn); backup_root = JARVIS_BACKUP_DIR or %USERPROFILE%/JARVIS-backups/local
@@ -928,6 +1360,11 @@ Verify:
 **Files:** `deploy/hostinger/deploy_from_pc.sh`, `deploy/hostinger/deploy.sh`, `deploy/hostinger/rollback.sh`, `deploy/hostinger/smoke_other_apps.sh`, `deploy/hostinger/RUNBOOK.md`
 **Depends on:** C-04, C-09, C-11, K-54 (COORD-4)
 **User se chahiye:** After the first sync deploy, open the UI, press Voice and confirm JARVIS answers.
+**VPS brain (2 Oct):** In progress (DOING since 01 Oct 22:35) and still first on the path.
+- Ship scripts/ and the deploy/hostinger requirements files.
+- Always name the services (up -d --no-deps <svc>).
+- The LiveKit pin can move into the V6 window if the hairpin probe needs advertise_internal_ip.
+- C-128 adds the agent gate.
 
 Steps:
 1. Create deploy_from_pc.sh [--dry-run] [--services 'ui-bridge frontend livekit'] [--nginx] (Git Bash, Claude only): SHA=$(git rev-parse --short HEAD); list uncommitted files under deploy/src/services/stonix_ui as NOT deployed; ship with 'git -c core.autocrlf=false archive --format=tar HEAD deploy src services stonix_ui requirements.txt requirements-dev.txt .dockerignore | $VPS "tar -x -C /opt/jarvis-agent && echo $SHA > /opt/jarvis-agent/DEPLOYED_SHA"' (autocrlf off keeps shell scripts LF)
@@ -962,6 +1399,7 @@ Verify:
 **Files:** `src/core/bridge_store.py`, `src/core/ui_bridge.py`, `deploy/hostinger/docker-compose.yml`, `deploy/hostinger/Dockerfile.bridge`, `tests/infrastructure/test_bridge_store.py`
 **Depends on:** C-12, K-41 (C-MSG-1), K-42 (C-STATE-1)
 **User se chahiye:** —
+**VPS brain (2 Oct):** Now on the cutover path (V2a). The kv holds desktop_link, active_job, paused and last_activity_ts; the store also keeps the nonce/seen store and the persisted UI notifications used for reminder delivery.
 
 Steps:
 1. Create src/core/bridge_store.py BridgeStore(path): sqlite3 through asyncio.to_thread with one connection (check_same_thread=False) and a threading.Lock, PRAGMA journal_mode=WAL, synchronous=NORMAL, schema_version table; tables messages, events, settings, sessions, audit, kv, confirmations, pending_commands per C-STATE-1
@@ -994,6 +1432,7 @@ Verify:
 **Files:** `services/utils/jarvis_config.py`, `services/utils/jarvis_security.py`, `services/utils/jarvis_logger.py`, `src/core/bridge_security.py`, `src/core/ui_bridge.py`, `scripts/ops/gen_secrets.py`, `scripts/ops/rotate_env_secret.py`, `deploy/hostinger/docker-compose.yml`, `.env.example`, `.env.production.example`, `deploy/hostinger/.env.example`, `pytest.ini`, `tests/infrastructure/test_bridge_notify.py`, `tests/infrastructure/test_bridge_socket_rooms.py`, `tests/infrastructure/test_bridge_connectivity.py`, `tests/infrastructure/test_persona_sync.py`
 **Depends on:** C-13, C-09, K-38 (C-SOCK-1), K-39 (C-NOTIFY-1), K-40 (C-EVT-1), K-47 (C-ENV-1)
 **User se chahiye:** After the deploy, confirm voice and typed chat still work.
+**VPS brain (2 Oct):** Back on the cutover path (V3b): C-19, C-21 and C-29 need it, and D3 makes the dashboard Allow (C-29/C-30) a cutover prerequisite. On the VPS the agent role arrives through the internal listener :5002, so no AGENT_TOKEN crosses the internet. C-14 keeps HMAC v2 notify and the ui/legacy rooms; AGENT_TOKEN is needed only by the PC fallback.
 
 Steps:
 1. jarvis_config.py: add role (JARVIS_ROLE, default 'agent'), agent_token, bridge_hmac_secret, legacy_token_auth (LEGACY_TOKEN_AUTH, default '1'), allowed_origins from env only, bridge_db_path; validate() becomes role-aware (bridge: LIVEKIT_API_KEY/SECRET, AGENT_TOKEN, BRIDGE_HMAC_SECRET, VORTEX_SECURITY_TOKEN only while legacy=1; agent: GOOGLE_API_KEY, LIVEKIT_API_KEY/SECRET, AGENT_TOKEN, BRIDGE_HMAC_SECRET, UI_BRIDGE_URL); security_token stays as a legacy alias
@@ -1028,6 +1467,7 @@ Verify:
 **Files:** `services/utils/jarvis_bridge.py`, `services/ai_core/agent_loops.py`, `tests/core/test_agent_loops.py`, `tests/unit/test_notify_signing.py`
 **Depends on:** C-14, C-09, K-39 (C-NOTIFY-1), K-38 (C-SOCK-1), K-41 (C-MSG-1)
 **User se chahiye:** —
+**VPS brain (2 Oct):** Before cutover (V3b; C-21 and C-29 need it). The listener slice (reconnect forever, socketio_path derivation) moves into C-112. The signed retry queue and the chat id echo stay here. On the VPS the agent's UI_BRIDGE_URL is http://jarvis-bridge:5002.
 
 Steps:
 1. jarvis_bridge.notify_event: serialize once (json.dumps(separators=(',',':'), ensure_ascii=False).encode()), send X-Agent-Token/Timestamp/Nonce/Signature and post content=raw; fall back to the legacy headers only when AGENT_TOKEN is not configured (local dev)
@@ -1058,6 +1498,7 @@ Verify:
 **Files:** `deploy/hostinger/jarvis.conf`, `deploy/hostinger/docker-compose.yml`, `.env`, `deploy/windows-local/.env`, `deploy/windows-local/start-agent.bat`, `deploy/windows-local/start_hybrid_agent.py`, `deploy/windows-local/test_chat_once.py`, `scripts/agent_ctl.py`
 **Depends on:** C-12, C-09, C-15, K-48 (C-NET-1)
 **User se chahiye:** After the switch, make one voice call and send one typed message.
+**VPS brain (2 Oct):** Steps 1-5 (nginx /agent + /twirp, PC on the domain) run before cutover at V3, for the PC fallback. Step 6 mem_limit is REMOVED (user decision); the log rotation stays. The 5101/7880 loopback binds are applied in the V6 LiveKit window (C-131). Depends on C-12, C-09 and C-112 instead of C-15.
 
 Steps:
 1. jarvis.conf: add 'location = /agent' (proxy_pass http://127.0.0.1:7880; HTTP/1.1; Upgrade + Connection upgrade; Host; read/send timeout 86400; proxy_buffering off), 'location /twirp/' (proxy_pass http://127.0.0.1:7880; Host; X-Forwarded-For) and 'location = /vortex/livekit/webhook { return 404; }'; deploy with deploy_from_pc.sh --nginx while the raw ports are still open
@@ -1089,6 +1530,7 @@ Verify:
 **Files:** `scripts/ops/rotate_livekit_keys.py`, `.env`, `deploy/windows-local/.env`, `/opt/jarvis-agent/deploy/hostinger/.env (VPS)`, `/opt/jarvis-agent/deploy/hostinger/bridge.env (VPS)`
 **Depends on:** C-16, C-14
 **User se chahiye:** Make one voice call after the rotation.
+**VPS brain (2 Oct):** Before cutover (V3b; C-18 → C-22 → C-30 need it), with its own announced idle LiveKit restart. The rotation also writes .env.agent when it exists. The PC fallback has its own LiveKit key pair (C-127), which is revocable on its own.
 
 Steps:
 1. Create scripts/ops/rotate_livekit_keys.py: over ssh (python3 on the VPS) back up the old pair to /root/jarvis-backups/<TS>/livekit-old.env (600), generate key 'API' + 12 alphanumerics and secret secrets.token_urlsafe(48), write LIVEKIT_API_KEY/LIVEKIT_API_SECRET into deploy/hostinger/.env and bridge.env (600)
@@ -1115,6 +1557,7 @@ Verify:
 **Files:** `/opt/jarvis-agent/deploy/hostinger/.env (VPS)`, `/opt/jarvis-agent/deploy/hostinger/bridge.env (VPS)`, `deploy/hostinger/docker-compose.yml`, `deploy/hostinger/.env.example`, `deploy/hostinger/RUNBOOK.md`
 **Depends on:** C-14, C-17, K-47 (C-ENV-1)
 **User se chahiye:** In Google AI Studio/Cloud Console restrict the Gemini key (optionally regenerate it), create a new Gmail App Password, and paste the new values into C:/Users/Matloob/Desktop/JARVIS-AGENT-main/.env yourself.
+**VPS brain (2 Oct):** Before cutover (V3b; C-22 needs it) and after C-127, which it now also depends on: the bridge.env split is done by C-127 in two deploys (V2a code, V2b env). What remains: the user restricts the Gemini key and makes a new Gmail App Password (Groq, OpenRouter, Tavily and HF optional); Claude updates the PC root .env and .env.agent (and the DPAPI fallback file once it exists) without printing values.
 
 Steps:
 1. bash backup_vps.sh env-min; reduce VPS deploy/hostinger/.env to LIVEKIT_API_KEY, LIVEKIT_API_SECRET, JARVIS_DOMAIN and VORTEX_SECURITY_TOKEN (kept only until OP-21 for the frontend build arg); bridge.env already holds the bridge keys
@@ -1142,6 +1585,7 @@ Verify:
 **Files:** `src/core/bridge_auth.py`, `src/core/ui_bridge.py`, `services/utils/jarvis_config.py`, `deploy/hostinger/requirements-bridge.txt`, `requirements.txt`, `deploy/windows-local/requirements-hybrid.txt`, `deploy/windows-local/test_chat_once.py`, `tests/infrastructure/test_bridge_auth.py`
 **Depends on:** C-13, C-14, C-16, K-36 (C-AUTH-1), K-37 (C-LK-1)
 **User se chahiye:** —
+**VPS brain (2 Oct):** Before cutover (V3b): C-21 and C-29 need it, and D3 makes the dashboard Allow (C-29/C-30) a cutover prerequisite. Its owner-<8 hex> identity is the one C-116 and K-37 v4 use.
 
 Steps:
 1. Dependencies: bcrypt==5.0.0 and pyotp==2.9.0 in deploy/hostinger/requirements-bridge.txt; pyotp==2.9.0 in requirements.txt and deploy/windows-local/requirements-hybrid.txt; install on the PC with agent_ctl stop -> .venv_312/Scripts/python.exe -m pip install pyotp==2.9.0 -> agent_ctl start
@@ -1176,6 +1620,7 @@ Verify:
 **Files:** `scripts/ops/set_owner_credentials.py`, `/opt/jarvis-agent/deploy/hostinger/bridge.env (VPS)`
 **Depends on:** C-19, K-36 (C-AUTH-1)
 **User se chahiye:** Run '.venv_312/Scripts/python.exe scripts/ops/set_owner_credentials.py' in your own terminal (Claude never sees the password): choose 12+ characters, scan the QR with an authenticator app, type the 6-digit code, keep the 10 recovery codes safe, then run it again with --test-login.
+**VPS brain (2 Oct):** Before cutover (V3b): the user enrolls the owner password and authenticator once (about 10 min in the user's own terminal), because the dashboard Allow needs the owner login (C-21, C-22).
 
 Steps:
 1. Create scripts/ops/set_owner_credentials.py, run by the USER in their own terminal: getpass twice, at least 12 chars and not in a small common-password list; bcrypt cost 12; store base64url of the hash
@@ -1202,6 +1647,7 @@ Verify:
 **Files:** `deploy/hostinger/deploy_from_pc.sh (from EXT OPS-06)`, `done_highlight.md`
 **Depends on:** X-08, C-12, C-14, C-15, C-19, C-20
 **User se chahiye:** Type the dashboard password and authenticator code for the first live login (and the temporary basic-auth password if Claude does not have it).
+**VPS brain (2 Oct):** Before cutover (V3b): the first real login on the live site; C-22 and therefore C-30 need it.
 
 Steps:
 1. Check that EXT OPS-08 is live: curl -s -o /dev/null -w '%{http_code}' https://jarvis.srv1802669.hstgr.cloud/vortex/auth/me returns 401.
@@ -1225,6 +1671,7 @@ Verify:
 **Files:** `deploy/hostinger/docker-compose.yml`, `deploy/hostinger/Dockerfile.frontend`, `deploy/hostinger/jarvis.conf`, `deploy/hostinger/deploy.sh`, `deploy/hostinger/check_bundle_secrets.sh`, `services/utils/jarvis_config.py`, `.env`, `deploy/windows-local/.env`, `/opt/jarvis-agent/deploy/hostinger/.env (VPS)`, `/opt/jarvis-agent/deploy/hostinger/bridge.env (VPS)`
 **Depends on:** X-08, C-21, X-09, C-18, C-20, K-48 (C-NET-1)
 **User se chahiye:** Confirm you could log in with the new screen before Claude switches off legacy access and the browser password.
+**VPS brain (2 Oct):** Before cutover (V3b; C-30 needs it). check_bundle_secrets also scans the .env.agent names. With D3 the dashboard is the approval surface for risky laptop actions, and finishing C-22 before cutover also closes the legacy-token path to typed chat before the VPS brain goes live. C-22 stays a dependency of the optional C-133.
 
 Steps:
 1. Precondition: the user's successful login with the new screen is recorded in done_highlight.md
@@ -1370,6 +1817,10 @@ Verify:
 **Files:** `services/ai_core/jarvis_confirm.py (new)`, `services/ai_core/confirmation.py (new re-export)`, `services/ai_core/jarvis_plugin_manager.py`, `tests/unit/test_confirm_broker.py (new)`
 **Depends on:** C-27, K-14 (ConfirmFlow), K-12 (ToolResult)
 **User se chahiye:** —
+**VPS brain (2 Oct):** DONE (live, 79 tools including confirm_action); follow-up through C-75 and C-119. By user decision D3 it is the only approval path for laptop actions (dashboard Allow or spoken yes before the agent sends the command; no prompt on the laptop):
+- _user_affirmed fails closed while unwired;
+- desktop items are never voice-approvable before voice-ID;
+- new hooks create_pending(desktop=True, channels ui|voice), create_pending_from_remote (for the node's APPROVAL_REQUIRED) and resolve(approval), which lets C-119 re-send the exec with the agent-signed approval reference.
 
 Steps:
 1. Create services/ai_core/jarvis_confirm.py with ConfirmationBroker holding PendingAction {id=uuid4().hex, tool, summary, risk, voice_allowed, args_preview, expires_at=now+config.confirm_timeout_s (60), run}.
@@ -1400,6 +1851,7 @@ Verify:
 **Files:** `src/core/ui_bridge.py`, `services/ai_core/agent_loops.py`, `services/utils/jarvis_bridge.py`, `tests/integration/test_confirm_routing.py (new)`, `services/ai_core/jarvis_guard.py`, `services/ai_core/jarvis_plugin_manager.py`, `src/core/bridge_store.py`, `services/utils/jarvis_audit.py`, `tests/core/test_guard.py`, `tests/infrastructure/test_bridge_confirm.py`
 **Depends on:** C-28, C-13, C-14, C-15, C-19, K-14 (ConfirmFlow), K-13 (ToolSyncEvent), K-45 (C-CONFIRM-1)
 **User se chahiye:** —
+**VPS brain (2 Oct):** Now a cutover prerequisite (C-131 depends on it; V3b). Today several K-45 HIGH tools (run_cmd_command, automate_whatsapp, shutdown/restart/sleep/empty_recycle_bin, start_file_access_server, send_email, zip_files) set no risk in their @jarvis_tool decorator (so risk low) and run on the PC brain with no confirmation, because K-45's static list is not enforced in code before this task's guard. On the VPS brain the laptop ones are confirm-class (K-76) and need the ConfirmFlow approval, so this routing and C-30 must be live first, or WhatsApp, CMD, shutdown, the file server and laptop attachments would stop at cutover. Its dependencies are unchanged; on the VPS the agent side uses the :5002 listener (C-116). Switch the guard's HIGH asking on together with the C-30 frontend deploy, so the PC brain never asks for an Allow that no dialog can show.
 
 Steps:
 1. In ui_bridge.py /notify: 'confirm_request' is stored in state['confirmations'] by id (expired pruned), emitted to room 'ui' only, and answered with {status:'ok', ui_clients:<authenticated ui sockets>}; 'confirm_resolved' removes it and emits to 'ui'; if OPS-19 or DASH-C12 already added confirm handlers, align them to ConfirmFlow instead of adding a second set.
@@ -1430,6 +1882,7 @@ Verify:
 **Files:** `scripts/vps/sync_ui.ps1 (new)`, `done_highlight.md (append only)`
 **Depends on:** C-29, X-10, C-12, C-22
 **User se chahiye:** Be at the UI once to click Deny and Allow for the selftest.
+**VPS brain (2 Oct):** Now a cutover prerequisite (C-131 depends on it; V3b). With D3 the ConfirmDialog on the VPS frontend is where the owner approves risky laptop actions (one dashboard Allow, nothing on the laptop). Live checks 8 and 9 of C-131 use it and pass only with a real Allow. Moving it earlier also brings forward X-29, X-31, X-32, X-41, X-44 and X-54, which wait on C-30.
 
 Steps:
 1. Create scripts/vps/sync_ui.ps1: back up /opt/jarvis-agent/stonix_ui to /root/jarvis-backups/<ts>/ and docker tag the current jarvis frontend image as backup-<ts> (name from 'docker compose -p jarvis images').
@@ -1454,6 +1907,7 @@ Verify:
 **Files:** `services/utils/jarvis_loopwatch.py (new)`, `src/core/agent_runner.py`, `tests/unit/test_loopwatch.py (new)`
 **Depends on:** C-27
 **User se chahiye:** —
+**VPS brain (2 Oct):** In progress (DOING since 01 Oct 22:35); must be DONE before cutover (C-120 depends on it). The node also uses the watchdog: a loop stall of 60 s or more lets the supervisor restart the node.
 
 Steps:
 1. Create services/utils/jarvis_loopwatch.py: a task that awaits asyncio.sleep(0.1) in a loop, measures drift and logs WARNING 'EVENT_LOOP_STALL ms=<n> tools=<plugin_manager.running_tools()>' when drift exceeds 250 ms; expose stall_count for tests.
@@ -1475,6 +1929,10 @@ Verify:
 **Files:** `src/core/agent.py`, `src/core/agent_runner.py`, `src/core/agent_core.py`, `tests/core/test_agent_entry.py`, `tests/core/test_agent_prewarm.py`, `.env.example`
 **Depends on:** C-07, C-08, C-09, C-23
 **User se chahiye:** —
+**VPS brain (2 Oct):** Before cutover.
+- IDLE_PROCS 2 on the VPS, 1 on the PC; JARVIS_JOB_MEMORY_WARN_MB 3000; shutdown_process_timeout 20.
+- Prewarm builds the proxies (C-119) and loads MiniLM and ECAPA, but never opens Chroma.
+- The city comes from jarvis_location, never ipinfo on the VPS.
 
 Steps:
 1. src/core/agent.py __main__: keep OPS-05 args and play_startup_voice; add prewarm_fnc=prewarm, initialize_process_timeout=float(os.getenv('JARVIS_PREWARM_TIMEOUT','120')), num_idle_processes=int(os.getenv('JARVIS_IDLE_PROCS','1')), load_threshold=float(os.getenv('JARVIS_LOAD_THRESHOLD','inf')).
@@ -1506,6 +1964,7 @@ Verify:
 **Files:** `src/core/agent_runner.py`, `src/core/agent_core.py`, `services/ai_core/agent_loops.py`, `services/utils/jarvis_autonomous.py`, `tests/core/test_agent_runner_lifecycle.py`, `tests/core/test_agent_runner.py`
 **Depends on:** C-32
 **User se chahiye:** —
+**VPS brain (2 Oct):** Before cutover. Unrecoverable realtime errors use the rebuild path, then ctx.shutdown (C-114). Reminder and task loops are not started in remote mode (agent-svc owns them).
 
 Steps:
 1. agent_runner.py: class JarvisRuntime(ctx) with session, assistant, protector=TaskProtector() per job, listener, closed=asyncio.Event(), reason; methods start(), wait_closed(), aclose(reason).
@@ -1567,6 +2026,7 @@ Verify:
 **Files:** `src/core/roomio_link.py`, `src/core/agent_runner.py`, `tests/core/test_roomio_link.py`, `src/core/voice_link.py (new)`, `tests/core/test_voice_link.py (new)`
 **Depends on:** C-33, C-34, K-56 (CT-VC-ROOMIO-LINK), K-04 (DASH-LIVEKIT-UI)
 **User se chahiye:** A 2-minute reconnect test in the browser.
+**VPS brain (2 Oct):** Before cutover; depends only on C-33 (voice_take_over waits for C-34). Eligible identities are owner-*, and text is accepted only from the linked owner.
 
 Steps:
 1. src/core/roomio_link.py: eligible(p) = kind STANDARD and identity not starting with 'agent-' or 'probe-'.
@@ -1598,6 +2058,13 @@ _Typed chat aur voice dono ek hi Gemini session me; voice-ID, wake-word, memory,
 **Files:** `src/core/bridge_rooms.py`, `src/core/ui_bridge.py`, `src/core/agent.py`, `src/core/agent_runner.py`, `deploy/windows-local/ensure_room.py`, `deploy/hostinger/livekit.yaml`, `deploy/hostinger/docker-compose.yml`, `scripts/agent_ctl.py`, `tests/infrastructure/test_bridge_rooms.py`, `tests/infrastructure/test_no_room_delete.py`
 **Depends on:** C-09, C-13, C-14, C-15, K-44 (C-ROOM-1), K-39 (C-NOTIFY-1)
 **User se chahiye:** Keep a voice call open while Claude restarts the agent and say whether it dropped.
+**VPS brain (2 Oct):** Pulled before cutover (V2a). Depends on C-12, C-13 and C-116 instead of C-14/C-15.
+- Dispatch target = the brain ('jarvis' or 'jarvis-pc'); AGENT_DISPATCH_MODE=on_demand in vps mode.
+- The loop runs every 5 s while a human or UI is present and no agent with a matching lk.agent.name and jarvis.session=running is in the room.
+- The newest dispatch is judged by its job state; one lock plus a 30 s in-flight marker; backoff.
+- Triggers: agent hello, ui_command start (Wake), /internal/livekit/ensure and the PC-signed /vortex/desktop/ensure.
+- Surplus agents are removed and active_job is announced to the node.
+- create_dispatch only.
 
 Steps:
 1. Create src/core/bridge_rooms.py RoomManager(api_url, key, secret, room, agent_name, store) with one asyncio.Lock; ensure(reason): list_rooms([room]) and create_room(name, empty_timeout=3600, departure_timeout=3600, max_participants=10) with no agents list; agent_in_room = participant kind == ParticipantInfo.Kind.AGENT or identity 'agent-*'; active dispatches = list_dispatch(room) for agent_name not deleted; kv 'paused' == '1' -> report only
@@ -1700,6 +2167,7 @@ Verify:
 **Files:** `services/utils/jarvis_bridge.py`, `services/utils/jarvis_logger.py`, `src/core/agent_runner.py`, `services/ai_core/agent_memory.py`, `services/ai_core/jarvis_identity.py`, `tests/core/test_probe_isolation.py`
 **Depends on:** C-34, C-15, K-57 (CT-VC-PROBE)
 **User se chahiye:** —
+**VPS brain (2 Oct):** Before cutover; depends on C-33 instead of C-34/C-15. Adds the canary room class jarvis-canary-<epoch> (K-57 v4) with the same isolation plus a tmpfs data dir and user 'canary'; the node refuses actuation from these rooms.
 
 Steps:
 1. jarvis_bridge.py: add ContextVar bridge_suppressed (default False) and is_probe_job(); notify_event returns early when set (DEBUG counter).
@@ -1726,6 +2194,7 @@ Verify:
 **Files:** `scripts/smoke/voice_probe.py`, `scripts/smoke/make_tts_fixtures.ps1`, `scripts/smoke/livekit_voice_vision_smoke.py`, `tests/integration/fixtures/audio/`
 **Depends on:** C-39, K-57 (CT-VC-PROBE)
 **User se chahiye:** —
+**VPS brain (2 Oct):** Probes are served by the VPS worker. Only one Gemini session runs at a time across canary and probes; the quota is checked first.
 
 Steps:
 1. make_tts_fixtures.ps1: System.Speech with SpeechAudioFormatInfo(16000, Sixteen, Mono) writes tts_jarvis_time.wav, tts_no_wake_time.wav, tts_jarvis_math.wav, tts_jarvis_secret.wav, tts_recall.wav (*.wav is gitignored).
@@ -1918,6 +2387,7 @@ Verify:
 **Files:** `services/ai_core/jarvis_vision.py`, `src/core/vision_handler.py`, `src/core/agent_core.py`, `services/ai_core/agent_loops.py`, `tests/vision/test_vision_fallbacks.py`
 **Depends on:** C-45, K-30 (llm_text)
 **User se chahiye:** —
+**VPS brain (2 Oct):** analyze_screen is split: the node captures (C-122) and the VPS runs vision. Laptop images never go to ':free' providers. The webcam fallback goes through the node and needs presence.
 
 Steps:
 1. jarvis_vision.py:62: ScreenPerceiver default model = os.getenv('JARVIS_VISION_MODEL', 'gemini-3.8-flash') instead of the 404ing 'gemini-2.0-flash'.
@@ -2030,6 +2500,7 @@ Verify:
 **Files:** `services/utils/jarvis_config.py`, `services/ai_core/agent_memory.py`, `services/ai_core/memory_store.py`, `src/core/agent_runner.py`, `services/ai_core/agent_loops.py`, `scripts/memory/migrate_user_memory.py`, `scripts/memory/dump_memory.py`, `.env.example`, `tests/core/test_memory.py`
 **Depends on:** C-51, C-42, C-39
 **User se chahiye:** —
+**VPS brain (2 Oct):** JARVIS_USER_ID is already set in every mode (C-112), and the per-job files are merged by C-129. Chroma documents are encrypted (C-124).
 
 Steps:
 1. jarvis_config.user_id = os.getenv('JARVIS_USER_ID','matloob'); the runtime passes it to BrainAssistant and MemoryExtractor; the participant identity is only logged.
@@ -2113,6 +2584,7 @@ Verify:
 **Files:** `services/utils/jarvis_announcer.py (new)`, `services/ai_core/announcer.py (new re-export)`, `src/core/agent_runner.py`, `services/ai_core/jarvis_confirm.py`, `tests/unit/test_announcer.py (new)`, `tests/core/test_agent_runner.py`
 **Depends on:** C-28, C-29, X-25, K-18 (AnnouncerAPI), K-19 (ClipboardSuggestion)
 **User se chahiye:** —
+**VPS brain (2 Oct):** Clipboard tips come from the node as signed events and enter the model as quoted, untrusted user-side data, never as a SYSTEM NOTIFICATION.
 
 Steps:
 1. Create services/utils/jarvis_announcer.py per AnnouncerAPI: attach(session)/detach() plus set_session/set_assistant aliases; announce(text, *, priority='normal', speak=True, kind='info') always posts an assistant Message {id, role:'assistant', text, source:'system', final:true, ts} via notify_transcription.
@@ -2140,6 +2612,7 @@ Verify:
 **Files:** `src/core/voice_speak.py`, `services/ai_core/agent_loops.py`, `src/core/agent_core.py`, `src/core/agent_runner.py`, `tests/core/test_voice_speak.py`
 **Depends on:** C-54, C-41, C-51, C-55, K-66 (CT-VC-PROACTIVE), K-18 (AnnouncerAPI)
 **User se chahiye:** —
+**VPS brain (2 Oct):** Spoken reminders and tasks go through the agent-svc delivery ladder (K-77): live job, then laptop speak_local, then stored UI notification, then optional email.
 
 Steps:
 1. src/core/voice_speak.py: async speak_proactive(text, *, kind, action=None, priority='normal', speak=True, msg_id=None) -> {spoken, reason}; never raises; always posts the text as an assistant message (source 'system').
@@ -2214,6 +2687,7 @@ Verify:
 **Files:** `src/core/gemini_gate.py`, `src/core/agent_runner.py`, `tests/core/test_gemini_longevity.py`, `tests/unit/test_gemini_gate_contract.py`
 **Depends on:** C-66
 **User se chahiye:** A 30-minute soak conversation while you work normally.
+**VPS brain (2 Oct):** Compression moves to C-114 and no longer waits for C-66. The go_away notice and the resumption delta stay here.
 
 Steps:
 1. Both modes: RealtimeModel(context_window_compression=ContextWindowCompressionConfig(trigger_tokens=int(os.getenv('JARVIS_CTX_TRIGGER_TOKENS','24000')), sliding_window=SlidingWindow(target_tokens=12000))).
@@ -2297,6 +2771,7 @@ Verify:
 **Files:** `src/core/turn_context.py`, `src/core/vision_handler.py`, `src/core/agent_core.py`, `src/core/conversation_router.py`, `src/core/agent_runner.py`, `tests/core/test_turn_context.py`
 **Depends on:** C-69, C-53, C-50, C-67, K-21 (ActiveWindowContext), K-19 (ClipboardSuggestion)
 **User se chahiye:** —
+**VPS brain (2 Oct):** Window context comes from node pushes through the C-112 provider. It is marked untrusted and injected as user-side data.
 
 Steps:
 1. turn_context.ContextBuilder.build(text, *, is_anna, source, budget_s=0.5): items in parallel with per-item timeouts -> (note <=1,200 chars '[JARVIS CONTEXT - background, not a user request]' + lines, image_jpeg|None); log 'CONTEXT_NOTE chars=%d items=%s'.
@@ -2351,6 +2826,7 @@ Verify:
 **Files:** `services/ai_core/voice_fingerprint.py`, `scripts/models/download_voice_model.py`, `src/core/agent_runner.py`, `tests/unit/test_voice_fingerprint_pcm.py`
 **Depends on:** C-38, K-64 (CT-VC-VOICE-ID-STORE)
 **User se chahiye:** —
+**VPS brain (2 Oct):** Voice-ID files and the model live on the VPS (jarvis_agent_data, model baked into the image). The p95 target is measured on the VPS. C-73 and C-90 follow the same rule: browser enrollment is preferred, and the CLI sample goes over ssh stdin.
 
 Steps:
 1. Run scripts/models/download_voice_model.py (config paths) to fill pretrained_models/spkrec-ecapa-voxceleb.
@@ -2378,6 +2854,7 @@ Verify:
 **Files:** `src/core/voice_gate.py`, `src/core/agent_core.py`, `scripts/voice/record_master.py`, `scripts/voice/test_voice_id.py`, `scripts/voice/realtime_voice_test.py`, `scripts/voice/calibrate_voice_id.py`, `tests/core/test_voice_gate.py`, `tests/core/test_agent_core.py`
 **Depends on:** C-72, C-69, C-56, K-62 (CT-VC-TURN-GATE)
 **User se chahiye:** Record 3 x 8 s of enrollment and 10 genuine test phrases; optionally 5-10 phrases from another person for calibration.
+**VPS brain (2 Oct):** A spoken yes approves a medium laptop action only on a voice-ID-verified turn id plus the C-75 transcript proof (D20); code_exec is never voice-approved. This wiring moves here from the optional C-133 (user decision D3).
 
 Steps:
 1. TeeSTT: when settings.voice_id and the engine is ready, start verify_pcm(frame.data.tobytes(), frame.sample_rate) per segment in parallel with STT.
@@ -2437,6 +2914,9 @@ Verify:
 **Files:** `services/ai_core/jarvis_confirm.py`, `src/core/agent_runner.py`, `tests/unit/test_confirm_voice_verification.py (new)`
 **Depends on:** C-28, C-74
 **User se chahiye:** —
+**VPS brain (2 Oct):** Before cutover; depends only on C-28 (C-74 improves recognition later).
+- Only final voice STT transcripts count, never typed chat, lk.chat or RPC text.
+- _user_affirmed fails closed while unwired.
 
 Steps:
 1. In agent_runner subscribe to AgentSession 'user_input_transcribed' and pass final transcripts (text, ts) to confirmation_broker.note_user_transcript(), keeping the last 20.
@@ -2461,6 +2941,7 @@ _Room ka ek malik, agent online/offline, SQLite state, events sirf sahi jagah._
 **Files:** `services/utils/jarvis_jobs.py (new)`, `services/ai_core/background_jobs.py (new re-export)`, `services/ai_core/agent_loops.py`, `tests/unit/test_jobs.py (new)`
 **Depends on:** C-29, C-55, K-20 (BackgroundJobsAPI)
 **User se chahiye:** —
+**VPS brain (2 Oct):** Jobs run on the VPS and their artifacts carry media ids. Laptop steps (fetch and open) run when the job finishes.
 
 Steps:
 1. Implement start_job(tool, title, factory, *, timeout=1800, announce=True) -> job_id, JobContext(job_id, tool, title).progress(percent, message) (throttled to one per 1.5 s or 5 points) and .cancelled, list_jobs(), get_job(id) and cancel_job(id) with asyncio tasks; at most 2 run concurrently, the rest queue.
@@ -2485,6 +2966,7 @@ Verify:
 **Files:** `src/core/ui_bridge.py`, `services/ai_core/agent_loops.py`, `tests/integration/test_job_events.py`
 **Depends on:** C-29, C-57, C-13, C-14, C-19, K-31 (job_progress_routing)
 **User se chahiye:** —
+**VPS brain (2 Oct):** open_job_artifact becomes pc.fetch + open on the laptop (K-73). os.startfile is never called on the agent host.
 
 Steps:
 1. ui_bridge.py 'tool_sync' branch (keeps tool_logs + 'tool_update'): when payload.job is true or phase == 'progress', upsert state['jobs'][id] (newest 20) and emit 'tool_progress' in the job_progress_routing shape (success mapped to done) to room 'ui'; skip this step if EXT C2 already emits tool_progress.
@@ -2513,6 +2995,7 @@ Verify:
 **Files:** `src/core/agent_settings.py (settings service created by VCR-09)`, `tests/unit/test_automation_settings.py (new)`
 **Depends on:** C-27, C-26, C-29, C-54, C-14, C-19, K-24 (AutomationSettings)
 **User se chahiye:** —
+**VPS brain (2 Oct):** Automation flags are applied on the node: tightening is accepted from anywhere; loosening only at the laptop (tray). The owner key of the optional C-133 is deferred by D3. Until C-59 is DONE, the PC root .env is the switch: the node's settings parser (C-120) reads JARVIS_DESKTOP_CONTROL and the clipboard flags at start and on change.
 
 Steps:
 1. Add an 'automation' block {desktop_control, clipboard_helper, clipboard_speak, voice_confirm_high} to the settings model of the VCR-09 settings service, defaulting to the config values.
@@ -2592,6 +3075,7 @@ Verify:
 **Files:** `services/utils/jarvis_health.py`, `services/utils/jarvis_ops.py`, `services/utils/jarvis_telemetry.py`, `src/core/ui_bridge.py`, `src/core/agent_runner.py`, `deploy/hostinger/Dockerfile.bridge`, `deploy/hostinger/docker-compose.yml`, `tests/infrastructure/test_bridge_status.py`, `tests/core/test_ops_supervisor.py`
 **Depends on:** C-14, C-15, C-19, C-23, X-28, K-43 (C-STATUS-1), K-40 (C-EVT-1)
 **User se chahiye:** —
+**VPS brain (2 Oct):** vitals_pc comes from the node every 10 s. The heartbeat gains link, cgroup and svc fields (C-134), and the bridge's own psutil figures become vitals_vps.
 
 Steps:
 1. jarvis_health.JarvisHealthMonitor(role=config.role): bridge services ui_bridge, livekit_api, db, agent_link; agent services agent_runner, backend_core, autonomous_protector, vector_db, bridge_link; heartbeats start at 0 (INITIALIZING); report STABLE or DEGRADED from its own services only, never CRITICAL for another process; snapshot_vitals() -> {cpu, ram, disk, cores, ram_total_gb, host, ts} with cpu_percent primed at init
@@ -2626,6 +3110,7 @@ Verify:
 **Files:** `services/utils/jarvis_logger.py`, `services/utils/jarvis_bug_hunter.py`, `services/utils/jarvis_audit.py`, `services/utils/jarvis_bridge.py`, `src/core/ui_bridge.py`, `src/core/bridge_security.py`, `tests/unit/test_logger_forwarding.py`, `tests/unit/test_bug_hunter.py`
 **Depends on:** C-14, C-15, K-39 (C-NOTIFY-1), K-40 (C-EVT-1)
 **User se chahiye:** —
+**VPS brain (2 Oct):** Per-role log files (agent, svc, bridge, desktop) on separate files or volumes. Node errors are forwarded with source 'desktop' at WARNING and above.
 
 Steps:
 1. jarvis_logger.py: module-level _FILE_HANDLERS so each file path has exactly one RotatingFileHandler shared by all loggers; main file level from LOG_FILE_LEVEL (default INFO), 10 MB x 5
@@ -2762,6 +3247,7 @@ Verify:
 **Files:** `services/ai_core/jarvis_rag.py`, `src/core/agent_runner.py`, `tests/unit/test_rag.py`
 **Depends on:** C-24
 **User se chahiye:** —
+**VPS brain (2 Oct):** Document Q&A runs on the laptop through the node; only excerpts of at most 6 KB travel to the VPS.
 
 Steps:
 1. DocumentRAG.__init__(search_dirs=None): roots from JARVIS_DOC_DIRS (';'), else ~/Desktop, ~/Documents, ~/Downloads, ~/OneDrive/Desktop, ~/OneDrive/Documents, config.shared_dir and D:/ only when it exists (replaces the whole-C:/Users root at line 34).
@@ -2812,6 +3298,7 @@ Verify:
 **Files:** `services/ai_core/scheduler_dispatcher.py`, `src/core/proactive.py`, `services/ai_core/agent_loops.py`, `tests/unit/test_scheduler_dispatcher.py`
 **Depends on:** X-32, C-56, C-62, C-24, C-28, C-55, K-32 (scheduled_action_runner), K-33 (task_store_v2)
 **User se chahiye:** —
+**VPS brain (2 Oct):** The scheduler lives in agent-svc. Scheduled desktop actions go through the link with origin 'scheduler' and wait 15 min when the laptop is offline (D16).
 
 Steps:
 1. Create services/ai_core/scheduler_dispatcher.py with FORBIDDEN_SCHEDULED_ACTIONS = confirm_action, schedule_task, cancel_scheduled_task, set_reminder, plus autonomous_self_repair when apply is true.
@@ -2887,6 +3374,7 @@ Verify:
 **Files:** `services/utils/jarvis_self_healing.py`, `tests/unit/test_self_repair.py`
 **Depends on:** C-45, C-47, C-24, C-28, C-30, K-30 (llm_text), K-28 (tool_arg_policies)
 **User se chahiye:** —
+**VPS brain (2 Oct):** Apply goes through the PC repo plus a deploy, because code in the image is immutable. JARVIS_SELF_REPAIR_APPLY lives in .env.agent. The same applies to C-110.
 
 Steps:
 1. Signature autonomous_self_repair(error_details: str, file_path: str, apply: bool = False); X0 kwargs execution_timeout=120, arg_policies {'error_details':'multiline','file_path':'path'}, risk 'high' when apply else 'low', confirm summary 'Patch {file_path}'.
@@ -2913,6 +3401,7 @@ Verify:
 **Files:** `scripts/pc/start_pinchtab.ps1 (new)`, `scripts/pc/install_desktop_deps.ps1 (new)`, `deploy/windows-local/start-agent.bat`, `deploy/windows-local/.env`, `/.env (root)`
 **Depends on:** C-06, C-26, C-08, C-09, K-23 (PinchTabLocalServer)
 **User se chahiye:** Approve installing PinchTab (npm global) and the FFmpeg source (see user questions).
+**VPS brain (2 Oct):** PinchTab stays on the laptop. FFmpeg, yt-dlp and node are also in the VPS image; the PC copies are kept for the fallback.
 
 Steps:
 1. After Sir approves, run 'npm install -g pinchtab' and check 'pinchtab --version'.
@@ -3091,6 +3580,7 @@ Verify:
 **Files:** `src/core/agent.py`
 **Depends on:** X-02, C-09
 **User se chahiye:** —
+**VPS brain (2 Oct):** In progress (DOING since 01 Oct 22:35). The startup sound, local speech (C-92) and device location (C-93) come from the node. agent.py keeps them for pc mode.
 
 Steps:
 1. play_startup_voice: resolve JARVIS_STARTUP_SOUND (default the MP3 path), then the same base name as .wav, then assets/audio/jarvis_startup_chime.wav; keep the 10 s delay and daemon thread.
@@ -3208,6 +3698,7 @@ Verify:
 **Files:** `deploy/hostinger/deploy_from_pc.sh (from EXT OPS-06)`, `done_highlight.md`, `scripts/vps/sync_ui.ps1`, `done_highlight.md (append only)`, `VPS: /opt/jarvis-agent (compose project jarvis, services ui-bridge and frontend)`, `VPS: /root/jarvis-backups/<ts>/`
 **Depends on:** C-65, X-19, X-10, X-21, X-22, X-17, C-93, C-94, X-20, X-49, X-23, X-24, X-33, C-95, X-45, X-46, X-47, X-18, X-48, X-50, C-54, C-90, X-52, X-53, C-27, C-29, C-30, C-59, C-58, X-55, X-40, X-39, C-80, X-38, C-79, X-05, C-64, C-60
 **User se chahiye:** Be at the PC for the voice, camera and voice-ID checks (speak, show an object, read the enrollment sentences).
+**VPS brain (2 Oct):** The live checks include the node path: Laptop chip, DESKTOP_OFFLINE, the DESKTOP_LOCKED pause and resume, ConfirmFlow approvals for laptop actions (dashboard Allow, no prompt on the laptop), the stops (Stop desktop, panic hotkey, kill switch, tray Full) and delivery. C-99 covers proxy-to-node security and cancel propagation.
 
 Steps:
 1. bash deploy/hostinger/deploy_from_pc.sh --services 'frontend ui-bridge'; run agent_ctl restart only if Claude-lane agent code changed (RUNTIME LOCK).
@@ -3326,6 +3817,7 @@ Verify:
 **Files:** `services/utils/jarvis_ops.py`, `src/core/agent_runner.py`, `services/utils/jarvis_healing.py`, `services/utils/jarvis_diagnostics.py`, `services/utils/jarvis_checkpoint.py`, `services/utils/backup_system.py`, `services/ai_core/agent_loops.py`, `tests/core/test_ops_supervisor.py`, `tests/unit/test_diagnostics.py`, `tests/unit/test_checkpoint.py`
 **Depends on:** C-11, C-63, C-64, C-71, C-76, C-77, C-83
 **User se chahiye:** —
+**VPS brain (2 Oct):** Two supervisors: agent-svc on the VPS and the node supervisor on the laptop. No new cron or systemd units.
 
 Steps:
 1. jarvis_ops.OpsSupervisor.start(session, assistant, room) owns, through autonomous_protector: heartbeat (existing start_heartbeat_loop), healing_loop, adaptation_loop, bug_hunter_loop, diagnostics_once, checkpoint_loop, daily_backup_loop and the OP-23 core loops; status() feeds agent_heartbeat
@@ -3412,6 +3904,7 @@ Verify:
 **Files:** `deploy/hostinger/deploy.sh`, `services/utils/jarvis_ops.py`, `deploy/hostinger/RUNBOOK.md`, `tests/unit/test_cert_watch.py`
 **Depends on:** C-12, C-101, K-54 (COORD-4)
 **User se chahiye:** —
+**VPS brain (2 Oct):** The daily read-only check also covers jarvis-agent and jarvis-agent-svc (scripts/ops/vps_daily_check.py).
 
 Steps:
 1. deploy.sh: compare the served jarvis cert (openssl s_client -connect 127.0.0.1:443 -servername jarvis.srv1802669.hstgr.cloud | openssl x509 -enddate) with /etc/letsencrypt/live/jarvis.srv1802669.hstgr.cloud/fullchain.pem (read-only); if the file is newer run nginx -t && systemctl reload nginx (graceful, same as a jarvis.conf deploy); WARN under 14 days
@@ -3464,6 +3957,7 @@ Verify:
 **Files:** `.github/workflows/production.yml`, `.github/dependabot.yml`, `.gitleaks.toml`, `pytest.ini`
 **Depends on:** C-04, C-14, C-105
 **User se chahiye:** —
+**VPS brain (2 Oct):** Add a Linux CI job (Linux import test, pytest core/unit, Dockerfile.agent build, strict manifest check). The Windows job keeps the node and the tools.
 
 Steps:
 1. Rewrite .github/workflows/production.yml: secret-scan (checkout fetch-depth 0 + gitleaks/gitleaks-action@v2 with .gitleaks.toml allow-listing the known test dummies), bridge-tests (ubuntu, Python 3.12, deploy/hostinger/requirements-bridge.txt + pytest pytest-asyncio httpx, pytest tests/infrastructure -m 'not live'), agent-tests (windows-latest, pip cache, requirements + dev, JARVIS_TEST_MODE=true, pytest tests/core tests/unit tests/integration -m 'not live' --maxfail=5)
@@ -3540,6 +4034,7 @@ Verify:
 **Files:** `README.md`, `deploy/hostinger/RUNBOOK.md`, `docs/CONTRACTS.md`, `docs/SECURITY.md`, `done_highlight.md`, `deploy/hostinger/jarvis.conf`
 **Depends on:** C-22, C-23, C-63, C-64, C-60, C-92, C-101, C-102, C-103, C-104, C-105, C-106, C-29, X-15, X-10, C-108, C-97, C-99, C-98, C-100, C-05, X-12, C-61, C-82, C-10, C-36
 **User se chahiye:** Walk through the final checklist with Claude (about 15 minutes).
+**VPS brain (2 Oct):** The docs include docs/ARCHITECTURE-VPS.md and the threat model from C-134.
 
 Steps:
 1. Run $PY -m pytest tests/core tests/unit tests/infrastructure tests/integration tests/vision -m 'not live' -q, run_qa.py and a no-op deploy_from_pc.sh --services ui-bridge; ask Cursor (plan.md section 11) to run the full e2e suite
@@ -3586,9 +4081,666 @@ Verify:
 - Get-Content logs/self_repair_audit.jsonl -Tail 2
 
 
+### VPS brain (2 Oct 2026) · laptop ka load VPS par
+
+#### C-111 · Contracts v4 (K-70..K-77) + plan, CLAUDE.md and Cursor rules for the VPS brain
+**Phase:** P0 · **Size:** — · **Feature:** VPS brain + Desktop Node
+**Source:** VPS-brain design 2026-10-02 (`docs/ARCHITECTURE_VPS_BRAIN.md`)
+**Kyun:** Both lanes need the new interfaces before any code: desktop link, manifest, brain switch, media relay, desktop status, agent containers, desktop policy and the always-on service. The reversed key rule (K-35/K-47) must be written down, and so must the critique contradictions: K-44 create_room, K-45 risk levels, K-57 canary, K-24 loosening, the single media path, and C-28 being DONE (live with 79 tools including confirm_action; 83 LLM-visible names with the 4 internal wrap_* tools). The user's answers of 2026-10-02 go in too: D3 and D14 changed (no approval prompt and no manual step on the laptop), every other decision approved as written; D21 (origin presence gate) is a new open question.
+**Files:** `docs/CONTRACTS.md`, `plan.md`, `CLAUDE.md`, `.cursor/rules/jarvis-collab.mdc`, `done_highlight.md`
+**Depends on:** —
+**User se chahiye:** — (the user answered D1..D20 on 2026-10-02: defaults OK, D3 and D14 changed; the new D21 is asked in section 10 and does not block this task).
+
+Steps:
+1. docs/CONTRACTS.md: add '## v4 (2026-10-0x)' and the K-70..K-77 text from this plan; reserve K-78 HANDOVER.
+2. Edit these contracts in place under v4, using the contract_amendments list of this plan (each find string occurs exactly once in docs/CONTRACTS.md and once in plan.md): - K-02, K-03, K-04 (desktop_status, reminder_due, desktop_stop, notification_ack; owner-* link policy). - K-08, K-11, K-12 (new error codes), K-13, K-14/K-45 (laptop actions are approved only through ConfirmFlow before the agent sends them, per K-76 and D3; voice never approves laptop actions before voice-ID; the unwired transcript check fails closed; the stricter of K-16/K-45/class wins). - K-15, K-16 (class and placement columns; open_app dynamic), K-17 (83 names; laptop tools stay registered while it is offline). - K-19, K-21, K-26 (the node produces them), K-20/K-31 (open = pc.fetch + open), K-24 (the node reads the flags from the PC root .env; tightening from the UI after C-59; loosening only at the laptop). - K-27, K-29 (new secret names), K-32/K-33 (agent-svc hosts them; 15 min grace). - K-34/K-35/K-47: keys live only in .env.agent and the PC root .env. - K-37 (the bridge mints owner-<8hex>), K-38/K-39/K-40/K-42/K-43 ('/desktop', :5002, desktop_status, minimal public health). - K-44 (create_dispatch only; brain target; on_demand; job-state check; 5 s loop while a UI is present; surplus removal). - K-48, K-50, K-53 (two runtimes; desktop actor lock), K-54 (jarvis-agent* containers and images, jarvis_agent_* volumes, jarvis-builder), K-56 (owner-* eligible; owner-only text and RPC), K-57 (canary room class), K-60 (stop also cancels laptop calls; the stop-desktop phrase sends desktop_stop), K-64, K-68, K-69 (VPS values).
+3. Add the Changelog line for v4 (answers the 2026-10-01 VPS decision and both critiques) and make plan.md section 4 a byte-identical copy.
+4. plan.md: - section 1: decision row (VPS brain, no CPU/RAM limits; D3/D14 as the user changed them on 2026-10-02); - section 2.6: RUNTIME LOCK text for two runtimes plus the node; - section 3: the target; - C-16 step 6: remove mem_limit; - board: rows for C-111..C-134 and X-64..X-68 with their dependencies. Every new task on the cutover path is P0 (C-111..C-131 and X-67). C-133 and X-68 are optional P4 rows with the status 'NOT NEEDED (deferred by user decision D3; reopen only if local approvals return)', so scripts/coord/wait_for_work.py never offers them, and no other task depends on them. The existing-task changes of this plan go into the rows and task blocks (C-29, C-30 and their chain C-14, C-15, C-17..C-22 move before cutover; C-18 also depends on C-127); - ordering rule next to the board: cutover-path work comes first. C-23, C-39 and C-75 keep their P1 label but gate the cutover, so Claude takes them as soon as they are ready, before any other P1-P4 work (wait_for_work.py lists ready work by phase); - this design as a new section; - section 9: user items; - section 10: D1..D20 with the final values and the open question D21 (decisions table of this plan); - section 12: risks.
+5. CLAUDE.md and .cursor/rules/jarvis-collab.mdc: - the RUNTIME LOCK covers the Desktop Node; - Cursor never starts the node, the PC brain or the Electron local backend while the node runs; - the VPS scope list gains the new containers, volumes and builder.
+6. Section 11: write the Cursor handoff (frozen shimmed symbols until X-64/X-65; new X tasks; X-67 gates the cutover (P0); X-68 optional (D3, NOT NEEDED on the board); stricter-wins rule; C-30 moves before cutover; REQ for X-09 desktop mode).
+7. Commit '[claude] C-111: contracts v4 + plan for the VPS brain' with explicit paths, then add a done_highlight entry.
+
+Done tab jab (acceptance):
+- docs/CONTRACTS.md has a v4 heading, K-70..K-77, the edited contracts and one v4 Changelog line.
+- plan.md section 4 equals the CONTRACTS body.
+- The board lists C-111..C-134 and X-64..X-68 with dependencies, and C-16 no longer mentions mem_limit.
+- C-133 and X-68 show 'NOT NEEDED (deferred by user decision D3; reopen only if local approvals return)' and scripts/coord/wait_for_work.py lists neither of them; every new cutover-path task is P0.
+- Section 10 shows D1..D20 with the final values, including the changed D3 and D14, plus the open question D21.
+- CLAUDE.md and the Cursor rule mention the Desktop Node runtime lock.
+- The pre-commit hook passes.
+
+Verify:
+- grep -c '^#### K-7[0-7] ' docs/CONTRACTS.md # 8
+- grep -n '^- \*\*v4\*\*' docs/CONTRACTS.md
+- grep -n 'mem_limit' plan.md // echo NO_MEM_LIMIT
+- $PY scripts/coord/check_lane.py --whoowns src/core/desktop/node.py # claude
+
+#### C-112 · Linux-importable agent with role/brain/mode gating, validate by (role, mode), stable user id, reconnecting UI listener
+**Phase:** P0 · **Size:** — · **Feature:** VPS brain + Desktop Node
+**Source:** VPS-brain design 2026-10-02 (`docs/ARCHITECTURE_VPS_BRAIN.md`)
+**Kyun:** Today the agent cannot import on Linux: GUI imports sit at module top. PC-only sensors and loops start inside every job, memory is keyed per job, validate() demands keys the role does not use, and the UI listener dies after a failed first connect. The PC fallback must keep working in local mode.
+**Files:** `services/ai_core/jarvis_vision.py`, `src/core/vision_handler.py`, `src/core/agent_core.py`, `services/ai_core/agent_loops.py`, `src/core/agent_runner.py`, `src/core/agent.py`, `services/utils/jarvis_config.py`, `services/utils/jarvis_bug_hunter.py`, `services/utils/jarvis_adaptive.py`, `scripts/models/download_voice_model.py`, `services/ai_core/voice_fingerprint.py`, `tests/unit/test_linux_import.py`, `tests/core/test_role_gating.py`, `tests/unit/test_config_validate_roles.py`
+**Depends on:** C-111
+**User se chahiye:** After the restart, ask one voice question and send one typed message.
+
+Steps:
+1. jarvis_vision.py: import cv2 and pyautogui lazily inside the capture functions; an ImportError gives status 'unavailable'. Importing the module has no GUI side effect.
+2. vision_handler.py: add a WindowContextProvider: - 'local': lazy jarvis_window_ctrl import plus today's 60 s poll; - 'remote': a cache fed by node window_context events, no polling. agent_core.py catches Exception (not only ImportError/ValueError) around optional handlers and logs once.
+3. agent_loops.py: - import jarvis_vision lazily; - UIBridgeListener uses reconnection=False and its own loop that never returns (backoff 1→10 s, fresh auth each connect); - derive socketio_path: 'vortex/socket.io' when the URL ends with /vortex, else 'socket.io'; - on :5002 send auth {role:'agent', room, job_id}.
+4. agent.py and agent_runner.py: read JARVIS_ROLE, JARVIS_BRAIN and JARVIS_DESKTOP_MODE. - Remote mode starts no ClipboardMonitor (lazy import), window poller, startup voice, ipinfo location loop, reminder loop or task monitor. - Local mode keeps today's behaviour byte for byte.
+5. user_id = JARVIS_USER_ID in every mode; fall back to today's logic only when it is unset, with a WARNING.
+6. jarvis_config.validate(role, mode): - agent + remote: GOOGLE_API_KEY, LiveKit key/secret, JARVIS_ENCRYPTION_KEY (fatal when missing) and DESKTOP_AGENT_SIGNING_KEY; - agent + local: today's set; - svc: JARVIS_ENCRYPTION_KEY and the agent link key; - bridge: LiveKit key/secret, plus the legacy token while it is in use; - desktop: node keys only. Accept both the old and the new env layout.
+7. jarvis_bug_hunter reads config.log_file. The adaptation loop only observes cgroup memory/CPU figures inside a container and never cancels loops because of host load.
+8. download_voice_model.py and voice_fingerprint.py: stop passing local_dir_use_symlinks (huggingface_hub 1.16 rejects it).
+9. Tests: - test_linux_import.py imports src.core.agent_runner in remote mode with stubbed GUI modules that raise KeyError/NotImplementedError and no DISPLAY; - test_role_gating.py checks which loops start per mode; - test_config_validate_roles.py covers every (role, mode) pair.
+10. $PY scripts/agent_ctl.py restart --by claude --reason C-112 (PC brain, local mode), then confirm the tool count and the loops.
+
+Done tab jab (acceptance):
+- The simulated Linux import succeeds in remote mode.
+- Local mode is unchanged: 83 tool names, the same loops, voice and chat work.
+- Remote mode starts none of the PC sensors, the reminder loop or the task monitor.
+- The voice-model download no longer raises TypeError with huggingface_hub 1.16.1.
+- Tests pass.
+
+Verify:
+- $PY -m pytest tests/unit/test_linux_import.py tests/core/test_role_gating.py tests/unit/test_config_validate_roles.py -q
+- $PY scripts/agent_ctl.py restart --by claude --reason C-112
+- Select-String -Path logs/agent_stderr.log -Pattern 'Registering Agent with/UI listener connected'
+
+#### C-113 · Compat layer: location provider, delivery helper, startfile/webbrowser shims with a startup self-test
+**Phase:** P0 · **Size:** — · **Feature:** VPS brain + Desktop Node
+**Source:** VPS-brain design 2026-10-02 (`docs/ARCHITECTURE_VPS_BRAIN.md`)
+**Kyun:** VPS-run Cursor tools call os.startfile, webbrowser.open and ipinfo (which answers Kuala Lumpur from the VPS). Until X-64/X-65 land, Claude-lane shims must keep them truthful, and must fail loudly when a binding changes.
+**Files:** `services/utils/jarvis_location.py`, `services/utils/jarvis_delivery.py`, `services/ai_core/remote_compat.py`, `src/core/agent_runner.py`, `tests/unit/test_remote_compat.py`, `tests/unit/test_location_provider.py`
+**Depends on:** C-112
+**User se chahiye:** —
+
+Steps:
+1. jarvis_location.py: get_current_city() and get_current_city_data() return the persisted device location (conversations/location.json, at most 30 min old) or USER_CITY with fixed coordinates. They never call ipinfo in remote mode.
+2. jarvis_delivery.py: - open_artifact(path): local → os.startfile; remote → map /app/Jarvis_Shared or /app/Jarvis_Outputs to (area, relpath), compute sha256 and send a fire-and-forget agent-signed pc.fetch{open:true}; laptop offline → raise OSError('DESKTOP_OFFLINE'); - open_url(url): http and https only.
+3. remote_compat.install() is the first call in agent_runner, remote mode only: - os.startfile = open_artifact; - webbrowser.open → pc.open_url only while a tool flagged opens_urls is running, else log and return False; - patch jarvis_search.get_current_city/_data and every by-value consumer (jarvis_get_weather, agent_runner) to jarvis_location.
+4. Startup self-test: every patched symbol must resolve to the provider; otherwise log ERROR COMPAT_SHIM_MISSING <symbol> and mark module_health degraded.
+5. Tests: - get_weather('') in remote mode gives USER_CITY and never calls ipinfo; - open_artifact with the laptop offline raises; - webbrowser.open outside a tool returns False; - the self-test detects a rebound symbol.
+
+Done tab jab (acceptance):
+- Remote mode never reaches ipinfo.
+- generate_qr_code with the laptop offline reports an error, not success.
+- The self-test passes on the current tree and fails on a rebound symbol.
+
+Verify:
+- $PY -m pytest tests/unit/test_remote_compat.py tests/unit/test_location_provider.py -q
+
+#### C-114 · 24/7 voice session safety: compression, real truncation, re-seed, liveness attribute, idle close and recycle
+**Phase:** P0 · **Size:** — · **Feature:** VPS brain + Desktop Node
+**Source:** VPS-brain design 2026-10-02 (`docs/ARCHITECTURE_VPS_BRAIN.md`)
+**Kyun:** A dashboard left open hits Gemini Live limits without compression. Every reconnect re-sends the whole history, update_instructions appends turns, prune_chat_context edits a copy, and a dead realtime session leaves a mute agent in the room that nothing re-dispatches.
+**Files:** `src/core/session_policy.py`, `src/core/agent_runner.py`, `src/core/agent_core.py`, `tests/core/test_session_policy.py`
+**Depends on:** C-33, C-35, C-111
+**User se chahiye:** —
+
+Steps:
+1. RealtimeModel(context_window_compression=ContextWindowCompressionConfig(trigger_tokens=JARVIS_CTX_TRIGGER_TOKENS (24000), sliding_window=SlidingWindow(target_tokens=16000))) in every mode. This is C-67 step 1, moved here.
+2. Replace prune_chat_context with real truncation: every 20 new items, ctx = agent.chat_ctx.copy(); ctx.truncate(max_items=40); await agent.update_chat_ctx(ctx).
+3. At job start, re-seed the last 20 user/assistant turns from ConversationMemory as user/model items (Gemini drops system items).
+4. Call update_instructions only when the date or city actually changes (at most daily, plus once per location change).
+5. An unrecoverable realtime/session error (recoverable=False, or close with reason ERROR) sets the runtime's closed event so C-33 rebuilds the session. A failed rebuild calls ctx.shutdown('session_dead').
+6. Set the participant attribute jarvis.session = starting/running/restarting/idle/closed, with ts.
+7. Idle policy: - no linked participant for JARVIS_IDLE_CLOSE_MIN (30) → flush memory, then ctx.shutdown('idle'); - a job older than 24 h ends at its next 10-minute idle gap.
+8. Flush memory at least every 10 s after final transcripts, and in ctx.add_shutdown_callback.
+9. Tests: compression is set; truncate runs; re-seed; the update_instructions count; the error → shutdown path; idle close.
+
+Done tab jab (acceptance):
+- Tests pass.
+- In the canary (C-130), a 45-minute open session with a question every 5 minutes never dies.
+- A forced 90 s Gemini block ends either resumed, or with the agent leaving and being re-dispatched; never a mute agent in the room.
+
+Verify:
+- $PY -m pytest tests/core/test_session_policy.py -q
+- Select-String -Path logs/agent_stderr.log -Pattern 'SESSION_POLICY/RUNTIME_SESSION_RESTART/jarvis.session'
+
+#### C-115 · Desktop Link protocol library (Ed25519, X25519/AEAD, replay, clock, resend) + key tooling
+**Phase:** P0 · **Size:** — · **Feature:** VPS brain + Desktop Node
+**Source:** VPS-brain design 2026-10-02 (`docs/ARCHITECTURE_VPS_BRAIN.md`)
+**Kyun:** One audited implementation of envelopes, signatures, end-to-end encryption, replay and clock rules, shared by the bridge, the agent peers and the node, so that a compromised bridge can neither forge nor read commands.
+**Files:** `services/utils/desktop_protocol.py`, `scripts/ops/gen_desktop_keys.py`, `tests/unit/test_desktop_protocol.py`
+**Depends on:** C-111
+**User se chahiye:** —
+
+Steps:
+1. canonical_json; Ed25519 sign/verify with the contexts 'jarvis/desktop/msg/v1' and 'jarvis/desktop/http/v1'; envelope build/parse with the K-70 fields and size caps.
+2. Session crypto: - ephemeral X25519 keys inside the signed hellos; - HKDF-SHA256 → ChaCha20-Poly1305, with the header as AAD; - blobs encrypted in 1 MB chunks.
+3. Freshness: - check on the receiver's own clock (±120 s); - offset/RTT estimator from signed ping/pong (NTP formula, updated on every pong, monotonic deadlines); - start_by conversion; CLOCK_SKEW above 60 s.
+4. SeenStore: SQLite owned by one thread, 24 h, for ids, call ids and confirm ids; binding to the session nonce.
+5. result_resend wrapper: fresh id, ts and to; the body keeps call_id, original_ts and finished_at.
+6. Signed HTTP headers (X-Desk-Ts, -Nonce, -Len, -Sha256, -Sig) with a verify-before-body helper.
+7. gen_desktop_keys.py: - --role pc writes the PC private key DPAPI-wrapped to %LOCALAPPDATA%\JARVIS\node\keys.dpapi; - --role agent runs on the VPS inside a one-off agent container and writes into .env.agent.tmp (umask 077, then mv); - both print only public keys.
+8. Tests: - tamper, bad signature, replay, stale, cross-session and skew are refused; - start_by, resend, AEAD failure and size caps behave as specified; - canonical JSON vectors match; - no private value appears in captured stdout.
+
+Done tab jab (acceptance):
+- A body or header modified by the bridge fails verification.
+- A replay across sessions is refused.
+- No private key value is ever printed.
+- Tests pass.
+
+Verify:
+- $PY -m pytest tests/unit/test_desktop_protocol.py -q
+
+#### C-116 · Bridge: internal listener :5002, '/desktop' relay, presence and desktop_status, persisted link switch, minimal public health
+**Phase:** P0 · **Size:** — · **Feature:** VPS brain + Desktop Node
+**Source:** VPS-brain design 2026-10-02 (`docs/ARCHITECTURE_VPS_BRAIN.md`)
+**Kyun:** The agent must reach the laptop through the bridge without the bridge being able to forge or read commands. The agent role must be unreachable from the internet, and safety switches must survive restarts.
+**Files:** `src/core/ui_bridge.py`, `src/core/bridge_desktop.py`, `src/core/bridge_store.py`, `deploy/hostinger/docker-compose.yml`, `deploy/hostinger/Dockerfile.bridge`, `tests/infrastructure/test_bridge_desktop.py`
+**Depends on:** C-13, C-115
+**User se chahiye:** After the deploy, ask one voice question and send one typed message.
+
+Steps:
+1. Serve the same ASGI app on a second uvicorn listener :5002 (exposed only on jarvis-net). The agent role, /internal/* and /internal/livekit/ensure are accepted only when the request's server port is 5002.
+2. Namespace '/desktop': - pc role from the public listener: verify the signed hello; a newer socket replaces the older one with an audited desktop_replaced alert, and a new node_id raises an alert; - agent role only on :5002, with a signed agent_hello; - welcome and status are unsigned hints.
+3. Relay only verified messages: - keep a call_id → agent sid map; - route result_resend by call_id to the agent serving the room, else drop it at INFO; - when the node drops, fail pending calls with dl_undeliverable{emitted, acked}.
+4. Presence: 10 s heartbeat, stale after 25 s, power:suspend. Send desktop_status (K-74) to agent peers, to UI sockets on '/' and in init_state. Add the desktop block to /vortex/status. Trim the public /vortex/health to {status, version, uptime_s}.
+5. Persisted controls in the C-13 kv: desktop_link on/off (admin CLI 'python -m src.core.bridge_desktop link off/on/status'), active_job and last_activity_ts. They are re-applied at boot.
+6. Rate limiting: count failed verifications per X-Real-IP, trusted only when the TCP peer is the Docker gateway. Never throttle a verified node.
+7. ui_command routing: - agent sockets whose declared room is JARVIS_ROOM_NAME; - plus legacy sockets while LEGACY_TOKEN_AUTH=1; - canary and probe peers never receive commands.
+8. Stop desktop from the UI or phone (K-74, K-40 v4 allow-list): - ui_command desktop_stop is accepted only from UI sockets (role ui, or legacy while LEGACY_TOKEN_AUTH=1) and is tighten-only; - the bridge persists it in the C-13 kv, sends the tighten-only control desktop_stop to the node (re-sent after every node reconnect until the node's desktop_state reports read or off, then cleared), sends a stop_all hint to the agent peers so their proxies cancel in-flight laptop calls, and emits desktop_status to UI sockets and agent peers; - the same allow-list change admits notification_ack {id}, which the bridge records in its notification store for the K-77 ledger.
+9. K-74 alerts raised by the bridge from cutover on (C-134 adds the rest later): critical for any failed signature or hello verification on '/desktop'; warning for desktop_replaced, a new node_id and rate-limit trips. Each goes out as system_alert to UI sockets, an audit row, and an alert hint to the node, which shows it as a toast.
+10. /livekit/token ignores any identity the client sends and mints owner-<8 hex>.
+11. Compose ui-bridge: oom_score_adj 300; jarvis_shared and jarvis_outputs mounted :ro; port 5002 not published.
+12. Tests with a fake node and fake agents: - forged, replayed and cross-session messages refused; - the agent role refused on :5001; - the bridge cannot decrypt bodies; - routing by call_id; - link off survives a restart; - ui_command desktop_stop from a UI socket is persisted, reaches the fake node as control desktop_stop (again after a node reconnect), sends stop_all to the fake agents and emits desktop_status; from an agent socket it is rejected; - a forged hello raises the critical alert (system_alert plus an audit row).
+13. deploy_from_pc.sh --services ui-bridge (stage V2a), then confirm the PC brain still does voice and chat.
+
+Done tab jab (acceptance):
+- Tests pass.
+- The agent role over the public path is refused.
+- desktop_link off survives 'docker restart jarvis-bridge'.
+- Stop desktop from a UI socket reaches the node and the agent peers, is re-sent after a node reconnect, and shows in desktop_status; the bridge-side K-74 alerts fire in the tests.
+- Public /vortex/health shows only status, version and uptime_s.
+- The PC brain works unchanged.
+
+Verify:
+- $PY -m pytest tests/infrastructure/test_bridge_desktop.py -q
+- curl -s https://jarvis.srv1802669.hstgr.cloud/vortex/health
+- $VPS "docker exec jarvis-bridge python -m src.core.bridge_desktop link status"
+
+#### C-117 · Media relay (single media path) + node file, blob and backup endpoints + nginx locations
+**Phase:** P0 · **Size:** — · **Feature:** VPS brain + Desktop Node
+**Source:** VPS-brain design 2026-10-02 (`docs/ARCHITECTURE_VPS_BRAIN.md`)
+**Kyun:** One media path (DASH-C21) must serve both the UI and the laptop. Laptop screenshots and attachments must reach the VPS with no disk retention and no memory abuse before authentication, and the symlink race must be impossible.
+**Files:** `src/core/bridge_media.py`, `src/core/ui_bridge.py`, `deploy/hostinger/jarvis.conf`, `deploy/hostinger/docker-compose.yml`, `tests/infrastructure/test_bridge_media.py`
+**Depends on:** C-116
+**User se chahiye:** —
+
+Steps:
+1. GET /media/index and /media/file (with Range) over jarvis_shared and jarvis_outputs mounted :ro. - Auth: owner session or legacy token for the UI; PC-signed HTTP for the node. - Only the allowed subtrees, with the exclusions. - Open paths component by component with O_NOFOLLOW (directories via dir_fd and O_DIRECTORY); serve regular files only; never list or stream symlinks.
+2. Index cursor = listing time − 5 s. Entries carry seq, relpath, size, mtime_ns, and sha256 when known.
+3. POST /desktop/blob: - verify the signed length (≤ 30 MB) and sha256 headers before reading the body; - stream and hash under a hard cap, at most 2 at a time; - keep blobs in RAM only (≤ 256 MB, TTL 15 min, deleted after the first fetch); - GET /internal/blob/<id> only on :5002.
+4. GET /desktop/backup/latest (PC-signed) streams the newest encrypted snapshot from jarvis_agent_snapshots, mounted :ro.
+5. jarvis.conf (back up first): - location = /vortex/desktop/blob with client_max_body_size 30m and proxy_request_buffering off; - location /vortex/internal/ { return 404; }; - limit_conn 20 per IP and limit_req 120r/m burst 60 on /vortex/socket.io; - then nginx -t && reload.
+6. Tests: - a symlink swapped to /proc/1/environ between listing and open is refused; - traversal is refused; - an unsigned body is never read; an oversize body gets 413 before the body is read; - TTL and first-fetch delete work; Range works.
+7. deploy_from_pc.sh --services ui-bridge --nginx; the smoke diff must be identical.
+
+Done tab jab (acceptance):
+- Tests pass.
+- nginx -t is OK and the other-apps smoke is unchanged.
+- The UI can load a generated image through /vortex/media.
+- /vortex/internal/* returns 404 from outside.
+
+Verify:
+- $PY -m pytest tests/infrastructure/test_bridge_media.py -q
+- curl -s -o /dev/null -w '%{http_code}' https://jarvis.srv1802669.hstgr.cloud/vortex/internal/blob/x # 404
+- $VPS 'D=$(ls -1d /root/jarvis-backups/2* / tail -1); diff $D/smoke-pre.txt $D/smoke-post.txt && echo OTHER_APPS_UNCHANGED'
+
+#### C-118 · Placement table, manifest exporter and placement-aware VPS discovery
+**Phase:** P0 · **Size:** — · **Feature:** VPS brain + Desktop Node
+**Source:** VPS-brain design 2026-10-02 (`docs/ARCHITECTURE_VPS_BRAIN.md`)
+**Kyun:** Gemini must see the same 83 tools whether or not the laptop is on, and the VPS must never import GUI modules or the system-control module.
+**Files:** `services/ai_core/tool_placement.py`, `scripts/desktop/export_manifest.py`, `services/ai_core/desktop_manifest.json`, `services/ai_core/jarvis_plugin_manager.py`, `tests/unit/test_desktop_manifest.py`, `tests/unit/test_tool_placement.py`
+**Depends on:** C-112, C-111
+**User se chahiye:** —
+
+Steps:
+1. tool_placement.py: one entry per tool (place, fallback, fallback_on, idempotent, cls, arg_hooks, opens_urls, timeout_override) for all 83 names. Overrides come from JARVIS_TOOL_PLACEMENT_OVERRIDES and are validated (GUI tools never 'vps'; wrap_* never 'laptop').
+2. export_manifest.py runs on Windows with JARVIS_TEST_MODE=true and a dead bridge URL. It imports the laptop-capable modules and writes params, meta, cls, placement, param_schema_sha256 and lk_schema_sha256. A type outside the annotation whitelist fails the export. --check mode compares with the committed file.
+3. Plugin manager in remote mode: - skip all-laptop modules and the static deny-list (keyboard_mouse_ctrl, jarvis_window_ctrl, jarvis_whatsapp_automation, jarvis_notepad_automation, jarvis_system_ctrl, jarvis_system_info, jarvis_browser_pinchtab); - expected names = discovery ∪ manifest; a mismatch logs ERROR and marks module_health degraded.
+4. test_desktop_manifest.py compares the live registry with the committed file. It is advisory (skip with a reason) unless JARVIS_MANIFEST_STRICT=1, which the deploy pre-flight and CI set.
+5. test_tool_placement.py: - every name is placed exactly once; - the counts are vps 32 / split 1 / routed 2 / laptop 48; - jarvis_system_ctrl is never imported in remote mode.
+
+Done tab jab (acceptance):
+- The strict manifest test passes on the committed tree.
+- Remote discovery imports no denied module.
+- The counts match.
+
+Verify:
+- $PY scripts/desktop/export_manifest.py --check
+- JARVIS_MANIFEST_STRICT=1 $PY -m pytest tests/unit/test_desktop_manifest.py tests/unit/test_tool_placement.py -q
+
+#### C-119 · Agent DesktopLink client and laptop-tool proxies (honest outcomes, repeat guard, ordering, stop, fallback)
+**Phase:** P0 · **Size:** — · **Feature:** VPS brain + Desktop Node
+**Source:** VPS-brain design 2026-10-02 (`docs/ARCHITECTURE_VPS_BRAIN.md`)
+**Kyun:** The VPS agent needs proxies with identical names, signatures and docstrings. Their outcomes must be honest, they must never double-send after an interruption, desktop calls from one reply must keep their order, and the shared datacenter IP must be protected.
+**Files:** `services/ai_core/desktop_link.py`, `services/ai_core/desktop_proxy.py`, `services/ai_core/jarvis_plugin_manager.py`, `services/ai_core/jarvis_confirm.py`, `src/core/agent_runner.py`, `tests/core/test_desktop_proxy.py`, `tests/integration/test_desktop_roundtrip.py`
+**Depends on:** C-115, C-118, C-32, C-28
+**User se chahiye:** —
+
+Steps:
+1. DesktopLink per process (job or svc): - '/desktop' client on http://jarvis-bridge:5002 with reconnection=False, its own loop and a fresh signed agent_hello on every connect; - a pending map call_id → Future (never sio.call); - sync_request after start; - SeenStore in conversations/desktop_seen.db.
+2. Proxies are built in the C-32 prewarm from the manifest, with __signature__ and __doc__ rebuilt. They are registered once via register_tool (exclusive None, retry 0, timeout = link cap); update_tools is never called. A param_schema_sha256 mismatch logs ERROR; an lk_schema drift logs WARNING.
+3. Wrapper remote mode: - one tool_sync start/end with source 'desktop' and the same id; - argument policies; - a static risk floor goes to the broker before sending: a confirm-class call (K-76) is sent only after the ConfirmFlow approval (dashboard Allow, or a spoken yes where K-76 allows it) and carries the agent-signed approval {confirm_id, channel, risk, args_sha256}; - APPROVAL_REQUIRED from the node (dynamic risk) becomes a broker pending item with desktop=True on the dashboard and voice channels; once approved, the exec is re-sent with the approval. There is no laptop-dialog channel (user decision D3); - the confirm_request summary for a laptop action shows the normalised arguments (control, bidi and zero-width characters escaped; metacharacters highlighted) and names any path.
+4. Outcomes: - offline → DESKTOP_OFFLINE in under 0.1 s; - ack timeout 3 s → send cancel; an explicit refusal, tombstone or start-window miss, or the bridge reporting emitted=false → DESKTOP_NOT_STARTED; - anything else → DESKTOP_RESULT_UNKNOWN plus reconciliation; - link errors are K-12 dicts, never breaker failures.
+5. Repeat guard: a messaging, code_exec, availability, exposure, type_text_tool or type_code_animation_tool call with the same args_sha256 within 120 s goes through ConfirmFlow ('dobara karun?') instead of running.
+6. Ordering: stamp seq {speech_id, n} synchronously at proxy entry. Lost outputs: a completed proxy whose output did not reach function_tools_executed within 2 s becomes a next-turn status note (user-side tag) or a short announcement.
+7. Explicit stop ('ruko' or UI stop): cancel every in-flight laptop call and refuse new ones for 3 s with STOPPED_BY_USER.
+8. Stop desktop by voice or chat: a final voice transcript or a typed owner message that matches the stop-desktop phrases ('desktop band karo', 'desktop control band karo' or 'stop desktop'; matched in the agent before the model, like 'ruko') sends the agent-signed control desktop_stop to the node and cancels every in-flight laptop call with STOPPED_BY_USER; JARVIS then says the laptop is read-only until its tray switches back to Full. A stop_all hint from the bridge (after a UI desktop_stop) cancels in-flight calls the same way.
+9. Fallback: a VPS result of YT_BOT_CHECK or MAPS_BLOCKED with no side effect gets one re-run on the laptop; VPS runs of that tool then back off for 6 h.
+10. Tests with a fake bridge and node: offline, not started, unknown plus reconciliation, repeat guard, ordering, stop-all, resend after an agent restart, update_tools never called, the approval reference attached after ConfirmFlow, an APPROVAL_REQUIRED exec re-sent after approval, 'desktop band karo' sending desktop_stop, and a bridge stop_all hint cancelling in-flight calls.
+
+Done tab jab (acceptance):
+- The integration test passes for every outcome.
+- A repeated WhatsApp call within 120 s asks first instead of sending.
+- No code path calls update_tools.
+- A run_cmd_command reaches the laptop only after the dashboard Allow, and its exec carries the approval reference.
+- 'desktop band karo', spoken or typed, puts the laptop in read-only and cancels in-flight laptop calls.
+
+Verify:
+- $PY -m pytest tests/core/test_desktop_proxy.py tests/integration/test_desktop_roundtrip.py -q
+
+#### C-120 · Desktop Node runtime: supervisor, link, tool executor, WAL, dead-man switch, health, power events
+**Phase:** P0 · **Size:** — · **Feature:** VPS brain + Desktop Node
+**Source:** VPS-brain design 2026-10-02 (`docs/ARCHITECTURE_VPS_BRAIN.md`)
+**Kyun:** The laptop needs a small, single-instance, crash-safe process that runs desktop tools for the VPS, survives sleep, Wi-Fi drops and restarts honestly, and never leaks secrets to child processes or runs elevated.
+**Files:** `src/core/desktop/__init__.py`, `src/core/desktop/__main__.py`, `src/core/desktop/supervisor.py`, `src/core/desktop/node.py`, `src/core/desktop/link.py`, `src/core/desktop/executor.py`, `src/core/desktop/wal.py`, `src/core/desktop/health.py`, `src/core/desktop/settings.py`, `src/core/agent_lock.py`, `src/core/agent.py`, `tests/unit/test_desktop_executor.py`, `tests/unit/test_desktop_wal.py`, `tests/core/test_desktop_node.py`, `tests/unit/test_desktop_settings.py`
+**Depends on:** C-115, C-111, C-31
+**User se chahiye:** —
+
+Steps:
+1. supervisor.py (pythonw): - starts the node as a child and restarts it with backoff; - exits 0 on a token-protected POST 127.0.0.1:8082/stop (token in run/desktop_node.token, user-only ACL); - refuses an elevated token; - holds run/desktop_node.lock (a second instance exits 3) and the shared run/desktop_actor.lock (shared with the PC brain, vortex.py and Electron local), both under JARVIS_RUN_DIR; - restarts the node after an event-loop stall of 60 s or more, measured with the C-31 watchdog.
+2. node.py: - loads the DPAPI-wrapped keys and pinned public keys from %LOCALAPPDATA%\JARVIS\node; - replaces dotenv.load_dotenv with a no-op before importing any services module; - scrubs secret names from os.environ and asserts none remain before every spawn.
+3. Settings and data root (the node runs from the read-only snapshot and dotenv is a no-op there, so nothing may resolve inside the snapshot): - the supervisor exports JARVIS_DATA_ROOT (the repo on the PC) and JARVIS_RUN_DIR (<data root>\run) to the node child, from %LOCALAPPDATA%\JARVIS\node\node_config.json written by 'agent_ctl node update' (C-123), never derived from the snapshot path; - settings.py: an allow-listed parser reads only non-secret keys from <data root>\.env (the PC root .env) before any services import, and again when the file changes (checked every 2 s): JARVIS_DESKTOP_CONTROL, JARVIS_CLIPBOARD_HELPER, JARVIS_CLIPBOARD_SPEAK, JARVIS_LINK_URL, JARVIS_PRESENCE_WINDOW_S, JARVIS_CAPTURE_PRESENCE_S, JARVIS_ORIGIN_PRESENCE_GATE, WHATSAPP_TEST_NUMBERS and the K-15 path and app keys; relative paths resolve against the data root; the kill switch and the presence keys apply at once, path keys at the next node start (the supervisor restarts the node when one changes); - JARVIS_OUTPUTS_DIR, LOG_FILE and WHATSAPP_CONTACTS_FILE are set as absolute paths under the data root (their jarvis_config defaults derive from the project root, which would be the snapshot), so Jarvis_Outputs, logs/desktop_audit.jsonl, data/whatsapp_contacts.json, run/desktop_link.db, run/desktop_state.json and run/desktop_actor.lock are the repo's own files; - PINCHTAB_TOKEN and CONTROLLER_TOKEN come from the DPAPI-wrapped %LOCALAPPDATA%\JARVIS\node\secrets.dpapi and are set on config in memory only, never in os.environ; - src/core/agent_lock.py gains the shared desktop_actor.lock under run_dir(); the PC brain worker (src/core/agent.py) takes it next to agent.lock, from its next agent_ctl restart.
+4. link.py: - wss client with reconnection=False, its own loop (1→30 s plus jitter) and a fresh signed hello per connect; - ping/pong offset; - WM_POWERBROADCAST: on suspend send power:suspend; on resume reset the watchdog, reconnect at once and refresh the offset.
+5. executor.py: - a dedicated tool event loop thread with a counting default ThreadPoolExecutor; - the desktop_input lock is held until the tool's thread work finishes (cap 10 s after a cancel, then 'degraded' and input tools refused); - cancel within 5 s; a call_id idempotency cache; - seq ordering per speech (holds up to 500 ms); - start_by enforcement.
+6. wal.py: run/desktop_link.db, owned by one thread. It records {call_id, tool, state, started_at, finished_at}; the hello reports completed, interrupted, never_started and start_window_missed. The outbox is kept until result_ack (10 min / 200 entries) and re-sent as result_resend.
+7. Dead-man switch: a link down for more than 5 s cancels running input-class calls; a messaging send step completes atomically.
+8. health.py: 127.0.0.1:8082/health reports link, mode, locked, panic, outbox, offset, last exec and git_sha; run/desktop_node.json is written every 10 s. Modes: --canary and active.
+9. Tests: - WAL states after a simulated crash; - dead-man cancel; - lock held until the thread work ends; - start_by refusal; - resume handling; - elevated refusal (mocked); - settings: a temp root .env with JARVIS_DESKTOP_CONTROL=false is applied at start and within one poll after a change; secret names in that file never reach os.environ; relative paths resolve under the data root, never under the snapshot; - the node supervisor and a PC brain worker started from the repo contend for the same run/desktop_actor.lock (whichever comes second exits 3).
+
+Done tab jab (acceptance):
+- Tests pass.
+- The node's audit log, WAL, state file and actor lock live under the repo's run/ and logs/, never inside the snapshot, and JARVIS_DESKTOP_CONTROL=false in the PC root .env reaches the node.
+- Node RSS stays under 300 MB and idle CPU is about 0.
+- kill -9 during a call shows 'interrupted' in the next hello.
+
+Verify:
+- $PY -m pytest tests/unit/test_desktop_executor.py tests/unit/test_desktop_wal.py tests/core/test_desktop_node.py tests/unit/test_desktop_settings.py -q
+- curl -s http://127.0.0.1:8082/health
+
+#### C-121 · Node policy: modes, Windows-lock pause and presence, class floors, launch surfaces, path policy, ConfirmFlow approval check, stops
+**Phase:** P0 · **Size:** — · **Feature:** VPS brain + Desktop Node
+**Source:** VPS-brain design 2026-10-02 (`docs/ARCHITECTURE_VPS_BRAIN.md`)
+**Kyun:** Desktop control is code execution. From day one the laptop enforces its own rules (classes, paths, captures, lock pause, stops) without trusting the bridge or the model, while everyday actions run with no prompt and no manual step on the laptop (user decision D3, 2026-10-02). Risky actions arrive only with the agent's ConfirmFlow approval. Input tools must not reach a Run dialog without that approval, and path tools must not rewrite the node or read ~/.ssh.
+**Files:** `src/core/desktop/policy.py`, `src/core/desktop/presence.py`, `src/core/desktop/tray.py`, `src/core/desktop/panic.py`, `requirements.txt`, `requirements-hybrid.txt`, `tests/unit/test_desktop_policy.py`, `tests/unit/test_desktop_paths.py`
+**Depends on:** C-120
+**User se chahiye:** —
+
+Steps:
+1. presence.py: low-level keyboard and mouse hooks (ctypes) record genuine input, i.e. events without the LLKHF_INJECTED/LLMHF_INJECTED flag. Lock, unlock and sleep come from WTS session notifications.
+2. Modes off/read/full (user decision D3; this replaces D14): - the node starts in mode full as soon as it runs (logon autostart, D11): no first-start dialog and no grant that expires; the one exception is a persisted panic latch, remote stop or tray Off/Read choice in run/desktop_state.json: it survives a reboot or logon, the node then starts in that mode (off or read), and desktop_status shows it on the Laptop chip until the tray Full clears it; - while the Windows session is locked, every call that needs the desktop_input lock (K-16) returns DESKTOP_LOCKED without running, because Windows blocks input injection then, and captures are refused; other calls run under their normal rules; - unlock resumes input automatically, with no user action; - state (mode, panic latch, remote stop) is kept in run/desktop_state.json under JARVIS_RUN_DIR (C-120); - check order: kill switch, panic, mode and Windows lock first, then class and approval, then origin, then paths; a canary or probe call therefore gets a state or approval refusal first, and nothing actuates.
+3. Class floors per K-76; the stricter of K-16, K-45 and the class wins. - Confirm-class: messaging, code_exec, availability and exposure, plus any call whose K-16 risk resolves to medium or high or which K-45 lists as HIGH; the classes read, capture, input and de-escalation add no approval of their own. - Launch surfaces count as code_exec: Win+*, Ctrl+Shift+Esc, Alt+F11, F12, Ctrl+Shift+I/J; the Run dialog, Explorer address bar, Start/Search hosts, taskmgr, regedit, mmc, consoles (incl. mintty, bash, wsl, python, node, conhost), Office VBA and DevTools. - Protected titles match by prefix. - Typing into a messaging app counts as messaging.
+4. Path policy (mandatory argument hooks): - edit/append_notepad_file: a basename only, inside Jarvis_Outputs; - open_notepad_file, folder_file, play_file, Windows zip_files and pc.read_file: resolve_in_roots plus is_sensitive_path; - the extended sensitive set: the repo (JARVIS_DATA_ROOT, never the snapshot path) except Jarvis_Outputs, .venv*, any *.pth, the Startup folders, %LOCALAPPDATA%\JARVIS, ~/.ssh, *.env, id_*, .coord, chroma_db, conversations, logs and password-manager data. - this keeps the node's own keys, pinned code and policy state out of reach of every path tool.
+5. Approval check (no laptop dialog, user decision D3): - a confirm-class exec must carry the agent-signed approval {confirm_id, channel, risk, args_sha256} from the agent's ConfirmFlow; - a missing approval gives APPROVAL_REQUIRED and an args_sha256 mismatch gives APPROVAL_INVALID; nothing runs; - dynamic risk found here (launch surface, unmapped open_app target, command outside the read-only allow-list) also returns APPROVAL_REQUIRED, so the agent asks through ConfirmFlow and re-sends; - nothing is held or prompted on the laptop.
+6. Accepted approval channels (all decided in the agent before the exec is sent): - ui (dashboard Allow): any class; - voice (spoken yes): medium risk only, never code_exec, and only with a voice-ID-verified turn id (D20), so it is refused until enrollment; - the bridge never approves, and there is no laptop-local approval (the optional C-133 is not built).
+7. Captures: - need mode read or full, plus presence within 120 s or a session opt-in; a toast on every capture; - refused when the foreground title shows a sensitive path or a password manager; - the webcam fallback requires presence.
+8. Origins: - actuation = a call in the input, messaging, code_exec, availability or exposure class; read and capture calls, de-escalation, pc.ping, pc.speak_local, pc.play_sound, pc.fetch without open and pc.fetch that opens an auto-open allow-listed (non-executable) file are not actuation; - actuation is refused from canary and probe rooms; - llm, scheduler, job and internal origins follow the same class rules; a confirm-class call carries a ConfirmFlow approval, for the scheduler the one recorded at scheduling time (C-80); - open question D21: with JARVIS_ORIGIN_PRESENCE_GATE=1, scheduler and job actuation also needs presence; the default 0 follows D3 ('seedha chale'); - the bridge's active_job control (tighten-only) limits actuation to that peer.
+9. Stops: - tray (pystray, installed by Claude with the node stopped): Off / Read / Full; Full also clears the panic latch or a remote stop; - panic hotkey Ctrl+Alt+Shift+F12 (genuine keypress) → off and cancel all; latched, cleared only at the laptop; - remote desktop_stop (UI or phone through the bridge, chat or voice through the agent) → read, and every in-flight call is cancelled with STOPPED_BY_USER; only the laptop tray can loosen it; - the JARVIS_DESKTOP_CONTROL kill switch (config.desktop_control_enabled false) refuses every actuation with DESKTOP_CONTROL_DISABLED; de-escalation still runs. The node reads it from the PC root .env at start and within seconds of a change (C-120 settings source); the UI can turn it off only after C-59.
+10. K-74 alerts raised by the node from cutover on: critical for any signature or approval verification failure (a bad signature on a K-70 message, APPROVAL_INVALID); warning for CLOCK_SKEW, MANIFEST_MISMATCH and cap trips. Each shows a local toast and goes to the bridge as a K-70 audit event, which the bridge turns into system_alert and an audit row.
+11. Abuse caps: input 600/min, messaging 60/h, approvals 30/h, uploads 60/h and 200 MB/h, deliveries 5 GB/day. A trip returns DESKTOP_RATE_LIMITED and shows a toast. Audit goes to logs/desktop_audit.jsonl, with no raw arguments.
+12. Tests: - the Win+R sequence is refused with APPROVAL_REQUIRED unless the exec carries a matching approval, and no dialog opens on the laptop; - an approval whose args_sha256 does not match is refused (APPROVAL_INVALID); - a locked session returns DESKTOP_LOCKED for typing, and typing works again after unlock with no user action; - Notepad '..\' traversal is refused; writing a *.pth is refused; - capture is refused on a '.ssh' title; - the panic latch holds; the kill switch refuses actuation; - JARVIS_DESKTOP_CONTROL=false written to a temp root .env gives DESKTOP_CONTROL_DISABLED within one settings poll, and de-escalation still runs; - a persisted remote stop survives a node restart (the node starts in read) and the tray Full clears it; - a job-origin pc.fetch that opens a PDF and a pc.speak_local run with no presence; with JARVIS_ORIGIN_PRESENCE_GATE=1 a scheduler-origin typing call without presence gets PRESENCE_REQUIRED; - an APPROVAL_INVALID raises the critical alert (toast plus audit event).
+
+Done tab jab (acceptance):
+- All refusal tests pass.
+- With the node running and Windows unlocked, everyday tools (type, click, open Notepad, volume) run at once, with no prompt and no step on the laptop.
+- Locking Windows pauses input with DESKTOP_LOCKED, and unlocking resumes it automatically.
+- No approval is accepted from the bridge, and no approval dialog exists on the laptop.
+- A remote stop, a panic or a tray Off survives a reboot, and the Laptop chip shows it until the tray Full.
+
+Verify:
+- $PY -m pytest tests/unit/test_desktop_policy.py tests/unit/test_desktop_paths.py -q
+
+#### C-122 · Node capabilities, sensors, file mirror and encrypted backup pull
+**Phase:** P0 · **Size:** — · **Feature:** VPS brain + Desktop Node
+**Source:** VPS-brain design 2026-10-02 (`docs/ARCHITECTURE_VPS_BRAIN.md`)
+**Kyun:** The VPS needs laptop screenshots and attachments, plus PC sensors (clipboard, window, vitals, location). VPS-made files must land safely in the same laptop folders as today, and VPS data needs an automatic off-host copy.
+**Files:** `src/core/desktop/capabilities.py`, `src/core/desktop/sensors.py`, `src/core/desktop/mirror.py`, `src/core/desktop/backup_pull.py`, `tests/unit/test_desktop_mirror.py`, `tests/unit/test_desktop_sensors.py`
+**Depends on:** C-120, C-121, C-117
+**User se chahiye:** —
+
+Steps:
+1. pc.* operations: - ping; - capture_screen (primary monitor, longest side 1600, JPEG q75-80, encrypted blob) and capture_webcam; - read_file (≤ 25 MB, path policy, the ConfirmFlow approval reference for exposure); - fetch (agent-signed sha256 required, name validation, Mark-of-the-Web, auto-open allow-list); - open_url (http and https); - speak_local (jarvis_audio.speak_locally), play_sound. There is no laptop approval operation (user decision D3).
+2. Sensors, active mode only: - clipboard: only a redacted excerpt of up to 200 characters, the query and the solution leave the laptop; - active window: checked every 5 s, pushed on change, never logged at INFO; - vitals every 10 s; - location at start and every 600 s; - power and lock events.
+3. Mirror: - cursor = listing time − 5 s, dedupe by relpath, size and mtime; full reconcile every 15 min; - each component validated (no backslash, colon, '..', control characters, Windows device names, trailing dot/space); - written to .part, verified, given Mark-of-the-Web, renamed; ' (n)' on clashes; - files over 20 MB only when desktop_status.voice_active is false, or on an explicit open.
+4. backup_pull: daily, and on 'agent_ctl backup pull', fetch the newest encrypted snapshot into %LOCALAPPDATA%\JARVIS\vps_backups. Keep all and report the size.
+5. Play the startup sound on activation (X-02 chime or the MP3).
+6. Tests: - the name-validation table; - the cursor never skips a file; - a sha mismatch is refused; - an executable is never opened.
+
+Done tab jab (acceptance):
+- A QR code made on the VPS appears in ~/Jarvis_Shared/QR_Codes and opens.
+- A file name containing '..\' never leaves the mirror root.
+- The backup pull leaves an encrypted file on the PC.
+
+Verify:
+- $PY -m pytest tests/unit/test_desktop_mirror.py tests/unit/test_desktop_sensors.py -q
+
+#### C-123 · agent_ctl node and brain commands, pinned node snapshot, logon autostart (limited), brain journal
+**Phase:** P0 · **Size:** — · **Feature:** VPS brain + Desktop Node
+**Source:** VPS-brain design 2026-10-02 (`docs/ARCHITECTURE_VPS_BRAIN.md`)
+**Kyun:** The node must run the deployed code, never the working tree Cursor edits. The brain switch spans two hosts and needs a journal and automatic restore. Launchers must start the right thing for each brain.
+**Files:** `scripts/agent_ctl.py`, `scripts/desktop/node_snapshot.py`, `deploy/windows-local/start-agent.bat`, `deploy/windows-local/start_hybrid_agent.py`, `deploy/windows-local/ensure_room.py`, `prod.bat`, `dev.bat`, `src/core/vortex.py`, `tests/test_agent_ctl.py`
+**Depends on:** C-120, C-12
+**User se chahiye:** — (the logon autostart, D11, was approved on 2026-10-02).
+
+Steps:
+1. agent_ctl node start/stop/status/logs/update [--sha] [--canary]. update does: - git archive the deployed SHA into %LOCALAPPDATA%\JARVIS\node\<sha>; - icacls so the user can read and execute but not write; - write %LOCALAPPDATA%\JARVIS\node\node_config.json {data_root: this repo, run_dir: <repo>\run}, and wrap PINCHTAB_TOKEN and CONTROLLER_TOKEN from the root .env into secrets.dpapi there (values never printed); - switch run/node_current.json and restart the supervisor.
+2. node stop = a graceful POST /stop, and the scheduled task stays disabled until node start.
+3. Autostart: schtasks /Create /SC ONLOGON /RL LIMITED /IT running pythonw -m src.core.desktop.supervisor from the snapshot with .venv_312. The supervisor sets JARVIS_DATA_ROOT and JARVIS_RUN_DIR from node_config.json (C-120), so the node never resolves run/, logs/ or Jarvis_Outputs inside the snapshot.
+4. agent_ctl brain vps/pc [--when-idle/--now]: - states PREFLIGHT → BACKUP → STOP_OLD → SYNC_DATA → FLIP_ENV → START_NEW → ENSURE → VERIFY → DONE, journalled in run/brain_switch.json; - a failure restores the previous brain automatically; the switch is resumable; - it succeeds only when /vortex/status (PC-signed) shows the brain and an agent whose lk.agent.name is the target.
+5. agent_ctl start/stop/restart act on the brain's laptop target: the node in vps mode (a worker start is refused), worker 'jarvis-pc' in pc mode. - Launchers check the domain instead of raw-IP ports. - ensure_room.py runs in pc mode only, never deletes, and calls the PC-signed /vortex/desktop/ensure.
+6. Idle gate: last speech, typed or tool activity at least 10 min ago (bridge last_activity_ts). --now gives a spoken 60 s notice.
+7. Tests (mocked ssh and bridge): journal resume, automatic restore, worker refused in vps mode, snapshot read-only.
+
+Done tab jab (acceptance):
+- The node survives logoff/logon and a reboot.
+- After 'node stop' the node stays stopped across logon.
+- A brain switch that fails half-way restores the old brain.
+
+Verify:
+- $PY -m pytest tests/test_agent_ctl.py -q
+- $PY scripts/agent_ctl.py node status
+- schtasks /Query /TN "JARVIS Desktop Node" /V /FO LIST
+
+#### C-124 · Agent hardening for the VPS: egress guard, child env, RPC and text owner-only, untrusted context, VPS argument hooks, encrypted Chroma
+**Phase:** P0 · **Size:** — · **Feature:** VPS brain + Desktop Node
+**Source:** VPS-brain design 2026-10-02 (`docs/ARCHITECTURE_VPS_BRAIN.md`)
+**Kyun:** The agent now sits next to 23 other apps and processes untrusted content. Anyone in the room can drive it over LiveKit RPC; send_email can mail /proc/self/environ; window titles reach the model as system text; Chroma stores memories in plaintext.
+**Files:** `services/utils/net_guard.py`, `services/ai_core/remote_compat.py`, `services/ai_core/tool_placement.py`, `src/core/agent_runner.py`, `src/core/vision_handler.py`, `services/ai_core/jarvis_vision.py`, `services/ai_core/jarvis_vector_memory.py`, `services/utils/jarvis_logger.py`, `tests/unit/test_net_guard.py`, `tests/unit/test_vps_arg_hooks.py`, `tests/core/test_rpc_hardening.py`, `tests/unit/test_vector_encryption.py`
+**Depends on:** C-112, C-113
+**User se chahiye:** —
+
+Steps:
+1. net_guard (agent and svc roles; JARVIS_NET_GUARD=1): - wrap socket.create_connection and socket.socket.connect, for AF_INET/AF_INET6 only; - refuse loopback, RFC1918, CGNAT, link-local (incl. 169.254.169.254), ULA, multicast, 0.0.0.0/8, IPv4-mapped forms, the Docker gateway and the VPS public IP; - allow the jarvis-network subnet minus its gateway, with names re-resolved per connect (cache ≤ 30 s); - provide a self_test() for the deploy gate; document it as SSRF-only and best effort.
+2. Subprocess env allow-list for Popen and create_subprocess_exec/shell: PATH, HOME, LANG, LC_*, TZ, TMPDIR, HF_*, TRANSFORMERS_OFFLINE. Call prctl(PR_SET_DUMPABLE, 0) at worker start and in every job process.
+3. After session.start, unregister lk.agent.send_message and lk.agent.get_chat_history (and get_session_state/get_agent_info), or wrap them so only the linked owner-* may call. The text-input callback accepts only the linked owner-* identity.
+4. Window titles, clipboard tips and node events go to the model as quoted, delimited, length-capped user-side data ('[DESKTOP DATA, untrusted] ...'), never role=system and never as a 'SYSTEM NOTIFICATION'.
+5. VPS argument hooks: - send_email attachment realpath must be inside /app/Jarvis_Outputs, /app/Jarvis_Shared or the blob temp dir; deny /proc, /sys, /etc and /app/{conversations,chroma_db,data,logs,backups}; - a recipient other than the owner → K-45 high; - download_images folder_name, the QR filename and zip names → basename.
+6. Chroma: documents stored Fernet-encrypted with JARVIS_ENCRYPTION_KEY and decrypted on recall. Only the job serving jarvis-hybrid opens the PersistentClient, under an fcntl lock on chroma_db/.jarvis.lock; any other process runs without vector recall.
+7. Vision: images captured on the laptop never go to ':free' providers.
+8. Log hygiene: window titles, clipboard text and tool arguments are never logged at INFO (UIBridgeHandler forwards INFO and above).
+9. Tests: - the guard table; - no secret in a child process's env; - send_email('/proc/self/environ') is refused; - send_message RPC from a non-owner is refused; - the Chroma round trip is encrypted on disk.
+
+Done tab jab (acceptance):
+- Tests pass.
+- On the VPS, net_guard.self_test allows the bridge, LiveKit and Gemini, and refuses 172.16.4.1 and the public IP.
+- No .env.agent name appears in the environment of yt-dlp or ffmpeg.
+
+Verify:
+- $PY -m pytest tests/unit/test_net_guard.py tests/unit/test_vps_arg_hooks.py tests/core/test_rpc_hardening.py tests/unit/test_vector_encryption.py -q
+
+#### C-125 · Always-on service jarvis-agent-svc: reminders/tasks with a delivery ledger, scheduler host, location cache, encrypted daily snapshot
+**Phase:** P0 · **Size:** — · **Feature:** VPS brain + Desktop Node
+**Source:** VPS-brain design 2026-10-02 (`docs/ARCHITECTURE_VPS_BRAIN.md`)
+**Kyun:** The LiveKit room closes when no human is in it, so jobs cannot be the home of reminders, scheduled actions or backups. Reminders are also marked triggered before they are delivered.
+**Files:** `src/core/agent_services.py`, `services/utils/jarvis_filelock.py`, `services/utils/backup_crypto.py`, `services/ai_core/jarvis_identity.py`, `services/utils/jarvis_adaptive.py`, `tests/core/test_agent_services.py`, `tests/unit/test_filelock.py`
+**Depends on:** C-112, C-119, C-13
+**User se chahiye:** —
+
+Steps:
+1. jarvis_filelock.locked(path) (fcntl on Linux, msvcrt on Windows) for identity.json, learning_state.json, delivery_ledger.json, desktop_outbox.json and location.json. IdentityManager and the adaptive engine reload when mtime/inode changes.
+2. agent_services.py (JARVIS_ROLE=svc): active only when JARVIS_BRAIN=vps, otherwise standby with health; health on 127.0.0.1:8083.
+3. Due loops: reminders every 30 s and tasks every 45 s. - Reminders are read under the lock; they are written only through Cursor's functions after X-66, and until then the ledger is the only writer. - tasks.db uses busy_timeout. - Delivery ladder: live job announce via the bridge → laptop speak_local plus toast when no participant is in the room → a UI notification stored in the bridge → an optional owner email after JARVIS_REMINDER_EMAIL_AFTER_MIN (0 = off). - An item is delivered only on an ack; otherwise it is retried on the next UI or node connect.
+4. Scheduled desktop actions (hook for C-80) go through the svc DesktopLink with origin 'scheduler'. If the laptop is offline, wait 15 min, then announce the failure.
+5. Write the location cache (conversations/location.json) from node location events.
+6. Daily snapshot at 03:30 PKT: - SQLite online copies plus a tar of conversations, data and chroma; - sealed with X25519 to BACKUP_RECIPIENT_PUBLIC_KEY (the PC holds the private key); - written to jarvis_agent_snapshots; no secrets inside; never auto-deleted.
+7. Heartbeat to the bridge: due counts, undelivered count, last snapshot.
+8. Tests: - exactly-once delivery with an ack; - retry after a reconnect; - standby when brain=pc; - the snapshot decrypts with a test key.
+
+Done tab jab (acceptance):
+- A reminder that falls due while no UI is open is delivered on the next UI or laptop connect, and never twice.
+- The snapshot decrypts on the PC.
+- Tests pass.
+
+Verify:
+- $PY -m pytest tests/core/test_agent_services.py tests/unit/test_filelock.py -q
+
+#### C-126 · Agent image and compose services (agent + agent-svc), no CPU/RAM limits, dedicated builder
+**Phase:** P0 · **Size:** — · **Feature:** VPS brain + Desktop Node
+**Source:** VPS-brain design 2026-10-02 (`docs/ARCHITECTURE_VPS_BRAIN.md`)
+**Kyun:** The VPS has no agent image or service. It must run as non-root, offline-safe and without limits, and it must not disturb the shared BuildKit cache or other apps.
+**Files:** `deploy/hostinger/Dockerfile.agent`, `deploy/hostinger/requirements-agent.txt`, `deploy/hostinger/constraints-agent.txt`, `deploy/hostinger/agent-bin/yt-dlp`, `deploy/hostinger/agent-bin/ffmpeg`, `deploy/hostinger/agent-bin/ffprobe`, `deploy/hostinger/docker-compose.yml`, `deploy/hostinger/.env.agent.example`, `scripts/models/check_models.py`, `.dockerignore`, `.gitignore`, `scripts/coord/precommit.py`, `tests/infrastructure/test_agent_requirements.py`
+**Depends on:** C-112, C-118
+**User se chahiye:** OK for the one-time build window (~10-15 min); the dedicated builder was approved on 2026-10-02 (D19).
+
+Steps:
+1. Dockerfile.agent per K-75: - base image pinned by digest; - apt: ffmpeg, nodejs, curl, ca-certificates, tzdata; - torch/torchaudio/torchvision +cpu; - requirements + constraints; - agent-bin wrappers (nice/ionice only when JARVIS_MEDIA_PRIORITY=low); - bake the fixed ECAPA download and MiniLM, readable by uid 10001; - COPY src, services, scripts; chown the data dirs; - USER 10001; HEALTHCHECK; CMD start --drain-timeout 20.
+2. requirements-agent.txt = the hybrid list without Windows/GUI packages, plus opencv-contrib-python-headless. constraints-agent.txt pins the +cpu torch builds, chromadb 1.5.0 and the livekit 1.4.6 family. A drift test checks it against requirements-hybrid.txt.
+3. Compose services agent and agent-svc: - profile vps-brain, user 10001, init, env_file .env.agent, environment per K-72; - volumes, including jarvis_agent_snapshots; - depends_on the bridge being healthy; restart unless-stopped; stop_grace_period 60s; - oom_score_adj 500, no-new-privileges, cap_drop ALL, json-file 10m×3; - no tmpfs and NO mem_limit/cpus/cpu_shares; pids_limit only if D10 says yes. Also: new jarvis_agent_* volumes with name:; the bridge reads ${JARVIS_BRAIN:?}; GIT_SHA only as an image label.
+4. Ignore rules: .dockerignore gets **/.env* and **/*.env; .gitignore and precommit treat .env.agent and bridge.env as secret files; .env.agent.example lists names only.
+5. One-time on the VPS (D19): docker buildx create --name jarvis-builder --driver docker-container. Build with --builder jarvis-builder --load in an announced window, recording docker buildx du before and after.
+6. Build checks: - compose run --rm --no-deps agent python -c 'import src.core.agent_runner' prints IMPORT_OK; - node, ffmpeg, yt-dlp and torch versions; - scripts/models/check_models.py loads MiniLM and ECAPA as uid 10001 with HF_HUB_OFFLINE=1.
+
+Done tab jab (acceptance):
+- The image builds.
+- IMPORT_OK and the offline model load pass as uid 10001.
+- docker inspect shows Memory=0, NanoCpus=0, OomScoreAdj=500 and User=10001.
+- No new published port.
+
+Verify:
+- $VPS "cd /opt/jarvis-agent/deploy/hostinger && docker compose -p jarvis run --rm --no-deps agent python -c 'import src.core.agent_runner; print(\"IMPORT_OK\")'"
+- $VPS "cd /opt/jarvis-agent/deploy/hostinger && docker compose -p jarvis run --rm --no-deps -e HF_HUB_OFFLINE=1 agent python scripts/models/check_models.py"
+- $VPS "docker inspect -f 'mem={{.HostConfig.Memory}} cpus={{.HostConfig.NanoCpus}} oom={{.HostConfig.OomScoreAdj}} user={{.Config.User}}' jarvis-agent"
+- $PY -m pytest tests/infrastructure/test_agent_requirements.py -q
+
+#### C-127 · Secrets split in two deploys, env-layout-aware rollback, DPAPI fallback secrets, second LiveKit key pair
+**Phase:** P0 · **Size:** — · **Feature:** VPS brain + Desktop Node
+**Source:** VPS-brain design 2026-10-02 (`docs/ARCHITECTURE_VPS_BRAIN.md`)
+**Kyun:** AI and email keys sit in the internet-facing bridge today. Rolling the bridge back after an env split would crash both brains. The PC fallback's secrets must not be readable by the node or by child processes.
+**Files:** `scripts/ops/push_agent_env.py`, `scripts/ops/split_bridge_env.py`, `scripts/ops/env_set.py`, `scripts/ops/fallback_env.py`, `deploy/hostinger/docker-compose.yml`, `deploy/hostinger/rollback.sh`, `.env.example`
+**Depends on:** C-12, C-116, C-112
+**User se chahiye:** After V2b, ask one voice question and send one typed message.
+
+Steps:
+1. V2a: a bridge deploy with the role-aware validate() (C-112) while the env files are unchanged. Drill rollback.sh to the previous bridge tag and back; both must come up healthy.
+2. V2b: run split_bridge_env.py on the VPS over ssh. - Back up .env. - Write bridge.env from an allow-list. - Remove the AI, search, email and SIM keys, JARVIS_ENCRYPTION_KEY and CONTROLLER_TOKEN from the compose .env. - Print names only.
+3. push_agent_env.py: - copies allow-listed names from the PC root .env to /opt/jarvis-agent/deploy/hostinger/.env.agent over ssh stdin (umask 077, tmp then mv); - generates DESKTOP_AGENT_SIGNING_KEY on the VPS (C-115 tool) and distributes only public keys; - checks equality by HMAC digest only.
+4. rollback.sh restores the image tag, compose file and env files together from one MANIFEST that records the env layout. It refuses a different layout unless --with-env is given.
+5. fallback_env.py: in vps mode, move the PC fallback secrets (LiveKit secret, legacy token, AI and email keys) from the root .env into a DPAPI-wrapped run/fallback.env.dpapi. Only 'agent_ctl brain pc' loads it.
+6. Second LiveKit key pair for the PC fallback (two LIVEKIT_KEYS entries), applied in the V6 LiveKit window and revocable on its own.
+7. Check the env names inside jarvis-bridge: no AI, email or encryption key.
+
+Done tab jab (acceptance):
+- The bridge is healthy after V2b.
+- The env key names in jarvis-bridge are correct.
+- Rolling back to a pre-split tag is refused without --with-env and works with it.
+- The PC brain still answers.
+
+Verify:
+- $VPS "docker exec jarvis-bridge env / cut -d= -f1 / grep -E 'GOOGLE_API_KEY/EMAIL_APP_PASSWORD/JARVIS_ENCRYPTION_KEY/GROQ' // echo NO_AI_KEYS_IN_BRIDGE"
+- $VPS 'stat -c "%a %U" /opt/jarvis-agent/deploy/hostinger/.env.agent /opt/jarvis-agent/deploy/hostinger/bridge.env' # 600 root
+- $VPS 'bash /opt/jarvis-agent/deploy/hostinger/rollback.sh --dry-run --tag <pre-split-tag>' # refuses without --with-env
+
+#### C-128 · Backup, deploy and rollback coverage for the agent containers (C-11/C-12 v2)
+**Phase:** P0 · **Size:** — · **Feature:** VPS brain + Desktop Node
+**Source:** VPS-brain design 2026-10-02 (`docs/ARCHITECTURE_VPS_BRAIN.md`)
+**Kyun:** The deploy tooling only knows the bridge and frontend. Agent data must be backed up encrypted and consistent. Deploys must never recreate services they do not name, and every agent deploy needs a health gate.
+**Files:** `deploy/hostinger/backup_vps.sh`, `deploy/hostinger/deploy.sh`, `deploy/hostinger/deploy_from_pc.sh`, `deploy/hostinger/rollback.sh`, `deploy/hostinger/RUNBOOK.md`, `scripts/ops/restore_agent_data.py`
+**Depends on:** C-12, C-126, C-127
+**User se chahiye:** —
+
+Steps:
+1. backup_vps.sh v2: - env copies go into a separate sub-folder; - agent data (SQLite online copies plus a tar of conversations, chroma and data) is encrypted to the PC backup key as agent-volumes.tar.enc; - jarvis-agent tags are added to the tag and untag loops; - MANIFEST records the brain and the env layout; - Jarvis_Shared/Downloads is excluded unless --with-media.
+2. deploy_from_pc.sh: - ship scripts/ and the deploy/hostinger requirements files; - every deploy names its services ('up -d --no-deps <svc>' only); - JARVIS_MANIFEST_STRICT=1 pre-flight; - after an agent deploy run 'agent_ctl node update --sha <same>' so the node matches the image.
+3. deploy.sh agent gate: - healthy within 180 s; /worker shows the agent name; LiveKit logs 'worker registered'; - agent_hello arrives on :5002; net_guard self-test; model check; smoke diff identical; - restarts are idle-gated (no speech, typed or tool activity for 10 min) unless --now, which gives a spoken notice; - on failure print rollback.sh <TS> and 'agent_ctl brain pc', then exit 2.
+4. rollback.sh: agent and agent-svc tags. --data prints the PC-side restore command 'restore_agent_data.py <TS>', which decrypts on the PC and streams back. Live data is moved aside first and never deleted.
+5. RUNBOOK: agent operations, brain switch, data restore, monitoring thresholds, retention (report only).
+
+Done tab jab (acceptance):
+- The backup contains encrypted agent data and no plaintext memory.
+- Deploying 'agent' recreates only jarvis-agent.
+- The rollback drill passes.
+- The gate fails on a broken image and prints the rollback commands.
+
+Verify:
+- $VPS 'D=$(ls -1d /root/jarvis-backups/2* / tail -1); ls $D; grep -E "brain/env_layout" $D/MANIFEST'
+- bash deploy/hostinger/deploy_from_pc.sh --dry-run --services agent
+- $VPS "docker ps --filter name=jarvis- --format '{{.Names}} {{.Status}}'"
+
+#### C-129 · Data migration tool: merge per-job memories, laptop ↔ VPS copies with the agent stopped
+**Phase:** P0 · **Size:** — · **Feature:** VPS brain + Desktop Node
+**Source:** VPS-brain design 2026-10-02 (`docs/ARCHITECTURE_VPS_BRAIN.md`)
+**Kyun:** Memory today is split across per-job files. A warm VPS process would overwrite migrated state with stale data. Tar extraction as uid 10001 needs specific flags, and nothing may be deleted on either side.
+**Files:** `scripts/ops/migrate_agent_data.py`, `tests/unit/test_migrate_agent_data.py`
+**Depends on:** C-112, C-124, C-126
+**User se chahiye:** —
+
+Steps:
+1. --merge-local (stage V3): - decrypt every conversations/*_memory.json; - merge, sort and dedupe into <JARVIS_USER_ID>_memory.json; rename the originals .pre-<ts>; - refuse when a file fails to decrypt or two files hold the same id with different text; - print counts only.
+2. --pre, --final and --verify: - refuse while jarvis-agent or jarvis-agent-svc is running; - run backup_local.py --now first; - build the tar without './' entries; extract with 'compose run --rm --no-deps -T --user 10001 --entrypoint tar agent -xzf - --no-same-owner --no-overwrite-dir -C /app' and check tar's exit code; - copy tasks.db with SQLite online backup; - copy Chroma, then re-encrypt its documents (C-124); - rename existing targets .pre-<ts>; - print sha256 and counts.
+3. --reverse for 'brain pc': VPS → PC with the same rules.
+4. Tests with a temporary Fernet key: merge, ambiguous refusal, refusal while running (mocked), tar flags.
+
+Done tab jab (acceptance):
+- Memory, task and Chroma counts are equal on both sides.
+- Decrypt inside the container works.
+- Nothing is deleted anywhere.
+- The PC brain loads matloob_memory.json after --merge-local.
+
+Verify:
+- $PY -m pytest tests/unit/test_migrate_agent_data.py -q
+- $PY scripts/ops/migrate_agent_data.py --verify # counts only
+
+#### C-130 · Canary, failure-injection drills and security checks before cutover (V5)
+**Phase:** P0 · **Size:** — · **Feature:** VPS brain + Desktop Node
+**Source:** VPS-brain design 2026-10-02 (`docs/ARCHITECTURE_VPS_BRAIN.md`)
+**Kyun:** The VPS brain must be proven on the hairpin media path, the link, reconciliation, the session lifetime and the security refusals. The rollback path must be drilled before any user traffic moves.
+**Files:** `scripts/smoke/vps_agent_canary.py`, `scripts/smoke/failure_drills.py`, `scripts/smoke/media_probe.py`, `tests/infrastructure/test_no_room_delete.py`
+**Depends on:** C-23, C-39, C-114, C-117, C-119, C-121, C-122, C-123, C-124, C-125, C-126, C-127, C-128, C-129
+**User se chahiye:** Check Gmail for a security alert after the test mail. Be reachable if a LiveKit window is needed. For the stop drills (about 5 min): press Ctrl+Alt+Shift+F12 once and click the tray Full three times when Claude asks.
+
+Steps:
+1. Canary rooms jarvis-canary-<epoch> (K-57 v4), explicitly dispatched to 'jarvis', with the node in --canary mode. Only the canary script creates or deletes them; test_no_room_delete allows only that pattern.
+2. Functional checks: - the worker registers; 60 s of two-way hairpin audio (loss and jitter recorded); - lk.chat is answered; weather and date show Lahore and PKT; a migrated fact is recalled read-only; - get_laptop_info round trip; the analyze_screen split (needs presence); - DESKTOP_OFFLINE in under 0.1 s; - killing the node mid-call gives RESULT_UNKNOWN, then reconciliation.
+3. Security checks: - forged, replayed, cross-session, skewed and bridge-only execs are refused; - '/' sockets receive nothing from '/desktop'; - the egress self-test passes; - a confirm-class exec without its ConfirmFlow approval reference is refused (APPROVAL_REQUIRED), and no prompt appears on the laptop; - every refusal above raises its K-74 alert from the bridge (C-116) or the node (C-121): system_alert on '/', an audit row, and a toast on the laptop for node-side alerts.
+4. External checks: - a short yt-dlp audio download from the VPS IP (decides D5); - an SMTP test mail to the owner's own address; - one Gemini session at a time, with 429 handling verified.
+5. Failure drills: - kill -9 the job; 'docker restart jarvis-agent' with a browser connected; a bridge restart during a desktop call; - laptop sleep and a 5 s Wi-Fi drop mid-call; laptop clock moved 3 min; - Gemini blocked for 90 s (egress rule in a test container); an announced LiveKit restart; the agent started after a token request; - a 45-minute open session; - all jarvis containers restarted in random order (never a host reboot); - Windows locked mid-session: typing gets DESKTOP_LOCKED, and after unlock the lock refusal is gone with no user action (the canary room refuses actuation itself, because the node checks its state before the origin rule; the full resume is live check 13).
+6. Stop drills (canary mode, in this order; the user presses the hotkey and the tray when asked): - kill switch: JARVIS_DESKTOP_CONTROL=false written to the PC root .env (scripts/ops/env_set.py, no value printed) → within 5 s an input call gets DESKTOP_CONTROL_DISABLED and de-escalation still runs; set back to true at once; - Stop desktop: ui_command desktop_stop from a test UI socket while a slow read call runs → mode read, the call cancelled (STOPPED_BY_USER), desktop_status read on '/' and at the agent peers; the bridge re-sends the stop after a node reconnect, and the node still starts in read after a restart; then the tray Full returns it to full; - 'desktop band karo' typed in the canary room → the same result through the agent (C-119); the tray Full again; - panic: the user presses Ctrl+Alt+Shift+F12 → mode off and the in-flight call cancelled; the same keys injected with SendInput are ignored; the tray Full clears the latch.
+7. Brain drill: 'agent_ctl brain pc' then 'brain vps' in canary mode.
+8. If the hairpin audio is not clean: rtc.advertise_internal_ip true (plus the v1.13.7 pin) in one announced LiveKit window, then repeat the canary.
+
+Done tab jab (acceptance):
+- Every check and drill passes. The results are written to /root/jarvis-backups/<TS>/canary.txt and logs/canary.log on the PC.
+- The stop drills pass: Stop desktop, 'desktop band karo', the panic hotkey and the kill switch each stop the laptop, and the tray Full resumes it.
+- The brain drill restores the PC brain and returns cleanly.
+
+Verify:
+- $PY scripts/smoke/vps_agent_canary.py --all
+- $PY scripts/smoke/failure_drills.py --all
+- $VPS "docker logs --since 2h jarvis-livekit 2>&1 / grep -c 'RoomService.DeleteRoom'" # only canary rooms
+
+#### C-131 · Cutover to the VPS brain (V6) and 72 h burn-in (V7)
+**Phase:** P0 · **Size:** — · **Feature:** VPS brain + Desktop Node
+**Source:** VPS-brain design 2026-10-02 (`docs/ARCHITECTURE_VPS_BRAIN.md`)
+**Kyun:** Move the live brain with no cut voice session and no feature lost (the dashboard Allow of C-29/C-30 and the Stop desktop button of X-67 are live before the move), apply the network lockdown, and prove stability with the user present and a ready rollback.
+**Files:** `deploy/hostinger/docker-compose.yml`, `deploy/hostinger/livekit.yaml`, `plan.md`, `done_highlight.md`
+**Depends on:** C-130, C-16, C-75, C-35, C-29, C-30, X-67
+**User se chahiye:** About 40 min with JARVIS: talk, reload the page once, give one dashboard Allow, lock and unlock Windows once, press Stop desktop on the phone once, press Ctrl+Alt+Shift+F12 once, click the tray Full twice, and watch one offline test. No approval prompt appears on the laptop (D3).
+
+Steps:
+1. Before the idle gate: C-29/C-30 are DONE (the ConfirmDialog answers ConfirmFlow on the live site), and the frontend with X-67 (Laptop chip, Stop desktop) is deployed with deploy_from_pc.sh --services frontend (backup first; the other-apps smoke diff must be identical).
+2. Idle gate: no speech, typed or tool activity for 10 min, or a spoken 60 s notice.
+3. Run backup_local.py --now and backup_vps.sh pre-brain-vps.
+4. agent_ctl stop: the PC brain drains and memory is flushed.
+5. compose stop agent agent-svc → migrate_agent_data --final --verify → compose up -d --no-deps agent agent-svc → wait until healthy and registered.
+6. agent_ctl brain vps: flips the env, recreates the bridge, create_dispatch('jarvis'), verifies the agent is in the room.
+7. Announced LiveKit window: pin v1.13.7, add the second key pair, bind 5101 and 7880 to 127.0.0.1 (C-16 step 6 without mem_limit). Then run the smoke diff.
+8. agent_ctl node start (active). The node controls the desktop at once; there is nothing to click on the laptop (user decision D3).
+9. Run the 17 live checks with the user (design section 16). Checks 8 and 9 pass only with a real dashboard Allow (C-29/C-30 are DONE before cutover); a refusal fails them. Checks 14-17 exercise Stop desktop from the phone, the panic hotkey, the JARVIS_DESKTOP_CONTROL kill switch and the tray Full.
+10. Burn-in for 72 h with the stop criteria. Do one 'brain pc' / 'brain vps' drill at an idle moment. Add a done_highlight entry with the reverse command.
+
+Done tab jab (acceptance):
+- All 17 live checks pass; checks 8 and 9 with a real dashboard Allow, none of them on a refusal.
+- The 72 h burn-in hits no stop criterion.
+- 5101 and 7880 listen only on 127.0.0.1, and the other-apps smoke is unchanged.
+
+Verify:
+- curl -s https://jarvis.srv1802669.hstgr.cloud/vortex/health
+- $PY scripts/agent_ctl.py status # brain vps, node active, no PC worker
+- $VPS "docker logs --since 10m jarvis-livekit 2>&1 / grep -E 'worker registered/assigned job' / tail -3"
+- $VPS "ss -tlpn / grep -E ':(5101/7880) '" # 127.0.0.1 only
+- $VPS 'D=$(ls -1d /root/jarvis-backups/2* / tail -1); diff $D/smoke-pre.txt $D/smoke-post.txt && echo OTHER_APPS_UNCHANGED'
+
+#### C-132 · Heavy tools on the VPS (V8): YouTube job, headless maps scraper, media previews
+**Phase:** P3 · **Size:** — · **Feature:** VPS brain + Desktop Node
+**Source:** VPS-brain design 2026-10-02 (`docs/ARCHITECTURE_VPS_BRAIN.md`)
+**Kyun:** Moves the remaining heavy work (downloads, Playwright scraping) off the laptop once the base move is stable and live tests have checked the datacenter IP.
+**Files:** `services/ai_core/tool_placement.py`, `deploy/hostinger/Dockerfile.agent`, `deploy/hostinger/requirements-agent.txt`, `tests/unit/test_tool_placement.py`
+**Depends on:** C-131, C-57, X-65, X-56, X-58
+**User se chahiye:** Say yes to moving the maps scraper after seeing the test result.
+
+Steps:
+1. download_youtube_media runs as a K-20 job on the VPS. On completion it calls pc.fetch and opens the file on the laptop; a bot check falls back to the laptop and backs off for 6 h.
+2. Maps scraper: - a live consent/captcha test from the VPS IP first; - if it passes, add Playwright Chromium and its dependencies to the image (+0.5-0.7 GB); - placement becomes vps headless; the CSV is delivered and opened on the laptop; - the laptop's visible mode stays as the fallback.
+3. Generated image and QR previews go through /vortex/media (X-40 public_url).
+4. list_generated_media merges the VPS and laptop lists.
+5. Each flip is one placement override plus a live check, with an announced agent restart.
+
+Done tab jab (acceptance):
+- Each moved tool passes its live check.
+- The fallback to the laptop works when the VPS is blocked.
+
+Verify:
+- $PY scripts/smoke/vps_agent_canary.py --tools download_youtube_media,scrape_google_maps_leads
+
+#### C-133 · (optional, deferred by user decision D3) Owner approval key: phone and UI approvals the laptop can verify (V9)
+**Phase:** P4 · **Size:** — · **Feature:** VPS brain + Desktop Node
+**Source:** VPS-brain design 2026-10-02 (`docs/ARCHITECTURE_VPS_BRAIN.md`)
+**Kyun:** Only needed if the user later turns local approvals back on. Since D3 (2026-10-02) laptop actions are approved in the agent's ConfirmFlow and the node shows no prompt; a dashboard Allow reaches the agent through the bridge's ConfirmFlow routing (C-29, live before cutover). Today's PC brain has no dashboard approval path at all: its risky tools run unconfirmed. A non-extractable owner key paired at the laptop would let the node verify phone and UI approvals itself, so that a compromised bridge could not approve.
+**Files:** `src/core/desktop/policy.py`, `src/core/desktop/pairing.py`, `src/core/desktop/local_confirm.py`, `src/core/ui_bridge.py`, `services/ai_core/jarvis_confirm.py`, `tests/unit/test_owner_approval.py`
+**Depends on:** C-131, C-22, C-29, C-30, C-73
+**User se chahiye:** Nothing now. Only if local approvals come back: pair the browser once at the laptop.
+
+Steps:
+1. Only if the user later turns local approvals back on: pair the browser's non-extractable owner key at the laptop (the node shows an 8-digit code and stores the key DPAPI-protected), let the node verify owner-signed approvals over (confirm_id, tool, args_sha256, risk, pc_paths, exp ≤ 120 s; single use) and owner-signed loosening controls, and add the laptop approval dialog (src/core/desktop/local_confirm.py) only if the user asks for it. Build it together with the optional X-68; tests cover bridge-forged, swapped-argument and replayed approvals.
+2. Until then nothing in this task is built, no other task depends on it, and its board status is 'NOT NEEDED (deferred by user decision D3; reopen only if local approvals return)', so scripts/coord/wait_for_work.py never offers it.
+
+Done tab jab (acceptance):
+- Only if built: a forged, swapped or replayed approval is refused, and the tests pass.
+
+Verify:
+- $PY -m pytest tests/unit/test_owner_approval.py -q # only if built
+
+#### C-134 · Monitoring, alerts, incident runbook and VPS-brain documentation
+**Phase:** P4 · **Size:** — · **Feature:** VPS brain + Desktop Node
+**Source:** VPS-brain design 2026-10-02 (`docs/ARCHITECTURE_VPS_BRAIN.md`)
+**Kyun:** The split runtime needs visible health, the alerts that C-116 and C-121 do not raise at cutover (restarts, memory, disk, duplicate agents, laptop offline), a tested way to rotate keys and stop desktop control, and honest security and privacy docs.
+**Files:** `src/core/ui_bridge.py`, `src/core/agent_services.py`, `scripts/ops/vps_daily_check.py`, `docs/SECURITY.md`, `docs/ARCHITECTURE-VPS.md`, `deploy/hostinger/RUNBOOK.md`, `README.md`
+**Depends on:** C-131
+**User se chahiye:** —
+
+Steps:
+1. Heartbeat fields (agent and svc): session state, link online, RTT p50/p95, pending calls, unknowns per hour, cgroup memory.current and CPU, free disk, downloads size, restarts, brain, git sha.
+2. Alerts beyond the cutover set (C-116 and C-121 already raise the signature, approval, desktop_replaced, new node_id, clock-skew, manifest-drift and rate-limit alerts) go to system_alert, audit and a laptop toast: - warning: duplicate agents, more than 3 restarts per hour, memory above 4 GiB, disk below 30 GB; - critical: memory above 6 GiB, disk below 15 GB; - info: the laptop offline for more than 30 min while a UI is connected.
+3. vps_daily_check.py runs from the PC and is read-only: docker stats for jarvis-*, RestartCount, df, volume sizes.
+4. Incident runbook: - rotate each Ed25519 pair, the LiveKit keys, the AI/email keys and the VPS SSH key; - stop desktop control (Stop desktop, JARVIS_DESKTOP_CONTROL=false in the PC root .env, which the node applies within seconds, or agent_ctl node stop); desktop_link off; brain pc.
+5. docs/SECURITY.md: the threat model including every LLM input channel, the residual risks and the privacy disclosures (D2). docs/ARCHITECTURE-VPS.md and README describe the architecture.
+
+Done tab jab (acceptance):
+- Re-running the C-130 drill scripts after cutover raises every K-74 alert: the cutover set from C-116/C-121 and the C-134 additions.
+- The runbook rotation steps have been dry-run.
+- The docs are committed.
+
+Verify:
+- $PY scripts/ops/vps_daily_check.py
+- grep -n 'Desktop Node' README.md docs/ARCHITECTURE-VPS.md
+
 ---
 
-## 7. Cursor tasks (63)
+## 7. Cursor tasks (68)
 
 ### P0 · Security aur buniyad
 _Darwaza band, git, backup, keys, room delete ka bug. Claude pehle; Cursor isi dauran apne tools lane me kaam karta hai._
@@ -3782,6 +4934,7 @@ Verify:
 **Files:** `services/automation/jarvis_notepad_automation.py`, `tests/automation/test_notepad_automation.py`, `tests/tools/test_notepad_tools.py (new)`
 **Depends on:** C-24, C-27, C-28, C-26, X-03, X-11, K-16 (DesktopToolPolicy)
 **User se chahiye:** —
+**VPS brain (2 Oct):** DONE; follow-up in X-65: edit_notepad_file and append_notepad_file take a basename only, inside Jarvis_Outputs. The node policy enforces the same rule; the stricter wins.
 
 Steps:
 1. Add _outputs_dir() = getattr(config,'outputs_dir', <project_root>/Jarvis_Outputs) and use it for the three recomputed blocks (L521-522, L562-563, L593-594), save_file_safely and list_notepad_files_tool; open_notepad_simple and list_notepad_files_tool return tool_result.
@@ -3812,6 +4965,7 @@ Verify:
 **Files:** `services/system/jarvis_system_ctrl.py`, `tests/tools/test_system_ctrl_tools.py (new)`
 **Depends on:** C-24, C-27, C-28, X-11, C-30, K-16 (DesktopToolPolicy), K-17 (ToolNamesV2)
 **User se chahiye:** Be at the PC for the shutdown + cancel and sleep checks. Restart is tested only if you explicitly agree.
+**VPS brain (2 Oct):** Add DESKTOP_ONLY on non-Windows hosts; X-65 step 1 may land first. The node classes shutdown, restart, sleep and the recycle bin as availability: they need the ConfirmFlow approval in the agent before the command is sent, with no prompt on the laptop.
 
 Steps:
 1. Decorate per DesktopToolPolicy: shutdown_system and restart_system risk='high', timeout=20, confirm_summary 'System 30 second mein SHUTDOWN (RESTART) hoga; cancel ke liye bolein: Jarvis shutdown cancel karo'; sleep_system risk='medium'; empty_recycle_bin risk='high' with an async confirm_summary.
@@ -3870,6 +5024,7 @@ Verify:
 **Files:** `services/automation/jarvis_notepad_automation.py`, `tests/tools/test_run_cmd_tool.py (new)`
 **Depends on:** X-27, C-28, C-30
 **User se chahiye:** —
+**VPS brain (2 Oct):** run_cmd_command is always high (K-45) and code_exec on the node, so it always needs the dashboard Allow (ConfirmFlow) before the agent sends it; the laptop shows no prompt (user decision D3).
 
 Steps:
 1. Change the signature to run_cmd_command(command: str, capture: bool = False) with raw_args=('command',) and timeout 30.
@@ -4435,6 +5590,7 @@ Verify:
 **Files:** `services/info/jarvis_search.py`, `tests/automation/test_search.py`, `tests/tools/test_search_chain.py`
 **Depends on:** C-25, K-29 (redact_secrets)
 **User se chahiye:** —
+**VPS brain (2 Oct):** DONE; follow-up in X-64 (for X-36 and X-37): location goes through the device city. Never ipinfo on the VPS. DuckDuckGo from the datacenter IP may be rate-limited.
 
 Steps:
 1. search_tavily: send 'Authorization: Bearer <TAVILY_API_KEY>' and drop api_key from the body (lines 124-129); search_depth from TAVILY_SEARCH_DEPTH (default 'advanced'); max_results 5; timeout 15; on 401/429/432/433 disable Tavily for 10 minutes.
@@ -4486,6 +5642,7 @@ Verify:
 **Files:** `services/info/sim_providers.py`, `services/info/jarvis_sim_lookup.py`, `tests/tools/test_sim_providers.py`
 **Depends on:** C-25, C-24, C-28, K-34 (sim_authorized_source)
 **User se chahiye:** —
+**VPS brain (2 Oct):** DONE; info only: SIM keys live in .env.agent. The audit file sits on the jarvis_outputs volume.
 
 Steps:
 1. Create services/info/sim_providers.py implementing EXT DASH-U18's AuthorizedSimSource protocol with exactly two sources: NotConfiguredSource (default; today's 'blocked' result and SAFE_MESSAGE plus 'provider not configured') and AuthorizedApiSource; the module docstring prohibits leaked, scraped or 'SIM database' sources.
@@ -4513,6 +5670,7 @@ Verify:
 **Files:** `services/multimedia/jarvis_qr_gen.py`, `tests/tools/test_qr_gen.py`
 **Depends on:** C-24, C-28, K-28 (tool_arg_policies)
 **User se chahiye:** —
+**VPS brain (2 Oct):** DONE; follow-up in X-65: QR open and image open go through jarvis_delivery.open_artifact. X-40 (DONE; follow-up in C-132): the image public_url goes through /vortex/media instead of the LAN URL.
 
 Steps:
 1. Decorate generate_qr_code with X0 arg_policies {'data':'raw','filename':'plain'} so '&' and ';' survive (NFC only).
@@ -4560,6 +5718,7 @@ Verify:
 **Files:** `services/automation/jarvis_whatsapp_automation.py`, `tests/automation/test_whatsapp_automation.py`, `tests/tools/test_whatsapp_tool.py (new)`
 **Depends on:** C-27, C-28, C-26, X-03, X-11, C-30, X-26, K-16 (DesktopToolPolicy)
 **User se chahiye:** Install WhatsApp Desktop from the Microsoft Store, link it by QR, and name a consenting test contact (see user questions).
+**VPS brain (2 Oct):** The WhatsApp test-number guard runs on the laptop. Messaging class: the ConfirmFlow approval (dashboard Allow) before the agent sends the command; no prompt on the laptop (user decision D3).
 
 Steps:
 1. is_whatsapp_installed() checks %LOCALAPPDATA%/Packages/<family of config.whatsapp_app_id, part before '!'> and caches the result for 60 s only (Sir may install it mid-session).
@@ -4587,6 +5746,7 @@ Verify:
 **Files:** `services/system/jarvis_window_ctrl.py`, `tests/tools/test_window_ctrl_tools.py (new)`
 **Depends on:** C-27, X-03, X-11, X-41, K-17 (ToolNamesV2), K-21 (ActiveWindowContext), K-16 (DesktopToolPolicy)
 **User se chahiye:** —
+**VPS brain (2 Oct):** Protected titles match by prefix. The open_app risk callable is X-43. Window context is pushed by the node (X-44 too).
 
 Steps:
 1. Add @jarvis_tool close_window(window_name: str, force: bool = False) with the docstring 'Closes an application WINDOW on the Windows desktop by name (calculator, chrome, notepad, vlc...). For the JARVIS automation browser use chrome_browser_close; for Notepad-only use close_notepad_tool.'
@@ -4846,6 +6006,7 @@ Verify:
 **Files:** `services/multimedia/jarvis_advanced_tools.py`, `tests/tools/test_send_email.py`
 **Depends on:** C-25, C-24, C-28, C-29, C-30, C-55, X-10, K-28 (tool_arg_policies)
 **User se chahiye:** Click Allow/Deny in the dashboard during the live test (the mail goes only to your own EMAIL_USER inbox).
+**VPS brain (2 Oct):** A missing attachment is an error. The node pulls laptop attachments as encrypted blobs. VPS attachments are confined to Jarvis_Outputs, Jarvis_Shared and the blob temp dir (with X-55).
 
 Steps:
 1. Decorate send_email with the X0 kwargs: execution_timeout=60, arg_policies {'recipient':'email_list','subject':'plain','body':'multiline','attachment_path':'path'}, risk 'high', confirm summary 'Email to {recipient}: {subject}'.
@@ -4898,6 +6059,7 @@ Verify:
 **Files:** `services/automation/jarvis_maps_scraper.py`, `tests/tools/test_maps_scraper_tools.py (new)`
 **Depends on:** C-06, C-26, X-11, C-57
 **User se chahiye:** —
+**VPS brain (2 Oct):** Add a headless flag. The placement decision is made in C-132 after a live test; visible mode on the laptop stays the default.
 
 Steps:
 1. Launch with p.chromium.launch(channel=getattr(config,'playwright_channel','chrome'), headless=headless, slow_mo=50); on error retry without channel (bundled chromium-1200 from TD-01); if both fail return error_code BROWSER_MISSING with the hint './.venv_312/Scripts/python.exe -m playwright install chromium'.
@@ -4949,6 +6111,7 @@ Verify:
 **Files:** `services/multimedia/jarvis_youtube_downloader.py`, `tests/automation/test_youtube_downloader.py`, `tests/tools/test_youtube_job.py`
 **Depends on:** C-47, C-24, C-28, C-55, C-57, K-31 (job_progress_routing)
 **User se chahiye:** —
+**VPS brain (2 Oct):** Runs on the VPS as a job; auto_open becomes delivery plus open on the laptop. C:\ffmpeg is irrelevant there.
 
 Steps:
 1. Command [sys.executable, '-m', 'yt_dlp', ...] instead of the bare 'yt-dlp' (lines 67, 73), so it works outside the activated venv too (desktop K16 item).
@@ -4977,6 +6140,7 @@ Verify:
 **Files:** `services/automation/jarvis_browser_pinchtab.py`, `tests/tools/test_pinchtab_tools.py (new)`
 **Depends on:** C-24, C-26, X-03, X-11, C-75, C-84, K-23 (PinchTabLocalServer), K-16 (DesktopToolPolicy)
 **User se chahiye:** Log in to websites once inside the 'jarvis_default' Chrome profile when a site needs it.
+**VPS brain (2 Oct):** PinchTab URL from config. The tools run only inside the node process (shared _session).
 
 Steps:
 1. Read the base URL and token from getattr(config,'pinchtab_url'/'pinchtab_token') with env fallback, send 'Authorization: Bearer <token>' on every request, and keep all requests in to_thread (connect 3 s, read 20 s).
@@ -5009,6 +6173,7 @@ _Deploy script, monitoring, tests, README._
 **Files:** `stonix_ui/electron/main.cjs`, `stonix_ui/electron/preload.cjs`, `stonix_ui/electron/offline.html (new)`, `stonix_ui/launcher.js`, `stonix_ui/src/shared/ui/WindowControls.tsx`, `stonix_ui/scripts/electron-prod-smoke.cjs`, `stonix_ui/tests/electron/electron.spec.ts (new)`, `stonix_ui/package.json`, `stonix_ui/package-lock.json`
 **Depends on:** X-07, X-08, C-09, K-01 (DASH-UI-RUNTIME), K-49 (C-ORIGIN-1)
 **User se chahiye:** —
+**VPS brain (2 Oct):** DONE; follow-up in X-67: Electron backend mode 'desktop' starts the node through agent_ctl node start, replacing 'agent'.
 
 Steps:
 1. main.cjs: loadURL(JARVIS_UI_URL, default https://jarvis.srv1802669.hstgr.cloud); if it is unreachable, load the bundled offline.html ('VPS unreachable - Retry'); load dist/index.html only with JARVIS_ELECTRON_BACKEND=local or JARVIS_UI_OFFLINE=1; keep the literal strings ELECTRON_IS_DEV and ../dist/index.html that the smoke script checks.
@@ -5123,6 +6288,7 @@ Verify:
 **Files:** `tests/tools/test_tool_registry.py (new)`, `tests/scripts/test_all_tools.py`, `tests/scripts/test_all_tools_fixed.py`
 **Depends on:** X-29, X-30, X-26, X-27, X-31, X-25, X-34, X-41, X-42, X-43, X-44, X-62, X-56, X-35, X-28, K-16 (DesktopToolPolicy)
 **User se chahiye:** —
+**VPS brain (2 Oct):** The registry and policy tests become two-sided: the node registry against the manifest, and the VPS proxies.
 
 Steps:
 1. tests/tools/test_tool_registry.py imports every area module via 'services.' paths and asserts that all 50 area tool names (the 48 existing ones including 'close', plus close_window and cancel_shutdown) are in plugin_manager.get_tools().
@@ -5137,6 +6303,118 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/tools -q -p no:cacheprovider
 - ./.venv_312/Scripts/python.exe -m pytest tests/scripts -q -p no:cacheprovider (GUI scripts skip without JARVIS_LIVE_GUI_TESTS=1)
 
+
+### VPS brain (2 Oct 2026) · laptop ka load VPS par
+
+#### X-64 · Location hook for weather and search (replaces Claude's compat patch)
+**Phase:** P3 · **Size:** — · **Feature:** VPS brain + Desktop Node
+**Source:** VPS-brain design 2026-10-02 (`docs/ARCHITECTURE_VPS_BRAIN.md`)
+**Kyun:** On the VPS, ipinfo answers Kuala Lumpur. The compat shim patches Cursor symbols by name, which breaks silently when a binding changes.
+**Files:** `services/info/jarvis_search.py`, `services/info/jarvis_get_weather.py`, `tests/tools/test_location_hook.py`
+**Depends on:** C-113, C-111
+**User se chahiye:** —
+
+Steps:
+1. get_current_city and get_current_city_data first call services.utils.jarvis_location.get_device_location(). They fall back to ipinfo only when JARVIS_DESKTOP_MODE is not 'remote'.
+2. jarvis_get_weather calls through the module (jarvis_search.get_current_city), not a by-value import.
+3. Remove the module-level load_dotenv(); jarvis_config already loads the env.
+4. Tests (side-effect guard on): in remote mode ipinfo is never called, and an empty city gives the device city or USER_CITY.
+
+Done tab jab (acceptance):
+- get_weather('') in remote mode returns Lahore without any request to ipinfo.
+- Claude's self-test still passes after its shim is removed.
+
+Verify:
+- pytest tests/tools/test_location_hook.py -q
+
+#### X-65 · VPS-safe Cursor modules: DESKTOP_ONLY guard, lazy GUI imports, delivery helper, safe names, stricter risks
+**Phase:** P3 · **Size:** — · **Feature:** VPS brain + Desktop Node
+**Source:** VPS-brain design 2026-10-02 (`docs/ARCHITECTURE_VPS_BRAIN.md`)
+**Kyun:** The Linux branches of shutdown, restart and sleep would act on the VPS host. GUI imports break Linux imports. os.startfile reports errors after success. send_email silently drops a missing attachment, and model-supplied names are unsanitised.
+**Files:** `services/system/jarvis_system_ctrl.py`, `services/system/jarvis_window_ctrl.py`, `services/automation/jarvis_whatsapp_automation.py`, `services/automation/jarvis_notepad_automation.py`, `services/automation/keyboard_mouse_ctrl.py`, `services/multimedia/jarvis_qr_gen.py`, `services/multimedia/jarvis_youtube_downloader.py`, `services/automation/jarvis_youtube_automation.py`, `services/automation/jarvis_maps_scraper.py`, `services/multimedia/jarvis_advanced_tools.py`, `services/automation/jarvis_browser_pinchtab.py`, `services/system/jarvis_desktop_common.py`, `tests/tools/test_vps_safety.py`
+**Depends on:** C-113, C-111
+**User se chahiye:** —
+
+Steps:
+1. jarvis_system_ctrl: on non-Windows hosts return ToolResult error_code DESKTOP_ONLY. The Linux shutdown, reboot and suspend branches never run.
+2. Lazy GUI imports (pyautogui, pygetwindow, pynput, pythoncom, comtypes, pycaw) inside functions, with 'except Exception' import guards.
+3. Replace os.startfile in QR (X-39 follow-up), the YouTube downloader and the maps scraper with services.utils.jarvis_delivery.open_artifact. Browser fallbacks use jarvis_delivery.open_url.
+4. send_email: a missing or unreadable attachment is an error and the mail is never sent without it. Honour zip_name. The QR filename and download folder_name use safe names. edit_notepad_file and append_notepad_file take a basename only, inside Jarvis_Outputs (X-27 follow-up; today they accept a safe sub-path).
+5. PinchTab base URL from config.pinchtab_url.
+6. open_app: a risk callable makes an unmapped target or an executable 'high'. - Protected titles match by prefix. - Extend the protected processes: explorer launch surfaces, taskmgr, regedit, mmc, mintty, bash, wsl, python, node, conhost. - Extend EXEC_EXTS: .lnk .url .msi .hta .scr .cpl .jar .vbs .wsf .ps1 .psm1 .reg.
+7. Tests (side-effect guard on): - simulated Linux shutdown → DESKTOP_ONLY; - startfile call sites replaced; - attachment error; - Notepad edit/append refuse a sub-path; - the open_app risk callable.
+
+Done tab jab (acceptance):
+- Tests pass.
+- Windows behaviour is unchanged apart from the safer refusals.
+- Claude's Linux import test no longer needs stubs for these modules.
+
+Verify:
+- pytest tests/tools/test_vps_safety.py -q
+
+#### X-66 · Reminders and tasks: cross-process locking, timezone-aware times, delivery hooks for agent-svc
+**Phase:** P3 · **Size:** — · **Feature:** VPS brain + Desktop Node
+**Source:** VPS-brain design 2026-10-02 (`docs/ARCHITECTURE_VPS_BRAIN.md`)
+**Kyun:** On the VPS, a job and agent-svc both touch reminders.json and tasks.db. A lost update could drop a reminder, the host clock is UTC, and delivery state must not be set before delivery.
+**Files:** `services/automation/jarvis_reminders.py`, `services/automation/jarvis_task_manager.py`, `tests/test_reminders.py`, `tests/automation/test_task_store_locking.py`
+**Depends on:** C-125, C-111
+**User se chahiye:** —
+
+Steps:
+1. Wrap every read-modify-write of reminders.json in services.utils.jarvis_filelock.locked(path). tasks.db connections use busy_timeout 5000 and WAL.
+2. Use timezone-aware now (zoneinfo Asia/Karachi from TZ/config) for setting reminders and checking due times; the stored format stays as today.
+3. Add list_due_reminders() (no mutation) and mark_reminder_delivered(id) for agent-svc. check_due_reminders keeps today's behaviour for the PC brain.
+4. Tests: two processes adding and marking at the same time lose no update; due times are correct on a UTC host.
+
+Done tab jab (acceptance):
+- The concurrency test loses no update.
+- PKT due times are correct with a UTC host clock.
+
+Verify:
+- pytest tests/test_reminders.py tests/automation/test_task_store_locking.py -q
+
+#### X-67 · UI for the split: Laptop chip, Stop desktop, notification ack, media links, Electron 'desktop' mode
+**Phase:** P0 · **Size:** — · **Feature:** VPS brain + Desktop Node
+**Source:** VPS-brain design 2026-10-02 (`docs/ARCHITECTURE_VPS_BRAIN.md`)
+**Kyun:** The user must see whether the laptop is online, locked or stopped, be able to stop desktop control from the phone, and acknowledge reminders so delivery is exactly once. Electron must start the node, not a worker. It gates the cutover (C-131 depends on it): the Stop desktop button is one of the brakes the user kept with D3.
+**Files:** `stonix_ui/src/features/status/`, `stonix_ui/src/features/controls/ (new)`, `stonix_ui/src/features/notifications/ (new)`, `stonix_ui/electron/main.cjs`, `stonix_ui/launcher.js`, `stonix_ui/tests/mock-bridge/`, `stonix_ui/tests/e2e/`
+**Depends on:** C-116, C-117, C-111
+**User se chahiye:** —
+
+Steps:
+1. Read desktop_status: - a Laptop chip (online, stale, offline, locked, panic, read-only); - the label 'Agent (VPS)'; - the 'PC (laptop)' vitals card from vitals_pc, showing a stale state.
+2. A 'Stop desktop' button (ui_command desktop_stop, tighten-only), visible whenever the laptop is online. After a stop the chip shows read-only with the hint that the laptop tray switches back to Full; a persisted stop or panic still shows after a laptop reboot (K-76).
+3. Send ui_command notification_ack {id} when a reminder or notification is shown; the bell keeps unacknowledged ones.
+4. DESKTOP_* toasts; play and download links through /vortex/media.
+5. Electron backend mode 'desktop' runs agent_ctl node start (replaces 'agent'); 'local' and 'none' are unchanged.
+6. Mock bridge fixtures and e2e specs for every state.
+
+Done tab jab (acceptance):
+- The e2e suite is green.
+- The chip states match the fixtures.
+- Stop desktop sends the command and shows the read-only state.
+- The Laptop chip and the Stop desktop button are live on the VPS frontend before C-131 (Claude deploys the frontend).
+
+Verify:
+- npm --prefix stonix_ui run test:e2e
+
+#### X-68 · (optional, deferred by user decision D3) Owner approval key in the browser: pairing and signed approvals over the arguments you see (V9)
+**Phase:** P4 · **Size:** — · **Feature:** VPS brain + Desktop Node
+**Source:** VPS-brain design 2026-10-02 (`docs/ARCHITECTURE_VPS_BRAIN.md`)
+**Kyun:** Only needed if the user later turns local approvals back on. Then phone approvals would be signed by a key the bridge cannot use, over exactly the arguments shown, so that the laptop could verify them itself. Today (D3) the existing ConfirmDialog (X-10) answers the agent's ConfirmFlow and nothing is verified on the laptop.
+**Files:** `stonix_ui/src/lib/ownerKey.ts (new)`, `stonix_ui/src/features/confirm/`, `stonix_ui/tests/e2e/`
+**Depends on:** C-111, C-116, X-67
+**User se chahiye:** Nothing now. Only if local approvals come back: pair the browser once at the laptop (with C-133).
+
+Steps:
+1. Only if the user later turns local approvals back on: create a non-extractable WebCrypto P-256 key kept in IndexedDB; add the pairing flow (the user types the 8-digit code shown on the laptop, and the UI sends the public key with HMAC(code, key)); let the ConfirmDialog render the full normalised arguments, compute the canonical args_sha256 itself and sign (confirm_id, tool, args_sha256, risk, pc_paths, exp ≤ 120 s); add e2e tests with the mock bridge plus test vectors shared with the optional C-133.
+2. Until then nothing in this task is built, no other task depends on it, and its board status is 'NOT NEEDED (deferred by user decision D3; reopen only if local approvals return)', so scripts/coord/wait_for_work.py never offers it.
+
+Done tab jab (acceptance):
+- Only if built: the approvals verify against the node test vectors, and the key cannot be exported.
+
+Verify:
+- npm --prefix stonix_ui run test:e2e -- confirm # only if built
 
 ---
 
@@ -5581,6 +6859,7 @@ Format: `- [YYYY-MM-DD HH:MM] from → to: message (task id)`. Jawab isi line ke
 - [2026-10-01 22:20] claude → cursor: **C-28 DONE** (`c68a314`, live: 79 tools). Ab khule X-tasks: X-27, X-38, X-39.
 - [2026-10-01 22:20] claude → cursor: **ConfirmFlow (K-14) ab live:** jis `@jarvis_tool` ka risk (fixed ya callable) medium/high ho, LLM call `{status:'needs_confirmation', tool, confirm_id, risk, message, hint}` deti hai aur tool sirf approval ke baad ek dafa chalta hai (UI Allow = C-29 + X-10, ya zabani 'haan' = naya `confirm_action` tool). Risky tools ko chhota Roman Urdu `confirm_summary` do (`{arg}` wala template, ya sync/async callable, 5 s). `voice_confirm=False` = sirf screen. High risk sirf screen se, jab tak `JARVIS_VOICE_CONFIRM_HIGH=1` na ho. Screen par Allow dabane se focus dashboard par chala jata hai, is liye desktop-input tool apni window khud dobara target kare. Events: `confirm_request {id, tool, summary, risk, voice_allowed, expires_at, ttl_s, args_preview}`, `confirm_resolved {id, allow, reason, result_status?}`.
 - [2026-10-02 01:35] cursor → claude: **C-28 unlocks done:** X-27 (`4d428a9`), X-38 (`04cf903`), X-39 (`be578d0`). ConfirmFlow MSG apply: write_custom_code medium+confirm_summary jab auto_run script. WT me `wait_for_work.py` line 131 corrupt thi (poll arg garbled); local `git checkout HEAD --` se theek. Agar dubara aaye to Claude commit se restore kare. Ab Cursor idle: agla unlock C-30 (aur C-29/C-12 chain) — X-29, X-30, X-31, X-41…
+- [2026-10-02 01:10] claude → cursor: **VPS brain plan (user ka faisla):** [2026-10-01, D3/D14 update 2026-10-02] claude → cursor: **VPS brain move (user ka faisla, koi CPU/RAM limit nahi).** **User ke jawab (2 Oct):** D1, D2, D4..D20 waise hi manzoor. D3/D14 badle: laptop par koi approval dialog ya manual step nahi; node chalte hi desktop control karta hai; Windows lock par input khud rukta hai aur unlock par khud chalu hota hai. Risky tools ka approval agent ka ConfirmFlow (dashboard Allow ya bola hua "haan") command bhejne se pehle leta hai; dashboard wala raasta tumhara ConfirmDialog (X-10) hi hai. **Kya badal raha hai:** - Agent aur saare non-desktop features VPS par chale jayenge: containers `jarvis-agent` aur `jarvis-agent-svc`. - Laptop par sirf Desktop Node chalega: `src/core/desktop/**`, Claude lane. - Pehle docs/CONTRACTS.md v4 me K-70..K-77 parho (C-111). **Cutover ke liye sirf X-67 zaroori hai** (Laptop chip aur Stop desktop button; C-131 is par depend karta hai, is liye ab P0). Baaki naye X-tasks cutover ke baad: / Task / Kaam / /---/---/ / X-64 / location hook / / X-65 / VPS-safe modules: DESKTOP_ONLY guard, lazy GUI imports, `jarvis_delivery.open_artifact`/`open_url` instead of `os.startfile`/`webbrowser`, send_email attachment error, safe names, PinchTab URL from config, open_app risk callable, protected-title prefix match, extended `EXEC_EXTS`, Notepad edit/append sirf basename (X-27 follow-up) / / X-66 / reminders/tasks file lock + TZ + `list_due_reminders`/`mark_reminder_delivered` / / X-67 / **P0, cutover se pehle.** UI: Laptop chip (online, stale, offline, locked, panic, read-only; reboot ke baad bhi persisted stop dikhao), Stop desktop, notification_ack, media links, Electron 'desktop' mode. Tests `stonix_ui/tests/e2e/` aur `stonix_ui/tests/mock-bridge/` me / / X-68 / (optional, deferred by user decision D3) owner approval key; sirf tab jab user local approvals wapas on kare. Koi aur task is par depend nahi karta; board status 'NOT NEEDED (deferred by user decision D3; reopen only if local approvals return)', is liye wait_for_work ise offer nahi karega / **FROZEN symbols** (Claude ke shims inhe naam se patch karte hain), X-64/X-65 land hone tak naam ya binding mat badlo: - `jarvis_search.get_current_city`, `get_current_city_data` - `jarvis_get_weather` ka us ka import - `os.startfile` call sites in `jarvis_qr_gen`, `jarvis_youtube_downloader`, `jarvis_maps_scraper` - `webbrowser.open` in `jarvis_youtube_downloader` aur `jarvis_youtube_automation` - `jarvis_reminders` ke `load_reminders` / `save_reminders` / `check_due_reminders` **Policy:** node class floor, K-16 aur K-45 me jo sakht ho wohi chalega. Apne decorators me risk kabhi kam mat karo. Laptop ke risky kaamon ka approval sirf ConfirmFlow hai (D3). **Purane tasks me tabdeeli** (detail board par): X-29, X-31, X-41, X-42/43/44, X-54/55, X-56, X-58, X-62, X-63. DONE tasks dobara mat kholo: X-27 aur X-39 ka follow-up X-65 me hai, X-36/X-37 ka X-64 me, X-40 ka C-132 me (Claude); X-38 sirf info hai. **C-30 ab cutover se pehle** (D3 ke baad dashboard Allow zaroori hai): X-29, X-31, X-32, X-41, X-44 aur X-54, jo C-30 ka intezar karte hain, jaldi khulenge. **RUNTIME LOCK:** - Cursor kabhi Desktop Node, PC brain ya Electron local backend start nahi karega. - `agent_ctl` sirf `status` ke liye use karo. - Restart chahiye to `REQ-RESTART`; deploy ke liye `REQ-DEPLOY`. - `src/core/desktop/**` aur `services/ai_core/tool_placement.py` Claude ke hain; tabdeeli chahiye to section 11 me REQ likho. **Tests:** - Naya manifest parity test tumhare liye advisory hai; strict sirf deploy aur CI me chalta hai. - Side-effect guard node ke link client, mirror aur `pc.*` operations ko bhi cover karega (K-27 v4).
 
 ---
 
@@ -5673,3 +6952,147 @@ REQ-CURSOR: Please prioritize Claude P0 so Cursor unblocks:
 - C-09 (Electron X-09), C-25 (info tools X-36+)
 REQ-RESTART: VR-37 wire assets/audio/jarvis_startup_chime.wav into agent startup (Cursor must not start-agent.bat)
 REQ-CONTRACT: .gitignore allow assets/audio/*.wav (force-added for now)
+
+---
+
+## 13. VPS brain: laptop ka bhaari kaam VPS par (2 Oct 2026)
+
+D3/D14 aap ke 2 Oct ke faislay ke mutabiq badal diye gaye hain: laptop par koi Allow dialog ya manual step nahi. Baaki saare faislay (D1, D2, D4..D20) jaise likhe the waise manzoor. Ek naya chhota sawal D21 hai (item 10).
+
+1. VPS par 2 naye hisse chalenge:
+   - `jarvis-agent`: voice, chat, memory, voice-ID, web, weather, email, image, QR, YouTube download, screen/camera analysis.
+   - `jarvis-agent-svc`: reminders, tasks, backup. Yeh 24 ghante chalta hai, browser band ho tab bhi.
+2. Laptop par sirf halka "JARVIS Desktop Node" chalega (~150-250 MB RAM). Is ke kaam: keyboard/mouse, apps, WhatsApp, Notepad, Chrome, files, screenshot, clipboard, vitals, shutdown/volume.
+3. Koi CPU/RAM limit nahi lagegi. VPS ke paas 8 cores aur 24 GB free RAM hai; JARVIS ~2-3 GB lega aur doosre apps ko farq nahi padega.
+4. Voice tez hoga: VPS se Gemini sirf 4-6 ms door hai (laptop se 61-116 ms). Laptop ka CPU aur internet free ho jayega.
+5. Gemini ko wahi 83 tools dikhenge. Laptop band ho to sirf laptop wale tools "laptop offline" kahenge; baaki sab chalega. Koi feature nahi hata: WhatsApp, CMD, shutdown aur file server jaise risky kaam aaj PC brain par bina approval chalte hain; VPS par yeh ek dashboard Allow ke baad chalenge, aur woh raasta (login + ConfirmDialog) cutover se pehle tayyar hoga.
+6. Laptop ke liye har command signed aur encrypted hogi. Node chalte hi (logon par khud start) laptop control karega; koi manual step nahi. Windows lock ho to typing/click khud ruk jata hai aur unlock par khud chalu ho jata hai.
+7. Code chalane, WhatsApp, shutdown aur file bahar bhejne se pehle agent dashboard Allow ya aap ka bola hua "haan" (ConfirmFlow) leta hai; laptop par koi dialog nahi. Dashboard wala raasta (C-29/C-30, owner login C-19..C-22 ke saath) cutover se pehle live hoga; awaaz se laptop ke kaam ka approval voice enrollment ke baad (D20), tab tak dashboard Allow. Sab rokne ke liye: Ctrl+Alt+Shift+F12, phone par "Stop desktop" button (X-67, cutover se pehle), "desktop band karo" bolna ya likhna, ya PC .env me JARVIS_DESKTOP_CONTROL=false. Wapas Full sirf laptop tray se; reboot ke baad bhi stop qaim rehta hai.
+8. 24/7 mazboot: agent gire to bridge use khud wapas bulata hai, Gemini session lamba chalega, aur reminders screen band ho tab bhi pohnchenge.
+9. Switch se pehle canary test aur failure drills honge. Phir khaali waqt me ek command chalegi; wapsi bhi ek command: `agent_ctl brain pc`. Tab tak laptop wala JARVIS chalta rahega.
+10. Aap ko yeh karna hai:
+    - D1-D20: ho gaya (2 Oct: defaults OK, D3/D14 badle). Naya sawal D21: scheduled ya background laptop kaam (typing, click, app) jab aap ne 10 min se laptop use na kiya ho, chalne dein? Jawab tak: chalne do.
+    - Cutover se pehle (~45 min, alag alag din): owner password + authenticator enrollment (C-20), live site par pehla login (C-21, C-22), Gemini key restrict aur naya Gmail App Password (C-18), LiveKit key badalne ke baad ek voice call (C-17), dashboard par ConfirmDialog selftest: ek Deny, ek Allow (C-30), aur canary me ek dafa panic hotkey aur tray Full (C-130).
+    - Cutover ke waqt ~40 min: baat karni, page ek dafa reload, dashboard par ek dafa Allow, Windows ek dafa lock/unlock, phone se ek dafa Stop desktop, ek dafa Ctrl+Alt+Shift+F12, tray se Full.
+    - Groq/OpenRouter/Tavily/HF keys (optional) baad me bhi rotate ho sakti hain.
+    - Voice enrollment karni.
+11. Waqt: cutover se pehle ~42 kaam: 22 naye (C-111..C-131 aur X-67) + 20 purane P0/P1, jin me login aur dashboard approval wale C-14, C-15, C-17..C-22, C-29, C-30 bhi hain. Aaj ki raftaar se takreeban 2-3 hafte.
+12. Ek ehtiyat: VPS par laptop ke risky kaam sirf dashboard ya awaaz ke approval par chalenge, is liye login (C-19..C-22) aur dashboard approval (C-29/C-30) ab cutover ki shart hain. Is se cutover takreeban ek hafta der se hoga, magar koi kaam nahi rukega. Agar aap pehle cutover chahte hain to batayein; tab C-29/C-30 tak yeh risky kaam VPS brain par nahi chalenge. Owner approval key (C-133, X-68) optional hai (board par NOT NEEDED, deferred).
+
+Poora design: `docs/ARCHITECTURE_VPS_BRAIN.md`. Naye tasks: C-111, C-112, C-113, C-114, C-115, C-116, C-117, C-118, C-119, C-120, C-121, C-122, C-123, C-124, C-125, C-126, C-127, C-128, C-129, C-130, C-131, C-132, C-133, C-134 (section 6 ke aakhir me) aur X-64, X-65, X-66, X-67, X-68 (section 7 ke aakhir me). Naye contracts: K-70..K-77 (`docs/CONTRACTS.md` v4).
+
+### 13.1 Faislay (user, 2 Oct)
+
+| D | Faisla | Value |
+|---|---|---|
+| D1 | AI, search, email aur SIM keys sirf VPS agent containers (.env.agent) me; bridge se hat jayengi (K-35/K-47 badalte hain) | Haan (approved) |
+| D2 | Memory, Chroma aur baad me voice-ID data VPS par (KL datacenter; provider snapshots mumkin; Chroma embeddings ka matlab rehta hai; backups PC key se encrypted) | Haan (approved) |
+| D3 | Laptop par koi approval dialog ya click nahi ("seedha chale"); risky kaam (code, WhatsApp, shutdown, file bahar) se pehle agent ka ConfirmFlow: dashboard Allow ya bola hua "haan" | Badla gaya (user, 2026-10-02): laptop prompt OFF, ConfirmFlow ON |
+| D4 | Maps scraper laptop par; VPS par sirf live test ke baad (V8) | Jaise likha (approved) |
+| D5 | YouTube download VPS par agar canary pass ho; warna laptop fallback + backoff | Haan (approved) |
+| D6 | VPS files laptop ke unhi folders me mirror; sirf kehne par open; 20 MB se bari files voice call ke bahar copy | Haan (approved) |
+| D7 | VPS media rakha jaye, sirf report ho; kabhi auto-delete nahi | Rakho (approved) |
+| D8 | oom_score_adj 500 (agent, svc) / 300 (bridge), IDLE_PROCS 2 (yeh limits nahi) | Haan (approved) |
+| D9 | Media ke liye nice/ionice | Off, opt-in (approved) |
+| D10 | pids_limit 4096 (fork bomb rokta hai, JARVIS ko slow nahi karta) | Nahi lagega jab tak aap haan na kahein (approved) |
+| D11 | Node logon par autostart (limited token, admin nahi) | Haan (approved) |
+| D12 | Device location laptop se, fallback Lahore | Haan (approved) |
+| D13 | PC fallback keys DPAPI-wrapped, sirf `agent_ctl brain pc` load kare | Haan (approved) |
+| D14 | Koi manual step nahi: node chalte hi desktop control karta hai; Windows lock par input khud rukta hai aur unlock par khud chalu (purana D14 is ne replace kiya) | Badla gaya (user, 2026-10-02): automatic |
+| D15 | Screen/webcam capture sirf jab aap ne pichle 2 min me laptop use kiya ho (ya opt-in), toast ke saath | Haan (approved) |
+| D16 | Laptop offline ho to scheduled laptop action 15 min wait kare, phir announce | 15 min (approved) |
+| D17 | Reminder 30 min tak deliver na ho to aap ko email | Off (approved) |
+| D18 | Claude ki VPS SSH key forced-command deploy user tak mehdood (sshd change, aaj ke scope se bahar) | Poochna hai; aap ki OK ke baghair koi tabdeeli nahi |
+| D19 | VPS builds ke liye alag `jarvis-builder` (K-54 v4) | Haan (approved) |
+| D20 | Voice enrollment tak awaaz se laptop ke kaam approve nahi honge | Haan (approved) |
+| D21 | Scheduled ya background laptop kaam (typing, click, app kholna) jab aap ne 10 min se laptop use na kiya ho: chalne dein ya aap ke aane tak rokein? Finished file kholna aur bolna hamesha chalta hai; risky kaam scheduling ke waqt wala ConfirmFlow approval hi use karte hain | Naya sawal; jawab tak: chalne do (D3 "seedha chale"); rokna ho to JARVIS_ORIGIN_PRESENCE_GATE=1 |
+
+### 13.2 Purane tasks me tabdeeli
+
+| Task | Tabdeeli |
+|---|---|
+| C-08 | DONE; follow-up only. The OS worker lock stays for pc mode. The VPS containers use per-container locks. The Desktop Node uses run/desktop_node.lock plus the shared run/desktop_actor.lock (C-120). |
+| C-09 | DONE; extended by C-123. agent_ctl gains the node and brain commands, and a worker start is refused while JARVIS_BRAIN=vps. Today's PC worker commands stay for pc mode. |
+| C-11 | DONE; extended by C-128: - agent volumes in the backup, encrypted to a PC-held key; - env copies in a separate folder; - the env layout recorded in MANIFEST; - Jarvis_Shared/Downloads excluded unless --with-media. |
+| C-12 | In progress (DOING since 01 Oct 22:35) and still first on the path. - Ship scripts/ and the deploy/hostinger requirements files. - Always name the services (up -d --no-deps <svc>). - The LiveKit pin can move into the V6 window if the hairpin probe needs advertise_internal_ip. - C-128 adds the agent gate. |
+| C-13 | Now on the cutover path (V2a). The kv holds desktop_link, active_job, paused and last_activity_ts; the store also keeps the nonce/seen store and the persisted UI notifications used for reminder delivery. |
+| C-14 | Back on the cutover path (V3b): C-19, C-21 and C-29 need it, and D3 makes the dashboard Allow (C-29/C-30) a cutover prerequisite. On the VPS the agent role arrives through the internal listener :5002, so no AGENT_TOKEN crosses the internet. C-14 keeps HMAC v2 notify and the ui/legacy rooms; AGENT_TOKEN is needed only by the PC fallback. |
+| C-15 | Before cutover (V3b; C-21 and C-29 need it). The listener slice (reconnect forever, socketio_path derivation) moves into C-112. The signed retry queue and the chat id echo stay here. On the VPS the agent's UI_BRIDGE_URL is http://jarvis-bridge:5002. |
+| C-16 | Steps 1-5 (nginx /agent + /twirp, PC on the domain) run before cutover at V3, for the PC fallback. Step 6 mem_limit is REMOVED (user decision); the log rotation stays. The 5101/7880 loopback binds are applied in the V6 LiveKit window (C-131). Depends on C-12, C-09 and C-112 instead of C-15. |
+| C-17 | Before cutover (V3b; C-18 → C-22 → C-30 need it), with its own announced idle LiveKit restart. The rotation also writes .env.agent when it exists. The PC fallback has its own LiveKit key pair (C-127), which is revocable on its own. |
+| C-18 | Before cutover (V3b; C-22 needs it) and after C-127, which it now also depends on: the bridge.env split is done by C-127 in two deploys (V2a code, V2b env). What remains: the user restricts the Gemini key and makes a new Gmail App Password (Groq, OpenRouter, Tavily and HF optional); Claude updates the PC root .env and .env.agent (and the DPAPI fallback file once it exists) without printing values. |
+| C-19 | Before cutover (V3b): C-21 and C-29 need it, and D3 makes the dashboard Allow (C-29/C-30) a cutover prerequisite. Its owner-<8 hex> identity is the one C-116 and K-37 v4 use. |
+| C-20 | Before cutover (V3b): the user enrolls the owner password and authenticator once (about 10 min in the user's own terminal), because the dashboard Allow needs the owner login (C-21, C-22). |
+| C-21 | Before cutover (V3b): the first real login on the live site; C-22 and therefore C-30 need it. |
+| C-22 | Before cutover (V3b; C-30 needs it). check_bundle_secrets also scans the .env.agent names. With D3 the dashboard is the approval surface for risky laptop actions, and finishing C-22 before cutover also closes the legacy-token path to typed chat before the VPS brain goes live. C-22 stays a dependency of the optional C-133. |
+| C-23 | Pulled before cutover (V2a). Depends on C-12, C-13 and C-116 instead of C-14/C-15. - Dispatch target = the brain ('jarvis' or 'jarvis-pc'); AGENT_DISPATCH_MODE=on_demand in vps mode. - The loop runs every 5 s while a human or UI is present and no agent with a matching lk.agent.name and jarvis.session=running is in the room. - The newest dispatch is judged by its job state; one lock plus a 30 s in-flight marker; backoff. - Triggers: agent hello, ui_command start (Wake), /internal/livekit/ensure and the PC-signed /vortex/desktop/ensure. - Surplus agents are removed and active_job is announced to the node. - create_dispatch only. |
+| C-28 | DONE (live, 79 tools including confirm_action); follow-up through C-75 and C-119. By user decision D3 it is the only approval path for laptop actions (dashboard Allow or spoken yes before the agent sends the command; no prompt on the laptop): - _user_affirmed fails closed while unwired; - desktop items are never voice-approvable before voice-ID; - new hooks create_pending(desktop=True, channels ui/voice), create_pending_from_remote (for the node's APPROVAL_REQUIRED) and resolve(approval), which lets C-119 re-send the exec with the agent-signed approval reference. |
+| C-29 | Now a cutover prerequisite (C-131 depends on it; V3b). Today several K-45 HIGH tools (run_cmd_command, automate_whatsapp, shutdown/restart/sleep/empty_recycle_bin, start_file_access_server, send_email, zip_files) set no risk in their @jarvis_tool decorator (so risk low) and run on the PC brain with no confirmation, because K-45's static list is not enforced in code before this task's guard. On the VPS brain the laptop ones are confirm-class (K-76) and need the ConfirmFlow approval, so this routing and C-30 must be live first, or WhatsApp, CMD, shutdown, the file server and laptop attachments would stop at cutover. Its dependencies are unchanged; on the VPS the agent side uses the :5002 listener (C-116). Switch the guard's HIGH asking on together with the C-30 frontend deploy, so the PC brain never asks for an Allow that no dialog can show. |
+| C-30 | Now a cutover prerequisite (C-131 depends on it; V3b). With D3 the ConfirmDialog on the VPS frontend is where the owner approves risky laptop actions (one dashboard Allow, nothing on the laptop). Live checks 8 and 9 of C-131 use it and pass only with a real Allow. Moving it earlier also brings forward X-29, X-31, X-32, X-41, X-44 and X-54, which wait on C-30. |
+| C-31 | In progress (DOING since 01 Oct 22:35); must be DONE before cutover (C-120 depends on it). The node also uses the watchdog: a loop stall of 60 s or more lets the supervisor restart the node. |
+| C-32 | Before cutover. - IDLE_PROCS 2 on the VPS, 1 on the PC; JARVIS_JOB_MEMORY_WARN_MB 3000; shutdown_process_timeout 20. - Prewarm builds the proxies (C-119) and loads MiniLM and ECAPA, but never opens Chroma. - The city comes from jarvis_location, never ipinfo on the VPS. |
+| C-33 | Before cutover. Unrecoverable realtime errors use the rebuild path, then ctx.shutdown (C-114). Reminder and task loops are not started in remote mode (agent-svc owns them). |
+| C-35 | Before cutover; depends only on C-33 (voice_take_over waits for C-34). Eligible identities are owner-*, and text is accepted only from the linked owner. |
+| C-39 | Before cutover; depends on C-33 instead of C-34/C-15. Adds the canary room class jarvis-canary-<epoch> (K-57 v4) with the same isolation plus a tmpfs data dir and user 'canary'; the node refuses actuation from these rooms. |
+| C-40 | Probes are served by the VPS worker. Only one Gemini session runs at a time across canary and probes; the quota is checked first. |
+| C-48 | analyze_screen is split: the node captures (C-122) and the VPS runs vision. Laptop images never go to ':free' providers. The webcam fallback goes through the node and needs presence. |
+| C-52 | JARVIS_USER_ID is already set in every mode (C-112), and the per-job files are merged by C-129. Chroma documents are encrypted (C-124). |
+| C-55 | Clipboard tips come from the node as signed events and enter the model as quoted, untrusted user-side data, never as a SYSTEM NOTIFICATION. |
+| C-56 | Spoken reminders and tasks go through the agent-svc delivery ladder (K-77): live job, then laptop speak_local, then stored UI notification, then optional email. |
+| C-57 | Jobs run on the VPS and their artifacts carry media ids. Laptop steps (fetch and open) run when the job finishes. |
+| C-58 | open_job_artifact becomes pc.fetch + open on the laptop (K-73). os.startfile is never called on the agent host. |
+| C-59 | Automation flags are applied on the node: tightening is accepted from anywhere; loosening only at the laptop (tray). The owner key of the optional C-133 is deferred by D3. Until C-59 is DONE, the PC root .env is the switch: the node's settings parser (C-120) reads JARVIS_DESKTOP_CONTROL and the clipboard flags at start and on change. |
+| C-63 | vitals_pc comes from the node every 10 s. The heartbeat gains link, cgroup and svc fields (C-134), and the bridge's own psutil figures become vitals_vps. |
+| C-64 | Per-role log files (agent, svc, bridge, desktop) on separate files or volumes. Node errors are forwarded with source 'desktop' at WARNING and above. |
+| C-67 | Compression moves to C-114 and no longer waits for C-66. The go_away notice and the resumption delta stay here. |
+| C-70 | Window context comes from node pushes through the C-112 provider. It is marked untrusted and injected as user-side data. |
+| C-72 | Voice-ID files and the model live on the VPS (jarvis_agent_data, model baked into the image). The p95 target is measured on the VPS. C-73 and C-90 follow the same rule: browser enrollment is preferred, and the CLI sample goes over ssh stdin. |
+| C-73 | A spoken yes approves a medium laptop action only on a voice-ID-verified turn id plus the C-75 transcript proof (D20); code_exec is never voice-approved. This wiring moves here from the optional C-133 (user decision D3). |
+| C-75 | Before cutover; depends only on C-28 (C-74 improves recognition later). - Only final voice STT transcripts count, never typed chat, lk.chat or RPC text. - _user_affirmed fails closed while unwired. |
+| C-78 | Document Q&A runs on the laptop through the node; only excerpts of at most 6 KB travel to the VPS. |
+| C-80 | The scheduler lives in agent-svc. Scheduled desktop actions go through the link with origin 'scheduler' and wait 15 min when the laptop is offline (D16). |
+| C-83 | Apply goes through the PC repo plus a deploy, because code in the image is immutable. JARVIS_SELF_REPAIR_APPLY lives in .env.agent. The same applies to C-110. |
+| C-84 | PinchTab stays on the laptop. FFmpeg, yt-dlp and node are also in the VPS image; the PC copies are kept for the fallback. |
+| C-91 | In progress (DOING since 01 Oct 22:35). The startup sound, local speech (C-92) and device location (C-93) come from the node. agent.py keeps them for pc mode. |
+| C-96 | The live checks include the node path: Laptop chip, DESKTOP_OFFLINE, the DESKTOP_LOCKED pause and resume, ConfirmFlow approvals for laptop actions (dashboard Allow, no prompt on the laptop), the stops (Stop desktop, panic hotkey, kill switch, tray Full) and delivery. C-99 covers proxy-to-node security and cancel propagation. |
+| C-101 | Two supervisors: agent-svc on the VPS and the node supervisor on the laptop. No new cron or systemd units. |
+| C-104 | The daily read-only check also covers jarvis-agent and jarvis-agent-svc (scripts/ops/vps_daily_check.py). |
+| C-106 | Add a Linux CI job (Linux import test, pytest core/unit, Dockerfile.agent build, strict manifest check). The Windows job keeps the node and the tools. |
+| C-109 | The docs include docs/ARCHITECTURE-VPS.md and the threat model from C-134. |
+| X-09 | DONE; follow-up in X-67: Electron backend mode 'desktop' starts the node through agent_ctl node start, replacing 'agent'. |
+| X-27 | DONE; follow-up in X-65: edit_notepad_file and append_notepad_file take a basename only, inside Jarvis_Outputs. The node policy enforces the same rule; the stricter wins. |
+| X-29 | Add DESKTOP_ONLY on non-Windows hosts; X-65 step 1 may land first. The node classes shutdown, restart, sleep and the recycle bin as availability: they need the ConfirmFlow approval in the agent before the command is sent, with no prompt on the laptop. |
+| X-31 | run_cmd_command is always high (K-45) and code_exec on the node, so it always needs the dashboard Allow (ConfirmFlow) before the agent sends it; the laptop shows no prompt (user decision D3). |
+| X-36 | DONE; follow-up in X-64 (for X-36 and X-37): location goes through the device city. Never ipinfo on the VPS. DuckDuckGo from the datacenter IP may be rate-limited. |
+| X-38 | DONE; info only: SIM keys live in .env.agent. The audit file sits on the jarvis_outputs volume. |
+| X-39 | DONE; follow-up in X-65: QR open and image open go through jarvis_delivery.open_artifact. X-40 (DONE; follow-up in C-132): the image public_url goes through /vortex/media instead of the LAN URL. |
+| X-41 | The WhatsApp test-number guard runs on the laptop. Messaging class: the ConfirmFlow approval (dashboard Allow) before the agent sends the command; no prompt on the laptop (user decision D3). |
+| X-42 | Protected titles match by prefix. The open_app risk callable is X-43. Window context is pushed by the node (X-44 too). |
+| X-54 | A missing attachment is an error. The node pulls laptop attachments as encrypted blobs. VPS attachments are confined to Jarvis_Outputs, Jarvis_Shared and the blob temp dir (with X-55). |
+| X-56 | Add a headless flag. The placement decision is made in C-132 after a live test; visible mode on the laptop stays the default. |
+| X-58 | Runs on the VPS as a job; auto_open becomes delivery plus open on the laptop. C:\ffmpeg is irrelevant there. |
+| X-62 | PinchTab URL from config. The tools run only inside the node process (shared _session). |
+| X-63 | The registry and policy tests become two-sided: the node registry against the manifest, and the VPS proxies. |
+
+### 13.3 Risks
+
+- Long critical path: 22 new tasks (C-111..C-131 and X-67) plus 20 existing P0/P1 tasks before cutover, including the owner-login and dashboard-approval chain (C-14, C-15, C-17..C-22, C-29, C-30) that D3 makes necessary. Mitigation: parallel code waves; the PC brain serves the user throughout and gets the login and the ConfirmDialog first; nothing switches until the canary and drills pass. An earlier cutover would leave the risky laptop actions waiting for C-29/C-30, so it is offered to the user but is not the default (nothing may be removed).
+- Media hairpin: a containerized agent behind docker-proxy to the advertised public IP may give choppy audio. Mitigation: a canary probe; advertise_internal_ip in one announced LiveKit window; last resort, host networking for the agent only.
+- Gemini Live quota and concurrency on the user's key: live session + canary + probes. Mitigation: one canary or probe session at a time; 429 handling tested; compression keeps the context small.
+- Shared datacenter IP in Kuala Lumpur: YouTube bot checks, DuckDuckGo rate limits, Google Maps consent pages, Gmail new-location alerts. These can affect JARVIS and the IP's reputation for neighbours. Mitigation: laptop fallbacks, 6 h per-tool backoff, the maps scraper stays on the laptop, an SMTP check in the canary.
+- Desktop control equals code execution while the node runs (user decision D3: no laptop-side approval and no manual step). A prompt-injected or compromised agent can use input-class tools whenever the node runs and Windows is unlocked, and a compromised agent container, bridge or owner session can get confirm-class actions through ConfirmFlow. Mitigation: ConfirmFlow before every confirm-class send, the agent-signed approval reference, launch-surface rules, protected windows, the path policy, the D15 capture rule, the Windows-lock pause, caps, audit and WAL, the panic hotkey, Stop desktop and the JARVIS_DESKTOP_CONTROL kill switch. Residual risk accepted by the user with D3 and documented.
+- Laptop compromise leads to VPS root through Claude's SSH key in ~/.ssh. The node path policy denies ~/.ssh, but malware on the PC is out of scope until D18 (forced-command deploy user) is approved.
+- Until C-22, a legacy-token socket counts as the owner and can send typed chat, which can steer laptop actions on the PC brain, as it can today. C-22 is now a cutover prerequisite, so the VPS brain never runs with the legacy path on; the ConfirmDialog (C-30) is deployed only after C-22, and the bridge accepts confirm_response only from role-ui sockets (C-29), so a legacy socket cannot approve. Mitigation until then: the rotated token behind the temporary basic auth, owner-only lk.chat and RPC (C-124), caps, audit, panic, Stop desktop and the kill switch.
+- D3 makes ConfirmFlow the only approval path for risky laptop actions. Today several K-45 HIGH tools (run_cmd_command, automate_whatsapp, shutdown/restart/sleep/empty_recycle_bin, start_file_access_server, send_email, zip_files) set no risk in their @jarvis_tool decorator (so risk low) and run on the PC brain with no confirmation, because K-45's static list is not enforced in code yet; medium tools such as press_hotkey (browser close) and write_custom_code auto_run can be approved by voice through confirm_action. On the VPS brain they need the ConfirmFlow approval, so without the dashboard path they would stop working at cutover. Mitigation: C-29/C-30 and their chain (C-14, C-15, C-17..C-22) are cutover prerequisites, C-131 depends on them, and live checks 8 and 9 pass only with a real dashboard Allow. A spoken yes approves laptop actions only after voice enrollment (D20); until then the dashboard Allow is the path.
+- The cutover waits for one Cursor task (X-67: Laptop chip and Stop desktop button). Mitigation: X-67 is P0 and can start as soon as C-116 and C-117 land; the spoken or typed stop (C-119), the panic hotkey and the kill switch work without it.
+- Data on a shared VPS in a third-country datacenter: encrypted memory, Chroma embeddings that still carry meaning, later voice-ID samples, provider-level snapshots that JARVIS cannot delete. Disclosed in D2; backups encrypted to a PC key.
+- No CPU/RAM limits: a runaway JARVIS process could pressure 23 other apps on a host without swap. Mitigation: oom_score_adj (JARVIS dies first), disk admission, monitoring alerts, fair cgroup share, optional pids_limit (D10).
+- Compat shims patch Cursor symbols by name until X-64/X-65. A renamed binding silently restores ipinfo or os.startfile. Mitigation: startup self-test, frozen symbols, Linux CI test.
+- Linux process-per-job executor: per-process singletons, a single Chroma opener (other processes run without vector recall), multi-process log rotation. Mitigation: file locks, separate log files per role, IDLE_PROCS 2.
+- Brief two-brain window during a switch or after a crash. Mitigation: explicit per-brain dispatch, one dispatch lock, surplus-agent removal, the node's active_job check, brain journal with automatic restore.
+- Manifest or code drift between Cursor's edits and deploys. Mitigation: the node runs a pinned snapshot of the deployed SHA; MANIFEST_MISMATCH instead of a wrong action; strict check in deploy and CI.
+- LiveKit restarts (C-17 key rotation in V3b, V5 if the hairpin fails, V6 pin + second key + binds) drop voice calls. Mitigation: only in announced idle windows.
+- The first image build (~10-15 min, ~3 GB) loads the shared VPS and Docker storage. Mitigation: a dedicated jarvis-builder, an announced window, build cache measured before and after, no prune without the user's OK.
+- Laptop offline means every desktop tool is unavailable. GUI actions are never queued, and scheduled desktop actions fail after 15 min. Announced honestly; reminders still arrive through the other channels.
+- Laptop clock jumps after sleep or resume. Mitigation: own-clock freshness with a measured offset, monotonic deadlines, CLOCK_SKEW refusal with an alert.
+- A bridge restart loses in-flight blobs and pauses chat for seconds. Mitigation: retryable UPLOAD_FAILED, the node outbox, persisted switches and notifications in the C-13 store.

@@ -514,3 +514,11 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `.venv_312/Scripts/python.exe -m pytest tests/tools/test_notepad_tools.py tests/automation/test_notepad_automation.py -q -p no:cacheprovider` — 18 passed
 - **Commit:** abhi commit ho raha hai · **Deploy:** no
 - **Doosre agent ke liye:** X-31 run_cmd_command ab X-27 par unblock; C-61 exhaustive notepad tests update pending
+
+### ✅ [claude] VPS brain plan · Laptop ka bhaari kaam VPS par: design + tasks (user ka faisla) · 2026-10-01 22:00 – 2026-10-02 01:15 PKT
+- **Kya kiya:** User ke faislay (sab bhaari kaam VPS par, laptop par sirf desktop tools, koi CPU/RAM limit nahi) ka poora design banaya. 5 jaaize, 3 alag design, judge, 2 critic, phir user ke D3 jawab (laptop par koi Allow click ya arming nahi) ke mutabiq adjust aur dobara jaanch. `plan.md` me section 13, 29 naye tasks (C-111..C-134, X-64..X-68; C-133/X-68 user ke D3 ki wajah se deferred), 62 purane tasks par "VPS brain" notes, aur `docs/CONTRACTS.md` v4 (K-70..K-77 naye, 42 purane contracts me 53 tabdeeliyan). Poora design: `docs/ARCHITECTURE_VPS_BRAIN.md`.
+- **Files:** `plan.md`, `docs/CONTRACTS.md`, `docs/ARCHITECTURE_VPS_BRAIN.md`
+- **Verify:** board 202 rows parse · section 4 == CONTRACTS body · har dependency maujood · lanes sahi (165 paths) · guard: koi secret/private naam nahi
+- **Commit:** isi entry wala commit · **Deploy:** no
+- **User ke liye:** Switch (cutover) se pehle 42 tasks hain (dashboard Allow C-29/C-30 aur login C-17..C-22 bhi pehle, taake switch ke baad koi risky laptop kaam band na ho). Andaza 2–3 hafte; aap ka kul waqt ~2.5 ghante. Is poore arse me JARVIS laptop par pehle ki tarah chalta rahega. D21 (scheduled kaam ke liye presence gate) default OFF hai.
+- **Doosre agent ke liye:** Cursor: tumhare naye tasks X-64..X-67 (X-67 P0, cutover se pehle) Claude ke C-111/C-113/C-116/C-117 ke baad khulenge; `wait_for_work.py` khud dikhayega.
