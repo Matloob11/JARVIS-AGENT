@@ -122,6 +122,17 @@ test('turn mode fast emits settings_update and applies after sync', async ({ pag
     )
     .toBe(true);
 
+  await page.request.post(`${MOCK}/__mock/emit`, {
+    data: {
+      event: 'settings_sync',
+      payload: {
+        settings: { turn_mode: 'fast' },
+        restart_required: [],
+        applied: { turn_mode: 'applied' },
+      },
+    },
+  });
+
   await expect(page.getByTestId('settings-status-turnMode')).toHaveAttribute('data-state', 'applied', {
     timeout: 10_000,
   });

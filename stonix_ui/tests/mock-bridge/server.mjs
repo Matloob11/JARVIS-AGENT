@@ -242,7 +242,7 @@ function handleVoiceEnroll(socket, payload, cb) {
     [33, 66, 100].forEach((percent, index) => {
       setTimeout(() => {
         const collected = Math.round((target * percent) / 100);
-        socket.emit('voice_enroll_progress', {
+        emitToUi('voice_enroll_progress', {
           ...base,
           percent,
           seconds: collected,
@@ -256,7 +256,7 @@ function handleVoiceEnroll(socket, payload, cb) {
   }
   if (action === 'commit') {
     setTimeout(() => {
-      socket.emit('voice_enroll_result', loadFixture('voice_enroll_result'));
+      emitToUi('voice_enroll_result', loadFixture('voice_enroll_result'));
     }, 150);
   }
 }

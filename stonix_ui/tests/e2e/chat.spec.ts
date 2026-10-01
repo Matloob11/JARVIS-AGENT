@@ -72,11 +72,14 @@ test('agent_offline ack queues user message for resend', async ({ page }) => {
 });
 
 test('legacy role agent renders as assistant', async ({ page }) => {
+  await page.request.post('http://127.0.0.1:5199/__mock/agent', { data: { online: true } });
+  await expect(page.getByTestId('chip-bridge')).toHaveAttribute('data-active', 'true');
+  const id = `legacy-agent-msg-${Date.now()}`;
   await page.request.post('http://127.0.0.1:5199/__mock/emit', {
     data: {
       event: 'new_message',
       payload: {
-        id: 'legacy-agent-msg',
+        id,
         role: 'agent',
         text: 'Legacy agent line',
         source: 'text',
@@ -85,7 +88,8 @@ test('legacy role agent renders as assistant', async ({ page }) => {
       },
     },
   });
-  const bubble = page.locator('[data-testid="chat-msg"][data-id="legacy-agent-msg"]');
+  const bubble = page.locator(`[data-testid="chat-msg"][data-id="${id}"]`);
+  await expect(bubble).toBeVisible({ timeout: 15_000 });
   await expect(bubble).toHaveAttribute('data-role', 'assistant');
   await expect(bubble).toContainText('Legacy agent line');
   });

@@ -11,6 +11,7 @@
     "vite-dev": "vite --no-open --host 127.0.0.1",
     "electron-dev": "concurrently --kill-others \"npm run vite-dev\" \"wait-on http://127.0.0.1:5173 && electron .\"",
     "build": "tsc && vite build",
+    "build:prod": "cross-env VITE_BRIDGE_BASE=/vortex VITE_VORTEX_URL= vite build",
     "prod-build": "npm run build",
     "prod-serve": "npx serve -s dist -l 5173",
     "prod-run": "cross-env ELECTRON_IS_DEV=0 npx concurrently -k \"npm run prod-serve\" \"wait-on http://127.0.0.1:5173 && electron .\"",
@@ -21,7 +22,7 @@
     "smoke:electron": "node scripts/electron-prod-smoke.cjs",
     "test:electron": "playwright test --config playwright.electron.config.ts",
     "test:electron:ci": "xvfb-run -a cross-env ELECTRON_DISABLE_SANDBOX=1 playwright test --config playwright.electron.config.ts",
-    "verify:prod": "npm run build && npm run test:e2e && npm run smoke:electron && npm run test:electron",
+    "verify:prod": "npm run build:prod && npm run test:e2e && npm run smoke:electron && npm run test:electron",
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
   },

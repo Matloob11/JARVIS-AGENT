@@ -207,9 +207,12 @@ button {
     display: none;
   }
 
-  .layout-zone--core,
+  .layout-zone--core {
+    @apply flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto;
+  }
+
   .layout-zone--trace {
-    @apply flex min-h-0 flex-col gap-3;
+    @apply flex min-h-0 shrink-0 flex-col gap-3;
   }
 
   .window-button,
@@ -228,7 +231,7 @@ button {
 
   .operations-rail,
   .command-center-stage {
-    @apply flex min-h-0 flex-col gap-3;
+    @apply flex min-h-0 flex-col gap-3 overflow-hidden;
   }
 
   .command-panel {

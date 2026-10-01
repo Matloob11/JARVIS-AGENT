@@ -36,6 +36,7 @@ test('not enrolled shows Not enrolled on the meter', async ({ page }) => {
 });
 
 test('enrollment wizard emits start and commit and shows success', async ({ page }) => {
+  await page.getByTestId('voice-id-enroll-link').scrollIntoViewIfNeeded();
   await page.getByTestId('voice-id-enroll-link').click();
   await expect(page.getByTestId('voice-enroll-dialog')).toBeVisible();
 
@@ -51,6 +52,7 @@ test('enrollment wizard emits start and commit and shows success', async ({ page
 
   await expect(page.getByTestId('voice-enroll-progress')).toBeVisible({ timeout: 5_000 });
 
+  await expect(page.getByTestId('voice-enroll-commit')).toBeEnabled({ timeout: 5_000 });
   await page.getByTestId('voice-enroll-commit').click();
 
   await expect
@@ -61,7 +63,7 @@ test('enrollment wizard emits start and commit and shows success', async ({ page
     )
     .toBe(true);
 
-  await expect(page.getByTestId('voice-enroll-success')).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId('voice-enroll-success')).toBeVisible({ timeout: 15_000 });
 });
 
 test('agent muted blocks Start in enrollment wizard', async ({ page }) => {

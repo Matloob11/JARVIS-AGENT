@@ -611,7 +611,7 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | C-99 | claude | P4 | Live desktop-tools smoke run on the PC with Sir | C-31, C-75, C-55, C-84, C-85, X-63, C-96 | TODO |
 | X-09 | cursor | P4 | Electron shell: canonical VPS URL, offline page, hybrid-safe opt-in backend via agent_ctl, browser-hidden window controls, real Electron test | X-07, X-08, C-09, K-01 (DASH-UI-RUNTIME), K-49 (C-ORIGIN-1) | DONE (01 Oct 21:25 PKT) |
 | X-51 | cursor | P4 | Responsive layout for tablet and phone (bottom tabs, chips always visible, camera kept mounted) | X-20, X-45, X-15 | DONE (cursor, 01 Oct 17:15 PKT) |
-| X-59 | cursor | P4 | Complete mock-bridge e2e suite and verify:prod | X-08, X-13, X-14, X-15, X-16, X-19, X-10, X-21, X-22, X-17, X-20, X-49, X-23, X-24, X-33, X-45, X-46, X-47, X-18, X-48, X-51, X-09 | BLOCKED (waiting many UI deps) |
+| X-59 | cursor | P4 | Complete mock-bridge e2e suite and verify:prod | X-08, X-13, X-14, X-15, X-16, X-19, X-10, X-21, X-22, X-17, X-20, X-49, X-23, X-24, X-33, X-45, X-46, X-47, X-18, X-48, X-51, X-09 | DONE (cursor, 01 Oct 21:45 PKT) |
 | X-60 | cursor | P4 | Opt-in live smoke suite against the VPS (session-cookie storageState, no stored TOTP seed) | X-59, C-65 | BLOCKED (waiting X-59,C-65) |
 | X-61 | cursor | P4 | Info/media tools smoke harness (--dry / --live) | C-48, X-36, X-37, X-57, X-40, X-39, X-58, C-78, X-04 | BLOCKED (waiting C-48,X-36+) |
 | X-63 | cursor | P4 | Tool registry/policy tests + legacy test-script cleanup | X-29, X-30, X-26, X-27, X-31, X-25, X-34, X-41, X-42, X-43, X-44, X-62, X-56, X-35, X-28, K-16 (DesktopToolPolicy) | BLOCKED (waiting many tool deps) |
