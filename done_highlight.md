@@ -185,3 +185,40 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** sim+dashboard e2e pass
 - **Commit:** pending · **Deploy:** no · **Doosre agent ke liye:** —
 
+
+
+### ✅ [claude] C-06 · PC test tools: pytest stack + Playwright + prereq checker · 2026-10-01 13:05–14:30 PKT
+- **Kya kiya:** venv me pytest ka stack pin kiya (`pytest 9.0.2`, `pytest-asyncio 1.4.0`, `pytest-mock 3.16.0`, `pytest-timeout 2.4.0`) aur Playwright Chromium 1200 install kiya. Naya read-only checker `scripts/pc/check_desktop_prereqs.py` batata hai PC par kya mojood hai aur kya missing (khud kuch install ya change nahi karta). venv ka toota `phoenix` pytest plugin har pytest run gira deta tha; `pytest.ini` me `-p no:phoenix` se band kiya.
+- **Files:** `requirements-dev.txt`, `scripts/pc/check_desktop_prereqs.py`, `pytest.ini`
+- **Verify:** checker: 17 OK, 4 MISSING (D: drive nahi hai, WhatsApp Desktop link baqi, PinchTab server band, `imageio_ffmpeg` fallback), 1 INFO · pylint 10/10 · pytest ab bina kisi env trick ke chalta hai
+- **Commit:** `9f24aa3` · **Deploy:** no
+- **Doosre agent ke liye:** `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1` mat lagao (us se pytest-asyncio bhi band hota hai aur async tests chalte hi nahi). X-11 ab khul gaya hai.
+
+### ✅ [claude] C-05 · Lanes ka pehra + `docs/CONTRACTS.md` + log aur encoding guard · 2026-10-01 13:05–14:30 PKT
+- **Kya kiya:** `.coord/lanes.json` banaya (har file ka maalik agent). Pre-commit hook ab: `JARVIS_AGENT` ke baghair commit rokta hai; doosri lane ki file rokta hai (lane HEAD wali `lanes.json` se aati hai, isliye usi commit me lane barhayi nahi ja sakti); `done_highlight.md` ki purani line badalna ya hatana rokta hai; double-encoded text (MOJIBAKE) rokta hai aur theek karne ka tareeqa batata hai. Contracts ki asal copy ab `docs/CONTRACTS.md` (v1) hai. `CLAUDE.md` aur `.cursor/rules/jarvis-collab.mdc` me commit ka tareeqa aur nayi lanes likhi. Ek purane `plan.md` edit (127433c) ne poori file double-encode kar di thi (841 jagah); woh repair kar di.
+- **Files:** `.coord/lanes.json`, `scripts/coord/check_lane.py`, `scripts/coord/precommit.py`, `docs/CONTRACTS.md`, `CLAUDE.md`, `.cursor/rules/jarvis-collab.mdc`, `tests/unit/test_check_lane.py`, `plan.md`
+- **Verify:** `tests/unit/test_check_lane.py` 63 passed · is batch ke saare commits hook se "clean" guzre · kisi file ka maalik: `python scripts/coord/check_lane.py --whoowns <path>`
+- **Commit:** `84064a2` · **Deploy:** no
+- **Doosre agent ke liye:** Commit ka tareeqa: `$env:JARVIS_AGENT='cursor'; git commit -m "[cursor] X-NN: ..." -- <paths>`. `plan.md` / `done_highlight.md` sirf UTF-8 edit tool se badlo (PowerShell 5.1 `Set-Content` se nahi).
+
+### ✅ [claude] C-07 · Test baseline theek + tests live system se alag · 2026-10-01 13:05–14:30 PKT
+- **Kya kiya:** 2 purane loop tests ab `notify_transcription` check karte hain (`session.say` chat-crash fix me hat chuka tha). `test_download_images_mock` ab wahi `DDGS` patch karta hai jo tool use karta hai (pehle asli DuckDuckGo request ja rahi thi). Tests aur smoke script ab live VPS bridge ko log nahi bhejte aur live agent log me nahi likhte (`UI_BRIDGE_URL` = band local port, `LOG_FILE` = temp folder). Smoke ka voice-ID check ab sach me fail ho sakta hai.
+- **Files:** `tests/core/test_agent_loops.py`, `tests/core/test_advanced_tools.py`, `tests/conftest.py`, `scripts/smoke/livekit_voice_vision_smoke.py`
+- **Verify:** `pytest tests/core tests/unit tests/integration` → 191 passed, 0 failed · smoke 5/5 PASS (`--include-voice-id` ke saath) · test run ke baad `logs/jarvis_hybrid_local.log` unchanged
+- **Commit:** `9138a9a` · **Deploy:** no
+- **Doosre agent ke liye:** Asal `download_images` tool me bug baqi hai: `ddgs`/`primp` "Invalid impersonate" (asli image search fail). `tests/exhaustive/**` (Claude lane) ko C-61 se pehle koi na chalaye; yeh asli mouse/keyboard chalata hai.
+
+### ✅ [claude] C-11 · Backup/restore tooling (PC + VPS) + restore drill · 2026-10-01 13:05–14:30 PKT
+- **Kya kiya:** `services/utils/backup_system.py` theek kiya (backup kabhi apne aap ko backup nahi karta; agar koi source backup folder ke andar ho to warning deta hai). PC: `scripts/ops/backup_local.py` (`--now` data zip + 30 ki rotation, `--full-tree`, `--list`). VPS: `deploy/hostinger/backup_vps.sh` sirf JARVIS ki cheezein leta hai (`/opt/jarvis-agent`, nginx `jarvis.conf` + htpasswd, `.env` files, bridge data, image rollback tags); VPS ke doosre apps ko haath nahi lagata. `deploy/hostinger/RUNBOOK.md` me backup, read-only restore drill, restore aur health check ke steps.
+- **Files:** `services/utils/backup_system.py`, `scripts/ops/backup_local.py`, `deploy/hostinger/backup_vps.sh`, `deploy/hostinger/RUNBOOK.md`, `tests/unit/test_backup_system.py`
+- **Backups:** VPS `/root/jarvis-backups/2026-10-01_0825Z-first-scripted` + `2026-10-01_0826Z-verify`; PC mirror `%USERPROFILE%\JARVIS-backups\vps`
+- **Verify:** `tests/unit/test_backup_system.py` 14 passed · restore drill (14:28 PKT): live `/opt/jarvis-agent` backup ke barabar, `SHA256SUMS` + `volumes.tgz` OK (`ARCHIVES_OK`)
+- **Commit:** `5b5d2e1` + executable-bit commit · **Deploy:** no (sirf backup script VPS par chali)
+- **Doosre agent ke liye:** VPS par kuch overwrite karne se pehle `backup_vps.sh <label>` (RUNBOOK). VPS deploy sirf Claude karta hai.
+
+### ✅ [claude] C-38 · Voice-ID engine ab load hota hai · 2026-10-01 13:05–14:30 PKT
+- **Kya kiya:** torchaudio 2.10 ke liye shims speechbrain import se pehle lagaye; model ab khud download nahi hota; engine apni halat saaf batata hai: `model_missing` / `not_enrolled` / `ready` / `engine_error`.
+- **Files:** `services/ai_core/voice_fingerprint.py`, `tests/unit/test_voice_id_import.py`
+- **Verify:** `tests/unit/test_voice_id_import.py` 16 passed · smoke `--include-voice-id` PASS (koi model download nahi hua)
+- **Commit:** `5d6b368` · **Deploy:** no (agent restart baad me voice tasks ke saath, RUNTIME LOCK le kar)
+- **Doosre agent ke liye:** Voice-ID UI ke liye engine states yahi 4 hain.
