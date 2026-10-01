@@ -529,3 +529,25 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** 8 naye K-7x headings · section 4 == CONTRACTS body · C-133/X-68 NOT NEEDED aur `wait_for_work.py` unhein nahi dikhata · `check_lane.py --whoowns src/core/desktop/node.py` = claude · hook clean
 - **Commit:** isi entry wala commit · **Deploy:** no
 - **Doosre agent ke liye:** Cursor: Desktop Node, PC brain ya Electron local backend kabhi start mat karna jab node chal raha ho (rule file me likha hai).
+
+### ✅ 🚀 [claude] C-12 · Deploy tooling + pehla live sync deploy · 2026-10-02 00:30–03:00 PKT
+- **Kya kiya:** Naye scripts: `deploy_from_pc.sh` (sirf committed HEAD aur sirf naam diye gaye services), `deploy.sh` v2 (lock, pehle backup, doosri apps ka smoke check jis me naam sirf hash hote hain, `nginx -t` ke baad reload, har service ka health gate, fail par khud rollback), `rollback.sh` aur `smoke_other_apps.sh`. Phir pehla live deploy: bridge, LiveKit (ab pinned v1.13.7, keys env se) aur nginx. Frontend ko haath nahi lagaya (C-21 tak).
+- **Files:** `deploy/hostinger/deploy_from_pc.sh`, `deploy.sh`, `rollback.sh`, `smoke_other_apps.sh`, `RUNBOOK.md`, `tests/unit/test_deploy_tooling.py`
+- **Backups:** VPS `/root/jarvis-backups/2026-10-01_2157Z-pre-deploy-0cb806e` (rollback: `bash /root/jarvis-backups/tools/rollback.sh 2026-10-01_2157Z-pre-deploy-0cb806e`)
+- **Verify:** offline tests 17 passed (+13 e2e with `JARVIS_DEPLOY_E2E=1`: 30 passed) · shellcheck clean · VPS dry run OK · live deploy 47 s me: health gate sab ok (bridge, `/vortex/health` 200, LiveKit 200, `/rtc/validate` 401, frontend 200, cert 88 din) · **doosri apps bilkul pehle jaisi** (14 sites, 23 containers, 33 listeners) · laptop worker 3 s me dobara register · agent room me join
+- **Commit:** `0663b26` · **Deploy:** yes 🚀 (DEPLOYED_SHA `0cb806e`)
+- **Doosre agent ke liye:** Frontend deploy C-21 tak mana. Deploy chahiye to `REQ-DEPLOY`.
+
+### ✅ [claude] C-31 · Event-loop stall watchdog · 2026-10-02 00:30–03:00 PKT
+- **Kya kiya:** Naya `services/utils/jarvis_loopwatch.py`: agent ka event loop atak jaye (koi blocking call) to `EVENT_LOOP_STALL` ke saath chalte tools aur loop thread ka chhota stack (secrets chhupa kar) log hota hai. Laptop sleep/resume ko atakna nahi samajhta. Har job ke saath chalta hai aur job khatam hone par khud band hota hai (LiveKit 1.4.6 normal job end par cleanup nahi chalata).
+- **Files:** `services/utils/jarvis_loopwatch.py`, `src/core/agent_runner.py`, `tests/unit/test_loopwatch.py`
+- **Verify:** tests pass · full suite 670 passed, 0 failed · CPU takreeban 0.3% of one core · review: 1 major theek, recheck approve
+- **Commit:** `cf2d3be` · **Deploy:** agle agent restart par live (Claude karega)
+- **Doosre agent ke liye:** —
+
+### ✅ [claude] C-91 · Startup sound: .mp3 ya .wav, phir Cursor ka chime · 2026-10-02 00:30–03:00 PKT
+- **Kya kiya:** Agent start par sound ab is tarteeb se dhoondhta hai: `JARVIS_STARTUP_SOUND`, phir usi naam ka .wav, phir `assets/audio/jarvis_startup_chime.wav` (X-02). Koi file na chale to agli try hoti hai. Startup kabhi nahi rukta, aur file ka path log nahi hota (K-69).
+- **Files:** `src/core/agent.py`, `tests/core/test_startup_sound.py`
+- **Verify:** tests pass · review approve (4 minor theek)
+- **Commit:** `0cb806e` · **Deploy:** agle agent restart par chime bajega (raat ko restart nahi kiya)
+- **Doosre agent ke liye:** —
