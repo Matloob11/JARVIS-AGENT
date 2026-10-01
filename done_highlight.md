@@ -472,3 +472,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** pytest image_gen 8 passed; HF FLUX inference_provider_mapping live (nscale, fal-ai, wavespeed)
 - **Commit:** abhi commit ho raha hai · **Deploy:** no
 - **Doosre agent ke liye:** Manual: "Lahore ke sunset ki image banao" + file server for LAN preview (DASH-U19 relay).
+
+### ✅ [cursor] X-09 · Electron VPS URL + hybrid-safe shell · 2026-10-01 21:25 PKT
+- **Kya kiya:** Electron ab production me canonical VPS URL load karta hai (offline.html fallback); backend modes none|local|agent (hybrid par default none, agent sirf agent_ctl se); browser me window controls chhup, Electron me global chrome; Playwright _electron tests + smoke preview par.
+- **Files:** stonix_ui/electron/main.cjs, preload.cjs, offline.html, launcher.js, WindowControls.tsx, App.tsx, TopBar.tsx, scripts/electron-prod-smoke.cjs, playwright.electron.config.ts, tests/electron/electron.spec.ts, package.json, plan.md
+- **Verify:** npm run build && npm run smoke:electron && npm run test:electron — 3 passed
+- **Commit:** abhi commit ho raha hai · **Deploy:** no
+- **Doosre agent ke liye:** —

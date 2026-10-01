@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from '@/features/auth/AuthProvider';
 import LoginScreen from '@/features/auth/LoginScreen';
 import Dashboard from '@/features/command-center/Dashboard';
 import { LiveKitProvider } from '@/features/voice/LiveKitProvider';
+import WindowControls from '@/shared/ui/WindowControls';
 
 const AuthenticatedApp = () => {
   const { status } = useAuth();
@@ -30,7 +31,12 @@ const AuthenticatedApp = () => {
 export const App = () => (
   <Toast>
     <AuthProvider>
-      <AuthenticatedApp />
+      <div className="relative min-h-screen">
+        <div className="pointer-events-none fixed right-3 top-2 z-[500] [&_.window-button]:pointer-events-auto">
+          <WindowControls />
+        </div>
+        <AuthenticatedApp />
+      </div>
     </AuthProvider>
   </Toast>
 );

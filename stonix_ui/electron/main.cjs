@@ -1,54 +1,271 @@
-const { app, BrowserWindow, ipcMain, Menu, Tray } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, Tray, shell, session } = require('electron');
 const path = require('path');
-const isDev = process.env.ELECTRON_IS_DEV !== '0' && !app.isPackaged;
-const startBackendEnabled = process.env.DISABLE_BACKEND !== '1';
+const fs = require('fs');
 const { spawn } = require('child_process');
+const http = require('http');
+const https = require('https');
+
+const isDev = process.env.ELECTRON_IS_DEV !== '0' && !app.isPackaged;
+const DEFAULT_UI_URL = 'https://jarvis.srv1802669.hstgr.cloud';
+const OFFLINE_PAGE = path.join(__dirname, 'offline.html');
+const DIST_INDEX = path.join(__dirname, '../dist/index.html');
 
 let mainWindow;
 let backendProcess;
 let tray = null;
 let isQuitting = false;
+let pendingVpsUrl = DEFAULT_UI_URL;
 
-const fs = require('fs');
+function readRootEnvValue(name) {
+  const envPath = path.join(__dirname, '../../.env');
+  if (!fs.existsSync(envPath)) return null;
+  const text = fs.readFileSync(envPath, 'utf8');
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq <= 0) continue;
+    const key = trimmed.slice(0, eq).trim();
+    if (key !== name) continue;
+    let val = trimmed.slice(eq + 1).trim();
+    if (
+      (val.startsWith('"') && val.endsWith('"')) ||
+      (val.startsWith("'") && val.endsWith("'"))
+    ) {
+      val = val.slice(1, -1);
+    }
+    return val;
+  }
+  return null;
+}
 
-function startBackend() {
-  const rootDir = path.join(__dirname, '../../');
-  console.log(`[Electron] Starting JARVIS Backend in ${rootDir}...`);
-  
+function resolveBackendMode() {
+  if (process.env.DISABLE_BACKEND === '1') {
+    return 'none';
+  }
+  const explicit = (process.env.JARVIS_ELECTRON_BACKEND || '').trim().toLowerCase();
+  if (explicit === 'none' || explicit === 'local' || explicit === 'agent') {
+    return explicit;
+  }
+  const hybrid = readRootEnvValue('JARVIS_HYBRID');
+  if (hybrid === '1') {
+    return 'none';
+  }
+  return 'local';
+}
+
+function resolvePythonCmd(rootDir) {
   let pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
-  
-  // Try to find a virtual environment's python
   const venvs = ['.venv_312', '.venv', 'venv'];
   const scriptsDir = process.platform === 'win32' ? 'Scripts' : 'bin';
   const pythonExec = process.platform === 'win32' ? 'python.exe' : 'python3';
-  
   for (const venv of venvs) {
     const vPath = path.join(rootDir, venv, scriptsDir, pythonExec);
     if (fs.existsSync(vPath)) {
       pythonCmd = vPath;
-      console.log(`[Electron] Using virtual env python: ${pythonCmd}`);
       break;
     }
   }
-  
+  return pythonCmd;
+}
+
+function startLocalBackend() {
+  const rootDir = path.join(__dirname, '../../');
+  const pythonCmd = resolvePythonCmd(rootDir);
+  console.log(`[Electron] Starting local bridge (vortex) in ${rootDir}...`);
+
   const backendPath = path.join(rootDir, 'src/core/vortex.py');
   backendProcess = spawn(pythonCmd, [backendPath], {
     cwd: rootDir,
     stdio: 'inherit',
-    shell: true
+    shell: true,
   });
 
   backendProcess.on('error', (err) => {
-    console.error(`[Electron] Failed to start backend: ${err}`);
+    console.error(`[Electron] Failed to start local backend: ${err}`);
   });
 
   backendProcess.on('exit', (code) => {
-    console.log(`[Electron] Backend process exited with code ${code}`);
+    console.log(`[Electron] Local backend exited with code ${code}`);
+    backendProcess = null;
     if (code !== 0 && !isQuitting) {
-       console.log('[Electron] Attempting backend restart in 5s...');
-       if (mainWindow) mainWindow.webContents.send('backend-exit', code);
-       setTimeout(startBackend, 5000);
+      console.log('[Electron] Attempting local backend restart in 5s...');
+      if (mainWindow) mainWindow.webContents.send('backend-exit', code);
+      setTimeout(startLocalBackend, 5000);
     }
+  });
+}
+
+function startAgentWorker() {
+  const rootDir = path.join(__dirname, '../../');
+  const pythonCmd = resolvePythonCmd(rootDir);
+  const agentCtl = path.join(rootDir, 'scripts/agent_ctl.py');
+  console.log('[Electron] Starting hybrid worker via agent_ctl...');
+
+  backendProcess = spawn(
+    pythonCmd,
+    [agentCtl, 'start', '--by', 'user', '--reason', 'electron'],
+    {
+      cwd: rootDir,
+      stdio: 'inherit',
+      shell: false,
+    },
+  );
+
+  backendProcess.on('error', (err) => {
+    console.error(`[Electron] agent_ctl start failed: ${err}`);
+  });
+
+  backendProcess.on('exit', (code) => {
+    console.log(`[Electron] agent_ctl start finished with code ${code}`);
+    backendProcess = null;
+    if (code !== 0 && !isQuitting && mainWindow) {
+      mainWindow.webContents.send('backend-exit', code);
+    }
+  });
+}
+
+function startBackendForMode(mode) {
+  if (mode === 'local') {
+    startLocalBackend();
+  } else if (mode === 'agent') {
+    startAgentWorker();
+  }
+}
+
+function fileDistUrl() {
+  return `file://${DIST_INDEX.replace(/\\/g, '/')}`;
+}
+
+function getUiUrl() {
+  return (process.env.JARVIS_UI_URL || DEFAULT_UI_URL).trim();
+}
+
+function urlOrigin(raw) {
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return null;
+  }
+}
+
+function allowedNavigationOrigins(uiUrl) {
+  const origins = new Set(['null']);
+  const uiOrigin = urlOrigin(uiUrl);
+  if (uiOrigin) origins.add(uiOrigin);
+  origins.add('http://127.0.0.1:5173');
+  origins.add('http://localhost:5173');
+  origins.add('http://127.0.0.1:4173');
+  origins.add('http://localhost:4173');
+  return origins;
+}
+
+function isNavigationAllowed(targetUrl, uiUrl) {
+  if (targetUrl.startsWith('file://')) {
+    const normalized = targetUrl.replace(/\\/g, '/').toLowerCase();
+    const distNormalized = fileDistUrl().toLowerCase();
+    const offlineNormalized = `file://${OFFLINE_PAGE.replace(/\\/g, '/')}`.toLowerCase();
+    return normalized.startsWith(distNormalized.split('#')[0]) || normalized.startsWith(offlineNormalized);
+  }
+  const origin = urlOrigin(targetUrl);
+  if (!origin) return false;
+  return allowedNavigationOrigins(uiUrl).has(origin);
+}
+
+function probeUrlReachable(url, timeoutMs = 12_000) {
+  return new Promise((resolve) => {
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch {
+      resolve(false);
+      return;
+    }
+    const lib = parsed.protocol === 'https:' ? https : http;
+    const req = lib.request(
+      {
+        method: 'HEAD',
+        hostname: parsed.hostname,
+        port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+        path: parsed.pathname + parsed.search,
+        timeout: timeoutMs,
+      },
+      (res) => {
+        res.resume();
+        resolve(res.statusCode >= 200 && res.statusCode < 500);
+      },
+    );
+    req.on('timeout', () => {
+      req.destroy();
+      resolve(false);
+    });
+    req.on('error', () => resolve(false));
+    req.end();
+  });
+}
+
+async function loadProductionContent(win) {
+  const backendMode = resolveBackendMode();
+  const uiUrl = getUiUrl();
+  pendingVpsUrl = uiUrl;
+
+  if (process.env.JARVIS_UI_OFFLINE === '1' || backendMode === 'local') {
+    await win.loadURL(fileDistUrl());
+    return;
+  }
+
+  const reachable = await probeUrlReachable(uiUrl);
+  if (!reachable) {
+    console.warn(`[Electron] VPS unreachable at ${uiUrl}; showing offline page.`);
+    await win.loadFile(OFFLINE_PAGE);
+    return;
+  }
+
+  try {
+    await win.loadURL(uiUrl);
+  } catch (err) {
+    console.warn(`[Electron] loadURL failed: ${err.message}`);
+    await win.loadFile(OFFLINE_PAGE);
+  }
+}
+
+async function retryVpsLoad() {
+  if (!mainWindow || isDev) return;
+  const uiUrl = pendingVpsUrl || getUiUrl();
+  const reachable = await probeUrlReachable(uiUrl);
+  if (!reachable) {
+    await mainWindow.loadFile(OFFLINE_PAGE);
+    return;
+  }
+  await mainWindow.loadURL(uiUrl);
+}
+
+function wireSecurity(win, uiUrl) {
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('https:') || url.startsWith('http:')) {
+      shell.openExternal(url);
+    }
+    return { action: 'deny' };
+  });
+
+  win.webContents.on('will-navigate', (event, url) => {
+    if (!isNavigationAllowed(url, uiUrl)) {
+      event.preventDefault();
+    }
+  });
+
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    const requestOrigin = urlOrigin(details.requestingUrl || '');
+    const allowed = allowedNavigationOrigins(uiUrl);
+    if (!requestOrigin || !allowed.has(requestOrigin)) {
+      callback(false);
+      return;
+    }
+    if (permission === 'media' || permission === 'notifications') {
+      callback(true);
+      return;
+    }
+    callback(false);
   });
 }
 
@@ -56,14 +273,17 @@ function createTray() {
   try {
     const iconPath = path.join(__dirname, '../public/favicon/favicon-32x32.png');
     tray = new Tray(iconPath);
-    
+
     const contextMenu = Menu.buildFromTemplate([
       { label: 'Show JARVIS', click: () => mainWindow.show() },
       { type: 'separator' },
-      { label: 'Quit JARVIS', click: () => {
-        isQuitting = true;
-        app.quit();
-      }}
+      {
+        label: 'Quit JARVIS',
+        click: () => {
+          isQuitting = true;
+          app.quit();
+        },
+      },
     ]);
 
     tray.setToolTip('JARVIS-AGENT');
@@ -75,6 +295,8 @@ function createTray() {
 }
 
 function createWindow() {
+  const uiUrl = getUiUrl();
+
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -94,7 +316,8 @@ function createWindow() {
     backgroundColor: '#00000000',
   });
 
-  // Rebranding about panel if applicable
+  wireSecurity(mainWindow, uiUrl);
+
   if (process.platform === 'darwin') {
     app.setAboutPanelOptions({
       applicationName: 'JARVIS & ANNA',
@@ -108,13 +331,10 @@ function createWindow() {
 
   if (isDev) {
     mainWindow.show();
+    mainWindow.loadURL('http://127.0.0.1:5173');
+  } else {
+    loadProductionContent(mainWindow);
   }
-
-  const startURL = isDev
-    ? 'http://127.0.0.1:5173'
-    : `file://${path.join(__dirname, '../dist/index.html')}`;
-
-  mainWindow.loadURL(startURL);
 
   mainWindow.on('close', (event) => {
     if (!isQuitting) {
@@ -132,14 +352,17 @@ function createWindow() {
     mainWindow.webContents.send('window-unmaximized');
   });
 
-  mainWindow.on('closed', () => (mainWindow = null));
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
 }
 
 app.on('ready', () => {
-  if (startBackendEnabled) {
-    startBackend();
+  const backendMode = resolveBackendMode();
+  if (backendMode === 'none') {
+    console.log('[Electron] Backend spawn disabled (mode none or DISABLE_BACKEND=1).');
   } else {
-    console.log('[Electron] Automatic backend start disabled by environment flag.');
+    startBackendForMode(backendMode);
   }
   createWindow();
   createTray();
@@ -154,7 +377,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   isQuitting = true;
   if (backendProcess) {
-    console.log('[Electron] Terminating backend process...');
+    console.log('[Electron] Terminating backend helper process...');
     backendProcess.kill();
   }
 });
@@ -180,5 +403,9 @@ ipcMain.on('window-maximize', () => {
 });
 
 ipcMain.on('window-close', () => {
-  mainWindow.hide(); // Hide to tray instead of quitting
+  if (mainWindow) mainWindow.hide();
+});
+
+ipcMain.on('retry-main-load', () => {
+  retryVpsLoad();
 });

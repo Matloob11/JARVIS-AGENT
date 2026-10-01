@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Copy, Minus, Square, X } from 'lucide-react';
+import { toast } from '@/toast';
 
 interface ElectronWindow {
   electronAPI?: {
+    isElectron?: boolean;
     onMaximize: (callback: () => void) => void;
     onUnmaximize: (callback: () => void) => void;
+    onBackendExit?: (callback: (code: number) => void) => void;
     minimize: () => void;
     maximize: () => void;
     close: () => void;
@@ -13,33 +16,45 @@ interface ElectronWindow {
 
 const WindowControls = () => {
   const [isMaximized, setIsMaximized] = useState(false);
-  const isElectron = window.navigator.userAgent.toLowerCase().includes('electron');
   const electronAPI = (window as unknown as ElectronWindow).electronAPI;
 
   useEffect(() => {
-    if (!isElectron || !electronAPI) return;
+    if (!electronAPI?.isElectron) return;
     electronAPI.onMaximize(() => setIsMaximized(true));
     electronAPI.onUnmaximize(() => setIsMaximized(false));
-  }, [electronAPI, isElectron]);
+    electronAPI.onBackendExit?.((code) => {
+      toast.error(`JARVIS backend band ho gaya (code ${code})`);
+    });
+  }, [electronAPI]);
+
+  if (!electronAPI?.isElectron) {
+    return null;
+  }
 
   return (
     <div className="no-drag z-[100] flex items-center gap-1">
       <button
-        onClick={() => electronAPI?.minimize()}
+        type="button"
+        data-testid="window-minimize"
+        onClick={() => electronAPI.minimize()}
         className="window-button"
         title="Minimize"
       >
         <Minus size={15} strokeWidth={2.2} />
       </button>
       <button
-        onClick={() => electronAPI?.maximize()}
+        type="button"
+        data-testid="window-maximize"
+        onClick={() => electronAPI.maximize()}
         className="window-button"
         title={isMaximized ? 'Restore' : 'Maximize'}
       >
         {isMaximized ? <Copy size={13} strokeWidth={2.2} /> : <Square size={13} strokeWidth={2.2} />}
       </button>
       <button
-        onClick={() => electronAPI?.close()}
+        type="button"
+        data-testid="window-close"
+        onClick={() => electronAPI.close()}
         className="window-button hover:border-command-danger/30 hover:bg-command-danger/10 hover:text-command-danger"
         title="Close"
       >

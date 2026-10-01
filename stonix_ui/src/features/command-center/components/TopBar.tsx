@@ -13,7 +13,6 @@ import {
   Zap,
 } from 'lucide-react';
 import type { TaskNotification } from '@/features/tasks/useTasks';
-import WindowControls from '@/shared/ui/WindowControls';
 import { StatusDot } from '@/shared/ui/Panel';
 import { personaAccent } from '@/shared/theme/commandTheme';
 import { useLiveKit } from '@/features/voice/LiveKitProvider';
@@ -282,7 +281,6 @@ const TopBar = ({
         >
           <LogOut size={15} />
         </button>
-        <WindowControls />
       </div>
     </header>
   );
