@@ -13,19 +13,19 @@ def test_agent_main_logic():
 
     mock_run = MagicMock()
     fake_entrypoint = MagicMock(name="entrypoint")
-
-    class FakeWorkerOptions:
-        def __init__(self, entrypoint_fnc):
-            self.entrypoint_fnc = entrypoint_fnc
+    fake_options = MagicMock(name="worker_options")
+    # C-08: agent_runner's shared builder; its 127.0.0.1:8081 defaults are checked in
+    # tests/unit/test_agent_lock.py against the installed livekit.
+    fake_builder = MagicMock(name="build_worker_options", return_value=fake_options)
 
     fake_agents = types.SimpleNamespace(
-        WorkerOptions=FakeWorkerOptions,
         cli=types.SimpleNamespace(run_app=mock_run),
     )
     fake_livekit = types.ModuleType("livekit")
     fake_livekit.agents = fake_agents
     fake_agent_runner = types.ModuleType("src.core.agent_runner")
     fake_agent_runner.entrypoint = fake_entrypoint
+    fake_agent_runner.build_worker_options = fake_builder
 
     modules = {
         "livekit": fake_livekit,
@@ -36,9 +36,8 @@ def test_agent_main_logic():
         with patch("sys.stdout", new=io.TextIOWrapper(io.BytesIO(), encoding="utf-8")):
             runpy.run_module("src.core.agent", run_name="__main__")
 
-    mock_run.assert_called_once()
-    opts = mock_run.call_args.args[0]
-    assert opts.entrypoint_fnc == fake_entrypoint
+    fake_builder.assert_called_once_with(fake_entrypoint)
+    mock_run.assert_called_once_with(fake_options)
 
 
 def test_agent_env_vars():
@@ -47,6 +46,7 @@ def test_agent_env_vars():
     fake_livekit.agents = types.SimpleNamespace()
     fake_agent_runner = types.ModuleType("src.core.agent_runner")
     fake_agent_runner.entrypoint = MagicMock(name="entrypoint")
+    fake_agent_runner.build_worker_options = MagicMock(name="build_worker_options")
 
     modules = {
         "livekit": fake_livekit,

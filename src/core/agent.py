@@ -1,4 +1,4 @@
-# pylint: disable=wrong-import-position
+# pylint: disable=wrong-import-position, ungrouped-imports
 # ruff: noqa: E402
 # Crucial: Suppress expensive metadata scan in Google API core on Windows
 import io
@@ -53,10 +53,15 @@ root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
+# Single worker (K-53): lock before the heavy imports so a second start exits 3 within seconds.
+if __name__ == "__main__":
+    from src.core.agent_lock import acquire_or_exit
+    acquire_or_exit()
+
 from livekit import agents
 
 # Use absolute import since root_dir is in sys.path
-from src.core.agent_runner import entrypoint
+from src.core.agent_runner import build_worker_options, entrypoint
 
 def play_startup_voice():
     """
@@ -113,5 +118,5 @@ if __name__ == "__main__":
     if sys.platform == "win32":
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
-    OPTS = agents.WorkerOptions(entrypoint_fnc=entrypoint)
+    OPTS = build_worker_options(entrypoint)
     agents.cli.run_app(OPTS)

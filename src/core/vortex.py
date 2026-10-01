@@ -20,8 +20,24 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 # -------------------------------------------------------------
 
+from src.core import agent_lock  # pylint: disable=wrong-import-position
+
 logging.basicConfig(level=logging.INFO, format="[VORTEX] %(message)s")
 logger = logging.getLogger("VORTEX")
+
+SKIP_AGENT_MESSAGE = "agent worker is managed by scripts/agent_ctl.py - not starting a second one"
+
+
+def _hybrid_mode() -> bool:
+    """JARVIS_HYBRID=1 in the environment or, when it is unset there, in the root .env."""
+    value = os.environ.get("JARVIS_HYBRID")
+    if value is None:
+        try:
+            from dotenv import dotenv_values  # pylint: disable=import-outside-toplevel
+        except ImportError:
+            return False
+        value = dotenv_values(os.path.join(project_root, ".env")).get("JARVIS_HYBRID")
+    return (value or "").strip() == "1"
 
 
 def start_process(command: str, name: str, extra_env: dict[str, str] | None = None) -> subprocess.Popen[str]:
@@ -77,31 +93,42 @@ def main() -> None:
 
     python_cmd = sys.executable
 
+    # Single worker (K-53): never start a second agent next to a running one or the hybrid one.
+    hybrid = _hybrid_mode()
+    start_agent = not hybrid and not agent_lock.is_locked()
+    if not start_agent:
+        print(f"[VORTEX] {SKIP_AGENT_MESSAGE}")
+        if hybrid:
+            print("[VORTEX] JARVIS_HYBRID=1: the UI bridge runs on the VPS, nothing to start here.")
+            return
+
     # Start UI Bridge
     bridge_proc = start_process(f"{python_cmd} -m src.core.ui_bridge", "UI-BRIDGE")
+    processes: list[dict[str, Any]] = [{"proc": bridge_proc, "name": "UI-BRIDGE"}]
 
-    # Wait for bridge to be healthy before starting Agent Runner
-    print("[VORTEX] Waiting for UI Bridge to initialize...")
-    max_retries = 10
-    for i in range(max_retries):
-        try:
-            with urllib.request.urlopen("http://127.0.0.1:5001/health", timeout=1) as response:
-                if response.status == 200:
-                    print("[VORTEX] UI Bridge is ONLINE.")
-                    break
-        except Exception:  # pylint: disable=broad-exception-caught
-            if i < max_retries - 1:
-                time.sleep(1)
-            else:
-                print("[VORTEX] Warning: UI Bridge did not respond after 10s. Starting agent anyway.")
+    if start_agent:
+        # Wait for bridge to be healthy before starting Agent Runner
+        print("[VORTEX] Waiting for UI Bridge to initialize...")
+        max_retries = 10
+        for i in range(max_retries):
+            try:
+                with urllib.request.urlopen("http://127.0.0.1:5001/health", timeout=1) as response:
+                    if response.status == 200:
+                        print("[VORTEX] UI Bridge is ONLINE.")
+                        break
+            except Exception:  # pylint: disable=broad-exception-caught
+                if i < max_retries - 1:
+                    time.sleep(1)
+                else:
+                    print("[VORTEX] Warning: UI Bridge did not respond after 10s. Starting agent anyway.")
 
-    # Start Agent Runner
-    agent_proc = start_process(f"{python_cmd} -m src.core.agent dev", "AGENT-RUNNER")
-
-    processes: list[dict[str, Any]] = [
-        {"proc": bridge_proc, "name": "UI-BRIDGE"},
-        {"proc": agent_proc, "name": "AGENT-RUNNER"},
-    ]
+        # Start Agent Runner
+        agent_proc = start_process(
+            f"{python_cmd} -m src.core.agent dev",
+            "AGENT-RUNNER",
+            extra_env={"JARVIS_STARTED_BY": os.environ.get("JARVIS_STARTED_BY") or "vortex"},
+        )
+        processes.append({"proc": agent_proc, "name": "AGENT-RUNNER"})
 
     def stream_reader(pipe: Any, prefix: str) -> None:
         try:
@@ -123,13 +150,19 @@ def main() -> None:
             p["thread"] = t
 
         while True:
-            for p in processes:
+            for p in list(processes):
                 # Poll for exit
                 proc_obj = p["proc"]
                 retcode = proc_obj.poll()
-                if retcode is not None:
-                    print(f"\n[ERROR] {p['name']} EXITED with code {retcode}")
-                    raise KeyboardInterrupt
+                if retcode is None:
+                    continue
+                if p["name"] == "AGENT-RUNNER" and retcode == agent_lock.EXIT_ALREADY_RUNNING:
+                    # Another worker took the lock first: not a crash, keep serving the bridge.
+                    print(f"[VORTEX] AGENT-RUNNER exited 3 (already running): {SKIP_AGENT_MESSAGE}")
+                    processes.remove(p)
+                    continue
+                print(f"\n[ERROR] {p['name']} EXITED with code {retcode}")
+                raise KeyboardInterrupt
             time.sleep(1)
 
     except KeyboardInterrupt:

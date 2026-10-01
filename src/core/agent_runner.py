@@ -11,7 +11,7 @@ import logging
 import os
 import traceback
 import uuid
-from collections.abc import Coroutine
+from collections.abc import Awaitable, Callable, Coroutine
 from typing import Any
 
 # FORCE global logging to show status while debugging
@@ -21,8 +21,13 @@ for logger_name in ["livekit", "livekit.agents", "livekit.rtc", "root"]:
     log_obj.setLevel(logging.ERROR)
     log_obj.propagate = False
 
+# Single worker (K-53): a direct start takes the same lock as src.core.agent, before heavy imports.
+if __name__ == "__main__":
+    from src.core.agent_lock import acquire_or_exit
+    acquire_or_exit()
+
 from livekit import agents, rtc
-from livekit.agents import AgentSession, WorkerOptions, cli, llm
+from livekit.agents import AgentSession, cli, llm
 from livekit.plugins import google, silero
 
 # Suppress LiveKit internal session noise
@@ -510,5 +515,24 @@ async def entrypoint(ctx: agents.JobContext):
         finally:
             await _cleanup_session_resources(session, list(active_tasks))
 
+
+def build_worker_options(
+    entrypoint_fnc: Callable[[agents.JobContext], Awaitable[None]] | None = None,
+) -> agents.WorkerOptions:
+    """WorkerOptions for the single PC worker (health server on 127.0.0.1:8081 by default).
+
+    Shared by both start paths: src.core.agent imports it from here, so this module never has to
+    import src.core.agent (that would be an import cycle). The explicit port also replaces dev
+    mode's random one. JARVIS_AGENT_NAME='' keeps automatic dispatch until OP-22 sets 'jarvis'
+    (explicit dispatch, K-44).
+    """
+    return agents.WorkerOptions(
+        entrypoint_fnc=entrypoint if entrypoint_fnc is None else entrypoint_fnc,
+        host=os.getenv("JARVIS_WORKER_HOST") or "127.0.0.1",
+        port=int(os.getenv("JARVIS_WORKER_PORT") or "8081"),
+        agent_name=os.getenv("JARVIS_AGENT_NAME", "").strip(),
+    )
+
+
 if __name__ == "__main__":
-    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))
+    cli.run_app(build_worker_options(entrypoint))
