@@ -123,6 +123,16 @@ const VoiceEnrollDialog = ({ open, onClose }: VoiceEnrollDialogProps) => {
       setPhase('capturing');
     };
 
+    const onVoiceIdStatus = (payload: unknown) => {
+      if (!payload || typeof payload !== 'object') return;
+      const data = payload as Record<string, unknown>;
+      if (data.enrolling !== true) return;
+      const parsed = parseProgress(data);
+      if (!parsed) return;
+      setProgress(parsed);
+      setPhase('capturing');
+    };
+
     const onResult = (payload: unknown) => {
       clearTimeoutTimer();
       const parsed = parseResult(payload);
@@ -131,10 +141,12 @@ const VoiceEnrollDialog = ({ open, onClose }: VoiceEnrollDialogProps) => {
     };
 
     socket.on('voice_enroll_progress', onProgress);
+    socket.on('voice_id_status', onVoiceIdStatus);
     socket.on('voice_enroll_result', onResult);
 
     return () => {
       socket.off('voice_enroll_progress', onProgress);
+      socket.off('voice_id_status', onVoiceIdStatus);
       socket.off('voice_enroll_result', onResult);
     };
   }, [open, clearTimeoutTimer]);

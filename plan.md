@@ -584,7 +584,7 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | X-48 | cursor | P3 | Controls: Terminate (guarded session restart), Swarm entry points, answer feedback thumbs | X-24, X-10, K-03 (DASH-UI-COMMANDS) | BLOCKED (waiting X-24,X-10; X-10 done but X-24 still blocked) |
 | X-49 | cursor | P3 | FlowMap from real state (Voice, Vision, Memory, Tools, Core); 'unknown' instead of a fake 'ready' | X-20, X-19, X-13, K-06 (DASH-MODULE-HEALTH) | DONE (01 Oct 17:05) |
 | X-50 | cursor | P3 | Real audio visualizer and 'You are speaking' indicator | X-13, X-33 | DONE (01 Oct 17:00) |
-| X-52 | cursor | P3 | Dashboard 'Voice & Conversation' settings and enrollment extras (delta on the dashboard drawer and dialog) | X-22, X-33, K-61 (CT-VC-SETTINGS), K-63 (CT-VC-VOICE-ENROLL) | DOING (cursor, 01 Oct 15:25) |
+| X-52 | cursor | P3 | Dashboard 'Voice & Conversation' settings and enrollment extras (delta on the dashboard drawer and dialog) | X-22, X-33, K-61 (CT-VC-SETTINGS), K-63 (CT-VC-VOICE-ENROLL) | DONE (cursor, 01 Oct 17:12 PKT) |
 | X-53 | cursor | P3 | Dashboard glue: spoken indicator on reminders, memory backup path, Terminate sends shutdown_agent | X-23, X-24, X-48, K-66 (CT-VC-PROACTIVE), K-60 (CT-VC-CONTROL) | BLOCKED (waiting X-23,X-24,X-48) |
 | X-54 | cursor | P3 | Email tool: multi-line UTF-8 body, SMTP timeout, attachment allow-list, approval | C-25, C-24, C-28, C-29, C-30, C-55, X-10, K-28 (tool_arg_policies) | BLOCKED (waiting C-25,C-24,C-28,C-29,C-30,C-55,X-10) |
 | X-55 | cursor | P3 | download_images + zip_files: contained paths, safe names, concurrent downloads, honoured zip_name | X-36, X-54, C-24, C-28, K-28 (tool_arg_policies) | BLOCKED (waiting X-36,X-54,C-24,C-28) |

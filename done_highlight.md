@@ -314,3 +314,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `cd stonix_ui && npm run build` pass · `npx playwright test tests/e2e/trace.spec.ts` 8 passed
 - **Commit:** pending · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-52 · Voice & Conversation settings + enrollment · 2026-10-01 17:12 PKT
+- **Kya kiya:** Settings drawer me **Voice & Conversation** section: speak typed replies (Auto/Always/Never), quiet hours, turn-mode restart badge; Voice-ID block me reject Silent/Polite, threshold slider, enroll-first gate, Fast-mode **monitor only** badge. `useSettings` CT-VC fields; enrollment dialog ab `voice_id_status` progress bhi sunta hai. Naya `voice-settings.spec.ts` + mock `turn_mode` → `restart_required`.
+- **Files:** stonix_ui/src/features/settings/useSettings.ts, command-center/components/SettingsPanel.tsx, voice/VoiceEnrollDialog.tsx, tests/e2e/voice-settings.spec.ts, tests/mock-bridge/server.mjs, tests/mock-bridge/fixtures/settings_sync.json, plan.md
+- **Verify:** `cd stonix_ui && npm run build` pass · `npx playwright test tests/e2e/voice-settings.spec.ts` 8 passed · repo `npm run lint` ab bhi 2 purani errors (IntelligencePanel / useVoiceRoom), X-52 files clean
+- **Commit:** pending · **Deploy:** no
+- **Doosre agent ke liye:** Live agent par CT-VC-SETTINGS fields apply hon to UI round-trip UI-34/C-96 se verify karein.

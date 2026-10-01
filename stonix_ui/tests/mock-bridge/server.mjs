@@ -51,7 +51,17 @@ function mergeSettingsSync(base, payload) {
       ...payload.automation,
     };
   }
-  return { ...base, settings: nextSettings };
+  const out = { ...base, settings: nextSettings };
+  if (Object.prototype.hasOwnProperty.call(payload, 'turn_mode')) {
+    out.restart_required = ['turn_mode'];
+    out.applied =
+      typeof base.applied === 'object' && base.applied
+        ? { ...base.applied, turn_mode: 'pending_restart' }
+        : { turn_mode: 'pending_restart' };
+  } else if (base.applied === true) {
+    out.applied = true;
+  }
+  return out;
 }
 
 function parseCookies(header) {

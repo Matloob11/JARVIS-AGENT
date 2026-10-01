@@ -8,6 +8,12 @@
     "turn_mode": "gated",
     "wake_followup_s": 0,
     "transcript_script": "roman",
+    "speak_typed_replies": "auto",
+    "quiet_hours": "",
+    "voice_id": true,
+    "voice_id_enrolled": false,
+    "voice_id_threshold": 0.45,
+    "voice_id_reject": "silent",
     "automation": {
       "desktop_control": true,
       "clipboard_helper": true,

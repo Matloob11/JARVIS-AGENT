@@ -4,7 +4,6 @@ import {
   Eye,
   Globe,
   LogOut,
-  MessageSquare,
   RefreshCw,
   Settings,
   Shield,
@@ -178,10 +177,36 @@ const SettingsPanel = ({
         </section>
 
         <section className="setting-block">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-command-muted">
+            Persona
+          </p>
+          <div className="settings-segmented" data-testid="settings-persona">
+            {(['jarvis', 'anna'] as const).map(key => (
+              <button
+                key={key}
+                type="button"
+                className={
+                  settings.persona === key
+                    ? 'settings-segmented__btn settings-segmented__btn--active'
+                    : 'settings-segmented__btn'
+                }
+                data-active={settings.persona === key ? 'true' : 'false'}
+                disabled={!isConnected}
+                onClick={() => settings.changePersona(key)}
+              >
+                {key === 'jarvis' ? 'JARVIS' : 'ANNA'}
+              </button>
+            ))}
+          </div>
+          <FieldStatusBadge field="persona" />
+        </section>
+
+        <section className="setting-block" data-testid="settings-voice-conversation">
           <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-command-muted">
             <Volume2 size={14} />
-            Voice
+            Voice &amp; Conversation
           </div>
+
           <label className="mb-2 block text-[11px] text-command-muted">Voice</label>
           <select
             className="setting-select"
@@ -213,38 +238,7 @@ const SettingsPanel = ({
             ))}
           </select>
           <FieldStatusBadge field="language" />
-        </section>
 
-        <section className="setting-block">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-command-muted">
-            Persona
-          </p>
-          <div className="settings-segmented" data-testid="settings-persona">
-            {(['jarvis', 'anna'] as const).map(key => (
-              <button
-                key={key}
-                type="button"
-                className={
-                  settings.persona === key
-                    ? 'settings-segmented__btn settings-segmented__btn--active'
-                    : 'settings-segmented__btn'
-                }
-                data-active={settings.persona === key ? 'true' : 'false'}
-                disabled={!isConnected}
-                onClick={() => settings.changePersona(key)}
-              >
-                {key === 'jarvis' ? 'JARVIS' : 'ANNA'}
-              </button>
-            ))}
-          </div>
-          <FieldStatusBadge field="persona" />
-        </section>
-
-        <section className="setting-block">
-          <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-command-muted">
-            <MessageSquare size={14} />
-            Conversation
-          </div>
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <span className="text-[11px] text-command-muted">Turn mode</span>
             {settings.restartRequired.includes('turn_mode') ? (
@@ -327,6 +321,49 @@ const SettingsPanel = ({
           </div>
           <AgentPendingHint field="transcriptScript" />
           <FieldStatusBadge field="transcriptScript" />
+
+          <p className="mb-2 mt-3 text-[11px] text-command-muted">Speak typed replies</p>
+          <div className="settings-segmented" data-testid="settings-speak-typed-replies">
+            {(
+              [
+                { key: 'auto', label: 'Auto' },
+                { key: 'always', label: 'Always' },
+                { key: 'never', label: 'Never' },
+              ] as const
+            ).map(opt => (
+              <button
+                key={opt.key}
+                type="button"
+                className={
+                  settings.speakTypedReplies === opt.key
+                    ? 'settings-segmented__btn settings-segmented__btn--active'
+                    : 'settings-segmented__btn'
+                }
+                data-active={settings.speakTypedReplies === opt.key ? 'true' : 'false'}
+                disabled={!isConnected || settings.isAgentUpdatePending('speakTypedReplies')}
+                onClick={() => settings.update({ speak_typed_replies: opt.key })}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <AgentPendingHint field="speakTypedReplies" />
+          <FieldStatusBadge field="speakTypedReplies" />
+
+          <label className="mb-2 mt-3 block text-[11px] text-command-muted">
+            Quiet hours (off when empty)
+          </label>
+          <input
+            type="text"
+            className="setting-select w-full font-mono text-xs"
+            data-testid="settings-quiet-hours"
+            placeholder="HH:MM-HH:MM"
+            value={settings.quietHours}
+            disabled={!isConnected || settings.isAgentUpdatePending('quietHours')}
+            onChange={event => settings.update({ quiet_hours: event.target.value })}
+          />
+          <AgentPendingHint field="quietHours" />
+          <FieldStatusBadge field="quietHours" />
         </section>
 
         <section className="setting-block space-y-3">
@@ -422,7 +459,19 @@ const SettingsPanel = ({
           <AgentPendingHint field="guardedTools" />
         </section>
 
-        <section className="setting-block space-y-3">
+        <section className="setting-block space-y-3" data-testid="settings-voice-id-block">
+          <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-command-muted">
+            <Shield size={14} />
+            Voice-ID &amp; wake
+            {settings.turnMode === 'fast' ? (
+              <span
+                className="rounded bg-sky-500/20 px-1.5 py-0.5 text-[10px] normal-case text-sky-300"
+                data-testid="settings-voice-id-monitor-badge"
+              >
+                monitor only
+              </span>
+            ) : null}
+          </div>
           <ToggleRow
             field="wakeWord"
             label="Wake word"
@@ -443,13 +492,60 @@ const SettingsPanel = ({
             field="voiceId"
             label="Voice-ID"
             checked={settings.voiceId}
-            disabled={!isConnected}
+            disabled={!isConnected || !settings.voiceIdEnrolled}
             onChange={next => settings.update({ voice_id: next })}
-            hint={`enforced: ${settings.enforcedVoiceId ? 'yes' : 'no'}`}
+            hint={
+              !settings.voiceIdEnrolled
+                ? 'Enroll first'
+                : `enforced: ${settings.enforcedVoiceId ? 'yes' : 'no'}`
+            }
           />
-          <p className="text-[11px] text-command-muted">
-            Threshold: {settings.voiceIdThreshold.toFixed(2)} (read-only)
-          </p>
+          <p className="mb-2 text-[11px] text-command-muted">Reject unknown voice</p>
+          <div className="settings-segmented" data-testid="settings-voice-id-reject">
+            {(
+              [
+                { key: 'silent', label: 'Silent' },
+                { key: 'polite', label: 'Polite' },
+              ] as const
+            ).map(opt => (
+              <button
+                key={opt.key}
+                type="button"
+                className={
+                  settings.voiceIdReject === opt.key
+                    ? 'settings-segmented__btn settings-segmented__btn--active'
+                    : 'settings-segmented__btn'
+                }
+                data-active={settings.voiceIdReject === opt.key ? 'true' : 'false'}
+                disabled={!isConnected || settings.isAgentUpdatePending('voiceIdReject')}
+                onClick={() => settings.update({ voice_id_reject: opt.key })}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <AgentPendingHint field="voiceIdReject" />
+          <FieldStatusBadge field="voiceIdReject" />
+
+          <label className="mb-1 block text-[11px] text-command-muted">
+            Match threshold ({settings.voiceIdThreshold.toFixed(2)})
+          </label>
+          <input
+            type="range"
+            min={0.2}
+            max={0.9}
+            step={0.01}
+            className="w-full"
+            data-testid="settings-voice-id-threshold"
+            value={settings.voiceIdThreshold}
+            disabled={!isConnected || settings.isAgentUpdatePending('voiceIdThreshold')}
+            onChange={event =>
+              settings.update({ voice_id_threshold: Number(event.target.value) })
+            }
+          />
+          <AgentPendingHint field="voiceIdThreshold" />
+          <FieldStatusBadge field="voiceIdThreshold" />
+
           {!settings.voiceIdEnrolled ? (
             <button
               type="button"
