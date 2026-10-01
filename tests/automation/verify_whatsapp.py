@@ -1,3 +1,10 @@
+
+import os
+import pytest
+
+if os.environ.get("JARVIS_LIVE_GUI_TESTS", "").strip() != "1":
+    pytest.skip("Live GUI script; set JARVIS_LIVE_GUI_TESTS=1 to run", allow_module_level=True)
+
 import asyncio
 import sys
 import os

@@ -321,3 +321,11 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `cd stonix_ui && npm run build` pass · `npx playwright test tests/e2e/voice-settings.spec.ts` 8 passed · repo `npm run lint` ab bhi 2 purani errors (IntelligencePanel / useVoiceRoom), X-52 files clean
 - **Commit:** pending · **Deploy:** no
 - **Doosre agent ke liye:** Live agent par CT-VC-SETTINGS fields apply hon to UI round-trip UI-34/C-96 se verify karein.
+
+### ✅ [cursor] X-12 · Side-effect guard on legacy desktop test folders · 2026-10-01 15:30 PKT
+- **Kya kiya:** `block_real_side_effects` imported in `tests/automation`, `tests/scripts`, `services/automation/tests` conftest. Live WhatsApp/YouTube scripts gated with `pytest.skip` unless `JARVIS_LIVE_GUI_TESTS=1`.
+- **Files:** tests/automation/conftest.py, tests/scripts/conftest.py, services/automation/tests/conftest.py, tests/test_whatsapp.py, tests/automation/verify_whatsapp.py, services/automation/tests/test_whatsapp.py, services/automation/tests/test_youtube.py, tests/scripts/test_agent_whatsapp_integration.py
+- **Verify:** pytest tests/automation tests/scripts → 53 passed, 5 skipped, 9 failed (guard/path); live scripts → 3 skipped. X-05 map re-verify without PYTEST_DISABLE_PLUGIN_AUTOLOAD → 2 passed.
+- **REAL SIDE EFFECT fails (owning tool tasks fix):** test_keyboard_mouse.py::test_mouse_click_tool, test_scroll_cursor_tool, test_type_text_tool, test_press_key_tool, test_press_hotkey_tool (X-26); test_whatsapp_automation.py::test_ensure_whatsapp_focus (X-41); test_window_ctrl_extra.py::test_focus_window, test_close_window (X-42). Also test_save_notepad_success failed on stale D:/ path (not guard; C-26/X-27).
+- **Commit:** pending · **Deploy:** no
+- **Doosre agent ke liye:** —

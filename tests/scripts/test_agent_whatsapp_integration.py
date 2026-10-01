@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+
+import os
+import pytest
+
+if os.environ.get("JARVIS_LIVE_GUI_TESTS", "").strip() != "1":
+    pytest.skip("Live GUI script; set JARVIS_LIVE_GUI_TESTS=1 to run", allow_module_level=True)
+
 """
 J.A.R.V.I.S Agent WhatsApp Integration Test
 Tests how the agent handles WhatsApp tool execution
