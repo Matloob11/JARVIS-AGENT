@@ -9,7 +9,8 @@ Usage:
 
 PowerShell: $env:JARVIS_AGENT='cursor'; git commit -m "[cursor] X-NN: ..." -- <paths>
 Lanes come from HEAD's .coord/lanes.json (scripts/coord/check_lane.py); a staged or unstaged edit applies from the next commit.
-Added lines are also checked for MOJIBAKE (UTF-8 text saved after being read as ANSI).
+Added lines are also checked for MOJIBAKE (UTF-8 text saved after being read as ANSI), and modified files
+for ENCODING_LOSS (committed non-ASCII characters saved as '?'; scripts/coord/restore_unicode.py undoes it).
 Prints only "path:line RULE" (never the secret value). Exit code 1 if anything is found.
 """
 from __future__ import annotations
@@ -24,6 +25,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 import check_lane  # noqa: E402  pylint: disable=wrong-import-position
+import restore_unicode  # noqa: E402  pylint: disable=wrong-import-position
 
 ROOT = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True).stdout.strip()
 ENV_FILES = [".env", "deploy/windows-local/.env", "deploy/hostinger/.env", "deploy/hostinger/bridge.env"]
@@ -197,6 +199,33 @@ def scan_line(rel: str, lineno: int, text: str, values, terms) -> list[str]:
     return hits
 
 
+def utf8_text_blob(spec: str) -> str | None:
+    """Like git_blob, but None for binary content (NUL byte or not valid UTF-8) and for large files."""
+    proc = subprocess.run(["git", "cat-file", "blob", spec], capture_output=True, cwd=ROOT, check=False)
+    data = proc.stdout
+    if proc.returncode != 0 or len(data) > MAX_SCAN_BYTES or b"\0" in data:
+        return None
+    try:
+        return data.decode("utf-8").replace("\r\n", "\n")
+    except UnicodeDecodeError:
+        return None
+
+
+def encoding_loss_check(modified: list[str]) -> list[str]:
+    """'plan.md:12-14 ENCODING_LOSS' when committed non-ASCII characters became '?' (file saved as ASCII)."""
+    findings = []
+    for rel in modified:
+        old = utf8_text_blob("HEAD:" + rel)
+        if old is None or old.isascii():
+            continue
+        new = utf8_text_blob(":" + rel)
+        if new is None:
+            continue
+        findings += [f"{rel}:{span} ENCODING_LOSS"
+                     for span in line_spans(restore_unicode.loss_lines(old, new))]
+    return findings
+
+
 def forbidden(rel: str) -> list[str]:
     rel = rel.replace("\\", "/")
     return [f"{rel}:0 {rule}" for rx, rule in FORBIDDEN_PATHS if rx.search(rel)]
@@ -210,6 +239,8 @@ def check_staged(values, terms, agent: str = "", lanes: check_lane.Lanes | None 
     changed = staged_changes()  # lanes and append-only also look at deletions and renames
     findings += lane_check(changed, agent, lanes)
     findings += append_only_check(changed, lanes)
+    findings += encoding_loss_check(
+        [p for p in git("diff", "--cached", "--name-only", "--diff-filter=M").splitlines() if p])
     current, lineno = None, 0
     for line in git("diff", "--cached", "-U0", "--no-color", "--diff-filter=ACMR").splitlines():
         if line.startswith("+++ "):
@@ -281,7 +312,18 @@ def fix_hints(problems: list[str], findings: list[str], agent: str) -> list[str]
             "      Edit the file with your editor's own UTF-8 edit tool, not PowerShell 5.1 Get-Content/Set-Content.",
             "      If PowerShell is needed: Get-Content -Encoding UTF8 ... | Set-Content -Encoding UTF8 ...",
             "      For plan.md / done_highlight.md, ask Claude in plan.md section 11 to repair it.",
+            "      Never 'fix' it by saving the file as ASCII: that turns the characters into '?' (ENCODING_LOSS).",
         ]
+    if "ENCODING_LOSS" in rules:
+        names = sorted({f.split(":", 1)[0] for f in findings if f.endswith(" ENCODING_LOSS")})
+        hints += [
+            "  - ENCODING_LOSS: the file was saved as ASCII/ANSI, so committed characters (middle dot, arrows, Urdu,"
+            " emoji) became '?'.",
+            "      Put them back (keeps your own edits; dry run first, then --write), then stage the file again:",
+        ]
+        hints += [f"        python scripts/coord/restore_unicode.py {n} --write" for n in names]
+        hints.append("      Edit text only with your editor's UTF-8 edit tool; never write files with PowerShell"
+                     " Set-Content/Out-File or encoding='ascii'.")
     return hints
 
 

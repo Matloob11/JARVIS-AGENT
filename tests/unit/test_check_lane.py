@@ -142,6 +142,56 @@ def test_removed_lines(old, new, removed):
     assert check_lane.removed_lines(old, new) == removed
 
 
+# ---------------------------------------------------------------- restore_unicode.py
+
+
+def _load_restore_unicode():
+    spec = importlib.util.spec_from_file_location("jarvis_coord_restore_unicode", COORD / "restore_unicode.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+restore_unicode = _load_restore_unicode()
+
+# Board rows and Urdu text, as in plan.md; a middle dot, an arrow, an em dash and Urdu letters.
+PLAN_TEXT = (
+    "# Plan\n\n"
+    "### 2.6 Runtime lock · sirf EK worker\n\n"
+    "| X-11 | cursor | P0 | Harness → tests | C-06 · X-03 | BLOCKED (waiting C-06) |\n"
+    "| X-12 | cursor | P0 | Legacy gating — tools | X-11 | BLOCKED (waiting X-11) |\n"
+    "- [2026-10-01 14:30] claude → cursor: سلام note? kept as is\n"
+)
+BINARY_BYTES = b"\x89BIN\x00\xff\xfe\x80 ? \x00 tail\n"
+
+
+def _ascii_save(text: str) -> str:
+    """What an ASCII save does: every non-ASCII character becomes '?'."""
+    return "".join(ch if ord(ch) < 128 else "?" for ch in text)
+
+
+def test_loss_lines_finds_lines_saved_as_ascii_even_when_also_edited():
+    new = _ascii_save(PLAN_TEXT).replace("BLOCKED (waiting C-06)", "DONE (01 Oct 17:13)")
+    assert restore_unicode.loss_lines(PLAN_TEXT, new) == [3, 5, 6, 7]
+
+
+def test_restore_puts_back_only_the_lost_characters_and_keeps_edits():
+    new = _ascii_save(PLAN_TEXT).replace("BLOCKED (waiting C-06)", "DONE (01 Oct 17:13)")
+    new += "- [2026-10-01 17:30] cursor -> claude: new line with a real question?\n"
+    fixed, count = restore_unicode.restore(PLAN_TEXT, new)
+    assert count == 9
+    assert fixed == PLAN_TEXT.replace("BLOCKED (waiting C-06)", "DONE (01 Oct 17:13)") + \
+        "- [2026-10-01 17:30] cursor -> claude: new line with a real question?\n"
+    assert restore_unicode.loss_lines(PLAN_TEXT, fixed) == []
+
+
+def test_a_real_question_mark_and_unchanged_unicode_are_not_a_loss():
+    edited = PLAN_TEXT.replace("kept as is", "kept as is?") + "- new? line\n"
+    assert restore_unicode.loss_lines(PLAN_TEXT, edited) == []
+    assert restore_unicode.restore(PLAN_TEXT, edited) == (edited, 0)
+
+
 # ---------------------------------------------------------------- pre-commit hook (throwaway repo)
 
 
@@ -151,7 +201,7 @@ def fixture_sandbox_template(tmp_path_factory):
     base = tmp_path_factory.mktemp("lane_sandbox")
     repo = base / "repo"
     (repo / "scripts" / "coord").mkdir(parents=True)
-    for name in ("precommit.py", "check_lane.py"):
+    for name in ("precommit.py", "check_lane.py", "restore_unicode.py"):
         shutil.copy2(COORD / name, repo / "scripts" / "coord" / name)
     (repo / ".coord").mkdir()
     shutil.copy2(LANES_JSON, repo / ".coord" / "lanes.json")
@@ -160,6 +210,8 @@ def fixture_sandbox_template(tmp_path_factory):
     (repo / "stonix_ui").mkdir()
     (repo / "stonix_ui" / "app.ts").write_text("export {};\n", encoding="utf-8")
     (repo / "done_highlight.md").write_bytes(b"# log\n\n### entry 1\n- first\n- more\n")
+    (repo / "plan.md").write_bytes(PLAN_TEXT.encode("utf-8"))
+    (repo / "data.bin").write_bytes(BINARY_BYTES)
     hooks = base / "hooks"
     hooks.mkdir()
     hook = hooks / "pre-commit"
@@ -170,7 +222,8 @@ def fixture_sandbox_template(tmp_path_factory):
     for key, value in (("user.name", "lane test"), ("user.email", "lane-test@example.invalid"),
                        ("commit.gpgsign", "false"), ("core.autocrlf", "false"), ("core.hooksPath", hooks.as_posix())):
         assert _git(repo, "config", key, value).returncode == 0
-    assert _git(repo, "add", "scripts", ".coord", "docs", "stonix_ui", "done_highlight.md").returncode == 0
+    assert _git(repo, "add", "scripts", ".coord", "docs", "stonix_ui", "done_highlight.md", "plan.md",
+                "data.bin").returncode == 0
     first = _git(repo, "commit", "-q", "-m", "baseline", agent="user")
     assert first.returncode == 0, first.stdout + first.stderr
     return repo
@@ -339,4 +392,42 @@ def test_line_endings_plus_append_pass(sandbox):
     (sandbox / "done_highlight.md").write_bytes(
         b"# log\r\n\r\n### entry 1\r\n- first\r\n- more\r\n\r\n### entry 2\r\n- second\r\n")
     code, out, moved = _commit(sandbox, "done_highlight.md", agent="claude")
+    assert code == 0 and moved, out
+
+
+@needs_git
+def test_plan_saved_as_ascii_is_rejected_with_the_restore_command(sandbox):
+    plan = sandbox / "plan.md"
+    plan.write_bytes(_ascii_save(PLAN_TEXT).replace("BLOCKED (waiting C-06)", "DONE (01 Oct 17:13)").encode())
+    code, out, moved = _commit(sandbox, "plan.md", agent="cursor")
+    assert code != 0 and not moved
+    assert "plan.md:3 ENCODING_LOSS" in out and "plan.md:5-7 ENCODING_LOSS" in out
+    assert "python scripts/coord/restore_unicode.py plan.md --write" in out
+
+
+@needs_git
+def test_restore_unicode_command_repairs_the_file_and_the_commit_passes(sandbox):
+    plan = sandbox / "plan.md"
+    plan.write_bytes(_ascii_save(PLAN_TEXT).replace("BLOCKED (waiting C-06)", "DONE (01 Oct 17:13)").encode())
+    proc = subprocess.run([sys.executable, "scripts/coord/restore_unicode.py", "plan.md", "--write"], cwd=sandbox,
+                          env=_env(), capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "9 character(s) to restore" in proc.stdout
+    assert plan.read_bytes().decode("utf-8") == PLAN_TEXT.replace("BLOCKED (waiting C-06)", "DONE (01 Oct 17:13)")
+    code, out, moved = _commit(sandbox, "plan.md", agent="cursor")
+    assert code == 0 and moved, out
+
+
+@needs_git
+def test_unicode_kept_status_edit_of_plan_passes(sandbox):
+    plan = sandbox / "plan.md"
+    plan.write_bytes(PLAN_TEXT.replace("BLOCKED (waiting X-11)", "DOING (cursor, 01 Oct 17:20)").encode("utf-8"))
+    code, out, moved = _commit(sandbox, "plan.md", agent="cursor")
+    assert code == 0 and moved, out
+
+
+@needs_git
+def test_changed_binary_file_is_not_an_encoding_loss(sandbox):
+    (sandbox / "data.bin").write_bytes(BINARY_BYTES.replace(b"\xff", b"?"))
+    code, out, moved = _commit(sandbox, "data.bin", agent="user")
     assert code == 0 and moved, out
