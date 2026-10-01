@@ -22,6 +22,10 @@ const uiSockets = [];
 const receivedUiCommands = [];
 let agentOnline = true;
 let ownerSessionActive = false;
+/** @type {Record<string, unknown>[]} */
+const persistedChatMessages = [];
+/** @type {number} */
+let visionFrameCount = 0;
 
 /** @type {Map<string, { count: number, resetAt: number }>} */
 const loginRate = new Map();
@@ -145,16 +149,19 @@ function handleChat(socket, payload, cb) {
     ts: Math.floor(Date.now() / 1000),
     timestamp: Math.floor(Date.now() / 1000),
   };
+  persistedChatMessages.push(userMsg);
   socket.emit('new_message', userMsg);
   setTimeout(() => {
     const assistantTemplate = loadFixture('new_message');
-    socket.emit('new_message', {
+    const assistantMsg = {
       ...assistantTemplate,
       id: randomUUID(),
       turn_id: String(id),
       ts: Math.floor(Date.now() / 1000),
       timestamp: Math.floor(Date.now() / 1000),
-    });
+    };
+    persistedChatMessages.push(assistantMsg);
+    socket.emit('new_message', assistantMsg);
   }, 300);
 }
 
@@ -343,6 +350,17 @@ async function handleMockControl(req, res, pathname, method) {
     return true;
   }
 
+  if (pathname === '/__mock/vision-frames' && method === 'GET') {
+    json(res, 200, { count: visionFrameCount });
+    return true;
+  }
+
+  if (pathname === '/__mock/vision-frames/reset' && method === 'POST') {
+    visionFrameCount = 0;
+    json(res, 200, { ok: true });
+    return true;
+  }
+
   return false;
 }
 
@@ -432,7 +450,10 @@ async function handleVortex(req, res, subPath, method, url) {
       return;
     }
     const page = loadFixture('messages_page');
-    json(res, 200, page);
+    json(res, 200, {
+      ...page,
+      messages: [...(page.messages || []), ...persistedChatMessages],
+    });
     return;
   }
 
@@ -509,7 +530,11 @@ io.use((socket, next) => {
 
 io.on('connection', socket => {
   uiSockets.push(socket);
-  socket.emit('init_state', loadFixture('init_state'));
+  const init = loadFixture('init_state');
+  socket.emit('init_state', {
+    ...init,
+    messages: [...(init.messages || []), ...persistedChatMessages],
+  });
 
   socket.on('ui_command', (cmd, cb) => {
     try {
@@ -517,6 +542,12 @@ io.on('connection', socket => {
     } catch (err) {
       console.error('[mock-bridge] ui_command', err);
       ackUi(socket, cb, 'rejected', 'handler_error');
+    }
+  });
+
+  socket.on('vision_frame', payload => {
+    if (payload && typeof payload.frame === 'string' && payload.frame.startsWith('data:image/')) {
+      visionFrameCount += 1;
     }
   });
 

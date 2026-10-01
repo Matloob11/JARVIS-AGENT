@@ -4,6 +4,7 @@ import AssistantCore from './components/AssistantCore';
 import ChatPanel from './components/ChatPanel';
 import FlowMap from './components/FlowMap';
 import OperationsRail from './components/OperationsRail';
+import { defaultCameraState, type CameraState } from './components/cameraState';
 import SettingsPanel from './components/SettingsPanel';
 import SimAccessDialog from './components/SimAccessDialog';
 import ConfirmDialog from '@/features/confirm/ConfirmDialog';
@@ -13,13 +14,19 @@ import { useCommandCenter } from './hooks/useCommandCenter';
 import { ErrorBoundary } from '@/shared/ui/ErrorBoundary';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { useLiveKit } from '@/features/voice/LiveKitProvider';
+import { useAgentStatus } from '@/features/status/useAgentStatus';
 import IntelligencePanel from '@/features/intelligence/IntelligencePanel';
 
 const Dashboard = () => {
   const { logout } = useAuth();
   const liveKit = useLiveKit();
+  const agentStatus = useAgentStatus();
   const command = useCommandCenter();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [cameraState, setCameraState] = useState<CameraState>(defaultCameraState);
+
+  const handleReconnect = () =>
+    command.reconnectBridge(liveKit, agentStatus.online);
 
   return (
     <div className="command-root">
@@ -37,9 +44,7 @@ const Dashboard = () => {
         <TopBar
           persona={command.activePersona}
           isConnected={command.isConnected}
-          isWakeWordActive={command.isWakeWordActive}
-          status={command.status}
-          onReconnect={command.reconnect}
+          onReconnect={handleReconnect}
           onOpenSettings={() => setSettingsOpen(true)}
           onOpenSim={command.openSimPanel}
           onLogout={() => {
@@ -53,8 +58,9 @@ const Dashboard = () => {
         <ErrorBoundary name="OperationsRail">
           <OperationsRail
             persona={command.activePersona}
-            isMuted={command.isMuted}
             location={command.location}
+            onCameraStateChange={setCameraState}
+            mapFocus={command.mapFocus}
             vitalsPc={command.vitalsPc}
             vitalsVps={command.vitalsVps}
             telemetry={command.telemetry}
@@ -70,6 +76,7 @@ const Dashboard = () => {
               isConnected={command.isConnected}
               isMuted={command.isMuted}
               isThinking={command.isThinking}
+              cameraState={cameraState}
             />
           </ErrorBoundary>
           <ErrorBoundary name="AssistantCore">
@@ -104,6 +111,12 @@ const Dashboard = () => {
             memories={command.memories}
             tools={command.toolLogs}
             onSend={command.sendMessage}
+            liveCaptions={command.chatLiveCaptions}
+            fallbackTranscription={command.transcription}
+            voiceConnected={liveKit.roomState === 'connected'}
+            hasMore={command.chatHasMore}
+            onLoadOlder={command.loadOlderChatMessages}
+            onRetry={command.retryChatMessage}
           />
         </ErrorBoundary>
       </main>
@@ -114,7 +127,7 @@ const Dashboard = () => {
             <SettingsPanel
               isConnected={command.isConnected}
               onClose={() => setSettingsOpen(false)}
-              onReconnect={command.reconnect}
+              onReconnect={handleReconnect}
             />
           </ErrorBoundary>
         )}

@@ -1,4 +1,5 @@
 import { createContext, useContext, type ReactNode } from 'react';
+import type { Room } from 'livekit-client';
 import { useVoiceRoom, type AgentState, type VoiceRoomState } from './useVoiceRoom';
 
 export type LiveKitContextValue = {
@@ -19,6 +20,8 @@ export type LiveKitContextValue = {
   disconnectRoom: () => Promise<void>;
   toggleMic: () => Promise<void>;
   setMicOff: () => Promise<void>;
+  publishCamera: (enabled: boolean, videoEl?: HTMLVideoElement | null) => Promise<boolean>;
+  getRoom: () => Room | null;
   takeOver: () => Promise<void>;
   wakeAgent: () => void;
   enablePlayback: () => Promise<void>;

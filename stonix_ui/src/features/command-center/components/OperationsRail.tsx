@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Cpu, HardDrive, MapPin, MemoryStick } from 'lucide-react';
 import CameraPanel from './CameraPanel';
+import type { CameraState } from './cameraState';
+import MapFocus, { type MapFocusData } from '@/features/location/MapFocus';
 import {
   LocationData,
   SystemAlert,
@@ -17,8 +19,9 @@ const ALERT_LEVELS = new Set(['warning', 'error', 'critical']);
 
 interface OperationsRailProps {
   persona: 'jarvis' | 'anna';
-  isMuted: boolean;
   location: LocationData;
+  onCameraStateChange?: (state: CameraState) => void;
+  mapFocus: MapFocusData | null;
   vitalsPc: VitalsSnapshot;
   vitalsVps: VitalsSnapshot;
   telemetry: TelemetrySnapshot;
@@ -42,6 +45,24 @@ function formatAgo(seconds: number): string {
   return `${Math.floor(seconds)}s ago`;
 }
 
+function formatLocationUpdated(ts: unknown, nowMs: number): string {
+  const ms = toEpochMs(ts);
+  if (ms === undefined) return '';
+  const sec = Math.max(0, Math.floor((nowMs - ms) / 1000));
+  if (sec < 60) return 'updated just now';
+  const min = Math.floor(sec / 60);
+  if (min === 1) return 'updated 1 min ago';
+  return `updated ${min} min ago`;
+}
+
+function formatCoords(lat: number, lng: number): string {
+  const latOk = Number.isFinite(lat);
+  const lngOk = Number.isFinite(lng);
+  if (!latOk && !lngOk) return '—';
+  if (latOk && lngOk) return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+  return latOk ? lat.toFixed(4) : lng.toFixed(4);
+}
+
 function resolveLogLevel(log: VortexLog): string | null {
   const level = log.level?.toLowerCase();
   if (level && ALERT_LEVELS.has(level)) return level.toUpperCase();
@@ -59,8 +80,9 @@ function formatLastSeen(ts: unknown): string {
 
 const OperationsRail = ({
   persona,
-  isMuted,
   location,
+  onCameraStateChange,
+  mapFocus,
   vitalsPc,
   vitalsVps,
   telemetry,
@@ -88,18 +110,30 @@ const OperationsRail = ({
 
   return (
     <aside className="operations-rail">
-      <CameraPanel isMuted={isMuted} />
+      <CameraPanel onCameraStateChange={onCameraStateChange} />
 
       <Panel title="Location">
-        <div className="location-card">
+        <div className="location-card" data-testid="device-location-card">
           <MapPin size={16} className={accent.text} />
-          <div>
+          <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-command-text">{location.city || 'Detecting...'}</p>
             <p className="mt-1 font-mono text-[11px] text-command-muted">
-              {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
+              {formatCoords(location.lat, location.lng)}
             </p>
+            {location.ts != null ? (
+              <p
+                className="mt-1 text-[10px] text-command-muted"
+                data-testid="device-location-updated"
+              >
+                {formatLocationUpdated(location.ts, nowMs)}
+              </p>
+            ) : null}
           </div>
         </div>
+      </Panel>
+
+      <Panel title="Map">
+        <MapFocus focus={mapFocus} />
       </Panel>
 
       <Panel title="Vitals">

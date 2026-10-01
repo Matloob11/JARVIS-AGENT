@@ -509,7 +509,7 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | C-74 | claude | P1 | Transcript language and script: A/B test, STT config, Roman Urdu display with original kept | C-71, C-73, C-44 | TODO |
 | C-75 | claude | P1 | Verify spoken confirmations against real user transcripts | C-28, C-74 | TODO |
 | X-13 | cursor | P1 | LiveKit room provider: join after login with mic off, mic toggle without churn, fresh token per connect, take-over UI | X-08, K-04 (DASH-LIVEKIT-UI) | DONE (01 Oct 13:20) |
-| X-14 | cursor | P1 | ChatPanel unified: one bubble per message id, Socket.IO send, history paging, live captions from lk.transcription | X-13, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS), K-04 (DASH-LIVEKIT-UI) | TODO |
+| X-14 | cursor | P1 | ChatPanel unified: one bubble per message id, Socket.IO send, history paging, live captions from lk.transcription | X-13, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS), K-04 (DASH-LIVEKIT-UI) | DONE (01 Oct 13:35) |
 | X-25 | cursor | P1 | Clipboard monitor: structured, redacted, rate-limited suggestions with self-write ignore | C-26, X-03, X-11, K-19 (ClipboardSuggestion) | BLOCKED (waiting C-26,X-11) |
 | C-57 | claude | P2 | Background jobs API (single module) + list/cancel tools | C-29, C-55, K-20 (BackgroundJobsAPI) | TODO |
 | C-58 | claude | P2 | Job progress routing: bridge tool_progress + init_state.jobs + job_cancel/open_job_artifact | C-29, C-57, C-13, C-14, C-19, K-31 (job_progress_routing) | TODO |
@@ -521,8 +521,8 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | C-65 | claude | P2 | Deploy #1: core dashboard (LiveKit provider, chat, status, controls) and live no-churn / exactly-once verification | C-21, C-22, C-09, C-23, C-63, C-60, C-33, C-35, C-43, C-44, C-51, X-13, X-14, C-62, X-15, X-16 | TODO |
 | C-76 | claude | P2 | Live Fast <-> Gated switch without restarting the agent | C-70, C-73, C-54 | TODO |
 | C-77 | claude | P2 | Voice session state in the agent heartbeat, probe silence, local health interval fix | C-33, C-39, C-23, C-63, K-68 (CT-VC-AGENT-HEARTBEAT) | TODO |
-| X-15 | cursor | P2 | Status bar: Bridge / Agent PC / Voice chips at every width, real agent state, working Reconnect | X-13, K-02 (DASH-UI-EVENTS), K-44 (C-ROOM-1), K-43 (C-STATUS-1) | TODO |
-| X-16 | cursor | P2 | Agent controls: Stop speaking, Pause/Start (Wake), separate Mic vs 'Agent listening', offline message queue | X-14, X-15, K-03 (DASH-UI-COMMANDS), K-60 (CT-VC-CONTROL), K-62 (CT-VC-TURN-GATE) | BLOCKED (waiting X-14,X-15) |
+| X-15 | cursor | P2 | Status bar: Bridge / Agent PC / Voice chips at every width, real agent state, working Reconnect | X-13, K-02 (DASH-UI-EVENTS), K-44 (C-ROOM-1), K-43 (C-STATUS-1) | DONE (01 Oct 13:35) |
+| X-16 | cursor | P2 | Agent controls: Stop speaking, Pause/Start (Wake), separate Mic vs 'Agent listening', offline message queue | X-14, X-15, K-03 (DASH-UI-COMMANDS), K-60 (CT-VC-CONTROL), K-62 (CT-VC-TURN-GATE) | TODO |
 | C-47 | claude | P3 | Media toolchain deps in .venv_312: yt-dlp[default] (yt-dlp-ejs) + pylint (+ imageio-ffmpeg only if chosen) | C-26, C-09, K-15 (DesktopConfigKeys) | DONE (01 Oct 12:30) |
 | C-78 | claude | P3 | Document Q&A: scoped persistent index, terminating chunker, work off the event loop | C-24 | TODO |
 | C-79 | claude | P3 | SIM ui_command payload {query, purpose}: agent handler + bridge validator | X-38, C-13, C-14, C-19, K-34 (sim_authorized_source) | TODO |
@@ -570,9 +570,9 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | X-42 | cursor | P3 | Window control 1/3: close_window (tool 'close' kept as routed alias), minimize/maximize, active-window context | C-27, X-03, X-11, X-41, K-17 (ToolNamesV2), K-21 (ActiveWindowContext), K-16 (DesktopToolPolicy) | BLOCKED (waiting C-27,X-11,X-41) |
 | X-43 | cursor | P3 | Window control 2/3: open_app with a universal app index and Chrome/YouTube/WhatsApp/Office/VLC routing | C-26, X-26, X-34, X-41, X-42 | BLOCKED (waiting C-26,X-26,X-34,X-41,X-42) |
 | X-44 | cursor | P3 | Window control 3/3: save_notepad, open_notepad_file, folder_file (+cv alias), create_folder, open_outputs_folder | C-26, X-03, C-30, X-27, X-43 | BLOCKED (waiting C-26,X-03,C-30,X-27,X-43) |
-| X-45 | cursor | P3 | CameraPanel: opt-in camera, LiveKit publish, honest link badges, Socket.IO fallback only while sharing | X-13, K-05 (DASH-CAMERA-VISION) | TODO |
-| X-46 | cursor | P3 | Location card + Map panel: device location and map focus kept separate, OpenStreetMap view | X-17, K-08 (DASH-LOCATION) | TODO |
-| X-47 | cursor | P3 | SIM dialog: provider-not-configured state, purpose field, masked results, 20 s timeout | X-15, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS), K-34 (sim_authorized_source) | BLOCKED (waiting X-15) |
+| X-45 | cursor | P3 | CameraPanel: opt-in camera, LiveKit publish, honest link badges, Socket.IO fallback only while sharing | X-13, K-05 (DASH-CAMERA-VISION) | DONE (01 Oct 13:35) |
+| X-46 | cursor | P3 | Location card + Map panel: device location and map focus kept separate, OpenStreetMap view | X-17, K-08 (DASH-LOCATION) | DONE (01 Oct 13:35) |
+| X-47 | cursor | P3 | SIM dialog: provider-not-configured state, purpose field, masked results, 20 s timeout | X-15, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS), K-34 (sim_authorized_source) | TODO |
 | X-48 | cursor | P3 | Controls: Terminate (guarded session restart), Swarm entry points, answer feedback thumbs | X-24, X-10, K-03 (DASH-UI-COMMANDS) | BLOCKED (waiting X-24,X-10) |
 | X-49 | cursor | P3 | FlowMap from real state (Voice, Vision, Memory, Tools, Core); 'unknown' instead of a fake 'ready' | X-20, X-19, X-13, K-06 (DASH-MODULE-HEALTH) | BLOCKED (waiting X-20,X-19,X-13) |
 | X-50 | cursor | P3 | Real audio visualizer and 'You are speaking' indicator | X-13, X-33 | BLOCKED (waiting X-13,X-33) |
@@ -5627,3 +5627,11 @@ Format: `- [YYYY-MM-DD HH:MM] from â†’ to: message (task id)`. Jawab isi li
 ### REQ-CURSOR-BLOCKED-P0 (01 Oct cursor)
 Cursor blocked on Claude: C-06 (for X-11+), C-24/C-26/C-27/C-28/C-30 (desktop tool chain). Please prioritize C-06 then decorator/lock/confirm stack.
 
+
+### Handoff � Cursor batch 01 Oct ~13:25 PKT
+REQ-CURSOR: Please prioritize Claude P0 so Cursor unblocks:
+- C-06 (side-effect guard / X-11)
+- C-24 decorator v2, C-26 config keys, C-27 tool core, C-28 confirm broker, C-30 kill switch (desktop tool chain X-26+)
+- C-09 (Electron X-09), C-25 (info tools X-36+)
+REQ-RESTART: VR-37 wire assets/audio/jarvis_startup_chime.wav into agent startup (Cursor must not start-agent.bat)
+REQ-CONTRACT: .gitignore allow assets/audio/*.wav (force-added for now)

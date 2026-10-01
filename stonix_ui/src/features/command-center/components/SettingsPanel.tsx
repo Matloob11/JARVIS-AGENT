@@ -5,7 +5,7 @@ import { BRIDGE_BASE } from '@/shared/config/runtime';
 interface SettingsPanelProps {
   isConnected: boolean;
   onClose: () => void;
-  onReconnect: () => void;
+  onReconnect: () => void | Promise<void>;
 }
 
 const SettingsPanel = ({ isConnected, onClose, onReconnect }: SettingsPanelProps) => {
@@ -48,7 +48,7 @@ const SettingsPanel = ({ isConnected, onClose, onReconnect }: SettingsPanelProps
       </div>
 
       <div className="settings-drawer__footer">
-        <button onClick={onReconnect} className="primary-button">
+        <button type="button" onClick={() => void onReconnect()} className="primary-button">
           <RefreshCw size={14} />
           Reconnect Bridge
         </button>

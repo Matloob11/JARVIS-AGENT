@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { normalizeMessage, toEpochMs } from '@/shared/contracts/events';
+import { toast } from '@/toast';
+import { toEpochMs } from '@/shared/contracts/events';
+import { useChat } from '@/features/chat/useChat';
+import type { ChatMessage } from '@/features/chat/types';
+import type { LiveKitContextValue } from '@/features/voice/LiveKitProvider';
+import type { MapFocusData } from '@/features/location/MapFocus';
 import {
   type IntelligenceItem,
   normalizeIntelligenceItem,
@@ -25,17 +30,62 @@ export interface ToolLog {
   timestamp: number;
 }
 
-export interface Message {
-  id: string;
-  role: 'agent' | 'user' | 'assistant' | 'system';
-  text: string;
-  timestamp: number;
-}
+export type Message = ChatMessage;
 
 export interface LocationData {
   city: string;
   lat: number;
   lng: number;
+  ts?: number;
+  kind?: string;
+  source?: string;
+}
+
+function finiteNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const n = Number(value);
+    if (Number.isFinite(n)) return n;
+  }
+  return undefined;
+}
+
+function locationKind(raw: Record<string, unknown>): string {
+  return raw.kind != null ? String(raw.kind).toLowerCase() : 'device';
+}
+
+export function parseMapFocusPayload(raw: unknown): MapFocusData | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const data = raw as Record<string, unknown>;
+  const lat = finiteNumber(data.lat);
+  const lng = finiteNumber(data.lng);
+  if (lat === undefined || lng === undefined) return null;
+  const zoom = finiteNumber(data.zoom);
+  const ts = toEpochMs(data.ts);
+  return {
+    query: data.query != null ? String(data.query) : undefined,
+    display_name: data.display_name != null ? String(data.display_name) : undefined,
+    lat,
+    lng,
+    zoom,
+    ts,
+  };
+}
+
+export function parseDeviceLocationPayload(raw: unknown): LocationData | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const data = raw as Record<string, unknown>;
+  if (locationKind(data) === 'map') return null;
+  const lat = finiteNumber(data.lat);
+  const lng = finiteNumber(data.lng);
+  return {
+    city: data.city != null ? String(data.city) : 'Unknown',
+    lat: lat ?? 0,
+    lng: lng ?? 0,
+    ts: toEpochMs(data.ts),
+    kind: locationKind(data),
+    source: data.source != null ? String(data.source) : undefined,
+  };
 }
 
 export interface ReasoningPlan {
@@ -136,17 +186,8 @@ export interface SimRecord {
   phone?: string;
 }
 
-function toUiMessage(raw: unknown): Message {
-  const n = normalizeMessage(raw);
-  return {
-    id: n.id || Math.random().toString(36).slice(2, 11),
-    role: n.role === 'assistant' ? 'assistant' : n.role === 'system' ? 'system' : n.role,
-    text: n.text,
-    timestamp: n.ts < 1e12 ? n.ts : Math.floor(n.ts / 1000),
-  };
-}
-
 export const useCommandCenter = () => {
+  const chat = useChat();
   const [isConnected, setIsConnected] = useState(false);
   const [status, setStatus] = useState('idle');
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -174,8 +215,8 @@ export const useCommandCenter = () => {
   const [memories, setMemories] = useState<NeuralMemory[]>([]);
   const [toolLogs, setToolLogs] = useState<ToolLog[]>([]);
   const [transcription, setTranscription] = useState('');
-  const [messages, setMessages] = useState<Message[]>([]);
   const [location, setLocation] = useState<LocationData>({ city: 'Detecting...', lat: 0, lng: 0 });
+  const [mapFocus, setMapFocus] = useState<MapFocusData | null>(null);
   const [reasoning, setReasoning] = useState<ReasoningPlan | null>(null);
   const [simRecords, setSimRecords] = useState<SimRecord[]>([]);
   const [simLoading, setSimLoading] = useState(false);
@@ -262,20 +303,24 @@ export const useCommandCenter = () => {
     const onMemorySync = (data: NeuralMemory) => setMemories(prev => [data, ...prev].slice(0, 50));
     const onToolUpdate = (data: ToolLog) => setToolLogs(prev => [data, ...prev].slice(0, 20));
     const onTranscriptionUpdate = (data: { text: string }) => setTranscription(data.text);
-    const onInitState = (state: { messages?: unknown[]; persona?: 'jarvis' | 'anna' }) => {
-      if (state.messages) setMessages(state.messages.map(toUiMessage));
+    const onInitState = (state: { persona?: 'jarvis' | 'anna' }) => {
       if (state.persona) setActivePersona(state.persona);
-    };
-    const onUpdateMessage = (msg: unknown) => {
-      const normalized = toUiMessage(msg);
-      setMessages(prev => prev.map(m => (m.id === normalized.id ? { ...m, ...normalized } : m)));
-    };
-    const onNewMessage = (msg: unknown) => {
-      setMessages(prev => [...prev, toUiMessage(msg)].slice(-50));
     };
     const onMuteUpdate = (muted: boolean) => setIsMuted(muted);
     const onWakeWordUpdate = (active: boolean) => setIsWakeWordActive(active);
-    const onLocationUpdate = (data: LocationData) => setLocation(data);
+    const onLocationUpdate = (data: Record<string, unknown>) => {
+      if (locationKind(data) === 'map') {
+        const focus = parseMapFocusPayload(data);
+        if (focus) setMapFocus(focus);
+        return;
+      }
+      const device = parseDeviceLocationPayload(data);
+      if (device) setLocation(device);
+    };
+    const onMapFocusUpdate = (data: Record<string, unknown>) => {
+      const focus = parseMapFocusPayload(data);
+      if (focus) setMapFocus(focus);
+    };
     const onReasoningUpdate = (data: ReasoningPlan) => setReasoning(data);
     const onNewLog = (data: Record<string, unknown>) =>
       setVortexLogs(prev => [normalizeVortexLog(data), ...prev].slice(0, 50));
@@ -321,6 +366,7 @@ export const useCommandCenter = () => {
     socket.on('tool_update', onToolUpdate);
     socket.on('transcription_update', onTranscriptionUpdate);
     socket.on('location_update', onLocationUpdate);
+    socket.on('map_focus_update', onMapFocusUpdate);
     socket.on('reasoning_update', onReasoningUpdate);
     socket.on('new_log', onNewLog);
     socket.on('voice_match_update', onVoiceMatchUpdate);
@@ -332,7 +378,8 @@ export const useCommandCenter = () => {
       persona?: 'jarvis' | 'anna';
       muted?: boolean;
       wake_word_active?: boolean;
-      location?: LocationData;
+      location?: Record<string, unknown>;
+      map_focus?: Record<string, unknown>;
       vortex_logs?: unknown[];
       logs?: unknown[];
       vitals_pc?: Record<string, unknown>;
@@ -358,7 +405,19 @@ export const useCommandCenter = () => {
       confirmApiRef.current.seedFromInit(state as Record<string, unknown>);
       setIsMuted(state.muted || false);
       setIsWakeWordActive(state.wake_word_active !== false);
-      if (state.location) setLocation(state.location);
+      if (state.map_focus) {
+        const focus = parseMapFocusPayload(state.map_focus);
+        if (focus) setMapFocus(focus);
+      }
+      if (state.location) {
+        if (locationKind(state.location) === 'map') {
+          const focus = parseMapFocusPayload(state.location);
+          if (focus) setMapFocus(focus);
+        } else {
+          const device = parseDeviceLocationPayload(state.location);
+          if (device) setLocation(device);
+        }
+      }
       const seedLogs = state.vortex_logs ?? state.logs;
       if (Array.isArray(seedLogs)) {
         setVortexLogs(
@@ -409,8 +468,6 @@ export const useCommandCenter = () => {
         if (seeded[0]) setIntelligence(seeded[0]);
       }
     });
-    socket.on('new_message', onNewMessage);
-    socket.on('update_message', onUpdateMessage);
     socket.on('mute_update', onMuteUpdate);
     socket.on('wake_word_update', onWakeWordUpdate);
 
@@ -431,6 +488,7 @@ export const useCommandCenter = () => {
       socket.off('tool_update', onToolUpdate);
       socket.off('transcription_update', onTranscriptionUpdate);
       socket.off('location_update', onLocationUpdate);
+      socket.off('map_focus_update', onMapFocusUpdate);
       socket.off('reasoning_update', onReasoningUpdate);
       socket.off('new_log', onNewLog);
       socket.off('voice_match_update', onVoiceMatchUpdate);
@@ -438,8 +496,6 @@ export const useCommandCenter = () => {
       socket.off('sim_data_loading', onSimDataLoading);
       socket.off('sim_panel_open', onSimPanelOpen);
       socket.off('init_state');
-      socket.off('new_message', onNewMessage);
-      socket.off('update_message', onUpdateMessage);
       socket.off('mute_update', onMuteUpdate);
       socket.off('wake_word_update', onWakeWordUpdate);
     };
@@ -469,16 +525,7 @@ export const useCommandCenter = () => {
   };
 
   const sendMessage = (text: string) => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    emitCommand('chat', trimmed);
-    const userMsg: Message = {
-      id: Math.random().toString(36).slice(2, 11),
-      role: 'user',
-      text: trimmed,
-      timestamp: Math.floor(Date.now() / 1000),
-    };
-    setMessages(prev => [...prev, userMsg].slice(-50));
+    chat.send(text);
   };
 
   const toggleMute = () => {
@@ -509,6 +556,60 @@ export const useCommandCenter = () => {
     setSimMessage('');
     emitCommand('sim_lookup', normalized);
   };
+
+  const waitForSocketConnect = useCallback(async (timeoutMs = 15_000) => {
+    const socket = getSocket();
+    if (socket.connected) return;
+    await new Promise<void>((resolve, reject) => {
+      const timer = window.setTimeout(() => {
+        cleanup();
+        reject(new Error('socket_timeout'));
+      }, timeoutMs);
+      const onConnect = () => {
+        cleanup();
+        resolve();
+      };
+      const onError = (err: Error) => {
+        cleanup();
+        reject(err);
+      };
+      const cleanup = () => {
+        window.clearTimeout(timer);
+        socket.off('connect', onConnect);
+        socket.off('connect_error', onError);
+      };
+      socket.on('connect', onConnect);
+      socket.on('connect_error', onError);
+      if (!socket.active) {
+        socket.connect();
+      }
+    });
+  }, []);
+
+  const reconnectBridge = useCallback(
+    async (liveKit: Pick<LiveKitContextValue, 'roomState' | 'connectRoom'>, agentOnline: boolean) => {
+      try {
+        disconnectSocket();
+        setIsConnected(false);
+        setSocketVersion(v => v + 1);
+        await waitForSocketConnect();
+        setIsConnected(true);
+        getSocket().emit('ui_command', { type: 'request_state', payload: {} });
+        await chat.refetchMessages();
+        const lkState = liveKit.roomState;
+        if (lkState === 'idle' || lkState === 'error') {
+          await liveKit.connectRoom();
+        }
+        if (!agentOnline) {
+          getSocket().emit('ui_command', { type: 'start', payload: {} });
+        }
+        toast.success('Reconnected');
+      } catch {
+        toast.error('Reconnect failed');
+      }
+    },
+    [chat.refetchMessages, waitForSocketConnect],
+  );
 
   useEffect(() => {
     if (!isSpeaking) {
@@ -541,8 +642,13 @@ export const useCommandCenter = () => {
     memories,
     toolLogs,
     transcription,
-    messages,
+    messages: chat.messages,
+    chatHasMore: chat.hasMore,
+    chatLiveCaptions: chat.liveCaptions,
+    loadOlderChatMessages: chat.loadOlderMessages,
+    retryChatMessage: chat.retrySend,
     location,
+    mapFocus,
     reasoning,
     vortexLogs,
     voiceMatch,
@@ -566,11 +672,8 @@ export const useCommandCenter = () => {
     openSimPanel,
     closeSimPanel,
     requestSimLookup,
-    reconnect: () => {
-      disconnectSocket();
-      setIsConnected(false);
-      setSocketVersion(v => v + 1);
-    },
+    refetchMessages: chat.refetchMessages,
+    reconnectBridge,
   };
 };
 

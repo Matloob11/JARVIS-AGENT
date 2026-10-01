@@ -370,6 +370,36 @@ export function useVoiceRoom() {
     setMicEnabled(false);
   }, []);
 
+  const publishCamera = useCallback(
+    async (enabled: boolean, videoEl?: HTMLVideoElement | null): Promise<boolean> => {
+      const room = roomRef.current;
+      if (!room || room.state !== ConnectionState.Connected) {
+        return false;
+      }
+
+      if (!enabled) {
+        const publication = room.localParticipant.getTrackPublication(Track.Source.Camera);
+        if (videoEl) {
+          publication?.videoTrack?.detach(videoEl);
+        }
+        await room.localParticipant.setCameraEnabled(false);
+        return true;
+      }
+
+      const publication = await room.localParticipant.setCameraEnabled(true, {
+        resolution: { width: 640, height: 480, frameRate: 10 },
+      });
+      const track =
+        publication?.videoTrack ??
+        room.localParticipant.getTrackPublication(Track.Source.Camera)?.videoTrack;
+      if (track && videoEl) {
+        track.attach(videoEl);
+      }
+      return true;
+    },
+    [],
+  );
+
   const emitUiCommand = useCallback((type: string, payload: Record<string, unknown> = {}) => {
     getSocket().emit('ui_command', { type, payload });
   }, []);
@@ -400,6 +430,8 @@ export function useVoiceRoom() {
       setError(err instanceof Error ? err.message : String(err));
     }
   }, []);
+
+  const getRoom = useCallback(() => roomRef.current, []);
 
   useEffect(() => {
     intentionalLeaveRef.current = false;
@@ -435,6 +467,8 @@ export function useVoiceRoom() {
       disconnectRoom,
       toggleMic,
       setMicOff,
+      publishCamera,
+      getRoom,
       takeOver,
       wakeAgent,
       enablePlayback,
@@ -457,6 +491,8 @@ export function useVoiceRoom() {
       disconnectRoom,
       toggleMic,
       setMicOff,
+      publishCamera,
+      getRoom,
       takeOver,
       wakeAgent,
       enablePlayback,

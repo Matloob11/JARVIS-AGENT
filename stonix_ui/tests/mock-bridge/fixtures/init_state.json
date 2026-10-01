@@ -72,6 +72,14 @@
     "source": "mock",
     "ts": 1727700000
   },
+  "map_focus": {
+    "query": "Islamabad",
+    "display_name": "Islamabad, Pakistan",
+    "lat": 33.6844,
+    "lng": 73.0479,
+    "zoom": 12,
+    "ts": 1727700000
+  },
   "sim_records": [],
   "sim_loading": false,
   "sim_status": "idle",

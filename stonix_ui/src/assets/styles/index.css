@@ -177,6 +177,10 @@ button {
     @apply flex items-center gap-2 text-[11px] capitalize text-command-muted;
   }
 
+  .status-chip {
+    @apply flex max-w-[9rem] items-center gap-1.5 rounded-md border border-command-border bg-white/[0.03] px-2 py-1 text-[10px] capitalize text-command-text sm:max-w-none;
+  }
+
   .window-button,
   .icon-button {
     @apply flex h-8 w-8 items-center justify-center rounded-md border border-transparent text-command-muted transition hover:border-command-border hover:bg-white/[0.04] hover:text-command-text active:scale-95 disabled:cursor-not-allowed disabled:opacity-40;
@@ -469,6 +473,34 @@ button {
 
   .message-bubble--user {
     @apply rounded-tl-lg rounded-tr-sm bg-command-blue/[0.08];
+  }
+
+  .message-row--system {
+    @apply justify-center;
+  }
+
+  .message-bubble--system {
+    @apply max-w-[92%] border-dashed bg-white/[0.02] text-center;
+  }
+
+  .message-bubble--group {
+    @apply max-w-[90%];
+  }
+
+  .chat-live-strip {
+    @apply sticky bottom-0 rounded-md border border-command-border/60 bg-black/40 px-3 py-2 italic text-command-text/80;
+  }
+
+  .chat-live-line {
+    @apply text-[12px] leading-5;
+  }
+
+  .chat-live-label {
+    @apply not-italic text-[10px] font-semibold uppercase tracking-wide text-command-accent;
+  }
+
+  .chat-load-older {
+    @apply rounded-md border border-command-border px-3 py-1.5 text-[11px] font-semibold text-command-muted transition hover:bg-white/[0.04] hover:text-command-text;
   }
 
   .data-row {

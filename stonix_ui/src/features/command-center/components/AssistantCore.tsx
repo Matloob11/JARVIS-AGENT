@@ -82,7 +82,7 @@ const AssistantCore = ({
             {voice.voiceUnavailable
               ? 'LiveKit abhi available nahi — chat aur bridge controls chalte rahenge.'
               : voice.micEnabled
-                ? 'Mic live — bolo, agent sunega aur bolega. Chat text alag hai (awaaz nahi).'
+                ? 'Mic live — bolo, agent sunega aur bolega. Typed sawal ka jawab text me aur (voice on ho to) awaaz me.'
                 : voiceLive
                   ? 'Mic off — room linked hai. Mic on dabao jab bolna ho; room disconnect nahi hota.'
                   : 'Login ke baad room auto-link hota hai (mic off). Mic on = permission allow.'}

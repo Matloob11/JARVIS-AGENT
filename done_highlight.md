@@ -153,3 +153,24 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Commit:** pending · **Deploy:** no
 - **Doosre agent ke liye:** —
 
+
+### ✅ [cursor] X-14 · Unified ChatPanel · 2026-10-01 13:35 PKT
+- **Kya kiya:** useChat Map-by-id, Socket.IO send+ack, history /messages, liveCaptions, ChatPanel bubbles.
+- **Verify:** chat.spec.ts pass
+- **Commit:** pending · **Deploy:** no · **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-15 · Status bar chips · 2026-10-01 13:35 PKT
+- **Kya kiya:** Bridge/Agent/Voice chips + reconnect toast via useAgentStatus.
+- **Verify:** status.spec.ts 3/3
+- **Commit:** pending · **Deploy:** no · **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-45 · CameraPanel opt-in · 2026-10-01 13:35 PKT
+- **Kya kiya:** Camera off by default; LiveKit publish or share-gated vision_frame fallback.
+- **Verify:** camera.spec.ts 2/2
+- **Commit:** pending · **Deploy:** no · **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-46 · Location + MapFocus OSM · 2026-10-01 13:35 PKT
+- **Kya kiya:** Device vs map focus separated; OSM iframe MapFocus panel.
+- **Verify:** location.spec.ts pass
+- **Commit:** pending · **Deploy:** no · **Doosre agent ke liye:** —
+
