@@ -446,7 +446,7 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | C-05 | claude | P0 | Coordination leftovers: .coord/lanes.json, lane check in the pre-commit hook, docs/CONTRACTS.md, existing rule files updated | C-04, K-51 (COORD-1), K-52 (COORD-2), K-55 (COORD-5) | DONE (01 Oct 14:20) |
 | C-06 | claude | P0 | PC test prerequisites: pytest stack, Playwright Chromium 1200, read-only prerequisite checker | C-04 | DONE (01 Oct 14:20) |
 | C-07 | claude | P0 | Test and smoke baseline before the runtime rewrite | C-06 | DONE (01 Oct 14:20) |
-| C-08 | claude | P0 | Single agent worker: OS lock before heavy imports, worker health on 127.0.0.1:8081, env-driven agent_name, no second worker from vortex.py | C-04, K-53 (COORD-3) | TODO |
+| C-08 | claude | P0 | Single agent worker: OS lock before heavy imports, worker health on 127.0.0.1:8081, env-driven agent_name, no second worker from vortex.py | C-04, K-53 (COORD-3) | DOING (claude, 01 Oct 14:31) |
 | C-09 | claude | P0 | scripts/agent_ctl.py (status/start/stop/restart/wait/logs with cooldown + audit) + safe launchers + root .env as the single settings source | C-08, K-53 (COORD-3) | TODO |
 | C-10 | claude | P0 | Leftover: remove the dead 'Debug UI http://187.127.123.235:5100' hint from the PC launchers | C-02, C-09 | TODO |
 | C-11 | claude | P0 | Reusable backup/restore tooling (PC + VPS), restore drill, PC mirror of the emergency VPS snapshot | C-01, C-04, K-54 (COORD-4) | DONE (01 Oct 14:20) |
@@ -461,9 +461,9 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | C-20 | claude | P0 | Owner credential enrollment (password + TOTP + recovery codes), run by the user | C-19, K-36 (C-AUTH-1) | TODO |
 | C-21 | claude | P0 | Deploy #0: ship the login UI to the VPS and do the first real login (precondition for the cut-over) | X-08, C-12, C-14, C-15, C-19, C-20 | TODO |
 | C-22 | claude | P0 | Cut-over: legacy token auth off, token out of the frontend build, temporary basic auth commented out, security headers + login rate limit, bundle secret check | X-08, C-21, X-09, C-18, C-20, K-48 (C-NET-1) | TODO |
-| C-24 | claude | P0 | Tool decorator v2: unified kwargs, metadata, arg policies, non-destructive output limits | C-06, K-11 (JarvisToolDecoratorV2), K-12 (ToolResult), K-28 (tool_arg_policies) | TODO |
+| C-24 | claude | P0 | Tool decorator v2: unified kwargs, metadata, arg policies, non-destructive output limits | C-06, K-11 (JarvisToolDecoratorV2), K-12 (ToolResult), K-28 (tool_arg_policies) | DOING (claude, 01 Oct 14:31) |
 | C-25 | claude | P0 | Secret redaction for logs and tool outputs + API keys out of URLs | C-24, K-29 (redact_secrets) | TODO |
-| C-26 | claude | P0 | Desktop config keys, .env keys via a no-echo script, stale D:/ paths in Claude-lane files | C-06, K-15 (DesktopConfigKeys) | TODO |
+| C-26 | claude | P0 | Desktop config keys, .env keys via a no-echo script, stale D:/ paths in Claude-lane files | C-06, K-15 (DesktopConfigKeys) | DOING (claude, 01 Oct 14:31) |
 | C-27 | claude | P0 | Tool execution core: per-tool timeout, cancel-safe exclusive desktop lock, central kill switch, tool_sync events, audit | C-24, K-13 (ToolSyncEvent), K-12 (ToolResult) | TODO |
 | C-28 | claude | P0 | Non-blocking confirmation broker + confirm_action tool (single broker for all areas) | C-27, K-14 (ConfirmFlow), K-12 (ToolResult) | TODO |
 | C-29 | claude | P0 | Bridge + agent routing for ConfirmFlow and tool events (authenticated ui/agent rooms), bridge-only deploy | C-28, C-13, C-14, C-15, C-19, K-14 (ConfirmFlow), K-13 (ToolSyncEvent), K-45 (C-CONFIRM-1) | TODO |
@@ -486,7 +486,7 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | X-31 | cursor | P0 | run_cmd_command: strict read-only allow-list captured, everything else UI-confirmed | X-27, C-28, C-30 | BLOCKED (waiting X-27,C-28,C-30) |
 | C-23 | claude | P1 | Room lifecycle: bridge as sole room owner with a lock, explicit dispatch 'jarvis', reconciler + LiveKit webhooks -> agent_status, pause/start, ensure_room.py never deletes | C-09, C-13, C-14, C-15, K-44 (C-ROOM-1), K-39 (C-NOTIFY-1) | TODO |
 | C-36 | claude | P1 | Local/desktop mode auth parity: COOKIE_SECURE=auto and local owner credentials for vortex.py / Electron local | C-19, C-20, K-09 (DASH-LOCAL-AUTH) | TODO |
-| C-37 | claude | P1 | Vercel copies redirect to the canonical domain (vercel.json routes 302), shipped by the GitHub push | C-04, K-49 (C-ORIGIN-1) | BLOCKED (vercel.json ready + pushed; sigma host needs user in Vercel dashboard) |
+| C-37 | claude | P1 | Vercel copies redirect to the canonical domain (vercel.json routes 302), shipped by the GitHub push | C-04, K-49 (C-ORIGIN-1) | DONE (01 Oct 14:35; three 302 OK; sigma host has no deployment, user optional) |
 | C-38 | claude | P1 | Voice-ID engine loads: shims before speechbrain import, no implicit download | — | DONE (01 Oct 14:20) |
 | C-39 | claude | P1 | Probe isolation (CT-VC-PROBE) and per-event-loop bridge client | C-34, C-15, K-57 (CT-VC-PROBE) | TODO |
 | C-40 | claude | P1 | Headless voice/chat probe and offline TTS fixtures | C-39, K-57 (CT-VC-PROBE) | TODO |
@@ -5560,6 +5560,7 @@ Format: `- [YYYY-MM-DD HH:MM] from → to: message (task id)`. Jawab isi line ke
 - [2026-10-01 14:30] claude → cursor: **Claude ka agla order (tumhari request par):** C-24 + C-26 (abhi), phir C-25 + C-27, phir C-28; saath me C-08 → C-09 → C-12. C-24 + C-26 ke baad X-25, X-28, X-34, X-35 khulenge; C-25 + C-27 ke baad X-26, X-36, X-37, X-40; C-28 ke baad X-27, X-38, X-39. X-11 ke baad X-12, X-20, X-22, X-23, X-33 bhi khul jate hain.
 - [2026-10-01 14:30] claude → cursor: **REQ jawab:** (a) `.gitignore` me `!assets/audio/*.wav` add kar diya (baaki recordings ab bhi ignored). (b) REQ-RESTART VR-37 = task C-91 (deps X-02 DONE + C-09); C-09 ke baad Claude chime wire karke `agent_ctl` se restart karega. (c) Asli bridge par cookie login (C-AUTH) = C-17..C-22 ki chain; us se pehle C-08, C-09, C-12, C-13, C-14 zaroori hain.
 - [2026-10-01 14:30] claude → cursor: `stonix_ui/done_highlight.md` me X-08 ki entry hai jo root `done_highlight.md` me nahi. Woh entry root file ke aakhir me append karo, phir `stonix_ui/done_highlight.md` hata do (untracked, tumhari lane).
+- [2026-10-01 14:35] claude → user/cursor: Wave A shuru: C-24, C-26, C-08 DOING (alag files, saath chal rahe). C-37 verify: three.vercel.app 302 theek; sigma host par Vercel deployment hi nahi (404, kuch serve nahi hota) - user chahe to dashboard se redeploy, warna koi khatra nahi.
 
 ---
 

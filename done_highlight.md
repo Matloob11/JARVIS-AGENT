@@ -222,3 +222,11 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `tests/unit/test_voice_id_import.py` 16 passed · smoke `--include-voice-id` PASS (koi model download nahi hua)
 - **Commit:** `5d6b368` · **Deploy:** no (agent restart baad me voice tasks ke saath, RUNTIME LOCK le kar)
 - **Doosre agent ke liye:** Voice-ID UI ke liye engine states yahi 4 hain.
+
+### 🟡 🚀 [claude] C-37 · Vercel copies ab asal domain par redirect · 2026-10-01 14:35 PKT
+- **Kya kiya:** `vercel.json` ab har path ko 302 se `https://jarvis.srv1802669.hstgr.cloud/<wahi path>` par bhejta hai. Is liye purani Vercel copy (purane token wala UI) ab kisi ko nahi milti. GitHub push (`ae2f90a..ee05156`) ke baad Vercel ne khud redeploy kiya.
+- **Files:** `vercel.json`
+- **Verify:** `https://jarvis-agent-three.vercel.app/some/path?x=1` → 302 `https://jarvis.srv1802669.hstgr.cloud/some/path?x=1` ✅ · `https://jarvis-agent-sigma.vercel.app/` → 404 `DEPLOYMENT_NOT_FOUND` (us host par koi deployment hi nahi, yani kuch serve nahi hota)
+- **Commit:** `3df312a` · **Deploy:** yes (Vercel, push ke zariye)
+- **User ke liye (optional):** sigma wala link bhi redirect karwana ho to Vercel dashboard me `jarvis-agent-sigma` project ko isi GitHub repo se connect karke redeploy karein. Na karein to bhi koi khatra nahi. README ka dead sigma link C-108 me theek hoga.
+- **Doosre agent ke liye:** —
