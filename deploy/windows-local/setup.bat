@@ -36,16 +36,40 @@ if not defined PY312 (
 echo [OK] Using Python 3.12: %PY312%
 "%PY312%" --version
 
-echo [1/4] Recreating clean .venv_312 with Python 3.12...
-if exist ".venv_312" (
-  echo Removing old venv (was wrong Python)...
-  rmdir /s /q ".venv_312"
+REM Never change .venv_312 under a running agent worker (K-53). agent_lock.py needs only the stdlib.
+"%PY312%" -c "from src.core import agent_lock; raise SystemExit(3 if agent_lock.is_locked() else 0)"
+if errorlevel 3 (
+  echo [ERROR] The JARVIS agent worker is running ^(run\agent.lock is held^) and uses .venv_312.
+  echo Stop it first: .venv_312\Scripts\python.exe scripts\agent_ctl.py stop --by user --reason setup.bat
+  pause
+  exit /b 3
 )
-"%PY312%" -m venv .venv_312
 if errorlevel 1 (
-  echo [ERROR] Failed to create venv.
+  echo [ERROR] Could not check run\agent.lock ^(src\core\agent_lock.py^).
   pause
   exit /b 1
+)
+
+set "REUSE_VENV="
+if exist ".venv_312\Scripts\python.exe" (
+  ".venv_312\Scripts\python.exe" -c "import sys; raise SystemExit(0 if sys.version_info[:2]==(3,12) else 1)" 2>nul
+  if not errorlevel 1 set "REUSE_VENV=1"
+)
+
+if defined REUSE_VENV (
+  echo [1/4] Reusing the existing Python 3.12 .venv_312
+) else (
+  echo [1/4] Creating a clean .venv_312 with Python 3.12...
+  if exist ".venv_312" (
+    echo Removing old venv ^(was wrong Python^)...
+    rmdir /s /q ".venv_312"
+  )
+  "%PY312%" -m venv .venv_312
+  if errorlevel 1 (
+    echo [ERROR] Failed to create venv.
+    pause
+    exit /b 1
+  )
 )
 
 call .venv_312\Scripts\activate.bat
@@ -71,12 +95,20 @@ if errorlevel 1 (
 )
 
 echo [4/4] Linking hybrid .env + folders...
-copy /Y "deploy\windows-local\.env" ".env" >nul
+REM The root .env is the single settings source (K-47): created once, never overwritten.
+if exist ".env" (
+  echo Keeping the existing root .env
+) else if exist "deploy\windows-local\.env" (
+  copy "deploy\windows-local\.env" ".env" >nul
+  echo Created the root .env from deploy\windows-local\.env ^(edit the root .env from now on^)
+) else (
+  echo [WARN] No .env yet: create the root .env from deploy\windows-local\.env.example
+)
 if not exist "logs" mkdir logs
 if not exist "%USERPROFILE%\Jarvis_Shared" mkdir "%USERPROFILE%\Jarvis_Shared" 2>nul
 
 echo.
 echo [OK] Setup complete on Python 3.12.
 echo Next: deploy\windows-local\start-agent.bat
-echo UI: http://187.127.123.235:5100
+echo UI: https://jarvis.srv1802669.hstgr.cloud
 pause

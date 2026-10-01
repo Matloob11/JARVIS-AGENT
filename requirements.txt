@@ -60,6 +60,7 @@ pygetwindow==0.0.9
 comtypes==1.4.2
 geopy==2.4.1
 pywin32==311; sys_platform == "win32"
+psutil==7.2.2  # scripts/agent_ctl.py (also a livekit-agents dependency)
 pycaw==20251023
 qrcode==8.2
 youtube-search-python==1.6.6

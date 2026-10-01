@@ -1,5 +1,5 @@
 @echo off
-setLOG=install.log
+set LOG=install.log
 echo [JARVIS PROD INSTALL] Starting installation...
 
 :: 1. Check for Python
@@ -40,5 +40,7 @@ if not exist logs mkdir logs
 if not exist backups mkdir backups
 
 echo [COMPLETED] JARVIS-AGENT is ready for production.
-echo To start: python src/core/vortex.py
+echo To start the agent worker (single worker, hybrid with the VPS UI):
+echo   venv\Scripts\python.exe scripts\agent_ctl.py start --by user --reason install_production
+echo Local bridge + agent on this PC instead: python src/core/vortex.py
 pause

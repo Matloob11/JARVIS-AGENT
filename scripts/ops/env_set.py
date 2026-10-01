@@ -4,7 +4,7 @@ Usage (from the repo root, with the project venv):
     .venv_312/Scripts/python.exe scripts/ops/env_set.py KEY=VALUE [KEY=VALUE ...] [--secret KEY ...]
     .venv_312/Scripts/python.exe scripts/ops/env_set.py --check [KEY ...]
 
-Files: deploy/windows-local/.env (start-agent.bat copies it over the root .env) and the root .env, edited
+Files: deploy/windows-local/.env (fills keys missing from the root .env, C-09) and the root .env, edited
 together. --env-file PATH (repeatable) replaces that pair, e.g. in tests. Every file must already exist.
 
 KEY=VALUE     adds KEY to each file that lacks it; a key with an empty value counts as missing. When one

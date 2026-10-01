@@ -15,7 +15,8 @@ from livekit import api
 
 ROOT = Path(__file__).resolve().parents[2]
 load_dotenv(ROOT / ".env")
-load_dotenv(Path(__file__).resolve().parent / ".env", override=True)
+# The root .env is the single settings source (K-47): this file only fills keys it lacks.
+load_dotenv(Path(__file__).resolve().parent / ".env", override=False)
 
 ROOM_NAME = os.getenv("JARVIS_ROOM_NAME", "jarvis-hybrid")
 

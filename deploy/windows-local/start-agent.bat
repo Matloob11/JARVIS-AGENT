@@ -14,7 +14,11 @@ if not exist ".venv_312\Scripts\activate.bat" (
   exit /b 1
 )
 
-copy /Y "deploy\windows-local\.env" ".env" >nul
+REM The root .env is the single settings source (K-47): never overwritten here, only created once.
+if not exist ".env" if exist "deploy\windows-local\.env" (
+  echo [INFO] No root .env yet: copying deploy\windows-local\.env once.
+  copy "deploy\windows-local\.env" ".env" >nul
+)
 call .venv_312\Scripts\activate.bat
 
 python -c "import sys; raise SystemExit(0 if sys.version_info[:2]==(3,12) else 1)" 2>nul
@@ -22,6 +26,17 @@ if errorlevel 1 (
   echo [ERROR] .venv_312 is not Python 3.12. Re-run setup.bat
   pause
   exit /b 1
+)
+
+REM Single worker (K-53): never open a second worker window.
+echo [CHECK] Agent worker...
+python scripts\agent_ctl.py status
+if not errorlevel 1 (
+  echo.
+  echo [INFO] A JARVIS agent worker is already running ^(details above^). Not starting a second one.
+  echo To restart it: .venv_312\Scripts\python.exe scripts\agent_ctl.py restart --by user --reason start-agent.bat
+  pause
+  exit /b 3
 )
 
 echo [CHECK] VPS bridge...
@@ -48,16 +63,24 @@ set PYTHONPATH=%CD%
 set PYTHONIOENCODING=utf-8
 set LIVEKIT_LOG_LEVEL=info
 set JARVIS_HYBRID=1
-REM Never inherit Docker-internal LiveKit hostname from a polluted shell
-set LIVEKIT_URL=ws://187.127.123.235:7880
-set LIVEKIT_PUBLIC_URL=wss://jarvis.srv1802669.hstgr.cloud
-set JARVIS_SHARED_DIR=C:/Users/Matloob/Jarvis_Shared
+REM These three come from the root .env (K-47), so they are cleared here, not set: a value set here or
+REM left in this shell (such as the Docker-internal LiveKit host) would override the root .env in the
+REM worker and in ensure_room.py.
+set "LIVEKIT_URL="
+set "LIVEKIT_PUBLIC_URL="
+set "JARVIS_SHARED_DIR="
 
-start "JARVIS-Agent-Worker" cmd /k "cd /d "%CD%" && call .venv_312\Scripts\activate.bat && set PYTHONPATH=%CD% && set PYTHONIOENCODING=utf-8 && set JARVIS_HYBRID=1 && set LIVEKIT_URL=ws://187.127.123.235:7880 && set LIVEKIT_PUBLIC_URL=wss://jarvis.srv1802669.hstgr.cloud && set JARVIS_SHARED_DIR=C:/Users/Matloob/Jarvis_Shared && python -m src.core.agent start"
+start "JARVIS-Agent-Worker" cmd /k .venv_312\Scripts\python.exe scripts\agent_ctl.py start --by user --reason start-agent.bat --foreground
 
-REM Worker import + LiveKit registration takes ~16s on this PC; 8s created the room before the worker existed (empty room, no job).
-echo Waiting 30s for worker to register on LiveKit...
-timeout /t 30 /nobreak >nul
+REM Health 200 on 127.0.0.1:8081 means the worker is up. The old blind 30 s timeout did not wait in a
+REM console without input, so ensure_room.py ran before the worker registered and the room got no job.
+echo Waiting for the worker to register on LiveKit (up to 60s)...
+python scripts\agent_ctl.py wait --timeout 60
+if errorlevel 1 (
+  echo [ERROR] The worker did not come up. Check the "JARVIS-Agent-Worker" window.
+  pause
+  exit /b 1
+)
 
 echo [2/2] Creating LiveKit room + dispatching agent job...
 python deploy\windows-local\ensure_room.py
@@ -72,8 +95,8 @@ echo ============================================
 echo  Agent window: "JARVIS-Agent-Worker"
 echo  Look for: JARVIS SYSTEMS ONLINE
 echo  Secure UI: https://jarvis.srv1802669.hstgr.cloud
-echo  Debug UI:  http://187.127.123.235:5100
 echo ============================================
 echo.
 echo Keep the agent window open. Close it to stop.
+echo Status: .venv_312\Scripts\python.exe scripts\agent_ctl.py status
 pause

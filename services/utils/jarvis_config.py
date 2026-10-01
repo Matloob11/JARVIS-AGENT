@@ -21,6 +21,19 @@ _WHATSAPP_APP_ID = "5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App"
 # Windows long-path prefixes \\?\ and \\?\UNC\ (os.path.realpath keeps them when its input had one).
 _LONG_PREFIX = "\\\\?\\"
 _LONG_UNC_PREFIX = "\\\\?\\UNC\\"
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# The root .env is the single settings source (K-47); deploy/windows-local/.env only fills keys it lacks.
+_ENV_FILES = (
+    os.path.join(_PROJECT_ROOT, ".env"),
+    os.path.join(_PROJECT_ROOT, "deploy", "windows-local", ".env"),
+)
+
+
+def _load_env_files() -> None:
+    """Root .env, then the hybrid file; never overrides a variable that is already set."""
+    for path in _ENV_FILES:
+        if os.path.isfile(path):
+            load_dotenv(path, override=False)
 
 
 def _expand(path: str) -> str:
@@ -269,8 +282,7 @@ class JarvisConfig:
 
     def __init__(self) -> None:
         """Loads environment variables and sets up configuration attributes."""
-        # Load environment variables from .env
-        load_dotenv()
+        _load_env_files()
         self.env = os.getenv("VORTEX_ENV", "development").lower()
         self.security_token = os.getenv("VORTEX_SECURITY_TOKEN")
         self.bridge_url = os.getenv("UI_BRIDGE_URL", "http://127.0.0.1:5001")

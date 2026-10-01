@@ -1,19 +1,23 @@
 """
 Hybrid launcher: run LiveKit agent on Windows against remote VPS bridge/LiveKit.
 Does NOT start a local UI bridge — VPS owns frontend + bridge + LiveKit.
+The worker is started through scripts/agent_ctl.py (single worker, K-53); the root .env is the
+settings source and is never overwritten (K-47).
+Usage: python deploy/windows-local/start_hybrid_agent.py [start|dev]   (default: start)
 """
 
 from __future__ import annotations
 
-import os
-import runpy
-import shutil
+import subprocess
 import sys
 import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 HYBRID_ENV = Path(__file__).resolve().parent / ".env"
+AGENT_CTL = ROOT / "scripts" / "agent_ctl.py"
+VENV_PYTHON = ROOT / ".venv_312" / "Scripts" / "python.exe"
+UI_URL = "https://jarvis.srv1802669.hstgr.cloud"
 
 
 def _check(url: str, label: str) -> None:
@@ -28,27 +32,25 @@ def _check(url: str, label: str) -> None:
 
 
 def main() -> None:
-    os.chdir(ROOT)
-    if str(ROOT) not in sys.path:
-        sys.path.insert(0, str(ROOT))
+    mode = sys.argv[1] if len(sys.argv) > 1 else "start"
+    if mode not in ("start", "dev"):
+        print("Usage: python deploy/windows-local/start_hybrid_agent.py [start|dev]")
+        sys.exit(2)
 
-    if not HYBRID_ENV.is_file():
-        print(f"[ERROR] Missing {HYBRID_ENV}")
+    if not (ROOT / ".env").is_file() and not HYBRID_ENV.is_file():
+        print(f"[ERROR] Missing {ROOT / '.env'} (run deploy\\windows-local\\setup.bat)")
         sys.exit(1)
-
-    shutil.copyfile(HYBRID_ENV, ROOT / ".env")
-    os.environ["PYTHONPATH"] = str(ROOT) + os.pathsep + os.environ.get("PYTHONPATH", "")
-    os.environ.setdefault("PYTHONIOENCODING", "utf-8")
-    os.environ["JARVIS_HYBRID"] = "1"
 
     print("JARVIS hybrid agent — local Windows executor")
     _check("http://187.127.123.235:5101/health", "VPS bridge")
     _check("http://187.127.123.235:7880", "VPS LiveKit")
-    print("UI: http://187.127.123.235:5100")
-    print("Starting agent worker...")
+    print(f"UI: {UI_URL}")
+    print("Starting agent worker via scripts/agent_ctl.py...")
 
-    sys.argv = ["src.core.agent", "dev"]
-    runpy.run_module("src.core.agent", run_name="__main__")
+    python = VENV_PYTHON if VENV_PYTHON.is_file() else Path(sys.executable)
+    cmd = [str(python), str(AGENT_CTL), "start", "--by", "user", "--reason", "start_hybrid_agent.py",
+           "--mode", mode, "--foreground"]
+    sys.exit(subprocess.call(cmd, cwd=ROOT))
 
 
 if __name__ == "__main__":

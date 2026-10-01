@@ -37,4 +37,6 @@ fi
 mkdir -p logs backups Jarvis_Outputs
 
 echo "✅ [COMPLETED] JARVIS-AGENT is ready for production."
-echo "To start: python src/core/vortex.py"
+echo "To start the agent worker (single worker, hybrid with the VPS UI):"
+echo "  venv/bin/python scripts/agent_ctl.py start --by user --reason install_production"
+echo "Local bridge + agent on this machine instead: python src/core/vortex.py"
