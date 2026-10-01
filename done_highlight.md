@@ -422,3 +422,25 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** —
 - **Commit:** `afe85f6` · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [claude] C-27 · Tool execution core: timeout, desktop lock, kill switch, tool_sync, audit · 2026-10-01 17:40–21:00 PKT
+- **Kya kiya:** Har tool call ab apne timeout ke saath chalta hai. Desktop tools (`exclusive='desktop_input'`) ek waqt me ek hi chalte hain (30 s intezar, warna DESKTOP_BUSY), aur lock tab tak nahi chhootta jab tak timeout hua tool poori tarah ruk na jaye. `JARVIS_DESKTOP_CONTROL` band ho to desktop tools DESKTOP_CONTROL_DISABLED dete hain. Har tool call ka ek start aur ek end event UI ko jata hai (K-13), secrets chhupa kar. medium/high tools `logs/security.log` me likhe jaate hain (args sirf hash aur length).
+- **Files:** `services/ai_core/jarvis_plugin_manager.py`, `services/utils/jarvis_audit.py`, `tests/unit/test_tool_exec_core.py`
+- **Verify:** 45 tests passed · full suite 564 passed, 0 failed · 78 tools, schemas same · pylint 10/10 · review approve (2 minor theek)
+- **Commit:** `2d25cbd` · **Deploy:** PC agent restart (20:53, 20:56)
+- **Doosre agent ke liye:** Lock, kill switch aur audit sirf un tools par lagte hain jo K-16 ke mutabiq `exclusive`/`risk` declare karein (abhi koi nahi). Voice test ke baad `logs/agent_stderr.log` me `tool_sync start/end` lines dikhengi.
+
+### ✅ [claude] C-25 · Secrets kabhi logs ya LLM tak na pohanchein · 2026-10-01 17:40–21:00 PKT
+- **Kya kiya:** Logs (file, console, UI) aur LLM ko jaane wale tool results me API keys aur tokens ab `***` se chhup jaate hain, tracebacks samait. Tool error ka message bhi ab mask hota hai. Swarm ab Gemini key URL ke bajaye header me bhejta hai, aur httpx ke URL wale INFO logs band hain. 3 aur naam list me add kiye (K-29 v3).
+- **Files:** `services/utils/jarvis_security.py`, `services/utils/jarvis_logger.py`, `src/core/agent_runner.py`, `services/ai_core/swarm_manager.py`, `tests/unit/test_redaction.py`
+- **Verify:** 41 tests passed · logs scan: asli secrets ke 0 hits (sirf key names print hue) · `key=AQ` 0 matches · offline swarm + CSE failure: 0 leaks · review approve
+- **Commit:** `989507c` · **Deploy:** PC agent restart (20:53)
+- **Doosre agent ke liye:** HTTP errors sirf `redact_secrets(str(e))` ke saath log ya return karo (K-29).
+
+### ✅ 🔁 [claude] C-09 + C-10 · `agent_ctl`: worker ka ek hi mehfooz start/stop/restart · 2026-10-01 17:40–21:00 PKT
+- **Kya kiya:** Naya `scripts/agent_ctl.py`: status/start/stop/restart/wait/logs, 120 s cooldown, restart lock, audit log aur log rotation. `stop` sirf worker ke apne processes band karta hai, JARVIS ke khole hue apps nahi. `wait` ab andha 30 s intezar nahi karta; health 200 aur lock dono dekhta hai, phir `ensure_room.py`. Ab root `.env` hi settings ka asal source hai; koi launcher usay overwrite nahi karta. Dead `:5100` hint hata diya (C-10). Worker ko ab registry ka taaza PATH milta hai, is liye FFmpeg mil jata hai.
+- **Files:** `scripts/agent_ctl.py`, `tests/unit/test_agent_ctl.py`, `services/utils/jarvis_config.py`, `deploy/windows-local/start-agent.bat`, `setup.bat`, `start_hybrid_agent.py`, `ensure_room.py`, `dev.bat`, `prod.bat`, `install_production.bat`, `install_production.sh`, `CLAUDE.md`, `.cursor/rules/jarvis-collab.mdc`, requirements (psutil pin)
+- **Verify:** 47 tests passed · live: `agent_ctl restart` 13 s me (purana 31500 band, naya worker, health 200, room me agent join) · doosra restart 10 s baad cooldown se ruka (exit 4, `logs/agent_ctl.log`) · PATH fix ke baad restart (pid 20056): 78 tools, koi warning/error nahi · review: 1 blocker (stop user apps band kar deta) theek, recheck approve
+- **Commit:** `4c6ecd2`, `4f7bc68` · **Deploy:** PC agent restart 20:53 + 20:56 PKT
+- **User ke liye:** Purani "JARVIS-Agent-Worker" window ab khaali cmd hai, band kar sakte hain. Worker ab chhupa (background) chalta hai; halat: `.venv_312\Scripts\python.exe scripts\agent_ctl.py status`. Baqi: browser me ek voice test.
+- **Doosre agent ke liye:** Worker sirf `agent_ctl` se. Cursor ko restart chahiye to `REQ-RESTART <reason>`.
