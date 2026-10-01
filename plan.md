@@ -434,7 +434,7 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | C-01 | claude | P0 | Emergency safety backups of PC + VPS with rollback image tags | — | DONE (30 Sep, Claude) |
 | C-02 | claude | P0 | Emergency containment: rotate the leaked UI token, frontend port 5100 to loopback, VPS file permissions, temporary basic auth on 'location /' | C-01 | DONE (30 Sep, Claude) |
 | C-03 | claude | P0 | UFW host firewall with dead-man switch (documentation only: not enabled by user decision) | — | NOT NEEDED (user rule) |
-| C-04 | claude | P0 | Git: connect the folder to the existing public repo Matloob11/JARVIS-AGENT (keep its 3 commits), secret-guard pre-commit hook, sanitized livekit.yaml, baseline commit + push | C-01, C-02, K-52 (COORD-2) | TODO |
+| C-04 | claude | P0 | Git: connect the folder to the existing public repo Matloob11/JARVIS-AGENT (keep its 3 commits), secret-guard pre-commit hook, sanitized livekit.yaml, baseline commit + push | C-01, C-02, K-52 (COORD-2) | DONE (01 Oct 12:45; push pending user OK) |
 | C-05 | claude | P0 | Coordination leftovers: .coord/lanes.json, lane check in the pre-commit hook, docs/CONTRACTS.md, existing rule files updated | C-04, K-51 (COORD-1), K-52 (COORD-2), K-55 (COORD-5) | TODO |
 | C-06 | claude | P0 | PC test prerequisites: pytest stack, Playwright Chromium 1200, read-only prerequisite checker | C-04 | TODO |
 | C-07 | claude | P0 | Test and smoke baseline before the runtime rewrite | C-06 | TODO |
