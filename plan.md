@@ -453,7 +453,7 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | C-09 | claude | P0 | scripts/agent_ctl.py (status/start/stop/restart/wait/logs with cooldown + audit) + safe launchers + root .env as the single settings source | C-08, K-53 (COORD-3) | DONE (01 Oct 21:00; live restart OK; user voice check pending) |
 | C-10 | claude | P0 | Leftover: remove the dead 'Debug UI http://187.127.123.235:5100' hint from the PC launchers | C-02, C-09 | DONE (01 Oct 21:00; with C-09) |
 | C-11 | claude | P0 | Reusable backup/restore tooling (PC + VPS), restore drill, PC mirror of the emergency VPS snapshot | C-01, C-04, K-54 (COORD-4) | DONE (01 Oct 14:20) |
-| C-12 | claude | P0 | Deploy tooling: deploy_from_pc.sh (committed HEAD only), deploy.sh v2 (lock, backup, nginx -t, health gate, other-apps smoke), rollback.sh, smoke_other_apps.sh + first full sync deploy | C-04, C-09, C-11, K-54 (COORD-4) | TODO |
+| C-12 | claude | P0 | Deploy tooling: deploy_from_pc.sh (committed HEAD only), deploy.sh v2 (lock, backup, nginx -t, health gate, other-apps smoke), rollback.sh, smoke_other_apps.sh + first full sync deploy | C-04, C-09, C-11, K-54 (COORD-4) | DOING (claude, 01 Oct 22:35) |
 | C-13 | claude | P0 | Bridge SQLite store on a volume + message normalization + init_state/history from the DB | C-12, K-41 (C-MSG-1), K-42 (C-STATE-1) | TODO |
 | C-14 | claude | P0 | Agent link v2, bridge side: AGENT_TOKEN + HMAC v2 notify with replay protection, Socket.IO roles/rooms with a legacy transition, env-only origins, secrets tooling | C-13, C-09, K-38 (C-SOCK-1), K-39 (C-NOTIFY-1), K-40 (C-EVT-1), K-47 (C-ENV-1) | TODO |
 | C-15 | claude | P0 | Agent link v2, agent side: signed raw-body notify with retry queue, AGENT_TOKEN socket with reconnect-forever loop, chat id echo | C-14, C-09, K-39 (C-NOTIFY-1), K-38 (C-SOCK-1), K-41 (C-MSG-1) | TODO |
@@ -471,7 +471,7 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | C-28 | claude | P0 | Non-blocking confirmation broker + confirm_action tool (single broker for all areas) | C-27, K-14 (ConfirmFlow), K-12 (ToolResult) | DONE (01 Oct 22:20; live 79 tools) |
 | C-29 | claude | P0 | Bridge + agent routing for ConfirmFlow and tool events (authenticated ui/agent rooms), bridge-only deploy | C-28, C-13, C-14, C-15, C-19, K-14 (ConfirmFlow), K-13 (ToolSyncEvent), K-45 (C-CONFIRM-1) | TODO |
 | C-30 | claude | P0 | Deploy the STONIX frontend with the ConfirmDialog to the VPS + live selftest | C-29, X-10, C-12, C-22 | TODO |
-| C-31 | claude | P0 | Event-loop stall watchdog | C-27 | TODO |
+| C-31 | claude | P0 | Event-loop stall watchdog | C-27 | DOING (claude, 01 Oct 22:35) |
 | C-32 | claude | P0 | Worker prewarm and single-user worker options (plugin discovery once per process) | C-07, C-08, C-09, C-23 | TODO |
 | C-33 | claude | P0 | JarvisRuntime: one AgentSession per job, restartable session errors, clean teardown with ctx.shutdown | C-32 | TODO |
 | C-34 | claude | P0 | UI command registry, (type,id) dedupe and a job-scoped bridge listener | C-33, K-60 (CT-VC-CONTROL) | TODO |
@@ -483,7 +483,7 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | X-11 | cursor | P0 | No-real-side-effect test harness (tests/tools) + helper tests | C-06, X-03, K-27 (TestSideEffectGuard) | DONE (01 Oct 15:20) |
 | X-12 | cursor | P0 | Apply the side-effect guard to legacy desktop test folders and gate live GUI scripts | X-11, K-27 (TestSideEffectGuard) | DONE (01 Oct 15:30) |
 | X-26 | cursor | P0 | Keyboard/mouse tools: no hard-coded token, Unicode-safe typing, full key set, protected-window hotkeys, new volume API | C-24, C-27, C-26, X-03, X-11, K-16 (DesktopToolPolicy) | DONE (cursor, 01 Oct 21:05 PKT) |
-| X-27 | cursor | P0 | Notepad automation: safe paths, PID-bound window, threaded typing, verified save, graceful close | C-24, C-27, C-28, C-26, X-03, X-11, K-16 (DesktopToolPolicy) | BLOCKED (waiting C-24,C-27,C-28,C-26,X-11) |
+| X-27 | cursor | P0 | Notepad automation: safe paths, PID-bound window, threaded typing, verified save, graceful close | C-24, C-27, C-28, C-26, X-03, X-11, K-16 (DesktopToolPolicy) | DOING (cursor, 02 Oct 01:30 PKT) |
 | X-29 | cursor | P0 | System control guards: confirmation, cancel_shutdown, real sleep vs hibernate, non-blocking recycle bin | C-24, C-27, C-28, X-11, C-30, K-16 (DesktopToolPolicy), K-17 (ToolNamesV2) | BLOCKED (waiting C-24,C-27,C-28,C-30,X-11) |
 | X-30 | cursor | P0 | File access server: allow-listed root (D:/ kept when present), LAN bind, token path, TTL, audit | C-24, C-28, C-26, X-03, X-11, C-30, K-15 (DesktopConfigKeys), K-45 (C-CONFIRM-1) | BLOCKED (waiting C-24,C-28,C-26,C-30,X-11) |
 | X-31 | cursor | P0 | run_cmd_command: strict read-only allow-list captured, everything else UI-confirmed | X-27, C-28, C-30 | BLOCKED (waiting X-27,C-28,C-30) |
@@ -548,7 +548,7 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | C-88 | claude | P3 | Latency baseline, fast-mode endpointing A/B and thinking-budget A/B | C-40, C-69, C-67 | TODO |
 | C-89 | claude | P3 | Short tool descriptions and prompt compaction with every tool kept; dry-run tool regression | C-88, C-28, C-85, C-86 | TODO |
 | C-90 | claude | P3 | Browser voice enrollment (agent side) in both Fast and Gated modes | C-73, C-51, K-63 (CT-VC-VOICE-ENROLL) | TODO |
-| C-91 | claude | P3 | Startup sound accepts .mp3 or .wav; verified through a lock-aware restart | X-02, C-09 | TODO |
+| C-91 | claude | P3 | Startup sound accepts .mp3 or .wav; verified through a lock-aware restart | X-02, C-09 | DOING (claude, 01 Oct 22:35) |
 | C-92 | claude | P3 | Wire jarvis_audio: speak reminders on the PC when no voice session, synthesized startup line when the MP3 is missing, smoke check | X-04, C-15, C-56, C-91, C-55, K-50 (C-AUDIO-1) | TODO |
 | C-93 | claude | P3 | Agent feeds A: module_health emitter and device location every 10 min (kind 'device'), bridge passthrough + init_state | C-13, C-63, C-44, K-06 (DASH-MODULE-HEALTH), K-08 (DASH-LOCATION) | TODO |
 | C-94 | claude | P3 | Agent feeds B: memory_update per saved item (id, role, source), memory_cleared, reasoning for fast-mode voice turns | C-43, C-44, C-51, C-52, C-53, K-07 (DASH-MEMORY-EVENTS) | TODO |
@@ -574,7 +574,7 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | X-35 | cursor | P3 | File opener: config media dirs (+D:/ when present), background index outside outputs, safe open/close | C-24, C-26, X-03, X-11, K-16 (DesktopToolPolicy) | DONE (01 Oct 17:40 PKT) |
 | X-36 | cursor | P3 | Search chain hardening: Tavily Bearer, Google header + auto-disable, DDG, shared helpers | C-25, K-29 (redact_secrets) | DONE (01 Oct 21:06 PKT) |
 | X-37 | cursor | P3 | Weather: auto-detected city + 24 h forecast + clear key errors | C-25 | DONE (cursor, 01 Oct 21:10 PKT) |
-| X-38 | cursor | P3 | SIM lookup: authorized-API source with a clear 'provider not configured' mode | C-25, C-24, C-28, K-34 (sim_authorized_source) | BLOCKED (waiting C-25,C-24,C-28) |
+| X-38 | cursor | P3 | SIM lookup: authorized-API source with a clear 'provider not configured' mode | C-25, C-24, C-28, K-34 (sim_authorized_source) | DOING (cursor, 02 Oct 01:30 PKT) |
 | X-39 | cursor | P3 | QR generator: exact data (raw policy), safe filename, open_file parameter | C-24, C-28, K-28 (tool_arg_policies) | BLOCKED (waiting C-24,C-28) |
 | X-40 | cursor | P3 | Image generation: FLUX.1-schnell via HF with Pollinations fallback and clear errors | C-25, C-24 | DONE (01 Oct 21:12 PKT) |
 | X-41 | cursor | P3 | WhatsApp: install check, process-based window match, confirmed Unicode send, safe close | C-27, C-28, C-26, X-03, X-11, C-30, X-26, K-16 (DesktopToolPolicy) | BLOCKED (waiting C-27,C-28,C-26,X-11,C-30,X-26) |
@@ -5665,7 +5665,7 @@ Format: `- [YYYY-MM-DD HH:MM] from → to: message (task id)`. Jawab isi line ke
 Cursor blocked on Claude: C-06 (for X-11+), C-24/C-26/C-27/C-28/C-30 (desktop tool chain). Please prioritize C-06 then decorator/lock/confirm stack.
 
 
-### Handoff � Cursor batch 01 Oct ~13:25 PKT
+### Handoff → Cursor batch 01 Oct ~13:25 PKT
 REQ-CURSOR: Please prioritize Claude P0 so Cursor unblocks:
 - C-06 (side-effect guard / X-11)
 - C-24 decorator v2, C-26 config keys, C-27 tool core, C-28 confirm broker, C-30 kill switch (desktop tool chain X-26+)

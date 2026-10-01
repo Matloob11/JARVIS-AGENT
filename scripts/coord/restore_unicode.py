@@ -25,19 +25,23 @@ def asciify(text: str) -> str:
     return "".join(ch if ord(ch) < 128 else "?" for ch in text)
 
 
+LOST_MARKS = ("?", "�")  # an ASCII save writes '?', a failed decode writes U+FFFD
+
+
 def lost_positions(old_line: str, new_line: str) -> list[tuple[int, int]]:
-    """(old index, new index) pairs where a non-ASCII character of old_line is a '?' in new_line.
+    """(old index, new index) pairs where a non-ASCII character of old_line is a '?' (or U+FFFD) in
+    new_line.
 
     Other edits on the line are allowed: only the parts that still match are compared.
     """
-    if old_line == new_line or old_line.isascii() or "?" not in new_line:
+    if old_line == new_line or old_line.isascii() or not any(m in new_line for m in LOST_MARKS):
         return []
     pairs = []
-    matcher = difflib.SequenceMatcher(None, asciify(old_line), new_line, autojunk=False)
+    matcher = difflib.SequenceMatcher(None, asciify(old_line), asciify(new_line), autojunk=False)
     for tag, i1, i2, j1, _ in matcher.get_opcodes():
         if tag == "equal":
             pairs += [(i1 + k, j1 + k) for k in range(i2 - i1)
-                      if ord(old_line[i1 + k]) >= 128 and new_line[j1 + k] == "?"]
+                      if ord(old_line[i1 + k]) >= 128 and new_line[j1 + k] in LOST_MARKS]
     return pairs
 
 
@@ -48,15 +52,15 @@ def paired_lines(old: str, new: str):
     pairs with its original. Inside an edited block, a new line pairs with its closest old line.
     """
     a, b = old.split("\n"), new.split("\n")
-    aa = [asciify(x) for x in a]
-    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, aa, b, autojunk=False).get_opcodes():
+    aa, bb = [asciify(x) for x in a], [asciify(x) for x in b]
+    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, aa, bb, autojunk=False).get_opcodes():
         if tag == "equal":
             for k in range(i2 - i1):
                 yield a[i1 + k], j1 + k, b[j1 + k]
         elif tag == "replace":
             block = aa[i1:i2]
             for j in range(j1, j2):
-                best = difflib.get_close_matches(b[j], block, n=1, cutoff=0.6)
+                best = difflib.get_close_matches(bb[j], block, n=1, cutoff=0.6)
                 if best:
                     yield a[i1 + block.index(best[0])], j, b[j]
 
@@ -101,13 +105,14 @@ def main(argv: list[str] | None = None) -> int:
     if old is None or not os.path.isfile(path):
         print(f"{rel}: not found in {args.base} or on disk")
         return 2
-    raw = open(path, "rb").read()
+    with open(path, "rb") as fh:
+        raw = fh.read()
     crlf = b"\r\n" in raw
     cur = raw.decode("utf-8").replace("\r\n", "\n")
     fixed, count = restore(old.replace("\r\n", "\n"), cur)
-    only_question_marks = len(fixed) == len(cur) and all(
-        c == "?" and ord(f) >= 128 for f, c in zip(fixed, cur) if f != c)
-    if not only_question_marks:
+    only_lost_marks = len(fixed) == len(cur) and all(
+        c in LOST_MARKS and ord(f) >= 128 for f, c in zip(fixed, cur) if f != c)
+    if not only_lost_marks:
         print(f"{rel}: safety check failed, file not changed")
         return 1
     print(f"{rel}: {count} character(s) to restore from {args.base}")

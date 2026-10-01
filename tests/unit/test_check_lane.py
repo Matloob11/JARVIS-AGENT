@@ -186,6 +186,12 @@ def test_restore_puts_back_only_the_lost_characters_and_keeps_edits():
     assert restore_unicode.loss_lines(PLAN_TEXT, fixed) == []
 
 
+def test_replacement_characters_count_as_a_loss_and_are_restored():
+    broken = PLAN_TEXT.replace("· sirf", "� sirf").replace("Harness →", "Harness �")
+    assert restore_unicode.loss_lines(PLAN_TEXT, broken) == [3, 5]
+    assert restore_unicode.restore(PLAN_TEXT, broken) == (PLAN_TEXT, 2)
+
+
 def test_a_real_question_mark_and_unchanged_unicode_are_not_a_loss():
     edited = PLAN_TEXT.replace("kept as is", "kept as is?") + "- new? line\n"
     assert restore_unicode.loss_lines(PLAN_TEXT, edited) == []
