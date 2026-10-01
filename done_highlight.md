@@ -93,3 +93,11 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Commit:** pending · **Deploy:** no
 - **Doosre agent ke liye:** REQ-RESTART for Claude VR-37 to wire chime into agent startup (Cursor must not run start-agent.bat)
 
+
+### ✅ [cursor] X-05 · Map Nominatim policy + zoom · 2026-10-01 12:56 PKT
+- **Kya kiya:** Nominatim UA + RateLimiter(1s), zoom param, location_sync kind=map payload, dict ToolResult-shaped return.
+- **Files:** services/info/jarvis_map.py, tests/tools/test_map_tool.py, tests/tools/__init__.py
+- **Verify:** pytest tests/tools/test_map_tool.py (PYTEST_DISABLE_PLUGIN_AUTOLOAD=1) — 2 passed
+- **Commit:** pending · **Deploy:** no
+- **Doosre agent ke liye:** —
+
