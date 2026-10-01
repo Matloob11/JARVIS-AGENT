@@ -575,7 +575,7 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | X-36 | cursor | P3 | Search chain hardening: Tavily Bearer, Google header + auto-disable, DDG, shared helpers | C-25, K-29 (redact_secrets) | DONE (01 Oct 21:06 PKT) |
 | X-37 | cursor | P3 | Weather: auto-detected city + 24 h forecast + clear key errors | C-25 | DONE (cursor, 01 Oct 21:10 PKT) |
 | X-38 | cursor | P3 | SIM lookup: authorized-API source with a clear 'provider not configured' mode | C-25, C-24, C-28, K-34 (sim_authorized_source) | DOING (cursor, 02 Oct 01:30 PKT) |
-| X-39 | cursor | P3 | QR generator: exact data (raw policy), safe filename, open_file parameter | C-24, C-28, K-28 (tool_arg_policies) | BLOCKED (waiting C-24,C-28) |
+| X-39 | cursor | P3 | QR generator: exact data (raw policy), safe filename, open_file parameter | C-24, C-28, K-28 (tool_arg_policies) | DONE (02 Oct 01:32 PKT) |
 | X-40 | cursor | P3 | Image generation: FLUX.1-schnell via HF with Pollinations fallback and clear errors | C-25, C-24 | DONE (01 Oct 21:12 PKT) |
 | X-41 | cursor | P3 | WhatsApp: install check, process-based window match, confirmed Unicode send, safe close | C-27, C-28, C-26, X-03, X-11, C-30, X-26, K-16 (DesktopToolPolicy) | BLOCKED (waiting C-27,C-28,C-26,X-11,C-30,X-26) |
 | X-42 | cursor | P3 | Window control 1/3: close_window (tool 'close' kept as routed alias), minimize/maximize, active-window context | C-27, X-03, X-11, X-41, K-17 (ToolNamesV2), K-21 (ActiveWindowContext), K-16 (DesktopToolPolicy) | BLOCKED (waiting C-27,X-11,X-41) |
@@ -5246,7 +5246,7 @@ Verify:
 | Image search download (download_images) | partial: path traversal via folder_name, unsafe file names, sequential downloads against a 15 s timeout, never shown in the UI | X-36, X-55 |
 | Zip archives (zip_files) | partial: zip_name ignored, any absolute path accepted, large folders exceed 15 s | X-55 |
 | Image generation (generate_image) | partial: SDXL may have no HF provider, the LAN http URL is served by nothing, nothing shown in the UI, no image generated on this PC yet | X-40 |
-| QR code generator (generate_qr_code) | partial: generation works but '&' and ';' are stripped from the data; unsafe filename; opens only on the PC | C-24, X-39 |
+| QR code generator (generate_qr_code) | works: raw data preserved (& and ;), safe .png filename, open_file toggle, intelligence/media relay | — |
 | YouTube download (download_youtube_media) | broken: text queries become a results-page playlist, yt-dlp-ejs and ffmpeg missing, 15 s timeout, unbound url (review correction: yt-dlp itself is on PATH through the activated venv) | C-47, X-58, X-19 |
 | Offline audio helpers (jarvis_audio) | stub: empty transcript, text returned as bytes, nothing calls it | X-61 |
 | Map focus (show_location_on_map) | cosmetic: only the Location card text changes and is overwritten every 60 s; no map | X-05 |

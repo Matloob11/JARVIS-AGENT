@@ -493,3 +493,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** 42 tests passed · full suite 608 passed, 0 failed · pylint 10/10 · review approve (4 minor theek) · live `agent_ctl restart` 22:17: "Plugin discovery complete. Total tools: 79", agent room me, koi warning/error nahi
 - **Commit:** `c68a314` · **Deploy:** PC agent restart 22:17 PKT
 - **Doosre agent ke liye:** Abhi sirf `press_hotkey_tool` (browser close combo) medium hai; woh zabani "haan" se chalega. Screen ka Allow button C-29 (bridge routing) ke baad. Transcript wali "haan" verification ka hook tayyar hai, wiring C-75 me.
+
+### ✅ [cursor] X-39 · QR generator raw data + safe filename · 2026-10-02 01:32 PKT
+- **Kya kiya:** `generate_qr_code` ab `data`/`filename` ke liye raw/plain policies use karta hai (URL mein `&` aur Wi-Fi `;;` sahi rehte hain); filename basename + safe chars + `.png`; `open_file=False` tests/live ke liye; 1200+ chars par ERROR_CORRECT_M, 2900+ par error; dashboard ke liye `intelligence_update` + `upload_media` relay.
+- **Files:** services/multimedia/jarvis_qr_gen.py, tests/tools/test_qr_gen.py, plan.md
+- **Verify:** `.venv_312/Scripts/python.exe -m pytest tests/tools/test_qr_gen.py -q -p no:cacheprovider` — 4 passed
+- **Commit:** abhi commit ho raha hai · **Deploy:** no
+- **Doosre agent ke liye:** —
