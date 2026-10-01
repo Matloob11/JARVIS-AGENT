@@ -483,7 +483,7 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | X-11 | cursor | P0 | No-real-side-effect test harness (tests/tools) + helper tests | C-06, X-03, K-27 (TestSideEffectGuard) | DONE (01 Oct 15:20) |
 | X-12 | cursor | P0 | Apply the side-effect guard to legacy desktop test folders and gate live GUI scripts | X-11, K-27 (TestSideEffectGuard) | DONE (01 Oct 15:30) |
 | X-26 | cursor | P0 | Keyboard/mouse tools: no hard-coded token, Unicode-safe typing, full key set, protected-window hotkeys, new volume API | C-24, C-27, C-26, X-03, X-11, K-16 (DesktopToolPolicy) | DONE (cursor, 01 Oct 21:05 PKT) |
-| X-27 | cursor | P0 | Notepad automation: safe paths, PID-bound window, threaded typing, verified save, graceful close | C-24, C-27, C-28, C-26, X-03, X-11, K-16 (DesktopToolPolicy) | DOING (cursor, 02 Oct 01:30 PKT) |
+| X-27 | cursor | P0 | Notepad automation: safe paths, PID-bound window, threaded typing, verified save, graceful close | C-24, C-27, C-28, C-26, X-03, X-11, K-16 (DesktopToolPolicy) | DONE (cursor, 02 Oct 01:33 PKT) |
 | X-29 | cursor | P0 | System control guards: confirmation, cancel_shutdown, real sleep vs hibernate, non-blocking recycle bin | C-24, C-27, C-28, X-11, C-30, K-16 (DesktopToolPolicy), K-17 (ToolNamesV2) | BLOCKED (waiting C-24,C-27,C-28,C-30,X-11) |
 | X-30 | cursor | P0 | File access server: allow-listed root (D:/ kept when present), LAN bind, token path, TTL, audit | C-24, C-28, C-26, X-03, X-11, C-30, K-15 (DesktopConfigKeys), K-45 (C-CONFIRM-1) | BLOCKED (waiting C-24,C-28,C-26,C-30,X-11) |
 | X-31 | cursor | P0 | run_cmd_command: strict read-only allow-list captured, everything else UI-confirmed | X-27, C-28, C-30 | BLOCKED (waiting X-27,C-28,C-30) |

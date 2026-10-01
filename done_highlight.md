@@ -507,3 +507,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** pytest test_sim_providers 6 passed; services/info/tests/test_sim_lookup.py + test_cnic_lookup.py smoke OK
 - **Commit:** abhi commit ho raha hai · **Deploy:** no
 - **Doosre agent ke liye:** C-79 agent/bridge purpose routing; optional `notify_sim_data(..., provider=)` in jarvis_bridge (abhi direct notify_event se provider jata hai)
+
+### ✅ [cursor] X-27 · Notepad automation safe + PID-bound · 2026-10-02 01:33 PKT
+- **Kya kiya:** Notepad tools ab `Jarvis_Outputs` ke andar safe paths use karte hain; launch PID/window se focus hota hai; typing `run_cancellable` thread mein; save verify + graceful close (sirf apna PID); `write_custom_code` medium risk + confirm jab auto-run script ho; `.bak` edit se pehle.
+- **Files:** services/automation/jarvis_notepad_automation.py, tests/tools/test_notepad_tools.py, tests/automation/test_notepad_automation.py, plan.md
+- **Verify:** `.venv_312/Scripts/python.exe -m pytest tests/tools/test_notepad_tools.py tests/automation/test_notepad_automation.py -q -p no:cacheprovider` — 18 passed
+- **Commit:** abhi commit ho raha hai · **Deploy:** no
+- **Doosre agent ke liye:** X-31 run_cmd_command ab X-27 par unblock; C-61 exhaustive notepad tests update pending

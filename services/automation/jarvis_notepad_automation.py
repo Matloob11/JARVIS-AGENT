@@ -1,256 +1,316 @@
 """
 Jarvis Notepad Automation Module
-Handles creating, writing, and running code in Notepad.
+Handles creating, writing, and running code in Notepad (X-27).
 """
+from __future__ import annotations
+
 import asyncio
 import os
 import shlex
+import shutil
 import subprocess
+import sys
 import time
-from typing import Any, Optional
+from pathlib import Path
+from typing import Any, Callable, Optional
 
 import pyautogui
 
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
+from services.system.jarvis_desktop_common import (
+    WindowInfo,
+    _clipboard_paste_text_sync,
+    close_windows_gracefully,
+    desktop_control_enabled,
+    force_foreground,
+    run_cancellable,
+    safe_child_path,
+    tool_result,
+    wait_for_window,
+)
 from services.utils.jarvis_bridge import notify_thinking, notify_tool_action
 from services.utils.jarvis_config import config
 from services.utils.jarvis_logger import setup_logger
-from services.utils.jarvis_win32 import WIN32_ERRORS, pywintypes, win32con, win32gui
 
-# Use WIN32_ERRORS tuple for stable generic exception catching in Win32 logic
-
-# Setup logging
 logger = setup_logger("JARVIS-NOTEPAD")
 
 _bg_tasks: set[asyncio.Task[Any]] = set()
 
-# Global Automation Instance
-_notepad_automation = None
+NOTEPAD_EXE = r"C:\Windows\System32\notepad.exe"
+TASKKILL_EXE = r"C:\Windows\System32\taskkill.exe"
 
-def get_notepad_mgr():
-    global _notepad_automation
-    if _notepad_automation is None:
-        from services.automation.jarvis_notepad_automation import NotepadAutomation
-        _notepad_automation = NotepadAutomation()
-    return _notepad_automation
+NOTEPAD_ALLOWED_EXTS: frozenset[str] = frozenset({
+    ".py", ".html", ".htm", ".txt", ".js", ".css", ".md", ".json", ".bat", ".ps1",
+})
 
-# Configure pyautogui
+AUTO_RUN_MEDIUM_EXTS: frozenset[str] = frozenset({".py", ".bat", ".cmd", ".ps1", ".js"})
+
 pyautogui.FAILSAFE = True
 
-# Try to import pygetwindow for window focus control
-try:
-    import pygetwindow as gw
-except ImportError:
-    gw = None
-    logger.warning(
-        "pygetwindow not installed. Window focus verification will be limited.")
+
+def _outputs_dir() -> str:
+    root = getattr(config, "project_root", os.getcwd())
+    return str(getattr(config, "outputs_dir", None) or os.path.join(root, "Jarvis_Outputs"))
+
+
+def _normalize_saved_text(text: str) -> str:
+    if text.startswith("\ufeff"):
+        text = text[1:]
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    return text.rstrip("\n")
+
+
+def _resolve_output_file(filename: str) -> tuple[Optional[Path], Optional[dict[str, Any]]]:
+    name = (filename or "").strip()
+    if not name:
+        return None, tool_result(
+            "error",
+            "Filename is required.",
+            error_code="PATH_NOT_ALLOWED",
+        )
+    ext = os.path.splitext(name)[1].lower()
+    if ext not in NOTEPAD_ALLOWED_EXTS:
+        return None, tool_result(
+            "error",
+            f"File type {ext!r} is not allowed for Notepad output.",
+            error_code="PATH_NOT_ALLOWED",
+        )
+    child = safe_child_path(_outputs_dir(), name)
+    if child is None:
+        return None, tool_result(
+            "error",
+            "Path is not allowed.",
+            error_code="PATH_NOT_ALLOWED",
+        )
+    return child, None
+
+
+def _type_text(cancel_event: Any, text: str, visible_limit: int = 1500) -> None:
+    """Blocking typing worker (run via run_cancellable)."""
+    old_pause = pyautogui.PAUSE
+    pyautogui.PAUSE = 0.02
+    try:
+        visible = text[:visible_limit]
+        remainder = text[visible_limit:]
+        lines = visible.split("\n")
+        for idx, line in enumerate(lines):
+            if cancel_event.is_set():
+                return
+            if line:
+                if line.isascii():
+                    pyautogui.write(line, interval=0.005)
+                else:
+                    _clipboard_paste_text_sync(line)
+            if idx < len(lines) - 1:
+                pyautogui.press("enter")
+        if remainder and not cancel_event.is_set():
+            _clipboard_paste_text_sync(remainder)
+    finally:
+        pyautogui.PAUSE = old_pause
+
+
+def _write_custom_code_risk(arguments: dict[str, Any]) -> str:
+    auto_run = arguments.get("auto_run", True)
+    filename = str(arguments.get("filename") or "")
+    ext = os.path.splitext(filename)[1].lower()
+    if auto_run and ext in AUTO_RUN_MEDIUM_EXTS:
+        return "medium"
+    return "low"
+
+
+def _write_custom_code_summary(arguments: dict[str, Any]) -> str:
+    filename = str(arguments.get("filename") or "file")
+    content = arguments.get("content") or ""
+    return f"{filename} Notepad mein likh kar RUN karna hai ({len(content)} chars)"
+
+
+def _close_notepad_risk(arguments: dict[str, Any]) -> str:
+    return "medium" if arguments.get("force", False) else "low"
+
+
+async def _safe_notify(notify_func: Callable[..., Any], *args: Any, **kwargs: Any) -> None:
+    try:
+        t = asyncio.create_task(notify_func(*args, **kwargs))
+        _bg_tasks.add(t)
+        t.add_done_callback(_bg_tasks.discard)
+    except Exception:
+        pass
+
+
+async def _maybe_await(value: Any) -> Any:
+    if asyncio.iscoroutine(value) or hasattr(value, "__await__"):
+        return await value
+    return value
+
+
+def _desktop_disabled(tool: str) -> dict[str, Any]:
+    return tool_result(
+        "error",
+        "Desktop control band hai; Notepad automation abhi use nahi ho sakti.",
+        tool=tool,
+        error_code="DESKTOP_CONTROL_DISABLED",
+    )
 
 
 class NotepadAutomation:
-    """Class to handle Notepad GUI automation"""
+    """PID-bound Notepad GUI automation."""
 
     def __init__(self) -> None:
         self.current_file_path: Optional[str] = None
+        self._session_hwnd: Optional[int] = None
+        self._session_pid: Optional[int] = None
 
-    async def ensure_notepad_focus(self, timeout: int = 10) -> bool:
-        """
-        Waits for Notepad to verify it is the active window and brings it to front.
-        Handles minimized and non-focused states with high priority Win32 calls.
-        """
-        if gw is None:
-            logger.warning("pygetwindow not available, falling back to simple delay.")
-            await asyncio.sleep(2)
-            return True
+    def clear_session(self) -> None:
+        self._session_hwnd = None
+        self._session_pid = None
 
-        logger.info("Ensuring Notepad is focused and visible...")
-        start_time = time.time()
+    async def ensure_notepad_focus(
+        self,
+        *,
+        hwnd: Optional[int] = None,
+        pid: Optional[int] = None,
+        timeout: float = 10.0,
+    ) -> bool:
+        """Focus only the given Notepad window; never picks an arbitrary Notepad."""
+        if hwnd is None and pid is None:
+            logger.warning("ensure_notepad_focus refused: no pid/hwnd (X-27)")
+            return False
 
-        while time.time() - start_time < timeout:
-            try:
-                # Find windows with "Notepad" in title
-                all_windows = gw.getWindowsWithTitle('Notepad')
-                windows = []
-                for w in all_windows:
-                    title = w.title.lower()
-                    # Filter for actual Notepad app
-                    if (title.endswith(" - notepad") or title == "notepad") and ".py" not in title:
-                        windows.append(w)
+        deadline = time.monotonic() + max(0.0, timeout)
+        target_hwnd = int(hwnd) if hwnd is not None else None
 
-                if not windows:
-                    await asyncio.sleep(0.5)
-                    continue
-
-                notepad = windows[0]
-                
-                # 1. Handle Minimized state
-                if notepad.isMinimized:
-                    logger.debug("Notepad is minimized, restoring...")
-                    notepad.restore()
-                    await asyncio.sleep(0.5)
-
-                # 2. Use Win32 for hard focus
-                if win32gui and pywintypes:
-                    hwnd = notepad._hWnd
-                    try:
-                        # Ensure it's not hidden
-                        win32gui.ShowWindow(hwnd, win32con.SW_SHOW)
-                        await asyncio.sleep(0.2)
-                        # Bring to top
-                        win32gui.SetForegroundWindow(hwnd)
-                        await asyncio.sleep(0.2)
-                        # Force focus
-                        win32gui.SetFocus(hwnd)
-                        # Bring to front for visibility
-                        win32gui.BringWindowToTop(hwnd)
-                    except WIN32_ERRORS as e:
-                        logger.debug("Win32 focus attempt: %s", e)
-
-                # 3. pygetwindow activate
-                notepad.activate()
-                await asyncio.sleep(0.8) # Increased wait for UI to catch up
-
-                # 4. Verification
-                if notepad.isActive or gw.getActiveWindow() == notepad:
-                    logger.info("Notepad focus confirmed.")
-                    # Move mouse to center of notepad to ensure click lands in text area
-                    center_x = notepad.left + (notepad.width // 2)
-                    center_y = notepad.top + (notepad.height // 2)
-                    pyautogui.click(center_x, center_y)
-                    await asyncio.sleep(0.2)
+        while time.monotonic() < deadline:
+            if target_hwnd is None and pid is not None:
+                matches = await wait_for_window(pid=int(pid), timeout_s=0.25)
+                if matches:
+                    target_hwnd = matches.hwnd
+            if target_hwnd is not None:
+                if await force_foreground(target_hwnd):
+                    self._session_hwnd = target_hwnd
+                    if pid is not None:
+                        self._session_pid = int(pid)
                     return True
+            await asyncio.sleep(0.25)
 
-            except (AttributeError, IndexError, gw.PyGetWindowException) as e:
-                logger.error("Focus loop error: %s", e)
-            
-            await asyncio.sleep(0.5)
-
-        logger.error("Timed out: Could not focus Notepad.")
+        logger.error("Timed out focusing Notepad hwnd=%s pid=%s", hwnd, pid)
         return False
 
+    async def launch_notepad_for_file(self, full_path: str) -> tuple[bool, Optional[WindowInfo], Optional[int]]:
+        """Launch Notepad with a file and bind focus to that PID/window."""
+        proc = subprocess.Popen([NOTEPAD_EXE, full_path])
+        pid = proc.pid
+        basename = os.path.basename(full_path)
+        win = await wait_for_window(pid=pid, timeout_s=10.0)
+        if win is None:
+            win = await wait_for_window(title_suffix=f"{basename} - Notepad", timeout_s=5.0)
+        if win is None:
+            logger.error("Notepad window not found for pid=%s path=%s", pid, full_path)
+            return False, None, pid
+
+        self._session_hwnd = win.hwnd
+        self._session_pid = pid
+        await force_foreground(win.hwnd)
+        focused = await self.ensure_notepad_focus(hwnd=win.hwnd, pid=pid, timeout=5.0)
+        return focused, win, pid
+
     async def simulate_typing(self, text: str) -> bool:
-        """Simulate typing text with visible animation (0.01s interval)"""
         try:
-            lines = text.split("\n")
-            for index, line in enumerate(lines):
-                if line:
-                    pyautogui.write(line, interval=0.01)
-                if index < len(lines) - 1:
-                    pyautogui.press("enter")
+            await run_cancellable(_type_text, text)
             return True
-        except (pyautogui.FailSafeException, RuntimeError, AttributeError) as e:
+        except (pyautogui.FailSafeException, RuntimeError, AttributeError, asyncio.CancelledError) as e:
             logger.exception("Typing simulation failed: %s", e)
             return False
 
-    async def save_file_safely(self, content: str, filename: str, folder_path: Optional[str] = None) -> tuple[bool, str]:
-        """Save content to a file safely using standard I/O."""
+    async def save_file_safely(
+        self,
+        content: str,
+        filename: str,
+        folder_path: Optional[str] = None,
+    ) -> tuple[bool, str]:
         try:
-            # Set dedicated workspace folder as Jarvis_Outputs
-            if not folder_path:
-                folder_path = os.path.join(config.project_root, "Jarvis_Outputs")
-
-            os.makedirs(folder_path, exist_ok=True)
-
-            # CRITICAL: Enforce basename only to prevent "Save As" path errors in Notepad
-            clean_filename = os.path.basename(filename)
-            full_path = str(os.path.join(folder_path, clean_filename))
-
+            folder = folder_path or _outputs_dir()
+            os.makedirs(folder, exist_ok=True)
+            child = safe_child_path(folder, os.path.basename(filename))
+            if child is None:
+                return False, "PATH_NOT_ALLOWED"
+            full_path = str(child)
             with open(full_path, "w", encoding="utf-8") as f:
                 f.write(content)
-
             self.current_file_path = full_path
-            logger.info("File successfully saved: %s", full_path)
+            logger.info("File saved: %s", full_path)
             return True, full_path
-
         except OSError as e:
             logger.error("Error creating file: %s", e)
             return False, str(e)
 
-    async def close_active_notepad(self, force: bool = True) -> bool:
-        """Closes the currently active Notepad window gracefully first."""
+    async def verify_saved_content(self, full_path: str, expected: str) -> tuple[bool, str]:
+        await asyncio.sleep(0.4)
         try:
-            logger.info("Closing Notepad window...")
-            closed_any = False
-            
-            # Find and close the window titled "Notepad" specifically
-            if gw:
-                windows = [w for w in gw.getWindowsWithTitle('Notepad') 
-                          if (w.title.lower().endswith(" - notepad") or w.title.lower() == "notepad")]
-                if windows:
-                    for w in windows:
-                        w.close() # Graceful close
-                        closed_any = True
-                        await asyncio.sleep(0.2)
+            with open(full_path, encoding="utf-8") as f:
+                disk = f.read()
+        except OSError:
+            disk = ""
+        if _normalize_saved_text(disk) == _normalize_saved_text(expected):
+            return True, "verified"
+        try:
+            with open(full_path, "w", encoding="utf-8") as f:
+                f.write(expected)
+        except OSError as e:
+            logger.error("Fallback save failed: %s", e)
+            return False, "fallback_failed"
+        return True, "fallback"
 
-            if not closed_any and win32gui:
-                handles = []
-
-                def _collect_notepad(hwnd, _param):
-                    title = win32gui.GetWindowText(hwnd)
-                    if win32gui.IsWindowVisible(hwnd) and title and "notepad" in title.lower():
-                        handles.append(hwnd)
-
-                win32gui.EnumWindows(_collect_notepad, None)
-                for hwnd in handles:
-                    win32gui.PostMessage(hwnd, getattr(win32con, "WM_CLOSE", 0x0010), 0, 0)
-                    closed_any = True
-                    await asyncio.sleep(0.2)
-
-            if not closed_any and not force:
-                pyautogui.hotkey('alt', 'f4')
-
-            if force:
-                # If still open, taskkill safely
-                await asyncio.sleep(0.5)
-                subprocess.run([r"C:\Windows\System32\taskkill.exe", "/f", "/im", "notepad.exe"],
-                               check=False, capture_output=True)
-                logger.info("Notepad force closed.")
+    async def close_active_notepad(
+        self,
+        *,
+        hwnd: Optional[int] = None,
+        pid: Optional[int] = None,
+        force_kill_pid: bool = False,
+        kill_all_im: bool = False,
+    ) -> bool:
+        """Close only our Notepad window; kill_all_im is for confirmed close_notepad_tool(force=True)."""
+        target_hwnd = hwnd if hwnd is not None else self._session_hwnd
+        target_pid = pid if pid is not None else self._session_pid
+        try:
+            if kill_all_im:
+                subprocess.run(
+                    [TASKKILL_EXE, "/F", "/IM", "notepad.exe"],
+                    check=False,
+                    capture_output=True,
+                )
+                self.clear_session()
                 return True
 
-            return True
+            if target_hwnd is not None:
+                await close_windows_gracefully([int(target_hwnd)], wait_s=2.0)
+
+            if force_kill_pid and target_pid is not None:
+                await asyncio.sleep(3.0)
+                subprocess.run(
+                    [TASKKILL_EXE, "/PID", str(int(target_pid)), "/F"],
+                    check=False,
+                    capture_output=True,
+                )
+
+            self.clear_session()
+            return target_hwnd is not None or target_pid is not None
         except Exception as e:
             logger.error("Error closing Notepad: %s", e)
             return False
 
     async def handle_save_as_dialog(self, full_path: str) -> bool:
-        """Types the absolute path into the Windows Save As dialog if present."""
-        try:
-            logger.info("Checking for 'Save As' dialog...")
-            await asyncio.sleep(1.0)
-
-            # Use abspath with normal backslashes for Windows dialog
-            clean_path = os.path.abspath(full_path).replace("/", "\\")
-
-            if gw:
-                save_as_wins = gw.getWindowsWithTitle('Save As')
-                if save_as_wins:
-                    logger.info("Found 'Save As' dialog. Typing path: %s", clean_path)
-                    save_as_wins[0].activate()
-                    await asyncio.sleep(0.5)
-                    pyautogui.typewrite(clean_path)
-                    await asyncio.sleep(0.5)
-                    pyautogui.press('enter')
-                    await asyncio.sleep(1.5)
-
-                    # If it says 'Overwrite?', confirmed it
-                    confirm_wins = gw.getWindowsWithTitle('Confirm Save As')
-                    if confirm_wins:
-                        pyautogui.press('y')
-                    return True
-            return False
-        except Exception as e:
-            logger.warning("Error in handle_save_as_dialog: %s", e)
-            return False
-
-    async def auto_close_browser(self, delay: int = 30) -> None:
-        """DEPRECATED: Background task to close browser - Removed to avoid killing user work."""
-        logger.info("Auto-close browser disabled to prevent data loss.")
-        return
+        """Legacy helper if Save As appears (rare when opening with path)."""
+        await asyncio.sleep(0.5)
+        return os.path.isfile(full_path)
 
 
-# Global instance
 notepad_automation = NotepadAutomation()
 
-# Code templates
+
+def get_notepad_mgr() -> NotepadAutomation:
+    return notepad_automation
+
+
 HTML_LOGIN_TEMPLATE = '''<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -299,7 +359,6 @@ done()
 
 
 def get_template_content(code_type: str, filename: str) -> tuple[str, str]:
-    """Retrieve template content and default filename"""
     content = ""
     new_filename = filename
     code_type_lower = code_type.lower()
@@ -320,143 +379,108 @@ def get_template_content(code_type: str, filename: str) -> tuple[str, str]:
     return content, new_filename
 
 
-async def _safe_notify(notify_func, *args, **kwargs):
-    """Helper to run notifications in the background to prevent blocking critical logic."""
-    try:
-        # Don't await directly in the main flow if the bridge is laggy
-        t = asyncio.create_task(notify_func(*args, **kwargs))
-        _bg_tasks.add(t)
-        t.add_done_callback(_bg_tasks.discard)
-    except Exception:
-        pass
-
-
-async def _maybe_await(value):
-    """Await async collaborators while tolerating sync mocks and fallbacks."""
-    if asyncio.iscoroutine(value) or hasattr(value, "__await__"):
-        return await value
-    return value
-
-
 async def _process_notepad_automation(content: str, filename: str, auto_run: bool) -> dict[str, Any]:
-    """Unified logic for writing and running code via Notepad."""
+    if not desktop_control_enabled():
+        return _desktop_disabled("write_custom_code")
+
+    resolved, err = _resolve_output_file(filename)
+    if err is not None:
+        return err
+    assert resolved is not None
+    full_path = str(resolved)
+    basename = resolved.name
+
     try:
-        # Step 1: Initialize File
         await _safe_notify(notify_thinking, "Sir, main file ki details prepare kar raha hoon...")
-        success, full_path = await _maybe_await(notepad_automation.save_file_safely("", filename))
+        success, init_path = await _maybe_await(notepad_automation.save_file_safely("", basename))
         if not success:
-            return {"status": "error", "message": f"❌ File initialization failed: {full_path}"}
+            return tool_result("error", f"File initialization failed: {init_path}")
 
-        await _safe_notify(notify_tool_action, "notepad", f"File '{filename}' initialized.")
-        await asyncio.sleep(0.5)
+        await _safe_notify(notify_tool_action, "notepad", f"File '{basename}' initialized.")
+        await asyncio.sleep(0.3)
 
-        # Step 2: Open and Focus Notepad
         await _safe_notify(notify_thinking, "Sir, Notepad open karke focus set kar raha hoon...")
-        subprocess.Popen([r"C:\Windows\System32\notepad.exe", full_path])
+        focused, _win, pid = await notepad_automation.launch_notepad_for_file(full_path)
+        save_mode = "verified"
+        msg = ""
 
-        try:
-            if await _maybe_await(notepad_automation.ensure_notepad_focus()):
-                await _safe_notify(notify_thinking, "Sir, aapka code Notepad mein type kar raha hoon...")
-                typed = await _maybe_await(notepad_automation.simulate_typing(content))
-                if not typed:
-                    raise RuntimeError("Typing failed")
+        if focused:
+            await _safe_notify(notify_thinking, "Sir, aapka code Notepad mein type kar raha hoon...")
+            typed = await _maybe_await(notepad_automation.simulate_typing(content))
+            if not typed:
+                raise RuntimeError("Typing failed")
 
-                await _safe_notify(notify_thinking, "Sir, code save karke Notepad close kar raha hoon...")
-                pyautogui.hotkey('ctrl', 's')
-                await _maybe_await(notepad_automation.handle_save_as_dialog(full_path))
-                await asyncio.sleep(1.0)
-                await _maybe_await(notepad_automation.close_active_notepad())
-                msg = f"Code successfully written to '{filename}' using Notepad focus logic.\n"
-            else:
-                await _maybe_await(notepad_automation.save_file_safely(content, filename))
-                msg = "Notepad focus failed. Focus failed. File saved programmatically.\n"
-        except Exception as gui_error:
-            logger.warning("GUI automation failed, saving directly: %s", gui_error)
-            await _maybe_await(notepad_automation.save_file_safely(content, filename))
-            msg = "GUI automation failed. File saved programmatically.\n"
+            await _safe_notify(notify_thinking, "Sir, code save karke Notepad close kar raha hoon...")
+            pyautogui.hotkey("ctrl", "s")
+            await asyncio.sleep(0.5)
+            ok, save_mode = await notepad_automation.verify_saved_content(full_path, content)
+            if not ok:
+                await _maybe_await(notepad_automation.save_file_safely(content, basename))
+                save_mode = "fallback"
+            await _maybe_await(
+                notepad_automation.close_active_notepad(
+                    pid=pid,
+                    force_kill_pid=True,
+                )
+            )
+            msg = f"Code written to '{basename}' (save: {save_mode}).\n"
+        else:
+            await _maybe_await(notepad_automation.save_file_safely(content, basename))
+            msg = "Notepad focus failed. File saved programmatically.\n"
+            save_mode = "programmatic"
 
         if auto_run:
-            await _safe_notify(notify_thinking, f"Sir, ab main {filename} ko execute kar raha hoon...")
-            if filename.endswith('.html'):
+            await _safe_notify(notify_thinking, f"Sir, ab main {basename} ko execute kar raha hoon...")
+            if basename.lower().endswith((".html", ".htm")):
                 import webbrowser
-                webbrowser.open(full_path)
+
+                webbrowser.open(Path(full_path).as_uri())
                 msg += "HTML page browser mein open ho gayi hai."
-            elif filename.endswith('.py'):
-                subprocess.Popen(['cmd', '/c', 'start', 'cmd', '/k', 'python', full_path])
+            elif basename.lower().endswith(".py"):
+                subprocess.Popen(["cmd", "/c", "start", "cmd", "/k", sys.executable, full_path])
                 msg += "Python script run ho rahi hai."
 
-        return {
-            "status": "success",
-            "filename": filename,
-            "path": full_path,
-            "message": msg,
-        }
-        
-        if await notepad_automation.ensure_notepad_focus():
-            # Step 3: Type Code (Visible)
-            await _safe_notify(notify_thinking, "Sir, aapka code Notepad mein type kar raha hoon...")
-            await notepad_automation.simulate_typing(content)
-            
-            # Step 4: Save and Close
-            await _safe_notify(notify_thinking, "Sir, code save karke Notepad close kar raha hoon...")
-            pyautogui.hotkey('ctrl', 's')
-            await notepad_automation.handle_save_as_dialog(full_path)
-            await asyncio.sleep(1.0)
-            await notepad_automation.close_active_notepad()
-            msg = f"✅ Code successfully written to '{filename}' using Notepad focus logic.\n"
-        else:
-            # Fallback
-            await notepad_automation.save_file_safely(content, filename)
-            msg = "⚠️ GUI focus failed. File saved programmatically.\n"
-
-        # Step 5: Run Code
-        if auto_run:
-            await _safe_notify(notify_thinking, f"Sir, ab main {filename} ko execute kar raha hoon...")
-            if filename.endswith('.html'):
-                import webbrowser
-                webbrowser.open(full_path)
-                msg += "🌐 HTML page browser mein open ho gayi hai."
-            elif filename.endswith('.py'):
-                subprocess.Popen(['cmd', '/c', 'start', 'cmd', '/k', 'python', full_path])
-                msg += "🐍 Python script run ho rahi hai."
-
-        return {
-            "status": "success",
-            "filename": filename,
-            "path": full_path,
-            "message": msg,
-        }
+        return tool_result(
+            "success",
+            msg.strip(),
+            data={"filename": basename, "path": full_path, "save_mode": save_mode},
+        )
     except Exception as e:
         logger.exception("Notepad process error: %s", e)
-        return {"status": "error", "message": f"❌ Error: {e}"}
+        return tool_result("error", f"Error: {e}")
 
 
-@jarvis_tool(execution_timeout=45.0)
+@jarvis_tool(timeout=90, exclusive="desktop_input")
 async def create_template_code(code_type: str, filename: str = "", auto_run: bool = True) -> dict[str, Any]:
     """
     Sir, is tool ki madad se main template code (HTML/Python) Notepad mein likh kar automatically run kar deta hoon.
-    Har step par main aapko inform karunga.
     """
     try:
         content, filename = get_template_content(code_type, filename)
     except Exception as e:
         logger.exception("create_template_code error: %s", e)
-        return {"status": "error", "message": f"Error: {e}"}
+        return tool_result("error", f"Error: {e}")
     if not content:
-        return {"status": "error", "message": "❌ Unsupported code type. Use 'html_login' or 'python_hello'."}
-    
+        return tool_result("error", "Unsupported code type. Use 'html_login' or 'python_hello'.")
+    _, err = _resolve_output_file(filename)
+    if err is not None:
+        return err
     return await _process_notepad_automation(content, filename, auto_run)
 
 
-@jarvis_tool(execution_timeout=45.0)
+@jarvis_tool(
+    timeout=120,
+    raw_args=("content",),
+    exclusive="desktop_input",
+    risk=_write_custom_code_risk,
+    confirm_summary=_write_custom_code_summary,
+)
 async def write_custom_code(content: str, filename: str, auto_run: bool = True) -> dict[str, Any]:
     """
     Sir, aap jo bhi code kahenge, main use Notepad mein manually type karke run karunga.
-    Aapko har action real-time mein nazar ayega.
     """
     if not filename:
-        return {"status": "error", "message": "❌ Filename is required."}
-    
+        return tool_result("error", "Filename is required.", error_code="PATH_NOT_ALLOWED")
     return await _process_notepad_automation(content, filename, auto_run)
 
 
@@ -464,67 +488,44 @@ async def write_custom_code(content: str, filename: str, auto_run: bool = True) 
 async def run_cmd_command(command: str) -> dict[str, Any]:
     """Execute a CMD command (Non-interactive) safely."""
     try:
-        # Sanitize and run via list to prevent injection
         cmd_list = ["cmd", "/c", "start", "cmd", "/k"] + shlex.split(command)
-        # Run in thread to prevent blocking
         await asyncio.to_thread(subprocess.Popen, cmd_list)
-        return {
-            "status": "success",
-            "command": command,
-            "message": f"✅ Command sent to CMD: {command}",
-        }
+        return tool_result("success", f"Command sent to CMD: {command}", data={"command": command})
     except (subprocess.SubprocessError, OSError, ValueError) as e:
         logger.exception("run_cmd_command error: %s", e)
-        return {
-            "status": "error",
-            "message": f"❌ Error running command: {e}",
-        }
+        return tool_result("error", f"Error running command: {e}")
 
 
-@jarvis_tool
+@jarvis_tool(timeout=10, risk="low")
 async def open_notepad_simple() -> dict[str, Any]:
-    """Open a blank Notepad instance"""
-    def _launch():
+    """Open a blank Notepad instance."""
+
+    def _launch() -> subprocess.Popen[Any]:
         try:
-            # Try absolute path first
-            return subprocess.Popen([r"C:\Windows\System32\notepad.exe"])
+            return subprocess.Popen([NOTEPAD_EXE])
         except FileNotFoundError:
-            # Fallback to generic command
             return subprocess.Popen(["notepad"])
 
     try:
-        # Run process launch in background thread to avoid blocking main loop
         await asyncio.to_thread(_launch)
-
-        # Notify UI about Notepad open
-        t = asyncio.create_task(notify_tool_action(
-            "notepad", "Opened blank instance"))
+        t = asyncio.create_task(notify_tool_action("notepad", "Opened blank instance"))
         _bg_tasks.add(t)
         t.add_done_callback(_bg_tasks.discard)
-        return {
-            "status": "success",
-            "message": "✅ Notepad opened successfully"
-        }
+        return tool_result("success", "Notepad opened successfully")
     except (subprocess.SubprocessError, OSError) as e:
         logger.exception("open_notepad_simple error: %s", e)
-        return {
-            "status": "error",
-            "message": f"❌ Error: {e!s}",
-        }
-@jarvis_tool
-async def list_notepad_files_tool() -> dict:
-    """
-    Lists all files in the Jarvis_Outputs directory created by JARVIS.
-    Use this to 'remember' which text or code files were created.
-    """
+        return tool_result("error", f"Error: {e!s}")
+
+
+@jarvis_tool(timeout=10, risk="low")
+async def list_notepad_files_tool() -> dict[str, Any]:
+    """Lists files in Jarvis_Outputs created by JARVIS."""
     try:
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        folder_path = os.path.join(project_root, "Jarvis_Outputs")
-        
+        folder_path = _outputs_dir()
         if not os.path.exists(folder_path):
-            return {"status": "empty", "message": "Sir, abhi tak koi Notepad files create nahi hui hain."}
-            
-        files = []
+            return tool_result("empty", "Sir, abhi tak koi Notepad files create nahi hui hain.")
+
+        files: list[dict[str, Any]] = []
         for f in os.listdir(folder_path):
             full_path = os.path.join(folder_path, f)
             if os.path.isfile(full_path):
@@ -532,94 +533,106 @@ async def list_notepad_files_tool() -> dict:
                 files.append({
                     "name": f,
                     "path": full_path,
-                    "created": time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(mtime)),
-                    "timestamp": mtime
+                    "created": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(mtime)),
+                    "timestamp": mtime,
                 })
-        
+
         files.sort(key=lambda x: x["timestamp"], reverse=True)
-        
         if not files:
-            return {"status": "empty", "message": "Jarvis_Outputs folder khali hai."}
-            
+            return tool_result("empty", "Jarvis_Outputs folder khali hai.")
+
         msg = f"Sir, mujhe {len(files)} files mili hain:\n"
         for i, f in enumerate(files[:10], 1):
             msg += f"{i}. {f['name']} ({f['created']})\n"
-            
-        return {"status": "success", "files": files, "message": msg}
-        
+
+        return tool_result("success", msg.strip(), data={"files": files})
     except Exception as e:
         logger.error("Error listing notepad files: %s", e)
-        return {"status": "error", "message": f"Files list karne mein error aaya: {e}"}
+        return tool_result("error", f"Files list karne mein error aaya: {e}")
 
 
-@jarvis_tool
-async def edit_notepad_file_tool(filename: str, new_content: str) -> dict:
-    """
-    Opens an existing file in Notepad, REPLACES all text with new_content, and saves it.
-    Use this when the user says "is file mein ye likh do" or "old text ko change kar do".
-    """
-    mgr = get_notepad_mgr()
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    folder_path = os.path.join(project_root, "Jarvis_Outputs")
-    full_path = os.path.join(folder_path, filename)
-    
+@jarvis_tool(timeout=90, raw_args=("new_content",), exclusive="desktop_input", risk="low")
+async def edit_notepad_file_tool(filename: str, new_content: str) -> dict[str, Any]:
+    """Replace all text in an existing Jarvis_Outputs file via Notepad."""
+    if not desktop_control_enabled():
+        return _desktop_disabled("edit_notepad_file_tool")
+
+    resolved, err = _resolve_output_file(filename)
+    if err is not None:
+        return err
+    assert resolved is not None
+    full_path = str(resolved)
     if not os.path.exists(full_path):
-        return {"status": "error", "message": f"❌ File '{filename}' nahi mili."}
+        return tool_result("error", f"File '{resolved.name}' nahi mili.")
 
-    logger.info("Opening file for editing: %s", full_path)
-    subprocess.Popen(["notepad.exe", full_path])
-    
-    if await mgr.ensure_notepad_focus():
-        # Select All and Delete
-        pyautogui.hotkey('ctrl', 'a')
-        pyautogui.press('backspace')
-        
-        # Type and Save
-        await mgr.simulate_typing(new_content)
-        pyautogui.hotkey('ctrl', 's')
-        
-        return {"status": "success", "message": f"✅ File '{filename}' successfully update ho gayi hai."}
-    
-    return {"status": "error", "message": "Notepad focus nahi ho saka."}
+    bak_path = full_path + ".bak"
+    try:
+        shutil.copy2(full_path, bak_path)
+    except OSError as e:
+        return tool_result("error", f"Backup failed: {e}")
 
+    focused, _win, pid = await get_notepad_mgr().launch_notepad_for_file(full_path)
+    if not focused:
+        return tool_result("error", "Notepad focus nahi ho saka.")
 
-@jarvis_tool
-async def append_notepad_file_tool(filename: str, append_text: str) -> dict:
-    """
-    Opens an existing file in Notepad, adds text at the bottom, and saves it.
-    Use this when the user says "is file ke end mein ye add kar do".
-    """
+    pyautogui.hotkey("ctrl", "a")
+    _clipboard_paste_text_sync(new_content)
+    pyautogui.hotkey("ctrl", "s")
     mgr = get_notepad_mgr()
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    folder_path = os.path.join(project_root, "Jarvis_Outputs")
-    full_path = os.path.join(folder_path, filename)
-    
+    await mgr.verify_saved_content(full_path, new_content)
+    await mgr.close_active_notepad(pid=pid, force_kill_pid=True)
+    return tool_result(
+        "success",
+        f"File '{resolved.name}' successfully update ho gayi hai.",
+        data={"backup": bak_path},
+    )
+
+
+@jarvis_tool(timeout=90, raw_args=("append_text",), exclusive="desktop_input", risk="low")
+async def append_notepad_file_tool(filename: str, append_text: str) -> dict[str, Any]:
+    """Append text at the end of a Jarvis_Outputs file via Notepad."""
+    if not desktop_control_enabled():
+        return _desktop_disabled("append_notepad_file_tool")
+
+    resolved, err = _resolve_output_file(filename)
+    if err is not None:
+        return err
+    assert resolved is not None
+    full_path = str(resolved)
     if not os.path.exists(full_path):
-        return {"status": "error", "message": f"❌ File '{filename}' nahi mili."}
+        return tool_result("error", f"File '{resolved.name}' nahi mili.")
 
-    logger.info("Opening file for appending: %s", full_path)
-    subprocess.Popen(["notepad.exe", full_path])
-    
-    if await mgr.ensure_notepad_focus():
-        # Go to end
-        pyautogui.hotkey('ctrl', 'end')
-        pyautogui.press('enter')
-        
-        # Type and Save
-        await mgr.simulate_typing(append_text)
-        pyautogui.hotkey('ctrl', 's')
-        
-        return {"status": "success", "message": f"✅ Text successfully append kar diya gaya hai."}
-    
-    return {"status": "error", "message": "Notepad focus nahi ho saka."}
-
-
-@jarvis_tool
-async def close_notepad_tool() -> dict:
-    """
-    Closes the active Notepad window.
-    """
     mgr = get_notepad_mgr()
-    if await mgr.close_active_notepad(force=True):
-        return {"status": "success", "message": "✅ Notepad closed."}
-    return {"status": "error", "message": "Notepad close nahi ho saka."}
+    focused, _win, pid = await mgr.launch_notepad_for_file(full_path)
+    if not focused:
+        return tool_result("error", "Notepad focus nahi ho saka.")
+
+    pyautogui.hotkey("ctrl", "end")
+    pyautogui.press("enter")
+    await mgr.simulate_typing(append_text)
+    pyautogui.hotkey("ctrl", "s")
+
+    try:
+        with open(full_path, encoding="utf-8") as f:
+            disk = f.read()
+    except OSError:
+        disk = ""
+    if append_text not in disk:
+        disk = disk + append_text
+        with open(full_path, "w", encoding="utf-8") as f:
+            f.write(disk)
+    await mgr.close_active_notepad(pid=pid, force_kill_pid=True)
+    return tool_result("success", "Text successfully append kar diya gaya hai.")
+
+
+@jarvis_tool(timeout=15, risk=_close_notepad_risk)
+async def close_notepad_tool(force: bool = False) -> dict[str, Any]:
+    """Close JARVIS Notepad session gracefully; force=True kills all Notepad (confirmed)."""
+    mgr = get_notepad_mgr()
+    if force:
+        ok = await mgr.close_active_notepad(kill_all_im=True)
+    else:
+        ok = await mgr.close_active_notepad(force_kill_pid=False)
+    if ok:
+        return tool_result("success", "Notepad closed.")
+    return tool_result("error", "Notepad close nahi ho saka.")
