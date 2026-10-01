@@ -545,7 +545,7 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | C-96 | claude | P3 | Deploy #2: panels build plus live checks (tools, confirm, settings, memory, tasks, voice-ID, camera, map, SIM, media, controls) | C-65, X-19, X-10, X-21, X-22, X-17, C-93, C-94, X-20, X-49, X-23, X-24, X-33, C-95, X-45, X-46, X-47, X-18, X-48, X-50, C-54, C-90, X-52, X-53, C-27, C-29, C-30, C-59, C-58, X-55, X-40, X-39, C-80, X-38, C-79, X-05, C-64, C-60 | TODO |
 | X-01 | cursor | P3 | YouTube downloader ffmpeg/interpreter fix (K16) merged into the tools-info downloader task | â€” | NOT NEEDED (user rule) |
 | X-02 | cursor | P3 | Original startup chime asset (Cursor part of the startup-voice split) | — | DONE (01 Oct 12:55) |
-| X-04 | cursor | P3 | jarvis_audio real implementation (gTTS/pyttsx3 TTS, SpeechRecognition STT, local playback) | K-50 (C-AUDIO-1) | DOING (cursor, 01 Oct 12:56) |
+| X-04 | cursor | P3 | jarvis_audio real implementation (gTTS/pyttsx3 TTS, SpeechRecognition STT, local playback) | K-50 (C-AUDIO-1) | DONE (01 Oct 12:58) |
 | X-05 | cursor | P3 | Map tool: Nominatim usage policy (1 req/s, proper user agent) + zoom | K-08 (DASH-LOCATION) | DONE (01 Oct 12:56) |
 | X-10 | cursor | P3 | ConfirmDialog for risky tools: queue, server-corrected countdown, Allow/Deny, closes on any resolution | X-06, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS), K-14 (ConfirmFlow), K-45 (C-CONFIRM-1) | TODO |
 | X-17 | cursor | P3 | Vitals cards PC (agent) vs VPS (server), Telemetry card, Alerts by level | X-06, K-02 (DASH-UI-EVENTS) | TODO |
