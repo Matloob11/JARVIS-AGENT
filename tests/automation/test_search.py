@@ -32,31 +32,43 @@ async def test_get_current_city_fallback():
 @pytest.mark.asyncio
 async def test_search_tavily_success():
     mock_response = MagicMock()
+    mock_response.status_code = 200
     mock_response.json.return_value = {
         "results": [{"title": "T1", "content": "C1", "url": "U1"}]
     }
     mock_response.raise_for_status = MagicMock()
 
-    with patch("jarvis_search.TAVILY_API_KEY", "test_key"):
-        with patch("requests.post", return_value=mock_response):
+    secret = "tavily-test-key-12345678"
+    with patch("jarvis_search.TAVILY_API_KEY", secret):
+        with patch("requests.post", return_value=mock_response) as post:
             result = await search_tavily("test query")
             assert result["status"] == "success"
+            assert result["provider"] == "tavily"
             assert "T1" in result["message"]
+            _, kwargs = post.call_args
+            assert "api_key" not in kwargs.get("json", {})
+            assert kwargs["headers"]["Authorization"] == f"Bearer {secret}"
 
 @pytest.mark.asyncio
 async def test_search_google_success():
     mock_response = MagicMock()
+    mock_response.status_code = 200
     mock_response.json.return_value = {
         "items": [{"title": "G1", "snippet": "S1", "link": "L1"}]
     }
     mock_response.raise_for_status = MagicMock()
 
-    with patch("jarvis_search.GOOGLE_SEARCH_API_KEY", "test_key"):
+    gkey = "google-test-key-12345678"
+    with patch("jarvis_search.GOOGLE_SEARCH_API_KEY", gkey):
         with patch("jarvis_search.SEARCH_ENGINE_ID", "test_id"):
-            with patch("requests.get", return_value=mock_response):
-                result = await search_google("test query")
-                assert result["status"] == "success"
-                assert "G1" in result["message"]
+            with patch("jarvis_search._GOOGLE_DISABLED_REASON", None):
+                with patch("requests.get", return_value=mock_response) as get:
+                    result = await search_google("test query")
+                    assert result["status"] == "success"
+                    assert "G1" in result["message"]
+                    url_used = get.call_args[0][0]
+                    assert "key=" not in url_used
+                    assert get.call_args[1]["headers"]["x-goog-api-key"] == gkey
 
 @pytest.mark.asyncio
 async def test_search_duckduckgo_success():
