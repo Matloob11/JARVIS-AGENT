@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from '@/toast';
-import { toEpochMs } from '@/shared/contracts/events';
+import { normalizePlan, toEpochMs, type NormalizedPlan } from '@/shared/contracts/events';
 import { useChat } from '@/features/chat/useChat';
 import type { ChatMessage } from '@/features/chat/types';
 import type { LiveKitContextValue } from '@/features/voice/LiveKitProvider';
@@ -14,17 +14,15 @@ import {
 import type { TelemetrySnapshot } from '@/features/telemetry/TelemetryCard';
 import { useConfirmQueue } from '@/features/confirm/useConfirmQueue';
 import { useJobs } from '@/features/jobs/useJobs';
+import { useMemories, type MemoryItem } from '@/features/memory/useMemories';
 import { useSettings } from '@/features/settings/useSettings';
 import { useToolLogs, type ToolLogEntry } from '@/features/tools/useToolLogs';
 import { disconnectSocket, getSocket } from '@/shared/realtime/socket';
+import { parseVoiceMatchPayload, type VoiceMatchLive } from '@/features/voice/voiceMeter';
 
 export { disconnectSocket, getSocket } from '@/shared/realtime/socket';
 
-export interface NeuralMemory {
-  id: string;
-  content: string | Record<string, unknown>;
-  timestamp: number;
-}
+export type NeuralMemory = MemoryItem;
 
 export type ToolLog = ToolLogEntry;
 
@@ -86,18 +84,131 @@ export function parseDeviceLocationPayload(raw: unknown): LocationData | null {
   };
 }
 
-export interface ReasoningPlan {
-  intent?: string;
-  plan: string[];
-  confidence?: Record<string, number>;
-  is_ambiguous?: boolean;
-}
+export type ReasoningPlan = NormalizedPlan;
 
 export interface VortexLog {
   text: string;
   category: string;
   timestamp: number;
   level?: string;
+  repeat?: number;
+}
+
+export interface PlanProgressLine {
+  current: number;
+  total: number;
+  action: string;
+  status: string;
+  ts?: number;
+}
+
+export interface SystemFeedEntry {
+  kind: 'telemetry' | 'diagnostics' | 'audit';
+  summary: string;
+  ts: number;
+}
+
+const VORTEX_LOG_CAP = 300;
+const REASONING_HISTORY_CAP = 5;
+const SYSTEM_FEED_CAP = 12;
+
+function appendVortexLogs(prev: VortexLog[], entries: VortexLog[]): VortexLog[] {
+  let next = [...prev];
+  for (const entry of entries) {
+    const head = next[0];
+    if (
+      head &&
+      head.text === entry.text &&
+      head.category === entry.category &&
+      (head.level ?? '') === (entry.level ?? '')
+    ) {
+      next[0] = { ...head, repeat: (head.repeat ?? 1) + 1 };
+    } else {
+      next = [{ ...entry, repeat: 1 }, ...next];
+    }
+    if (next.length > VORTEX_LOG_CAP) {
+      next = next.slice(0, VORTEX_LOG_CAP);
+    }
+  }
+  return next;
+}
+
+function normalizePlanProgress(raw: Record<string, unknown>): PlanProgressLine | null {
+  const current =
+    typeof raw.current === 'number'
+      ? raw.current
+      : typeof raw.step_index === 'number'
+        ? raw.step_index
+        : typeof raw.step === 'number'
+          ? raw.step
+          : null;
+  const total =
+    typeof raw.total === 'number'
+      ? raw.total
+      : typeof raw.total_steps === 'number'
+        ? raw.total_steps
+        : null;
+  if (current == null || total == null) return null;
+  return {
+    current,
+    total,
+    action: String(raw.action ?? raw.step_action ?? ''),
+    status: String(raw.status ?? 'IN_PROGRESS'),
+    ts: toEpochMs(raw.ts ?? raw.timestamp),
+  };
+}
+
+function turnRejectedToast(data: Record<string, unknown>): string {
+  const reason = String(data.reason ?? '');
+  if (reason === 'voice_id') {
+    const score =
+      typeof data.score === 'number'
+        ? Math.round(data.score * (data.score <= 1 ? 100 : 1))
+        : null;
+    const threshold =
+      typeof data.threshold === 'number'
+        ? Math.round(data.threshold * (data.threshold <= 1 ? 100 : 1))
+        : null;
+    if (score != null && threshold != null) {
+      return `Awaaz match nahi hui (${score}% < ${threshold}%) - ignore kiya`;
+    }
+    return 'Awaaz match nahi hui - ignore kiya';
+  }
+  if (reason === 'wake_word') return 'Wake word nahi mila';
+  if (reason === 'muted') return 'Mute hai';
+  if (reason === 'security') return 'Security block';
+  if (reason === 'enrolling') return 'Voice enroll chal rahi hai — ignore kiya';
+  if (reason === 'empty') return 'Kuch sunai nahi diya';
+  return `Turn reject (${reason || 'unknown'})`;
+}
+
+function summarizeTelemetryFeed(raw: Record<string, unknown>): string {
+  const rate =
+    typeof raw.success_rate === 'number' ? `${Math.round(raw.success_rate * 100)}% ok` : '';
+  const latency =
+    typeof raw.avg_latency === 'number' ? `${Math.round(raw.avg_latency)}ms` : '';
+  const status = raw.status != null ? String(raw.status) : 'update';
+  return ['telemetry', status, rate, latency].filter(Boolean).join(' · ');
+}
+
+function summarizeDiagnosticsFeed(raw: Record<string, unknown>): string {
+  if (raw.message != null) return String(raw.message);
+  if (raw.summary != null) return String(raw.summary);
+  if (Array.isArray(raw.flags) && raw.flags.length) {
+    return raw.flags.map(item => String(item)).join(', ');
+  }
+  const keys = Object.entries(raw)
+    .filter(([key]) => !['ts', 'timestamp', 'type'].includes(key))
+    .slice(0, 3)
+    .map(([key, value]) => `${key}=${String(value)}`);
+  return keys.length ? keys.join(' · ') : 'diagnostics update';
+}
+
+function summarizeAuditFeed(raw: Record<string, unknown>): string {
+  if (raw.event != null) return String(raw.event);
+  if (raw.action != null) return String(raw.action);
+  if (raw.message != null) return String(raw.message);
+  return 'audit entry';
 }
 
 export interface VitalsSnapshot {
@@ -227,10 +338,15 @@ export const useCommandCenter = () => {
   });
   const [systemAlerts, setSystemAlerts] = useState<SystemAlert[]>([]);
   const [vortexLogs, setVortexLogs] = useState<VortexLog[]>([]);
-  const [voiceMatch, setVoiceMatch] = useState(0.0);
+  const [logDroppedCount, setLogDroppedCount] = useState(0);
+  const [planProgress, setPlanProgress] = useState<PlanProgressLine | null>(null);
+  const [reasoningHistory, setReasoningHistory] = useState<ReasoningPlan[]>([]);
+  const [systemFeed, setSystemFeed] = useState<SystemFeedEntry[]>([]);
+  const traceLogPauseRef = useRef(false);
+  const traceLogBufferRef = useRef<VortexLog[]>([]);
+  const [voiceMatchLive, setVoiceMatchLive] = useState<VoiceMatchLive>({ confidence: 0 });
   const [intelligence, setIntelligence] = useState<IntelligenceItem | null>(null);
   const [intelligenceHistory, setIntelligenceHistory] = useState<IntelligenceItem[]>([]);
-  const [memories, setMemories] = useState<NeuralMemory[]>([]);
   const [transcription, setTranscription] = useState('');
   const [location, setLocation] = useState<LocationData>({ city: 'Detecting...', lat: 0, lng: 0 });
   const [mapFocus, setMapFocus] = useState<MapFocusData | null>(null);
@@ -264,13 +380,37 @@ export const useCommandCenter = () => {
     seedToolLogsFromInit,
   } = useToolLogs();
   const { jobs, seedJobsFromInit, cancelJob, openJobArtifact } = useJobs(emitCommand);
+  const { memories, seedMemoriesFromInit, clearShortTermMemory } = useMemories(emitCommand);
 
-  const pushConfirmLog = useCallback((text: string) => {
-    setVortexLogs(prev => [
-      { text, category: 'confirm', timestamp: Math.floor(Date.now() / 1000) },
-      ...prev,
-    ].slice(0, 50));
+  const pushSystemFeed = useCallback((entry: SystemFeedEntry) => {
+    setSystemFeed(prev => [entry, ...prev].slice(0, SYSTEM_FEED_CAP));
   }, []);
+
+  const ingestVortexLogs = useCallback((entries: VortexLog[]) => {
+    if (traceLogPauseRef.current) {
+      traceLogBufferRef.current = appendVortexLogs(traceLogBufferRef.current, entries);
+      return;
+    }
+    setVortexLogs(prev => appendVortexLogs(prev, entries));
+  }, []);
+
+  const setTraceLogsPaused = useCallback((paused: boolean) => {
+    traceLogPauseRef.current = paused;
+    if (!paused && traceLogBufferRef.current.length) {
+      const buffered = traceLogBufferRef.current;
+      traceLogBufferRef.current = [];
+      setVortexLogs(prev => appendVortexLogs(prev, buffered));
+    }
+  }, []);
+
+  const pushConfirmLog = useCallback(
+    (text: string) => {
+      ingestVortexLogs([
+        { text, category: 'confirm', timestamp: Math.floor(Date.now() / 1000), level: 'INFO' },
+      ]);
+    },
+    [ingestVortexLogs],
+  );
 
   const clearSimLookupTimer = useCallback(() => {
     if (simLookupTimerRef.current != null) {
@@ -343,6 +483,11 @@ export const useCommandCenter = () => {
     };
     const onTelemetryUpdate = (data: Record<string, unknown>) => {
       setTelemetry(normalizeTelemetryPayload(data));
+      pushSystemFeed({
+        kind: 'telemetry',
+        summary: summarizeTelemetryFeed(data),
+        ts: toEpochMs(data.ts) ?? Date.now(),
+      });
     };
     const onSystemAlert = (data: Record<string, unknown>) => {
       setSystemAlerts(prev => [normalizeSystemAlert(data), ...prev].slice(0, 30));
@@ -354,7 +499,6 @@ export const useCommandCenter = () => {
       setIntelligence(item);
       setIntelligenceHistory(prev => prependIntelligenceHistory(prev, item));
     };
-    const onMemorySync = (data: NeuralMemory) => setMemories(prev => [data, ...prev].slice(0, 50));
     const onTranscriptionUpdate = (data: { text: string }) => setTranscription(data.text);
     const onLocationUpdate = (data: Record<string, unknown>) => {
       if (locationKind(data) === 'map') {
@@ -369,11 +513,76 @@ export const useCommandCenter = () => {
       const focus = parseMapFocusPayload(data);
       if (focus) setMapFocus(focus);
     };
-    const onReasoningUpdate = (data: ReasoningPlan) => setReasoning(data);
-    const onNewLog = (data: Record<string, unknown>) =>
-      setVortexLogs(prev => [normalizeVortexLog(data), ...prev].slice(0, 50));
-    const onVoiceMatchUpdate = (data: { confidence: number; timestamp: number }) => {
-      setVoiceMatch(data.confidence);
+    const onReasoningUpdate = (raw: unknown) => {
+      const normalized = normalizePlan(raw);
+      setReasoning(normalized);
+      setReasoningHistory(prev => {
+        const key = normalized.msg_id ?? normalized.turn_id ?? normalized.intent ?? '';
+        const withoutDup = key
+          ? prev.filter(item => (item.msg_id ?? item.turn_id ?? item.intent) !== key)
+          : prev;
+        return [normalized, ...withoutDup].slice(0, REASONING_HISTORY_CAP);
+      });
+    };
+    const onNewLog = (data: Record<string, unknown>) => {
+      ingestVortexLogs([normalizeVortexLog(data)]);
+    };
+    const onLogBatch = (data: Record<string, unknown>) => {
+      const dropped =
+        typeof data.dropped === 'number'
+          ? data.dropped
+          : typeof data.dropped_count === 'number'
+            ? data.dropped_count
+            : 0;
+      if (dropped > 0) {
+        setLogDroppedCount(prev => prev + dropped);
+      }
+      const rawItems = data.items ?? data.logs ?? data.entries;
+      if (!Array.isArray(rawItems)) return;
+      ingestVortexLogs(
+        rawItems.map(item =>
+          typeof item === 'object' && item
+            ? normalizeVortexLog(item as Record<string, unknown>)
+            : normalizeVortexLog({ text: String(item) }),
+        ),
+      );
+    };
+    const onPlanProgress = (data: Record<string, unknown>) => {
+      const payload =
+        data.payload && typeof data.payload === 'object'
+          ? (data.payload as Record<string, unknown>)
+          : data;
+      const line = normalizePlanProgress(payload);
+      if (line) setPlanProgress(line);
+    };
+    const onTurnRejected = (data: Record<string, unknown>) => {
+      const message = turnRejectedToast(data);
+      toast(message, { icon: '🎙️' });
+      ingestVortexLogs([
+        {
+          text: message,
+          category: 'turn_rejected',
+          timestamp: Math.floor((toEpochMs(data.ts) ?? Date.now()) / 1000),
+          level: 'WARN',
+        },
+      ]);
+    };
+    const onDiagnosticsUpdate = (data: Record<string, unknown>) => {
+      pushSystemFeed({
+        kind: 'diagnostics',
+        summary: summarizeDiagnosticsFeed(data),
+        ts: toEpochMs(data.ts) ?? Date.now(),
+      });
+    };
+    const onAuditUpdate = (data: Record<string, unknown>) => {
+      pushSystemFeed({
+        kind: 'audit',
+        summary: summarizeAuditFeed(data),
+        ts: toEpochMs(data.ts) ?? Date.now(),
+      });
+    };
+    const onVoiceMatchUpdate = (data: Record<string, unknown>) => {
+      setVoiceMatchLive(prev => ({ ...prev, ...parseVoiceMatchPayload(data) }));
     };
     const applySimProvider = (provider?: string, configured?: boolean) => {
       if (provider !== undefined) setSimProvider(provider);
@@ -432,12 +641,19 @@ export const useCommandCenter = () => {
     socket.on('telemetry_update', onTelemetryUpdate);
     socket.on('system_alert', onSystemAlert);
     socket.on('intelligence_update', onIntelligenceUpdate);
-    socket.on('memory_sync', onMemorySync);
     socket.on('transcription_update', onTranscriptionUpdate);
     socket.on('location_update', onLocationUpdate);
     socket.on('map_focus_update', onMapFocusUpdate);
     socket.on('reasoning_update', onReasoningUpdate);
     socket.on('new_log', onNewLog);
+    socket.on('vortex_log_batch', onLogBatch);
+    socket.on('log_batch', onLogBatch);
+    socket.on('new_logs', onLogBatch);
+    socket.on('plan_progress', onPlanProgress);
+    socket.on('plan_progress_update', onPlanProgress);
+    socket.on('turn_rejected', onTurnRejected);
+    socket.on('diagnostics_update', onDiagnosticsUpdate);
+    socket.on('audit_update', onAuditUpdate);
     socket.on('voice_match_update', onVoiceMatchUpdate);
     socket.on('sim_data_result', onSimDataResult);
     socket.on('sim_data_loading', onSimDataLoading);
@@ -473,6 +689,7 @@ export const useCommandCenter = () => {
       confirmApiRef.current.seedFromInit(state as Record<string, unknown>);
       seedToolLogsFromInit(state as Record<string, unknown>);
       seedJobsFromInit(state as Record<string, unknown>);
+      seedMemoriesFromInit(state as Record<string, unknown>);
       if (state.map_focus) {
         const focus = parseMapFocusPayload(state.map_focus);
         if (focus) setMapFocus(focus);
@@ -515,14 +732,8 @@ export const useCommandCenter = () => {
             : normalizeTelemetryPayload(state.telemetry as Record<string, unknown>),
         );
       }
-      if (typeof state.voice_match === 'number') {
-        setVoiceMatch(state.voice_match);
-      } else if (
-        state.voice_match &&
-        typeof state.voice_match === 'object' &&
-        typeof (state.voice_match as { confidence?: number }).confidence === 'number'
-      ) {
-        setVoiceMatch((state.voice_match as { confidence: number }).confidence);
+      if (state.voice_match !== undefined) {
+        setVoiceMatchLive(parseVoiceMatchPayload(state.voice_match));
       }
       if (state.sim_records) setSimRecords(state.sim_records);
       if (state.sim_loading !== undefined) setSimLoading(state.sim_loading);
@@ -549,7 +760,6 @@ export const useCommandCenter = () => {
       socket.off('telemetry_update', onTelemetryUpdate);
       socket.off('system_alert', onSystemAlert);
       socket.off('intelligence_update', onIntelligenceUpdate);
-      socket.off('memory_sync', onMemorySync);
       socket.off('transcription_update', onTranscriptionUpdate);
       socket.off('location_update', onLocationUpdate);
       socket.off('map_focus_update', onMapFocusUpdate);
@@ -561,7 +771,16 @@ export const useCommandCenter = () => {
       socket.off('sim_panel_open', onSimPanelOpen);
       socket.off('init_state');
     };
-  }, [socketVersion, clearSimLookupTimer, startSimLookupTimer, seedToolLogsFromInit, seedJobsFromInit]);
+  }, [
+    socketVersion,
+    clearSimLookupTimer,
+    startSimLookupTimer,
+    seedToolLogsFromInit,
+    seedJobsFromInit,
+    seedMemoriesFromInit,
+    ingestVortexLogs,
+    pushSystemFeed,
+  ]);
 
   const respondConfirm = (id: string, allow: boolean) => {
     if (!confirmQueue.markResponded(id)) return;
@@ -692,6 +911,7 @@ export const useCommandCenter = () => {
     intelligenceHistory,
     activePersona: settings.persona,
     memories,
+    clearShortTermMemory,
     toolLogs,
     toolRunningCount,
     toolLastError,
@@ -707,8 +927,13 @@ export const useCommandCenter = () => {
     location,
     mapFocus,
     reasoning,
+    reasoningHistory,
+    planProgress,
+    systemFeed,
+    logDroppedCount,
+    setTraceLogsPaused,
     vortexLogs,
-    voiceMatch,
+    voiceMatchLive,
     simRecords,
     simLoading,
     simQueryMasked,

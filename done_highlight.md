@@ -244,3 +244,24 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `npm run build` pass · `npx playwright test tests/e2e/settings.spec.ts` 4 passed
 - **Commit:** abhi nahi · **Deploy:** no
 - **Doosre agent ke liye:** X-22 advanced settings same drawer/useSettings extend kare; voice enroll link placeholder (`settings-voice-enroll-link`).
+
+### ✅ [cursor] X-08 · Login + AuthProvider session lifecycle · 2026-10-01 12:52 PKT
+- **Kya kiya:** Password+TOTP/recovery login, AuthProvider states, LoginScreen, dashboard gated until auth, TopBar logout, e2e auth+dashboard; request_state on socket connect; mock expire/rate-reset.
+- **Files:** stonix_ui/src/features/auth/*, App.tsx, TopBar.tsx, Dashboard.tsx, useCommandCenter.ts, index.css, tests/e2e/auth.spec.ts, helpers/login.ts, dashboard.spec.ts, mock-bridge/server.mjs, playwright.config.ts
+- **Verify:** build OK; playwright auth+dashboard+contracts 14/14 pass
+- **Commit:** pending · **Deploy:** no
+- **Doosre agent ke liye:** Live bridge needs C-AUTH cookie login; LEGACY_TOKEN cut-over later
+
+### ✅ [cursor] X-11 · No-real-side-effect test harness + desktop_common tests · 2026-10-01 15:20 PKT
+- **Kya kiya:** `tests/tools/side_effect_guard.py` autouse (K-27) blocks pyautogui/pynput/subprocess/httpx/win32/etc with `REAL SIDE EFFECT`; bridge_url -> 127.0.0.1:9; UIBridgeHandler stripped. `test_desktop_common.py` covers paths, windows, tool_result, force_foreground, run_cancellable, clipboard restore skip, guard self-test.
+- **Files:** tests/tools/__init__.py, tests/tools/side_effect_guard.py, tests/tools/conftest.py, tests/tools/test_desktop_common.py
+- **Verify:** `./.venv_312/Scripts/python.exe -m pytest tests/tools/test_desktop_common.py -q -p no:cacheprovider` → 9 passed
+- **Commit:** pending · **Deploy:** no
+- **Doosre agent ke liye:** X-12 imports this guard into tests/automation, tests/scripts, services/automation/tests.
+
+### ✅ [cursor] X-23 · Memory Notes tab restore stream search clear · 2026-10-01 16:35 PKT
+- **Kya kiya:** `useMemories` seeds `init_state.memories`, streams `memory_sync` (200 cap), `memory_cleared` + backup toast; Notes tab `MemoryList` with role/source badges, search, local confirm then `clear_memory`; mock bridge persists memories for reload e2e.
+- **Files:** stonix_ui/src/features/memory/useMemories.ts, MemoryList.tsx, ChatPanel.tsx, useCommandCenter.ts, Dashboard.tsx, index.css, tests/e2e/memory.spec.ts, tests/mock-bridge/server.mjs, plan.md
+- **Verify:** `npm run build` pass · `npx playwright test tests/e2e/memory.spec.ts` 3 passed
+- **Commit:** abhi nahi · **Deploy:** no
+- **Doosre agent ke liye:** X-24 tasks tab ab unblock; agent `memory_update` / clear still C-94 bridge side.

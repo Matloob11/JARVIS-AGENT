@@ -1,0 +1,127 @@
+import { useCallback, useEffect, useState } from 'react';
+import { toast } from '@/toast';
+import { toEpochMs } from '@/shared/contracts/events';
+import { getSocket } from '@/shared/realtime/socket';
+
+export type MemoryRole = 'user' | 'assistant';
+export type MemorySource = 'extractor' | 'fact' | 'vector';
+
+export interface MemoryItem {
+  id: string;
+  content: string;
+  role?: MemoryRole;
+  source?: MemorySource;
+  ts: number;
+}
+
+const MAX_ROWS = 200;
+
+function normalizeRole(raw: unknown): MemoryRole | undefined {
+  const r = String(raw ?? '').toLowerCase();
+  if (r === 'user' || r === 'assistant') return r;
+  return undefined;
+}
+
+function normalizeSource(raw: unknown): MemorySource | undefined {
+  const s = String(raw ?? '').toLowerCase();
+  if (s === 'extractor' || s === 'fact' || s === 'vector') return s;
+  return undefined;
+}
+
+function contentText(raw: unknown): string {
+  if (typeof raw === 'string') return raw;
+  if (raw && typeof raw === 'object') return JSON.stringify(raw);
+  if (raw != null) return String(raw);
+  return '';
+}
+
+export function normalizeMemory(raw: unknown): MemoryItem | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const data = raw as Record<string, unknown>;
+  const id = data.id != null ? String(data.id).trim() : '';
+  if (!id) return null;
+  const content = contentText(data.content);
+  if (!content.trim()) return null;
+  const ts = toEpochMs(data.ts ?? data.timestamp) ?? Date.now();
+  return {
+    id,
+    content,
+    role: normalizeRole(data.role),
+    source: normalizeSource(data.source),
+    ts,
+  };
+}
+
+function sortNewestFirst(rows: MemoryItem[]): MemoryItem[] {
+  return [...rows].sort((a, b) => b.ts - a.ts);
+}
+
+function prependRow(prev: MemoryItem[], next: MemoryItem): MemoryItem[] {
+  const without = prev.filter(row => row.id !== next.id);
+  return sortNewestFirst([next, ...without]).slice(0, MAX_ROWS);
+}
+
+function mergeSeed(prev: MemoryItem[], seeded: MemoryItem[]): MemoryItem[] {
+  const byId = new Map<string, MemoryItem>();
+  for (const row of sortNewestFirst([...seeded, ...prev])) {
+    if (!byId.has(row.id)) byId.set(row.id, row);
+  }
+  return sortNewestFirst([...byId.values()]).slice(0, MAX_ROWS);
+}
+
+function backupPathFromCleared(payload: Record<string, unknown>): string | null {
+  const backup = payload.backup;
+  if (typeof backup === 'string' && backup.trim()) return backup.trim();
+  return null;
+}
+
+export function useMemories(emitCommand: (type: string, payload?: unknown) => void) {
+  const [rows, setRows] = useState<MemoryItem[]>([]);
+
+  const applySync = useCallback((raw: unknown) => {
+    const entry = normalizeMemory(raw);
+    if (!entry) return;
+    setRows(prev => prependRow(prev, entry));
+  }, []);
+
+  const applyCleared = useCallback((raw: unknown) => {
+    setRows([]);
+    if (!raw || typeof raw !== 'object') return;
+    const path = backupPathFromCleared(raw as Record<string, unknown>);
+    if (path) {
+      toast(`Backup: ${path}`, { icon: '💾' });
+    }
+  }, []);
+
+  const seedFromInit = useCallback((state: Record<string, unknown>) => {
+    const list = state.memories;
+    if (!Array.isArray(list) || list.length === 0) return;
+    const seeded = list
+      .map(raw => normalizeMemory(raw))
+      .filter((row): row is MemoryItem => row != null);
+    if (!seeded.length) return;
+    setRows(prev => mergeSeed(prev, seeded));
+  }, []);
+
+  const clearShortTermMemory = useCallback(() => {
+    emitCommand('clear_memory', {});
+  }, [emitCommand]);
+
+  useEffect(() => {
+    const socket = getSocket();
+    const onSync = (payload: unknown) => applySync(payload);
+    const onCleared = (payload: unknown) => applyCleared(payload);
+    socket.on('memory_sync', onSync);
+    socket.on('memory_cleared', onCleared);
+    return () => {
+      socket.off('memory_sync', onSync);
+      socket.off('memory_cleared', onCleared);
+    };
+  }, [applySync, applyCleared]);
+
+  return {
+    memories: rows,
+    seedMemoriesFromInit: seedFromInit,
+    clearShortTermMemory,
+  };
+}

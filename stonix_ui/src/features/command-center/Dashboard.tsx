@@ -7,6 +7,7 @@ import OperationsRail from './components/OperationsRail';
 import { defaultCameraState, type CameraState } from './components/cameraState';
 import SettingsPanel from './components/SettingsPanel';
 import SimAccessDialog from './components/SimAccessDialog';
+import VoiceEnrollDialog from '@/features/voice/VoiceEnrollDialog';
 import ConfirmDialog from '@/features/confirm/ConfirmDialog';
 import SystemTrace from './components/SystemTrace';
 import TopBar from './components/TopBar';
@@ -24,7 +25,13 @@ const DashboardInner = () => {
   const agentStatus = useAgentStatus();
   const command = useCommandCenter();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [voiceEnrollOpen, setVoiceEnrollOpen] = useState(false);
   const [cameraState, setCameraState] = useState<CameraState>(defaultCameraState);
+
+  const openVoiceEnroll = () => {
+    setVoiceEnrollOpen(true);
+    setSettingsOpen(false);
+  };
 
   const handleReconnect = () =>
     command.reconnectBridge(liveKit, agentStatus.online);
@@ -85,7 +92,8 @@ const DashboardInner = () => {
               isConnected={command.isConnected}
               isSpeaking={command.isSpeaking}
               isThinking={command.isThinking}
-              voiceMatch={command.voiceMatch}
+              voiceMatchLive={command.voiceMatchLive}
+              onOpenVoiceEnroll={openVoiceEnroll}
             />
           </ErrorBoundary>
           <ErrorBoundary name="IntelligencePanel">
@@ -98,7 +106,12 @@ const DashboardInner = () => {
             <SystemTrace
               logs={command.vortexLogs}
               reasoning={command.reasoning}
+              reasoningHistory={command.reasoningHistory}
+              planProgress={command.planProgress}
+              systemFeed={command.systemFeed}
+              logDroppedCount={command.logDroppedCount}
               isConnected={command.isConnected}
+              onLogsPausedChange={command.setTraceLogsPaused}
             />
           </ErrorBoundary>
         </section>
@@ -109,6 +122,7 @@ const DashboardInner = () => {
             messages={command.messages}
             logs={command.vortexLogs}
             memories={command.memories}
+            onClearMemory={command.clearShortTermMemory}
             toolLogs={command.toolLogs}
             jobs={command.jobs}
             onCancelJob={command.cancelJob}
@@ -131,6 +145,7 @@ const DashboardInner = () => {
               isConnected={command.isConnected}
               onClose={() => setSettingsOpen(false)}
               onReconnect={handleReconnect}
+              onOpenVoiceEnroll={openVoiceEnroll}
               onLogout={() => {
                 void liveKit.disconnectRoom();
                 void logout();
@@ -139,6 +154,10 @@ const DashboardInner = () => {
           </ErrorBoundary>
         )}
       </AnimatePresence>
+
+      <ErrorBoundary name="VoiceEnrollDialog">
+        <VoiceEnrollDialog open={voiceEnrollOpen} onClose={() => setVoiceEnrollOpen(false)} />
+      </ErrorBoundary>
 
       <ErrorBoundary name="SimAccessDialog">
         <SimAccessDialog

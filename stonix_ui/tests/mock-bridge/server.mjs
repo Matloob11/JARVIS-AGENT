@@ -25,6 +25,8 @@ let suppressSettingsSync = false;
 let ownerSessionActive = false;
 /** @type {Record<string, unknown>[]} */
 const persistedChatMessages = [];
+/** @type {Record<string, unknown>[]} */
+const persistedMemories = [];
 /** @type {number} */
 let visionFrameCount = 0;
 
@@ -36,6 +38,20 @@ const RATE_LIMIT_WINDOW_MS = 60_000;
 function loadFixture(name) {
   const path = join(FIXTURES_DIR, `${name}.json`);
   return JSON.parse(readFileSync(path, 'utf8'));
+}
+
+function mergeSettingsSync(base, payload) {
+  if (!payload || typeof payload !== 'object') {
+    return { ...base, settings: { ...(base.settings || {}) } };
+  }
+  const nextSettings = { ...(base.settings || {}), ...payload };
+  if (payload.automation && typeof payload.automation === 'object') {
+    nextSettings.automation = {
+      ...(base.settings?.automation || {}),
+      ...payload.automation,
+    };
+  }
+  return { ...base, settings: nextSettings };
 }
 
 function parseCookies(header) {
@@ -118,7 +134,41 @@ function checkLoginRate(ip) {
   return null;
 }
 
+function buildInitState() {
+  const init = loadFixture('init_state');
+  const mergedMemories = [...persistedMemories];
+  for (const row of init.memories || []) {
+    const id = row?.id != null ? String(row.id) : '';
+    if (id && !mergedMemories.some(item => String(item?.id) === id)) {
+      mergedMemories.push(row);
+    }
+  }
+  return {
+    ...init,
+    messages: [...(init.messages || []), ...persistedChatMessages],
+    memories: mergedMemories.slice(0, 50),
+  };
+}
+
+function rememberMemorySync(payload) {
+  if (!payload || typeof payload !== 'object') return;
+  const id = payload.id != null ? String(payload.id) : '';
+  if (!id) return;
+  const without = persistedMemories.filter(row => String(row?.id) !== id);
+  persistedMemories.length = 0;
+  persistedMemories.push(payload, ...without);
+  if (persistedMemories.length > 200) {
+    persistedMemories.splice(200);
+  }
+}
+
 function emitToUi(event, payload) {
+  if (event === 'memory_sync') {
+    rememberMemorySync(payload);
+  }
+  if (event === 'memory_cleared') {
+    persistedMemories.length = 0;
+  }
   for (const socket of uiSockets) {
     socket.emit(event, payload);
   }
@@ -174,22 +224,28 @@ function handleVoiceEnroll(socket, payload, cb) {
   const action = payload?.action;
   ackUi(socket, cb, 'sent');
   if (action === 'cancel') return;
-  if (action === 'start' || action === 'commit') {
+  if (action === 'start') {
     const base = loadFixture('voice_enroll_progress');
     const target = payload?.target_seconds ?? base.target_seconds ?? 6;
     [33, 66, 100].forEach((percent, index) => {
       setTimeout(() => {
+        const collected = Math.round((target * percent) / 100);
         socket.emit('voice_enroll_progress', {
           ...base,
           percent,
-          seconds: Math.round((target * percent) / 100),
+          seconds: collected,
+          collected_s: collected,
           target_seconds: target,
+          target_s: target,
         });
       }, (index + 1) * 200);
     });
+    return;
+  }
+  if (action === 'commit') {
     setTimeout(() => {
       socket.emit('voice_enroll_result', loadFixture('voice_enroll_result'));
-    }, 900);
+    }, 150);
   }
 }
 
@@ -227,10 +283,7 @@ function handleUiCommand(socket, cmd, cb) {
       ackUi(socket, cb, 'sent');
       if (!suppressSettingsSync) {
         const sync = loadFixture('settings_sync');
-        socket.emit('settings_sync', {
-          ...sync,
-          settings: { ...sync.settings, ...(payload || {}) },
-        });
+        socket.emit('settings_sync', mergeSettingsSync(sync, payload || {}));
       }
       break;
     }
@@ -246,6 +299,7 @@ function handleUiCommand(socket, cmd, cb) {
     }
     case 'clear_memory': {
       ackUi(socket, cb, 'sent');
+      persistedMemories.length = 0;
       socket.emit('memory_cleared', loadFixture('memory_cleared'));
       break;
     }
@@ -278,7 +332,7 @@ function handleUiCommand(socket, cmd, cb) {
     }
     case 'request_state':
       ackUi(socket, cb, 'sent');
-      socket.emit('init_state', loadFixture('init_state'));
+      socket.emit('init_state', buildInitState());
       break;
     case 'stop':
     case 'start':
@@ -330,6 +384,12 @@ async function handleMockControl(req, res, pathname, method) {
 
   if (pathname === '/__mock/reset-login-rate' && method === 'POST') {
     loginRate.clear();
+    json(res, 200, { ok: true });
+    return true;
+  }
+
+  if (pathname === '/__mock/memories/reset' && method === 'POST') {
+    persistedMemories.length = 0;
     json(res, 200, { ok: true });
     return true;
   }
@@ -540,11 +600,8 @@ io.use((socket, next) => {
 
 io.on('connection', socket => {
   uiSockets.push(socket);
-  const init = loadFixture('init_state');
-  socket.emit('init_state', {
-    ...init,
-    messages: [...(init.messages || []), ...persistedChatMessages],
-  });
+  socket.emit('init_state', buildInitState());
+  socket.emit('settings_sync', loadFixture('settings_sync'));
 
   socket.on('ui_command', (cmd, cb) => {
     try {

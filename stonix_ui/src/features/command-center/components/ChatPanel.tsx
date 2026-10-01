@@ -2,8 +2,10 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Bell, Keyboard, Mic, Send } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { ChatMessage, LiveCaption } from '@/features/chat/types';
-import { Message, NeuralMemory, VortexLog } from '../hooks/useCommandCenter';
+import { Message, VortexLog } from '../hooks/useCommandCenter';
 import type { JobEntry } from '@/features/jobs/useJobs';
+import MemoryList from '@/features/memory/MemoryList';
+import type { MemoryItem } from '@/features/memory/useMemories';
 import JobsList from '@/features/tools/JobsList';
 import ToolLogList from '@/features/tools/ToolLogList';
 import type { ToolLogEntry } from '@/features/tools/useToolLogs';
@@ -15,7 +17,8 @@ interface ChatPanelProps {
   persona: 'jarvis' | 'anna';
   messages: Message[];
   logs: VortexLog[];
-  memories: NeuralMemory[];
+  memories: MemoryItem[];
+  onClearMemory: () => void;
   toolLogs: ToolLogEntry[];
   jobs: JobEntry[];
   onCancelJob: (jobId: string) => void;
@@ -87,6 +90,7 @@ const ChatPanel = ({
   messages,
   logs,
   memories,
+  onClearMemory,
   toolLogs,
   jobs,
   onCancelJob,
@@ -214,14 +218,7 @@ const ChatPanel = ({
         )}
 
         {activeTab === 'notes' && (
-          <DataList
-            empty="No memories synced yet"
-            rows={memories.map(memory => ({
-              title: 'memory',
-              detail: typeof memory.content === 'string' ? memory.content : JSON.stringify(memory.content),
-              meta: formatTime(memory.timestamp),
-            }))}
-          />
+          <MemoryList rows={memories} onClearConfirmed={onClearMemory} />
         )}
 
         {activeTab === 'tools' && (

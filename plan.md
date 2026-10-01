@@ -477,8 +477,8 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | X-06 | cursor | P0 | UI foundation: relative /vortex runtime config, cookie socket, tolerant event types, per-panel ErrorBoundary, no secrets in the bundle | K-01 (DASH-UI-RUNTIME), K-02 (DASH-UI-EVENTS) | DONE (01 Oct 12:40) |
 | X-07 | cursor | P0 | Mock bridge (Node) for local dev and e2e, built from the adopted contracts, with exported fixtures | X-06, K-10 (DASH-MOCK-BRIDGE), K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS) | DONE (01 Oct 12:42) |
 | X-08 | cursor | P0 | Login screen, AuthProvider and session lifecycle (password + TOTP, recovery code, robust expiry) | X-06, X-07, K-01 (DASH-UI-RUNTIME), K-36 (C-AUTH-1), K-37 (C-LK-1), K-38 (C-SOCK-1), K-49 (C-ORIGIN-1) | DONE (01 Oct 12:52) |
-| X-11 | cursor | P0 | No-real-side-effect test harness (tests/tools) + helper tests | C-06, X-03, K-27 (TestSideEffectGuard) | DOING (cursor, 01 Oct 14:40) |
-| X-12 | cursor | P0 | Apply the side-effect guard to legacy desktop test folders and gate live GUI scripts | X-11, K-27 (TestSideEffectGuard) | BLOCKED (waiting X-11) |
+| X-11 | cursor | P0 | No-real-side-effect test harness (tests/tools) + helper tests | C-06, X-03, K-27 (TestSideEffectGuard) | DONE (01 Oct 15:20) |
+| X-12 | cursor | P0 | Apply the side-effect guard to legacy desktop test folders and gate live GUI scripts | X-11, K-27 (TestSideEffectGuard) | DOING (cursor, 01 Oct 15:20) |
 | X-26 | cursor | P0 | Keyboard/mouse tools: no hard-coded token, Unicode-safe typing, full key set, protected-window hotkeys, new volume API | C-24, C-27, C-26, X-03, X-11, K-16 (DesktopToolPolicy) | BLOCKED (waiting C-24,C-27,C-26,X-11) |
 | X-27 | cursor | P0 | Notepad automation: safe paths, PID-bound window, threaded typing, verified save, graceful close | C-24, C-27, C-28, C-26, X-03, X-11, K-16 (DesktopToolPolicy) | BLOCKED (waiting C-24,C-27,C-28,C-26,X-11) |
 | X-29 | cursor | P0 | System control guards: confirmation, cancel_shutdown, real sleep vs hibernate, non-blocking recycle bin | C-24, C-27, C-28, X-11, C-30, K-16 (DesktopToolPolicy), K-17 (ToolNamesV2) | BLOCKED (waiting C-24,C-27,C-28,C-30,X-11) |
@@ -559,14 +559,14 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | X-17 | cursor | P3 | Vitals cards PC (agent) vs VPS (server), Telemetry card, Alerts by level | X-06, K-02 (DASH-UI-EVENTS) | DONE (01 Oct 13:20) |
 | X-18 | cursor | P3 | Intelligence / Media panel: generated images, QR codes and files over HTTPS through the bridge media relay | X-06, K-02 (DASH-UI-EVENTS) | DONE (01 Oct 13:20) |
 | X-19 | cursor | P3 | Tools tab: live tool rows for every call (upsert by id), jobs with progress and cancel, medium-risk toasts | X-14, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS), K-13 (ToolSyncEvent), K-31 (job_progress_routing) | DONE (01 Oct 14:50) |
-| X-20 | cursor | P3 | SystemTrace: crash-proof reasoning card, plan progress, turn_rejected feed, logs terminal with level filters, diagnostics/audit | X-19, K-02 (DASH-UI-EVENTS), K-62 (CT-VC-TURN-GATE), K-67 (CT-VC-REASONING) | TODO |
+| X-20 | cursor | P3 | SystemTrace: crash-proof reasoning card, plan progress, turn_rejected feed, logs terminal with level filters, diagnostics/audit | X-19, K-02 (DASH-UI-EVENTS), K-62 (CT-VC-TURN-GATE), K-67 (CT-VC-REASONING) | DOING (cursor, 01 Oct 15:20) |
 | X-21 | cursor | P3 | Settings drawer (core): session, connection, voice, persona, wake word, agent listening, voice-ID with confirmed state | X-15, X-16, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS) | DONE (cursor, 01 Oct 2026 15:10 PKT) |
-| X-22 | cursor | P3 | Settings drawer (advanced): turn mode, follow-up window, transcript script, automation toggles, vision mode, guarded-tools list | X-10, X-21, K-05 (DASH-CAMERA-VISION), K-03 (DASH-UI-COMMANDS), K-24 (AutomationSettings) | BLOCKED (waiting X-10,X-21) |
-| X-23 | cursor | P3 | Memory (Notes) tab: restore, stream, search, confirmed clear | X-19, X-10, K-07 (DASH-MEMORY-EVENTS) | TODO |
-| X-24 | cursor | P3 | Tasks & Reminders tab with countdown and Cancel, due-item toasts and a notification bell | X-23, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS) | BLOCKED (waiting X-23) |
+| X-22 | cursor | P3 | Settings drawer (advanced): turn mode, follow-up window, transcript script, automation toggles, vision mode, guarded-tools list | X-10, X-21, K-05 (DASH-CAMERA-VISION), K-03 (DASH-UI-COMMANDS), K-24 (AutomationSettings) | DOING (cursor, 01 Oct 15:20) |
+| X-23 | cursor | P3 | Memory (Notes) tab: restore, stream, search, confirmed clear | X-19, X-10, K-07 (DASH-MEMORY-EVENTS) | DONE (01 Oct 16:35 PKT) |
+| X-24 | cursor | P3 | Tasks & Reminders tab with countdown and Cancel, due-item toasts and a notification bell | X-23, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS) | TODO |
 | X-28 | cursor | P3 | System info: battery + CPU/RAM/disk ToolResult and collect_pc_vitals() | C-24, X-11, K-26 (VitalsPCHelper) | BLOCKED (waiting C-24,X-11) |
 | X-32 | cursor | P3 | TaskStore v2: schema columns, parse_when, schedule_task with args + confirm, cancel tool | C-24, C-28, C-30, K-66 (CT-VC-PROACTIVE), K-33 (task_store_v2), K-32 (scheduled_action_runner) | BLOCKED (waiting C-24,C-28,C-30) |
-| X-33 | cursor | P3 | Voice-ID meter with real states and the voice enrollment wizard | X-21, X-13, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS) | BLOCKED (waiting X-21,X-13) |
+| X-33 | cursor | P3 | Voice-ID meter with real states and the voice enrollment wizard | X-21, X-13, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS) | DOING (cursor, 01 Oct 15:20) |
 | X-34 | cursor | P3 | YouTube play: real watch URL via yt-dlp search, browser paths from config | C-24, C-26, X-11, K-22 (YouTubeVideoUrl) | BLOCKED (waiting C-24,C-26,X-11) |
 | X-35 | cursor | P3 | File opener: config media dirs (+D:/ when present), background index outside outputs, safe open/close | C-24, C-26, X-03, X-11, K-16 (DesktopToolPolicy) | BLOCKED (waiting C-24,C-26,X-11) |
 | X-36 | cursor | P3 | Search chain hardening: Tavily Bearer, Google header + auto-disable, DDG, shared helpers | C-25, K-29 (redact_secrets) | BLOCKED (waiting C-25) |
