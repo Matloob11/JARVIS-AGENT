@@ -11,6 +11,14 @@ import shutil
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+# Test isolation (2026-10-01): tests must never reach the live VPS UI bridge or write into the
+# live agent logs. These env vars are set before any services module (and its load_dotenv) runs;
+# load_dotenv never overrides variables that already exist.
+os.environ["UI_BRIDGE_URL"] = "http://127.0.0.1:9"  # closed local port: bridge notifications fail fast
+_TEST_LOG_DIR = os.path.join(tempfile.gettempdir(), "jarvis_tests")
+os.makedirs(_TEST_LOG_DIR, exist_ok=True)
+os.environ["LOG_FILE"] = os.path.join(_TEST_LOG_DIR, "jarvis_test.log")
+
 # Add project root and service directories to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))

@@ -20,10 +20,11 @@ async def test_zip_files_success(mock_exists, mock_make_archive):
 
 @pytest.mark.asyncio
 @patch("requests.get")
-@patch("duckduckgo_search.DDGS.images")
-async def test_download_images_mock(mock_ddgs, mock_get):
-    # Mock DDGS results
-    mock_ddgs.return_value = [{"image": "http://example.com/test.jpg"}]
+@patch("jarvis_advanced_tools.DDGS")  # same module object the test imports above
+async def test_download_images_mock(mock_ddgs_cls, mock_get):
+    # Patch the DDGS class the tool really uses (ddgs first, duckduckgo_search as fallback), so no
+    # real DuckDuckGo request is made: `with DDGS() as ddgs: ddgs.images(...)`.
+    mock_ddgs_cls.return_value.__enter__.return_value.images.return_value = [{"image": "http://example.com/test.jpg"}]
 
     # Mock requests response
     mock_resp = MagicMock()

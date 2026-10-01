@@ -8,6 +8,18 @@ from services.ai_core.agent_loops import (
     start_ui_command_listener
 )
 
+
+def _transcription_role_and_text(mock_notify):
+    """Return (role, text) of the single awaited notify_transcription call.
+
+    Reads positional or keyword arguments, so extra kwargs (msg_id, source) do not break the check.
+    """
+    mock_notify.assert_awaited_once()
+    args, kwargs = mock_notify.await_args
+    role = args[0] if len(args) > 0 else kwargs.get("role")
+    text = args[1] if len(args) > 1 else kwargs.get("text")
+    return role, text
+
 @pytest.mark.asyncio
 async def test_start_memory_storage_loop():
     mock_assistant = MagicMock()
@@ -29,14 +41,19 @@ async def test_start_reminder_loop():
 
     # Mock check_due_reminders to return one item
     mock_due = [{"message": "Test Reminder"}]
-    with patch("asyncio.to_thread", side_effect=[mock_due, asyncio.CancelledError()]):
-        with patch("asyncio.sleep"): # To skip the sleep(30)
-            try:
-                await start_reminder_loop(mock_session)
-            except asyncio.CancelledError:
-                pass
+    # Reminders reach the UI as text via notify_transcription (no TTS / session.say)
+    with patch("services.ai_core.agent_loops.notify_transcription", new_callable=AsyncMock) as mock_notify:
+        with patch("asyncio.to_thread", side_effect=[mock_due, asyncio.CancelledError()]):
+            with patch("asyncio.sleep"): # To skip the sleep(30)
+                try:
+                    await start_reminder_loop(mock_session)
+                except asyncio.CancelledError:
+                    pass
 
-    mock_session.say.assert_called()
+    role, text = _transcription_role_and_text(mock_notify)
+    assert role == "assistant"
+    assert "Test Reminder" in text
+    mock_session.say.assert_not_called()
 
 @pytest.mark.asyncio
 async def test_start_bug_hunter_loop():
@@ -48,13 +65,18 @@ async def test_start_bug_hunter_loop():
         await callback("Test Error")
         raise asyncio.CancelledError()
 
-    with patch("services.ai_core.agent_loops.monitor_logs", side_effect=mock_monitor):
-        try:
-            await start_bug_hunter_loop(mock_session)
-        except asyncio.CancelledError:
-            pass
+    # Detected errors reach the UI as text via notify_transcription (no TTS / session.say)
+    with patch("services.ai_core.agent_loops.notify_transcription", new_callable=AsyncMock) as mock_notify:
+        with patch("services.ai_core.agent_loops.monitor_logs", side_effect=mock_monitor):
+            try:
+                await start_bug_hunter_loop(mock_session)
+            except asyncio.CancelledError:
+                pass
 
-    mock_session.say.assert_called()
+    role, text = _transcription_role_and_text(mock_notify)
+    assert role == "assistant"
+    assert "Test Error" in text
+    mock_session.say.assert_not_called()
 
 @pytest.mark.asyncio
 async def test_start_ui_command_listener():

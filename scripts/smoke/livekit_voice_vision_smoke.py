@@ -26,6 +26,17 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+# Isolation (2026-10-01): the smoke run must not post its log lines to the live VPS UI bridge or write
+# into the live agent log. Set JARVIS_SMOKE_LIVE=1 to keep the real UI_BRIDGE_URL / LOG_FILE on purpose.
+if os.environ.get("JARVIS_SMOKE_LIVE") != "1":
+    import tempfile
+
+    os.environ.setdefault("JARVIS_TEST_MODE", "true")  # offline audio helpers: no Google STT / gTTS calls
+    os.environ["UI_BRIDGE_URL"] = "http://127.0.0.1:9"  # closed local port: notifications fail fast
+    _SMOKE_LOG_DIR = os.path.join(tempfile.gettempdir(), "jarvis_tests")
+    os.makedirs(_SMOKE_LOG_DIR, exist_ok=True)
+    os.environ["LOG_FILE"] = os.path.join(_SMOKE_LOG_DIR, "jarvis_smoke.log")
+
 
 Check = Callable[[], None]
 
@@ -80,10 +91,16 @@ def check_vision_frame_decode(require_secrets: bool) -> None:
 
 
 def check_voice_id_import() -> None:
-    from services.ai_core.voice_fingerprint import VoiceFingerprintEngine
+    from services.ai_core.voice_fingerprint import VoiceFingerprintEngine, _ensure_audio_deps
 
+    # The engine catches every error (state 'engine_error'), so call the import path directly:
+    # this raises if the torchaudio shims or the speechbrain import break again.
+    _ensure_audio_deps()
     master_voice_path = PROJECT_ROOT / "data" / "identity" / "master_voice.wav"
-    VoiceFingerprintEngine(str(master_voice_path))
+    engine = VoiceFingerprintEngine(str(master_voice_path))
+    state = getattr(engine, "state", None)
+    if state == "engine_error":
+        raise RuntimeError(f"voice-ID engine failed to load: {getattr(engine, 'error', '')}")
 
 
 def check_core_assistant_turn_flow() -> None:
