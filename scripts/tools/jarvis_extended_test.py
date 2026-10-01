@@ -140,9 +140,10 @@ async def test_rag_tools():
     banner("RAG TOOLS (PDF / DOCX)")
     
     from services.ai_core.jarvis_rag import ask_about_document, rag_system
-    
+    from services.utils.jarvis_config import config
+
     # Register common test directory for RAG
-    rag_system.search_dirs = [os.path.abspath("Jarvis_Outputs"), "D:/Personal-Assistant-main/Jarvis_Outputs"]
+    rag_system.search_dirs = [os.path.join(config.project_root, "Jarvis_Outputs")]
     
     # Test Word Document RAG (using the file we just created)
     await run_test("RAG", "ask_about_document [DOCX]", 

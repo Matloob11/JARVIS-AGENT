@@ -4,8 +4,10 @@ import asyncio
 import os
 import sys
 
-# Define project root
-project_root = r"d:\Personal-Assistant-main"
+# This file sits in the repo root, so the services package imports directly
+from services.utils.jarvis_config import config
+
+project_root = config.project_root
 sys.path.append(project_root)
 
 # Correct paths via environment

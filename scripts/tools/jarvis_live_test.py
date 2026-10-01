@@ -443,7 +443,7 @@ def generate_html_report() -> str:
 <body>
 <h1>&#129302; JARVIS Automation Test Report</h1>
 <p class="subtitle">Generated: {datetime.now().strftime("%A, %B %d, %Y at %I:%M %p")} &nbsp;|&nbsp;
-   Project: Personal-Assistant-main</p>
+   Project: JARVIS-AGENT</p>
 
 <div class="stats">
   <div class="card"><div class="num">{total}</div><div class="lbl">Total Tests</div></div>

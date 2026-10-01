@@ -3,6 +3,10 @@ import os
 import sys
 import ast
 
+# The services package lives in the repo root, two folders up from this script.
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+from services.utils.jarvis_config import config  # noqa: E402  pylint: disable=wrong-import-position
+
 def check_file(filepath):
     print(f"Checking {filepath}...")
     with open(filepath, 'r', encoding='utf-8') as f:
@@ -46,7 +50,7 @@ def main():
     ]
     
     for f in files_to_check:
-        full_path = os.path.join("d:/Personal-Assistant-main", f)
+        full_path = os.path.join(config.project_root, f)
         if os.path.exists(full_path):
             check_file(full_path)
         else:
