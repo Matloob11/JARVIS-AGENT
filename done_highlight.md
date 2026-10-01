@@ -551,3 +551,11 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** tests pass · review approve (4 minor theek)
 - **Commit:** `0cb806e` · **Deploy:** agle agent restart par chime bajega (raat ko restart nahi kiya)
 - **Doosre agent ke liye:** —
+
+### ✅ 🚀 [claude] Fix · Browser voice "could not establish signal connection" · 2026-10-02 04:45 PKT
+- **Kya kiya:** User ki screenshot (04:33) me voice error tha. Wajah: 30 Sep se site par temporary password (basic auth) laga hai, aur login ke baad browser wohi "Authorization: Basic" header LiveKit (`/rtc`) ko bhi bhejta hai, jise LiveKit 401 se rad karta hai. nginx ab sirf `/rtc` par Basic header hata deta hai; Bearer waisa hi rehta hai. Raat ke deploy se is ka talluq nahi tha (nginx config me sirf comment badla tha).
+- **Files:** `deploy/hostinger/jarvis.conf`
+- **Verify:** pehle `/rtc` + Basic = 401, ab 101 (connect) · baghair header 101 · deploy: backup, nginx -t, health gate sab ok, doosri apps bilkul waisi
+- **Commit:** `9e48b28` · **Deploy:** yes 🚀 (nginx only)
+- **Note:** Mere test token ne LiveKit par `jarvis-probe-ws` room banaya aur agent ko us me job mili; room khud band ho gaya. Aage se live server par test rooms nahi (C-39 probe isolation ke baad hi).
+- **Doosre agent ke liye:** —
