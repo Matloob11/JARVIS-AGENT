@@ -572,11 +572,11 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | X-33 | cursor | P3 | Voice-ID meter with real states and the voice enrollment wizard | X-21, X-13, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS) | DONE (01 Oct 16:45 PKT) |
 | X-34 | cursor | P3 | YouTube play: real watch URL via yt-dlp search, browser paths from config | C-24, C-26, X-11, K-22 (YouTubeVideoUrl) | DONE (01 Oct 17:40 PKT) |
 | X-35 | cursor | P3 | File opener: config media dirs (+D:/ when present), background index outside outputs, safe open/close | C-24, C-26, X-03, X-11, K-16 (DesktopToolPolicy) | DONE (01 Oct 17:40 PKT) |
-| X-36 | cursor | P3 | Search chain hardening: Tavily Bearer, Google header + auto-disable, DDG, shared helpers | C-25, K-29 (redact_secrets) | BLOCKED (waiting C-25) |
+| X-36 | cursor | P3 | Search chain hardening: Tavily Bearer, Google header + auto-disable, DDG, shared helpers | C-25, K-29 (redact_secrets) | DONE (01 Oct 21:06 PKT) |
 | X-37 | cursor | P3 | Weather: auto-detected city + 24 h forecast + clear key errors | C-25 | DONE (cursor, 01 Oct 21:10 PKT) |
 | X-38 | cursor | P3 | SIM lookup: authorized-API source with a clear 'provider not configured' mode | C-25, C-24, C-28, K-34 (sim_authorized_source) | BLOCKED (waiting C-25,C-24,C-28) |
 | X-39 | cursor | P3 | QR generator: exact data (raw policy), safe filename, open_file parameter | C-24, C-28, K-28 (tool_arg_policies) | BLOCKED (waiting C-24,C-28) |
-| X-40 | cursor | P3 | Image generation: FLUX.1-schnell via HF with Pollinations fallback and clear errors | C-25, C-24 | BLOCKED (waiting C-25,C-24) |
+| X-40 | cursor | P3 | Image generation: FLUX.1-schnell via HF with Pollinations fallback and clear errors | C-25, C-24 | DONE (01 Oct 21:12 PKT) |
 | X-41 | cursor | P3 | WhatsApp: install check, process-based window match, confirmed Unicode send, safe close | C-27, C-28, C-26, X-03, X-11, C-30, X-26, K-16 (DesktopToolPolicy) | BLOCKED (waiting C-27,C-28,C-26,X-11,C-30,X-26) |
 | X-42 | cursor | P3 | Window control 1/3: close_window (tool 'close' kept as routed alias), minimize/maximize, active-window context | C-27, X-03, X-11, X-41, K-17 (ToolNamesV2), K-21 (ActiveWindowContext), K-16 (DesktopToolPolicy) | BLOCKED (waiting C-27,X-11,X-41) |
 | X-43 | cursor | P3 | Window control 2/3: open_app with a universal app index and Chrome/YouTube/WhatsApp/Office/VLC routing | C-26, X-26, X-34, X-41, X-42 | BLOCKED (waiting C-26,X-26,X-34,X-41,X-42) |

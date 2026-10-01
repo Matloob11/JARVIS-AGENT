@@ -23,18 +23,27 @@ class YouTubeDownloader:
         # Centralized output directory
         self.base_dir = os.path.join(config.shared_dir, "Downloads", "YouTube")
         os.makedirs(self.base_dir, exist_ok=True)
-        # 🛠️ Set FFmpeg path if it exists at C:\ffmpeg\bin or in system PATH
-        self.ffmpeg_path = r"C:\ffmpeg\bin"
-        if not os.path.exists(os.path.join(self.ffmpeg_path, "ffmpeg.exe")):
-            # Try to find it in system path
-            from shutil import which  # pylint: disable=import-outside-toplevel
-            system_ffmpeg = which("ffmpeg")
-            if system_ffmpeg:
-                self.ffmpeg_path = os.path.dirname(system_ffmpeg)
-                logger.info("FFmpeg found in system path: %s", self.ffmpeg_path)
+        from shutil import which  # pylint: disable=import-outside-toplevel
+
+        self.ffmpeg_path = None
+        configured = getattr(config, "ffmpeg_dir", None)
+        if configured and os.path.isfile(os.path.join(configured, "ffmpeg.exe")):
+            self.ffmpeg_path = configured
+            logger.info("FFmpeg from config.ffmpeg_dir: %s", self.ffmpeg_path)
+        else:
+            default_bin = r"C:\ffmpeg\bin"
+            if os.path.isfile(os.path.join(default_bin, "ffmpeg.exe")):
+                self.ffmpeg_path = default_bin
+                logger.info("FFmpeg found at %s", self.ffmpeg_path)
             else:
-                self.ffmpeg_path = None
-                logger.warning("FFmpeg not found at C:\\ffmpeg\\bin or in system PATH.")
+                system_ffmpeg = which("ffmpeg")
+                if system_ffmpeg:
+                    self.ffmpeg_path = os.path.dirname(system_ffmpeg)
+                    logger.info("FFmpeg found in system path: %s", self.ffmpeg_path)
+                else:
+                    logger.warning(
+                        "FFmpeg not found (config.ffmpeg_dir, C:\\ffmpeg\\bin, or PATH)."
+                    )
 
     def is_valid_url(self, url: str) -> bool:
         """Simple check for YouTube URL."""

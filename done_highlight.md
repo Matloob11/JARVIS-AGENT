@@ -465,3 +465,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** pytest 15 passed; live `search_internet('Lahore weather today')` → success tavily ['tavily']
 - **Commit:** abhi commit ho raha hai · **Deploy:** no
 - **Doosre agent ke liye:** X-55/X-57 ab `search_urls` / `search_images` import kar sakte hain (TI-08); researcher abhi purana Google-only `get_search_urls` use karta hai — X-57 me switch hoga.
+
+### ✅ [cursor] X-40 · FLUX image gen + Pollinations fallback · 2026-10-01 21:12 PKT
+- **Kya kiya:** Image generation ab `JARVIS_IMAGE_MODEL` (default FLUX.1-schnell) aur `JARVIS_IMAGE_PROVIDER=auto` se Hugging Face InferenceClient chalati hai; fail par Pollinations (Bearer token optional) with HTTP/Content-Type checks aur clear status errors. Dashboard ko `intelligence_update` me `meta` {prompt, provider, model}; tool timeout 150s. YouTube downloader ab pehle `config.ffmpeg_dir` dekhta hai.
+- **Files:** `services/multimedia/jarvis_image_gen.py`, `services/multimedia/jarvis_youtube_downloader.py`, `tests/tools/test_image_gen_provider.py`, `plan.md`
+- **Verify:** pytest image_gen 8 passed; HF FLUX inference_provider_mapping live (nscale, fal-ai, wavespeed)
+- **Commit:** abhi commit ho raha hai · **Deploy:** no
+- **Doosre agent ke liye:** Manual: "Lahore ke sunset ki image banao" + file server for LAN preview (DASH-U19 relay).
