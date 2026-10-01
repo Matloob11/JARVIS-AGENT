@@ -401,3 +401,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `.\.venv_312\Scripts\python.exe -m pytest tests/tools/test_file_opener_tools.py -q -p no:cacheprovider` — 12 passed
 - **Commit:** pending · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-34 · YouTube play: yt-dlp watch URL · 2026-10-01 17:42 PKT
+- **Kya kiya:** `play` ab `ytsearch1:` se asli `/watch?v=` URL dhundhta hai (search results URL kabhi nahi); Edge/Chrome pehle `config.edge_path`/`chrome_path`; app mode me autoplay flag; `tool_result` data me url/video_id/title.
+- **Files:** services/automation/jarvis_youtube_automation.py, tests/automation/test_youtube_automation.py, tests/tools/test_youtube_tool.py, plan.md
+- **Verify:** pytest 11 passed · live `get_video_url('lofi hip hop')` → `https://www.youtube.com/watch?v=n61ULEU7CO0`
+- **Commit:** pending · **Deploy:** no
+- **Doosre agent ke liye:** X-43 `open_app` youtube routing ab sahi watch URL expect kar sakta hai (K-22).
+
+### ✅ [cursor] X-35 · commit hash · 2026-10-01 17:45 PKT
+- **Kya kiya:** X-35 implementation entry upar; yeh sirf commit ref.
+- **Files:** —
+- **Verify:** —
+- **Commit:** `d6f98a2` · **Deploy:** no
+- **Doosre agent ke liye:** —
