@@ -1,4 +1,4 @@
-﻿# JARVIS: Mushtarka Plan (Claude + Cursor)
+# JARVIS: Mushtarka Plan (Claude + Cursor)
 
 - **Banaya:** 30 Sep 2026 (Claude). Tasks audit + 9-agent trace/review se nikle hain.
 - **Repo:** `C:\Users\Matloob\Desktop\JARVIS-AGENT-main` â†’ GitHub `Matloob11/JARVIS-AGENT` (abhi **public**)
@@ -469,13 +469,13 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | X-06 | cursor | P0 | UI foundation: relative /vortex runtime config, cookie socket, tolerant event types, per-panel ErrorBoundary, no secrets in the bundle | K-01 (DASH-UI-RUNTIME), K-02 (DASH-UI-EVENTS) | DONE (01 Oct 12:40) |
 | X-07 | cursor | P0 | Mock bridge (Node) for local dev and e2e, built from the adopted contracts, with exported fixtures | X-06, K-10 (DASH-MOCK-BRIDGE), K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS) | DONE (01 Oct 12:42) |
 | X-08 | cursor | P0 | Login screen, AuthProvider and session lifecycle (password + TOTP, recovery code, robust expiry) | X-06, X-07, K-01 (DASH-UI-RUNTIME), K-36 (C-AUTH-1), K-37 (C-LK-1), K-38 (C-SOCK-1), K-49 (C-ORIGIN-1) | DONE (01 Oct 12:52) |
-| X-11 | cursor | P0 | No-real-side-effect test harness (tests/tools) + helper tests | C-06, X-03, K-27 (TestSideEffectGuard) | TODO |
-| X-12 | cursor | P0 | Apply the side-effect guard to legacy desktop test folders and gate live GUI scripts | X-11, K-27 (TestSideEffectGuard) | TODO |
-| X-26 | cursor | P0 | Keyboard/mouse tools: no hard-coded token, Unicode-safe typing, full key set, protected-window hotkeys, new volume API | C-24, C-27, C-26, X-03, X-11, K-16 (DesktopToolPolicy) | TODO |
-| X-27 | cursor | P0 | Notepad automation: safe paths, PID-bound window, threaded typing, verified save, graceful close | C-24, C-27, C-28, C-26, X-03, X-11, K-16 (DesktopToolPolicy) | TODO |
-| X-29 | cursor | P0 | System control guards: confirmation, cancel_shutdown, real sleep vs hibernate, non-blocking recycle bin | C-24, C-27, C-28, X-11, C-30, K-16 (DesktopToolPolicy), K-17 (ToolNamesV2) | TODO |
-| X-30 | cursor | P0 | File access server: allow-listed root (D:/ kept when present), LAN bind, token path, TTL, audit | C-24, C-28, C-26, X-03, X-11, C-30, K-15 (DesktopConfigKeys), K-45 (C-CONFIRM-1) | TODO |
-| X-31 | cursor | P0 | run_cmd_command: strict read-only allow-list captured, everything else UI-confirmed | X-27, C-28, C-30 | TODO |
+| X-11 | cursor | P0 | No-real-side-effect test harness (tests/tools) + helper tests | C-06, X-03, K-27 (TestSideEffectGuard) | BLOCKED (waiting C-06) |
+| X-12 | cursor | P0 | Apply the side-effect guard to legacy desktop test folders and gate live GUI scripts | X-11, K-27 (TestSideEffectGuard) | BLOCKED (waiting X-11) |
+| X-26 | cursor | P0 | Keyboard/mouse tools: no hard-coded token, Unicode-safe typing, full key set, protected-window hotkeys, new volume API | C-24, C-27, C-26, X-03, X-11, K-16 (DesktopToolPolicy) | BLOCKED (waiting C-24,C-27,C-26,X-11) |
+| X-27 | cursor | P0 | Notepad automation: safe paths, PID-bound window, threaded typing, verified save, graceful close | C-24, C-27, C-28, C-26, X-03, X-11, K-16 (DesktopToolPolicy) | BLOCKED (waiting C-24,C-27,C-28,C-26,X-11) |
+| X-29 | cursor | P0 | System control guards: confirmation, cancel_shutdown, real sleep vs hibernate, non-blocking recycle bin | C-24, C-27, C-28, X-11, C-30, K-16 (DesktopToolPolicy), K-17 (ToolNamesV2) | BLOCKED (waiting C-24,C-27,C-28,C-30,X-11) |
+| X-30 | cursor | P0 | File access server: allow-listed root (D:/ kept when present), LAN bind, token path, TTL, audit | C-24, C-28, C-26, X-03, X-11, C-30, K-15 (DesktopConfigKeys), K-45 (C-CONFIRM-1) | BLOCKED (waiting C-24,C-28,C-26,C-30,X-11) |
+| X-31 | cursor | P0 | run_cmd_command: strict read-only allow-list captured, everything else UI-confirmed | X-27, C-28, C-30 | BLOCKED (waiting X-27,C-28,C-30) |
 | C-23 | claude | P1 | Room lifecycle: bridge as sole room owner with a lock, explicit dispatch 'jarvis', reconciler + LiveKit webhooks -> agent_status, pause/start, ensure_room.py never deletes | C-09, C-13, C-14, C-15, K-44 (C-ROOM-1), K-39 (C-NOTIFY-1) | TODO |
 | C-36 | claude | P1 | Local/desktop mode auth parity: COOKIE_SECURE=auto and local owner credentials for vortex.py / Electron local | C-19, C-20, K-09 (DASH-LOCAL-AUTH) | TODO |
 | C-37 | claude | P1 | Vercel copies redirect to the canonical domain (vercel.json routes 302), shipped by the GitHub push | C-04, K-49 (C-ORIGIN-1) | DOING (claude, 01 Oct 13:05) |
@@ -508,7 +508,7 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | C-73 | claude | P1 | Voice-ID in the turn gate, CLI enrollment, calibration and reject flow | C-72, C-69, C-56, K-62 (CT-VC-TURN-GATE) | TODO |
 | C-74 | claude | P1 | Transcript language and script: A/B test, STT config, Roman Urdu display with original kept | C-71, C-73, C-44 | TODO |
 | C-75 | claude | P1 | Verify spoken confirmations against real user transcripts | C-28, C-74 | TODO |
-| X-13 | cursor | P1 | LiveKit room provider: join after login with mic off, mic toggle without churn, fresh token per connect, take-over UI | X-08, K-04 (DASH-LIVEKIT-UI) | TODO |
+| X-13 | cursor | P1 | LiveKit room provider: join after login with mic off, mic toggle without churn, fresh token per connect, take-over UI | X-08, K-04 (DASH-LIVEKIT-UI) | DOING (cursor, 01 Oct 12:53) |
 | X-14 | cursor | P1 | ChatPanel unified: one bubble per message id, Socket.IO send, history paging, live captions from lk.transcription | X-13, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS), K-04 (DASH-LIVEKIT-UI) | TODO |
 | X-25 | cursor | P1 | Clipboard monitor: structured, redacted, rate-limited suggestions with self-write ignore | C-26, X-03, X-11, K-19 (ClipboardSuggestion) | TODO |
 | C-57 | claude | P2 | Background jobs API (single module) + list/cancel tools | C-29, C-55, K-20 (BackgroundJobsAPI) | TODO |
@@ -544,9 +544,9 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | C-95 | claude | P3 | Camera to Gemini via LiveKit video: video_input, live/on-request vision mode, VisionHandler reads the linked camera track | C-33, C-35, C-54, C-60, C-48, K-05 (DASH-CAMERA-VISION) | TODO |
 | C-96 | claude | P3 | Deploy #2: panels build plus live checks (tools, confirm, settings, memory, tasks, voice-ID, camera, map, SIM, media, controls) | C-65, X-19, X-10, X-21, X-22, X-17, C-93, C-94, X-20, X-49, X-23, X-24, X-33, C-95, X-45, X-46, X-47, X-18, X-48, X-50, C-54, C-90, X-52, X-53, C-27, C-29, C-30, C-59, C-58, X-55, X-40, X-39, C-80, X-38, C-79, X-05, C-64, C-60 | TODO |
 | X-01 | cursor | P3 | YouTube downloader ffmpeg/interpreter fix (K16) merged into the tools-info downloader task | â€” | NOT NEEDED (user rule) |
-| X-02 | cursor | P3 | Original startup chime asset (Cursor part of the startup-voice split) | â€” | TODO |
+| X-02 | cursor | P3 | Original startup chime asset (Cursor part of the startup-voice split) | — | DONE (01 Oct 12:55) |
 | X-04 | cursor | P3 | jarvis_audio real implementation (gTTS/pyttsx3 TTS, SpeechRecognition STT, local playback) | K-50 (C-AUDIO-1) | TODO |
-| X-05 | cursor | P3 | Map tool: Nominatim usage policy (1 req/s, proper user agent) + zoom | K-08 (DASH-LOCATION) | TODO |
+| X-05 | cursor | P3 | Map tool: Nominatim usage policy (1 req/s, proper user agent) + zoom | K-08 (DASH-LOCATION) | DOING (cursor, 01 Oct 12:55) |
 | X-10 | cursor | P3 | ConfirmDialog for risky tools: queue, server-corrected countdown, Allow/Deny, closes on any resolution | X-06, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS), K-14 (ConfirmFlow), K-45 (C-CONFIRM-1) | TODO |
 | X-17 | cursor | P3 | Vitals cards PC (agent) vs VPS (server), Telemetry card, Alerts by level | X-06, K-02 (DASH-UI-EVENTS) | TODO |
 | X-18 | cursor | P3 | Intelligence / Media panel: generated images, QR codes and files over HTTPS through the bridge media relay | X-06, K-02 (DASH-UI-EVENTS) | TODO |
@@ -5622,3 +5622,8 @@ Format: `- [YYYY-MM-DD HH:MM] from â†’ to: message (task id)`. Jawab isi li
 - plan.md: both lanes change their own DOING/DONE status lines and add section 11 handoffs. Each agent edits only its own lines in place and never regenerates the file. Claude owns its structure and the RUNTIME LOCK line.
 - services/info/sim_providers.py, services/info/jarvis_sim_lookup.py, tests/tools/test_sim_providers.py: TI-22 was labeled Claude but these are Cursor-lane files. Resolved by moving TI-22 to Cursor; Claude keeps TI-23 (ui_bridge.py, agent_loops.py).
 - tests/exhaustive/** (not in either lane): TD-18 (Claude) edits the keyboard_mouse_ctrl and notepad exhaustive tests, while Cursor rewrites those modules in TD-15/TD-16. Assign tests/exhaustive/** to Claude in .coord/lanes.json (OP-04) and run TD-18 after TD-15/TD-16. Assign tests/test_whatsapp.py (TD-09) to Cursor in the same file.
+
+
+### REQ-CURSOR-BLOCKED-P0 (01 Oct cursor)
+Cursor blocked on Claude: C-06 (for X-11+), C-24/C-26/C-27/C-28/C-30 (desktop tool chain). Please prioritize C-06 then decorator/lock/confirm stack.
+

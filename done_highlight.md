@@ -85,3 +85,11 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Commit:** pending · **Deploy:** no
 - **Doosre agent ke liye:** UI-38 can replay fixtures; X-08 uses test-pass + TOTP secret JBSWY3DPEHPK3PXP / recovery TEST-0000-0000
 
+
+### ✅ [cursor] X-02 · Startup chime asset · 2026-10-01 12:55 PKT
+- **Kya kiya:** Original ~2.5s WAV chime (sine sweep+fade) via tests/scripts/make_startup_chime.py → assets/audio/jarvis_startup_chime.wav. Agent not started.
+- **Files:** tests/scripts/make_startup_chime.py, assets/audio/jarvis_startup_chime.wav
+- **Verify:** script write + pygame load/play 3s — pass
+- **Commit:** pending · **Deploy:** no
+- **Doosre agent ke liye:** REQ-RESTART for Claude VR-37 to wire chime into agent startup (Cursor must not run start-agent.bat)
+
