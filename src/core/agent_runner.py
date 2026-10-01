@@ -3,10 +3,11 @@
 Entrypoint and session management for the JARVIS agent.
 """
 
-# pylint: disable=broad-exception-caught, wrong-import-position
+# pylint: disable=broad-exception-caught, wrong-import-position, wrong-import-order, ungrouped-imports
 # ruff: noqa: E402
 
 import asyncio
+import functools
 import logging
 import os
 import traceback
@@ -16,6 +17,9 @@ from typing import Any
 
 # FORCE global logging to show status while debugging
 logging.basicConfig(level=logging.INFO, force=True)
+# K-29: httpx logs every request URL (query keys included) at INFO.
+for logger_name in ["httpx", "httpcore"]:
+    logging.getLogger(logger_name).setLevel(logging.WARNING)
 for logger_name in ["livekit", "livekit.agents", "livekit.rtc", "root"]:
     log_obj = logging.getLogger(logger_name)
     log_obj.setLevel(logging.ERROR)
@@ -26,13 +30,42 @@ if __name__ == "__main__":
     from src.core.agent_lock import acquire_or_exit
     acquire_or_exit()
 
+# K-29: every root handler masks secrets. Kept below the lock: jarvis_logger loads .env.
+from services.utils.jarvis_logger import redact_root_handlers
+
+redact_root_handlers()
+
 from livekit import agents, rtc
 from livekit.agents import AgentSession, cli, llm
+from livekit.agents.cli import cli as livekit_cli_module
 from livekit.plugins import google, silero
 
 # Suppress LiveKit internal session noise
 for logger_name in ["livekit", "livekit.agents", "livekit.rtc"]:
     logging.getLogger(logger_name).setLevel(logging.WARNING)
+
+
+def _mask_cli_log_handler() -> None:
+    """
+    K-29: LiveKit's CLI adds its own root handler when the worker starts (JSON on stdout in
+    'start' mode, the Rich console in 'dev'). Its _configure_logger is wrapped so that handler
+    masks secrets from then on, not only from the first job. A LiveKit release without the hook
+    still starts; entrypoint() then masks the handler.
+    """
+    configure_logger = getattr(livekit_cli_module, "_configure_logger", None)
+    if not callable(configure_logger) or getattr(configure_logger, "masks_secrets", False):
+        return
+
+    @functools.wraps(configure_logger)
+    def configure_and_mask(*args: Any, **kwargs: Any) -> None:
+        configure_logger(*args, **kwargs)
+        redact_root_handlers()
+
+    configure_and_mask.masks_secrets = True  # type: ignore[attr-defined]
+    livekit_cli_module._configure_logger = configure_and_mask  # pylint: disable=protected-access
+
+
+_mask_cli_log_handler()
 
 # [Safeguard] Patch for LiveKit internal KeyError on flaky reconnections (Sir Matloob's PC)
 # The SDK 1.1.2 has a race condition where local_track_published is emitted before local state sync.
@@ -296,6 +329,8 @@ def _print_startup_banner() -> None:
 
 async def entrypoint(ctx: agents.JobContext):
     """Main job entrypoint."""
+    # K-29 backstop for _mask_cli_log_handler(): masks any root handler added since then.
+    redact_root_handlers()
     max_retries = 5
     attempt = 0
 

@@ -13,6 +13,7 @@ import httpx
 
 from services.utils.jarvis_bridge import notify_transcription, notify_ui
 from services.utils.jarvis_logger import setup_logger
+from services.utils.jarvis_security import redact_secrets
 
 logger = setup_logger("SWARM-MANAGER")
 
@@ -43,10 +44,11 @@ async def _call_gemini(prompt: str) -> str:
     }
 
     async with httpx.AsyncClient(timeout=60.0) as client:
+        # K-29: the key travels in a header; URLs end up in httpx logs and exception texts.
         resp = await client.post(
-            f"{_GEMINI_URL}?key={api_key}",
+            _GEMINI_URL,
             json=payload,
-            headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
         )
         resp.raise_for_status()
         data = resp.json()
@@ -105,7 +107,7 @@ class SwarmCoordinator:
             logger.info("Decomposed into %d sub-tasks.", len(tasks))
             return tasks
         except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.error("Task decomposition failed: %s", e)
+            logger.error("Task decomposition failed: %s", redact_secrets(str(e)))
             await self._send_ui_update("Task decomposition mein error aagaya. Single-agent fallback activated.")
             return [{"id": "agent_1", "role": "Generalist", "instruction": user_intent}]
 
@@ -131,11 +133,12 @@ class SwarmCoordinator:
             )
             return {"id": agent_id, "role": agent_role, "result": result_text}
         except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.error("Sub-agent %s failed: %s", agent_id, e)
+            error = redact_secrets(str(e))
+            logger.error("Sub-agent %s failed: %s", agent_id, error)
             await self._send_ui_update(
                 f"Sub-agent '{agent_role}' ({agent_id}) failed — API error."
             )
-            return {"id": agent_id, "role": agent_role, "result": f"Execution failed: {e}"}
+            return {"id": agent_id, "role": agent_role, "result": f"Execution failed: {error}"}
 
     async def _aggregate_results(
         self, original_task: str, results: list[dict[str, str]]
@@ -159,7 +162,7 @@ class SwarmCoordinator:
         try:
             return await _call_gemini(prompt)
         except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.error("Aggregation failed: %s", e)
+            logger.error("Aggregation failed: %s", redact_secrets(str(e)))
             return f"Sir, final merge nahi ho saki. Raw output:\n\n{combined}"
 
     async def execute_swarm(self, user_intent: str) -> str:
@@ -199,7 +202,8 @@ class SwarmCoordinator:
             return final_report
 
         except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.error("SwarmCoordinator.execute_swarm critical failure: %s", e, exc_info=True)
+            logger.error("SwarmCoordinator.execute_swarm critical failure: %s",
+                         redact_secrets(str(e)), exc_info=True)
             return "Sir, swarm coordination mein critical error aa gayi hai."
 
 

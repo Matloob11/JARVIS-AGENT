@@ -7,6 +7,8 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any, cast
 
+from services.utils.jarvis_security import redact_secrets
+
 # Import config safely
 try:
     from services.utils.jarvis_config import config
@@ -21,16 +23,55 @@ _BRIDGE_NOTIFY_LOG: Callable[[str, str], Any] | None = None
 
 _bg_tasks: set[asyncio.Task[Any]] = set()
 
-class JSONFormatter(logging.Formatter):
+_LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+
+
+class RedactingFormatter(logging.Formatter):
     """
-    Structured JSON formatter for production-ready logs.
+    Contract K-29: masks secrets with redact_secrets() in the finished line, so the message, its
+    args, exc_info tracebacks and stack_info are all covered. Every JARVIS handler uses it.
+    With inner it wraps another formatter (for example LiveKit's JSON one) and keeps its layout.
+    """
+
+    def __init__(self, *args: Any, inner: logging.Formatter | None = None, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.inner = inner
+        if inner is not None:
+            self.datefmt = inner.datefmt
+
+    def format(self, record: logging.LogRecord) -> str:
+        if self.inner is None:
+            return redact_secrets(super().format(record))
+        if record.exc_info and not record.exc_text:
+            # Formatter.format caches the traceback on the record; caching the masked one means
+            # handlers that print record.exc_text themselves (LiveKit's console) never see a secret.
+            record.exc_text = self.formatException(record.exc_info)
+        return redact_secrets(self.inner.format(record))
+
+    def formatException(self, ei: Any) -> str:
+        return redact_secrets(super().formatException(ei))
+
+    def formatStack(self, stack_info: str) -> str:
+        return redact_secrets(super().formatStack(stack_info))
+
+
+class UIMessageFormatter(RedactingFormatter):
+    """The masked message alone, without traceback or stack: what the UI log panel shows."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        return redact_secrets(record.getMessage())
+
+
+class JSONFormatter(RedactingFormatter):
+    """
+    Structured JSON formatter for production-ready logs (message and traceback masked, K-29).
     """
     def format(self, record: logging.LogRecord) -> str:
         log_record = {
             "timestamp": time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime(record.created)),
             "level": record.levelname,
             "name": record.name,
-            "message": record.getMessage(),
+            "message": redact_secrets(record.getMessage()),
             "module": record.module,
             "funcName": record.funcName,
             "line": record.lineno,
@@ -39,12 +80,31 @@ class JSONFormatter(logging.Formatter):
             log_record["exception"] = self.formatException(record.exc_info)
         return json.dumps(log_record)
 
+
+def redact_root_handlers() -> None:
+    """
+    Contract K-29: puts a RedactingFormatter on every root handler and on logging.lastResort,
+    keeping the layout of the formatter each one already has. Safe to call again, for example
+    after LiveKit's CLI has added its own root handler.
+    """
+    handlers = list(logging.getLogger().handlers)
+    if logging.lastResort is not None:
+        handlers.append(logging.lastResort)
+    for handler in handlers:
+        if not isinstance(handler.formatter, RedactingFormatter):
+            handler.setFormatter(RedactingFormatter(inner=handler.formatter))
+
+
 class UIBridgeHandler(logging.Handler):
     """
     Custom logging handler that forwards logs to the STONIX UI Bridge.
     Only forwards INFO and higher levels to avoid UI noise.
     """
     _emitting: bool = False  # Class-level re-entrancy guard
+
+    def __init__(self, level: int = logging.NOTSET) -> None:
+        super().__init__(level)
+        self.setFormatter(UIMessageFormatter())
 
     def emit(self, record: logging.LogRecord) -> None:
         """Forwards the log record to the UI Bridge if appropriate."""
@@ -68,7 +128,7 @@ class UIBridgeHandler(logging.Handler):
                 from services.utils.jarvis_bridge import notify_log
                 _BRIDGE_NOTIFY_LOG = notify_log
 
-            message: str = record.getMessage() # Sending raw message for UI readability
+            message: str = self.format(record) # Bare message (masked) for UI readability
             category: str = record.name.replace("JARVIS-", "").replace("-RUNNER", "").upper()
 
             try:
@@ -149,6 +209,10 @@ def setup_logger(name: str, log_file: str | Path | None = None,
 
     # Custom Handler to feed the queue instead of direct writing
     class BatchedFileHandler(logging.Handler):
+        def __init__(self, level: int = logging.NOTSET) -> None:
+            super().__init__(level)
+            self.setFormatter(RedactingFormatter(_LOG_FORMAT))
+
         def emit(self, record):
             try:
                 msg = self.format(record)
@@ -185,14 +249,12 @@ def setup_logger(name: str, log_file: str | Path | None = None,
     # Phase 7: Ensure log directory exists
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Create formatter
-    formatter: logging.Formatter
+    # Create formatter (both kinds mask secrets, K-29)
+    formatter: RedactingFormatter
     if json_format:
         formatter = JSONFormatter()
     else:
-        formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        )
+        formatter = RedactingFormatter(_LOG_FORMAT)
 
     # Console handler
     console_handler: logging.StreamHandler[Any] = logging.StreamHandler()

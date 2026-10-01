@@ -1,23 +1,36 @@
 """
 # services/utils/jarvis_security.py
-Security module for JARVIS, handling input sanitization and threat detection.
+Security module for JARVIS, handling input sanitization, threat detection and secret redaction.
 """
 import functools
 import hashlib
 import hmac
 import logging
 import ntpath
+import os
 import re
+import threading
 import typing
 import unicodedata
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import quote, quote_plus, urlsplit
 
 logger = logging.getLogger("JARVIS-SECURITY")
 
 # Contract K-11 / K-28 limits.
 RAW_ARG_MAX_CHARS = 20000
 DEFAULT_MAX_OUTPUT_CHARS = 12000
+
+# Contract K-29: env names whose current values redact_secrets() masks.
+SECRET_ENV_NAMES: tuple[str, ...] = (
+    "GOOGLE_API_KEY", "GOOGLE_SEARCH_API_KEY", "TAVILY_API_KEY", "OPENROUTER_API_KEY",
+    "GROQ_API_KEY", "HF_TOKEN", "EMAIL_APP_PASSWORD", "WEATHER_API_KEY", "OPENWEATHER_API_KEY",
+    "VORTEX_SECURITY_TOKEN", "CONTROLLER_TOKEN", "JARVIS_ENCRYPTION_KEY", "LIVEKIT_API_SECRET",
+    "AGENT_TOKEN", "BRIDGE_HMAC_SECRET", "SESSION_JWT_SECRET", "POLLINATIONS_TOKEN",
+    "PINCHTAB_TOKEN", "SIM_LOOKUP_API_KEY",
+)
+MIN_SECRET_CHARS = 8
+REDACTED = "***"
 
 _C0_EXCEPT_TAB_LF_CR = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
@@ -28,6 +41,74 @@ _WINDOWS_DEVICE_NAMES = frozenset(
     {"con", "prn", "aux", "nul", "conin$", "conout$"}
     | {f"{port}{n}" for port in ("com", "lpt") for n in (*"0123456789", "¹", "²", "³")},
 )
+# A URL query value ends at a delimiter or at the quote, bracket or punctuation around the URL.
+_QUERY_SECRET = re.compile(
+    r"([?&](?:amp;)?(?:api_?key|key|appid|access_token|token|sig)=)[^\s&#\"'<>\\`)\]},;]+",
+    re.IGNORECASE)
+# Only a token-shaped value (8+ chars with a digit, or 20+ chars), so prose such as
+# 'flag bearer Muhammad' or 'bearer securities' is left alone.
+_BEARER_TOKEN = re.compile(
+    r"\b(bearer\s+)(?=[A-Za-z0-9_.~+/-]*\d|[A-Za-z0-9_.~+/-]{20})[A-Za-z0-9_.~+/-]{8,}=*",
+    re.IGNORECASE)
+
+_runtime_secrets: set[str] = set()
+_runtime_secrets_lock = threading.Lock()
+
+
+def register_runtime_secret(value: str) -> None:
+    """
+    Contract K-29: masks value in every later redact_secrets() call, for a secret that is not in
+    the environment (for example the per-start file-server token). Like an env value, a value
+    shorter than MIN_SECRET_CHARS is ignored.
+    """
+    if not isinstance(value, str) or len(value.strip()) < MIN_SECRET_CHARS:
+        return
+    with _runtime_secrets_lock:
+        _runtime_secrets.add(value.strip())
+
+
+def _current_secrets() -> frozenset[str]:
+    # Read on every call: keys rotate, and tests monkeypatch the environment.
+    with _runtime_secrets_lock:
+        secrets = set(_runtime_secrets)
+    for name in SECRET_ENV_NAMES:
+        value = (os.environ.get(name) or "").strip()
+        if len(value) >= MIN_SECRET_CHARS:
+            secrets.add(value)
+    return frozenset(secrets)
+
+
+@functools.lru_cache(maxsize=32)
+def _secret_needles(secrets: frozenset[str]) -> tuple[str, ...]:
+    """Each secret plus its URL-encoded forms, longest first so no secret is masked only in part."""
+    needles = set(secrets)
+    for secret in secrets:
+        needles.add(quote(secret, safe="", errors="replace"))
+        needles.add(quote_plus(secret, safe="", errors="replace"))
+    return tuple(sorted(needles, key=len, reverse=True))
+
+
+def redact_secrets(text: str) -> str:
+    """
+    Contract K-29: replaces secrets in text bound for logs, the UI or the LLM with '***'.
+    Masks the current values (8+ chars, longest first, also URL-encoded) of SECRET_ENV_NAMES and
+    of register_runtime_secret(), then the values of key=, api_key=, appid=, token= and sig= URL
+    query parameters and 'Bearer <token>' (a token has 8+ chars with a digit, or 20+ chars).
+    Never raises: None is returned as is, any other non-str value goes through str() first, and
+    an unexpected error returns '***' instead of the text.
+    """
+    if text is None:
+        return text
+    try:
+        if not isinstance(text, str):
+            text = str(text)
+        for needle in _secret_needles(_current_secrets()):
+            if needle in text:
+                text = text.replace(needle, REDACTED)
+        text = _QUERY_SECRET.sub(r"\g<1>" + REDACTED, text)
+        return _BEARER_TOKEN.sub(r"\g<1>" + REDACTED, text)
+    except Exception:  # pylint: disable=broad-exception-caught
+        return REDACTED
 
 
 class ArgPolicyError(ValueError):
@@ -252,7 +333,7 @@ class VortexGuard:
             if hits:
                 logger.warning("☣️ Tool %s returned suspicious content: %d match(es) replaced by [filtered]",
                                tool_name, hits)
-        # Looked up at call time: redact_secrets (contract K-29) is added to this module later.
+        # Looked up at call time, so a replaced module-level redact_secrets (K-29) is the one used.
         redactor = globals().get("redact_secrets")
         if callable(redactor):
             text = redactor(text)
