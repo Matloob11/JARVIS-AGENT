@@ -500,3 +500,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `.venv_312/Scripts/python.exe -m pytest tests/tools/test_qr_gen.py -q -p no:cacheprovider` — 4 passed
 - **Commit:** abhi commit ho raha hai · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-38 · SIM authorized API + not-configured mode · 2026-10-02 01:32 PKT
+- **Kya kiya:** `sim_providers.py` mein sirf NotConfigured aur AuthorizedApi sources; bina URL/KEY blocked message + "provider not configured"; configured par purpose (≥5), daily limit (20), masked records, audit mein provider + purpose_sha256; panel/result events mein provider metadata.
+- **Files:** services/info/sim_providers.py, services/info/jarvis_sim_lookup.py, tests/tools/test_sim_providers.py, plan.md
+- **Verify:** pytest test_sim_providers 6 passed; services/info/tests/test_sim_lookup.py + test_cnic_lookup.py smoke OK
+- **Commit:** abhi commit ho raha hai · **Deploy:** no
+- **Doosre agent ke liye:** C-79 agent/bridge purpose routing; optional `notify_sim_data(..., provider=)` in jarvis_bridge (abhi direct notify_event se provider jata hai)
