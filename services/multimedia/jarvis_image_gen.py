@@ -31,8 +31,23 @@ class JarvisImageGenerator:
         self.hf_token = os.getenv("HF_TOKEN")
         self.client = InferenceClient(
             token=self.hf_token) if self.hf_token else None
-        self.output_dir = os.path.join(config.shared_dir, "Generated_Images")
-        os.makedirs(self.output_dir, exist_ok=True)
+        shared = (config.shared_dir or "").strip() or os.path.join(
+            os.path.expanduser("~"), "Jarvis_Shared"
+        )
+        self.output_dir = os.path.join(shared, "Generated_Images")
+        try:
+            os.makedirs(self.output_dir, exist_ok=True)
+        except OSError as exc:
+            # Don't crash the whole agent job if the shared drive is missing (e.g. no D:).
+            fallback = os.path.join(os.path.expanduser("~"), "Jarvis_Shared", "Generated_Images")
+            logger.warning(
+                "Image output dir %s unavailable (%s); falling back to %s",
+                self.output_dir,
+                exc,
+                fallback,
+            )
+            self.output_dir = fallback
+            os.makedirs(self.output_dir, exist_ok=True)
 
     async def generate_image(self, prompt: str, aspect_ratio: str = "1:1") -> dict[str, Any]:
         """

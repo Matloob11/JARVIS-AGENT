@@ -365,8 +365,8 @@ async def entrypoint(ctx: agents.JobContext):
                 user_id=user_id,
             )
 
-            # Important: AgentSession uses the assistant directly. 
-            # If we pass llm to AgentSession, it overrides the agent's llm.
+            # Realtime model owns in-room voice. Do not attach Cloud TTS for chat
+            # (AI Studio keys are not Cloud TTS credentials; chat uses text notify).
             session = AgentSession(
                 preemptive_generation=True,
                 allow_interruptions=True,

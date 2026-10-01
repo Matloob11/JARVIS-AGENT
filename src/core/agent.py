@@ -81,7 +81,11 @@ def play_startup_voice():
 
             if os.path.exists(voice_file):
                 print(f"[JARVIS-SYSTEM] initializing neural voice: {os.path.basename(voice_file)}")
-                import pygame
+                try:
+                    import pygame  # optional; hybrid installs may skip it
+                except ImportError:
+                    print("[JARVIS-WARN] pygame not installed; skipping startup voice")
+                    return
                 pygame.mixer.init()
                 pygame.mixer.music.load(voice_file)
                 pygame.mixer.music.set_volume(0.85) # Premium volume

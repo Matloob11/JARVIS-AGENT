@@ -73,10 +73,11 @@ class JarvisAdaptiveEngine:
         mem_usage = vitals.get("memory", {}).get("percent", 0.0)
         disk_usage = vitals.get("disk", {}).get("percent", 0.0)
 
-        # 3. Decision Matrix
-        if open_circuits > 5 or failures > 20 or cpu_usage > 90 or mem_usage > 90:
+        # 3. Decision Matrix — Windows hybrid desktops often sit at 70-85% RAM with browsers;
+        # do not treat that alone as overload (it was canceling useful loops every 30s).
+        if open_circuits > 5 or failures > 20 or cpu_usage > 95 or mem_usage > 95:
             self.stress_level = "CRITICAL"
-        elif open_circuits > 2 or failures > 5 or cpu_usage > 75 or mem_usage > 80 or disk_usage > 95:
+        elif open_circuits > 2 or failures > 5 or cpu_usage > 90 or mem_usage > 92 or disk_usage > 97:
             self.stress_level = "STRESSED"
         else:
             self.stress_level = "NORMAL"

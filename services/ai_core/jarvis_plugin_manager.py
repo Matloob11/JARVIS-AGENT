@@ -185,7 +185,8 @@ class JarvisPluginManager:
                 try:
                     importlib.import_module(module_name)
                     logger.debug("Discovered module: %s", module_name)
-                except (ImportError, ValueError, AttributeError, RuntimeError) as e:
+                except Exception as e:  # pylint: disable=broad-exception-caught
+                    # One bad plugin (missing drive, optional deps) must not kill the voice job.
                     logger.warning("Failed to load module %s: %s", module_name, e)
 
         _scan()

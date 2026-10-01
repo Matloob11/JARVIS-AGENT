@@ -51,6 +51,10 @@ const Dashboard = () => {
             isSpeaking={command.isSpeaking}
             isThinking={command.isThinking}
             voiceMatch={command.voiceMatch}
+            isMuted={command.isMuted}
+            onEnsureUnmuted={() => {
+              if (command.isMuted) command.toggleMute();
+            }}
           />
           <SystemTrace
             logs={command.vortexLogs}

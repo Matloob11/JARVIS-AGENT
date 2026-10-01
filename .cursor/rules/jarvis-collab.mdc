@@ -1,0 +1,19 @@
+---
+description: JARVIS shared-work rules for Cursor (Claude Code works in the same folder and on the same VPS)
+alwaysApply: true
+---
+
+# JARVIS: Claude + Cursor shared work
+
+Before any task in this repo:
+
+1. Read `plan.md` (sections 2 "Kaam ke usool" and 4 "Contracts") and pick only tasks whose ID starts with `X-` (Cursor lane).
+2. Only edit files in the Cursor lane (see `plan.md` section 2.1): `stonix_ui/**`, `services/automation/**`, `services/info/**`, `services/multimedia/**`, `services/system/**`, `assets/**`, `tests/automation/**`, `tests/scripts/**`, `tests/tools/**`.
+   Anything else (src/core, services/ai_core, services/utils, deploy, .env*, requirements, VPS) belongs to Claude: write a request in `plan.md` section 11 "Handoff" instead of editing it.
+3. Claim a task by changing its status line in `plan.md` to `DOING (cursor, <date time PKT>)`. Mark it `DONE` only after its "Verify" steps pass.
+4. After finishing, append an entry at the END of `done_highlight.md` using the template at the top of that file.
+5. Never delete or disable a feature, tool, panel or module. The user wants everything working; unsafe things get a guard (confirmation, token, allow-list), not removal.
+6. Git: commit only your own files with explicit paths and a message starting `[cursor] X-NN:`. Never `git add -A`, `git stash`, `git reset --hard`, `git checkout <branch>`, `git clean`, rebase or push. Claude pushes.
+7. VPS: read-only for Cursor. Deploys and VPS changes are done only by Claude; request them in section 11.
+8. Runtime: only one Windows agent worker may run. Check and set the `RUNTIME LOCK` line in `plan.md` section 2.6 before starting or restarting the agent or the UI dev server.
+9. Never print, paste or commit secrets from `.env` files.

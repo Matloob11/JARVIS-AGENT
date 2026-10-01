@@ -1,0 +1,18 @@
+# LiveKit self-hosted config — Hostinger VPS (isolated)
+port: 7880
+bind_addresses:
+  - ""
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 50050
+  use_external_ip: true
+  # Advertise host IP so browser WebRTC reaches UDP 50000-50050
+  node_ip: 187.127.123.235
+redis: null
+# API keys come from LIVEKIT_KEYS (compose environment), never from this file
+logging:
+  level: info
+room:
+  empty_timeout: 300
+  max_participants: 20

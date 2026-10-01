@@ -4,6 +4,7 @@ Background loops for reminders, bug hunting, and UI communication.
 """
 
 import asyncio
+import os
 import uuid
 from typing import TYPE_CHECKING, Any
 
@@ -29,6 +30,7 @@ if TYPE_CHECKING:
 
 # Setup logger
 logger = setup_logger("JARVIS-LOOPS")
+logger.info("AGENT_LOOPS_MODULE_V2 loaded from %s", __file__)
 
 # Module-level state for adaptation loop
 _throttled_tasks: set[str] = set()
@@ -56,7 +58,7 @@ async def start_adaptation_loop() -> None:
                         task.cancel()
                         _throttled_tasks.add(task_name)
 
-            elif stress == "HEALTHY" and _throttled_tasks:
+            elif stress == "NORMAL" and _throttled_tasks:
                 # Self-Healing: Bring back suspended tasks once resource pressure is gone
                 logger.info("🌤️ SYSTEM RECOVERED: Restoring previously throttled services...")
                 for task_name in list(_throttled_tasks):
@@ -70,7 +72,7 @@ async def start_adaptation_loop() -> None:
                     await jarvis_vector_db._ensure_initialized()
 
             # Re-evaluation interval (Dynamic based on load)
-            sleep_time = 30 if stress != "HEALTHY" else 90
+            sleep_time = 30 if stress != "NORMAL" else 90
             await asyncio.sleep(sleep_time)
         except Exception as e:
             logger.error("Adaptation loop error: %s", e)
@@ -90,32 +92,28 @@ async def start_memory_storage_loop(assistant: "BrainAssistant") -> None:
 
 
 async def start_reminder_loop(session: "AgentSession") -> None:
-    """Check for due reminders and trigger proactive responses."""
+    """Check for due reminders and notify UI as text (no TTS / session.say)."""
     while True:
         # check_due_reminders is blocking (file IO), run in thread
         due = await asyncio.to_thread(check_due_reminders)
         for item in due:
             logger.info("🔔 Triggering proactive reminder: %s", item['message'])
-            await session.say(
-                f"Sir ko proactively yaad dilayein (Natural Urdu main): '{item['message']}'",
-                allow_interruptions=True,
+            await notify_transcription(
+                "assistant",
+                f"Reminder: {item['message']}",
             )
         await asyncio.sleep(30)
 
 
 async def start_bug_hunter_loop(session: "AgentSession") -> None:
-    """Monitor error logs and notify the user about issues."""
+    """Monitor error logs and notify the user about issues (text only)."""
     while True:
         try:
             async def on_error_detected(error_block: str) -> None:
                 logger.warning("🚨 AI Bug Hunter detected a system error.")
-                await session.say(
-                    (
-                        "Sir ko Roman Urdu main batayein ke ek system error mila hai "
-                        "aur uska analysis dain. "
-                        f"Error details:\n{error_block[:1000]}"
-                    ),
-                    allow_interruptions=True,
+                await notify_transcription(
+                    "assistant",
+                    f"System error detected: {error_block[:400]}",
                 )
 
             await monitor_logs(on_error_detected)
@@ -190,20 +188,42 @@ class UIBridgeListener:
             logger.error("❌ Error processing UI command %s: %s", cmd_type, e, exc_info=True)
 
     async def _task_wrapper(self, payload: str) -> None:
+        """Handle UI chat as text only — never call session.say() (no TTS dependency)."""
+        response_text = "Sir, main yahan hoon."
         try:
             user_msg_id = str(uuid.uuid4())
             await notify_transcription("user", payload, msg_id=user_msg_id)
+            logger.info("CHAT_TEXT_PATH_V2 user notified")
             safe_message = vortex_guard.sanitize_input(payload)
-            response = await self.assistant.handle_user_query(safe_message)
-
-            # pylint: disable=protected-access
-            if self.assistant._active_session: # type: ignore[attr-defined]
-                logger.info("🎤 Responding to chat via Voice Engine...")
-                await self.assistant._active_session.say(response, allow_interruptions=True) # type: ignore[attr-defined]
-            else:
-                await notify_ui("agent_message", {"text": response})
+            try:
+                response = await self.assistant.handle_user_query(safe_message)
+                response_text = str(response or "").strip() or response_text
+                logger.info("CHAT_TEXT_PATH_V2 query ok (%d chars)", len(response_text))
+            except Exception as query_err:  # pylint: disable=broad-exception-caught
+                logger.error(
+                    "CHAT_TEXT_PATH_V2 query failed: %s",
+                    query_err,
+                    exc_info=True,
+                )
+                response_text = (
+                    "Sir, mujhe jawab generate karte waqt issue aaya. Dobara try karein."
+                )
         except Exception as e:
-            logger.error("Task execution failure: %s", e)
+            logger.error("Task execution failure (pre-reply): %s", e, exc_info=True)
+            response_text = (
+                "Sir, mujhe jawab generate karte waqt issue aaya. Dobara try karein."
+            )
+
+        try:
+            assistant_msg_id = str(uuid.uuid4())
+            await notify_transcription("assistant", response_text, msg_id=assistant_msg_id)
+            logger.info(
+                "💬 Text reply sent to UI (%d chars): %s",
+                len(response_text),
+                response_text[:120],
+            )
+        except Exception as notify_err:  # pylint: disable=broad-exception-caught
+            logger.error("CHAT_TEXT_PATH_V2 assistant notify failed: %s", notify_err, exc_info=True)
 
     async def on_vision_frame(self, data: Any) -> None:
         frame = data.get("frame") if isinstance(data, dict) else data
@@ -218,9 +238,9 @@ class UIBridgeListener:
 
         if self.assistant._active_session: # type: ignore[attr-defined]
             if command == "check_intelligence":
-                await self.assistant._active_session.say("Sir, metrics check kar raha hoon.", allow_interruptions=True) # type: ignore[attr-defined]
+                await notify_transcription("assistant", "Sir, metrics check kar raha hoon.")
             elif command == "open_archives":
-                await self.assistant._active_session.say("Sir, archives open kar raha hoon.", allow_interruptions=True) # type: ignore[attr-defined]
+                await notify_transcription("assistant", "Sir, archives open kar raha hoon.")
 
     async def on_connect(self) -> None:
         self._is_reconnecting = False

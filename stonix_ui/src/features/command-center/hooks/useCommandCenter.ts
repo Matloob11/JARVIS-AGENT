@@ -2,7 +2,39 @@ import { useEffect, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 
 const VORTEX_TOKEN = import.meta.env.VITE_VORTEX_SECURITY_TOKEN || '';
-const VORTEX_URL = import.meta.env.VITE_VORTEX_URL || 'http://localhost:5001';
+const VORTEX_URL = (import.meta.env.VITE_VORTEX_URL || 'http://localhost:5001').replace(/\/$/, '');
+
+/** When VITE_VORTEX_URL is https://host/vortex, Socket.IO must use path /vortex/socket.io (not a namespace). */
+function vortexSocketOptions() {
+  try {
+    const parsed = new URL(VORTEX_URL);
+    const prefix = parsed.pathname.replace(/\/$/, '');
+    const origin = parsed.origin;
+    if (prefix && prefix !== '/') {
+      return {
+        url: origin,
+        options: {
+          path: `${prefix}/socket.io`,
+          auth: { token: VORTEX_TOKEN },
+          reconnection: true,
+          reconnectionAttempts: 5,
+          reconnectionDelay: 1000,
+        },
+      };
+    }
+  } catch {
+    /* fall through */
+  }
+  return {
+    url: VORTEX_URL,
+    options: {
+      auth: { token: VORTEX_TOKEN },
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+    },
+  };
+}
 
 if (!VORTEX_TOKEN) {
   console.error('VITE_VORTEX_SECURITY_TOKEN is missing from the UI environment.');
@@ -16,12 +48,8 @@ let sharedSocket: Socket | null = null;
 
 export const getSocket = () => {
   if (!sharedSocket) {
-    sharedSocket = io(VORTEX_URL, {
-      auth: { token: VORTEX_TOKEN },
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-    });
+    const { url, options } = vortexSocketOptions();
+    sharedSocket = io(url, options);
   }
   return sharedSocket;
 };

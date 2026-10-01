@@ -1,0 +1,32 @@
+# Frontend static build for Hostinger (build context = repo root)
+FROM node:20-slim AS builder
+
+WORKDIR /app
+
+ARG VITE_VORTEX_URL=http://187.127.123.235:5101
+ARG VITE_VORTEX_SECURITY_TOKEN=
+ARG VITE_LIVEKIT_URL=ws://187.127.123.235:7880
+
+ENV VITE_VORTEX_URL=$VITE_VORTEX_URL
+ENV VITE_VORTEX_SECURITY_TOKEN=$VITE_VORTEX_SECURITY_TOKEN
+ENV VITE_LIVEKIT_URL=$VITE_LIVEKIT_URL
+
+COPY stonix_ui/package*.json ./
+RUN npm ci
+
+COPY stonix_ui/ .
+RUN npm run build
+
+FROM node:20-slim
+WORKDIR /app
+
+RUN npm install -g serve@14
+
+COPY --from=builder /app/dist ./dist
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+CMD ["serve", "-s", "dist", "-l", "3000"]

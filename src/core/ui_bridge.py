@@ -6,6 +6,7 @@ WebSocket server to bridge JARVIS core events to the React-based STONIX UI.
 import asyncio
 import copy
 import json
+import os
 import time
 import uuid
 from collections.abc import AsyncGenerator
@@ -362,6 +363,103 @@ async def notify_bridge(data: dict[str, Any], request: Request) -> dict[str, str
 async def get_health() -> dict[str, Any]:
     """Returns detailed system health state."""
     return health_monitor.generate_health_report()
+
+
+@app.get("/livekit/token")
+async def livekit_token(request: Request, identity: str = "web-user") -> dict[str, str]:
+    """
+    Issue a LiveKit access token for the browser voice client.
+    Auth: X-Vortex-Token header (same as UI socket auth).
+    """
+    token_hdr: str | None = request.headers.get("X-Vortex-Token")
+    if token_hdr != VORTEX_SECURITY_TOKEN:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    api_key = os.getenv("LIVEKIT_API_KEY", "")
+    api_secret = os.getenv("LIVEKIT_API_SECRET", "")
+    room_name = os.getenv("JARVIS_ROOM_NAME", "jarvis-hybrid")
+    # Browser-facing URL (public). Internal docker URL is not usable from clients.
+    public_url = os.getenv(
+        "LIVEKIT_PUBLIC_URL",
+        os.getenv("LIVEKIT_URL", "ws://127.0.0.1:7880"),
+    )
+    # If bridge has internal docker hostname, prefer explicit public URL
+    if "jarvis-livekit" in public_url:
+        public_url = os.getenv("LIVEKIT_PUBLIC_URL", "ws://187.127.123.235:7880")
+
+    if not api_key or not api_secret:
+        raise HTTPException(status_code=503, detail="LiveKit keys not configured")
+
+    safe_identity = "".join(c for c in identity if c.isalnum() or c in "-_")[:64] or "web-user"
+    try:
+        from livekit import api as lk_api  # pylint: disable=import-outside-toplevel
+
+        # Ensure room exists with an agent job before the browser joins.
+        # Without this, Voice can show CONNECTED while the agent is gone
+        # (empty room after idle/departure timeout) — chat + speech both fail.
+        internal_ws = os.getenv("LIVEKIT_URL", "")
+        api_http = internal_ws.replace("ws://", "http://").replace("wss://", "https://")
+        if api_http:
+            try:
+                lk = lk_api.LiveKitAPI(api_http, api_key, api_secret)
+                try:
+                    rooms = await lk.room.list_rooms(lk_api.ListRoomsRequest(names=[room_name]))
+                    need_dispatch = True
+                    if rooms.rooms:
+                        parts = await lk.room.list_participants(
+                            lk_api.ListParticipantsRequest(room=room_name)
+                        )
+                        has_agent = any(
+                            (getattr(p, "kind", None) and str(p.kind).endswith("AGENT"))
+                            or str(getattr(p, "identity", "")).startswith("agent-")
+                            for p in parts.participants
+                        )
+                        need_dispatch = not has_agent
+                    if need_dispatch:
+                        if rooms.rooms:
+                            try:
+                                await lk.room.delete_room(lk_api.DeleteRoomRequest(room=room_name))
+                            except Exception:  # pylint: disable=broad-exception-caught
+                                pass
+                        await lk.room.create_room(
+                            lk_api.CreateRoomRequest(
+                                name=room_name,
+                                empty_timeout=3600,
+                                departure_timeout=3600,
+                                max_participants=10,
+                                agents=[lk_api.RoomAgentDispatch(agent_name="")],
+                            )
+                        )
+                        logger.info("LiveKit room '%s' ensured with agent dispatch", room_name)
+                finally:
+                    await lk.aclose()
+            except Exception as ensure_exc:  # pylint: disable=broad-exception-caught
+                logger.warning("LiveKit room ensure skipped: %s", ensure_exc)
+
+        access = (
+            lk_api.AccessToken(api_key, api_secret)
+            .with_identity(safe_identity)
+            .with_name(safe_identity)
+            .with_grants(
+                lk_api.VideoGrants(
+                    room_join=True,
+                    room=room_name,
+                    can_publish=True,
+                    can_subscribe=True,
+                    can_publish_data=True,
+                )
+            )
+        )
+        jwt_token = access.to_jwt()
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.exception("LiveKit token mint failed")
+        raise HTTPException(status_code=500, detail=f"Token error: {exc}") from exc
+
+    return {
+        "token": jwt_token,
+        "url": public_url,
+        "room": room_name,
+    }
 
 
 @app.get("/telemetry/production")

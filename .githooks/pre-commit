@@ -1,0 +1,6 @@
+#!/bin/sh
+# JARVIS guard (plan task C-04): blocks .env files, keys, passwords and private terms from being committed.
+ROOT="$(git rev-parse --show-toplevel)"
+PY="$ROOT/.venv_312/Scripts/python.exe"
+[ -x "$PY" ] || PY="python"
+exec "$PY" "$ROOT/scripts/coord/precommit.py"

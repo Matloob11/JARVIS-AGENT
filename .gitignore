@@ -115,3 +115,22 @@ ehthumbs.db
 repro_self_error.py
 test_bridge.py
 KMS/
+
+# Added 2026-10-01 (C-04): secrets, screenshots, runtime state
+claude-artifact-*.png
+importtime_*.txt
+run/
+data/
+.coord/*.lock
+.coord/private_terms.txt
+*.htpasswd
+deploy/hostinger/bridge.env
+deploy/**/*.rendered.*
+*.db
+*.sqlite3
+stonix_ui/.env*
+!stonix_ui/.env.example
+.env.*
+!.env.example
+!.env.production.example
+!**/.env.example

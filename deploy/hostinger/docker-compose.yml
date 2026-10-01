@@ -1,0 +1,88 @@
+# Isolated Hostinger deploy — project name: jarvis
+# Ports: UI 5100, Bridge API 5101 (do not collide with existing apps)
+# Usage: docker compose -p jarvis -f deploy/hostinger/docker-compose.yml up -d --build
+
+name: jarvis
+
+services:
+  livekit:
+    image: livekit/livekit-server:v1.13.7
+    container_name: jarvis-livekit
+    command: ["--config", "/etc/livekit.yaml"]
+    environment:
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "50000-50050:50000-50050/udp"
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+    restart: unless-stopped
+    networks:
+      - jarvis-net
+
+  ui-bridge:
+    build:
+      context: ../..
+      dockerfile: deploy/hostinger/Dockerfile.bridge
+    image: jarvis-bridge:hostinger
+    container_name: jarvis-bridge
+    ports:
+      - "5101:5001"
+    env_file:
+      - .env
+    environment:
+      VORTEX_ENV: production
+      JARVIS_SHARED_DIR: /app/Jarvis_Shared
+      UI_BRIDGE_URL: http://187.127.123.235:5101
+      LIVEKIT_URL: ws://jarvis-livekit:7880
+      LIVEKIT_PUBLIC_URL: wss://jarvis.srv1802669.hstgr.cloud
+      JARVIS_ROOM_NAME: jarvis-hybrid
+      ALLOWED_ORIGINS: https://jarvis.srv1802669.hstgr.cloud,http://187.127.123.235:5100,http://127.0.0.1:5100,http://localhost:5100
+    depends_on:
+      - livekit
+    volumes:
+      - jarvis_logs:/app/logs
+      - jarvis_outputs:/app/Jarvis_Outputs
+      - jarvis_shared:/app/Jarvis_Shared
+    restart: unless-stopped
+    networks:
+      - jarvis-net
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:5001/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+
+  frontend:
+    build:
+      context: ../..
+      dockerfile: deploy/hostinger/Dockerfile.frontend
+      args:
+        VITE_VORTEX_URL: https://jarvis.srv1802669.hstgr.cloud/vortex
+        VITE_VORTEX_SECURITY_TOKEN: ${VORTEX_SECURITY_TOKEN}
+        VITE_LIVEKIT_URL: wss://jarvis.srv1802669.hstgr.cloud
+    image: jarvis-frontend:hostinger
+    container_name: jarvis-frontend
+    ports:
+      - "127.0.0.1:5100:3000"
+    depends_on:
+      ui-bridge:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - jarvis-net
+
+networks:
+  jarvis-net:
+    name: jarvis-network
+    driver: bridge
+
+volumes:
+  jarvis_logs:
+    name: jarvis_logs
+  jarvis_outputs:
+    name: jarvis_outputs
+  jarvis_shared:
+    name: jarvis_shared
