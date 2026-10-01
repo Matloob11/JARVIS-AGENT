@@ -63,52 +63,83 @@ from livekit import agents
 # Use absolute import since root_dir is in sys.path
 from src.core.agent_runner import build_worker_options, entrypoint
 
-def play_startup_voice():
-    """
-    Plays the Ironman Jarvis startup voice from the assets folder
-    after a 10-second delay as requested by the user.
-    Runs separately in a background thread to avoid blocking agent connection.
-    """
-    def _run_sequence():
-        import threading
-        import time
-        import os
+STARTUP_SOUND_DEFAULT = os.path.join("assets", "audio", "Installing... Ironman Jarvis Ai.mp3")
+STARTUP_CHIME = os.path.join("assets", "audio", "jarvis_startup_chime.wav")  # X-02, tracked in git
+
+
+def startup_sound_candidates():
+    """{path: log name} of the startup sound files in priority order: JARVIS_STARTUP_SOUND (default
+    the Ironman MP3), the same name as .wav, then the bundled chime. Relative paths start at the repo
+    root, not the cwd. K-69: a configured path is logged by the variable's name, never its value."""
+    configured = os.getenv("JARVIS_STARTUP_SOUND", "").strip()
+    first = os.path.normpath(os.path.join(root_dir, os.path.expanduser(configured or STARTUP_SOUND_DEFAULT)))
+    twin = os.path.splitext(first)[0] + ".wav"
+    chime = os.path.normpath(os.path.join(root_dir, STARTUP_CHIME))
+    names = ("JARVIS_STARTUP_SOUND", "JARVIS_STARTUP_SOUND as .wav") if configured else (first, twin)
+    candidates = {}
+    for path, name in zip((first, twin, chime), (*names, chime)):
+        candidates.setdefault(path, name)
+    return candidates
+
+
+def _play_startup_sound(delay_s):
+    import time  # pylint: disable=import-outside-toplevel
+    try:
+        # 1. Wait 10 seconds after command starts (User's specific requirement)
+        time.sleep(delay_s)
+
+        # 2. Pick the files only now. flush=True: __main__ swaps sys.stdout for a block-buffered
+        # wrapper, which kept these lines out of logs/agent_stdout.log until the worker exited.
+        candidates = startup_sound_candidates()
+        found = [path for path in candidates if os.path.isfile(path)]
+        if not found:
+            # One line, no retries (C-92 adds the spoken fallback here)
+            print("[JARVIS-INFO] Startup voice not found; tried: "
+                  + " | ".join(candidates.values()), flush=True)
+            return
         try:
-            # 1. Wait 10 seconds after command starts (User's specific requirement)
-            time.sleep(10)
-            
-            # 2. Resolve absolute path to the audio file
-            # Root is 2 levels up from src/core/agent.py
-            current_path = os.path.dirname(os.path.abspath(__file__))
-            p_root = os.path.abspath(os.path.join(current_path, "..", ".."))
-            # File: assets/audio/Installing... Ironman Jarvis Ai.mp3
-            voice_file = os.path.join(p_root, "assets", "audio", "Installing... Ironman Jarvis Ai.mp3")
-
-            if os.path.exists(voice_file):
-                print(f"[JARVIS-SYSTEM] initializing neural voice: {os.path.basename(voice_file)}")
-                try:
-                    import pygame  # optional; hybrid installs may skip it
-                except ImportError:
-                    print("[JARVIS-WARN] pygame not installed; skipping startup voice")
-                    return
-                pygame.mixer.init()
+            import pygame  # pylint: disable=import-outside-toplevel  # optional; hybrid installs may skip it
+        except ImportError:
+            print("[JARVIS-WARN] pygame not installed; skipping startup voice", flush=True)
+            return
+        pygame.mixer.init()
+        for voice_file in found:
+            name = os.path.basename(candidates[voice_file])
+            try:
                 pygame.mixer.music.load(voice_file)
-                pygame.mixer.music.set_volume(0.85) # Premium volume
-                pygame.mixer.music.play()
-                
-                # Keep thread alive during playback
-                while pygame.mixer.music.get_busy():
-                    time.sleep(1)
-            else:
-                # Silently log error to console for Matloob to see but don't stop system
-                print(f"[JARVIS-WARN] Startup voice not found at: {voice_file}")
-        except Exception as ex:
-            # Catch-all to prevent startup crash
-            print(f"[JARVIS-ERROR] System voice fail: {ex}")
+            except pygame.error as ex:  # pylint: disable=no-member  # defined in a C extension
+                # Empty or corrupt: try the next file. Some pygame errors name the path (K-69).
+                print(f"[JARVIS-WARN] Startup voice {name} unplayable: "
+                      f"{str(ex).replace(voice_file, name)}", flush=True)
+                continue
+            pygame.mixer.music.set_volume(0.85) # Premium volume
+            pygame.mixer.music.play()
+            # Only after play(): in the log this line is the proof that the sound started.
+            print(f"[JARVIS-SYSTEM] initializing neural voice: {name}", flush=True)
 
-    # Launch daemon thread
-    import threading
-    threading.Thread(target=_run_sequence, daemon=True).start()
+            # Keep thread alive during playback
+            while pygame.mixer.music.get_busy():
+                time.sleep(1)
+            return
+    except Exception as ex:  # pylint: disable=broad-exception-caught
+        # Catch-all to prevent startup crash
+        print(f"[JARVIS-ERROR] System voice fail: {ex}", flush=True)
+
+
+def play_startup_voice(delay_s=10):
+    """
+    Plays the first startup sound pygame can load (startup_sound_candidates) after a 10-second
+    delay as requested by the user.
+    Runs separately in a background thread to avoid blocking agent connection.
+    Returns that thread; under pytest none is started (tests never play real audio).
+    """
+    if running_under_pytest:
+        return None
+    import threading  # pylint: disable=import-outside-toplevel
+    thread = threading.Thread(target=_play_startup_sound, args=(delay_s,),
+                              name="jarvis-startup-sound", daemon=True)
+    thread.start()
+    return thread
 
 if __name__ == "__main__":
     # Initiate startup voice sequence (Background)
