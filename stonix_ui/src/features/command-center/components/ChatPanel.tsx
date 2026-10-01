@@ -2,17 +2,24 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Bell, Keyboard, Mic, Send } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { ChatMessage, LiveCaption } from '@/features/chat/types';
-import { Message, NeuralMemory, ToolLog, VortexLog } from '../hooks/useCommandCenter';
+import { Message, NeuralMemory, VortexLog } from '../hooks/useCommandCenter';
+import type { JobEntry } from '@/features/jobs/useJobs';
+import JobsList from '@/features/tools/JobsList';
+import ToolLogList from '@/features/tools/ToolLogList';
+import type { ToolLogEntry } from '@/features/tools/useToolLogs';
 import { personaAccent } from '@/shared/theme/commandTheme';
 
-type ChatTab = 'chat' | 'logs' | 'notes' | 'tasks';
+type ChatTab = 'chat' | 'logs' | 'notes' | 'tools' | 'tasks';
 
 interface ChatPanelProps {
   persona: 'jarvis' | 'anna';
   messages: Message[];
   logs: VortexLog[];
   memories: NeuralMemory[];
-  tools: ToolLog[];
+  toolLogs: ToolLogEntry[];
+  jobs: JobEntry[];
+  onCancelJob: (jobId: string) => void;
+  onOpenJobArtifact: (jobId: string) => void;
   onSend: (text: string) => void;
   liveCaptions?: { user: LiveCaption | null; assistant: LiveCaption | null };
   fallbackTranscription?: string;
@@ -22,7 +29,7 @@ interface ChatPanelProps {
   onRetry?: (id: string) => void;
 }
 
-const tabs: ChatTab[] = ['chat', 'logs', 'notes', 'tasks'];
+const tabs: ChatTab[] = ['chat', 'logs', 'notes', 'tools', 'tasks'];
 
 type RenderBlock =
   | { kind: 'single'; message: ChatMessage }
@@ -80,7 +87,10 @@ const ChatPanel = ({
   messages,
   logs,
   memories,
-  tools,
+  toolLogs,
+  jobs,
+  onCancelJob,
+  onOpenJobArtifact,
   onSend,
   liveCaptions,
   fallbackTranscription,
@@ -214,14 +224,17 @@ const ChatPanel = ({
           />
         )}
 
+        {activeTab === 'tools' && (
+          <div className="space-y-4" data-testid="tools-tab-panel">
+            <JobsList jobs={jobs} onCancel={onCancelJob} onOpenArtifact={onOpenJobArtifact} />
+            <ToolLogList rows={toolLogs} />
+          </div>
+        )}
+
         {activeTab === 'tasks' && (
-          <DataList
-            empty="No tool actions yet"
-            rows={tools.map(tool => ({
-              title: tool.tool || 'tool',
-              detail: tool.details || tool.action,
-              meta: formatTime(tool.timestamp),
-            }))}
+          <EmptyState
+            title="Tasks coming soon"
+            body="Scheduled tasks and reminders will appear here after UI-25."
           />
         )}
       </div>

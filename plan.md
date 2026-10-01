@@ -1,9 +1,9 @@
 # JARVIS: Mushtarka Plan (Claude + Cursor)
 
 - **Banaya:** 30 Sep 2026 (Claude). Tasks audit + 9-agent trace/review se nikle hain.
-- **Repo:** `C:\Users\Matloob\Desktop\JARVIS-AGENT-main` → GitHub `Matloob11/JARVIS-AGENT` (abhi **public**)
-- **VPS:** 187.127.123.235 · Docker project `jarvis` · `https://jarvis.srv1802669.hstgr.cloud`
-- **Log:** `done_highlight.md` (har mukammal kaam wahan) · **Auto rules:** `CLAUDE.md`, `.cursor/rules/jarvis-collab.mdc`
+- **Repo:** `C:\Users\Matloob\Desktop\JARVIS-AGENT-main` ? GitHub `Matloob11/JARVIS-AGENT` (abhi **public**)
+- **VPS:** 187.127.123.235 ? Docker project `jarvis` ? `https://jarvis.srv1802669.hstgr.cloud`
+- **Log:** `done_highlight.md` (har mukammal kaam wahan) ? **Auto rules:** `CLAUDE.md`, `.cursor/rules/jarvis-collab.mdc`
 
 ---
 
@@ -31,7 +31,7 @@
 | Features | Koi feature remove nahi; sab working |
 | API keys | Weather, Google search + CSE id, Tavily, OpenRouter, Groq, HF, email user + app password: **sab `.env` me SET** (teeno .env files) |
 | Login | **Password + Authenticator (TOTP)** |
-| Voice-ID | **Toggle, default ON.** Wake-word "Jarvis" bhi toggle. User ek baar 20–30 sec awaz record karega |
+| Voice-ID | **Toggle, default ON.** Wake-word "Jarvis" bhi toggle. User ek baar 20?30 sec awaz record karega |
 | SIM lookup | User ke paas **authorized API** hai: adapter banao, key baad me `.env` me (`SIM_LOOKUP_API_URL`, `SIM_LOOKUP_API_KEY`). Leaked / bina ijazat data sources kabhi nahi |
 | GitHub | Existing repo `Matloob11/JARVIS-AGENT` se connect karke commit. Local folder abhi git repo nahi |
 | Domain | `jarvis.srv1802669.hstgr.cloud` |
@@ -41,7 +41,7 @@
 | CV (1 Oct) | Fixed path nahi. "CV kholo" saari drives (C:, D: agar ho) me CV/Resume files dhoondhe, Windows/Program Files/AppData/system folders skip kare, mila hua path `JARVIS_CV_PATH` me cache ho |
 | Memory (1 Oct) | FA exam wali purani yaad hatani hai (koi exam nahi). Memory baat-cheet se **zaroori points khud nikaal kar yaad rakhe** aur jawab unhi ki buniyad par de |
 | Tests ki lane | `tests/exhaustive/**` = Claude lane; `tests/test_whatsapp.py` = Cursor lane (orderer ka faisla) |
-| Emergency (30 Sep 23:40–23:50) | ✅ Ho gaya: backup, token rotation, UI par temporary browser password (user `matloob`), port 5100 localhost-only, VPS permissions. Tafseel `done_highlight.md` me |
+| Emergency (30 Sep 23:40?23:50) | ? Ho gaya: backup, token rotation, UI par temporary browser password (user `matloob`), port 5100 localhost-only, VPS permissions. Tafseel `done_highlight.md` me |
 
 ---
 
@@ -60,14 +60,14 @@ Machine-readable copy: `.coord/lanes.json` (hook isi se lane check karta hai). U
 Doosri lane ki file me tabdeeli chahiye? Khud edit mat karo. Section 11 me request likho.
 
 ### 2.2 Status markers
-`TODO` · `DOING (agent, time)` · `BLOCKED (wajah)` · `DONE (time)` · `VERIFIED (user)`. Ek agent ek waqt me max 2 `DOING` tasks.
+`TODO` ? `DOING (agent, time)` ? `BLOCKED (wajah)` ? `DONE (time)` ? `VERIFIED (user)`. Ek agent ek waqt me max 2 `DOING` tasks.
 
 ### 2.3 Git (task C-01 ke baad)
 
 - **Commit ka tareeqa (hook enforce karta hai):** pehle `git add <apne naye files>`, phir `JARVIS_AGENT=<claude|cursor> git commit -m "[agent] TASK-ID: ..." -- <paths>` (PowerShell: `$env:JARVIS_AGENT='cursor'; git commit -m "..." -- <paths>`). Hook rokta hai: `JARVIS_AGENT` ke baghair commit, doosri lane ki file, secret files/values, private terms, `done_highlight.md` ki hatayi/badli line, aur double-encoded text (MOJIBAKE). Kisi path ka owner: `python scripts/coord/check_lane.py --whoowns <path>`.
 - Dono ek hi working tree me hain. Is liye **sirf `main` branch**. Koi `git checkout <branch>`, `git stash`, `git reset --hard`, `git clean`, rebase, `git add -A` / `git add .` nahi.
 - Commit sirf apni files ka, explicit paths ke saath. Message: `[claude] C-07: ...` / `[cursor] X-03: ...`
-- **Push sirf Claude karega** (din me 1–2 baar, ya task batch ke baad). Cursor sirf local commit karega.
+- **Push sirf Claude karega** (din me 1?2 baar, ya task batch ke baad). Cursor sirf local commit karega.
 - `.env*` (examples ke ilawa), `deploy/**/.env`, `livekit.yaml` keys, `logs/`, `chroma_db/`, `conversations/`, `claude-artifact-*.png`, `data/identity/*.wav` kabhi commit nahi honge.
 
 ### 2.4 VPS
@@ -82,7 +82,7 @@ Doosri lane ki file me tabdeeli chahiye? Khud edit mat karo. Section 11 me reque
 
 `RUNTIME LOCK: free`
 
-- Windows agent worker (`start-agent.bat` / `python -m src.core.agent`) ya UI dev server (`npm run vite-dev`) start/restart karne se pehle upar wali line ko `RUNTIME LOCK: claude|cursor · kya chal raha · time` karo. Kaam ke baad wapas `free` karo.
+- Windows agent worker (`start-agent.bat` / `python -m src.core.agent`) ya UI dev server (`npm run vite-dev`) start/restart karne se pehle upar wali line ko `RUNTIME LOCK: claude|cursor ? kya chal raha ? time` karo. Kaam ke baad wapas `free` karo.
 - Restart se pehle `tasklist | findstr python` se purane workers band karo. Do workers = duplicate jawab.
 - `start-agent.bat` se pehle browser me voice band karo, jab tak C-task "ensure_room delete fix" DONE na ho.
 
@@ -104,7 +104,7 @@ Koi feature hatana ya disable karna pade (aam tor par nahi karna); koi paid serv
 ## 3. Aaj ki haqeeqat aur target (khulasa)
 
 **Aaj (audit, 30 Sep):**
-- Voice chal raha hai: browser → LiveKit → PC agent → Gemini Live.
+- Voice chal raha hai: browser ? LiveKit ? PC agent ? Gemini Live.
 - Typed chat LLM tak nahi jaati (regex template).
 - Voice-ID aur wake-word kabhi nahi chalte (library hook skip karti hai).
 - Security token public JS me hai; ports 5100/5101/7880 bina TLS ke public hain; UFW off; git nahi.
@@ -128,37 +128,37 @@ Poori tafseel: architecture page v2, `C:\Users\Matloob\AppData\Local\Temp\claude
 
 **Canonical copy: `docs/CONTRACTS.md` (v1, 2026-10-01).** Asal wahi hai; yeh section us ki copy hai. Tabdeeli sirf Claude karega, section 11 me `REQ-CONTRACT <contract> <proposal>` ke baad (naya version + Changelog line + yahan copy).
 
-#### K-01 · DASH-UI-RUNTIME (config+http-client) · owner: Claude
+#### K-01 ? DASH-UI-RUNTIME (config+http-client) ? owner: Claude
 Owner: Cursor (UI), built on Claude's C-AUTH-1 / C-SOCK-1 / C-ORIGIN-1 (infra). Browser base BRIDGE_BASE = VITE_BRIDGE_BASE || VITE_VORTEX_URL || '/vortex' (relative, same origin; the bundle never contains a secret). Every fetch uses credentials 'include': POST /auth/login {password, totp} | {password, recovery_code}; GET /auth/me; POST /auth/logout; GET /livekit/token (a NEW token before every connect and reconnect); GET /messages?before=&limit=; GET /media/<id> and /media/<id>/sign; POST /feedback. Socket.IO: io(origin, {path: BRIDGE_BASE + '/socket.io', withCredentials: true, transports: ['websocket','polling'], tryAllTransports: true, reconnectionAttempts: Infinity, reconnectionDelayMax: 10000}) with no auth payload. Session expiry: on any connect_error or a 'session_expired' {reason} event the UI calls /auth/me, and a 401 shows the login screen, so it never depends on the refusal text. Dev: Vite proxies /vortex (http + ws) to VITE_DEV_BRIDGE: the mock on 5199, the local bridge on 5001 with VITE_DEV_BRIDGE_STRIP=1, or the VPS with the Origin header rewritten. Electron loads JARVIS_UI_URL (default https://jarvis.srv1802669.hstgr.cloud); file:// dist only with JARVIS_ELECTRON_BACKEND=local or JARVIS_UI_OFFLINE=1.
 
-#### K-02 · DASH-UI-EVENTS (socketio-consumer) · owner: Claude
+#### K-02 ? DASH-UI-EVENTS (socketio-consumer) ? owner: Claude
 Owner: Claude for the emitters (infra C-EVT-1/C-STATE-1, voice CT-VC-*, tools X0); Cursor for the reader. Every field is optional and unknown fields are ignored; the readers accept all three variants. init_state: C-STATE-1 plus optional memories, tool_logs, tasks, notifications, intelligence, map_focus, module_health, confirmations|pending_confirmations|pending_confirms, settings, agent_status, vitals_pc, vitals_vps, telemetry, server_time. new_message/update_message: Message {id, role 'user'|'assistant' (legacy 'agent'), text, source 'voice'|'text'|'system', final|is_final, ts|timestamp in s or ms, turn_id?}. transcription_update: live caption only. agent_status {online, voice_ready|in_room, paused, since, last_heartbeat|last_seen, session?, mode?, restarting?}. status_change {speaking, thinking} and legacy status_update. vitals_pc {cpu, ram, disk, disk_label?, host, ts}; vitals_vps; legacy vitals_update. telemetry_update {success_rate, avg_latency, confusion_rate, total_samples, status, source}. tool_update {id, tool, status, phase?, args_summary|details, result_summary?, duration_ms?, progress?, risk?, ts|timestamp}. tool_progress {job_id, tool, title, status, percent, message, artifact?}. confirm_request {id, tool, summary, risk, args_preview?, voice_allowed?, expires_at|expires_ts, ttl_ms?}; confirm_resolved {id, allow|allowed, by|reason}. settings_sync: flat CT-VC-SETTINGS or {settings, applied}, plus optional enforced, available_voices, guarded_tools, automation, vision_mode, errors, pending, restart_required. Legacy persona_update, wake_word_update and mute_update. memory_sync and memory_cleared (DASH-MEMORY-EVENTS). reasoning_update {intent, confidence, is_ambiguous, plan: string[], plan_steps?: [{step, action, description}], source, msg_id|turn_id, ts}. plan_progress|plan_progress_update {current, total, action, status}. turn_rejected {reason, score?, threshold?}. voice_match_update {confidence, accepted?, threshold?, enrolled?, mode?}. voice_enroll_progress; voice_enroll_result. task_sync {tasks}|{pending}; task_notification {id, source|kind, description, action?, due_at?, spoken?, ts}. location_update and map_focus_update (DASH-LOCATION). intelligence_update {id?, type 'image'|'json'|'link'|'audio', label, url?, data?, ts}. new_log {text, category, level?, source?, count?, ts} and batch forms. system_alert; diagnostics_update; audit_update. module_health (DASH-MODULE-HEALTH). voice_link {identity, reason}. sim_panel_open {message, provider?, requires_purpose?}; sim_data_loading; sim_data_result {records, phone, status, message, provider?}. session_expired {reason}. Legacy events stay readable forever.
 
-#### K-03 · DASH-UI-COMMANDS (socketio-producer+bridge-allow-list) · owner: Claude
+#### K-03 ? DASH-UI-COMMANDS (socketio-producer+bridge-allow-list) ? owner: Claude
 Owner: Claude for the bridge allow-list and handlers (UI-11, on top of infra OPS-08 and voice VCR-02); Cursor for sending. ui_command {type, payload} gets ack {status: 'sent'|'queued'|'agent_offline'|'no_agent'|'rejected', reason?}. Types: chat {id uuid, text 1-4000} (legacy string accepted; text starting '/swarm ' is routed by the agent); stop (interrupt current speech only, CT-VC-CONTROL); shutdown_agent (Terminate: the agent asks with confirm_request, the job ends, and the bridge reconciler starts a fresh session unless paused); pause_agent (bridge kv paused=1, agent kept out of the room); start (paused=0 plus ensure; also used as 'Wake'); mute/unmute (agent stops/starts hearing; typed chat still answered); settings_update (partial settings incl. automation {desktop_control, clipboard_helper, clipboard_speak, voice_confirm_high} and vision_mode); confirm_response {id, allow}; clear_memory; task_cancel {id, source 'task'|'reminder'}; tasks_refresh; voice_take_over {identity}; voice_enroll {action 'start'|'cancel'|'commit', target_seconds?}; feedback {message_id, score 1|-1}; sim_lookup {query <=20 chars, purpose?} (legacy string); open_sim_panel; swarm {task} (legacy string); job_cancel {job_id}; open_job_artifact {job_id}; request_state; legacy wake_word_toggle (bool) and persona_change ('jarvis'|'anna'). Only role 'ui' sockets may send them; the bridge validates each payload, forwards to room 'agent' only and rejects unknown types; rate limit per C-SOCK-1.
 
-#### K-04 · DASH-LIVEKIT-UI (livekit) · owner: Claude
+#### K-04 ? DASH-LIVEKIT-UI (livekit) ? owner: Claude
 Owner: Claude (token endpoint per C-LK-1 and the agent link policy in UI-08); consumer: Cursor (UI-09/UI-10/UI-28). After login the browser fetches GET /vortex/livekit/token (identity chosen by the server, stable per session; the UI never parses its prefix) and joins room 'jarvis-hybrid' with mic and camera OFF, fetching a NEW token before every connect and automatic reconnect. Mic = localParticipant.setMicrophoneEnabled(true|false); camera = setCameraEnabled. The room is disconnected only on logout or unload. DUPLICATE_IDENTITY (same session in two tabs) leads to a 'Take over' reconnect. Typed chat is NOT sent on lk.chat; Socket.IO is canonical, though the agent still accepts lk.chat. lk.transcription is read only for live captions: user streams are full snapshots per lk.segment_id (final when the header lk.transcription_final == 'true'); agent streams are deltas (final at stream end). Agent participant attributes: lk.agent.state (initializing|listening|thinking|speaking) and jarvis.linked_identity. Link policy: link the first STANDARD participant; when it leaves, re-link the most recent remaining one; switch to an unlinked participant that publishes or unmutes a mic (3 s debounce); ui_command voice_take_over {identity} switches explicitly. Every switch sets jarvis.linked_identity and sends notify 'voice_link' {identity, reason, ts}.
 
-#### K-05 · DASH-CAMERA-VISION (livekit+socketio+settings) · owner: Claude
+#### K-05 ? DASH-CAMERA-VISION (livekit+socketio+settings) ? owner: Claude
 Owner: Claude (agent/bridge, UI-27); consumer: Cursor (UI-28, UI-18). The camera never starts before login and stops on logout. Primary path: a LiveKit camera track (640x480, at most 10 fps) published only after the user turns it on; agent RoomOptions(video_input=True). settings vision_mode: 'live' (default; Gemini samples frames while the camera is on) or 'on_request' (session.input.set_video_enabled(True) only for about 5 s around an analyze request). VisionHandler keeps the latest frame of the linked participant's camera, at most 1 per second, for analyze_surroundings. Fallback when LiveKit is not connected: Socket.IO 'vision_frame' {frame: 'data:image/jpeg;base64,...' within the bridge size limit, ts epoch ms} every 2 s, only while 'Share with agent' is on; the bridge forwards it to room 'agent' only (C-SOCK-1 / OPS-18); the agent uses it only if it is at most 10 s old. module_health.vision.camera_source = 'livekit'|'socket'|'none'.
 
-#### K-06 · DASH-MODULE-HEALTH (socketio-event) · owner: Claude
+#### K-06 ? DASH-MODULE-HEALTH (socketio-event) ? owner: Claude
 Owner: Claude (UI-20). The agent sends notify 'module_health' at session start, every 5 min and on change. The bridge stores it (kv), emits 'module_health' to room 'ui' and sets init_state.module_health: {voice: {ok, detail}, gemini: {ok, detail}, vision: {ok, detail, model, camera_source}, memory: {ok, detail}, tools: {ok, count, failures_1h}, voice_id: {ok, state, enrolled}, ts}. The UI shows a missing module as 'unknown'.
 
-#### K-07 · DASH-MEMORY-EVENTS (socketio-event) · owner: Claude
+#### K-07 ? DASH-MEMORY-EVENTS (socketio-event) ? owner: Claude
 Owner: Claude (UI-21, on top of voice VCR-07/VCR-08). The agent's notify 'memory_update' {id, content (<=500), role? 'user'|'assistant', source 'extractor'|'fact'|'vector', user_id?, ts} becomes UI 'memory_sync' with the same payload; the bridge keeps the last 200 and puts the last 50 in init_state.memories. After clear_memory the agent sends 'memory_cleared' {scope: 'short_term', backup?, ts}, which becomes UI 'memory_cleared', and the bridge empties its stored short-term memories. memory_sync never carries the clear result.
 
-#### K-08 · DASH-LOCATION (socketio-event) · owner: Claude
+#### K-08 ? DASH-LOCATION (socketio-event) ? owner: Claude
 Owner: Claude (UI-20); the map tool emitter belongs to tools-info. Device: the agent's notify 'location_sync' {city, lat, lng, kind: 'device', source: 'ipinfo', ts}, sent at session start and every 600 s, becomes UI 'location_update' and init_state.location. Map focus: the map tool's 'map_focus' becomes UI 'map_focus_update' {query, display_name, lat, lng, zoom, ts} and init_state.map_focus (tools-info routing). For compatibility, a location_sync with kind 'map' is treated as map focus, and a missing kind means device.
 
-#### K-09 · DASH-LOCAL-AUTH (http+env) · owner: Claude
+#### K-09 ? DASH-LOCAL-AUTH (http+env) ? owner: Claude
 Owner: Claude (UI-07, on top of infra OPS-08/OPS-09). COOKIE_SECURE=auto|1|0 on the bridge: auto sets Secure only for HTTPS requests, judged from the ASGI scheme or from X-Forwarded-Proto sent by a trusted proxy peer. Local mode (vortex.py bridge on http://127.0.0.1:5001, used by npm run dev and Electron local) reads SESSION_JWT_SECRET, OWNER_PASSWORD_HASH and OWNER_TOTP_SECRET from the PC root .env, written by the owner-credential script with --target local. Without them, /auth/login returns 503 {error: 'owner_not_enrolled'} and the UI shows a setup hint.
 
-#### K-10 · DASH-MOCK-BRIDGE (test-fixture) · owner: Claude
+#### K-10 ? DASH-MOCK-BRIDGE (test-fixture) ? owner: Claude
 Owner: Cursor (stonix_ui/tests/mock-bridge, UI-04); checked by Claude (UI-38). server.mjs implements the DASH-UI-RUNTIME routes under /vortex and Socket.IO at /vortex/socket.io with the same cookie name jarvis_session (no Secure flag on http), refusal Error('unauthorized'), 'session_expired' before disconnect, every DASH-UI-EVENTS event and every DASH-UI-COMMANDS ack. Test controls: POST /__mock/emit {event, payload}, POST /__mock/agent {online}, POST /__mock/expire, GET /__mock/emits. Every scripted payload is stored in tests/mock-bridge/fixtures/<event>.json, and tests/infrastructure/test_ui_contract_conformance.py replays them against the Python bridge, so any drift fails a test. No test hook is compiled into the app bundle; the only debug hook is window.__jarvisDebug.identity, shown with ?debug=1.
 
-#### K-11 · JarvisToolDecoratorV2 (python-api (services/ai_core/jarvis_plugin_manager.py, Claude-owned; unified with tools-info tool_arg_policies)) · owner: Claude
+#### K-11 ? JarvisToolDecoratorV2 (python-api (services/ai_core/jarvis_plugin_manager.py, Claude-owned; unified with tools-info tool_arg_policies)) ? owner: Claude
 @jarvis_tool(permissions=None, retry_attempts=0, retry_delay=1.0, execution_timeout=15.0, *, timeout=None, raw_args=False|tuple[str], arg_policies=None (dict arg -> 'plain'|'multiline'|'raw'|'url_or_text'|'path'|'email_list'), risk='low'|'medium'|'high'|Callable[[dict],str], risky=False, confirm=None ({'risk','summary'}), confirm_summary=None (str template | sync callable | async callable, 5 s cap), voice_confirm=None, exclusive=None, max_output_chars=12000, long_running=False). Unknown kwargs log ERROR and are ignored (no TypeError).
 - timeout overrides execution_timeout and covers execution only (not confirmation, not the lock wait).
 - raw_args=('x',) equals arg_policies {'x':'raw'}; raw_args=True applies to every str arg. 'plain' = old sanitize_input; 'raw' = NFC, NUL and C0 controls except TAB/LF/CR removed, punctuation kept, cap 20000; 'multiline' = raw + CRLF->LF. A rejected 'path' returns ToolResult PATH_NOT_ALLOWED (never raises, not a breaker failure). Validation runs before breaker.call.
@@ -170,16 +170,16 @@ Owner: Cursor (stonix_ui/tests/mock-bridge, UI-04); checked by Claude (UI-38). s
 - plugin_manager.get_tool_meta(name) -> {timeout, risk, arg_policies, exclusive, voice_confirm, max_output_chars, long_running}; plugin_manager.running_tools() -> set of names. The internal kwarg _confirmed never appears in the schema.
 - Cursor modules use the new kwargs only after TD-02 is merged (an older decorator raises TypeError at import and drops the module's tools).
 
-#### K-12 · ToolResult (data-schema (every desktop tool return value)) · owner: Claude
+#### K-12 ? ToolResult (data-schema (every desktop tool return value)) ? owner: Claude
 dict {status: 'success'|'error'|'not_found'|'cancelled'|'needs_confirmation'|'degraded'|'started'|'empty', message: str (one short Roman-Urdu sentence Jarvis can speak), tool: str, data?: object (path, url, count, output, elements, job_id, untrusted...), error_code?: UPPER_SNAKE str, hint?: str, confirm_id?: str (only with needs_confirmation)}.
 Known error_codes: PATH_NOT_ALLOWED, WHATSAPP_NOT_INSTALLED, FOCUS_LOST, PINCHTAB_UNAVAILABLE, DESKTOP_CONTROL_DISABLED, DESKTOP_BUSY, CONTROLLER_TOKEN_MISSING (reserved), NO_LAN, FILE_SERVER_ROOT_MISSING, NOT_CONFIRMED, UI_CONFIRM_REQUIRED, CONFIRM_UI_UNREACHABLE, NO_USER_AFFIRMATION, CV_PATH_NOT_SET, BROWSER_MISSING, TIMEOUT.
 Legacy top-level keys tools return today (file_path, path, url, files, media, count, title, is_maximized, is_minimized, app, contact, qr_path, opened_file, filename, action, query) stay for backward compatibility. Built with services.system.jarvis_desktop_common.tool_result(). The wrapper's own error dict {status:'error', tool, error_type, message} is unchanged.
 
-#### K-13 · ToolSyncEvent (event: agent POST /notify {type:'tool_sync'} -> bridge emits 'tool_update' (and 'tool_progress' for progress) to room ui) · owner: Claude
+#### K-13 ? ToolSyncEvent (event: agent POST /notify {type:'tool_sync'} -> bridge emits 'tool_update' (and 'tool_progress' for progress) to room ui) ? owner: Claude
 payload {id: str (uuid per call or job id), tool: str, action: str (tool name or sub-action; the UI ToolLog needs it), phase: 'start'|'progress'|'end', status: 'running'|'success'|'error'|'not_found'|'cancelled'|'needs_confirmation'|'degraded'|'started'|'timeout'|'blocked', details: str (<=160 chars; args preview, raw args as '<N chars>', secrets redacted), result_summary?: str (end only, <=200, redacted), progress?: int 0-100, duration_ms?: int (end only), risk: 'low'|'medium'|'high', source: 'plugin'|'internal'|'job', timestamp: float epoch s}.
 The TD-03 wrapper emits exactly one start and one end per LLM tool call; jobs/tools add progress via notify_tool_action(tool, details, phase='progress', progress=N, id=<call or job id>). The bridge keeps the last 20 by id and relays 'tool_update'; for phase 'progress' it also emits 'tool_progress' {job_id, tool, title, status, percent, message, ts}. DASH-C11 (internal tools + upsert) and VCR-23 reuse these ids so there is one UI row per call.
 
-#### K-14 · ConfirmFlow (events + broker + internal tool (one implementation for all areas)) · owner: Claude
+#### K-14 ? ConfirmFlow (events + broker + internal tool (one implementation for all areas)) ? owner: Claude
 - agent -> bridge /notify confirm_request {id: 32-hex uuid4().hex, tool, summary (Roman Urdu, <=300), risk: 'medium'|'high', voice_allowed: bool, expires_at: epoch s, ttl_s, args_preview}. The bridge stores state['confirmations'], emits only to room 'ui', and answers {status, ui_clients}.
 - ui -> bridge ui_command {type:'confirm_response', payload:{id, allow: bool}}: accepted only from authenticated role-ui sockets with a pending, non-expired row; forwarded only to room 'agent'; audited.
 - agent -> ui confirm_resolved {id, allow: bool, reason: 'approved'|'denied'|'expired'|'voice'|'no_ui'|'cancelled', result_status?}.
@@ -191,7 +191,7 @@ The TD-03 wrapper emits exactly one start and one end per LLM tool call; jobs/to
 - Approved runs go through the normal wrapper (timeout, lock, tool_sync).
 - Risk levels of desktop tools come from DesktopToolPolicy via get_tool_meta; other risk maps (tool_risk_policy.py, jarvis_guard.RISK) read it instead of overriding it; a confirm_level setting may only make confirmation stricter.
 
-#### K-15 · DesktopConfigKeys (env + config attributes (services/utils/jarvis_config.py, Claude-owned)) · owner: Claude
+#### K-15 ? DesktopConfigKeys (env + config attributes (services/utils/jarvis_config.py, Claude-owned)) ? owner: Claude
 deploy/windows-local/.env and root .env get the same keys via scripts/ops/env_set.py (set-if-missing, --secret generates token_urlsafe(32), never prints values). ENV -> attribute (default):
 - JARVIS_OUTPUTS_DIR -> outputs_dir (<project_root>/Jarvis_Outputs)
 - JARVIS_SHARED_DIR -> shared_dir (~/Jarvis_Shared; on the PC C:/Users/Matloob/Jarvis_Shared)
@@ -208,7 +208,7 @@ deploy/windows-local/.env and root .env get the same keys via scripts/ops/env_se
 - JARVIS_CV_PATH -> cv_path (None)
 Cursor code reads each attribute via getattr(config, name, <same default>) so a missing key never crashes.
 
-#### K-16 · DesktopToolPolicy (policy table: timeout(s) / risk / raw args / exclusive) · owner: Claude
+#### K-16 ? DesktopToolPolicy (policy table: timeout(s) / risk / raw args / exclusive) ? owner: Claude
 - open_app 30/low/-/desktop_input; save_notepad 25/low/-/desktop_input; open_notepad_file 10/dyn(medium for non-text types)/file_path/-
 - close_window 15/dyn(medium if force, >1 match or any browser window)/-/-; close = routed alias of close_window (same policy)
 - minimize_window, maximize_window 10/low; folder_file 15/dyn(high for EXEC_EXTS; files outside open_roots need confirmation)/path/-; create_folder 10/low; open_outputs_folder 10/low; get_active_window_context 5/low
@@ -225,13 +225,13 @@ Cursor code reads each attribute via getattr(config, name, <same default>) so a 
 - shutdown_system 20/high; restart_system 20/high; sleep_system 15/medium; empty_recycle_bin 30/high (async summary); cancel_shutdown 10/low; get_laptop_info 5/low
 - retry_attempts stays 0 for every GUI tool: never auto-retry a send or typing action. desktop_input tools obey the central kill switch.
 
-#### K-17 · ToolNamesV2 (naming (LLM-visible tool names)) · owner: Claude
+#### K-17 ? ToolNamesV2 (naming (LLM-visible tool names)) ? owner: Claude
 - Added: close_window(window_name: str, force: bool = False). The tool 'close' stays registered as a routed alias that calls close_window (nothing unregistered).
 - New tools: cancel_shutdown() (jarvis_system_ctrl, Cursor); confirm_action(confirm_id, allow=True) (jarvis_confirm, Claude); list_background_jobs() and cancel_background_job(job_id) (jarvis_jobs, Claude); confirm_selftest only when JARVIS_CONFIRM_SELFTEST=1.
 - Backward-compatible signature changes: sleep_system(mode='sleep'|'hibernate'), close_notepad_tool(force=False), run_cmd_command(command, capture=False).
 - No tool is removed. TD-36 updates the prompt (one change with VCR-06).
 
-#### K-18 · AnnouncerAPI (python-api (services/utils/jarvis_announcer.py, Claude-owned; re-exported by services/ai_core/announcer.py)) · owner: Claude
+#### K-18 ? AnnouncerAPI (python-api (services/utils/jarvis_announcer.py, Claude-owned; re-exported by services/ai_core/announcer.py)) ? owner: Claude
 - attach(session) / detach() (aliases set_session(session|None), set_assistant(assistant|None)) called by agent_runner.
 - async announce(text: str, *, priority: 'low'|'normal'|'high' = 'normal', speak: bool = True, kind: str = 'info') -> None.
   - Always posts Message {id, role:'assistant', text, source:'system', final:true, ts} to the UI.
@@ -239,13 +239,13 @@ Cursor code reads each attribute via getattr(config, name, <same default>) so a 
   - Rate limit 1 per 5 s; 'high' bypasses it. Without a session it queues up to 20 and flushes on attach. Never raises.
 - Used by ConfirmationBroker.on_result, jobs completion and clipboard tips; VCR-19 proactive reminders may use it too.
 
-#### K-19 · ClipboardSuggestion (callback schema (Cursor producer jarvis_clipboard.py, Claude consumer agent_runner.py)) · owner: Claude
+#### K-19 ? ClipboardSuggestion (callback schema (Cursor producer jarvis_clipboard.py, Claude consumer agent_runner.py)) ? owner: Claude
 - ClipboardMonitor.start(cb) awaits cb(s) with s = {id: str, error_excerpt: str (redacted, <=200 chars), query: str, solution: str (<=500 chars), source_url: str|None, ts: float}.
 - The consumer also accepts a plain str (old behaviour) during the transition.
 - services.automation.jarvis_clipboard.note_self_write(text: str) -> None marks clipboard content JARVIS wrote itself; the monitor ignores it.
 - config.clipboard_helper_enabled False stops detections; config.clipboard_speak decides whether tips are spoken.
 
-#### K-20 · BackgroundJobsAPI (python-api (services/utils/jarvis_jobs.py, Claude-owned; re-exported by services/ai_core/background_jobs.py)) · owner: Claude
+#### K-20 ? BackgroundJobsAPI (python-api (services/utils/jarvis_jobs.py, Claude-owned; re-exported by services/ai_core/background_jobs.py)) ? owner: Claude
 - start_job(tool: str, title: str, factory: Callable[[JobContext], Awaitable[dict]], *, timeout: float = 1800, announce: bool = True) -> job_id
 - JobContext(job_id, tool, title): await progress(percent: float|None, message: str) (throttled to 1 per 1.5 s or 5 points; emits tool_sync phase='progress'); .cancelled: bool
 - list_jobs() -> list[dict]; get_job(job_id) -> dict|None; cancel_job(job_id) -> bool
@@ -254,13 +254,13 @@ Cursor code reads each attribute via getattr(config, name, <same default>) so a 
 - Memory-only: jobs are lost on agent restart and reported as such.
 - Cursor callers import lazily and run synchronously when the module is missing.
 
-#### K-21 · ActiveWindowContext (python-api (Cursor-owned function, consumed by Claude's src/core/vision_handler.py:50)) · owner: Claude
+#### K-21 ? ActiveWindowContext (python-api (Cursor-owned function, consumed by Claude's src/core/vision_handler.py:50)) ? owner: Claude
 await get_active_window_context() -> {status: 'success'|'not_found'|'error', title: str, is_maximized: bool, is_minimized: bool, message: str, pid?: int, process_name?: str}. The keys status and title must not change.
 
-#### K-22 · YouTubeVideoUrl (python-api (Cursor-owned, consumed by services/multimedia/jarvis_youtube_downloader.py)) · owner: Claude
+#### K-22 ? YouTubeVideoUrl (python-api (Cursor-owned, consumed by services/multimedia/jarvis_youtube_downloader.py)) ? owner: Claude
 await yt_bot.get_video_url(query: str) -> 'https://www.youtube.com/watch?v=<id>' or None. It never returns a search-results URL (yt-dlp would expand one into a playlist). The merged downloader may instead pass 'ytsearch1:<query>' to yt-dlp directly.
 
-#### K-23 · PinchTabLocalServer (ops + HTTP API) · owner: Claude
+#### K-23 ? PinchTabLocalServer (ops + HTTP API) ? owner: Claude
 PinchTab (github.com/pinchtab/pinchtab): a local open-source HTTP server that drives Chrome for AI agents (accessibility snapshots with refs, text extraction, profiles and instances).
 - Install on the PC (after approval): npm install -g pinchtab (Node 24 present).
 - Config: server.bind 127.0.0.1, server.port 9867; the token lives in PinchTab's config file or the PINCHTAB_TOKEN environment variable, never on a command line or in logs.
@@ -269,13 +269,13 @@ PinchTab (github.com/pinchtab/pinchtab): a local open-source HTTP server that dr
 - Endpoints used: GET /health; GET/POST /profiles; GET /instances; POST /instances/start; POST /instances/{id}/tabs/open; GET /tabs/{id}/text; GET /tabs/{id}/snapshot?filter=interactive; POST /tabs/{id}/action {kind: click|fill|type|press, ref, text|key}; POST /instances/{id}/stop or /profiles/{name}/stop.
 - read_page output is untrusted data (data.untrusted=true).
 
-#### K-24 · AutomationSettings (event payload extension (branch of the single settings service from VCR-09)) · owner: Claude
+#### K-24 ? AutomationSettings (event payload extension (branch of the single settings service from VCR-09)) ? owner: Claude
 - ui_command {type:'settings_update', payload:{...existing settings..., automation?: {desktop_control: bool, clipboard_helper: bool, clipboard_speak: bool, voice_confirm_high: bool}}}.
 - Handled inside the VCR-09 settings service (no second handler); accepted only from authenticated ui sockets (OPS-08 roles). voice_confirm_high=true is accepted only when legacy token auth is off (after OPS-10); otherwise refused and audited.
 - Every change is audited (AUTOMATION_SETTING) and persisted in the settings store with {by, ts}; at startup .env applies first and the persisted block overrides it (voice_confirm_high=true only when set after the cut-over).
 - settings_sync (agent -> ui) includes the automation block on change and at UI connect.
 
-#### K-25 · DesktopCommonHelpers (python-api (services/system/jarvis_desktop_common.py; Cursor-internal)) · owner: Claude
+#### K-25 ? DesktopCommonHelpers (python-api (services/system/jarvis_desktop_common.py; Cursor-internal)) ? owner: Claude
 - tool_result(status, message, *, tool=None, data=None, error_code=None, hint=None, **legacy) -> dict
 - find_windows(title_contains=None, *, title_suffix=None, pid=None, visible_only=True) -> list[WindowInfo(hwnd, title, pid, process_name)]; async wait_for_window(*, pid=None, title_contains=None, title_suffix=None, timeout_s=10.0) -> WindowInfo|None
 - force_foreground_sync(hwnd) -> bool and async force_foreground(hwnd) -> bool: never raise; the async form runs in to_thread.
@@ -288,138 +288,138 @@ PinchTab (github.com/pinchtab/pinchtab): a local open-source HTTP server that dr
 - async clipboard_paste_text(text, restore=True): saves CF_UNICODETEXT, pastes, waits 600 ms-1.5 s, restores only if the saved content was text and the clipboard still holds our text, calls note_self_write.
 - No import-time side effects.
 
-#### K-26 · VitalsPCHelper (python-api (Cursor provides, Claude may consume for vitals_pc)) · owner: Claude
+#### K-26 ? VitalsPCHelper (python-api (Cursor provides, Claude may consume for vitals_pc)) ? owner: Claude
 services.system.jarvis_system_info.collect_pc_vitals() -> {cpu: float, ram: float, disk: float, battery: int|None, plugged: bool|None, secs_left: int|None}. Synchronous, under 0.5 s, safe to call from asyncio.to_thread every 5-10 s; OPS-16 snapshot_vitals() may route through it.
 
-#### K-27 · TestSideEffectGuard (pytest fixture module (tests/tools/side_effect_guard.py, Cursor-owned; contract recorded by Claude)) · owner: Claude
+#### K-27 ? TestSideEffectGuard (pytest fixture module (tests/tools/side_effect_guard.py, Cursor-owned; contract recorded by Claude)) ? owner: Claude
 - Autouse fixture block_real_side_effects patches pyautogui input functions, pynput Controller methods, os.startfile, os.system, subprocess.Popen/run/call, asyncio.create_subprocess_exec/_shell, webbrowser.open, pyperclip, win32clipboard set/get, win32gui PostMessage/SetForegroundWindow/ShowWindow/BringWindowToTop, win32api keybd_event/PostMessage, ctypes user32 keybd_event/SendInput, shell32.SHEmptyRecycleBinW, smtplib.SMTP, requests.get/post and httpx get/post/AsyncClient to raise AssertionError('REAL SIDE EFFECT: <name>').
 - It points config.bridge_url to http://127.0.0.1:9 and removes UIBridgeHandler from all loggers.
 - Disabled only with JARVIS_LIVE_GUI_TESTS=1. Imported by conftest.py in tests/tools, tests/automation, tests/scripts, services/automation/tests (Cursor) and tests/exhaustive (Claude).
 
-#### K-28 · tool_arg_policies (python-api (Claude: services/utils/jarvis_security.py; wired by the single EXT X0/C1 jarvis_tool decorator)) · owner: Claude
-VortexGuard.sanitize_arg(value: str, policy='plain') -> str, raising ArgPolicyError(code='PATH_NOT_ALLOWED'|'INVALID_ARG', message). Policies: plain = today's sanitize_input, unchanged, and the default for every argument without a policy; multiline = NFC, CRLF/CR to LF, control chars removed except LF/TAB, punctuation kept, max 20000; raw = NFC only (never NFKC), control chars removed except LF/TAB, max 20000 (identical to C1 sanitize_raw; raw_args=True means raw); url_or_text = an http(s) URL with a host is returned unchanged except control chars, anything else gets plain; path = NFC, control chars removed, '..' segments and UNC/device paths raise PATH_NOT_ALLOWED (each tool still checks its allowed roots); email_list = 1-10 addresses split on comma/semicolon/whitespace, returned ', '-joined, else INVALID_ARG. validate_tool_args(tool, args, depth=0, policies=None) applies per-key policies to top-level strings; nested values stay plain. validate_tool_output(tool, output, depth=0, max_chars=12000): every str gets INJECTION_PATTERNS replaced by '[filtered]', then redact_secrets(), then truncation to max_chars plus a line '…[truncated N chars]'; a whole string is never replaced for length; the 500 KB, 100-key, 200-item and depth caps are unchanged; detect_threat (with its 5000-char rule) is for user input only. Wrapper duties for EXT C1: validate arguments BEFORE breaker.call; ArgPolicyError becomes {status:'error', tool, error_code, message} with no breaker failure counted; the decorator's max_output_chars is passed as max_chars.
+#### K-28 ? tool_arg_policies (python-api (Claude: services/utils/jarvis_security.py; wired by the single EXT X0/C1 jarvis_tool decorator)) ? owner: Claude
+VortexGuard.sanitize_arg(value: str, policy='plain') -> str, raising ArgPolicyError(code='PATH_NOT_ALLOWED'|'INVALID_ARG', message). Policies: plain = today's sanitize_input, unchanged, and the default for every argument without a policy; multiline = NFC, CRLF/CR to LF, control chars removed except LF/TAB, punctuation kept, max 20000; raw = NFC only (never NFKC), control chars removed except LF/TAB, max 20000 (identical to C1 sanitize_raw; raw_args=True means raw); url_or_text = an http(s) URL with a host is returned unchanged except control chars, anything else gets plain; path = NFC, control chars removed, '..' segments and UNC/device paths raise PATH_NOT_ALLOWED (each tool still checks its allowed roots); email_list = 1-10 addresses split on comma/semicolon/whitespace, returned ', '-joined, else INVALID_ARG. validate_tool_args(tool, args, depth=0, policies=None) applies per-key policies to top-level strings; nested values stay plain. validate_tool_output(tool, output, depth=0, max_chars=12000): every str gets INJECTION_PATTERNS replaced by '[filtered]', then redact_secrets(), then truncation to max_chars plus a line '?[truncated N chars]'; a whole string is never replaced for length; the 500 KB, 100-key, 200-item and depth caps are unchanged; detect_threat (with its 5000-char rule) is for user input only. Wrapper duties for EXT C1: validate arguments BEFORE breaker.call; ArgPolicyError becomes {status:'error', tool, error_code, message} with no breaker failure counted; the decorator's max_output_chars is passed as max_chars.
 
-#### K-29 · redact_secrets (python-api + logging convention (Claude: services/utils/jarvis_security.py, services/utils/jarvis_logger.py)) · owner: Claude
+#### K-29 ? redact_secrets (python-api + logging convention (Claude: services/utils/jarvis_security.py, services/utils/jarvis_logger.py)) ? owner: Claude
 redact_secrets(text) -> str replaces with '***' the current values (length >= 8) of GOOGLE_API_KEY, GOOGLE_SEARCH_API_KEY, TAVILY_API_KEY, OPENROUTER_API_KEY, GROQ_API_KEY, HF_TOKEN, EMAIL_APP_PASSWORD, WEATHER_API_KEY, OPENWEATHER_API_KEY, VORTEX_SECURITY_TOKEN, CONTROLLER_TOKEN, JARVIS_ENCRYPTION_KEY, LIVEKIT_API_SECRET, AGENT_TOKEN, BRIDGE_HMAC_SECRET, SESSION_JWT_SECRET, POLLINATIONS_TOKEN, PINCHTAB_TOKEN, SIM_LOOKUP_API_KEY and every value given to register_runtime_secret(value) (for example the per-start file-server token of EXT K2), and masks key=, api_key=, appid=, token=, sig= query values and 'Bearer <x>'. jarvis_logger.RedactingFormatter.format() returns redact_secrets(super().format(record)), covering messages, args, exc_info tracebacks and stack_info; every JARVIS handler (console, rotating file, UI bridge or batch) uses it, and later logger rewrites (EXT OPS-17, VCR-32) must keep it. httpx and httpcore loggers stay at WARNING. Conventions: Google keys go in the 'x-goog-api-key' header; Tavily, Pollinations and the SIM API use 'Authorization: Bearer'; HTTP errors are logged or returned only as redact_secrets(str(e)).
 
-#### K-30 · llm_text (python-api (Claude: services/ai_core/llm_text.py)) · owner: Claude
+#### K-30 ? llm_text (python-api (Claude: services/ai_core/llm_text.py)) ? owner: Claude
 async generate_text(prompt, *, system=None, model=None, max_output_tokens=2048, temperature=0.4, timeout=60.0) -> LLMResult(text, provider, model); async generate_vision(prompt, image: PIL.Image | bytes, *, timeout=60.0) -> LLMResult; both raise LLMUnavailableError(reasons) when every tier fails; async list_gemini_models() for diagnostics. Tier 1 Gemini (google-genai, GOOGLE_API_KEY): the model argument or JARVIS_TEXT_MODEL (gemini-3.5-flash) / JARVIS_VISION_MODEL (gemini-3.8-flash), then gemini-3.8-flash, gemini-3.5-flash, gemini-3.1-flash-lite, gemini-2.5-flash; a 404 marks the id dead and tries the next one, 429/5xx moves to the next tier. Tier 2 Groq (OpenAI-compatible): JARVIS_GROQ_TEXT_MODEL openai/gpt-oss-120b with reasoning_effort 'low'; JARVIS_GROQ_VISION_MODEL qwen/qwen3.6-27b with reasoning_effort 'none'. Tier 3 OpenRouter: JARVIS_OPENROUTER_MODEL openrouter/free. Keys only via SDK or headers; failure reasons pass through redact_secrets. Consumers: vision (TI-05), research (TI-11, Cursor), swarm (TI-19), bug hunter (TI-20), self-repair (TI-21).
 
-#### K-31 · job_progress_routing (events (agent /notify -> bridge -> room 'ui') + ui_command) · owner: Claude
+#### K-31 ? job_progress_routing (events (agent /notify -> bridge -> room 'ui') + ui_command) ? owner: Claude
 Producer: EXT C6 jobs (JobContext.progress and job end) post /notify tool_sync {id: job id, tool, action: job title, phase: 'start'|'progress'|'end', status, details, progress?: 0-100, duration_ms?, job: true, artifact?: {kind: 'audio'|'video'|'image'|'file', path, name}, timestamp}. Bridge: keeps today's tool_logs and 'tool_update'; for job events it upserts state.jobs[id] (newest 20) and emits 'tool_progress' {job_id, tool, title, status: 'queued'|'running'|'done'|'error'|'cancelled' (success maps to done), percent: number|null, message, artifact?, ts} to room 'ui'; a direct /notify 'tool_progress' of the same shape is also accepted. init_state gains jobs (newest first). UI -> agent: ui_command {type:'job_cancel', payload:{job_id}} and {type:'open_job_artifact', payload:{job_id}}, added to the ui_command allow-list and forwarded only to room 'agent'. Agent: job_cancel -> jarvis_jobs.cancel_job(job_id); open_job_artifact -> os.startfile(artifact.path) only for a finished job whose file exists under <project_root>/Jarvis_Outputs or config.shared_dir, audited. Producers: YouTube (TI-15), research+email (TI-11), swarm (TI-19); consumer: Jobs panel (TI-27).
 
-#### K-32 · scheduled_action_runner (python-api (Claude: services/ai_core/scheduler_dispatcher.py)) · owner: Claude
+#### K-32 ? scheduled_action_runner (python-api (Claude: services/ai_core/scheduler_dispatcher.py)) ? owner: Claude
 FORBIDDEN_SCHEDULED_ACTIONS = confirm_action, schedule_task, cancel_scheduled_task, set_reminder, plus autonomous_self_repair when apply is true. action_risk(action, args) -> 'forbidden'|'free_text'|'low'|'medium'|'high' (a registered tool returns its X0 decorator risk with defaults applied; an unknown name returns 'free_text'). async run_scheduled_action(row) -> {status: 'success'|'error'|'awaiting_confirmation'|'delegate'|'forbidden', message, result?}: tool actions run through the plugin-manager wrapper (arg policies, timeout and confirmation kept), never the raw function; 'delegate' means EXT VCR-19's ProactiveAnnouncer keeps its LLM action instruction. needs_confirmation sets the row to awaiting_confirmation with confirm_id; on the X0 broker resolution: allow + result -> completed (result JSON <= 4000 chars); deny -> failed 'denied'; expired or no UI -> stays awaiting, re-asked every 15 min, failed 'approval timeout' after 24 h and announced. Results are announced through EXT C5. Consumers: the EXT VCR-19 due loop; schedule_task (Cursor) imports action_risk lazily and treats a missing module as 'high' for any action.
 
-#### K-33 · task_store_v2 (python-api + sqlite schema (Cursor-owned services/automation/jarvis_task_manager.py and jarvis_reminders.py; contract owned by Claude)) · owner: Claude
+#### K-33 ? task_store_v2 (python-api + sqlite schema (Cursor-owned services/automation/jarvis_task_manager.py and jarvis_reminders.py; contract owned by Claude)) ? owner: Claude
 conversations/tasks.db table tasks gains kind TEXT DEFAULT 'task', action_args TEXT (JSON object), result TEXT, attempts INTEGER DEFAULT 0, updated_at TEXT and confirm_id TEXT, added only when missing (PRAGMA table_info); nothing is dropped. status is one of pending, triggered, running, awaiting_confirmation, completed, failed, cancelled. TaskManager: add_task(description, scheduled_time, action=None, action_args=None, kind='task') -> int; get_due_tasks() (marks triggered atomically, decodes action_args); list_triggered_tasks(); mark_running(id); mark_awaiting_confirmation(id, confirm_id); mark_completed(id, result=None); mark_failed(id, error); increment_attempts(id); cancel_task(id); get_task(id); list_pending_tasks(kind=None). Module parse_when(text, now=None) -> datetime | None (English and Roman-Urdu units and number words, HH:MM, h:mm am/pm, ISO, 'kal'/'tomorrow HH:MM'). Tools: schedule_task(time_str, description, action='', action_args_json='') and the new cancel_scheduled_task(task_id). Reminders stay in reminders.json (EXT DASH-U13/VCR-20); set_reminder uses parse_when. CONTRACT-TASKS TaskItem.status may carry the new statuses, and UIs render unknown statuses as plain text.
 
-#### K-34 · sim_authorized_source (python-api + env + event fields (Cursor-owned services/info/sim_providers.py on EXT DASH-U18's AuthorizedSimSource protocol; Claude routing)) · owner: Claude
+#### K-34 ? sim_authorized_source (python-api + env + event fields (Cursor-owned services/info/sim_providers.py on EXT DASH-U18's AuthorizedSimSource protocol; Claude routing)) ? owner: Claude
 Exactly two sources: NotConfiguredSource (default: today's blocked result, SAFE_MESSAGE plus 'provider not configured') and AuthorizedApiSource. Leaked, scraped or 'SIM database' sources and any other source type are prohibited (a test asserts it). Selection: SIM_SOURCE='none' forces off; unset or empty = auto, AuthorizedApiSource only when SIM_LOOKUP_API_URL and SIM_LOOKUP_API_KEY are both set (user decision 30 Sep). AuthorizedApiSource.lookup(digits) -> list[{full_name, cnic_masked (last 4 digits visible), phone_masked, address? (only with SIM_LOOKUP_SHOW_ADDRESS=1)}] via POST SIM_LOOKUP_API_URL json {msisdn} with 'Authorization: Bearer <SIM_LOOKUP_API_KEY>' and a 10 s timeout; field names live in one FIELD_MAP that is confirmed against the provider's API doc. lookup_sim_data(phone_number, purpose=''): with a configured source a purpose of >= 5 chars and SIM_LOOKUP_DAILY_LIMIT (default 20 per day) are enforced; the audit row is {ts, provider, query_masked, status, count, purpose_sha256}, never the raw number or purpose. Events: sim_panel_open {message, provider, configured, requires_purpose}; sim_data_result gains provider. ui_command sim_lookup accepts the legacy string (<= 20 chars) or {query (<= 20 chars), purpose (<= 200 chars)}; the bridge allow-list (EXT OPS-08/DASH-C09) accepts both and forwards only to room 'agent'.
 
-#### K-35 · tools_info_env (env (PC only)) · owner: Claude
+#### K-35 ? tools_info_env (env (PC only)) ? owner: Claude
 Added by scripts/ops/env_defaults.py (append-only; never rewrites or prints values) to the root .env and deploy/windows-local/.env (start-agent.bat copies the latter over .env until EXT C-ENV-1 changes that) and listed in .env.example and .env.production.example: JARVIS_TEXT_MODEL=gemini-3.5-flash, JARVIS_VISION_MODEL=gemini-3.8-flash, JARVIS_GROQ_TEXT_MODEL=openai/gpt-oss-120b, JARVIS_GROQ_VISION_MODEL=qwen/qwen3.6-27b, JARVIS_OPENROUTER_MODEL=openrouter/free, JARVIS_IMAGE_MODEL=black-forest-labs/FLUX.1-schnell, JARVIS_IMAGE_PROVIDER=auto, POLLINATIONS_TOKEN= (optional secret), TAVILY_SEARCH_DEPTH=advanced, SMTP_HOST=smtp.gmail.com, SMTP_PORT=587, JARVIS_DOC_DIRS= (';' list, empty = defaults), JARVIS_RAG_WARM_DELAY_S=120, JARVIS_FRAME_MAX_AGE_S=10, JARVIS_SELF_REPAIR_APPLY=0 (TI-32 sets 1), SIM_SOURCE= (empty = auto), SIM_LOOKUP_API_URL=, SIM_LOOKUP_API_KEY= (secret, filled by the user), SIM_LOOKUP_DAILY_LIMIT=20, SIM_LOOKUP_SHOW_ADDRESS=0. Existing names stay and already match the code: GOOGLE_API_KEY, WEATHER_API_KEY (OPENWEATHER_API_KEY alias), GOOGLE_SEARCH_API_KEY, SEARCH_ENGINE_ID, TAVILY_API_KEY, OPENROUTER_API_KEY, GROQ_API_KEY, HF_TOKEN, EMAIL_USER, EMAIL_APP_PASSWORD, JARVIS_SHARED_DIR, USER_CITY, LOG_FILE. Owned elsewhere: JARVIS_CONFIRM_TIMEOUT_S (EXT X0/C3, one value), JARVIS_FILE_SERVER_* and FFMPEG_DIR (EXT C3/C7), media relay settings (EXT DASH-C21). --update is allowed only for non-secret switches. Nothing from this list goes to the VPS.
 
-#### K-36 · C-AUTH-1 (http-api) · owner: Claude
+#### K-36 ? C-AUTH-1 (http-api) ? owner: Claude
 Owner session auth on the bridge (nginx /vortex/ strips the prefix). POST /vortex/auth/login JSON {password, totp:'6 digits'} or {password, recovery_code}; the Origin header must be in ALLOWED_ORIGINS. 200 -> {ok:true, user:'owner', session_id, expires_at:<epoch s>} + Set-Cookie jarvis_session=<JWT>; Path=/vortex; HttpOnly; Secure; SameSite=Strict; Max-Age=43200. 401 -> {ok:false, error:'invalid_credentials'} (same body for any wrong field). 429 -> {ok:false, error:'rate_limited', retry_after:<s>} after 5 failures per 15 min per IP or 20 per hour globally (after OP-21 nginx also applies limit_req 10r/m burst 5 on this path). 503 -> {error:'owner_not_enrolled'}. POST /vortex/auth/logout -> 200 {ok:true}, cookie cleared (Max-Age=0), session revoked. GET /vortex/auth/me -> 200 {authenticated:true, user:'owner', session_id, expires_at} or 401 {authenticated:false}. JWT HS256 with SESSION_JWT_SECRET, claims {sub:'owner', sid, iat, exp=iat+43200, v:1}, valid only while sid exists unrevoked in the sessions table. Password: bcrypt cost 12 (OWNER_PASSWORD_HASH). TOTP: RFC 6238, 30 s, 6 digits, window +-1 step (OWNER_TOTP_SECRET); the last accepted timecode is stored and never accepted again. Recovery: 10 single-use codes (OWNER_RECOVERY_HASHES, bcrypt). Hashes are stored base64url-encoded in bridge.env (no '$' for compose to interpolate). Session required (401 {error:'auth_required'} otherwise): GET /vortex/livekit/token, /vortex/status, /vortex/messages, GET/POST /vortex/settings, /vortex/telemetry/production, POST /vortex/feedback and the Socket.IO UI connection. Public: GET /vortex/health, POST /vortex/auth/login, GET /vortex/auth/me. Agent credentials (C-NOTIFY-1 headers) accepted on POST /vortex/notify, POST /vortex/livekit/ensure, GET /vortex/settings, GET /vortex/status. Root-only CLI inside the container: 'python -m src.core.bridge_auth hash-password | mint-session --ttl N --label X (prints jarvis_session=<JWT>) | revoke-all | enroll-check | audit-summary --prefix P'. Transition: while LEGACY_TOKEN_AUTH=1 the header X-Vortex-Token or Socket.IO auth.token = VORTEX_SECURITY_TOKEN is also accepted (identity 'owner-legacy'); set to 0 at cut-over (OP-21). Every login attempt, logout and session mint writes an audit row.
 
-#### K-37 · C-LK-1 (http-api) · owner: Claude
+#### K-37 ? C-LK-1 (http-api) ? owner: Claude
 GET /vortex/livekit/token (session cookie; legacy token only while LEGACY_TOKEN_AUTH=1) -> 200 {token, url:'wss://jarvis.srv1802669.hstgr.cloud', room:'jarvis-hybrid', identity:'owner-<first 8 chars of session id>' ('owner-legacy' in legacy mode), expires_at}. Token TTL 3600 s; grants room_join, room='jarvis-hybrid', can_publish, can_subscribe, can_publish_data; attributes {role:'owner'}, name 'Owner'. Any client 'identity' query parameter is ignored. The UI fetches a NEW token right before every connect and every automatic reconnect and never reuses one. Before answering, the bridge runs RoomManager.ensure('token') (create the room if missing, ensure a dispatch) and never deletes a room; 503 {error:'livekit_unavailable'} only when no token can be minted (dispatch problems are reported through agent_status). Room 'jarvis-hybrid'; agent_name 'jarvis' after OP-22. UI->agent typed text over LiveKit uses topic 'lk.chat' and agent->UI transcripts 'lk.transcription' (details belong to the voice/chat contract of the voice-runtime area).
 
-#### K-38 · C-SOCK-1 (socketio) · owner: Claude
+#### K-38 ? C-SOCK-1 (socketio) ? owner: Claude
 Socket.IO path '/vortex/socket.io' on https://jarvis.srv1802669.hstgr.cloud (dev: the Vite proxy forwards /vortex with ws). UI client: io(<page origin>, {path:'/vortex/socket.io', withCredentials:true, transports:['websocket','polling'], reconnection:true, reconnectionAttempts:Infinity, reconnectionDelayMax:10000}); no auth payload, the server reads the jarvis_session cookie from the handshake. Agent client (python-socketio AsyncClient, reconnection=False, own loop that never exits, backoff 1->10 s; it lives inside the LiveKit job process): connect('https://jarvis.srv1802669.hstgr.cloud', socketio_path='vortex/socket.io', auth={agent_token: AGENT_TOKEN, agent_id: <hostname>, version: <git sha>}). Roles: valid cookie -> 'ui' (room 'ui', receives init_state); valid agent_token -> 'agent' (room 'agent'; agent_status online emitted to 'ui'); auth.token or ?token= equal to VORTEX_SECURITY_TOKEN only while LEGACY_TOKEN_AUTH=1 -> legacy role that joins BOTH rooms (today's broadcast behavior, so old agents/UIs keep working during the migration); anything else is refused (connect returns False, audit 'socket_auth_failed'). Routing: 'ui_command' (ui/legacy only, max 10/s per sid, C-EVT-1 allow-list) -> persistence side effects -> emit('agent_command', data, to='agent'); the sender gets ack {status:'sent'|'queued'|'agent_offline'|'rejected', reason?}. 'vision_frame' (ui/legacy only, max 1/s per sid, max 600 KB) -> emit('agent_vision_frame', data, to='agent'). Events from POST /notify and all bridge periodic events go to='ui' only. An agent socket may only emit 'agent_hello' {version, host}. When the last agent socket disconnects, agent_status {online:false} goes to 'ui'.
 
-#### K-39 · C-NOTIFY-1 (http-api) · owner: Claude
+#### K-39 ? C-NOTIFY-1 (http-api) ? owner: Claude
 Agent -> bridge events: POST /vortex/notify with headers X-Agent-Token: AGENT_TOKEN; X-Agent-Timestamp: unix seconds (int); X-Agent-Nonce: at least 16 random hex chars; X-Agent-Signature: hex(HMAC-SHA256(BRIDGE_HMAC_SECRET, f'{timestamp}.{nonce}.'.encode() + raw_body_bytes)); Content-Type: application/json. The body is exactly the signed bytes of {'type': <event>, 'payload': <any>}, at most 256 KB. Server checks in order: token (401 bad_token), |now - ts| <= 60 s (401 stale), signature over the raw body (403 bad_signature), nonce unseen in the last 300 s (409 replay), size (413), rate buckets (429 with Retry-After; critical types 50/s, logs 10/s, others 20/s). Only after auth are last_runner_contact and the agent_link heartbeat updated. 200 -> {status:'ok'} or {status:'ignored', reason} for unknown types. The legacy headers X-Vortex-Token/X-Vortex-Signature (HMAC keyed with VORTEX_SECURITY_TOKEN over sorted JSON) are accepted only while LEGACY_TOKEN_AUTH=1. Agent side: services/utils/jarvis_bridge.notify_event signs the raw bytes once; critical types (transcription, confirm_request, settings_sync, tool_sync, agent_heartbeat) are retried up to 5 times with backoff 1->30 s from a bounded 500-item queue; signed_headers(raw) is reused by ensure_room.py and agent_ctl. POST /vortex/livekit/ensure uses the same headers with body {}.
 
-#### K-40 · C-EVT-1 (socketio-events) · owner: Claude
+#### K-40 ? C-EVT-1 (socketio-events) ? owner: Claude
 Agent->bridge notify types and what the bridge emits to room 'ui': transcription {id, role:'user'|'assistant' (legacy 'agent'), text, source?, final|is_final, ts|timestamp} -> normalized per C-MSG-1 -> new_message (first time the id is seen) or update_message, plus legacy transcription_update {text}. status 'START'|'STOP' and thinking 'START'|'STOP'|'REJECTED' -> status_change {speaking, thinking}. vitals_pc {cpu, ram, disk, cores, ram_total_gb, host, ts} -> vitals_pc and legacy vitals_update. agent_heartbeat {services, tasks:{name:{running, failures}}, version, ts} -> stored, refreshes agent_status. telemetry {total_samples, success_rate, avg_latency, confusion_rate, status, tools:{calls, failures}, ts} -> telemetry_update. tool_sync {tool, details, risk?, status?, duration_ms?, ts} -> tool_update. memory_update -> memory_sync. reasoning -> reasoning_update. intelligence_sync/intelligence_update -> intelligence_update. location_sync -> location_update. mute_sync (bool) -> mute_update. wake_word_sync (bool) -> wake_word_update. voice_id_sync {confidence, ts} -> voice_match_update. persona_change 'jarvis'|'anna' -> persona_update {persona}. task_alert -> task_notification. task_update -> task_sync. sim_data_result, sim_data_loading, sim_panel_open keep their names. vortex_log {text, category, ts} and vortex_log_batch {items:[<=50], dropped} -> new_log per item. confirm_request -> confirm_request (C-CONFIRM-1). settings_sync -> settings_sync (C-SETTINGS-1). diagnostics {checks, ts} -> diagnostics_update. audit_event {action, detail, ts} -> audit_update. qa_ping {n} -> counted only, never emitted. Legacy types kept working: 'token' -> token_stream; 'vitals' -> handled as vitals_pc (+ vitals_update); user_speaking_sync (bool) -> user_status_change {speaking} with the 1.5 s auto-reset. Bridge-originated (to 'ui'): init_state (C-STATE-1), agent_status (C-ROOM-1), vitals_vps {same shape as vitals_pc, host:'vps'} every 12 s, legacy vitals_update (latest vitals_pc if under 30 s old, else vitals_vps with source:'vps'), telemetry_update, confirm_resolved {id, allow, by:'owner'|'timeout'|'no_ui'}. UI->bridge ui_command types: chat {id, text} (a legacy plain string is accepted), mute, unmute, wake_word_toggle (bool), stop, start, persona_change, clear_memory, open_sim_panel, sim_lookup, swarm, confirm_response {id, allow}, settings_update (C-SETTINGS-1). Anything else gets ack {status:'rejected'}.
 
-#### K-41 · C-MSG-1 (schema) · owner: Claude
+#### K-41 ? C-MSG-1 (schema) ? owner: Claude
 Message = {id: string (uuid; for typed chat the UI-generated id), role: 'user'|'assistant', text: string, source: 'voice'|'text'|'system', final: boolean, ts: number (epoch seconds, float)}. The bridge normalizes legacy input: role 'agent' -> 'assistant'; is_final -> final (default true); timestamp -> ts (default now); source defaults to 'voice' for session transcriptions, 'text' when the id matches a chat command id, 'system' for reminders, the bug hunter and probes (the agent should set it explicitly). Emitted messages also carry the legacy aliases timestamp (=ts) and is_final (=final) for older UIs. Messages are upserted by id (text replaced, final updated), persisted in SQLite and never auto-pruned. Typed chat: the UI generates the id -> ui_command chat {id, text} -> optimistic render with that id -> the agent accepts {id, text} or a legacy string, echoes the user message with the SAME id and source 'text' (a new id only for legacy strings) and replies with source 'text' -> the UI de-duplicates by id. History: GET /vortex/messages?before=<ts>&limit=<=100 -> {messages:[ascending ts], has_more}.
 
-#### K-42 · C-STATE-1 (schema) · owner: Claude
+#### K-42 ? C-STATE-1 (schema) ? owner: Claude
 init_state is emitted to a UI socket on connect: {messages: last 100 (C-MSG-1, ascending, with legacy aliases), logs: last 30, memories: last 10, tool_logs: last 20, settings (C-SETTINGS-1), persona (legacy key), muted, wake_word_active, voice_match, agent_status (C-ROOM-1), vitals_pc|null, vitals_vps, telemetry|null, location, sim_records, sim_loading, sim_query_masked, sim_status, sim_message, sim_panel_open, server_time}. Storage: SQLite at BRIDGE_DB_PATH=/app/data/bridge.db on the named volume jarvis_bridge_data (WAL). Tables: messages, events, settings, sessions, audit, kv, confirmations, pending_commands, schema_version; volatile flags (speaking, thinking, user_speaking) stay in memory. Everything survives bridge restarts and deploys. Event/log retention = BRIDGE_EVENT_RETENTION_DAYS (0 = keep forever until the user approves a value); messages are never auto-pruned. deploy/hostinger/backup_vps.sh takes an online SQLite backup; a corrupt DB is renamed (never deleted) and a fresh one is started with a CRITICAL log.
 
-#### K-43 · C-STATUS-1 (http-api) · owner: Claude
+#### K-43 ? C-STATUS-1 (http-api) ? owner: Claude
 GET /vortex/health (public liveness; used by the Docker healthcheck and deploy.sh) -> 200 {status:'ok', version:<GIT_SHA>, uptime_s} whenever the process serves requests. GET /vortex/status (session cookie or agent credentials) -> 200 {status:'ok'|'degraded'|'down', ts, bridge:{ok, version, uptime_s}, db:{ok, size_bytes}, livekit:{ok, latency_ms, room_exists, participants, agent_in_room, dispatch_id, last_job_state}, agent:{online, voice_ready, paused, since, last_heartbeat, host, version, services, tasks}, vitals_vps, vitals_pc, ui_clients:int, qa:{pings}}. 'degraded' = agent offline or LiveKit unreachable; 'down' = DB unusable. The bridge never reports CRITICAL because of heartbeats that belong to the PC process (jarvis_health is role-aware via JARVIS_ROLE).
 
-#### K-44 · C-ROOM-1 (process+http-api) · owner: Claude
+#### K-44 ? C-ROOM-1 (process+http-api) ? owner: Claude
 Room 'jarvis-hybrid' (JARVIS_ROOM_NAME) is created only by the bridge: CreateRoom(empty_timeout=3600, departure_timeout=3600, max_participants=10), no agents list. Nothing calls DeleteRoom except the audited admin CLI 'python -m src.core.bridge_rooms reset-room --confirm jarvis-hybrid' (a test enforces this; ensure_room.py never deletes). Worker: WorkerOptions(agent_name='jarvis', host='127.0.0.1', port=8081) = explicit dispatch. RoomManager.ensure(reason), serialized by one asyncio.Lock, runs every 20 s, on webhooks, on /livekit/token and on POST /vortex/livekit/ensure: create the room if missing; if not paused, no agent participant in the room, (no active dispatch, or the newest is older than 30 s with no running job), the last dispatch was more than 30 s ago and the dispatch mode allows it (AGENT_DISPATCH_MODE=always (default) | on_demand = only when a UI client was connected in the last 10 min) -> delete the stale DISPATCH only, then create_dispatch(agent_name='jarvis', room, metadata {reason, ts}). POST /vortex/livekit/ensure (agent auth per C-NOTIFY-1, body {}) -> {room, dispatch_id, agent_in_room, created:{room:bool, dispatch:bool}}; used by deploy/windows-local/ensure_room.py and scripts/agent_ctl.py (which waits up to 60 s for agent_in_room). Webhooks: LiveKit posts to http://jarvis-bridge:5001/livekit/webhook on the Docker network only (nginx returns 404 for /vortex/livekit/webhook), verified by WebhookReceiver(TokenVerifier(LIVEKIT_API_KEY, LIVEKIT_API_SECRET)); livekit.yaml webhook.urls plus env LIVEKIT_WEBHOOK_API_KEY. participant_joined/left kind AGENT -> voice_ready; kind STANDARD -> UI voice presence; room_finished -> ensure. agent_status (bridge -> 'ui', on every change and in init_state) = {online: agent socket connected, voice_ready: agent participant in room, paused, since: epoch s of last change, last_heartbeat, host, version}. ui_command 'stop' -> paused=true (kv) + forwarded; the agent ends its job with ctx.shutdown('paused_by_owner') instead of restarting the session, and nothing re-dispatches while paused. ui_command 'start' -> paused=false + immediate ensure.
 
-#### K-45 · C-CONFIRM-1 (socketio+python-api) · owner: Claude
+#### K-45 ? C-CONFIRM-1 (socketio+python-api) ? owner: Claude
 Policy in services/ai_core/jarvis_guard.py (Claude). HIGH risk (UI confirmation required): shutdown_system, restart_system, sleep_system, empty_recycle_bin, run_cmd_command, write_custom_code, autonomous_self_repair, send_email, autonomous_research_and_email, automate_whatsapp, start_file_access_server, zip_files, lookup_sim_data, guard_selftest (test only). MEDIUM (runs, with a UI toast and an audit row): type_text_tool, press_hotkey_tool, press_key_tool, mouse_click_tool, chrome_browser_perform_action, automate_chrome_browser, download_youtube_media, download_images, create_folder. Everything else is LOW. Env JARVIS_CONFIRM_EXTRA / JARVIS_CONFIRM_SKIP (comma lists) adjust the policy, but SKIP can never contain shutdown_system, restart_system or run_cmd_command. The gate sits in the LLM tool wrapper; direct Python calls for explicit UI actions (e.g. the SIM panel's ui_command sim_lookup) are not asked twice. HIGH flow: the agent sends notify confirm_request {id: uuid4, tool, summary (<=200 chars, secrets redacted), risk:'high', expires_ts: now+60}; the bridge stores it as pending; with no UI socket it immediately sends agent_command {type:'confirm_response', payload:{id, allow:false, reason:'no_ui'}}, otherwise it emits confirm_request to 'ui'. The UI answers ui_command {type:'confirm_response', payload:{id, allow:boolean}}; the bridge checks role ui + pending + not expired, records decided_by 'owner', forwards to the agent and emits confirm_resolved {id, allow, by}. The agent denies at expiry. A denied tool returns {status:'denied', tool, message:'User ne permission nahi di (confirmation required)'} and its body never runs. Confirmation happens outside the tool timeout and the circuit breaker. Every HIGH/MEDIUM execution is audited (PC logs/security.log via jarvis_audit.log_tool and the bridge audit table).
 
-#### K-46 · C-SETTINGS-1 (socketio+schema) · owner: Claude
+#### K-46 ? C-SETTINGS-1 (socketio+schema) ? owner: Claude
 ui_command {type:'settings_update', payload: partial {voice?: string (Gemini voice name, e.g. 'Charon'), language?: string (BCP-47, e.g. 'ur-PK', 'en-US'), persona?: 'jarvis'|'anna', wake_word?: boolean, voice_id?: boolean (voice-ID gate), style?: string, emotional_intelligence?: boolean}}; the camelCase key emotionalIntelligence is accepted and mapped. Defaults when nothing is stored: voice_id true (user decision), wake_word true (current behavior), persona 'jarvis', voice 'Charon'; other fields keep the current UI/agent defaults. The bridge merges into the settings table (updated_by 'ui', ts) even when the agent is offline, then forwards it to the agent or queues it. The agent applies what it can and answers notify settings_sync {settings: full object, applied: {field: 'applied'|'pending_restart'|'unsupported'}}; the bridge stores it (updated_by 'agent') and emits settings_sync to 'ui'. On agent connect the bridge sends agent_command {type:'settings_bootstrap', payload: settings}. init_state.settings is the stored object; GET /vortex/settings (cookie or agent credentials) returns it. The legacy commands persona_change and wake_word_toggle keep working and also update the stored settings.
 
-#### K-47 · C-ENV-1 (env) · owner: Claude
+#### K-47 ? C-ENV-1 (env) ? owner: Claude
 PC root .env is the single source; deploy/windows-local/.env only fills missing keys (load_dotenv override=False) and is never copied over the root. PC keys: VORTEX_ENV, LOG_LEVEL, LOG_FILE, LOG_FILE_LEVEL, UI_LOG_LEVEL, UI_LOG_INFO_ALLOW, USER_NAME, USER_CITY, GOOGLE_API_KEY, WEATHER_API_KEY, GOOGLE_SEARCH_API_KEY, SEARCH_ENGINE_ID, TAVILY_API_KEY, OPENROUTER_API_KEY, GROQ_API_KEY, HF_TOKEN, EMAIL_USER, EMAIL_APP_PASSWORD, JARVIS_ENCRYPTION_KEY, CONTROLLER_TOKEN, SIM_LOOKUP_API_URL, SIM_LOOKUP_API_KEY (later, PC only), LIVEKIT_URL (wss://jarvis.srv1802669.hstgr.cloud after OP-13), LIVEKIT_API_KEY, LIVEKIT_API_SECRET, JARVIS_ROOM_NAME=jarvis-hybrid, JARVIS_AGENT_NAME (jarvis after OP-22), JARVIS_WORKER_HOST=127.0.0.1, JARVIS_WORKER_PORT=8081, UI_BRIDGE_URL (https://jarvis.srv1802669.hstgr.cloud/vortex after OP-13), AGENT_TOKEN, BRIDGE_HMAC_SECRET, JARVIS_SHARED_DIR (default ~/Jarvis_Shared), JARVIS_HYBRID=1, JARVIS_ROLE=agent; optional JARVIS_MONITORING, JARVIS_TRACING, JARVIS_METRICS_PORT=8765, JARVIS_BACKUP_DIR, JARVIS_BACKUP_DAILY, JARVIS_QA_DAILY, JARVIS_CONFIRM_EXTRA/SKIP, JARVIS_REMINDER_SPEAK_LOCAL, JARVIS_STARTUP_LINE, JARVIS_FILE_SERVER_TTL_MIN, AGENT_DISPATCH_MODE. VORTEX_SECURITY_TOKEN / VITE_VORTEX_SECURITY_TOKEN are legacy and dead after OP-21. VPS deploy/hostinger/.env (600) = compose interpolation only: LIVEKIT_API_KEY, LIVEKIT_API_SECRET, JARVIS_DOMAIN, plus VORTEX_SECURITY_TOKEN until OP-21 (frontend build arg). VPS deploy/hostinger/bridge.env (600, gitignored, the bridge env_file): AGENT_TOKEN, BRIDGE_HMAC_SECRET, SESSION_JWT_SECRET, OWNER_PASSWORD_HASH, OWNER_TOTP_SECRET, OWNER_RECOVERY_HASHES, LIVEKIT_API_KEY, LIVEKIT_API_SECRET, VORTEX_SECURITY_TOKEN (legacy, until OP-21), LEGACY_TOKEN_AUTH (1, then 0 at OP-21), BRIDGE_EVENT_RETENTION_DAYS (0). Non-secret bridge settings live in compose 'environment:': JARVIS_ROLE=bridge, VORTEX_ENV=production, LIVEKIT_URL=ws://jarvis-livekit:7880, LIVEKIT_PUBLIC_URL=wss://jarvis.srv1802669.hstgr.cloud, JARVIS_ROOM_NAME, JARVIS_AGENT_NAME, ALLOWED_ORIGINS=https://jarvis.srv1802669.hstgr.cloud,http://127.0.0.1:5173,http://localhost:5173, COOKIE_PATH=/vortex, COOKIE_SECURE=1, BRIDGE_DB_PATH=/app/data/bridge.db, JARVIS_SHARED_DIR, GIT_SHA (exported by deploy.sh). No LLM, search or email keys on the VPS. LiveKit container env: LIVEKIT_KEYS='<key>: <secret>' and LIVEKIT_WEBHOOK_API_KEY=<key> (auto-mapped from webhook.api_key). Frontend build args hold no secrets after OP-21: VITE_VORTEX_URL=/vortex, VITE_LIVEKIT_URL optional. Secrets are generated by scripts/ops/gen_secrets.py and rotated by scripts/ops/rotate_env_secret.py / rotate_livekit_keys.py; values travel over ssh stdin and are never printed.
 
-#### K-48 · C-NET-1 (network) · owner: Claude
+#### K-48 ? C-NET-1 (network) ? owner: Claude
 Public on 187.127.123.235 for JARVIS: 80/443 (nginx), 7881/tcp and 50000-50050/udp (LiveKit media). Loopback only: 5100 (frontend, done 30 Sep), 5101 (bridge) and 7880 (LiveKit signaling/API) from OP-13. /etc/nginx/conf.d/jarvis.conf, server jarvis.srv1802669.hstgr.cloud: 'location /' -> 127.0.0.1:5100 (temporary basic auth until OP-21, then the lines stay commented for emergency re-enable); 'location /vortex/' -> 127.0.0.1:5101/ (prefix stripped, WebSocket upgrade, read timeout 86400, never basic auth); 'location /rtc' -> 127.0.0.1:7880 (ws); 'location = /agent' -> 127.0.0.1:7880 (ws, worker registration); 'location /twirp/' -> 127.0.0.1:7880 (LiveKit server API); 'location = /vortex/livekit/webhook' -> 404; 'location = /vortex/auth/login' -> limit_req zone jarvis_login 10r/m burst 5 (zone declared at the top of jarvis.conf); the port-80 server keeps /.well-known/acme-challenge from /var/www/html. Headers on '/' after OP-21: HSTS max-age=31536000, X-Content-Type-Options nosniff, Referrer-Policy strict-origin-when-cross-origin, X-Frame-Options DENY, Permissions-Policy camera=(self) microphone=(self), CSP report-only (enforcing in OP-38). The PC agent uses only https/wss on the domain after OP-13. The PC worker health server binds 127.0.0.1:8081. UFW stays inactive (user decision); Docker-published ports bypass UFW anyway, so JARVIS relies only on loopback binds and jarvis.conf.
 
-#### K-49 · C-ORIGIN-1 (process) · owner: Claude
+#### K-49 ? C-ORIGIN-1 (process) ? owner: Claude
 The canonical UI is https://jarvis.srv1802669.hstgr.cloud, the same origin as /vortex, so cookie auth needs no CORS. Electron production loads that URL (JARVIS_UI_URL, default the canonical URL), not file://; file:// only as an offline fallback when JARVIS_UI_OFFLINE=1; Electron spawns the local backend only when JARVIS_LOCAL_BACKEND=1, and prod.bat's 'start backend = y' answer starts the hybrid worker through scripts/agent_ctl.py instead. Dev: the Vite server at http://127.0.0.1:5173 or http://localhost:5173 proxies /vortex (http + ws) to the domain, and ALLOWED_ORIGINS includes both dev origins. Vercel (jarvis-agent-three.vercel.app, jarvis-agent-sigma.vercel.app): vercel.json keeps 'builds' and its 'routes' becomes a single 302 to https://jarvis.srv1802669.hstgr.cloud/$1 (Vercel rejects 'redirects' next to 'routes'); these origins are NOT in ALLOWED_ORIGINS and there is no cross-site cookie mode (SameSite stays Strict). The hardcoded Vercel origin in ui_bridge.py:35-36 is replaced by the env-only list.
 
-#### K-50 · C-AUDIO-1 (python-api) · owner: Claude
+#### K-50 ? C-AUDIO-1 (python-api) ? owner: Claude
 services/multimedia/jarvis_audio.py (Cursor): generate_speech(text: str, lang: str = 'ur') -> bytes (MP3 via gTTS; fallback WAV via pyttsx3 offline; empty text -> b''). process_audio_input(audio_data: bytes, sample_rate: int = 16000, lang: str = 'ur-PK') -> dict {'transcript': str, 'confidence': float, 'bytes': int, 'engine': str, 'error'?: str}, never raises. speak_locally(text: str, lang: str = 'ur') -> bool, plays on the PC speakers via pygame in a daemon thread and returns False on failure. With JARVIS_TEST_MODE=true it makes no network calls and returns deterministic stubs. Names and signatures stay backward compatible with the current stub. Callers (Claude): the reminder loop when no participant is in the room, the startup line when the MP3 is missing, and scripts/smoke.
 
-#### K-51 · COORD-1 (process) · owner: Claude
+#### K-51 ? COORD-1 (process) ? owner: Claude
 Lanes (file ownership; a task edits only its own lane; machine-readable copy .coord/lanes.json, enforced by the pre-commit hook). CLAUDE: deploy/**; everything on the VPS; src/core/**; services/ai_core/**; services/utils/**; scripts/**; root config (requirements*.txt, pyproject.toml, pytest.ini, mypy.ini, .pylintrc, pyrightconfig.json, .pyre_configuration, .python-version, .env*, Dockerfile*, docker-compose.yml, vercel.json, main.py, dev.bat, prod.bat, install_production.*, test_agent_tools.py, .gitignore, .gitattributes, .dockerignore, .gitleaks.toml, .githooks/**, .github/**, .coord/**); git setup and pushes; CLAUDE.md; .cursor/rules/** (Cursor proposes changes in plan.md section 11); docs/**; README.md; tests/core, tests/unit, tests/infrastructure, tests/integration, tests/vision, tests/exhaustive, tests/conftest.py, tests/__init__.py and the other tests/*.py except the two below. CURSOR: stonix_ui/** (frontend + Electron, package.json, package-lock.json); services/automation/**; services/info/**; services/multimedia/**; services/system/**; assets/**; tests/automation/**; tests/scripts/**; tests/tools/** (new); tests/test_reminders.py; tests/test_whatsapp.py. SHARED: plan.md (each agent edits only its own task status lines and appends to section 11 'Handoff') and done_highlight.md (append-only). A change that needs both lanes is split into a Claude-owned contract in docs/CONTRACTS.md plus one task per lane.
 
-#### K-52 · COORD-2 (process) · owner: Claude
+#### K-52 ? COORD-2 (process) ? owner: Claude
 Git: one working tree, one index, single branch main, remote origin = https://github.com/Matloob11/JARVIS-AGENT (PUBLIC). One-time setup by Claude only: git init -b main, fetch origin, git reset --mixed origin/main (keeps the 3 existing commits). After that nobody switches branches, rebases, stashes, resets to a commit, cleans or force-pushes. Forbidden: git add -A, git add ., git commit -a, git stash*, git reset --hard|--soft|--mixed <commit>, git checkout <branch>, git switch, git rebase, git clean, git restore/checkout -- <path outside own lane>, git push --force, deleting a .git/index.lock younger than 10 min. Commit: 'git add <own new files>' then 'JARVIS_AGENT=<claude|cursor> git commit -m "[claude|cursor] <TASK-ID>: <summary>" -- <paths>' (PowerShell: $env:JARVIS_AGENT='cursor'). The pre-commit hook (.githooks via core.hooksPath) rejects a missing JARVIS_AGENT, other-lane paths, secret files, secret values, terms from the untracked .coord/private_terms.txt and removed lines in done_highlight.md. Commit only after the task's verify passes. Claude adds 'Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>'. On index.lock wait 5-10 s and retry. Only Claude pushes (origin main, never forced); Cursor commits locally only. Because the repo is public: never commit secrets, passwords, private keys, voice samples, logs, chat data or details of non-JARVIS apps on the VPS; a leaked secret is rotated at once (no history rewrite).
 
-#### K-53 · COORD-3 (process) · owner: Claude
+#### K-53 ? COORD-3 (process) ? owner: Claude
 Runtime lock for the single Windows agent worker. Only scripts/agent_ctl.py starts, stops or restarts it: $PY scripts/agent_ctl.py status|start|stop|restart|wait|logs --by claude|cursor|user --reason '<TASK-ID or why>' (PY=.venv_312/Scripts/python.exe, Git Bash in the repo root). The worker holds an OS lock on run/agent.lock (released on exit) and writes run/agent.pid.json; a second 'python -m src.core.agent' exits 3. restart takes run/restart.lock (fails fast; stale after 10 min) and keeps a 120 s cooldown unless --force (logged). Never: taskkill /IM python.exe, killing PIDs not started through agent_ctl, starting the agent directly, running Electron with JARVIS_LOCAL_BACKEND=1 while the hybrid worker runs, or pip install into .venv_312 while the worker runs. Python dependencies are Claude-only (stop, install, start); Cursor asks with 'REQ-DEP python <pkg>==<ver> <why>' in plan.md section 11. Until OP-06 ships, the manual 'RUNTIME LOCK' line in plan.md section 2.6 applies. After any restart append a done_highlight.md entry. PC ports: 5173 vite and 4173 preview/e2e (Cursor); 8081 worker health (127.0.0.1); 8765 metrics (optional); 6006/4317 Phoenix (optional); 8000 file-server tool.
 
-#### K-54 · COORD-4 (process) · owner: Claude
+#### K-54 ? COORD-4 (process) ? owner: Claude
 VPS rules (Claude only; Cursor never runs ssh, scp or docker against the VPS). Allowed scope ONLY: Docker project jarvis (always 'docker compose -p jarvis'; code dir /opt/jarvis-agent, containers jarvis-*, volumes jarvis_*, network jarvis-network, images jarvis-*), /etc/nginx/conf.d/jarvis.conf, /etc/nginx/jarvis.htpasswd and /root/jarvis-backups (backups, deploy lock, deploy.log, scratch). Not allowed: enabling or changing UFW (stays inactive), any other app, container, volume, network, vhost, cert or config, /etc/nginx/snippets, /etc/letsencrypt (read-only checks only), new systemd units, docker system/image/volume/builder prune, 'docker compose down' without -p jarvis, apt upgrade, reboot, restarting nginx or the docker daemon (only 'nginx -t && systemctl reload nginx'), deleting files or backups on the server without the user's explicit OK. Every change: backup_vps.sh -> change -> nginx -t before reload -> health gate + smoke_other_apps.sh pre/post diff -> done_highlight.md entry with the rollback command. Deploys only through deploy/hostinger/deploy_from_pc.sh from the committed HEAD. Verify commands use VPS='ssh -i ~/.ssh/id_ed25519_hostinger -o BatchMode=yes root@187.127.123.235'.
 
-#### K-55 · COORD-5 (process) · owner: Claude
+#### K-55 ? COORD-5 (process) ? owner: Claude
 Progress protocol (keeps the existing CLAUDE.md / .cursor/rules/jarvis-collab.mdc / done_highlight.md conventions). plan.md is generated by Claude; each agent claims a task by setting its status line to 'DOING (<agent>, <YYYY-MM-DD HH:MM PKT>)' and sets DONE only after verify passes. Requests go to plan.md section 11 'Handoff' as one line: 'REQ-DEPLOY <task> <sha> <what to verify>' | 'REQ-DEP python <pkg>==<ver> <why>' | 'REQ-RESTART <reason>' | 'REQ-CONTRACT <contract> <proposal>' | 'REQ-VPS <what>'; Claude answers in the same section (ACK / DEPLOYED <sha>) in the same working session. done_highlight.md is shared and append-only: re-read it right before appending, add one entry at the very end using the template at the top of that file, never edit or reorder existing lines. docs/CONTRACTS.md (canonical, versioned, changelog) changes only by Claude after a REQ-CONTRACT. Secrets and non-JARVIS server details are never written to plan.md, done_highlight.md, docs or commits.
 
-#### K-56 · CT-VC-ROOMIO-LINK (internal-api) · owner: Claude
+#### K-56 ? CT-VC-ROOMIO-LINK (internal-api) ? owner: Claude
 src/core/roomio_link.py (Claude). Eligible participant = kind STANDARD and identity not starting with 'agent-' or 'probe-' (works for 'owner-*', 'web-*' and legacy random ids). RoomOptions(close_on_disconnect=False, delete_room_on_close=False). The agent calls session.room_io.set_participant(identity) when an eligible participant connects and nobody is linked, when the linked participant leaves and another eligible one is present (newest first), or on ui_command voice_take_over {identity}; it never steals an active link. After every change it sets agent attribute 'jarvis.linked_identity' and logs ROOMIO_RELINK. Audio-output policy (same module): output audio is on only while an eligible participant is subscribed to agent audio and (speak_typed_replies='always' or the linked participant's mic is published and unmuted); 'never' keeps it off; logged as AUDIO_OUT.
 
-#### K-57 · CT-VC-PROBE (process+internal-api) · owner: Claude
+#### K-57 ? CT-VC-PROBE (process+internal-api) ? owner: Claude
 Probe rooms are 'jarvis-probe-<epoch>' with identity 'probe-<epoch>'; only scripts/smoke/voice_probe.py creates and deletes them (regex ^jarvis-probe-\d+$, never any other room). A job whose room matches sets ContextVar services.utils.jarvis_bridge.bridge_suppressed=True before creating any task. While set: notify_event and UIBridgeHandler send nothing; MemoryExtractor, identity saves and settings persistence are no-ops; no UI listener, reminder/bug-hunter/location/adaptation/heartbeat/vitals loops, clipboard or vision loop or task monitor run. jarvis_bridge keeps httpx clients and semaphores per event loop. JARVIS_PROBE_DISABLED=1 makes probes exit SKIP; a run is capped at 20 turns. Infra's no-room-delete test must allow this probe cleanup.
 
-#### K-58 · CT-VC-MESSAGE (event-schema) · owner: Claude
+#### K-58 ? CT-VC-MESSAGE (event-schema) ? owner: Claude
 Extends C-MSG-1. Agent notify 'transcription': {id, role:'user'|'assistant', text, source:'voice'|'text'|'system', final, ts (epoch seconds; the bridge normalizer converts units for the UI), turn_id? (user message that caused an assistant message), text_native? (original script when transliterated), score? (voice-ID score on voice user messages), persona?, legacy is_final/timestamp until no UI reads them}. Exactly once: typed user text by the router with the UI id; voice user text once (conversation_item_added in fast mode, TURN_ACCEPTED in gated mode); assistant text once from conversation_item_added with id = ChatMessage.id. An update with the same id carries changed fields and the bridge merges ALL fields. Live captions come from LiveKit 'lk.transcription' only.
 
-#### K-59 · CT-VC-CHAT-INPUT (command-schema) · owner: Claude
+#### K-59 ? CT-VC-CHAT-INPUT (command-schema) ? owner: Claude
 Canonical typed chat: Socket.IO ui_command {type:'chat', payload: string | {id?|client_msg_id?, text}}. LiveKit 'lk.chat' (attributes 'jarvis.client_msg_id' or 'msg_id', else stream_id) is accepted only from the RoomIO-linked participant, so a UI uses it only when jarvis.linked_identity equals its own identity. ConversationRouter.handle_text(text, msg_id, origin): LRU dedupe 512 by id; NFKC + control-char strip (newline/tab kept), max 4000 chars; VortexGuard.detect_threat only (no sanitize_input); emits the user message (source 'text', same id); session.interrupt() then generate_reply(user_input='[typed] '+text); '/swarm <task>' dispatches the registered 'swarm' command; session not running -> '[offline] '+template as source 'system'. Typed text never needs the wake word and is never voice-ID checked (browser session authenticated by the P0 login).
 
-#### K-60 · CT-VC-CONTROL (command-schema+python-api) · owner: Claude
+#### K-60 ? CT-VC-CONTROL (command-schema+python-api) ? owner: Claude
 Registry services/utils/ui_command_registry.py (no project imports): register_ui_command(name), dispatch(); agent_loops re-exports it; other areas register commands from their own modules instead of editing agent_loops. Dedupe per (type, payload.id|client_msg_id), LRU 512; unknown types logged and ignored. 'stop' = interrupt current and queued speech (AgentSession.interrupt; gated mode also activity_start to Gemini); JARVIS keeps listening. 'mute'/'unmute' = session.input.set_audio_enabled(False/True) + pause of the legacy audio tap; typed chat still answered; mute_sync emitted. 'shutdown_agent' {restart?:bool=true, confirm?, confirm_id?} = end the job (runtime.aclose -> ctx.shutdown); restart=false also asks the bridge to pause re-dispatch when supported; needs confirmation (broker when registered, else confirm:true from the authenticated UI) and is audited. 'clear_memory' {include_vector?, confirm?} = medium-risk confirmation, file moved to backups/memory/<ts>_<user>_memory.json, optional vector wipe after a second confirmation; agent emits 'memory_cleared' {scope:'short_term'|'all', backup, ts}. 'voice_take_over' per CT-VC-ROOMIO-LINK. Other areas that used 'stop' for restart or pause must send 'shutdown_agent'.
 
-#### K-61 · CT-VC-SETTINGS (command+event-schema) · owner: Claude
+#### K-61 ? CT-VC-SETTINGS (command+event-schema) ? owner: Claude
 Agent is the single source of truth: data/settings/agent_settings.json (atomic, gitignored; probe jobs never write). Input: ui_command settings_update, or bridge settings_bootstrap treated as a validated update, with partial {voice (30 Gemini voices or aliases alloy/echo/shimmer/ash/ballad/coral/sage/verse), persona 'jarvis'|'anna', wake_word bool=true, wake_followup_s 0..60=0, voice_id bool=true (enforced only in gated mode after enrollment), voice_id_threshold 0.2..0.9=0.45, voice_id_reject 'silent'|'polite', turn_mode 'gated'|'fast' (default from VR-22), transcript_script 'roman'|'native', language 'auto'|'ur'|'hi'|'en' (BCP-47 mapped), speak_typed_replies 'auto'|'always'|'never', quiet_hours 'HH:MM-HH:MM'|'', confirm_level, style, emotional_intelligence (emotionalIntelligence accepted)}. Output notify 'settings_sync' = {settings:{all fields + muted + voice_id_enrolled}, applied:{field:'applied'|'pending_restart'|'unsupported'}, errors:{field:message}, pending_restart:[fields], available_voices, available_languages, ts} (C-SETTINGS-1 envelope; UIs read values from settings_sync.settings). Legacy wake_word_toggle, persona_change and mute/unmute also produce settings_sync. Voice/persona apply at the next safe point. Extension: register_settings_section(name, validate_fn, apply_fn).
 
-#### K-62 · CT-VC-TURN-GATE (event-schema) · owner: Claude
+#### K-62 ? CT-VC-TURN-GATE (event-schema) ? owner: Claude
 Spoken turns only, in order: security -> muted -> enrolling -> voice_id (only if enabled AND enrolled; timeout = reject) -> wake_word (skipped inside the follow-up window). Default location: TeeSTT returns an empty transcript for a reject (no turn committed, an interrupted JARVIS resumes); fallback: on_user_turn_completed + StopResponse (chosen by the VR-22 spike). Rejected audio never reaches Gemini. agent->UI 'turn_rejected' {id, reason:'voice_id'|'wake_word'|'muted'|'security'|'enrolling'|'empty', score?, threshold?, preview? (first 40 chars, wake_word only), ts}. Status uses dashboard CONTRACT-VOICE-ID 'voice_id_status' {enrolled, enforced, threshold, last_score, last_result, mode:'enforce'|'monitor', ts} plus legacy voice_id_sync -> voice_match_update {confidence, accepted, threshold, ts}. Every reject is audited in logs/security.log (TURN_REJECTED / VOICE_REJECTED).
 
-#### K-63 · CT-VC-VOICE-ENROLL (command+event-schema) · owner: Claude
+#### K-63 ? CT-VC-VOICE-ENROLL (command+event-schema) ? owner: Claude
 ui_command voice_enroll {action:'start'|'cancel'|'commit', target_seconds?:20} and alias voice_enroll_start {seconds} (start with auto-commit at target). Works in Fast and Gated mode: Gemini input disabled (session.input.set_audio_enabled(False)) and audio read from a dedicated stream on the linked participant's mic. Progress via voice_id_status {enrolling:true, collected_s, target_s, seconds_left, utterances, last_quality:'ok'|'too_short'|'noisy'|'clipped', error?:'mic_off'}; final 'voice_enroll_result' {ok, samples, self_score, error?}. Voice turns while enrolling -> turn_rejected 'enrolling'. Commit backs up data/identity/* to backups/identity/<ts>/ first. Auto-cancel after 3 min; input state restored on every exit. CLI equivalent scripts/voice/record_master.py writes the same files.
 
-#### K-64 · CT-VC-VOICE-ID-STORE (file-format+internal-api) · owner: Claude
+#### K-64 ? CT-VC-VOICE-ID-STORE (file-format+internal-api) ? owner: Claude
 Files: data/identity/master_voice.wav (16 kHz mono int16, concatenated samples), data/identity/master_embedding.npy (L2-normalized mean ECAPA embedding), data/identity/samples/*.wav; backups in backups/identity/<ts>/. Model pretrained_models/spkrec-ecapa-voxceleb, downloaded only by scripts/models/download_voice_model.py (never implicitly). services/ai_core/voice_fingerprint.py: torchaudio shims installed before importing speechbrain; verify_pcm(pcm: bytes, sample_rate: int, threshold: float|None=None) -> (accepted, score) in memory (no temp files, no torchaudio.load); enroll(samples: list[tuple[bytes,int]]) -> {ok, self_score, samples}; is_enrolled; state 'model_missing'|'not_enrolled'|'ready'|'engine_error'; reload(). verify_bytes and verify_segment stay as wrappers. The gated check uses the exact VAD utterance frames captured by TeeSTT.
 
-#### K-65 · CT-VC-GEMINI-GATE (internal-api) · owner: Claude
+#### K-65 ? CT-VC-GEMINI-GATE (internal-api) ? owner: Claude
 src/core/gemini_gate.py: JarvisGeminiRealtimeModel(google.realtime.RealtimeModel) whose session() returns JarvisGatedRealtimeSession. Gated mode: automatic_activity_detection.disabled=True, input_audio_transcription=None, AgentSession(stt=TeeSTT, turn_detection='vad'); push_audio, start_user_activity and commit_audio are no-ops; interrupt() sends activity_start while a generation is active. submit_user_turn(frames, transcript, context_note, image_jpeg): note as LiveClientContent(role=None, turn_complete=False) -> activity_start (skipped if open) -> optional image Blob -> audio via base push_audio, then every frame returned by _bstream.flush() -> activity_end; arms the pending generation future; adds the transcript to _chat_ctx. generate_reply() returns that future (no '.' placeholder, 8 s timeout) when a turn is pending, else the plugin path. push_video keeps only the latest frame in gated mode. discard_user_turn(); send_context_note(text) in both modes; update_instructions() sends a '[SYSTEM UPDATE]' delta when the diff is < 30% (full text kept in _opts); reconnects with a resumption handle re-send only items added since the last handle. Fast mode = automatic activity detection with the same class. Pinned to livekit-plugins-google==1.4.6; tests/unit/test_gemini_gate_contract.py checks _send_client_event, _pending_generation_fut, _chat_ctx, _opts, _bstream, _manual_activity_detection, _handle_go_away, RealtimeModel._sessions.
 
-#### K-66 · CT-VC-PROACTIVE (python-api+event-schema) · owner: Claude
+#### K-66 ? CT-VC-PROACTIVE (python-api+event-schema) ? owner: Claude
 src/core/voice_speak.py: async speak_proactive(text, *, kind, action=None, priority='normal', speak=True, msg_id=None) -> {spoken, reason}; never raises; always posts the text as an assistant message (source 'system'). Speaks only when the session runs, not muted, outside quiet_hours, neither JARVIS nor the user is speaking (<=30 s wait per attempt) and an eligible participant is subscribed (output audio enabled for the announcement if needed); retries up to 30 min then spoken:false. Delivery = user-role tagged turn generate_reply(user_input='[SYSTEM PROACTIVE] ...' + tool-call request for action), never generate_reply(instructions=...) (Gemini takes instructions as a model turn and answers a '.' placeholder). 'stop' cancels current and queued announcements. Every other area's announcer, scheduler dispatcher, bug hunter and swarm use speak_proactive for speech. Event task_alert {id, kind, source:'task'|'reminder', description, action?, due_at, spoken, ts} (bridge -> task_notification). A task is marked completed only after its announcement returns.
 
-#### K-67 · CT-VC-REASONING (event-schema) · owner: Claude
+#### K-67 ? CT-VC-REASONING (event-schema) ? owner: Claude
 notify 'reasoning' for every accepted user message, typed and voice: {turn_id = msg_id, msg_id, intent, confidence (top 5, 0-1), is_ambiguous, plan: string[] ('Action: description', safe for today's UI), plan_steps: [{step, action, description}], source:'voice'|'text', ts}. Produced by jarvis_reasoning.process_with_advanced_reasoning in a background task (2 s timeout); it never produces the reply. The bridge passes both through; UIs render plan_steps when present, else plan strings, and never render objects as React children.
 
-#### K-68 · CT-VC-AGENT-HEARTBEAT (event-schema) · owner: Claude
+#### K-68 ? CT-VC-AGENT-HEARTBEAT (event-schema) ? owner: Claude
 Fields the voice runtime adds, through a provider hook, to the agent heartbeat owned by infra OPS-16 / dashboard DASH-C08: {job_id, room, since, pid, mode:'gated'|'fast', session:'starting'|'running'|'restarting'|'closed', agent_state, linked_identity, worker_agent_name}. One heartbeat at runtime start and {session:'closed'} at teardown. Probe jobs send none.
 
-#### K-69 · CT-VC-RUNTIME-ENV (config) · owner: Claude
+#### K-69 ? CT-VC-RUNTIME-ENV (config) ? owner: Claude
 Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVIS_TURN_MODE (spike decision, else fast), JARVIS_REALTIME_MODEL (models/gemini-2.5-flash-native-audio-latest, pinned because typed chat needs mid-session client content), JARVIS_STT_PROVIDER, JARVIS_STT_MODEL (whisper-large-v3-turbo), JARVIS_STT_LANGUAGE (ur), JARVIS_STT_PROMPT, JARVIS_STT_FALLBACK_MODEL and JARVIS_TRANSLIT_MODEL (resolved at startup from a list), JARVIS_VOICE_JARVIS (Charon), JARVIS_VOICE_ANNA (Aoede), JARVIS_VOICE_ID_THRESHOLD (0.45), JARVIS_LOAD_THRESHOLD (inf), JARVIS_PREWARM_TIMEOUT (120), JARVIS_IDLE_PROCS (1), JARVIS_CTX_TRIGGER_TOKENS (24000), JARVIS_THINKING_BUDGET (unset), JARVIS_AAD_SILENCE_MS / JARVIS_AAD_EOS_SENSITIVITY / JARVIS_AAD_PREFIX_MS (unset), JARVIS_TOOL_DESC (short|full), JARVIS_TOOL_DRY_RUN (0), JARVIS_DEBUG_SAVE_AUDIO (0), JARVIS_CV_PATH, JARVIS_SPEAK_TYPED (auto), JARVIS_STARTUP_SOUND, JARVIS_PROBE_DISABLED (0), JARVIS_SMOKE (0), JARVIS_SPIKE (0). JARVIS_AGENT_NAME belongs to OPS-15/C-ENV-1. Until OPS-05 lands, start-agent.bat copies deploy/windows-local/.env over the root .env, so any value written to the root .env is mirrored there.
 
 
@@ -439,9 +439,9 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 
 | ID | Lane | Phase | Task | Depends on | Status |
 |---|---|---|---|---|---|
-| C-01 | claude | P0 | Emergency safety backups of PC + VPS with rollback image tags | — | DONE (30 Sep, Claude) |
+| C-01 | claude | P0 | Emergency safety backups of PC + VPS with rollback image tags | ? | DONE (30 Sep, Claude) |
 | C-02 | claude | P0 | Emergency containment: rotate the leaked UI token, frontend port 5100 to loopback, VPS file permissions, temporary basic auth on 'location /' | C-01 | DONE (30 Sep, Claude) |
-| C-03 | claude | P0 | UFW host firewall with dead-man switch (documentation only: not enabled by user decision) | — | NOT NEEDED (user rule) |
+| C-03 | claude | P0 | UFW host firewall with dead-man switch (documentation only: not enabled by user decision) | ? | NOT NEEDED (user rule) |
 | C-04 | claude | P0 | Git: connect the folder to the existing public repo Matloob11/JARVIS-AGENT (keep its 3 commits), secret-guard pre-commit hook, sanitized livekit.yaml, baseline commit + push | C-01, C-02, K-52 (COORD-2) | DONE (01 Oct 12:45; push pending user OK) |
 | C-05 | claude | P0 | Coordination leftovers: .coord/lanes.json, lane check in the pre-commit hook, docs/CONTRACTS.md, existing rule files updated | C-04, K-51 (COORD-1), K-52 (COORD-2), K-55 (COORD-5) | DONE (01 Oct 14:20) |
 | C-06 | claude | P0 | PC test prerequisites: pytest stack, Playwright Chromium 1200, read-only prerequisite checker | C-04 | DONE (01 Oct 14:20) |
@@ -477,7 +477,7 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | X-06 | cursor | P0 | UI foundation: relative /vortex runtime config, cookie socket, tolerant event types, per-panel ErrorBoundary, no secrets in the bundle | K-01 (DASH-UI-RUNTIME), K-02 (DASH-UI-EVENTS) | DONE (01 Oct 12:40) |
 | X-07 | cursor | P0 | Mock bridge (Node) for local dev and e2e, built from the adopted contracts, with exported fixtures | X-06, K-10 (DASH-MOCK-BRIDGE), K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS) | DONE (01 Oct 12:42) |
 | X-08 | cursor | P0 | Login screen, AuthProvider and session lifecycle (password + TOTP, recovery code, robust expiry) | X-06, X-07, K-01 (DASH-UI-RUNTIME), K-36 (C-AUTH-1), K-37 (C-LK-1), K-38 (C-SOCK-1), K-49 (C-ORIGIN-1) | DONE (01 Oct 12:52) |
-| X-11 | cursor | P0 | No-real-side-effect test harness (tests/tools) + helper tests | C-06, X-03, K-27 (TestSideEffectGuard) | BLOCKED (waiting C-06) |
+| X-11 | cursor | P0 | No-real-side-effect test harness (tests/tools) + helper tests | C-06, X-03, K-27 (TestSideEffectGuard) | DOING (cursor, 01 Oct 14:40) |
 | X-12 | cursor | P0 | Apply the side-effect guard to legacy desktop test folders and gate live GUI scripts | X-11, K-27 (TestSideEffectGuard) | BLOCKED (waiting X-11) |
 | X-26 | cursor | P0 | Keyboard/mouse tools: no hard-coded token, Unicode-safe typing, full key set, protected-window hotkeys, new volume API | C-24, C-27, C-26, X-03, X-11, K-16 (DesktopToolPolicy) | BLOCKED (waiting C-24,C-27,C-26,X-11) |
 | X-27 | cursor | P0 | Notepad automation: safe paths, PID-bound window, threaded typing, verified save, graceful close | C-24, C-27, C-28, C-26, X-03, X-11, K-16 (DesktopToolPolicy) | BLOCKED (waiting C-24,C-27,C-28,C-26,X-11) |
@@ -487,7 +487,7 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | C-23 | claude | P1 | Room lifecycle: bridge as sole room owner with a lock, explicit dispatch 'jarvis', reconciler + LiveKit webhooks -> agent_status, pause/start, ensure_room.py never deletes | C-09, C-13, C-14, C-15, K-44 (C-ROOM-1), K-39 (C-NOTIFY-1) | TODO |
 | C-36 | claude | P1 | Local/desktop mode auth parity: COOKIE_SECURE=auto and local owner credentials for vortex.py / Electron local | C-19, C-20, K-09 (DASH-LOCAL-AUTH) | TODO |
 | C-37 | claude | P1 | Vercel copies redirect to the canonical domain (vercel.json routes 302), shipped by the GitHub push | C-04, K-49 (C-ORIGIN-1) | DONE (01 Oct 14:35; three 302 OK; sigma host has no deployment, user optional) |
-| C-38 | claude | P1 | Voice-ID engine loads: shims before speechbrain import, no implicit download | — | DONE (01 Oct 14:20) |
+| C-38 | claude | P1 | Voice-ID engine loads: shims before speechbrain import, no implicit download | ? | DONE (01 Oct 14:20) |
 | C-39 | claude | P1 | Probe isolation (CT-VC-PROBE) and per-event-loop bridge client | C-34, C-15, K-57 (CT-VC-PROBE) | TODO |
 | C-40 | claude | P1 | Headless voice/chat probe and offline TTS fixtures | C-39, K-57 (CT-VC-PROBE) | TODO |
 | C-41 | claude | P1 | Audio-output gating so typed replies never wait for a browser | C-35, K-56 (CT-VC-ROOMIO-LINK) | TODO |
@@ -551,18 +551,18 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | C-94 | claude | P3 | Agent feeds B: memory_update per saved item (id, role, source), memory_cleared, reasoning for fast-mode voice turns | C-43, C-44, C-51, C-52, C-53, K-07 (DASH-MEMORY-EVENTS) | TODO |
 | C-95 | claude | P3 | Camera to Gemini via LiveKit video: video_input, live/on-request vision mode, VisionHandler reads the linked camera track | C-33, C-35, C-54, C-60, C-48, K-05 (DASH-CAMERA-VISION) | TODO |
 | C-96 | claude | P3 | Deploy #2: panels build plus live checks (tools, confirm, settings, memory, tasks, voice-ID, camera, map, SIM, media, controls) | C-65, X-19, X-10, X-21, X-22, X-17, C-93, C-94, X-20, X-49, X-23, X-24, X-33, C-95, X-45, X-46, X-47, X-18, X-48, X-50, C-54, C-90, X-52, X-53, C-27, C-29, C-30, C-59, C-58, X-55, X-40, X-39, C-80, X-38, C-79, X-05, C-64, C-60 | TODO |
-| X-01 | cursor | P3 | YouTube downloader ffmpeg/interpreter fix (K16) merged into the tools-info downloader task | — | NOT NEEDED (user rule) |
-| X-02 | cursor | P3 | Original startup chime asset (Cursor part of the startup-voice split) | — | DONE (01 Oct 12:55) |
+| X-01 | cursor | P3 | YouTube downloader ffmpeg/interpreter fix (K16) merged into the tools-info downloader task | ? | NOT NEEDED (user rule) |
+| X-02 | cursor | P3 | Original startup chime asset (Cursor part of the startup-voice split) | ? | DONE (01 Oct 12:55) |
 | X-04 | cursor | P3 | jarvis_audio real implementation (gTTS/pyttsx3 TTS, SpeechRecognition STT, local playback) | K-50 (C-AUDIO-1) | DONE (01 Oct 12:58) |
 | X-05 | cursor | P3 | Map tool: Nominatim usage policy (1 req/s, proper user agent) + zoom | K-08 (DASH-LOCATION) | DONE (01 Oct 12:56) |
 | X-10 | cursor | P3 | ConfirmDialog for risky tools: queue, server-corrected countdown, Allow/Deny, closes on any resolution | X-06, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS), K-14 (ConfirmFlow), K-45 (C-CONFIRM-1) | DONE (01 Oct 13:20) |
 | X-17 | cursor | P3 | Vitals cards PC (agent) vs VPS (server), Telemetry card, Alerts by level | X-06, K-02 (DASH-UI-EVENTS) | DONE (01 Oct 13:20) |
 | X-18 | cursor | P3 | Intelligence / Media panel: generated images, QR codes and files over HTTPS through the bridge media relay | X-06, K-02 (DASH-UI-EVENTS) | DONE (01 Oct 13:20) |
-| X-19 | cursor | P3 | Tools tab: live tool rows for every call (upsert by id), jobs with progress and cancel, medium-risk toasts | X-14, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS), K-13 (ToolSyncEvent), K-31 (job_progress_routing) | BLOCKED (waiting X-14) |
-| X-20 | cursor | P3 | SystemTrace: crash-proof reasoning card, plan progress, turn_rejected feed, logs terminal with level filters, diagnostics/audit | X-19, K-02 (DASH-UI-EVENTS), K-62 (CT-VC-TURN-GATE), K-67 (CT-VC-REASONING) | BLOCKED (waiting X-19) |
-| X-21 | cursor | P3 | Settings drawer (core): session, connection, voice, persona, wake word, agent listening, voice-ID with confirmed state | X-15, X-16, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS) | BLOCKED (waiting X-15,X-16) |
+| X-19 | cursor | P3 | Tools tab: live tool rows for every call (upsert by id), jobs with progress and cancel, medium-risk toasts | X-14, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS), K-13 (ToolSyncEvent), K-31 (job_progress_routing) | DONE (01 Oct 14:50) |
+| X-20 | cursor | P3 | SystemTrace: crash-proof reasoning card, plan progress, turn_rejected feed, logs terminal with level filters, diagnostics/audit | X-19, K-02 (DASH-UI-EVENTS), K-62 (CT-VC-TURN-GATE), K-67 (CT-VC-REASONING) | TODO |
+| X-21 | cursor | P3 | Settings drawer (core): session, connection, voice, persona, wake word, agent listening, voice-ID with confirmed state | X-15, X-16, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS) | DONE (cursor, 01 Oct 2026 15:10 PKT) |
 | X-22 | cursor | P3 | Settings drawer (advanced): turn mode, follow-up window, transcript script, automation toggles, vision mode, guarded-tools list | X-10, X-21, K-05 (DASH-CAMERA-VISION), K-03 (DASH-UI-COMMANDS), K-24 (AutomationSettings) | BLOCKED (waiting X-10,X-21) |
-| X-23 | cursor | P3 | Memory (Notes) tab: restore, stream, search, confirmed clear | X-19, X-10, K-07 (DASH-MEMORY-EVENTS) | BLOCKED (waiting X-19,X-10) |
+| X-23 | cursor | P3 | Memory (Notes) tab: restore, stream, search, confirmed clear | X-19, X-10, K-07 (DASH-MEMORY-EVENTS) | TODO |
 | X-24 | cursor | P3 | Tasks & Reminders tab with countdown and Cancel, due-item toasts and a notification bell | X-23, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS) | BLOCKED (waiting X-23) |
 | X-28 | cursor | P3 | System info: battery + CPU/RAM/disk ToolResult and collect_pc_vitals() | C-24, X-11, K-26 (VitalsPCHelper) | BLOCKED (waiting C-24,X-11) |
 | X-32 | cursor | P3 | TaskStore v2: schema columns, parse_when, schedule_task with args + confirm, cancel tool | C-24, C-28, C-30, K-66 (CT-VC-PROACTIVE), K-33 (task_store_v2), K-32 (scheduled_action_runner) | BLOCKED (waiting C-24,C-28,C-30) |
@@ -617,16 +617,16 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 
 ## 6. Claude tasks (110)
 
-### P0 · Security aur buniyad
+### P0 ? Security aur buniyad
 _Darwaza band, git, backup, keys, room delete ka bug. Claude pehle; Cursor isi dauran apne tools lane me kaam karta hai._
 
-#### C-01 · Emergency safety backups of PC + VPS with rollback image tags
-**Phase:** P0 · **Size:** S · **Feature:** Backups & restore (PC + VPS)
-**Source:** OP-01 (infra-security-ops) · **Pehle se ho chuka (30 Sep)**
+#### C-01 ? Emergency safety backups of PC + VPS with rollback image tags
+**Phase:** P0 ? **Size:** S ? **Feature:** Backups & restore (PC + VPS)
+**Source:** OP-01 (infra-security-ops) ? **Pehle se ho chuka (30 Sep)**
 **Kyun:** Every later change needs a restore point; taken 30 Sep 23:40 PKT before the emergency fix.
 **Files:** `C:/Users/Matloob/JARVIS-backups/JARVIS-AGENT-main_2026-09-30_2340.tgz (PC)`, `/root/jarvis-backups/2026-09-30_2340/ (VPS)`
-**Depends on:** —
-**User se chahiye:** —
+**Depends on:** ?
+**User se chahiye:** ?
 
 Steps:
 1. Done 2026-09-30 23:40 PKT: PC tree archived to C:/Users/Matloob/JARVIS-backups/JARVIS-AGENT-main_2026-09-30_2340.tgz.
@@ -640,13 +640,13 @@ Verify:
 - ls -la "$USERPROFILE/JARVIS-backups/"
 - $VPS 'ls -la /root/jarvis-backups/2026-09-30_2340/ && docker images | grep pre-emergency'
 
-#### C-02 · Emergency containment: rotate the leaked UI token, frontend port 5100 to loopback, VPS file permissions, temporary basic auth on 'location /'
-**Phase:** P0 · **Size:** M · **Feature:** Leaked UI token enables remote control of the PC
-**Source:** OP-02 (infra-security-ops) · **Pehle se ho chuka (30 Sep)**
+#### C-02 ? Emergency containment: rotate the leaked UI token, frontend port 5100 to loopback, VPS file permissions, temporary basic auth on 'location /'
+**Phase:** P0 ? **Size:** M ? **Feature:** Leaked UI token enables remote control of the PC
+**Source:** OP-02 (infra-security-ops) ? **Pehle se ho chuka (30 Sep)**
 **Kyun:** The VORTEX token in the public bundle let anyone mint LiveKit tokens and drive the agent's 82 tools on the PC. Merged duplicate UI-01: Emergency dashboard containment: rotate leaked UI token, rebuild frontend, temporary basic auth, port 5100 on loopback (done 30 Sep)
 **Files:** `.env`, `deploy/windows-local/.env`, `deploy/hostinger/.env`, `deploy/hostinger/docker-compose.yml`, `deploy/hostinger/jarvis.conf`, `deploy/windows-local/start-agent.bat`, `/etc/nginx/jarvis.htpasswd (VPS)`, `/etc/nginx/conf.d/jarvis.conf (VPS)`, `VPS: /etc/nginx/conf.d/jarvis.conf, /etc/nginx/jarvis.htpasswd, /root/jarvis-backups/2026-09-30_2340`
 **Depends on:** C-01
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Done: VORTEX_SECURITY_TOKEN (+ VITE_ alias) rotated in all three .env files; frontend rebuilt, bridge recreated; the old token now gets 401.
@@ -664,13 +664,13 @@ Verify:
 - curl -s -m 5 -o /dev/null -w '%{http_code}' http://187.127.123.235:5100/   # expect 000
 - $VPS 'stat -c %a /opt/jarvis-agent /opt/jarvis-agent/deploy/hostinger/.env /opt/jarvis-agent/deploy/hostinger/livekit.yaml'   # 750 600 600
 
-#### C-03 · UFW host firewall with dead-man switch (documentation only: not enabled by user decision)
-**Phase:** P0 · **Size:** S · **Feature:** Network exposure & firewall
-**Source:** OP-16 (infra-security-ops) · **User rule ki wajah se nahi karna**
+#### C-03 ? UFW host firewall with dead-man switch (documentation only: not enabled by user decision)
+**Phase:** P0 ? **Size:** S ? **Feature:** Network exposure & firewall
+**Source:** OP-16 (infra-security-ops) ? **User rule ki wajah se nahi karna**
 **Kyun:** The user decided UFW stays off and other apps must not be touched; JARVIS exposure is handled by loopback binds and jarvis.conf.
-**Files:** —
-**Depends on:** —
-**User se chahiye:** —
+**Files:** ?
+**Depends on:** ?
+**User se chahiye:** ?
 
 Steps:
 1. No UFW change: UFW stays inactive, the DOCKER-USER chain and every other app are untouched.
@@ -682,8 +682,8 @@ Done tab jab (acceptance):
 Verify:
 - $VPS 'ufw status | head -1'   # Status: inactive (read-only check)
 
-#### C-04 · Git: connect the folder to the existing public repo Matloob11/JARVIS-AGENT (keep its 3 commits), secret-guard pre-commit hook, sanitized livekit.yaml, baseline commit + push
-**Phase:** P0 · **Size:** M · **Feature:** Git version control & secret hygiene
+#### C-04 ? Git: connect the folder to the existing public repo Matloob11/JARVIS-AGENT (keep its 3 commits), secret-guard pre-commit hook, sanitized livekit.yaml, baseline commit + push
+**Phase:** P0 ? **Size:** M ? **Feature:** Git version control & secret hygiene
 **Source:** OP-03 (infra-security-ops)
 **Kyun:** No history or rollback exists, both agents need one index, and the repo is PUBLIC so any committed secret leaks at once (deploy/hostinger/livekit.yaml holds the LiveKit secret today).
 **Files:** `.gitignore`, `.gitattributes`, `.githooks/pre-commit`, `scripts/coord/precommit.py`, `deploy/hostinger/livekit.yaml`, `deploy/hostinger/docker-compose.yml`, `deploy/hostinger/.env.example`, `deploy/windows-local/.env.example`, `.coord/private_terms.txt (untracked)`
@@ -716,13 +716,13 @@ Verify:
 - $PY scripts/coord/precommit.py --all-files && echo CLEAN; grep -c '^keys:' deploy/hostinger/livekit.yaml   # expect 0
 - git add -f .env; JARVIS_AGENT=claude git commit -m hooktest; echo "exit=$? (expect non-zero)"; git reset -q -- .env
 
-#### C-05 · Coordination leftovers: .coord/lanes.json, lane check in the pre-commit hook, docs/CONTRACTS.md, existing rule files updated
-**Phase:** P0 · **Size:** S · **Feature:** Claude + Cursor coordination in one tree
+#### C-05 ? Coordination leftovers: .coord/lanes.json, lane check in the pre-commit hook, docs/CONTRACTS.md, existing rule files updated
+**Phase:** P0 ? **Size:** S ? **Feature:** Claude + Cursor coordination in one tree
 **Source:** OP-04 (infra-security-ops)
 **Kyun:** CLAUDE.md, .cursor/rules/jarvis-collab.mdc and done_highlight.md already exist, but nothing enforces lanes or append-only, and contracts live only in plan.md.
 **Files:** `.coord/lanes.json`, `scripts/coord/check_lane.py`, `scripts/coord/precommit.py`, `docs/CONTRACTS.md`, `CLAUDE.md`, `.cursor/rules/jarvis-collab.mdc`, `tests/unit/test_check_lane.py`
 **Depends on:** C-04, K-51 (COORD-1), K-52 (COORD-2), K-55 (COORD-5)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Create .coord/lanes.json per COORD-1: {claude:[globs], cursor:[globs], shared:['plan.md','done_highlight.md'], append_only:['done_highlight.md']}; tests/test_reminders.py and tests/test_whatsapp.py are cursor, tests/conftest.py, tests/exhaustive/** and the other tests/*.py are claude
@@ -745,13 +745,13 @@ Verify:
 - echo '# lane test' >> docs/CONTRACTS.md && JARVIS_AGENT=cursor git commit -m t -- docs/CONTRACTS.md; echo "exit=$? (expect 1)"; git checkout -- docs/CONTRACTS.md
 - $PY scripts/coord/check_lane.py --whoowns stonix_ui/electron/main.cjs   # expect cursor
 
-#### C-06 · PC test prerequisites: pytest stack, Playwright Chromium 1200, read-only prerequisite checker
-**Phase:** P0 · **Size:** S · **Feature:** Desktop prerequisites on this PC
+#### C-06 ? PC test prerequisites: pytest stack, Playwright Chromium 1200, read-only prerequisite checker
+**Phase:** P0 ? **Size:** S ? **Feature:** Desktop prerequisites on this PC
 **Source:** TD-01 (tools-desktop)
 **Kyun:** pytest is not installed in .venv_312 and Python Playwright 1.57.0 expects chromium-1200 while only chromium-1234 exists; every later verify step needs both, and a checker shows which desktop prerequisites are missing.
 **Files:** `requirements-dev.txt`, `scripts/pc/check_desktop_prereqs.py (new)`, `done_highlight.md (append only)`
 **Depends on:** C-04
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Append a 'pip install running in .venv_312, do not run pytest' line to done_highlight.md so Cursor pauses test runs.
@@ -774,13 +774,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe scripts/pc/check_desktop_prereqs.py
 - ./.venv_312/Scripts/python.exe scripts/pc/check_desktop_prereqs.py --launch-test
 
-#### C-07 · Test and smoke baseline before the runtime rewrite
-**Phase:** P0 · **Size:** S · **Feature:** Entrypoint 5x retry loop and session lifecycle
+#### C-07 ? Test and smoke baseline before the runtime rewrite
+**Phase:** P0 ? **Size:** S ? **Feature:** Entrypoint 5x retry loop and session lifecycle
 **Source:** VR-01 (voice-runtime)
 **Kyun:** Later tasks change agent_runner/agent_core/agent_loops behaviour; two loop tests already fail (they assert session.say, code uses notify_transcription). A baseline stops new breakage from hiding.
 **Files:** `tests/core/test_agent_loops.py`, `scripts/smoke/livekit_voice_vision_smoke.py`, `done_highlight.md`, `logs/test_baseline_2026-10-01.txt`
 **Depends on:** C-06
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Run ./.venv_312/Scripts/python.exe -m pytest tests/core tests/unit tests/integration -q -p no:cacheprovider and save the summary to logs/test_baseline_<date>.txt.
@@ -799,13 +799,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/core/test_agent_loops.py -q
 - ./.venv_312/Scripts/python.exe -m pytest tests/core tests/unit -q
 
-#### C-08 · Single agent worker: OS lock before heavy imports, worker health on 127.0.0.1:8081, env-driven agent_name, no second worker from vortex.py
-**Phase:** P0 · **Size:** M · **Feature:** Single agent worker guarantee
+#### C-08 ? Single agent worker: OS lock before heavy imports, worker health on 127.0.0.1:8081, env-driven agent_name, no second worker from vortex.py
+**Phase:** P0 ? **Size:** M ? **Feature:** Single agent worker guarantee
 **Source:** OP-05 (infra-security-ops)
 **Kyun:** start-agent.bat plus Electron/vortex 'dev' can register two workers on the same LiveKit (they steal jobs), and the worker health server listens on 0.0.0.0:8081.
 **Files:** `src/core/agent_lock.py`, `src/core/agent.py`, `src/core/agent_runner.py`, `src/core/vortex.py`, `tests/unit/test_agent_lock.py`
 **Depends on:** C-04, K-53 (COORD-3)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Create src/core/agent_lock.py: acquire_or_exit() creates run/, opens run/agent.lock and locks byte 0 (msvcrt.locking LK_NBLCK on Windows, fcntl.flock LOCK_EX|LOCK_NB elsewhere), keeps the fd for the process lifetime and writes run/agent.pid.json {pid, started_at, by: JARVIS_STARTED_BY or 'manual', reason: JARVIS_START_REASON, argv, git_sha}; on failure prints '[JARVIS] Agent already running (pid X, by Y, since Z). Use: python scripts/agent_ctl.py restart --by <you> --reason <why>' and exits 3; is_locked() probes without holding; no-op under pytest or JARVIS_NO_LOCK=1
@@ -829,8 +829,8 @@ Verify:
 - netstat -ano | grep ':8081 '   # expect 127.0.0.1:8081 only
 - $VPS "docker logs --since 10m jarvis-livekit 2>&1 | grep -c 'worker registered'"
 
-#### C-09 · scripts/agent_ctl.py (status/start/stop/restart/wait/logs with cooldown + audit) + safe launchers + root .env as the single settings source
-**Phase:** P0 · **Size:** M · **Feature:** Single agent worker guarantee
+#### C-09 ? scripts/agent_ctl.py (status/start/stop/restart/wait/logs with cooldown + audit) + safe launchers + root .env as the single settings source
+**Phase:** P0 ? **Size:** M ? **Feature:** Single agent worker guarantee
 **Source:** OP-06 (infra-security-ops)
 **Kyun:** Both agents need one safe way to restart the worker; start-agent.bat, setup.bat and start_hybrid_agent.py copy deploy/windows-local/.env over the root .env; agent stdout/stderr logs grow forever.
 **Files:** `scripts/agent_ctl.py`, `services/utils/jarvis_config.py`, `deploy/windows-local/start-agent.bat`, `deploy/windows-local/setup.bat`, `deploy/windows-local/start_hybrid_agent.py`, `dev.bat`, `prod.bat`, `install_production.bat`, `install_production.sh`, `CLAUDE.md`, `.cursor/rules/jarvis-collab.mdc`, `tests/unit/test_agent_ctl.py`
@@ -863,13 +863,13 @@ Verify:
 - tail -n 3 logs/agent_ctl.log
 - Manual (user): after the restart, talk to JARVIS and hear a reply.
 
-#### C-10 · Leftover: remove the dead 'Debug UI http://187.127.123.235:5100' hint from the PC launchers
-**Phase:** P0 · **Size:** S · **Feature:** Login screen + session handling
+#### C-10 ? Leftover: remove the dead 'Debug UI http://187.127.123.235:5100' hint from the PC launchers
+**Phase:** P0 ? **Size:** S ? **Feature:** Login screen + session handling
 **Source:** UI-02 (dashboard-ui)
 **Kyun:** Port 5100 is loopback-only since 30 Sep, so the printed URL fails and points users at a non-HTTPS origin that can never hold the session cookie.
 **Files:** `deploy/windows-local/start-agent.bat`, `deploy/windows-local/start_hybrid_agent.py`
 **Depends on:** C-02, C-09
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. start-agent.bat:75: delete the 'Debug UI: http://187.127.123.235:5100' echo line; keep line 74 'Secure UI: https://jarvis.srv1802669.hstgr.cloud'.
@@ -884,13 +884,13 @@ Verify:
 - grep -n '5100' deploy/windows-local/start-agent.bat deploy/windows-local/start_hybrid_agent.py   (expect no match)
 - .venv_312/Scripts/python.exe -m py_compile deploy/windows-local/start_hybrid_agent.py
 
-#### C-11 · Reusable backup/restore tooling (PC + VPS), restore drill, PC mirror of the emergency VPS snapshot
-**Phase:** P0 · **Size:** M · **Feature:** Backups & restore (PC + VPS)
+#### C-11 ? Reusable backup/restore tooling (PC + VPS), restore drill, PC mirror of the emergency VPS snapshot
+**Phase:** P0 ? **Size:** M ? **Feature:** Backups & restore (PC + VPS)
 **Source:** OP-07 (infra-security-ops)
 **Kyun:** The emergency snapshot was manual; deploys need a scripted backup (code, nginx conf, env, volumes, SQLite, rollback tags) and backup_system.py points at files that do not exist and rotates any .zip.
 **Files:** `services/utils/backup_system.py`, `scripts/ops/backup_local.py`, `deploy/hostinger/backup_vps.sh`, `deploy/hostinger/RUNBOOK.md`, `tests/unit/test_backup_system.py`
 **Depends on:** C-01, C-04, K-54 (COORD-4)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. services/utils/backup_system.py (keep the API): JarvisBackup(source_dirs=None, backup_root=None, *, exclude_globs=None); default sources .env, deploy/windows-local/.env, conversations/, chroma_db/, data/identity/, Jarvis_Outputs/, backups/checkpoints/, logs/*.log, logs/telemetry.jsonl, plan.md, done_highlight.md (missing ones only warn); backup_root = JARVIS_BACKUP_DIR or %USERPROFILE%/JARVIS-backups/local
@@ -918,8 +918,8 @@ Verify:
 - ls "$USERPROFILE/JARVIS-backups/vps/"
 - $PY -m pytest tests/unit/test_backup_system.py -q
 
-#### C-12 · Deploy tooling: deploy_from_pc.sh (committed HEAD only), deploy.sh v2 (lock, backup, nginx -t, health gate, other-apps smoke), rollback.sh, smoke_other_apps.sh + first full sync deploy
-**Phase:** P0 · **Size:** M · **Feature:** Deploy pipeline & rollback
+#### C-12 ? Deploy tooling: deploy_from_pc.sh (committed HEAD only), deploy.sh v2 (lock, backup, nginx -t, health gate, other-apps smoke), rollback.sh, smoke_other_apps.sh + first full sync deploy
+**Phase:** P0 ? **Size:** M ? **Feature:** Deploy pipeline & rollback
 **Source:** OP-08 (infra-security-ops)
 **Kyun:** deploy.sh only runs compose up (no backup, no rollback, health cannot fail it); 6 VPS files drifted, test_chat_once.py is missing there, and the sanitized livekit.yaml + LIVEKIT_KEYS + pinned image must reach the VPS.
 **Files:** `deploy/hostinger/deploy_from_pc.sh`, `deploy/hostinger/deploy.sh`, `deploy/hostinger/rollback.sh`, `deploy/hostinger/smoke_other_apps.sh`, `deploy/hostinger/RUNBOOK.md`
@@ -952,13 +952,13 @@ Verify:
 - $VPS 'grep -c ^keys: /opt/jarvis-agent/deploy/hostinger/livekit.yaml; docker inspect -f {{.Config.Image}} jarvis-livekit'   # expect 0 and livekit/livekit-server:v1.13.7
 - Manual (user): open the UI (browser password), press Voice, ask something, hear a reply.
 
-#### C-13 · Bridge SQLite store on a volume + message normalization + init_state/history from the DB
-**Phase:** P0 · **Size:** M · **Feature:** Bridge state persistence
+#### C-13 ? Bridge SQLite store on a volume + message normalization + init_state/history from the DB
+**Phase:** P0 ? **Size:** M ? **Feature:** Bridge state persistence
 **Source:** OP-10 (infra-security-ops)
 **Kyun:** Chat history, logs and memories live in a Python dict capped at 50 messages and vanished at the 16:51Z bridge restart; auth (sessions, audit) also needs a store.
 **Files:** `src/core/bridge_store.py`, `src/core/ui_bridge.py`, `deploy/hostinger/docker-compose.yml`, `deploy/hostinger/Dockerfile.bridge`, `tests/infrastructure/test_bridge_store.py`
 **Depends on:** C-12, K-41 (C-MSG-1), K-42 (C-STATE-1)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Create src/core/bridge_store.py BridgeStore(path): sqlite3 through asyncio.to_thread with one connection (check_same_thread=False) and a threading.Lock, PRAGMA journal_mode=WAL, synchronous=NORMAL, schema_version table; tables messages, events, settings, sessions, audit, kv, confirmations, pending_commands per C-STATE-1
@@ -984,8 +984,8 @@ Verify:
 - $VPS 'docker exec jarvis-bridge python -m src.core.bridge_store stats'   # no 'agent' role rows
 - $VPS 'docker restart jarvis-bridge'   # then reload the UI and check the chat history is still there
 
-#### C-14 · Agent link v2, bridge side: AGENT_TOKEN + HMAC v2 notify with replay protection, Socket.IO roles/rooms with a legacy transition, env-only origins, secrets tooling
-**Phase:** P0 · **Size:** L · **Feature:** Agent-bridge authentication and routing
+#### C-14 ? Agent link v2, bridge side: AGENT_TOKEN + HMAC v2 notify with replay protection, Socket.IO roles/rooms with a legacy transition, env-only origins, secrets tooling
+**Phase:** P0 ? **Size:** L ? **Feature:** Agent-bridge authentication and routing
 **Source:** OP-11 (infra-security-ops)
 **Kyun:** The agent logs in as a UI with the shared token, the HMAC key has a hardcoded fallback, ui_command and camera frames are broadcast to every socket, and /notify updates state before auth.
 **Files:** `services/utils/jarvis_config.py`, `services/utils/jarvis_security.py`, `services/utils/jarvis_logger.py`, `src/core/bridge_security.py`, `src/core/ui_bridge.py`, `scripts/ops/gen_secrets.py`, `scripts/ops/rotate_env_secret.py`, `deploy/hostinger/docker-compose.yml`, `.env.example`, `.env.production.example`, `deploy/hostinger/.env.example`, `pytest.ini`, `tests/infrastructure/test_bridge_notify.py`, `tests/infrastructure/test_bridge_socket_rooms.py`, `tests/infrastructure/test_bridge_connectivity.py`, `tests/infrastructure/test_persona_sync.py`
@@ -1018,13 +1018,13 @@ Verify:
 - $PY deploy/windows-local/test_chat_once.py   # legacy probe still prints PASS
 - Manual (user): voice + typed chat still work after the deploy.
 
-#### C-15 · Agent link v2, agent side: signed raw-body notify with retry queue, AGENT_TOKEN socket with reconnect-forever loop, chat id echo
-**Phase:** P0 · **Size:** M · **Feature:** Agent-bridge authentication and routing
+#### C-15 ? Agent link v2, agent side: signed raw-body notify with retry queue, AGENT_TOKEN socket with reconnect-forever loop, chat id echo
+**Phase:** P0 ? **Size:** M ? **Feature:** Agent-bridge authentication and routing
 **Source:** OP-12 (infra-security-ops)
 **Kyun:** The listener returns after a disconnect or failed first connect and TaskProtector never restarts it; notify errors are swallowed so transcripts vanish while the bridge restarts; typed text shows twice.
 **Files:** `services/utils/jarvis_bridge.py`, `services/ai_core/agent_loops.py`, `tests/core/test_agent_loops.py`, `tests/unit/test_notify_signing.py`
 **Depends on:** C-14, C-09, K-39 (C-NOTIFY-1), K-38 (C-SOCK-1), K-41 (C-MSG-1)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. jarvis_bridge.notify_event: serialize once (json.dumps(separators=(',',':'), ensure_ascii=False).encode()), send X-Agent-Token/Timestamp/Nonce/Signature and post content=raw; fall back to the legacy headers only when AGENT_TOKEN is not configured (local dev)
@@ -1048,8 +1048,8 @@ Verify:
 - $VPS 'docker restart jarvis-bridge && timeout 60 sh -c "until docker logs --since 1m jarvis-bridge 2>&1 | grep -q role=agent; do sleep 2; done" && echo AGENT_BACK'
 - $PY deploy/windows-local/test_chat_once.py   # PASS
 
-#### C-16 · Network lockdown: nginx /agent + /twirp, PC agent on wss/https via the domain, 5101/7880 bound to 127.0.0.1, compose memory/log limits
-**Phase:** P0 · **Size:** M · **Feature:** Network exposure & firewall
+#### C-16 ? Network lockdown: nginx /agent + /twirp, PC agent on wss/https via the domain, 5101/7880 bound to 127.0.0.1, compose memory/log limits
+**Phase:** P0 ? **Size:** M ? **Feature:** Network exposure & firewall
 **Source:** OP-13 (infra-security-ops)
 **Kyun:** Bridge 5101 and LiveKit API/signaling 7880 are still public on the raw IP because the PC agent uses them; basic auth is only on 'location /', so the agent can move to the domain right now.
 **Files:** `deploy/hostinger/jarvis.conf`, `deploy/hostinger/docker-compose.yml`, `.env`, `deploy/windows-local/.env`, `deploy/windows-local/start-agent.bat`, `deploy/windows-local/start_hybrid_agent.py`, `deploy/windows-local/test_chat_once.py`, `scripts/agent_ctl.py`
@@ -1079,8 +1079,8 @@ Verify:
 - $VPS "docker logs --since 10m jarvis-livekit 2>&1 | grep -E 'worker registered|assigned job' | tail -3"
 - Manual (user): one voice call + one typed message work.
 
-#### C-17 · Rotate the LiveKit API key/secret (they sat in world-readable files); values live only in env files
-**Phase:** P0 · **Size:** S · **Feature:** Git version control & secret hygiene
+#### C-17 ? Rotate the LiveKit API key/secret (they sat in world-readable files); values live only in env files
+**Phase:** P0 ? **Size:** S ? **Feature:** Git version control & secret hygiene
 **Source:** OP-14 (infra-security-ops)
 **Kyun:** The LiveKit secret was in livekit.yaml and 666 env files on a shared VPS with other local users; whoever copied it can mint room tokens.
 **Files:** `scripts/ops/rotate_livekit_keys.py`, `.env`, `deploy/windows-local/.env`, `/opt/jarvis-agent/deploy/hostinger/.env (VPS)`, `/opt/jarvis-agent/deploy/hostinger/bridge.env (VPS)`
@@ -1105,8 +1105,8 @@ Verify:
 - $PY scripts/ops/rotate_livekit_keys.py --check-old /root/jarvis-backups/<TS>/livekit-old.env   # old key rejected: 401
 - Manual (user): a voice call works.
 
-#### C-18 · Least-privilege VPS env: bridge reads only bridge.env, compose .env keeps interpolation vars, unused VPS key copies moved to backups; user rotates Google/Gmail keys
-**Phase:** P0 · **Size:** S · **Feature:** VPS file permissions
+#### C-18 ? Least-privilege VPS env: bridge reads only bridge.env, compose .env keeps interpolation vars, unused VPS key copies moved to backups; user rotates Google/Gmail keys
+**Phase:** P0 ? **Size:** S ? **Feature:** VPS file permissions
 **Source:** OP-15 (infra-security-ops)
 **Kyun:** The bridge container still receives every PC API key (Google, Groq, OpenRouter, Tavily, HF, email) it never uses, and two unused full copies of the PC keys sit in /opt/jarvis-agent.
 **Files:** `/opt/jarvis-agent/deploy/hostinger/.env (VPS)`, `/opt/jarvis-agent/deploy/hostinger/bridge.env (VPS)`, `deploy/hostinger/docker-compose.yml`, `deploy/hostinger/.env.example`, `deploy/hostinger/RUNBOOK.md`
@@ -1132,13 +1132,13 @@ Verify:
 - curl -s https://jarvis.srv1802669.hstgr.cloud/vortex/health
 - Manual (user): ask 'Lahore ka mausam?' and 'latest news search karo' and get answers.
 
-#### C-19 · Owner session auth backend: password + TOTP + recovery codes, JWT cookie on /vortex, session-protected endpoints, LiveKit token per C-LK-1
-**Phase:** P0 · **Size:** L · **Feature:** Owner login / UI authentication
+#### C-19 ? Owner session auth backend: password + TOTP + recovery codes, JWT cookie on /vortex, session-protected endpoints, LiveKit token per C-LK-1
+**Phase:** P0 ? **Size:** L ? **Feature:** Owner login / UI authentication
 **Source:** OP-17 (infra-security-ops)
 **Kyun:** There is no password, session, logout, CSRF/Origin check or login rate limit; the UI still depends on a shared static token baked into the bundle.
 **Files:** `src/core/bridge_auth.py`, `src/core/ui_bridge.py`, `services/utils/jarvis_config.py`, `deploy/hostinger/requirements-bridge.txt`, `requirements.txt`, `deploy/windows-local/requirements-hybrid.txt`, `deploy/windows-local/test_chat_once.py`, `tests/infrastructure/test_bridge_auth.py`
 **Depends on:** C-13, C-14, C-16, K-36 (C-AUTH-1), K-37 (C-LK-1)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Dependencies: bcrypt==5.0.0 and pyotp==2.9.0 in deploy/hostinger/requirements-bridge.txt; pyotp==2.9.0 in requirements.txt and deploy/windows-local/requirements-hybrid.txt; install on the PC with agent_ctl stop -> .venv_312/Scripts/python.exe -m pip install pyotp==2.9.0 -> agent_ctl start
@@ -1166,8 +1166,8 @@ Verify:
 - $VPS 'docker exec jarvis-bridge python -m src.core.bridge_auth enroll-check'
 - Manual (user): voice + typed chat still work.
 
-#### C-20 · Owner credential enrollment (password + TOTP + recovery codes), run by the user
-**Phase:** P0 · **Size:** S · **Feature:** Owner login / UI authentication
+#### C-20 ? Owner credential enrollment (password + TOTP + recovery codes), run by the user
+**Phase:** P0 ? **Size:** S ? **Feature:** Owner login / UI authentication
 **Source:** OP-18 (infra-security-ops)
 **Kyun:** The login needs the owner's own password and authenticator secret, which Claude must never see.
 **Files:** `scripts/ops/set_owner_credentials.py`, `/opt/jarvis-agent/deploy/hostinger/bridge.env (VPS)`
@@ -1192,8 +1192,8 @@ Verify:
 - Manual (user): .venv_312/Scripts/python.exe scripts/ops/set_owner_credentials.py --test-login
 - $VPS 'docker exec jarvis-bridge python -m src.core.bridge_auth audit-summary --prefix login'
 
-#### C-21 · Deploy #0: ship the login UI to the VPS and do the first real login (precondition for the cut-over)
-**Phase:** P0 · **Size:** S · **Feature:** Login screen + session handling
+#### C-21 ? Deploy #0: ship the login UI to the VPS and do the first real login (precondition for the cut-over)
+**Phase:** P0 ? **Size:** S ? **Feature:** Login screen + session handling
 **Source:** UI-06 (dashboard-ui)
 **Kyun:** EXT OPS-10 needs a confirmed login with the new screen before legacy token auth is switched off, and Cursor cannot deploy.
 **Files:** `deploy/hostinger/deploy_from_pc.sh (from EXT OPS-06)`, `done_highlight.md`
@@ -1215,8 +1215,8 @@ Verify:
 - ssh -i ~/.ssh/id_ed25519_hostinger root@187.127.123.235 'docker ps --format "{{.Names}} {{.Status}}"'
 - Playwright MCP screenshots of the login screen and of the dashboard after the user's login
 
-#### C-22 · Cut-over: legacy token auth off, token out of the frontend build, temporary basic auth commented out, security headers + login rate limit, bundle secret check
-**Phase:** P0 · **Size:** S · **Feature:** Leaked UI token enables remote control of the PC
+#### C-22 ? Cut-over: legacy token auth off, token out of the frontend build, temporary basic auth commented out, security headers + login rate limit, bundle secret check
+**Phase:** P0 ? **Size:** S ? **Feature:** Leaked UI token enables remote control of the PC
 **Source:** OP-21 (infra-security-ops)
 **Kyun:** Until the shared token leaves the build and the legacy path is off, anyone with the bundle can still drive the agent; basic auth is a stopgap.
 **Files:** `deploy/hostinger/docker-compose.yml`, `deploy/hostinger/Dockerfile.frontend`, `deploy/hostinger/jarvis.conf`, `deploy/hostinger/deploy.sh`, `deploy/hostinger/check_bundle_secrets.sh`, `services/utils/jarvis_config.py`, `.env`, `deploy/windows-local/.env`, `/opt/jarvis-agent/deploy/hostinger/.env (VPS)`, `/opt/jarvis-agent/deploy/hostinger/bridge.env (VPS)`
@@ -1247,13 +1247,13 @@ Verify:
 - for i in $(seq 1 11); do curl -s -o /dev/null -w '%{http_code} ' -X POST -H 'Content-Type: application/json' -H 'Origin: https://jarvis.srv1802669.hstgr.cloud' -d '{"password":"x","totp":"000000"}' https://jarvis.srv1802669.hstgr.cloud/vortex/auth/login; done; echo ' <- 429 at the end'
 - Manual (user): open the site (no browser prompt), log in, use voice + chat.
 
-#### C-24 · Tool decorator v2: unified kwargs, metadata, arg policies, non-destructive output limits
-**Phase:** P0 · **Size:** M · **Feature:** Tool wrapper: sanitize/timeout/blocking
+#### C-24 ? Tool decorator v2: unified kwargs, metadata, arg policies, non-destructive output limits
+**Phase:** P0 ? **Size:** M ? **Feature:** Tool wrapper: sanitize/timeout/blocking
 **Source:** TD-02 (tools-desktop)
 **Kyun:** VortexGuard strips newlines and < > & | $ from every argument (breaks code, Urdu text and paths) and replaces any output over 5000 chars; tools-desktop and tools-info planned incompatible decorator kwargs, and an unknown kwarg silently drops a whole module's tools at import (jarvis_plugin_manager.py:188-190). Merges tools-info 'P0 Tool arg policies'. Merged duplicate TI-01: Arg-policy sanitizers + non-destructive tool output filter (jarvis_security.py)
 **Files:** `services/ai_core/jarvis_plugin_manager.py`, `services/utils/jarvis_security.py`, `tests/unit/test_plugin_manager_v2.py (new)`, `tests/unit/test_tool_policies.py (new)`, `tests/unit/test_tool_policies.py`
 **Depends on:** C-06, K-11 (JarvisToolDecoratorV2), K-12 (ToolResult), K-28 (tool_arg_policies)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. In jarvis_plugin_manager.py extend jarvis_tool() and register_tool() with the keyword-only args of JarvisToolDecoratorV2 (timeout, raw_args, arg_policies, risk, risky, confirm, confirm_summary, voice_confirm, exclusive, max_output_chars, long_running); bare @jarvis_tool and execution_timeout keep working.
@@ -1275,13 +1275,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/unit/test_plugin_manager_v2.py tests/unit/test_tool_policies.py -q -p no:cacheprovider
 - Restart the PC agent per the RUNTIME LOCK rule, then: Select-String -Path logs/agent_stderr.log -Pattern 'Plugin discovery complete|Failed to load module'
 
-#### C-25 · Secret redaction for logs and tool outputs + API keys out of URLs
-**Phase:** P0 · **Size:** S · **Feature:** Tool execution guard (arg sanitizer / output filter / timeouts)
+#### C-25 ? Secret redaction for logs and tool outputs + API keys out of URLs
+**Phase:** P0 ? **Size:** S ? **Feature:** Tool execution guard (arg sanitizer / output filter / timeouts)
 **Source:** TI-02 (tools-info)
 **Kyun:** Swarm puts the Gemini key in a URL, httpx logs full URLs at INFO, and HTTP exceptions carrying ?key= reach logs and the LLM. Review R28: a Formatter (not a Filter) is needed so tracebacks are covered; PINCHTAB_TOKEN and the file-server token must be masked too.
 **Files:** `services/utils/jarvis_security.py`, `services/utils/jarvis_logger.py`, `src/core/agent_runner.py`, `services/ai_core/swarm_manager.py`, `tests/unit/test_redaction.py`
 **Depends on:** C-24, K-29 (redact_secrets)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. jarvis_security.py: redact_secrets(text) replaces with '***' the current values (length >= 8, longest first) of every env name listed in contract redact_secrets.
@@ -1302,13 +1302,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/unit/test_redaction.py -q -p no:cacheprovider
 - Select-String -Path logs/*.log -Pattern 'key=AQ'   (expect no matches)
 
-#### C-26 · Desktop config keys, .env keys via a no-echo script, stale D:/ paths in Claude-lane files
-**Phase:** P0 · **Size:** M · **Feature:** Desktop prerequisites on this PC
+#### C-26 ? Desktop config keys, .env keys via a no-echo script, stale D:/ paths in Claude-lane files
+**Phase:** P0 ? **Size:** M ? **Feature:** Desktop prerequisites on this PC
 **Source:** TD-06 (tools-desktop)
 **Kyun:** Desktop tools hard-code D:/, d:/Personal-Assistant-main and C:/ffmpeg on a PC that has only C:; Cursor tools need one config source for outputs, media, open roots, browsers, PinchTab, ffmpeg, WhatsApp, CV and the automation flags. (scripts/voice/* paths are fixed by VCR-12 and the prompt's D:/CV lines by VCR-06.)
 **Files:** `services/utils/jarvis_config.py`, `scripts/ops/env_set.py (new)`, `deploy/windows-local/.env`, `/.env (root)`, `.env.example`, `.env.production.example`, `scripts/tools/verify_all_fixes.py`, `scripts/tools/jarvis_extended_test.py`, `scripts/tools/jarvis_live_test.py`, `test_agent_tools.py`, `tests/unit/test_config_desktop_keys.py (new)`
 **Depends on:** C-06, K-15 (DesktopConfigKeys)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. In jarvis_config.py add _env_bool, _env_int and _env_list (';'-separated, expandvars plus expanduser) and every DesktopConfigKeys attribute with its default; include 'D:/' in media_dirs, open_roots and file_server_root only when os.path.exists('D:/').
@@ -1331,13 +1331,13 @@ Verify:
 - Select-String -Path scripts/tools/*.py,test_agent_tools.py -Pattern 'Personal-Assistant-main'
 - ./.venv_312/Scripts/python.exe scripts/ops/env_set.py --check
 
-#### C-27 · Tool execution core: per-tool timeout, cancel-safe exclusive desktop lock, central kill switch, tool_sync events, audit
-**Phase:** P0 · **Size:** M · **Feature:** Tool wrapper: sanitize/timeout/blocking
+#### C-27 ? Tool execution core: per-tool timeout, cancel-safe exclusive desktop lock, central kill switch, tool_sync events, audit
+**Phase:** P0 ? **Size:** M ? **Feature:** Tool wrapper: sanitize/timeout/blocking
 **Source:** TD-03 (tools-desktop)
 **Kyun:** All 78 tools are async but call blocking GUI/subprocess code; one 15 s timeout cuts long tools; GUI tools can interleave (a timed-out typing thread keeps typing); the kill switch exists only in keyboard_mouse_ctrl; the UI gets tool rows from only 3 call sites.
 **Files:** `services/ai_core/jarvis_plugin_manager.py`, `services/utils/jarvis_audit.py`, `tests/unit/test_tool_exec_core.py (new)`
 **Depends on:** C-24, K-13 (ToolSyncEvent), K-12 (ToolResult)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. In tool_wrapper compute bound = sig.bind_partial(*a, **k); bound.apply_defaults() and pass bound.arguments to policies, risk and summary callables (an omitted auto_run counts as its default True).
@@ -1360,13 +1360,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/unit/test_tool_exec_core.py -q -p no:cacheprovider
 - After a restart say 'Jarvis battery kitni hai' and check the agent log for one tool_sync start/end pair.
 
-#### C-28 · Non-blocking confirmation broker + confirm_action tool (single broker for all areas)
-**Phase:** P0 · **Size:** L · **Feature:** Risky-action confirmation guard
+#### C-28 ? Non-blocking confirmation broker + confirm_action tool (single broker for all areas)
+**Phase:** P0 ? **Size:** L ? **Feature:** Risky-action confirmation guard
 **Source:** TD-04 (tools-desktop)
 **Kyun:** Shutdown, restart, recycle bin, CMD and WhatsApp run immediately with no approval; four areas planned four brokers, and the blocking designs keep Gemini waiting, break spoken approval and leave dead Allow buttons. Merges tools-info 'P0 Confirmation broker'.
 **Files:** `services/ai_core/jarvis_confirm.py (new)`, `services/ai_core/confirmation.py (new re-export)`, `services/ai_core/jarvis_plugin_manager.py`, `tests/unit/test_confirm_broker.py (new)`
 **Depends on:** C-27, K-14 (ConfirmFlow), K-12 (ToolResult)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Create services/ai_core/jarvis_confirm.py with ConfirmationBroker holding PendingAction {id=uuid4().hex, tool, summary, risk, voice_allowed, args_preview, expires_at=now+config.confirm_timeout_s (60), run}.
@@ -1390,13 +1390,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/unit/test_confirm_broker.py -q -p no:cacheprovider
 - After a restart: Select-String -Path logs/agent_stderr.log -Pattern 'Plugin discovery complete' shows 79 or more tools.
 
-#### C-29 · Bridge + agent routing for ConfirmFlow and tool events (authenticated ui/agent rooms), bridge-only deploy
-**Phase:** P0 · **Size:** L · **Feature:** Risky-action confirmation guard
+#### C-29 ? Bridge + agent routing for ConfirmFlow and tool events (authenticated ui/agent rooms), bridge-only deploy
+**Phase:** P0 ? **Size:** L ? **Feature:** Risky-action confirmation guard
 **Source:** TD-10 (tools-desktop)
 **Kyun:** confirm_request/confirm_response have no route; the Allow decision must come only from the authenticated owner UI (the old VORTEX token was in the public bundle), and tool_sync must reach the UI as one row per call. Merged duplicate OP-26: Confirmation gate + audit for high/medium-risk tools (agent and bridge side)
 **Files:** `src/core/ui_bridge.py`, `services/ai_core/agent_loops.py`, `services/utils/jarvis_bridge.py`, `tests/integration/test_confirm_routing.py (new)`, `services/ai_core/jarvis_guard.py`, `services/ai_core/jarvis_plugin_manager.py`, `src/core/bridge_store.py`, `services/utils/jarvis_audit.py`, `tests/core/test_guard.py`, `tests/infrastructure/test_bridge_confirm.py`
 **Depends on:** C-28, C-13, C-14, C-15, C-19, K-14 (ConfirmFlow), K-13 (ToolSyncEvent), K-45 (C-CONFIRM-1)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. In ui_bridge.py /notify: 'confirm_request' is stored in state['confirmations'] by id (expired pruned), emitted to room 'ui' only, and answered with {status:'ok', ui_clients:<authenticated ui sockets>}; 'confirm_resolved' removes it and emits to 'ui'; if OPS-19 or DASH-C12 already added confirm handlers, align them to ConfirmFlow instead of adding a second set.
@@ -1420,8 +1420,8 @@ Verify:
 - ssh -i ~/.ssh/id_ed25519_hostinger -o BatchMode=yes root@187.127.123.235 "docker ps --format '{{.Names}} {{.Status}}'"
 - curl -s -o NUL -w '%{http_code}' https://jarvis.srv1802669.hstgr.cloud/vortex/health
 
-#### C-30 · Deploy the STONIX frontend with the ConfirmDialog to the VPS + live selftest
-**Phase:** P0 · **Size:** S · **Feature:** Risky-action confirmation guard
+#### C-30 ? Deploy the STONIX frontend with the ConfirmDialog to the VPS + live selftest
+**Phase:** P0 ? **Size:** S ? **Feature:** Risky-action confirmation guard
 **Source:** TD-12 (tools-desktop)
 **Kyun:** The web UI is built inside the VPS frontend container; without a Claude redeploy the dialog never reaches https://jarvis.srv1802669.hstgr.cloud, and high-risk tools could not be approved.
 **Files:** `scripts/vps/sync_ui.ps1 (new)`, `done_highlight.md (append only)`
@@ -1444,13 +1444,13 @@ Verify:
 - On the VPS fetch http://127.0.0.1:5100/ and grep its /assets/*.js files for 'alertdialog' (count of 1 or more).
 - Test-Path logs/confirm_selftest.marker after Allow (True) and after Deny (False).
 
-#### C-31 · Event-loop stall watchdog
-**Phase:** P0 · **Size:** S · **Feature:** Event-loop stall watchdog (new)
+#### C-31 ? Event-loop stall watchdog
+**Phase:** P0 ? **Size:** S ? **Feature:** Event-loop stall watchdog (new)
 **Source:** TD-05 (tools-desktop)
 **Kyun:** 'Never blocks the event loop' had no measurement; every tool is async, so stalls come from blocking calls inside tools and must be measured around real tools (Gemini audio freezes during a stall).
 **Files:** `services/utils/jarvis_loopwatch.py (new)`, `src/core/agent_runner.py`, `tests/unit/test_loopwatch.py (new)`
 **Depends on:** C-27
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Create services/utils/jarvis_loopwatch.py: a task that awaits asyncio.sleep(0.1) in a loop, measures drift and logs WARNING 'EVENT_LOOP_STALL ms=<n> tools=<plugin_manager.running_tools()>' when drift exceeds 250 ms; expose stall_count for tests.
@@ -1465,13 +1465,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/unit/test_loopwatch.py -q -p no:cacheprovider
 - Select-String -Path logs/agent_stderr.log -Pattern 'EVENT_LOOP_STALL'
 
-#### C-32 · Worker prewarm and single-user worker options (plugin discovery once per process)
-**Phase:** P0 · **Size:** M · **Feature:** Plugin discovery done twice
+#### C-32 ? Worker prewarm and single-user worker options (plugin discovery once per process)
+**Phase:** P0 ? **Size:** M ? **Feature:** Plugin discovery done twice
 **Source:** VR-02 (voice-runtime)
 **Kyun:** Discovery runs twice inside the job after connect (~8 s); default initialize_process_timeout is 10 s; production load_threshold 0.7 can mark the only PC worker unavailable.
 **Files:** `src/core/agent.py`, `src/core/agent_runner.py`, `src/core/agent_core.py`, `tests/core/test_agent_entry.py`, `tests/core/test_agent_prewarm.py`, `.env.example`
 **Depends on:** C-07, C-08, C-09, C-23
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. src/core/agent.py __main__: keep OPS-05 args and play_startup_voice; add prewarm_fnc=prewarm, initialize_process_timeout=float(os.getenv('JARVIS_PREWARM_TIMEOUT','120')), num_idle_processes=int(os.getenv('JARVIS_IDLE_PROCS','1')), load_threshold=float(os.getenv('JARVIS_LOAD_THRESHOLD','inf')).
@@ -1496,13 +1496,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe scripts/agent_ctl.py restart --by claude --reason VR-02
 - Select-String -Path logs/agent_stderr.log -Pattern 'PREWARM_DONE|Session started|Registering Agent with'
 
-#### C-33 · JarvisRuntime: one AgentSession per job, restartable session errors, clean teardown with ctx.shutdown
-**Phase:** P0 · **Size:** L · **Feature:** Entrypoint 5x retry loop and session lifecycle
+#### C-33 ? JarvisRuntime: one AgentSession per job, restartable session errors, clean teardown with ctx.shutdown
+**Phase:** P0 ? **Size:** L ? **Feature:** Entrypoint 5x retry loop and session lifecycle
 **Source:** VR-03 (voice-runtime)
 **Kyun:** The while-loop restarts after 'stop' without break, never closes the old session (session.stop() does not exist in 1.4.6), re-registers handlers, leaks the old Socket.IO client, cancels the global protector, and returning from the entrypoint does not end the job.
 **Files:** `src/core/agent_runner.py`, `src/core/agent_core.py`, `services/ai_core/agent_loops.py`, `services/utils/jarvis_autonomous.py`, `tests/core/test_agent_runner_lifecycle.py`, `tests/core/test_agent_runner.py`
 **Depends on:** C-32
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. agent_runner.py: class JarvisRuntime(ctx) with session, assistant, protector=TaskProtector() per job, listener, closed=asyncio.Event(), reason; methods start(), wait_closed(), aclose(reason).
@@ -1529,13 +1529,13 @@ Verify:
 - Select-String -Path logs/agent_stderr.log -Pattern 'RUNTIME_STARTED|RUNTIME_CLOSED|RUNTIME_SESSION_RESTART'
 - ssh -i ~/.ssh/id_ed25519_hostinger -o BatchMode=yes root@187.127.123.235 "docker logs --since 15m jarvis-livekit 2>&1 | grep -E 'assigned job|participant closing'"
 
-#### C-34 · UI command registry, (type,id) dedupe and a job-scoped bridge listener
-**Phase:** P0 · **Size:** M · **Feature:** Fragmented / echo / duplicate replies
+#### C-34 ? UI command registry, (type,id) dedupe and a job-scoped bridge listener
+**Phase:** P0 ? **Size:** M ? **Feature:** Fragmented / echo / duplicate replies
 **Source:** VR-05 (voice-runtime)
 **Kyun:** Today's listener returns when the link drops, the old AsyncClient keeps auto-reconnecting with handlers bound to an old assistant, and a typed message is processed twice (telemetry.jsonl pairs).
 **Files:** `services/utils/ui_command_registry.py`, `services/ai_core/agent_loops.py`, `src/core/agent_runner.py`, `tests/core/test_ui_command_registry.py`, `tests/core/test_agent_loops.py`, `deploy/windows-local/test_chat_once.py`
 **Depends on:** C-33, K-60 (CT-VC-CONTROL)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. services/utils/ui_command_registry.py (no project imports): UI_COMMANDS, register_ui_command(name), dispatch(type, payload, ctx); agent_loops re-exports it.
@@ -1557,8 +1557,8 @@ Verify:
 - ./.venv_312/Scripts/python.exe deploy/windows-local/test_chat_once.py
 - ssh -i ~/.ssh/id_ed25519_hostinger -o BatchMode=yes root@187.127.123.235 "docker restart jarvis-bridge && sleep 15 && docker logs --since 1m jarvis-bridge 2>&1 | grep -ci agent"
 
-#### C-35 · RoomIO relink: voice survives page reloads, Voice off/on and new browser identities
-**Phase:** P0 · **Size:** S · **Feature:** Voice round trip (browser mic -> LiveKit -> Gemini Live -> speaker)
+#### C-35 ? RoomIO relink: voice survives page reloads, Voice off/on and new browser identities
+**Phase:** P0 ? **Size:** S ? **Feature:** Voice round trip (browser mic -> LiveKit -> Gemini Live -> speaker)
 **Source:** VR-04 (voice-runtime)
 **Kyun:** With close_on_disconnect=False RoomIO keeps the first identity forever (room_io.py:356-375) and the browser mints a new identity per connect, so after a reload the agent never hears the user and drops lk.chat from unlinked participants. Merged duplicate UI-08: Agent voice link policy: re-link on disconnect, 'Take over voice' command, jarvis.linked_identity attribute
 **Files:** `src/core/roomio_link.py`, `src/core/agent_runner.py`, `tests/core/test_roomio_link.py`, `src/core/voice_link.py (new)`, `tests/core/test_voice_link.py (new)`
@@ -1585,11 +1585,11 @@ Verify:
 - Select-String -Path logs/agent_stderr.log -Pattern 'ROOMIO_RELINK'
 - Manual: reload twice + 3 Voice off/on cycles on https://jarvis.srv1802669.hstgr.cloud
 
-### P1 · Ek dimagh
+### P1 ? Ek dimagh
 _Typed chat aur voice dono ek hi Gemini session me; voice-ID, wake-word, memory, language._
 
-#### C-23 · Room lifecycle: bridge as sole room owner with a lock, explicit dispatch 'jarvis', reconciler + LiveKit webhooks -> agent_status, pause/start, ensure_room.py never deletes
-**Phase:** P1 · **Size:** L · **Feature:** LiveKit room lifecycle
+#### C-23 ? Room lifecycle: bridge as sole room owner with a lock, explicit dispatch 'jarvis', reconciler + LiveKit webhooks -> agent_status, pause/start, ensure_room.py never deletes
+**Phase:** P1 ? **Size:** L ? **Feature:** LiveKit room lifecycle
 **Source:** OP-22 (infra-security-ops)
 **Kyun:** ensure_room.py and the bridge delete the room (15 DeleteRoom calls on 30 Sep, cutting live calls); the AGENT kind check never matches; 'stop' from the UI restarts the session instead of pausing.
 **Files:** `src/core/bridge_rooms.py`, `src/core/ui_bridge.py`, `src/core/agent.py`, `src/core/agent_runner.py`, `deploy/windows-local/ensure_room.py`, `deploy/hostinger/livekit.yaml`, `deploy/hostinger/docker-compose.yml`, `scripts/agent_ctl.py`, `tests/infrastructure/test_bridge_rooms.py`, `tests/infrastructure/test_no_room_delete.py`
@@ -1622,8 +1622,8 @@ Verify:
 - $PY scripts/agent_ctl.py restart --by claude --reason OP-22-test   # while the user keeps a call open
 - Manual (user): the call does not drop and JARVIS answers again within 60 s.
 
-#### C-36 · Local/desktop mode auth parity: COOKIE_SECURE=auto and local owner credentials for vortex.py / Electron local
-**Phase:** P1 · **Size:** S · **Feature:** Login screen + session handling
+#### C-36 ? Local/desktop mode auth parity: COOKIE_SECURE=auto and local owner credentials for vortex.py / Electron local
+**Phase:** P1 ? **Size:** S ? **Feature:** Login screen + session handling
 **Source:** UI-07 (dashboard-ui)
 **Kyun:** Once the token is gone, the local bridge started by vortex.py (npm run dev, Electron local backend) runs on http and has no owner credentials, so nobody can log in locally.
 **Files:** `src/core/bridge_auth.py (from EXT OPS-08)`, `scripts/ops/set_owner_credentials.py (from EXT OPS-09)`, `.env.example`, `tests/infrastructure/test_bridge_auth_local.py (new)`
@@ -1645,8 +1645,8 @@ Verify:
 - .venv_312/Scripts/python.exe -m pytest tests/infrastructure/test_bridge_auth_local.py -q
 - Manual: local bridge + vite-dev -> log in -> dashboard loads
 
-#### C-37 · Vercel copies redirect to the canonical domain (vercel.json routes 302), shipped by the GitHub push
-**Phase:** P1 · **Size:** S · **Feature:** Owner login / UI authentication
+#### C-37 ? Vercel copies redirect to the canonical domain (vercel.json routes 302), shipped by the GitHub push
+**Phase:** P1 ? **Size:** S ? **Feature:** Owner login / UI authentication
 **Source:** OP-09 (infra-security-ops)
 **Kyun:** jarvis-agent-three/-sigma.vercel.app serve a UI that can no longer connect (old token) and must never get cross-site cookies; a redirect keeps old links working.
 **Files:** `vercel.json`
@@ -1666,13 +1666,13 @@ Verify:
 - curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' https://jarvis-agent-three.vercel.app/
 - curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' https://jarvis-agent-sigma.vercel.app/some/path
 
-#### C-38 · Voice-ID engine loads: shims before speechbrain import, no implicit download
-**Phase:** P1 · **Size:** S · **Feature:** Voice-ID 'only Matloob'
+#### C-38 ? Voice-ID engine loads: shims before speechbrain import, no implicit download
+**Phase:** P1 ? **Size:** S ? **Feature:** Voice-ID 'only Matloob'
 **Source:** VR-06 (voice-runtime)
 **Kyun:** speechbrain 1.0.1 calls torchaudio.list_audio_backends at import (dataio.py:30) and torchaudio 2.10 lacks it; the shim runs after the import, __init__ does not catch AttributeError, and __init__ downloads the model on the turn path.
 **Files:** `services/ai_core/voice_fingerprint.py`, `tests/unit/test_voice_id_import.py`
-**Depends on:** —
-**User se chahiye:** —
+**Depends on:** ?
+**User se chahiye:** ?
 
 Steps:
 1. _ensure_audio_deps: import torchaudio and install list_audio_backends/get_audio_backend/set_audio_backend shims BEFORE 'from speechbrain.inference.speaker import SpeakerRecognition'.
@@ -1690,13 +1690,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/unit/test_voice_id_import.py -q
 - ./.venv_312/Scripts/python.exe scripts/smoke/livekit_voice_vision_smoke.py
 
-#### C-39 · Probe isolation (CT-VC-PROBE) and per-event-loop bridge client
-**Phase:** P1 · **Size:** M · **Feature:** Worker availability and dispatch name
+#### C-39 ? Probe isolation (CT-VC-PROBE) and per-event-loop bridge client
+**Phase:** P1 ? **Size:** M ? **Feature:** Worker availability and dispatch name
 **Source:** VR-07 (voice-runtime)
 **Kyun:** Windows THREAD executor runs probe jobs in the live process: notify handlers, UIBridgeHandler log forwarding, memory/identity writes and loop-bound jarvis_bridge globals would leak probe traffic into the user's UI and memory.
 **Files:** `services/utils/jarvis_bridge.py`, `services/utils/jarvis_logger.py`, `src/core/agent_runner.py`, `services/ai_core/agent_memory.py`, `services/ai_core/jarvis_identity.py`, `tests/core/test_probe_isolation.py`
 **Depends on:** C-34, C-15, K-57 (CT-VC-PROBE)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. jarvis_bridge.py: add ContextVar bridge_suppressed (default False) and is_probe_job(); notify_event returns early when set (DEBUG counter).
@@ -1716,13 +1716,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/core/test_probe_isolation.py -q
 - ssh -i ~/.ssh/id_ed25519_hostinger -o BatchMode=yes root@187.127.123.235 "docker logs --since 5m jarvis-bridge 2>&1 | grep -c 'Transcription: role='"
 
-#### C-40 · Headless voice/chat probe and offline TTS fixtures
-**Phase:** P1 · **Size:** M · **Feature:** Voice round trip (browser mic -> LiveKit -> Gemini Live -> speaker)
+#### C-40 ? Headless voice/chat probe and offline TTS fixtures
+**Phase:** P1 ? **Size:** M ? **Feature:** Voice round trip (browser mic -> LiveKit -> Gemini Live -> speaker)
 **Source:** VR-08 (voice-runtime)
 **Kyun:** Every voice feature needs an automated end-to-end proof that does not touch the live room.
 **Files:** `scripts/smoke/voice_probe.py`, `scripts/smoke/make_tts_fixtures.ps1`, `scripts/smoke/livekit_voice_vision_smoke.py`, `tests/integration/fixtures/audio/`
 **Depends on:** C-39, K-57 (CT-VC-PROBE)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. make_tts_fixtures.ps1: System.Speech with SpeechAudioFormatInfo(16000, Sixteen, Mono) writes tts_jarvis_time.wav, tts_no_wake_time.wav, tts_jarvis_math.wav, tts_jarvis_secret.wav, tts_recall.wav (*.wav is gitignored).
@@ -1744,13 +1744,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe scripts/smoke/voice_probe.py --text "Jarvis, what is 2 plus 2?" --expect-contains 4 --json-out logs/probe_text.json
 - ./.venv_312/Scripts/python.exe scripts/smoke/voice_probe.py --wav tests/integration/fixtures/audio/tts_jarvis_time.wav --expect reply --json-out logs/probe_voice.json
 
-#### C-41 · Audio-output gating so typed replies never wait for a browser
-**Phase:** P1 · **Size:** S · **Feature:** Typed chat - legacy Socket.IO path
+#### C-41 ? Audio-output gating so typed replies never wait for a browser
+**Phase:** P1 ? **Size:** S ? **Feature:** Typed chat - legacy Socket.IO path
 **Source:** VR-09 (voice-runtime)
 **Kyun:** RoomIO audio output waits for a subscriber before every frame (room_io/_output.py:93), so typed replies hang when no browser is in the room; with output audio disabled realtime generation is text-only (agent_activity.py:2410).
 **Files:** `src/core/roomio_link.py`, `src/core/agent_runner.py`, `tests/core/test_output_gating.py`
 **Depends on:** C-35, K-56 (CT-VC-ROOMIO-LINK)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. roomio_link.audio_out_wanted(room, linked, policy): an eligible participant subscribed to agent audio AND (policy 'always' OR the linked participant has an unmuted microphone publication); 'never' -> False.
@@ -1769,13 +1769,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/core/test_output_gating.py -q
 - Select-String -Path logs/agent_stderr.log -Pattern 'AUDIO_OUT enabled'
 
-#### C-42 · ConversationRouter: typed chat (Socket.IO + lk.chat) goes into the Gemini session exactly once
-**Phase:** P1 · **Size:** L · **Feature:** Typed chat - legacy Socket.IO path
+#### C-42 ? ConversationRouter: typed chat (Socket.IO + lk.chat) goes into the Gemini session exactly once
+**Phase:** P1 ? **Size:** L ? **Feature:** Typed chat - legacy Socket.IO path
 **Source:** VR-10 (voice-runtime)
 **Kyun:** Typed chat answers with random templates (jarvis_reasoning.py:252-339), no tools or memory; user bubbles are duplicated (generate_reply adds a new user item; final transcripts are emitted twice).
 **Files:** `src/core/conversation_router.py`, `src/core/agent_runner.py`, `services/ai_core/agent_loops.py`, `src/core/agent_core.py`, `services/utils/jarvis_bridge.py`, `services/ai_core/jarvis_prompt.py`, `tests/core/test_conversation_router.py`, `tests/core/test_agent_core.py`
 **Depends on:** C-34, C-41, K-59 (CT-VC-CHAT-INPUT), K-58 (CT-VC-MESSAGE)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. jarvis_bridge.notify_transcription(role, text, msg_id=None, is_final=True, source='voice', turn_id=None, extra=None): {id, role ('agent'->'assistant'), text, source, final, ts, turn_id, is_final, timestamp, **extra}; old callers unchanged.
@@ -1802,13 +1802,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe scripts/smoke/voice_probe.py --text "Jarvis, what is 7 times 8?" --expect-contains 56
 - Select-String -Path logs/agent_stderr.log -Pattern 'CHAT_ROUTER' | Select-Object -Last 20
 
-#### C-43 · Router extras: reasoning_update for every typed and voice turn, '/swarm' through the swarm command
-**Phase:** P1 · **Size:** S · **Feature:** Reasoning panel fed by jarvis_reasoning (intent/plan)
+#### C-43 ? Router extras: reasoning_update for every typed and voice turn, '/swarm' through the swarm command
+**Phase:** P1 ? **Size:** S ? **Feature:** Reasoning panel fed by jarvis_reasoning (intent/plan)
 **Source:** VR-11 (voice-runtime)
 **Kyun:** The panel is fed only by the template path with dict plan steps that crash React; '/swarm' must not create a second report emitter.
 **Files:** `src/core/conversation_router.py`, `src/core/bridge_notifier.py`, `src/core/agent_runner.py`, `tests/core/test_conversation_router.py`
 **Depends on:** C-42, K-67 (CT-VC-REASONING)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. bridge_notifier.notify_reasoning(res, source=None, msg_id=None): plan as strings 'Action: description' (accept 'description' or 'desc') + plan_steps [{step, action, description}] + intent, top-5 confidence, is_ambiguous, source, msg_id, turn_id=msg_id, ts.
@@ -1826,13 +1826,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/core/test_conversation_router.py -q
 - Select-String -Path logs/agent_stderr.log -Pattern 'CHAT_ROUTER|SWARM'
 
-#### C-44 · Bridge: voice event passthroughs, field-merging message upsert, voice command allow-list
-**Phase:** P1 · **Size:** S · **Feature:** Fragmented / echo / duplicate replies
+#### C-44 ? Bridge: voice event passthroughs, field-merging message upsert, voice command allow-list
+**Phase:** P1 ? **Size:** S ? **Feature:** Fragmented / echo / duplicate replies
 **Source:** VR-12 (voice-runtime)
 **Kyun:** update_message keeps only text (ui_bridge.py:156-162) so text_native/score/turn_id are lost on reload; turn_rejected, voice_id_status, voice_enroll_result and memory_cleared would hit UNKNOWN EVENT; new commands must pass the allow-list.
 **Files:** `src/core/ui_bridge.py`, `tests/integration/test_bridge_voice_events.py`
 **Depends on:** C-12, C-13, C-14, C-19, K-58 (CT-VC-MESSAGE), K-62 (CT-VC-TURN-GATE), K-60 (CT-VC-CONTROL), K-63 (CT-VC-VOICE-ENROLL)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Message upsert: merge every incoming field (text, final, source, turn_id, text_native, score, persona) into the stored message, on top of the OPS-07 store.
@@ -1855,13 +1855,13 @@ Verify:
 - ssh -i ~/.ssh/id_ed25519_hostinger -o BatchMode=yes root@187.127.123.235 "docker logs --since 10m jarvis-bridge 2>&1 | grep -c 'UNKNOWN EVENT'"
 - curl -s -o /dev/null -w '%{http_code}' https://jarvis.srv1802669.hstgr.cloud/vortex/health
 
-#### C-45 · llm_text helper: Gemini 3.x -> Groq -> OpenRouter with header auth
-**Phase:** P1 · **Size:** M · **Feature:** Shared LLM access (llm_text for vision/research/swarm/bug hunter/self-repair)
+#### C-45 ? llm_text helper: Gemini 3.x -> Groq -> OpenRouter with header auth
+**Phase:** P1 ? **Size:** M ? **Feature:** Shared LLM access (llm_text for vision/research/swarm/bug hunter/self-repair)
 **Source:** TI-03 (tools-info)
 **Kyun:** Vision, research, swarm, bug hunter and self-repair each call Gemini their own way, and retired models (gemini-2.0-flash 404, Groq llama-4-scout deprecated 2026-07-17) break them. Review R31: qwen reasons by default, so reasoning must be switched off.
 **Files:** `services/ai_core/llm_text.py`, `tests/unit/test_llm_text.py`
 **Depends on:** C-25, K-30 (llm_text)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Create services/ai_core/llm_text.py with dataclass LLMResult(text, provider, model) and exception LLMUnavailableError(reasons: list[str]).
@@ -1882,13 +1882,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/unit/test_llm_text.py -q -p no:cacheprovider
 - ./.venv_312/Scripts/python.exe -c "import asyncio; from services.ai_core.llm_text import generate_text, list_gemini_models; print(asyncio.run(list_gemini_models())[:40]); print(asyncio.run(generate_text('Reply with the single word OK')))"
 
-#### C-46 · Tools-info env keys via one append-only script
-**Phase:** P1 · **Size:** S · **Feature:** Ops, env and docs for info/media tools (env keys, VPS deploy, smoke, TOOLS.md)
+#### C-46 ? Tools-info env keys via one append-only script
+**Phase:** P1 ? **Size:** S ? **Feature:** Ops, env and docs for info/media tools (env keys, VPS deploy, smoke, TOOLS.md)
 **Source:** TI-04 (tools-info)
 **Kyun:** New model, RAG, vision-frame, SIM and self-repair keys need defaults in both PC .env files without touching secrets. Review R60: one scripted mechanism, and no second JARVIS_CONFIRM_TIMEOUT_S value.
 **Files:** `scripts/ops/env_defaults.py`, `tests/unit/test_env_defaults.py`, `.env`, `deploy/windows-local/.env`, `.env.example`, `.env.production.example`
 **Depends on:** C-26, K-35 (tools_info_env)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Create scripts/ops/env_defaults.py: --file PATH (repeatable) --add KEY=VALUE ...; append only keys that have no 'KEY=' line yet; never rewrite existing lines; print key names only ('added X' / 'kept X'), never values.
@@ -1908,13 +1908,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/unit/test_env_defaults.py -q -p no:cacheprovider
 - ./.venv_312/Scripts/python.exe scripts/ops/env_defaults.py --file .env --file deploy/windows-local/.env --check JARVIS_VISION_MODEL SIM_LOOKUP_API_URL JARVIS_SELF_REPAIR_APPLY
 
-#### C-48 · Vision tools on current models + fallbacks + fresh frames only
-**Phase:** P1 · **Size:** M · **Feature:** Screen vision (analyze_screen)
+#### C-48 ? Vision tools on current models + fallbacks + fresh frames only
+**Phase:** P1 ? **Size:** M ? **Feature:** Screen vision (analyze_screen)
 **Source:** TI-05 (tools-info)
 **Kyun:** analyze_screen, analyze_camera and analyze_surroundings all fail today (gemini-2.0-flash 404, Groq model deprecated, openai.NotFoundError escapes so OpenRouter is never tried), and old frames get described after the camera is off. Review R32: the frame analyze_surroundings uses needs a timestamp too.
 **Files:** `services/ai_core/jarvis_vision.py`, `src/core/vision_handler.py`, `src/core/agent_core.py`, `services/ai_core/agent_loops.py`, `tests/vision/test_vision_fallbacks.py`
 **Depends on:** C-45, K-30 (llm_text)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. jarvis_vision.py:62: ScreenPerceiver default model = os.getenv('JARVIS_VISION_MODEL', 'gemini-3.8-flash') instead of the 404ing 'gemini-2.0-flash'.
@@ -1937,13 +1937,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/vision/test_vision_fallbacks.py -q -p no:cacheprovider
 - Select-String -Path logs/jarvis_hybrid_local.log -Pattern 'provider=' | Select-Object -Last 5
 
-#### C-49 · Instructions reach Gemini; compose_instructions per persona and turn mode (no rule deleted)
-**Phase:** P1 · **Size:** M · **Feature:** Persona switch JARVIS <-> ANNA
+#### C-49 ? Instructions reach Gemini; compose_instructions per persona and turn mode (no rule deleted)
+**Phase:** P1 ? **Size:** M ? **Feature:** Persona switch JARVIS <-> ANNA
 **Source:** VR-13 (voice-runtime)
 **Kyun:** BrainAssistant.update_instructions only sets _instructions (never reaches Gemini); ANNA's prompt lacks tool protocols; the wake-word rule shares a section with tool rules; prompt paths point to D:/ and to a non-existent open_file_with_os.
 **Files:** `src/core/agent_core.py`, `src/core/persona_manager.py`, `services/ai_core/jarvis_prompt.py`, `tests/core/test_agent_core.py`, `tests/core/test_prompt_compose.py`
 **Depends on:** C-43
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. agent_core.update_instructions: set self._instructions then await super().update_instructions(instructions) in try/except (Agent -> activity -> rt_session, no reconnect).
@@ -1965,13 +1965,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/core/test_agent_core.py tests/core/test_prompt_compose.py -q
 - ./.venv_312/Scripts/python.exe scripts/smoke/voice_probe.py --text "Jarvis, switch to Anna mode" --expect reply
 
-#### C-50 · Real Gemini voices and a voice switch that actually restarts the Gemini session
-**Phase:** P1 · **Size:** M · **Feature:** change_voice tool
+#### C-50 ? Real Gemini voices and a voice switch that actually restarts the Gemini session
+**Phase:** P1 ? **Size:** M ? **Feature:** change_voice tool
 **Source:** VR-14 (voice-runtime)
 **Kyun:** tool_change_voice sets a non-existent attribute and calls session.set_voice (missing) yet reports success; RealtimeModel.update_options sets the shared _opts first so the session never restarts (realtime_api.py:402-420, 522-545).
 **Files:** `src/core/voices.py`, `src/core/agent_core.py`, `src/core/persona_manager.py`, `src/core/agent_runner.py`, `tests/core/test_persona_voice.py`
 **Depends on:** C-49
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. src/core/voices.py: GEMINI_VOICES = typing.get_args(api_proto.Voice) (30); OPENAI_ALIAS = {alloy:Zephyr, echo:Charon, shimmer:Aoede, ash:Orus, ballad:Algieba, coral:Leda, sage:Sadaltager, verse:Puck}; resolve_voice(name) case-insensitive.
@@ -1993,13 +1993,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/core/test_persona_voice.py -q
 - Select-String -Path logs/agent_stderr.log -Pattern 'Voice switched|persona|instructions'
 
-#### C-51 · Control commands: Stop = interrupt, Mute = mic input off, guarded shutdown_agent and clear_memory
-**Phase:** P1 · **Size:** M · **Feature:** Stop command
+#### C-51 ? Control commands: Stop = interrupt, Mute = mic input off, guarded shutdown_agent and clear_memory
+**Phase:** P1 ? **Size:** M ? **Feature:** Stop command
 **Source:** VR-15 (voice-runtime)
 **Kyun:** 'stop' restarts the session loop and leaks the old session; mute unsubscribes tracks behind RoomIO's back; clear_memory deletes the file with no confirmation or backup.
 **Files:** `src/core/agent_runner.py`, `src/core/agent_core.py`, `services/ai_core/agent_loops.py`, `services/ai_core/memory_store.py`, `tests/core/test_control_commands.py`
 **Depends on:** C-50, C-34, K-60 (CT-VC-CONTROL)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. 'stop': await session.interrupt(force=current speech not interruptible); cancel queued proactive speech when the VR-19 queue exists; notify_ui('STOP'); jarvis_audit.log_event('STOP_SPEAKING'); never set runtime.closed.
@@ -2020,13 +2020,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/core/test_control_commands.py -q
 - Get-ChildItem backups/memory
 
-#### C-52 · Memory core: one stable user, every message saved once, real flush, memory_update events
-**Phase:** P1 · **Size:** M · **Feature:** Long-term memory write
+#### C-52 ? Memory core: one stable user, every message saved once, real flush, memory_update events
+**Phase:** P1 ? **Size:** M ? **Feature:** Long-term memory write
 **Source:** VR-16 (voice-runtime)
 **Kyun:** Memory is keyed by the per-job agent identity, the extractor stops after 20 messages (index into a 20-item window), the LRU cache keys collide, and 'Auto-saved memory snapshot' is logged for a no-op.
 **Files:** `services/utils/jarvis_config.py`, `services/ai_core/agent_memory.py`, `services/ai_core/memory_store.py`, `src/core/agent_runner.py`, `services/ai_core/agent_loops.py`, `scripts/memory/migrate_user_memory.py`, `scripts/memory/dump_memory.py`, `.env.example`, `tests/core/test_memory.py`
 **Depends on:** C-51, C-42, C-39
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. jarvis_config.user_id = os.getenv('JARVIS_USER_ID','matloob'); the runtime passes it to BrainAssistant and MemoryExtractor; the participant identity is only logged.
@@ -2049,13 +2049,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe scripts/memory/migrate_user_memory.py --dry-run
 - ./.venv_312/Scripts/python.exe scripts/memory/dump_memory.py --user matloob --last 40
 
-#### C-53 · Vector memory prewarm off the event loop and recall summary at session start
-**Phase:** P1 · **Size:** S · **Feature:** Long-term memory read-back
+#### C-53 ? Vector memory prewarm off the event loop and recall summary at session start
+**Phase:** P1 ? **Size:** S ? **Feature:** Long-term memory read-back
 **Source:** VR-17 (voice-runtime)
 **Kyun:** Chroma + SentenceTransformer load on the event-loop thread at first use (first write, first query or adaptation preload), freezing the voice job; no memory summary reaches the session.
 **Files:** `services/ai_core/jarvis_vector_memory.py`, `src/core/agent_runner.py`, `src/core/agent_core.py`, `services/ai_core/memory_store.py`, `tests/core/test_memory_recall.py`
 **Depends on:** C-52, C-49, C-32
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. VectorMemory.prewarm(): PersistentClient + SentenceTransformerEmbeddingFunction + get_or_create_collection entirely in asyncio.to_thread; _ensure_initialized uses the same threaded path.
@@ -2075,13 +2075,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe scripts/agent_ctl.py restart --by claude --reason VR-17
 - Select-String -Path logs/agent_stderr.log -Pattern 'VECTOR_PREWARM|MEMORY_SUMMARY|LOOP_LAG'
 
-#### C-54 · Agent settings service: settings_update -> validate -> apply -> persist -> settings_sync
-**Phase:** P1 · **Size:** M · **Feature:** Voice-ID and wake-word toggles / settings_update
+#### C-54 ? Agent settings service: settings_update -> validate -> apply -> persist -> settings_sync
+**Phase:** P1 ? **Size:** M ? **Feature:** Voice-ID and wake-word toggles / settings_update
 **Source:** VR-18 (voice-runtime)
 **Kyun:** settings_update has no agent handler; voice-ID has no toggle; settings are not persisted; three areas proposed different payloads.
 **Files:** `src/core/agent_settings.py`, `services/ai_core/agent_loops.py`, `src/core/agent_core.py`, `src/core/persona_manager.py`, `src/core/agent_runner.py`, `.gitignore`, `tests/core/test_agent_settings.py`
 **Depends on:** C-50, C-51, C-44, K-61 (CT-VC-SETTINGS)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. agent_settings.AgentSettings: defaults per CT-VC-SETTINGS (voice_id True per user decision, wake_word True, wake_followup_s 0, voice_id_threshold env 0.45, reject 'silent', turn_mode env or 'fast', transcript_script 'roman', speak_typed_replies 'auto', quiet_hours ''); validate(partial) -> (clean, errors); maps emotionalIntelligence and BCP-47 language codes.
@@ -2103,13 +2103,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/core/test_agent_settings.py -q
 - Get-Content data/settings/agent_settings.json
 
-#### C-55 · Announcer API (single module) + clipboard tip delivery (fix the chat_ctx append)
-**Phase:** P1 · **Size:** M · **Feature:** ClipboardMonitor
+#### C-55 ? Announcer API (single module) + clipboard tip delivery (fix the chat_ctx append)
+**Phase:** P1 ? **Size:** M ? **Feature:** ClipboardMonitor
 **Source:** TD-21 (tools-desktop)
 **Kyun:** Clipboard suggestions die on ChatContext.messages (a method) and never reach Sir; approved actions and finished jobs need one way to show and speak results; tools-info planned a second announcer that would also attach to the session. Covers VCR-23's clipboard step.
 **Files:** `services/utils/jarvis_announcer.py (new)`, `services/ai_core/announcer.py (new re-export)`, `src/core/agent_runner.py`, `services/ai_core/jarvis_confirm.py`, `tests/unit/test_announcer.py (new)`, `tests/core/test_agent_runner.py`
 **Depends on:** C-28, C-29, X-25, K-18 (AnnouncerAPI), K-19 (ClipboardSuggestion)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Create services/utils/jarvis_announcer.py per AnnouncerAPI: attach(session)/detach() plus set_session/set_assistant aliases; announce(text, *, priority='normal', speak=True, kind='info') always posts an assistant Message {id, role:'assistant', text, source:'system', final:true, ts} via notify_transcription.
@@ -2130,13 +2130,13 @@ Verify:
 - Manual: copy 'Traceback (most recent call last): ZeroDivisionError: division by zero' and watch the UI chat.
 - Select-String -Path logs/agent_stderr.log -Pattern 'Clipboard loop attribute error'
 
-#### C-56 · Proactive speech primitive (CT-VC-PROACTIVE) and spoken reminders/tasks (interim wiring)
-**Phase:** P1 · **Size:** M · **Feature:** Proactive reminders and task alerts
+#### C-56 ? Proactive speech primitive (CT-VC-PROACTIVE) and spoken reminders/tasks (interim wiring)
+**Phase:** P1 ? **Size:** M ? **Feature:** Proactive reminders and task alerts
 **Source:** VR-19 (voice-runtime)
 **Kyun:** Reminders are text-only; the task monitor marks tasks completed without running them; every announcer design uses generate_reply(instructions=...), which Gemini receives as a model turn plus a '.' user turn, so reminders are often not spoken.
 **Files:** `src/core/voice_speak.py`, `services/ai_core/agent_loops.py`, `src/core/agent_core.py`, `src/core/agent_runner.py`, `tests/core/test_voice_speak.py`
 **Depends on:** C-54, C-41, C-51, C-55, K-66 (CT-VC-PROACTIVE), K-18 (AnnouncerAPI)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. src/core/voice_speak.py: async speak_proactive(text, *, kind, action=None, priority='normal', speak=True, msg_id=None) -> {spoken, reason}; never raises; always posts the text as an assistant message (source 'system').
@@ -2157,13 +2157,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/core/test_voice_speak.py -q
 - Select-String -Path logs/agent_stderr.log -Pattern 'PROACTIVE spoken'
 
-#### C-61 · Guard and update the exhaustive test suite to the new desktop behaviour
-**Phase:** P1 · **Size:** S · **Feature:** Desktop tool tests
+#### C-61 ? Guard and update the exhaustive test suite to the new desktop behaviour
+**Phase:** P1 ? **Size:** S ? **Feature:** Desktop tool tests
 **Source:** TD-18 (tools-desktop)
 **Kyun:** tests/exhaustive (Claude lane per the OPS-04 lanes map) asserts the replaced taskkill/Alt+F4 behaviour, activates with DEFAULT_TOKEN and can touch the live desktop without the guard.
 **Files:** `tests/exhaustive/conftest.py (new)`, `tests/exhaustive/test_keyboard_mouse_ctrl_exhaustive.py`, `tests/exhaustive/test_jarvis_notepad_automation_exhaustive.py`
 **Depends on:** X-11, X-26, X-27, K-27 (TestSideEffectGuard)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Create tests/exhaustive/conftest.py importing block_real_side_effects from tests.tools.side_effect_guard (autouse).
@@ -2176,13 +2176,13 @@ Done tab jab (acceptance):
 Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/exhaustive -q -p no:cacheprovider
 
-#### C-66 · Gated turn mode implementation: JarvisGeminiRealtimeModel + TeeSTT (behind turn_mode=gated)
-**Phase:** P1 · **Size:** M · **Feature:** on_user_turn_completed hook (voice-ID, wake word, memory/vision/window/reasoning injection)
+#### C-66 ? Gated turn mode implementation: JarvisGeminiRealtimeModel + TeeSTT (behind turn_mode=gated)
+**Phase:** P1 ? **Size:** M ? **Feature:** on_user_turn_completed hook (voice-ID, wake word, memory/vision/window/reasoning injection)
 **Source:** VR-20 (voice-runtime)
 **Kyun:** The hook never runs with Gemini server turn detection (agent_activity.py:1525-1527); stt=None on the Agent hides any session STT; realtime replies ignore edited context; a manual-activity reject would leak audio and the plugin adds a '.' turn.
 **Files:** `src/core/gemini_gate.py`, `src/core/voice_gate.py`, `src/core/agent_core.py`, `src/core/agent_runner.py`, `tests/unit/test_gemini_gate_contract.py`, `tests/core/test_gemini_gate.py`
 **Depends on:** C-40, C-54, K-65 (CT-VC-GEMINI-GATE)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. agent_core: stop passing stt=None/tts=None to Agent.__init__ (NOT_GIVEN unless explicitly provided).
@@ -2204,8 +2204,8 @@ Verify:
 - ./.venv_312/Scripts/python.exe scripts/agent_ctl.py restart --by claude --reason VR-20
 - ./.venv_312/Scripts/python.exe scripts/smoke/voice_probe.py --wav tests/integration/fixtures/audio/tts_jarvis_time.wav --expect reply
 
-#### C-67 · Gemini session longevity: context compression, go_away notice, resumption without history re-send
-**Phase:** P1 · **Size:** S · **Feature:** Gemini Live session longevity
+#### C-67 ? Gemini session longevity: context compression, go_away notice, resumption without history re-send
+**Phase:** P1 ? **Size:** S ? **Feature:** Gemini Live session longevity
 **Source:** VR-21 (voice-runtime)
 **Kyun:** go_away arrives about every 10 min; no compression is configured (audio+video sessions are limited to 2 min without it); every reconnect resumes the server session AND re-sends the whole local chat history (realtime_api.py:812-824).
 **Files:** `src/core/gemini_gate.py`, `src/core/agent_runner.py`, `tests/core/test_gemini_longevity.py`, `tests/unit/test_gemini_gate_contract.py`
@@ -2228,8 +2228,8 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/core/test_gemini_longevity.py tests/unit/test_gemini_gate_contract.py -q
 - Select-String -Path logs/agent_stderr.log -Pattern 'Gemini server indicates|connection refresh|GEMINI_RECONNECT|RESUME'
 
-#### C-68 · SPIKE run: gated vs fast decision (variant B STT-level reject first)
-**Phase:** P1 · **Size:** M · **Feature:** on_user_turn_completed hook (voice-ID, wake word, memory/vision/window/reasoning injection)
+#### C-68 ? SPIKE run: gated vs fast decision (variant B STT-level reject first)
+**Phase:** P1 ? **Size:** M ? **Feature:** on_user_turn_completed hook (voice-ID, wake word, memory/vision/window/reasoning injection)
 **Source:** VR-22 (voice-runtime)
 **Kyun:** The gated design depends on plugin internals; it must prove one reply per turn, no leaks, acceptable latency and that rejected speech does not cut JARVIS off before voice-ID and wake-word build on it.
 **Files:** `scripts/voice/spike_gated_report.py`, `src/core/voice_gate.py`, `src/core/agent_core.py`, `.env.example`
@@ -2257,16 +2257,16 @@ Verify:
 - ./.venv_312/Scripts/python.exe scripts/smoke/voice_probe.py --wav tests/integration/fixtures/audio/tts_jarvis_secret.wav --expect silence
 - ./.venv_312/Scripts/python.exe scripts/voice/spike_gated_report.py logs/spike_gated.jsonl
 
-#### C-69 · Gated pipeline in production: UtteranceGate, wake-word gate, accepted-turn hook
-**Phase:** P1 · **Size:** M · **Feature:** Wake-word gating ('Jarvis')
+#### C-69 ? Gated pipeline in production: UtteranceGate, wake-word gate, accepted-turn hook
+**Phase:** P1 ? **Size:** M ? **Feature:** Wake-word gating ('Jarvis')
 **Source:** VR-23 (voice-runtime)
 **Kyun:** Only a prompt rule gates the wake word today (Gemini decides) and it can also ignore typed chat; the code gate lives in the dead hook.
 **Files:** `src/core/voice_gate.py`, `src/core/agent_core.py`, `src/core/conversation_router.py`, `services/ai_core/jarvis_prompt.py`, `scripts/smoke/livekit_voice_vision_smoke.py`, `tests/core/test_turn_gate.py`
 **Depends on:** C-68, K-62 (CT-VC-TURN-GATE)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
-1. voice_gate.WakeWordMatcher: NFKC, lowercase, punctuation stripped; whole-word jarvis/jarviss/jarves/jervis/jarwis/jarvish, Urdu جاروس/جارویس/جاروِس, Devanagari जार्विस/जारविस/जर्विस; ANNA triggers (anna, babu, jaan, myra, kiara, zoya, اینا, بابو, जान, बाबू, अन्ना) only in the first 3 words; follow-up window from settings.
+1. voice_gate.WakeWordMatcher: NFKC, lowercase, punctuation stripped; whole-word jarvis/jarviss/jarves/jervis/jarwis/jarvish, Urdu ?????/??????/??????, Devanagari ???????/??????/??????; ANNA triggers (anna, babu, jaan, myra, kiara, zoya, ????, ????, ???, ????, ?????) only in the first 3 words; follow-up window from settings.
 2. UtteranceGate.decide(text, segment, settings, muted, enrolling): security -> muted -> enrolling -> voice_id (stub 'skip' until VR-27) -> wake_word -> Decision(accept, reason, score).
 3. Gate location from the spike (default variant B in TeeSTT): reject -> discard frames, notify turn_rejected {id, reason, score?, threshold?, preview?, ts}, jarvis_audit.log_event('TURN_REJECTED', reason).
 4. on_user_turn_completed (accepted only): router.emit_user_voice(text, msg_id=new_message.id, score); persona switch via _handle_wake_word/_handle_persona_switch (voice applies immediately); rt.submit_user_turn(frames, text, None, None); gate.mark_accepted(); router.emit_reasoning; log 'TURN_ACCEPTED id=%s hook_ms=%d'.
@@ -2287,13 +2287,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe scripts/smoke/voice_probe.py --wav tests/integration/fixtures/audio/tts_jarvis_time.wav --expect reply
 - Select-String -Path logs/agent_stderr.log -Pattern 'TURN_ACCEPTED|TURN_REJECTED'
 
-#### C-70 · Per-turn context: ContextBuilder (memory, window, vision, reasoning, ANNA notes, clipboard) for voice and typed turns
-**Phase:** P1 · **Size:** M · **Feature:** Vision and window context in voice turns
+#### C-70 ? Per-turn context: ContextBuilder (memory, window, vision, reasoning, ANNA notes, clipboard) for voice and typed turns
+**Phase:** P1 ? **Size:** M ? **Feature:** Vision and window context in voice turns
 **Source:** VR-24 (voice-runtime)
 **Kyun:** Vision images, window titles, memories and clipboard detections never reach Gemini (realtime turns drop edited context; turn_ctx.chat_ctx does not exist; ChatContext.messages is a method).
 **Files:** `src/core/turn_context.py`, `src/core/vision_handler.py`, `src/core/agent_core.py`, `src/core/conversation_router.py`, `src/core/agent_runner.py`, `tests/core/test_turn_context.py`
 **Depends on:** C-69, C-53, C-50, C-67, K-21 (ActiveWindowContext), K-19 (ClipboardSuggestion)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. turn_context.ContextBuilder.build(text, *, is_anna, source, budget_s=0.5): items in parallel with per-item timeouts -> (note <=1,200 chars '[JARVIS CONTEXT - background, not a user request]' + lines, image_jpeg|None); log 'CONTEXT_NOTE chars=%d items=%s'.
@@ -2316,13 +2316,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/core/test_turn_context.py -q
 - Select-String -Path logs/agent_stderr.log -Pattern 'CONTEXT_NOTE|vision frame attached|TURN_ACCEPTED'
 
-#### C-71 · STT resilience: Gemini REST fallback STT with model resolution at startup
-**Phase:** P1 · **Size:** S · **Feature:** Transcript language/script (Urdu speech shown as Gujarati/Telugu/Sinhala)
+#### C-71 ? STT resilience: Gemini REST fallback STT with model resolution at startup
+**Phase:** P1 ? **Size:** S ? **Feature:** Transcript language/script (Urdu speech shown as Gujarati/Telugu/Sinhala)
 **Source:** VR-25 (voice-runtime)
 **Kyun:** Gated mode depends on Groq Whisper (free-tier limits); hard-coded Gemini model names get retired (gemini-2.0-flash already 404s).
 **Files:** `services/ai_core/gemini_rest_stt.py`, `src/core/voice_gate.py`, `src/core/agent_runner.py`, `.env.example`, `tests/core/test_stt_fallback.py`
 **Depends on:** C-69
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. GeminiRestSTT(stt.STT), non-streaming: in-memory WAV -> client.aio.models.generate_content(model=<resolved>, [audio, 'Transcribe verbatim; output only the transcript in Roman Urdu (Latin script)']) -> FINAL SpeechEvent.
@@ -2341,13 +2341,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/core/test_stt_fallback.py -q
 - Select-String -Path logs/agent_stderr.log -Pattern 'STT_FALLBACK|STT_FAILOVER'
 
-#### C-72 · Voice-ID engine API: in-memory verify_pcm, enroll, prewarm
-**Phase:** P1 · **Size:** M · **Feature:** Voice-ID 'only Matloob'
+#### C-72 ? Voice-ID engine API: in-memory verify_pcm, enroll, prewarm
+**Phase:** P1 ? **Size:** M ? **Feature:** Voice-ID 'only Matloob'
 **Source:** VR-26 (voice-runtime)
 **Kyun:** master_voice.wav and the speechbrain model are missing; verification goes through temp files and torchaudio.load (torchcodec not installed); bytes(deque of int16) raises for negative samples.
 **Files:** `services/ai_core/voice_fingerprint.py`, `scripts/models/download_voice_model.py`, `src/core/agent_runner.py`, `tests/unit/test_voice_fingerprint_pcm.py`
 **Depends on:** C-38, K-64 (CT-VC-VOICE-ID-STORE)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Run scripts/models/download_voice_model.py (config paths) to fill pretrained_models/spkrec-ecapa-voxceleb.
@@ -2368,8 +2368,8 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/unit/test_voice_fingerprint_pcm.py -q
 - Select-String -Path logs/agent_stderr.log -Pattern 'VOICE_ID'
 
-#### C-73 · Voice-ID in the turn gate, CLI enrollment, calibration and reject flow
-**Phase:** P1 · **Size:** M · **Feature:** Voice-ID 'only Matloob'
+#### C-73 ? Voice-ID in the turn gate, CLI enrollment, calibration and reject flow
+**Phase:** P1 ? **Size:** M ? **Feature:** Voice-ID 'only Matloob'
 **Source:** VR-27 (voice-runtime)
 **Kyun:** Voice-ID must reject strangers before audio reaches Gemini, with a calibrated threshold; scripts use D:/ paths and call async functions without await (test_voice_id.py:24,:47; realtime_voice_test.py:56,:90).
 **Files:** `src/core/voice_gate.py`, `src/core/agent_core.py`, `scripts/voice/record_master.py`, `scripts/voice/test_voice_id.py`, `scripts/voice/realtime_voice_test.py`, `scripts/voice/calibrate_voice_id.py`, `tests/core/test_voice_gate.py`, `tests/core/test_agent_core.py`
@@ -2401,8 +2401,8 @@ Verify:
 - ./.venv_312/Scripts/python.exe scripts/voice/calibrate_voice_id.py --genuine logs/voice_samples/genuine --impostor logs/voice_samples/impostor
 - Select-String -Path logs/security.log -Pattern VOICE_REJECTED
 
-#### C-74 · Transcript language and script: A/B test, STT config, Roman Urdu display with original kept
-**Phase:** P1 · **Size:** M · **Feature:** Transcript language/script (Urdu speech shown as Gujarati/Telugu/Sinhala)
+#### C-74 ? Transcript language and script: A/B test, STT config, Roman Urdu display with original kept
+**Phase:** P1 ? **Size:** M ? **Feature:** Transcript language/script (Urdu speech shown as Gujarati/Telugu/Sinhala)
 **Source:** VR-28 (voice-runtime)
 **Kyun:** Gemini native-audio models accept no language hint (AudioTranscriptionConfig has no fields); script control must come from the STT choice plus transliteration.
 **Files:** `scripts/voice/transcript_ab.py`, `services/ai_core/transliterate.py`, `src/core/conversation_router.py`, `src/core/voice_gate.py`, `.env.example`, `tests/unit/test_transliterate.py`
@@ -2427,13 +2427,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe scripts/voice/transcript_ab.py --check-live-language ur-IN hi-IN
 - ./.venv_312/Scripts/python.exe -m pytest tests/unit/test_transliterate.py -q
 
-#### C-75 · Verify spoken confirmations against real user transcripts
-**Phase:** P1 · **Size:** S · **Feature:** Risky-action confirmation guard
+#### C-75 ? Verify spoken confirmations against real user transcripts
+**Phase:** P1 ? **Size:** S ? **Feature:** Risky-action confirmation guard
 **Source:** TD-19 (tools-desktop)
 **Kyun:** The model itself calls confirm_action, so injected page, search or clipboard text could approve a medium-risk action such as a WhatsApp send without Sir saying anything.
 **Files:** `services/ai_core/jarvis_confirm.py`, `src/core/agent_runner.py`, `tests/unit/test_confirm_voice_verification.py (new)`
 **Depends on:** C-28, C-74
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. In agent_runner subscribe to AgentSession 'user_input_transcribed' and pass final transcripts (text, ts) to confirmation_broker.note_user_transcript(), keeping the last 20.
@@ -2448,16 +2448,16 @@ Done tab jab (acceptance):
 Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/unit/test_confirm_voice_verification.py -q -p no:cacheprovider
 
-### P2 · Rooms, state, control plane
+### P2 ? Rooms, state, control plane
 _Room ka ek malik, agent online/offline, SQLite state, events sirf sahi jagah._
 
-#### C-57 · Background jobs API (single module) + list/cancel tools
-**Phase:** P2 · **Size:** M · **Feature:** Background jobs + list/cancel tools (new)
+#### C-57 ? Background jobs API (single module) + list/cancel tools
+**Phase:** P2 ? **Size:** M ? **Feature:** Background jobs + list/cancel tools (new)
 **Source:** TD-22 (tools-desktop)
 **Kyun:** Maps scraping can hold the conversation for 300+ s; tools-info planned a second jobs module with a different event, so one module, one progress path and re-exports are needed. Merges tools-info 'P2 Background jobs + announcer' (jobs part).
 **Files:** `services/utils/jarvis_jobs.py (new)`, `services/ai_core/background_jobs.py (new re-export)`, `services/ai_core/agent_loops.py`, `tests/unit/test_jobs.py (new)`
 **Depends on:** C-29, C-55, K-20 (BackgroundJobsAPI)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Implement start_job(tool, title, factory, *, timeout=1800, announce=True) -> job_id, JobContext(job_id, tool, title).progress(percent, message) (throttled to one per 1.5 s or 5 points) and .cancelled, list_jobs(), get_job(id) and cancel_job(id) with asyncio tasks; at most 2 run concurrently, the rest queue.
@@ -2475,13 +2475,13 @@ Done tab jab (acceptance):
 Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/unit/test_jobs.py -q -p no:cacheprovider
 
-#### C-58 · Job progress routing: bridge tool_progress + init_state.jobs + job_cancel/open_job_artifact
-**Phase:** P2 · **Size:** M · **Feature:** Long-running tool jobs + progress (YouTube, research+email, swarm)
+#### C-58 ? Job progress routing: bridge tool_progress + init_state.jobs + job_cancel/open_job_artifact
+**Phase:** P2 ? **Size:** M ? **Feature:** Long-running tool jobs + progress (YouTube, research+email, swarm)
 **Source:** TI-06 (tools-info)
 **Kyun:** Per review X0, progress travels as tool_sync phase=progress and the bridge must also emit tool_progress for the Jobs panel. No other task routes job state, cancel or 'open on PC'.
 **Files:** `src/core/ui_bridge.py`, `services/ai_core/agent_loops.py`, `tests/integration/test_job_events.py`
 **Depends on:** C-29, C-57, C-13, C-14, C-19, K-31 (job_progress_routing)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. ui_bridge.py 'tool_sync' branch (keeps tool_logs + 'tool_update'): when payload.job is true or phase == 'progress', upsert state['jobs'][id] (newest 20) and emit 'tool_progress' in the job_progress_routing shape (success mapped to done) to room 'ui'; skip this step if EXT C2 already emits tool_progress.
@@ -2503,13 +2503,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/integration/test_job_events.py -q -p no:cacheprovider
 - ssh -i ~/.ssh/id_ed25519_hostinger -o BatchMode=yes root@187.127.123.235 'docker logs --since 10m jarvis-bridge 2>&1 | grep -c UNKNOWN.EVENT'
 
-#### C-59 · Automation flags as a branch of the single agent settings service (owner-only, audited)
-**Phase:** P2 · **Size:** S · **Feature:** Automation settings toggles (new)
+#### C-59 ? Automation flags as a branch of the single agent settings service (owner-only, audited)
+**Phase:** P2 ? **Size:** S ? **Feature:** Automation settings toggles (new)
 **Source:** TD-23 (tools-desktop)
 **Kyun:** The kill switch, clipboard helper and voice-confirm policy must be switchable from the UI, but only by the authenticated owner, with an audit trail, and without a second settings handler.
 **Files:** `src/core/agent_settings.py (settings service created by VCR-09)`, `tests/unit/test_automation_settings.py (new)`
 **Depends on:** C-27, C-26, C-29, C-54, C-14, C-19, K-24 (AutomationSettings)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Add an 'automation' block {desktop_control, clipboard_helper, clipboard_speak, voice_confirm_high} to the settings model of the VCR-09 settings service, defaulting to the config values.
@@ -2526,13 +2526,13 @@ Done tab jab (acceptance):
 Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/unit/test_automation_settings.py -q -p no:cacheprovider
 
-#### C-60 · Settings persistence + routing (settings_update / settings_sync / bootstrap), offline command queue, camera frame limits
-**Phase:** P2 · **Size:** M · **Feature:** Settings sync
+#### C-60 ? Settings persistence + routing (settings_update / settings_sync / bootstrap), offline command queue, camera frame limits
+**Phase:** P2 ? **Size:** M ? **Feature:** Settings sync
 **Source:** OP-25 (infra-security-ops)
 **Kyun:** SettingsPanel emits settings_update but the agent has no branch for it and nothing is stored; typed messages are lost while the agent is offline; camera frames go to every socket unthrottled.
 **Files:** `src/core/ui_bridge.py`, `src/core/bridge_store.py`, `services/ai_core/agent_loops.py`, `tests/infrastructure/test_bridge_settings.py`, `tests/core/test_agent_settings_handler.py`
 **Depends on:** C-13, C-14, C-15, C-54, K-46 (C-SETTINGS-1)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Bridge ui_command settings_update: validate keys per C-SETTINGS-1 (emotionalIntelligence -> emotional_intelligence), store.merge_settings(by='ui') on top of the defaults (voice_id true, wake_word true, persona 'jarvis', voice 'Charon'), forward to the agent and ack; GET /settings (session or agent); persona_change and wake_word_toggle also update the stored settings
@@ -2555,13 +2555,13 @@ Verify:
 - $PY scripts/agent_ctl.py stop --by claude --reason OP-25-queue; (user types a message in the UI); $PY scripts/agent_ctl.py start --by claude --reason OP-25-queue
 - Manual (user): change persona/language in Settings, reload the page, values persist.
 
-#### C-62 · Dashboard-only ui_commands end to end: bridge allow-list, pause_agent vs stop, task_cancel/tasks_refresh, answer feedback
-**Phase:** P2 · **Size:** M · **Feature:** Answer feedback (thumbs up/down)
+#### C-62 ? Dashboard-only ui_commands end to end: bridge allow-list, pause_agent vs stop, task_cancel/tasks_refresh, answer feedback
+**Phase:** P2 ? **Size:** M ? **Feature:** Answer feedback (thumbs up/down)
 **Source:** UI-11 (dashboard-ui)
 **Kyun:** The planned bridge allow-list (C-EVT-1) rejects commands the dashboard needs; 'stop' means pause in C-ROOM-1 but interrupt in CT-VC-CONTROL; nothing handles task cancel or answer feedback on the PC agent (POST /feedback updates the VPS engine instead).
 **Files:** `src/core/ui_bridge.py`, `services/ai_core/dashboard_commands.py (new)`, `tests/core/test_dashboard_commands.py (new)`, `tests/infrastructure/test_bridge_ui_commands.py (new)`
 **Depends on:** C-14, C-19, C-23, C-34, X-32, K-03 (DASH-UI-COMMANDS), K-33 (task_store_v2)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. ui_bridge.py: extend the ui_command allow-list with shutdown_agent, pause_agent, start, voice_take_over {identity}, voice_enroll {action, target_seconds}, task_cancel {id, source}, tasks_refresh, feedback {message_id, score +-1}, request_state, job_cancel {job_id} and open_job_artifact {job_id}, each payload validated per DASH-UI-COMMANDS.
@@ -2582,13 +2582,13 @@ Done tab jab (acceptance):
 Verify:
 - .venv_312/Scripts/python.exe -m pytest tests/core/test_dashboard_commands.py tests/infrastructure/test_bridge_ui_commands.py -q
 
-#### C-63 · Real health/status, agent heartbeat, vitals_pc vs vitals_vps, telemetry forwarding (OpsSupervisor core loops)
-**Phase:** P2 · **Size:** M · **Feature:** Health endpoint
+#### C-63 ? Real health/status, agent heartbeat, vitals_pc vs vitals_vps, telemetry forwarding (OpsSupervisor core loops)
+**Phase:** P2 ? **Size:** M ? **Feature:** Health endpoint
 **Source:** OP-23 (infra-security-ops)
 **Kyun:** /health reports CRITICAL from PC heartbeats the bridge never receives, the UI shows VPS vitals as PC vitals, and PC telemetry never reaches the bridge.
 **Files:** `services/utils/jarvis_health.py`, `services/utils/jarvis_ops.py`, `services/utils/jarvis_telemetry.py`, `src/core/ui_bridge.py`, `src/core/agent_runner.py`, `deploy/hostinger/Dockerfile.bridge`, `deploy/hostinger/docker-compose.yml`, `tests/infrastructure/test_bridge_status.py`, `tests/core/test_ops_supervisor.py`
 **Depends on:** C-14, C-15, C-19, C-23, X-28, K-43 (C-STATUS-1), K-40 (C-EVT-1)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. jarvis_health.JarvisHealthMonitor(role=config.role): bridge services ui_bridge, livekit_api, db, agent_link; agent services agent_runner, backend_core, autonomous_protector, vector_db, bridge_link; heartbeats start at 0 (INITIALIZING); report STABLE or DEGRADED from its own services only, never CRITICAL for another process; snapshot_vitals() -> {cpu, ram, disk, cores, ram_total_gb, host, ts} with cpu_percent primed at init
@@ -2616,13 +2616,13 @@ Verify:
 - $PY scripts/agent_ctl.py stop --by claude --reason OP-23-test; then poll /vortex/status with the cookie until it says degraded (max 60 s); $PY scripts/agent_ctl.py start --by claude --reason OP-23-test
 - $PY -m pytest tests/infrastructure/test_bridge_status.py tests/core/test_ops_supervisor.py -q
 
-#### C-64 · Log pipeline: rate-limited batched UI log forwarding, one shared handler per file, bug hunter on the real log, rotating audit log, priority buckets on /notify
-**Phase:** P2 · **Size:** M · **Feature:** Log forwarding, bug hunter and log files
+#### C-64 ? Log pipeline: rate-limited batched UI log forwarding, one shared handler per file, bug hunter on the real log, rotating audit log, priority buckets on /notify
+**Phase:** P2 ? **Size:** M ? **Feature:** Log forwarding, bug hunter and log files
 **Source:** OP-24 (infra-security-ops)
 **Kyun:** Every INFO record becomes a POST (126 in an idle hour) sharing one 500/min limit with transcripts; the bug hunter tails a file that is never written; duplicate RotatingFileHandlers break rollover on Windows.
 **Files:** `services/utils/jarvis_logger.py`, `services/utils/jarvis_bug_hunter.py`, `services/utils/jarvis_audit.py`, `services/utils/jarvis_bridge.py`, `src/core/ui_bridge.py`, `src/core/bridge_security.py`, `tests/unit/test_logger_forwarding.py`, `tests/unit/test_bug_hunter.py`
 **Depends on:** C-14, C-15, K-39 (C-NOTIFY-1), K-40 (C-EVT-1)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. jarvis_logger.py: module-level _FILE_HANDLERS so each file path has exactly one RotatingFileHandler shared by all loggers; main file level from LOG_FILE_LEVEL (default INFO), 10 MB x 5
@@ -2646,13 +2646,13 @@ Verify:
 - $PY -m pytest tests/unit/test_logger_forwarding.py tests/unit/test_bug_hunter.py -q
 - Manual (user): ask 'recent bugs check karo' and get the real recent errors or 'no errors'.
 
-#### C-65 · Deploy #1: core dashboard (LiveKit provider, chat, status, controls) and live no-churn / exactly-once verification
-**Phase:** P2 · **Size:** S · **Feature:** Voice button: mic toggle without room churn
+#### C-65 ? Deploy #1: core dashboard (LiveKit provider, chat, status, controls) and live no-churn / exactly-once verification
+**Phase:** P2 ? **Size:** S ? **Feature:** Voice button: mic toggle without room churn
 **Source:** UI-14 (dashboard-ui)
 **Kyun:** Room churn, duplicate chat and the status chips can only be proven on the live stack (LiveKit logs, /vortex/messages, /vortex/health).
 **Files:** `deploy/hostinger/deploy_from_pc.sh (from EXT OPS-06)`, `done_highlight.md`
 **Depends on:** C-21, C-22, C-09, C-23, C-63, C-60, C-33, C-35, C-43, C-44, C-51, X-13, X-14, C-62, X-15, X-16
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Confirm EXT OPS-15's ensure_room.py (never deletes) is on the PC before any agent restart, and take the RUNTIME LOCK through agent_ctl.
@@ -2673,13 +2673,13 @@ Verify:
 - curl -s https://jarvis.srv1802669.hstgr.cloud/vortex/health
 - Playwright MCP screenshot of the chat panel and status chips after the test
 
-#### C-76 · Live Fast <-> Gated switch without restarting the agent
-**Phase:** P2 · **Size:** M · **Feature:** Voice-ID and wake-word toggles / settings_update
+#### C-76 ? Live Fast <-> Gated switch without restarting the agent
+**Phase:** P2 ? **Size:** M ? **Feature:** Voice-ID and wake-word toggles / settings_update
 **Source:** VR-30 (voice-runtime)
 **Kyun:** turn_mode changes otherwise need an agent restart ('restart required').
 **Files:** `src/core/agent_runner.py`, `src/core/agent_settings.py`, `src/core/agent_core.py`, `src/core/gemini_gate.py`, `tests/core/test_mode_switch.py`
 **Depends on:** C-70, C-73, C-54
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. On a turn_mode settings change build the other model/STT/VAD set and a new BrainAssistant with the same persona/settings and the shared router/memory/gate.
@@ -2698,13 +2698,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/core/test_mode_switch.py -q
 - Select-String -Path logs/agent_stderr.log -Pattern 'MODE_SWITCH|TURN_ACCEPTED'
 
-#### C-77 · Voice session state in the agent heartbeat, probe silence, local health interval fix
-**Phase:** P2 · **Size:** S · **Feature:** Agent heartbeat / health / PC vitals
+#### C-77 ? Voice session state in the agent heartbeat, probe silence, local health interval fix
+**Phase:** P2 ? **Size:** S ? **Feature:** Agent heartbeat / health / PC vitals
 **Source:** VR-31 (voice-runtime)
 **Kyun:** /health shows CRITICAL; heartbeats exist only inside the agent; the local heartbeat sleeps 30 s while health marks OFFLINE after 30 s, so healing flaps.
 **Files:** `src/core/agent_runner.py`, `tests/core/test_runtime_status.py`, `scripts/smoke/voice_probe.py`
 **Depends on:** C-33, C-39, C-23, C-63, K-68 (CT-VC-AGENT-HEARTBEAT)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. runtime.status() -> {job_id, room, since, pid, mode, session:'starting'|'running'|'restarting'|'closed', agent_state, linked_identity, worker_agent_name}.
@@ -2724,11 +2724,11 @@ Verify:
 - ssh -i ~/.ssh/id_ed25519_hostinger -o BatchMode=yes root@187.127.123.235 "docker logs --since 10m jarvis-livekit 2>&1 | grep 'worker registered'"
 - ./.venv_312/Scripts/python.exe scripts/smoke/voice_probe.py --text "Jarvis, hello" --expect reply
 
-### P3 · Har tool aur panel working
+### P3 ? Har tool aur panel working
 _Saare 82 tools aur dashboard ke saare panels asal me kaam karein._
 
-#### C-47 · Media toolchain deps in .venv_312: yt-dlp[default] (yt-dlp-ejs) + pylint (+ imageio-ffmpeg only if chosen)
-**Phase:** P3 · **Size:** S · **Feature:** YouTube download (download_youtube_media)
+#### C-47 ? Media toolchain deps in .venv_312: yt-dlp[default] (yt-dlp-ejs) + pylint (+ imageio-ffmpeg only if chosen)
+**Phase:** P3 ? **Size:** S ? **Feature:** YouTube download (download_youtube_media)
 **Source:** TI-07 (tools-info)
 **Kyun:** yt-dlp-ejs is missing (YouTube JS challenges fail) and pylint is not installed in .venv_312 (self-repair score is always 0.0). Review R45: the FFmpeg source is decided once (EXT X0) and imageio-ffmpeg is only a fallback; installs must not race Cursor's pytest runs.
 **Files:** `requirements.txt`, `deploy/windows-local/requirements-hybrid.txt`, `done_highlight.md`
@@ -2752,13 +2752,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -c "import yt_dlp_ejs; print('ejs ok')"
 - ./.venv_312/Scripts/python.exe -m pylint --version
 
-#### C-78 · Document Q&A: scoped persistent index, terminating chunker, work off the event loop
-**Phase:** P3 · **Size:** M · **Feature:** Local document Q&A (ask_about_document)
+#### C-78 ? Document Q&A: scoped persistent index, terminating chunker, work off the event loop
+**Phase:** P3 ? **Size:** M ? **Feature:** Local document Q&A (ask_about_document)
 **Source:** TI-16 (tools-info)
 **Kyun:** Roots are D:/ (absent) and all of C:/Users, chunk_text never ends on some inputs and runs on the event loop (jarvis_rag.py:186), freezing voice; txt/md return empty text. Review R47: also stagger with the EXT K10 file-opener walk.
 **Files:** `services/ai_core/jarvis_rag.py`, `src/core/agent_runner.py`, `tests/unit/test_rag.py`
 **Depends on:** C-24
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. DocumentRAG.__init__(search_dirs=None): roots from JARVIS_DOC_DIRS (';'), else ~/Desktop, ~/Documents, ~/Downloads, ~/OneDrive/Desktop, ~/OneDrive/Documents, config.shared_dir and D:/ only when it exists (replaces the whole-C:/Users root at line 34).
@@ -2781,13 +2781,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/unit/test_rag.py -q -p no:cacheprovider
 - ./.venv_312/Scripts/python.exe -c "import json; d=json.load(open('conversations/doc_index.json')); print(len(d['files']), any(('AppData' in f['path']) or ('.ssh' in f['path']) for f in d['files']))"
 
-#### C-79 · SIM ui_command payload {query, purpose}: agent handler + bridge validator
-**Phase:** P3 · **Size:** S · **Feature:** SIM lookup (open_sim_lookup_panel / lookup_sim_data)
+#### C-79 ? SIM ui_command payload {query, purpose}: agent handler + bridge validator
+**Phase:** P3 ? **Size:** S ? **Feature:** SIM lookup (open_sim_lookup_panel / lookup_sim_data)
 **Source:** TI-23 (tools-info)
 **Kyun:** agent_loops.py:171-174 passes str(payload), so a purpose can never reach lookup_sim_data, and the bridge allow-list planned by other areas accepts only a 20-char string.
 **Files:** `services/ai_core/agent_loops.py`, `src/core/ui_bridge.py`, `tests/unit/test_agent_loops_sim.py`
 **Depends on:** X-38, C-13, C-14, C-19, K-34 (sim_authorized_source)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. agent_loops._handle_command 'sim_lookup' (lines 171-174): accept a dict {query, purpose} or the legacy string and call lookup_sim_data(query, purpose=purpose).
@@ -2802,13 +2802,13 @@ Done tab jab (acceptance):
 Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/unit/test_agent_loops_sim.py -q -p no:cacheprovider
 
-#### C-80 · Scheduled action runner: execute due tool actions safely (forbidden list, confirmations, results)
-**Phase:** P3 · **Size:** M · **Feature:** Task scheduler (schedule_task / list_tasks)
+#### C-80 ? Scheduled action runner: execute due tool actions safely (forbidden list, confirmations, results)
+**Phase:** P3 ? **Size:** M ? **Feature:** Task scheduler (schedule_task / list_tasks)
 **Source:** TI-18 (tools-info)
 **Kyun:** Due tasks are marked completed without their action ever running (agent_core.py:405-432). EXT VCR-19 owns the due loop and speaking; this task owns deterministic tool execution. Review R38: refuse dangerous actions and handle needs_confirmation as awaiting_confirmation.
 **Files:** `services/ai_core/scheduler_dispatcher.py`, `src/core/proactive.py`, `services/ai_core/agent_loops.py`, `tests/unit/test_scheduler_dispatcher.py`
 **Depends on:** X-32, C-56, C-62, C-24, C-28, C-55, K-32 (scheduled_action_runner), K-33 (task_store_v2)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Create services/ai_core/scheduler_dispatcher.py with FORBIDDEN_SCHEDULED_ACTIONS = confirm_action, schedule_task, cancel_scheduled_task, set_reminder, plus autonomous_self_repair when apply is true.
@@ -2829,13 +2829,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/unit/test_scheduler_dispatcher.py -q -p no:cacheprovider
 - ./.venv_312/Scripts/python.exe -c "import sqlite3; c=sqlite3.connect('conversations/tasks.db'); print(c.execute('select id,kind,status,action,result from tasks order by id desc limit 5').fetchall())"
 
-#### C-81 · Swarm: llm_text calls, voice tool start_swarm_mode as a job, spoken summary
-**Phase:** P3 · **Size:** M · **Feature:** Swarm mode (SwarmCoordinator)
+#### C-81 ? Swarm: llm_text calls, voice tool start_swarm_mode as a job, spoken summary
+**Phase:** P3 ? **Size:** M ? **Feature:** Swarm mode (SwarmCoordinator)
 **Source:** TI-19 (tools-info)
 **Kyun:** Swarm is reachable only through an unused ui_command and has no voice trigger, no progress or cancel, and calls Gemini directly. EXT DASH-C22/VCR-05 route its chat output; this task adds the tool, the job and the fallbacks.
 **Files:** `services/ai_core/swarm_manager.py`, `services/ai_core/agent_loops.py`, `tests/unit/test_swarm_tool.py`
 **Depends on:** C-25, C-45, C-58, C-43, C-55, C-57, K-30 (llm_text), K-31 (job_progress_routing)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. swarm_manager._call_gemini becomes a thin wrapper over llm_text.generate_text(prompt, max_output_tokens=2048) (header auth + model fallbacks); is_active is true when any provider key exists.
@@ -2854,13 +2854,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/unit/test_swarm_tool.py -q -p no:cacheprovider
 - ssh -i ~/.ssh/id_ed25519_hostinger -o BatchMode=yes root@187.127.123.235 'docker logs --since 10m jarvis-bridge 2>&1 | grep -c UNKNOWN.EVENT'
 
-#### C-82 · Bug hunter: grouped errors + LLM triage in tool_investigate_recent_bugs
-**Phase:** P3 · **Size:** S · **Feature:** Bug hunter (monitor_logs / tool_investigate_recent_bugs)
+#### C-82 ? Bug hunter: grouped errors + LLM triage in tool_investigate_recent_bugs
+**Phase:** P3 ? **Size:** S ? **Feature:** Bug hunter (monitor_logs / tool_investigate_recent_bugs)
 **Source:** TI-20 (tools-info)
 **Kyun:** analyze_error is a placeholder (jarvis_bug_hunter.py:52-59) and the manual tool returns raw lines. EXT OPS-17/VCR-23 fix the log path and de-duplication; this task adds grouping and triage.
 **Files:** `services/utils/jarvis_bug_hunter.py`, `tests/unit/test_bug_hunter_triage.py`
 **Depends on:** C-45, C-64, K-30 (llm_text)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Read the log path set by EXT OPS-17/VCR-23 (config.log_file, today logs/jarvis_hybrid_local.log) and parse 'YYYY-MM-DD HH:MM:SS,ms - NAME - LEVEL - message' lines plus traceback blocks.
@@ -2877,13 +2877,13 @@ Done tab jab (acceptance):
 Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/unit/test_bug_hunter_triage.py -q -p no:cacheprovider
 
-#### C-83 · Guarded self-repair: diagnose, propose diff, approved apply with backup and rollback
-**Phase:** P3 · **Size:** M · **Feature:** Self repair (autonomous_self_repair)
+#### C-83 ? Guarded self-repair: diagnose, propose diff, approved apply with backup and rollback
+**Phase:** P3 ? **Size:** M ? **Feature:** Self repair (autonomous_self_repair)
 **Source:** TI-21 (tools-info)
 **Kyun:** Today it only runs a missing pylint (score always 0.0) and tells the LLM to type code into Notepad. Review R56: tmp_path tests, git apply --check, and an apply gate so JARVIS is not a third writer while Claude and Cursor edit the tree.
 **Files:** `services/utils/jarvis_self_healing.py`, `tests/unit/test_self_repair.py`
 **Depends on:** C-45, C-47, C-24, C-28, C-30, K-30 (llm_text), K-28 (tool_arg_policies)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Signature autonomous_self_repair(error_details: str, file_path: str, apply: bool = False); X0 kwargs execution_timeout=120, arg_policies {'error_details':'multiline','file_path':'path'}, risk 'high' when apply else 'low', confirm summary 'Patch {file_path}'.
@@ -2903,8 +2903,8 @@ Done tab jab (acceptance):
 Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/unit/test_self_repair.py -q -p no:cacheprovider
 
-#### C-84 · Install and auto-start PinchTab (127.0.0.1, token) and install FFmpeg (after approval)
-**Phase:** P3 · **Size:** M · **Feature:** automate_chrome_browser
+#### C-84 ? Install and auto-start PinchTab (127.0.0.1, token) and install FFmpeg (after approval)
+**Phase:** P3 ? **Size:** M ? **Feature:** automate_chrome_browser
 **Source:** TD-26 (tools-desktop)
 **Kyun:** PinchTab and FFmpeg are not installed; the Chrome automation tools need PinchTab, and YouTube mp3 and voice-ID audio conversion need FFmpeg.
 **Files:** `scripts/pc/start_pinchtab.ps1 (new)`, `scripts/pc/install_desktop_deps.ps1 (new)`, `deploy/windows-local/start-agent.bat`, `deploy/windows-local/.env`, `/.env (root)`
@@ -2929,13 +2929,13 @@ Verify:
 - netstat -ano | findstr :9867
 - (Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'pinchtab' -and $_.CommandLine -match 'token' } | Measure-Object).Count (expect 0)
 
-#### C-85 · System prompt sync: tool names, confirmation rule, error codes (one prompt change with VCR-06)
-**Phase:** P3 · **Size:** S · **Feature:** close_window + close (alias kept)
+#### C-85 ? System prompt sync: tool names, confirmation rule, error codes (one prompt change with VCR-06)
+**Phase:** P3 ? **Size:** S ? **Feature:** close_window + close (alias kept)
 **Source:** TD-36 (tools-desktop)
 **Kyun:** The model must learn close_window (with 'close' as alias), cancel_shutdown, sleep modes, needs_confirmation handling and the new error codes without breaking the format_map call at agent_core.py:93.
 **Files:** `services/ai_core/jarvis_prompt.py`, `tests/unit/test_prompt_format.py (new)`
 **Depends on:** C-28, X-29, C-75, C-57, X-42, C-49, K-17 (ToolNamesV2)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. In the exact-tool-names section (SHARED_PROTOCOLS after VCR-06, else BEHAVIOR_PROMPT) list window tools (close_window, with 'close' as the same tool; close_notepad_tool; close_file_window_tool; chrome_browser_close only for the automation browser; minimize_window, maximize_window) and system tools (shutdown_system, restart_system, sleep_system with mode sleep or hibernate, cancel_shutdown, empty_recycle_bin).
@@ -2952,13 +2952,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/unit/test_prompt_format.py -q -p no:cacheprovider
 - Select-String -Path services/ai_core/jarvis_prompt.py -Pattern 'open_file_with_os|Personal-Assistant'
 
-#### C-86 · Prompt rules for tools-info (plan progress, swarm, long jobs, self-healing) in one change
-**Phase:** P3 · **Size:** S · **Feature:** Plan progress (tool_report_plan_progress)
+#### C-86 ? Prompt rules for tools-info (plan progress, swarm, long jobs, self-healing) in one change
+**Phase:** P3 ? **Size:** S ? **Feature:** Plan progress (tool_report_plan_progress)
 **Source:** TI-26 (tools-info)
 **Kyun:** The prompt never asks for plan progress or swarm, and its SELF-HEALING section tells the LLM to self-repair through Notepad after any tool error. Review R24/R53/R54: land all prompt edits together with EXT C8, with no literal braces.
 **Files:** `services/ai_core/jarvis_prompt.py`, `tests/unit/test_prompt_rules.py`
 **Depends on:** C-81, C-83, C-43, C-44, C-50, C-85
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Add the rules to the shared tool protocols of EXT VCR-06's compose_instructions (or BEHAVIOR_PROMPT if VCR-06 has not landed) in the same change as EXT C8's prompt edits.
@@ -2977,13 +2977,13 @@ Done tab jab (acceptance):
 Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/unit/test_prompt_rules.py -q -p no:cacheprovider
 
-#### C-87 · Identity facts reach the live prompt and survive restarts
-**Phase:** P3 · **Size:** S · **Feature:** Identity tools -> live prompt
+#### C-87 ? Identity facts reach the live prompt and survive restarts
+**Phase:** P3 ? **Size:** S ? **Feature:** Identity tools -> live prompt
 **Source:** VR-32 (voice-runtime)
 **Kyun:** The prompt is built once at init and identity updates are never pushed to the live session; jarvis_id is a process-wide singleton shared by live and probe jobs.
 **Files:** `services/ai_core/jarvis_identity.py`, `src/core/agent_core.py`, `src/core/gemini_gate.py`, `tests/core/test_identity_live_prompt.py`
 **Depends on:** C-49, C-67, C-39
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. IdentityManager default path os.path.join(config.conversations_dir,'identity.json'); merge an old CWD-relative file once if present.
@@ -3002,13 +3002,13 @@ Verify:
 - Select-String -Path conversations/identity.json -Pattern Ali
 - Select-String -Path logs/agent_stderr.log -Pattern INSTRUCTIONS_DELTA
 
-#### C-88 · Latency baseline, fast-mode endpointing A/B and thinking-budget A/B
-**Phase:** P3 · **Size:** M · **Feature:** Latency with 82 tools + 21 KB prompt
+#### C-88 ? Latency baseline, fast-mode endpointing A/B and thinking-budget A/B
+**Phase:** P3 ? **Size:** M ? **Feature:** Latency with 82 tools + 21 KB prompt
 **Source:** VR-33 (voice-runtime)
 **Kyun:** No per-turn latency metrics exist; in fast mode Gemini's server VAD ends the turn, so the levers are automatic_activity_detection settings, not the local silero VAD.
 **Files:** `src/core/agent_runner.py`, `scripts/voice/latency_report.py`, `.env.example`, `tests/unit/test_latency_report.py`
 **Depends on:** C-40, C-69, C-67
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. session.on('metrics_collected') appends to logs/voice_metrics.jsonl (type, ttft, duration, tokens incl. cached, end_of_utterance_delay, transcription_delay, on_user_turn_completed_delay, speech_id, mode).
@@ -3027,13 +3027,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe scripts/voice/latency_report.py logs/voice_metrics.jsonl
 - ./.venv_312/Scripts/python.exe -m pytest tests/unit/test_latency_report.py -q
 
-#### C-89 · Short tool descriptions and prompt compaction with every tool kept; dry-run tool regression
-**Phase:** P3 · **Size:** M · **Feature:** Latency with 82 tools + 21 KB prompt
+#### C-89 ? Short tool descriptions and prompt compaction with every tool kept; dry-run tool regression
+**Phase:** P3 ? **Size:** M ? **Feature:** Latency with 82 tools + 21 KB prompt
 **Source:** VR-34 (voice-runtime)
 **Kyun:** About 10.6 KB of tool docstrings and a 21 KB prompt are sent every session; tools may not be removed.
 **Files:** `services/ai_core/tool_catalog.py`, `services/ai_core/jarvis_plugin_manager.py`, `services/ai_core/jarvis_prompt.py`, `services/ai_core/jarvis_identity.py`, `scripts/voice/tool_regression.py`, `tests/unit/test_tool_catalog.py`
 **Depends on:** C-88, C-28, C-85, C-86
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. tool_catalog.SHORT_DESCRIPTIONS for every registered tool (<=140 chars, same meaning, Roman Urdu trigger hints); missing entry keeps the docstring + WARNING; JARVIS_TOOL_DESC=full restores originals.
@@ -3055,8 +3055,8 @@ Verify:
 - ./.venv_312/Scripts/python.exe scripts/voice/tool_regression.py --dry-run
 - ./.venv_312/Scripts/python.exe scripts/voice/latency_report.py logs/voice_metrics.jsonl
 
-#### C-90 · Browser voice enrollment (agent side) in both Fast and Gated modes
-**Phase:** P3 · **Size:** M · **Feature:** Voice-ID 'only Matloob'
+#### C-90 ? Browser voice enrollment (agent side) in both Fast and Gated modes
+**Phase:** P3 ? **Size:** M ? **Feature:** Voice-ID 'only Matloob'
 **Source:** VR-35 (voice-runtime)
 **Kyun:** Enrollment from the browser uses the same LiveKit audio path as verification; the TeeSTT segments exist only in gated mode, so enrollment needs its own capture.
 **Files:** `src/core/voice_enroll.py`, `services/ai_core/voice_fingerprint.py`, `src/core/voice_gate.py`, `tests/core/test_voice_enroll.py`
@@ -3081,13 +3081,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/core/test_voice_enroll.py -q
 - Get-ChildItem data/identity, backups/identity
 
-#### C-91 · Startup sound accepts .mp3 or .wav; verified through a lock-aware restart
-**Phase:** P3 · **Size:** S · **Feature:** Startup voice
+#### C-91 ? Startup sound accepts .mp3 or .wav; verified through a lock-aware restart
+**Phase:** P3 ? **Size:** S ? **Feature:** Startup voice
 **Source:** VR-37 (voice-runtime)
 **Kyun:** play_startup_voice only looks for the missing MP3 and prints 'Startup voice not found'.
 **Files:** `src/core/agent.py`
 **Depends on:** X-02, C-09
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. play_startup_voice: resolve JARVIS_STARTUP_SOUND (default the MP3 path), then the same base name as .wav, then assets/audio/jarvis_startup_chime.wav; keep the 10 s delay and daemon thread.
@@ -3103,13 +3103,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe scripts/agent_ctl.py restart --by claude --reason VR-37
 - Select-String -Path logs/agent_stdout.log -Pattern 'initializing neural voice|Startup voice not found'
 
-#### C-92 · Wire jarvis_audio: speak reminders on the PC when no voice session, synthesized startup line when the MP3 is missing, smoke check
-**Phase:** P3 · **Size:** S · **Feature:** jarvis_audio helpers
+#### C-92 ? Wire jarvis_audio: speak reminders on the PC when no voice session, synthesized startup line when the MP3 is missing, smoke check
+**Phase:** P3 ? **Size:** S ? **Feature:** jarvis_audio helpers
 **Source:** OP-31 (infra-security-ops)
 **Kyun:** Reminders are only text when the browser is closed, and the startup sound file is missing (it never came with the repo because *.mp3 is gitignored).
 **Files:** `services/ai_core/agent_loops.py`, `src/core/agent_runner.py`, `src/core/agent.py`, `scripts/smoke/livekit_voice_vision_smoke.py`
 **Depends on:** X-04, C-15, C-56, C-91, C-55, K-50 (C-AUDIO-1)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. src/core/agent_runner.py: run_protected('reminder_loop', start_reminder_loop, session, ctx.room)
@@ -3127,13 +3127,13 @@ Verify:
 - $PY scripts/agent_ctl.py restart --by claude --reason OP-31   # listen for the startup line
 - Manual (user): 'mujhe 1 minute baad yaad dilana test', close the browser, hear the reminder on the PC.
 
-#### C-93 · Agent feeds A: module_health emitter and device location every 10 min (kind 'device'), bridge passthrough + init_state
-**Phase:** P3 · **Size:** S · **Feature:** FlowMap
+#### C-93 ? Agent feeds A: module_health emitter and device location every 10 min (kind 'device'), bridge passthrough + init_state
+**Phase:** P3 ? **Size:** S ? **Feature:** FlowMap
 **Source:** UI-20 (dashboard-ui)
 **Kyun:** FlowMap needs real per-module health and no emitter exists; the 60 s ipinfo loop (agent_runner.py:397-406) adds one /notify per minute and overwrote the map focus.
 **Files:** `src/core/module_health.py (new)`, `src/core/agent_runner.py`, `src/core/ui_bridge.py`, `tests/core/test_module_health.py (new)`, `tests/infrastructure/test_bridge_location.py (new)`
 **Depends on:** C-13, C-63, C-44, K-06 (DASH-MODULE-HEALTH), K-08 (DASH-LOCATION)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. module_health.py: collect {voice, gemini (session running), vision (last call ok, model, camera_source), memory (store writable, vector ok), tools (registered count, failures_1h), voice_id (engine state, enrolled), ts}; never raises.
@@ -3150,13 +3150,13 @@ Done tab jab (acceptance):
 Verify:
 - .venv_312/Scripts/python.exe -m pytest tests/core/test_module_health.py tests/infrastructure/test_bridge_location.py -q
 
-#### C-94 · Agent feeds B: memory_update per saved item (id, role, source), memory_cleared, reasoning for fast-mode voice turns
-**Phase:** P3 · **Size:** S · **Feature:** Memory panel (memory_update)
+#### C-94 ? Agent feeds B: memory_update per saved item (id, role, source), memory_cleared, reasoning for fast-mode voice turns
+**Phase:** P3 ? **Size:** S ? **Feature:** Memory panel (memory_update)
 **Source:** UI-21 (dashboard-ui)
 **Kyun:** The Notes tab needs an id, role and source per memory and a separate clear event (memory_sync collides with the item stream). Fast-mode voice turns emit no reasoning, because only the dead on_user_turn_completed hook did.
 **Files:** `services/ai_core/agent_memory.py`, `services/ai_core/jarvis_identity.py`, `services/ai_core/jarvis_vector_memory.py`, `src/core/conversation_router.py (from EXT VCR-05)`, `src/core/ui_bridge.py`, `tests/unit/test_memory_events.py (new)`
 **Depends on:** C-43, C-44, C-51, C-52, C-53, K-07 (DASH-MEMORY-EVENTS)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. agent_memory.py MemoryExtractor (on top of EXT VCR-08's bundle save): for each saved user/assistant message, notify_event('memory_update', {id, content[:500], role, source:'extractor', user_id, ts}).
@@ -3173,13 +3173,13 @@ Done tab jab (acceptance):
 Verify:
 - .venv_312/Scripts/python.exe -m pytest tests/unit/test_memory_events.py -q
 
-#### C-95 · Camera to Gemini via LiveKit video: video_input, live/on-request vision mode, VisionHandler reads the linked camera track
-**Phase:** P3 · **Size:** M · **Feature:** Camera panel (LiveKit video + Socket.IO fallback)
+#### C-95 ? Camera to Gemini via LiveKit video: video_input, live/on-request vision mode, VisionHandler reads the linked camera track
+**Phase:** P3 ? **Size:** M ? **Feature:** Camera panel (LiveKit video + Socket.IO fallback)
 **Source:** UI-27 (dashboard-ui)
 **Kyun:** LiveKit video is unused because RoomOptions.video_input defaults to False (room_io/types.py:115,146-150), so camera frames only travel over Socket.IO.
 **Files:** `src/core/vision_handler.py`, `src/core/agent_runner.py`, `src/core/agent_settings.py (from EXT VCR-09)`, `tests/core/test_vision_frames.py (new)`
 **Depends on:** C-33, C-35, C-54, C-60, C-48, K-05 (DASH-CAMERA-VISION)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. agent_runner.py: add video_input=True to the RoomOptions that the EXT VCR-01 runtime builds (keep close_on_disconnect=False).
@@ -3198,8 +3198,8 @@ Done tab jab (acceptance):
 Verify:
 - .venv_312/Scripts/python.exe -m pytest tests/core/test_vision_frames.py -q
 
-#### C-96 · Deploy #2: panels build plus live checks (tools, confirm, settings, memory, tasks, voice-ID, camera, map, SIM, media, controls)
-**Phase:** P3 · **Size:** S · **Feature:** Confirmation dialog for risky tools
+#### C-96 ? Deploy #2: panels build plus live checks (tools, confirm, settings, memory, tasks, voice-ID, camera, map, SIM, media, controls)
+**Phase:** P3 ? **Size:** S ? **Feature:** Confirmation dialog for risky tools
 **Source:** UI-34 (dashboard-ui)
 **Kyun:** The panels only help once the VPS serves them, and each needs one live proof against the real agent. Merged duplicate TD-25: Redeploy the STONIX frontend with the Automation settings Merged duplicate TI-28: Deploy tools-info bridge + UI changes to the VPS (jarvis project only)
 **Files:** `deploy/hostinger/deploy_from_pc.sh (from EXT OPS-06)`, `done_highlight.md`, `scripts/vps/sync_ui.ps1`, `done_highlight.md (append only)`, `VPS: /opt/jarvis-agent (compose project jarvis, services ui-bridge and frontend)`, `VPS: /root/jarvis-backups/<ts>/`
@@ -3222,11 +3222,11 @@ Verify:
 - ssh -i ~/.ssh/id_ed25519_hostinger root@187.127.123.235 'docker ps --format "{{.Names}} {{.Status}}"'
 - Playwright MCP screenshots of each panel after its check
 
-### P4 · Ops, tests, docs
+### P4 ? Ops, tests, docs
 _Deploy script, monitoring, tests, README._
 
-#### C-97 · Voice and conversation regression suite + runbook
-**Phase:** P4 · **Size:** M · **Feature:** Voice round trip (browser mic -> LiveKit -> Gemini Live -> speaker)
+#### C-97 ? Voice and conversation regression suite + runbook
+**Phase:** P4 ? **Size:** M ? **Feature:** Voice round trip (browser mic -> LiveKit -> Gemini Live -> speaker)
 **Source:** VR-40 (voice-runtime)
 **Kyun:** One command must prove every feature of this area on the user's PC, and the user needs a runbook to enroll and switch modes alone.
 **Files:** `scripts/smoke/run_voice_regression.py`, `deploy/windows-local/VOICE_RUNBOOK.md`
@@ -3249,13 +3249,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe scripts/smoke/run_voice_regression.py --offline
 - ./.venv_312/Scripts/python.exe scripts/smoke/run_voice_regression.py --all
 
-#### C-98 · Internal-tool regression checks after the voice/dashboard fixes (change_voice, wake word, persona, identity, analyze_surroundings)
-**Phase:** P4 · **Size:** S · **Feature:** Internal tool: change_voice
+#### C-98 ? Internal-tool regression checks after the voice/dashboard fixes (change_voice, wake word, persona, identity, analyze_surroundings)
+**Phase:** P4 ? **Size:** S ? **Feature:** Internal tool: change_voice
 **Source:** TI-29 (tools-info)
 **Kyun:** These four internal tools are implemented by EXT VCR-06/DASH-C13/VCR-09/VCR-21, but this area's features must end up working. The tests lock in the review findings: only the session-level update_options restarts the Gemini voice, and a '{' in an identity fact must not break the prompt.
 **Files:** `tests/core/test_tools_info_internal.py`, `src/core/agent_core.py`
 **Depends on:** C-48, C-50, C-54, C-69, C-87
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. tests/core/test_tools_info_internal.py: tool_change_voice('alloy') resolves to a Gemini voice and calls the session-level RealtimeSession.update_options on a fake session that shares the model's _opts, so a restart is marked.
@@ -3273,8 +3273,8 @@ Done tab jab (acceptance):
 Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/core/test_tools_info_internal.py -q -p no:cacheprovider
 
-#### C-99 · Live desktop-tools smoke run on the PC with Sir
-**Phase:** P4 · **Size:** M · **Feature:** Desktop tool tests
+#### C-99 ? Live desktop-tools smoke run on the PC with Sir
+**Phase:** P4 ? **Size:** M ? **Feature:** Desktop tool tests
 **Source:** TD-38 (tools-desktop)
 **Kyun:** Mocked tests cannot prove focus, typing, sleep, dialogs and phone access on the real PC; this is the final human-in-the-loop check, run with the stall watchdog on.
 **Files:** `scripts/pc/desktop_smoke.py (new)`
@@ -3296,13 +3296,13 @@ Verify:
 - Get-Content logs/desktop_smoke_*.jsonl | Select-Object -Last 60
 - Select-String -Path logs/agent_stderr.log -Pattern 'EVENT_LOOP_STALL'
 
-#### C-100 · TOOLS.md for info/media tools (env, providers, timeouts, approvals, outputs)
-**Phase:** P4 · **Size:** S · **Feature:** Ops, env and docs for info/media tools (env keys, VPS deploy, smoke, TOOLS.md)
+#### C-100 ? TOOLS.md for info/media tools (env, providers, timeouts, approvals, outputs)
+**Phase:** P4 ? **Size:** S ? **Feature:** Ops, env and docs for info/media tools (env keys, VPS deploy, smoke, TOOLS.md)
 **Source:** TI-31 (tools-info)
 **Kyun:** The user and both agents need one page that says which env keys, providers, timeouts and approvals each tool uses and where its output appears.
 **Files:** `deploy/windows-local/TOOLS.md`
 **Depends on:** C-46, X-61
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. deploy/windows-local/TOOLS.md: one row per tools-info tool with env names, provider chain, timeout, risk/approval, output folder and where it shows in the UI (Jobs panel, Intelligence panel, Map focus, Tasks tab).
@@ -3316,13 +3316,13 @@ Done tab jab (acceptance):
 Verify:
 - Select-String -Path deploy/windows-local/TOOLS.md -Pattern 'SIM_LOOKUP_API_URL','JARVIS_SELF_REPAIR_APPLY'
 
-#### C-101 · OpsSupervisor: one entry point for health, healing, adaptation, bug hunter, startup diagnostics, checkpoints, daily backups
-**Phase:** P4 · **Size:** L · **Feature:** Healing/monitoring entry point
+#### C-101 ? OpsSupervisor: one entry point for health, healing, adaptation, bug hunter, startup diagnostics, checkpoints, daily backups
+**Phase:** P4 ? **Size:** L ? **Feature:** Healing/monitoring entry point
 **Source:** OP-32 (infra-security-ops)
 **Kyun:** Eight loops start ad hoc, perform_startup_diagnostics is never called, checkpoints are never pruned, backup_system has no caller, and the 'ui_bridge' recovery only sends a heartbeat.
 **Files:** `services/utils/jarvis_ops.py`, `src/core/agent_runner.py`, `services/utils/jarvis_healing.py`, `services/utils/jarvis_diagnostics.py`, `services/utils/jarvis_checkpoint.py`, `services/utils/backup_system.py`, `services/ai_core/agent_loops.py`, `tests/core/test_ops_supervisor.py`, `tests/unit/test_diagnostics.py`, `tests/unit/test_checkpoint.py`
 **Depends on:** C-11, C-63, C-64, C-71, C-76, C-77, C-83
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. jarvis_ops.OpsSupervisor.start(session, assistant, room) owns, through autonomous_protector: heartbeat (existing start_heartbeat_loop), healing_loop, adaptation_loop, bug_hunter_loop, diagnostics_once, checkpoint_loop, daily_backup_loop and the OP-23 core loops; status() feeds agent_heartbeat
@@ -3347,13 +3347,13 @@ Verify:
 - ls backups/checkpoints | wc -l
 - $VPS 'docker restart jarvis-bridge && timeout 60 sh -c "until docker logs --since 1m jarvis-bridge 2>&1 | grep -q role=agent; do sleep 2; done" && echo AGENT_BACK'
 
-#### C-102 · Optional monitoring profile: PerformanceMonitor + metrics server on 127.0.0.1:8765 + Phoenix/OpenTelemetry tracing
-**Phase:** P4 · **Size:** M · **Feature:** Ops modules without callers
+#### C-102 ? Optional monitoring profile: PerformanceMonitor + metrics server on 127.0.0.1:8765 + Phoenix/OpenTelemetry tracing
+**Phase:** P4 ? **Size:** M ? **Feature:** Ops modules without callers
 **Source:** OP-33 (infra-security-ops)
 **Kyun:** jarvis_monitoring, jarvis_metrics_server and jarvis_instrumentation have no runtime caller; start_monitoring.py has a wrong project_root and its default port 8000 clashes with the file-server tool.
 **Files:** `services/utils/jarvis_ops.py`, `services/utils/jarvis_metrics_server.py`, `services/utils/jarvis_monitoring.py`, `services/utils/jarvis_instrumentation.py`, `services/ai_core/jarvis_plugin_manager.py`, `scripts/tools/start_monitoring.py`, `scripts/tools/phoenix_server.py`, `scripts/tools/encrypt_env.py`, `deploy/hostinger/RUNBOOK.md`
 **Depends on:** C-101, C-29
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. jarvis_metrics_server: host 127.0.0.1, port JARVIS_METRICS_PORT (default 8765); start_metrics_server runs as an asyncio task
@@ -3375,13 +3375,13 @@ Verify:
 - (JARVIS_MONITORING=1 in .env, then agent_ctl restart) curl -s http://127.0.0.1:8765/api/metrics/current | head -c 300
 - Manual (Claude): start Phoenix, enable tracing, run one tool, see the span at http://127.0.0.1:6006
 
-#### C-103 · Runnable QA command (jarvis_qa + reporter + qa_modules with signed qa_ping), repair_deps --check/--fix, encrypted env support
-**Phase:** P4 · **Size:** M · **Feature:** Ops modules without callers
+#### C-103 ? Runnable QA command (jarvis_qa + reporter + qa_modules with signed qa_ping), repair_deps --check/--fix, encrypted env support
+**Phase:** P4 ? **Size:** M ? **Feature:** Ops modules without callers
 **Source:** OP-34 (infra-security-ops)
 **Kyun:** The QA probes expect old status codes and sign with 'INTERNAL' (would spam the UI), repair_deps imports the deprecated pkg_resources, and jarvis_secure_config is used only by tests.
 **Files:** `services/utils/jarvis_qa.py`, `services/utils/jarvis_qa_reporter.py`, `services/utils/qa_modules/__init__.py`, `services/utils/qa_modules/security_tester.py`, `services/utils/qa_modules/stress_tester.py`, `src/core/ui_bridge.py`, `scripts/ops/run_qa.py`, `services/utils/repair_deps.py`, `services/utils/jarvis_config.py`, `services/utils/jarvis_secure_config.py`, `scripts/tools/encrypt_env.py`, `tests/infrastructure/test_qa_engine.py`, `tests/unit/test_repair_deps.py`, `tests/unit/test_secure_config.py`
 **Depends on:** C-14, C-19, C-101
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. qa_modules: add __init__.py; SecurityQA(bridge_url, agent_token, hmac_secret) expects invalid token 401, forged signature 403, stale timestamp 401, replayed nonce 409, unauthenticated /livekit/token 401; StressQA sends signed 'qa_ping' at 10/s for 10 s, PASS with 0 errors and p95 < 300 ms; JarvisQAEngine(bridge_url, ...) configurable, reporter unchanged
@@ -3402,13 +3402,13 @@ Verify:
 - $PY -m services.utils.repair_deps --check
 - $PY -m pytest tests/infrastructure/test_qa_engine.py tests/unit/test_repair_deps.py tests/unit/test_secure_config.py -q
 
-#### C-104 · TLS renewal pickup within the allowed VPS scope: deploy.sh served-vs-disk check + reload, daily PC-side expiry watch, RUNBOOK
-**Phase:** P4 · **Size:** S · **Feature:** TLS certificate renewal
+#### C-104 ? TLS renewal pickup within the allowed VPS scope: deploy.sh served-vs-disk check + reload, daily PC-side expiry watch, RUNBOOK
+**Phase:** P4 ? **Size:** S ? **Feature:** TLS certificate renewal
 **Source:** OP-35 (infra-security-ops)
 **Kyun:** certbot.timer renews the jarvis cert (valid to 2026-12-29) but nothing reloads nginx afterwards; /etc/letsencrypt and new systemd units are outside the allowed VPS paths.
 **Files:** `deploy/hostinger/deploy.sh`, `services/utils/jarvis_ops.py`, `deploy/hostinger/RUNBOOK.md`, `tests/unit/test_cert_watch.py`
 **Depends on:** C-12, C-101, K-54 (COORD-4)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. deploy.sh: compare the served jarvis cert (openssl s_client -connect 127.0.0.1:443 -servername jarvis.srv1802669.hstgr.cloud | openssl x509 -enddate) with /etc/letsencrypt/live/jarvis.srv1802669.hstgr.cloud/fullchain.pem (read-only); if the file is newer run nginx -t && systemctl reload nginx (graceful, same as a jarvis.conf deploy); WARN under 14 days
@@ -3427,13 +3427,13 @@ Verify:
 - curl -s -o /dev/null -w '%{http_code}' http://jarvis.srv1802669.hstgr.cloud/.well-known/acme-challenge/probe; echo ' <- expect 404'
 - $PY -m pytest tests/unit/test_cert_watch.py -q
 
-#### C-105 · Docker image slimming + container hardening (nginx:alpine frontend, non-root bridge, no-new-privileges)
-**Phase:** P4 · **Size:** M · **Feature:** Container images
+#### C-105 ? Docker image slimming + container hardening (nginx:alpine frontend, non-root bridge, no-new-privileges)
+**Phase:** P4 ? **Size:** M ? **Feature:** Container images
 **Source:** OP-36 (infra-security-ops)
 **Kyun:** The frontend image is 316 MB (node + serve), every container runs as root on a shared VPS.
 **Files:** `deploy/hostinger/Dockerfile.frontend`, `deploy/hostinger/frontend-nginx.conf`, `deploy/hostinger/Dockerfile.bridge`, `deploy/hostinger/docker-compose.yml`, `deploy/hostinger/deploy.sh`, `Dockerfile.backend`, `docker-compose.yml`
 **Depends on:** C-16, C-63
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Dockerfile.frontend: builder stays node:20-slim; runtime nginx:1.27-alpine with dist in /usr/share/nginx/html and deploy/hostinger/frontend-nginx.conf as default.conf (listen 8080; SPA try_files $uri /index.html; /assets/ cached 1y immutable; index.html no-cache); USER nginx with the pid file in /tmp; HEALTHCHECK wget -qO- http://127.0.0.1:8080/; compose port '127.0.0.1:5100:8080'
@@ -3454,13 +3454,13 @@ Verify:
 - curl -s -o /dev/null -w '%{http_code}' https://jarvis.srv1802669.hstgr.cloud/some/deep/link; echo ' <- expect 200 (login page)'
 - curl -s https://jarvis.srv1802669.hstgr.cloud/vortex/health
 
-#### C-106 · CI workflow for the public repo: secret scan, bridge tests, agent tests, frontend, production image builds; no deploy
-**Phase:** P4 · **Size:** M · **Feature:** CI pipeline
+#### C-106 ? CI workflow for the public repo: secret scan, bridge tests, agent tests, frontend, production image builds; no deploy
+**Phase:** P4 ? **Size:** M ? **Feature:** CI pipeline
 **Source:** OP-37 (infra-security-ops)
 **Kyun:** The existing workflow builds the non-production root images, installs the full torch stack on every run and has no secret scan; it starts running on every push once the repo is connected.
 **Files:** `.github/workflows/production.yml`, `.github/dependabot.yml`, `.gitleaks.toml`, `pytest.ini`
 **Depends on:** C-04, C-14, C-105
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Rewrite .github/workflows/production.yml: secret-scan (checkout fetch-depth 0 + gitleaks/gitleaks-action@v2 with .gitleaks.toml allow-listing the known test dummies), bridge-tests (ubuntu, Python 3.12, deploy/hostinger/requirements-bridge.txt + pytest pytest-asyncio httpx, pytest tests/infrastructure -m 'not live'), agent-tests (windows-latest, pip cache, requirements + dev, JARVIS_TEST_MODE=true, pytest tests/core tests/unit tests/integration -m 'not live' --maxfail=5)
@@ -3481,13 +3481,13 @@ Verify:
 - docker build -f deploy/hostinger/Dockerfile.bridge -t jarvis-bridge:ci . && docker build -f deploy/hostinger/Dockerfile.frontend -t jarvis-frontend:ci .
 - curl -s 'https://api.github.com/repos/Matloob11/JARVIS-AGENT/actions/runs?per_page=3' | grep -E '"(status|conclusion)"' | head -6
 
-#### C-107 · Bridge vs mock-bridge contract conformance tests (event names, payload keys, refusal/expiry, allow-list)
-**Phase:** P4 · **Size:** M · **Feature:** Playwright e2e tests
+#### C-107 ? Bridge vs mock-bridge contract conformance tests (event names, payload keys, refusal/expiry, allow-list)
+**Phase:** P4 ? **Size:** M ? **Feature:** Playwright e2e tests
 **Source:** UI-38 (dashboard-ui)
 **Kyun:** If the Node mock drifts from the Python bridge, every UI test gives false confidence; this pins both to the same fixtures.
 **Files:** `tests/infrastructure/test_ui_contract_conformance.py (new)`
 **Depends on:** X-07, C-62, C-93, C-94, X-59, C-14, C-19, C-44, C-29, C-58, C-79, K-10 (DASH-MOCK-BRIDGE)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Load stonix_ui/tests/mock-bridge/fixtures/*.json read-only (Cursor lane; never edited).
@@ -3503,8 +3503,8 @@ Done tab jab (acceptance):
 Verify:
 - .venv_312/Scripts/python.exe -m pytest tests/infrastructure/test_ui_contract_conformance.py -q -m 'not live'
 
-#### C-108 · Final dashboard deploy, live suite run, CI frontend job env, Vercel entry check, README dashboard section
-**Phase:** P4 · **Size:** M · **Feature:** Playwright e2e tests
+#### C-108 ? Final dashboard deploy, live suite run, CI frontend job env, Vercel entry check, README dashboard section
+**Phase:** P4 ? **Size:** M ? **Feature:** Playwright e2e tests
 **Source:** UI-40 (dashboard-ui)
 **Kyun:** Closes the loop: everything deployed, the live suite green, CI building the right bundle, and the Vercel entry landing on the login page.
 **Files:** `deploy/hostinger/deploy_from_pc.sh (from EXT OPS-06)`, `.github/workflows/production.yml`, `README.md`, `done_highlight.md`
@@ -3530,8 +3530,8 @@ Verify:
 - curl -sI https://jarvis-agent-sigma.vercel.app | grep -i location
 - ssh -i ~/.ssh/id_ed25519_hostinger root@187.127.123.235 'docker ps --format "{{.Names}} {{.Status}}"'
 
-#### C-109 · Final ops acceptance run + README, RUNBOOK, CONTRACTS changelog and SECURITY docs; CSP enforcing
-**Phase:** P4 · **Size:** M · **Feature:** Claude + Cursor coordination in one tree
+#### C-109 ? Final ops acceptance run + README, RUNBOOK, CONTRACTS changelog and SECURITY docs; CSP enforcing
+**Phase:** P4 ? **Size:** M ? **Feature:** Claude + Cursor coordination in one tree
 **Source:** OP-38 (infra-security-ops)
 **Kyun:** Everything above must be proven together with the user, and the public repo needs accurate docs without leaking server details.
 **Files:** `README.md`, `deploy/hostinger/RUNBOOK.md`, `docs/CONTRACTS.md`, `docs/SECURITY.md`, `done_highlight.md`, `deploy/hostinger/jarvis.conf`
@@ -3558,8 +3558,8 @@ Verify:
 - curl -sI https://jarvis.srv1802669.hstgr.cloud/ | grep -i '^content-security-policy'
 - Manual (user): the end-to-end checklist above.
 
-#### C-110 · Enable self-repair apply mode after the two-agent build-out
-**Phase:** P4 · **Size:** S · **Feature:** Self repair (autonomous_self_repair)
+#### C-110 ? Enable self-repair apply mode after the two-agent build-out
+**Phase:** P4 ? **Size:** S ? **Feature:** Self repair (autonomous_self_repair)
 **Source:** TI-32 (tools-info)
 **Kyun:** JARVIS_SELF_REPAIR_APPLY stays 0 only while Claude and Cursor edit the tree (review R56); the user decision requires every feature to end up working, so apply mode is switched on and proven at the end.
 **Files:** `.env`, `deploy/windows-local/.env`, `tests/unit/scratch_self_repair_probe.py`, `done_highlight.md`
@@ -3587,16 +3587,16 @@ Verify:
 
 ## 7. Cursor tasks (63)
 
-### P0 · Security aur buniyad
+### P0 ? Security aur buniyad
 _Darwaza band, git, backup, keys, room delete ka bug. Claude pehle; Cursor isi dauran apne tools lane me kaam karta hai._
 
-#### X-03 · Shared desktop helpers module (windows, focus, safe paths, clipboard, redaction)
-**Phase:** P0 · **Size:** M · **Feature:** Shared desktop helpers (new)
+#### X-03 ? Shared desktop helpers module (windows, focus, safe paths, clipboard, redaction)
+**Phase:** P0 ? **Size:** M ? **Feature:** Shared desktop helpers (new)
 **Source:** TD-07 (tools-desktop)
 **Kyun:** Every desktop tool re-implements focus, window matching and path checks; pygetwindow.activate raises uncaught errors, sync helpers would block the loop, the clipboard restore races WebView targets, and nothing protects dev tools, .env, SSH keys or UNC paths.
 **Files:** `services/system/jarvis_desktop_common.py (new)`
 **Depends on:** C-04, K-25 (DesktopCommonHelpers), K-12 (ToolResult)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Create services/system/jarvis_desktop_common.py with no import-time side effects (plugin discovery imports every services module) and tool_result(status, message, *, tool=None, data=None, error_code=None, hint=None, **legacy).
@@ -3617,13 +3617,13 @@ Done tab jab (acceptance):
 Verify:
 - ./.venv_312/Scripts/python.exe -c "import services.system.jarvis_desktop_common as m; print([n for n in dir(m) if not n.startswith('_')])"
 
-#### X-06 · UI foundation: relative /vortex runtime config, cookie socket, tolerant event types, per-panel ErrorBoundary, no secrets in the bundle
-**Phase:** P0 · **Size:** M · **Feature:** Login screen + session handling
+#### X-06 ? UI foundation: relative /vortex runtime config, cookie socket, tolerant event types, per-panel ErrorBoundary, no secrets in the bundle
+**Phase:** P0 ? **Size:** M ? **Feature:** Login screen + session handling
 **Source:** UI-03 (dashboard-ui)
 **Kyun:** The bundle ships the VORTEX token (useCommandCenter.ts:4,18,31; useLiveKitVoice.ts:13,132) and one panel crash blanks the page; every later UI task builds on this layer.
 **Files:** `stonix_ui/src/shared/config/runtime.ts (new)`, `stonix_ui/src/shared/realtime/socket.ts (new)`, `stonix_ui/src/shared/contracts/events.ts (new)`, `stonix_ui/src/shared/ui/ErrorBoundary.tsx (new)`, `stonix_ui/src/features/command-center/hooks/useCommandCenter.ts`, `stonix_ui/src/features/command-center/hooks/useLiveKitVoice.ts`, `stonix_ui/src/features/command-center/Dashboard.tsx`, `stonix_ui/src/features/command-center/components/SettingsPanel.tsx`, `stonix_ui/src/vite-env.d.ts`, `stonix_ui/vite.config.ts`, `stonix_ui/tests/e2e/contracts.spec.ts (new)`
 **Depends on:** K-01 (DASH-UI-RUNTIME), K-02 (DASH-UI-EVENTS)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. runtime.ts: BRIDGE_BASE = VITE_BRIDGE_BASE || VITE_VORTEX_URL || '/vortex' (trailing slash stripped); export bridgeUrl(path), SOCKET_ORIGIN and SOCKET_PATH (base path + '/socket.io').
@@ -3644,13 +3644,13 @@ Verify:
 - cd stonix_ui && npm run lint && npm run build && npm run test:e2e
 - cd stonix_ui && (grep -rlE 'VITE_VORTEX_SECURITY_TOKEN|X-Vortex-Token' src dist || echo CLEAN)
 
-#### X-07 · Mock bridge (Node) for local dev and e2e, built from the adopted contracts, with exported fixtures
-**Phase:** P0 · **Size:** M · **Feature:** Playwright e2e tests
+#### X-07 ? Mock bridge (Node) for local dev and e2e, built from the adopted contracts, with exported fixtures
+**Phase:** P0 ? **Size:** M ? **Feature:** Playwright e2e tests
 **Source:** UI-04 (dashboard-ui)
 **Kyun:** Cursor must build and test every panel before the backend lands; the fixtures also let Claude check the real bridge against the same payloads (UI-38).
 **Files:** `stonix_ui/tests/mock-bridge/server.mjs (new)`, `stonix_ui/tests/mock-bridge/scenarios.mjs (new)`, `stonix_ui/tests/mock-bridge/fixtures/*.json (new)`, `stonix_ui/playwright.config.ts`, `stonix_ui/package.json`, `stonix_ui/package-lock.json`
 **Depends on:** X-06, K-10 (DASH-MOCK-BRIDGE), K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. npm i -D socket.io@^4.8 otplib cross-env (project-local dev tools only).
@@ -3671,13 +3671,13 @@ Verify:
 - cd stonix_ui && npm install && npm run test:e2e
 - cd stonix_ui && npm run mock:bridge   then   curl -s http://127.0.0.1:5199/vortex/health
 
-#### X-08 · Login screen, AuthProvider and session lifecycle (password + TOTP, recovery code, robust expiry)
-**Phase:** P0 · **Size:** M · **Feature:** Login screen + session handling
+#### X-08 ? Login screen, AuthProvider and session lifecycle (password + TOTP, recovery code, robust expiry)
+**Phase:** P0 ? **Size:** M ? **Feature:** Login screen + session handling
 **Source:** UI-05 (dashboard-ui)
 **Kyun:** App.tsx renders the dashboard with no login; the user decided on password + TOTP authenticator. This task absorbs the login part of infra OPS-C1. Merged duplicate OP-19: UI login screen + cookie session + relative /vortex + fresh LiveKit token per connect + Socket.IO withCredentials (VITE_VORTEX_SECURITY_TOKEN no longer used)
 **Files:** `stonix_ui/src/features/auth/api.ts (new)`, `stonix_ui/src/features/auth/AuthProvider.tsx (new)`, `stonix_ui/src/features/auth/LoginScreen.tsx (new)`, `stonix_ui/src/features/auth/useAuth.ts (new)`, `stonix_ui/src/app/App.tsx`, `stonix_ui/src/features/command-center/components/TopBar.tsx`, `stonix_ui/src/assets/styles/index.css`, `stonix_ui/tests/e2e/auth.spec.ts (new)`, `stonix_ui/tests/e2e/dashboard.spec.ts`, `stonix_ui/src/features/auth/LoginScreen.tsx`, `stonix_ui/src/features/auth/useAuth.ts`, `stonix_ui/src/features/auth/api.ts`, `stonix_ui/src/features/command-center/hooks/useCommandCenter.ts`, `stonix_ui/src/features/command-center/hooks/useLiveKitVoice.ts`, `stonix_ui/src/vite-env.d.ts`, `stonix_ui/vite.config.ts`, `stonix_ui/tests/e2e/login.spec.ts`
 **Depends on:** X-06, X-07, K-01 (DASH-UI-RUNTIME), K-36 (C-AUTH-1), K-37 (C-LK-1), K-38 (C-SOCK-1), K-49 (C-ORIGIN-1)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. api.ts: login({password, totp} | {password, recovery_code}), me(), logout() on bridgeUrl('/auth/...') with credentials 'include'; messages: 401 'Password ya code ghalat hai', 429 'Bohat zyada koshishen - <retry_after> s baad', 503 'Login abhi set nahi hua (owner enroll karein)', network 'Bridge offline'.
@@ -3696,13 +3696,13 @@ Done tab jab (acceptance):
 Verify:
 - cd stonix_ui && npm run build && npx playwright test tests/e2e/auth.spec.ts tests/e2e/dashboard.spec.ts
 
-#### X-11 · No-real-side-effect test harness (tests/tools) + helper tests
-**Phase:** P0 · **Size:** M · **Feature:** Desktop tool tests
+#### X-11 ? No-real-side-effect test harness (tests/tools) + helper tests
+**Phase:** P0 ? **Size:** M ? **Feature:** Desktop tool tests
 **Source:** TD-08 (tools-desktop)
 **Kyun:** Existing tests can type on the real desktop, kill every Notepad, send a real WhatsApp message, and forward INFO logs to the live VPS bridge; a reusable autouse guard must make that impossible before any desktop task is tested.
 **Files:** `tests/tools/__init__.py (new)`, `tests/tools/side_effect_guard.py (new)`, `tests/tools/conftest.py (new)`, `tests/tools/test_desktop_common.py (new)`
 **Depends on:** C-06, X-03, K-27 (TestSideEffectGuard)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Create tests/tools/side_effect_guard.py with an autouse fixture block_real_side_effects that makes these raise AssertionError('REAL SIDE EFFECT: <name>'): pyautogui write/typewrite/press/hotkey/click/moveTo/dragTo/scroll/keyDown/keyUp and pynput keyboard/mouse Controller methods.
@@ -3722,13 +3722,13 @@ Done tab jab (acceptance):
 Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/tools/test_desktop_common.py -q -p no:cacheprovider
 
-#### X-12 · Apply the side-effect guard to legacy desktop test folders and gate live GUI scripts
-**Phase:** P0 · **Size:** S · **Feature:** Desktop tool tests
+#### X-12 ? Apply the side-effect guard to legacy desktop test folders and gate live GUI scripts
+**Phase:** P0 ? **Size:** S ? **Feature:** Desktop tool tests
 **Source:** TD-09 (tools-desktop)
 **Kyun:** As soon as pytest exists (TD-01), tests/automation, tests/scripts and services/automation/tests can type, taskkill every Notepad or send WhatsApp messages; tests/test_whatsapp.py sends a real message to 'Matloob'.
 **Files:** `tests/automation/conftest.py (new)`, `tests/scripts/conftest.py (new)`, `services/automation/tests/conftest.py (new)`, `tests/test_whatsapp.py`, `tests/automation/verify_whatsapp.py`, `services/automation/tests/test_whatsapp.py`, `services/automation/tests/test_youtube.py`, `tests/scripts/test_agent_whatsapp_integration.py`
 **Depends on:** X-11, K-27 (TestSideEffectGuard)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Create tests/automation/conftest.py, tests/scripts/conftest.py and services/automation/tests/conftest.py that import block_real_side_effects from tests.tools.side_effect_guard (autouse).
@@ -3743,13 +3743,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/automation tests/scripts -q -p no:cacheprovider
 - ./.venv_312/Scripts/python.exe -m pytest tests/test_whatsapp.py services/automation/tests -q -p no:cacheprovider (all skipped)
 
-#### X-26 · Keyboard/mouse tools: no hard-coded token, Unicode-safe typing, full key set, protected-window hotkeys, new volume API
-**Phase:** P0 · **Size:** M · **Feature:** type_text_tool
+#### X-26 ? Keyboard/mouse tools: no hard-coded token, Unicode-safe typing, full key set, protected-window hotkeys, new volume API
+**Phase:** P0 ? **Size:** M ? **Feature:** type_text_tool
 **Source:** TD-15 (tools-desktop)
 **Kyun:** unicode_escape corrupts Urdu, the clipboard is overwritten, a hard-coded token fallback exists, F-keys and Alt+F4 are rejected, Alt+F4 could close the JARVIS UI, and pycaw's new AudioDevice breaks the first volume path. OPS-C5's token part is done here.
 **Files:** `services/automation/keyboard_mouse_ctrl.py`, `tests/automation/test_keyboard_mouse.py`, `tests/tools/test_keyboard_mouse_tools.py (new)`
 **Depends on:** C-24, C-27, C-26, X-03, X-11, K-16 (DesktopToolPolicy)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Remove the literal 'JARVIS_SECURE_TOKEN_2024' (L37): DEFAULT_TOKEN = getattr(config,'controller_token',None) or os.getenv('CONTROLLER_TOKEN') or a per-process secrets.token_urlsafe(32) with one WARNING 'CONTROLLER_TOKEN missing; using per-process token' (attribute kept for tests).
@@ -3763,7 +3763,7 @@ Steps:
 9. Tests: Urdu text reaches the clipboard mock unchanged and the old clipboard is restored; a Windows path keeps its backslashes; ['alt','f4'] is accepted on a normal window and refused on a protected one; EndpointVolume path used; no token or typed text in control_log; update tests/automation/test_keyboard_mouse.py to set CONTROLLER_TOKEN via monkeypatch.
 
 Done tab jab (acceptance):
-- 'Jarvis Notepad mein سلام دنیا likho' types correct Urdu; 'Jarvis volume 30 percent karo' sets 30%; 'Jarvis F5 dabao' works.
+- 'Jarvis Notepad mein ???? ???? likho' types correct Urdu; 'Jarvis volume 30 percent karo' sets 30%; 'Jarvis F5 dabao' works.
 - 'Jarvis Alt F4 dabao' closes the focused normal app window, asks first when a browser is in front, and is refused when the JARVIS UI or a dev tool is in front.
 - After a long paste the user's previous text clipboard is back; logs/control_log.txt contains no typed text and no token.
 - With JARVIS_DESKTOP_CONTROL=0 every input tool refuses (central switch from TD-03).
@@ -3772,13 +3772,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/tools/test_keyboard_mouse_tools.py tests/automation/test_keyboard_mouse.py -q -p no:cacheprovider
 - Manual voice checks: Urdu typing, F5, Alt+F4 on Notepad, volume 30%.
 
-#### X-27 · Notepad automation: safe paths, PID-bound window, threaded typing, verified save, graceful close
-**Phase:** P0 · **Size:** L · **Feature:** write_custom_code
+#### X-27 ? Notepad automation: safe paths, PID-bound window, threaded typing, verified save, graceful close
+**Phase:** P0 ? **Size:** L ? **Feature:** write_custom_code
 **Source:** TD-16 (tools-desktop)
 **Kyun:** Code loses newlines, typing blocks the event loop, the wrong Notepad can be focused and wiped, every Notepad is force-killed, and filenames can traverse to any file such as .env.
 **Files:** `services/automation/jarvis_notepad_automation.py`, `tests/automation/test_notepad_automation.py`, `tests/tools/test_notepad_tools.py (new)`
 **Depends on:** C-24, C-27, C-28, C-26, X-03, X-11, K-16 (DesktopToolPolicy)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Add _outputs_dir() = getattr(config,'outputs_dir', <project_root>/Jarvis_Outputs) and use it for the three recomputed blocks (L521-522, L562-563, L593-594), save_file_safely and list_notepad_files_tool; open_notepad_simple and list_notepad_files_tool return tool_result.
@@ -3802,8 +3802,8 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/tools/test_notepad_tools.py tests/automation/test_notepad_automation.py -q -p no:cacheprovider
 - Manual: open two Notepads with unsaved text, run the voice command, then (Get-Process notepad).Count is still 2 or more.
 
-#### X-29 · System control guards: confirmation, cancel_shutdown, real sleep vs hibernate, non-blocking recycle bin
-**Phase:** P0 · **Size:** M · **Feature:** shutdown_system
+#### X-29 ? System control guards: confirmation, cancel_shutdown, real sleep vs hibernate, non-blocking recycle bin
+**Phase:** P0 ? **Size:** M ? **Feature:** shutdown_system
 **Source:** TD-13 (tools-desktop)
 **Kyun:** Shutdown, restart and recycle bin run instantly on any model call with no cancel; sleep_system actually hibernates and blocks the event loop until resume; infra OPS-C5's cancel_shutdown is done here.
 **Files:** `services/system/jarvis_system_ctrl.py`, `tests/tools/test_system_ctrl_tools.py (new)`
@@ -3831,8 +3831,8 @@ Verify:
 - After wake: wevtutil qe System /q:"*[System[Provider[@Name='Microsoft-Windows-Kernel-Power'] and (EventID=506)]]" /c:1 /rd:true /f:text
 - Manual with Sir present: shutdown, Allow, then 'Jarvis shutdown cancel karo' (or 'shutdown /a' in a terminal).
 
-#### X-30 · File access server: allow-listed root (D:/ kept when present), LAN bind, token path, TTL, audit
-**Phase:** P0 · **Size:** M · **Feature:** start_file_access_server
+#### X-30 ? File access server: allow-listed root (D:/ kept when present), LAN bind, token path, TTL, audit
+**Phase:** P0 ? **Size:** M ? **Feature:** start_file_access_server
 **Source:** TD-14 (tools-desktop)
 **Kyun:** It serves only D:/ (absent here, so it always fails), binds every interface with no auth, loses bind errors and never stops. This is the only task editing jarvis_file_server.py: it absorbs tools-info 'P3 File access server', OPS-C5's file-server part and DASH-U19's QR relay. Merged duplicate OP-29: Harden risky Cursor-lane tools without removing them: tokenized + TTL file server, no hardcoded controller token, cancel_shutdown tool
 **Files:** `services/system/jarvis_file_server.py`, `tests/tools/test_file_server_tool.py (new)`, `services/automation/keyboard_mouse_ctrl.py`, `services/system/jarvis_system_ctrl.py`, `tests/automation/test_system_ctrl_tool.py`, `tests/tools/test_file_server_security.py`
@@ -3860,13 +3860,13 @@ Verify:
 - netstat -ano | findstr :8000
 - Manual with the phone: scan the QR, open a file, remove the token from the URL and expect 403.
 
-#### X-31 · run_cmd_command: strict read-only allow-list captured, everything else UI-confirmed
-**Phase:** P0 · **Size:** S · **Feature:** run_cmd_command
+#### X-31 ? run_cmd_command: strict read-only allow-list captured, everything else UI-confirmed
+**Phase:** P0 ? **Size:** S ? **Feature:** run_cmd_command
 **Source:** TD-17 (tools-desktop)
 **Kyun:** Commands run with no confirmation, POSIX shlex mangles Windows paths, output is never captured, and a naive allow-list would let 'echo %GOOGLE_API_KEY%' leak secrets held in the agent environment.
 **Files:** `services/automation/jarvis_notepad_automation.py`, `tests/tools/test_run_cmd_tool.py (new)`
 **Depends on:** X-27, C-28, C-30
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Change the signature to run_cmd_command(command: str, capture: bool = False) with raw_args=('command',) and timeout 30.
@@ -3884,16 +3884,16 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/tools/test_run_cmd_tool.py -q -p no:cacheprovider
 - Manual voice check: 'Jarvis mera IP batao'.
 
-### P1 · Ek dimagh
+### P1 ? Ek dimagh
 _Typed chat aur voice dono ek hi Gemini session me; voice-ID, wake-word, memory, language._
 
-#### X-13 · LiveKit room provider: join after login with mic off, mic toggle without churn, fresh token per connect, take-over UI
-**Phase:** P1 · **Size:** L · **Feature:** Room connection on login with mic off
+#### X-13 ? LiveKit room provider: join after login with mic off, mic toggle without churn, fresh token per connect, take-over UI
+**Phase:** P1 ? **Size:** L ? **Feature:** Room connection on login with mic off
 **Source:** UI-09 (dashboard-ui)
 **Kyun:** Each Voice click mints a new identity, token and Room and disconnects on the next click (useLiveKitVoice.ts:130-184), which closes the agent session; agent audio and transcripts arrive only after a click. Absorbs the LiveKit part of infra OPS-C1.
 **Files:** `stonix_ui/src/features/voice/LiveKitProvider.tsx (new)`, `stonix_ui/src/features/voice/useVoiceRoom.ts (new)`, `stonix_ui/src/features/command-center/hooks/useLiveKitVoice.ts`, `stonix_ui/src/features/command-center/components/AssistantCore.tsx`, `stonix_ui/src/features/command-center/components/TopBar.tsx`, `stonix_ui/src/app/App.tsx`, `stonix_ui/tests/e2e/voice.spec.ts (new)`
 **Depends on:** X-08, K-04 (DASH-LIVEKIT-UI)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. LiveKitProvider (mounted only when authenticated): fetch a NEW token (bridgeUrl('/livekit/token'), credentials include) before every connect and automatic reconnect; new Room({adaptiveStream: true, dynacast: true}).connect(url, token) with mic and camera OFF.
@@ -3915,13 +3915,13 @@ Done tab jab (acceptance):
 Verify:
 - cd stonix_ui && npm run build && npx playwright test tests/e2e/voice.spec.ts
 
-#### X-14 · ChatPanel unified: one bubble per message id, Socket.IO send, history paging, live captions from lk.transcription
-**Phase:** P1 · **Size:** L · **Feature:** ChatPanel: unified messages (lk.chat + lk.transcription + bridge history)
+#### X-14 ? ChatPanel unified: one bubble per message id, Socket.IO send, history paging, live captions from lk.transcription
+**Phase:** P1 ? **Size:** L ? **Feature:** ChatPanel: unified messages (lk.chat + lk.transcription + bridge history)
 **Source:** UI-10 (dashboard-ui)
 **Kyun:** User text shows twice (optimistic copy plus an agent echo with a new uuid), roles differ ('agent' vs 'assistant'), history lives only in RAM, and the LiveKit text streams are unused (useCommandCenter.ts:317-328; agent_loops.py:194-195). Absorbs voice VCR-14 and the message part of infra OPS-C3.
 **Files:** `stonix_ui/src/features/chat/useChat.ts (new)`, `stonix_ui/src/features/chat/liveCaptions.ts (new)`, `stonix_ui/src/features/command-center/components/ChatPanel.tsx`, `stonix_ui/src/features/command-center/components/AssistantCore.tsx`, `stonix_ui/src/features/command-center/hooks/useCommandCenter.ts`, `stonix_ui/tests/e2e/chat.spec.ts (new)`
 **Depends on:** X-13, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS), K-04 (DASH-LIVEKIT-UI)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. useChat: Map<id, Message> seeded from init_state.messages plus GET bridgeUrl('/messages?limit=50'); upsert on new_message and update_message through normalizeMessage; keep the last 300, sorted by ts.
@@ -3942,13 +3942,13 @@ Done tab jab (acceptance):
 Verify:
 - cd stonix_ui && npm run build && npx playwright test tests/e2e/chat.spec.ts
 
-#### X-25 · Clipboard monitor: structured, redacted, rate-limited suggestions with self-write ignore
-**Phase:** P1 · **Size:** S · **Feature:** ClipboardMonitor
+#### X-25 ? Clipboard monitor: structured, redacted, rate-limited suggestions with self-write ignore
+**Phase:** P1 ? **Size:** S ? **Feature:** ClipboardMonitor
 **Source:** TD-20 (tools-desktop)
 **Kyun:** The raw clipboard line goes to DuckDuckGo, the 0x pattern matches crypto addresses, JARVIS's own pastes trigger it, and the callback payload is an unstructured string.
 **Files:** `services/automation/jarvis_clipboard.py`, `tests/tools/test_clipboard_monitor.py (new)`
 **Depends on:** C-26, X-03, X-11, K-19 (ClipboardSuggestion)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Make the callback payload {id (uuid), error_excerpt (redact(), up to 200 chars), query, solution (up to 500), source_url, ts} and await on_detection_callback(payload) inside try/except, logging once per error type so the loop never dies.
@@ -3966,16 +3966,16 @@ Done tab jab (acceptance):
 Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/tools/test_clipboard_monitor.py -q -p no:cacheprovider
 
-### P2 · Rooms, state, control plane
+### P2 ? Rooms, state, control plane
 _Room ka ek malik, agent online/offline, SQLite state, events sirf sahi jagah._
 
-#### X-15 · Status bar: Bridge / Agent PC / Voice chips at every width, real agent state, working Reconnect
-**Phase:** P2 · **Size:** M · **Feature:** Agent online/offline indicator
+#### X-15 ? Status bar: Bridge / Agent PC / Voice chips at every width, real agent state, working Reconnect
+**Phase:** P2 ? **Size:** M ? **Feature:** Agent online/offline indicator
 **Source:** UI-12 (dashboard-ui)
 **Kyun:** TopBar shows '<PERSONA> ready' whenever the browser socket is up (TopBar.tsx:44-47), status_update is never emitted, and the status block is hidden below 1024 px (TopBar.tsx:43). Absorbs the status pill of infra OPS-C3. Merged duplicate OP-27: UI state alignment: agent_status pill + Start/Stop, PC vs Server vitals, telemetry/diagnostics/audit in SystemTrace, message schema + dedupe + history paging, settings_sync, task notifications
 **Files:** `stonix_ui/src/features/status/useAgentStatus.ts (new)`, `stonix_ui/src/features/command-center/components/TopBar.tsx`, `stonix_ui/src/features/command-center/hooks/useCommandCenter.ts`, `stonix_ui/src/features/command-center/components/SettingsPanel.tsx`, `stonix_ui/tests/e2e/status.spec.ts (new)`, `stonix_ui/src/features/command-center/components/OperationsRail.tsx`, `stonix_ui/src/features/command-center/components/SystemTrace.tsx`, `stonix_ui/src/features/command-center/components/ChatPanel.tsx`, `stonix_ui/tests/e2e/state.spec.ts`
 **Depends on:** X-13, K-02 (DASH-UI-EVENTS), K-44 (C-ROOM-1), K-43 (C-STATUS-1)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. useAgentStatus merges init_state.agent_status and 'agent_status' events (online, voice_ready|in_room, paused, since, last_heartbeat|last_seen, session, mode, restarting) with LiveKit agentPresent/agentState.
@@ -3991,13 +3991,13 @@ Done tab jab (acceptance):
 Verify:
 - cd stonix_ui && npm run build && npx playwright test tests/e2e/status.spec.ts
 
-#### X-16 · Agent controls: Stop speaking, Pause/Start (Wake), separate Mic vs 'Agent listening', offline message queue
-**Phase:** P2 · **Size:** M · **Feature:** Agent mute (stop listening)
+#### X-16 ? Agent controls: Stop speaking, Pause/Start (Wake), separate Mic vs 'Agent listening', offline message queue
+**Phase:** P2 ? **Size:** M ? **Feature:** Agent mute (stop listening)
 **Source:** UI-13 (dashboard-ui)
 **Kyun:** Mute is easily confused with the Voice button and gives no feedback when the agent is offline; when the job ends nothing brings it back from the UI, and typed text sent offline disappears. Absorbs the Start/Stop part of infra OPS-C3 and DASH-U26. Merged duplicate VR-29: Dashboard: Stop (interrupt) button, mute tooltip, turn_rejected toasts, corrected helper text
 **Files:** `stonix_ui/src/features/status/AgentControls.tsx (new)`, `stonix_ui/src/features/command-center/components/TopBar.tsx`, `stonix_ui/src/features/chat/useChat.ts`, `stonix_ui/src/features/command-center/hooks/useCommandCenter.ts`, `stonix_ui/tests/e2e/controls-agent.spec.ts (new)`, `stonix_ui/src/features/command-center/components/AssistantCore.tsx`, `stonix_ui/src/features/command-center/components/SystemTrace.tsx`, `stonix_ui/tests/e2e/voice-feedback.spec.ts`
 **Depends on:** X-14, X-15, K-03 (DASH-UI-COMMANDS), K-60 (CT-VC-CONTROL), K-62 (CT-VC-TURN-GATE)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. TopBar 'Stop' (square icon, title 'JARVIS ko chup karao') sends ui_command stop (interrupt only).
@@ -4014,16 +4014,16 @@ Done tab jab (acceptance):
 Verify:
 - cd stonix_ui && npm run build && npx playwright test tests/e2e/controls-agent.spec.ts
 
-### P3 · Har tool aur panel working
+### P3 ? Har tool aur panel working
 _Saare 82 tools aur dashboard ke saare panels asal me kaam karein._
 
-#### X-01 · YouTube downloader ffmpeg/interpreter fix (K16) merged into the tools-info downloader task
-**Phase:** P3 · **Size:** S · **Feature:** automate_youtube
-**Source:** TD-39 (tools-desktop) · **User rule ki wajah se nahi karna**
+#### X-01 ? YouTube downloader ffmpeg/interpreter fix (K16) merged into the tools-info downloader task
+**Phase:** P3 ? **Size:** S ? **Feature:** automate_youtube
+**Source:** TD-39 (tools-desktop) ? **User rule ki wajah se nahi karna**
 **Kyun:** Same file and feature as tools-info 'P3 YouTube downloader as background job', which owns download_youtube_media; one task must own jarvis_youtube_downloader.py.
 **Files:** `services/multimedia/jarvis_youtube_downloader.py`
-**Depends on:** —
-**User se chahiye:** —
+**Depends on:** ?
+**User se chahiye:** ?
 
 Steps:
 1. No separate work here; the tools-info task carries K16's points: config.ffmpeg_dir (FFMPEG_DIR) first in the ffmpeg search order, [sys.executable, '-m', 'yt_dlp'] commands, and never a search-results URL (ytsearch1: or yt_bot.get_video_url from TD-27, which returns a watch URL or None).
@@ -4034,13 +4034,13 @@ Done tab jab (acceptance):
 Verify:
 - Select-String -Path services/multimedia/jarvis_youtube_downloader.py -Pattern 'ffmpeg_dir|sys.executable'
 
-#### X-02 · Original startup chime asset (Cursor part of the startup-voice split)
-**Phase:** P3 · **Size:** S · **Feature:** Startup voice
+#### X-02 ? Original startup chime asset (Cursor part of the startup-voice split)
+**Phase:** P3 ? **Size:** S ? **Feature:** Startup voice
 **Source:** VR-36 (voice-runtime)
 **Kyun:** assets/audio/ has no startup sound; Cursor may not start the agent, touch .env or the VPS (start-agent.bat copies .env and deletes the live room).
 **Files:** `tests/scripts/make_startup_chime.py`, `assets/audio/jarvis_startup_chime.wav`
-**Depends on:** —
-**User se chahiye:** —
+**Depends on:** ?
+**User se chahiye:** ?
 
 Steps:
 1. tests/scripts/make_startup_chime.py: generate an original ~2.5 s chime (numpy sine sweep + fade, 44.1 kHz 16-bit) to assets/audio/jarvis_startup_chime.wav; no copyrighted audio.
@@ -4056,13 +4056,13 @@ Verify:
 - .venv_312/Scripts/python.exe tests/scripts/make_startup_chime.py
 - .venv_312/Scripts/python.exe -c "import pygame,time; pygame.mixer.init(); pygame.mixer.music.load('assets/audio/jarvis_startup_chime.wav'); pygame.mixer.music.play(); time.sleep(3)"
 
-#### X-04 · jarvis_audio real implementation (gTTS/pyttsx3 TTS, SpeechRecognition STT, local playback)
-**Phase:** P3 · **Size:** M · **Feature:** jarvis_audio helpers
+#### X-04 ? jarvis_audio real implementation (gTTS/pyttsx3 TTS, SpeechRecognition STT, local playback)
+**Phase:** P3 ? **Size:** M ? **Feature:** jarvis_audio helpers
 **Source:** OP-30 (infra-security-ops)
 **Kyun:** jarvis_audio returns an empty transcript and the text bytes as 'speech'; reminders and the startup line need real local speech.
 **Files:** `services/multimedia/jarvis_audio.py`, `tests/tools/test_jarvis_audio.py`
 **Depends on:** K-50 (C-AUDIO-1)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. generate_speech(text, lang='ur') -> bytes: MP3 from gTTS ('en' when the text is ASCII-only English); fallback WAV bytes from pyttsx3 (offline) via a temp file; empty text -> b''
@@ -4081,13 +4081,13 @@ Verify:
 - $PY -m pytest tests/tools/test_jarvis_audio.py -q
 - $PY -c "from services.multimedia.jarvis_audio import generate_speech, speak_locally; print(len(generate_speech('Salam Sir'))>1000); print(speak_locally('JARVIS audio test'))"
 
-#### X-05 · Map tool: Nominatim usage policy (1 req/s, proper user agent) + zoom
-**Phase:** P3 · **Size:** S · **Feature:** Map focus (show_location_on_map)
+#### X-05 ? Map tool: Nominatim usage policy (1 req/s, proper user agent) + zoom
+**Phase:** P3 ? **Size:** S ? **Feature:** Map focus (show_location_on_map)
 **Source:** TI-25 (tools-info)
 **Kyun:** Nominatim's free service requires an identifying user agent and at most 1 request/s; the map view also needs a zoom level. EXT DASH-U17/DASH-C20 own the location_sync kind 'map' emitter and the OSM view, so the old Location card keeps working (review R49 resolved).
 **Files:** `services/info/jarvis_map.py`, `tests/tools/test_map_tool.py`
 **Depends on:** K-08 (DASH-LOCATION)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. jarvis_map.py: Nominatim(user_agent='jarvis_personal_assistant_v2 (JARVIS-AGENT)', timeout=10) wrapped in geopy.extra.rate_limiter.RateLimiter(min_delay_seconds=1).
@@ -4102,13 +4102,13 @@ Done tab jab (acceptance):
 Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/tools/test_map_tool.py -q -p no:cacheprovider
 
-#### X-10 · ConfirmDialog for risky tools: queue, server-corrected countdown, Allow/Deny, closes on any resolution
-**Phase:** P3 · **Size:** M · **Feature:** Confirmation dialog for risky tools
+#### X-10 ? ConfirmDialog for risky tools: queue, server-corrected countdown, Allow/Deny, closes on any resolution
+**Phase:** P3 ? **Size:** M ? **Feature:** Confirmation dialog for risky tools
 **Source:** UI-16 (dashboard-ui)
 **Kyun:** High-impact tools (shutdown, run_cmd_command, send_email, ...) run with no approval; four plans want one dashboard dialog. Absorbs tools K13 (dialog), infra OPS-C4 and the tools-info ConfirmDialog UI. Merged duplicate TD-11: STONIX ConfirmDialog + live tool rows (one dialog for every area) Merged duplicate OP-28: ConfirmDialog for confirm_request/confirm_response + medium-risk toasts
 **Files:** `stonix_ui/src/features/confirm/ConfirmDialog.tsx (new)`, `stonix_ui/src/features/confirm/useConfirmQueue.ts (new)`, `stonix_ui/src/features/command-center/Dashboard.tsx`, `stonix_ui/tests/e2e/confirm.spec.ts (new)`, `stonix_ui/src/features/command-center/components/ConfirmDialog.tsx (new)`, `stonix_ui/src/features/command-center/hooks/useCommandCenter.ts`, `stonix_ui/src/features/command-center/components/ChatPanel.tsx`, `stonix_ui/tests/e2e/confirm-dialog.spec.ts (new)`, `stonix_ui/src/features/command-center/components/ConfirmDialog.tsx`, `stonix_ui/tests/e2e/confirm.spec.ts`
 **Depends on:** X-06, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS), K-14 (ConfirmFlow), K-45 (C-CONFIRM-1)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. useConfirmQueue: seed from init_state.confirmations | pending_confirmations | pending_confirms; add on confirm_request (dedupe by id), oldest first; drop on confirm_resolved or expiry.
@@ -4127,13 +4127,13 @@ Done tab jab (acceptance):
 Verify:
 - cd stonix_ui && npm run build && npx playwright test tests/e2e/confirm.spec.ts
 
-#### X-17 · Vitals cards PC (agent) vs VPS (server), Telemetry card, Alerts by level
-**Phase:** P3 · **Size:** S · **Feature:** Vitals: PC (agent) vs VPS (server)
+#### X-17 ? Vitals cards PC (agent) vs VPS (server), Telemetry card, Alerts by level
+**Phase:** P3 ? **Size:** S ? **Feature:** Vitals: PC (agent) vs VPS (server)
 **Source:** UI-19 (dashboard-ui)
 **Kyun:** Only the VPS container's own psutil numbers appear, in an unlabelled card (OperationsRail.tsx:37-43); telemetry is never rendered; Alerts filter by logger name (OperationsRail.tsx:17-19). Absorbs the vitals part of infra OPS-C3 and the alerts part of tools-info 'Dashboard panels'.
 **Files:** `stonix_ui/src/features/command-center/components/OperationsRail.tsx`, `stonix_ui/src/features/telemetry/TelemetryCard.tsx (new)`, `stonix_ui/src/features/command-center/hooks/useCommandCenter.ts`, `stonix_ui/tests/e2e/vitals.spec.ts (new)`
 **Depends on:** X-06, K-02 (DASH-UI-EVENTS)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Two Panels: 'PC (agent)' from vitals_pc and 'VPS (server)' from vitals_vps (legacy vitals_update used only when it carries source 'vps' or nothing else arrived); CPU/RAM/Disk bars with the disk labelled from vitals_pc.disk_label or 'Disk (C:)'; 'updated Xs ago' and a stale badge after 30 s; Number.isFinite guards; data-testid vitals-pc, vitals-vps.
@@ -4148,13 +4148,13 @@ Done tab jab (acceptance):
 Verify:
 - cd stonix_ui && npm run build && npx playwright test tests/e2e/vitals.spec.ts
 
-#### X-18 · Intelligence / Media panel: generated images, QR codes and files over HTTPS through the bridge media relay
-**Phase:** P3 · **Size:** S · **Feature:** Intelligence / generated-media viewer
+#### X-18 ? Intelligence / Media panel: generated images, QR codes and files over HTTPS through the bridge media relay
+**Phase:** P3 ? **Size:** S ? **Feature:** Intelligence / generated-media viewer
 **Source:** UI-31 (dashboard-ui)
 **Kyun:** intelligence_update is stored but never rendered (useCommandCenter.ts:127-132,167-172), and image URLs point at the PC LAN (http://<lan-ip>:8000), which the HTTPS dashboard cannot load. Absorbs the MediaPanel of tools-info 'Dashboard panels'.
 **Files:** `stonix_ui/src/features/intelligence/IntelligencePanel.tsx (new)`, `stonix_ui/src/features/command-center/Dashboard.tsx`, `stonix_ui/src/features/command-center/hooks/useCommandCenter.ts`, `stonix_ui/tests/e2e/intelligence.spec.ts (new)`
 **Depends on:** X-06, K-02 (DASH-UI-EVENTS)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. A collapsible panel under AssistantCore shows the latest item (image with lightbox, json as key/value, link with rel noopener, audio with <audio controls>) plus a history strip from init_state.intelligence (last 20).
@@ -4168,13 +4168,13 @@ Done tab jab (acceptance):
 Verify:
 - cd stonix_ui && npm run build && npx playwright test tests/e2e/intelligence.spec.ts
 
-#### X-19 · Tools tab: live tool rows for every call (upsert by id), jobs with progress and cancel, medium-risk toasts
-**Phase:** P3 · **Size:** M · **Feature:** Tool logs panel (tool events for every tool)
+#### X-19 ? Tools tab: live tool rows for every call (upsert by id), jobs with progress and cancel, medium-risk toasts
+**Phase:** P3 ? **Size:** M ? **Feature:** Tool logs panel (tool events for every tool)
 **Source:** UI-15 (dashboard-ui)
 **Kyun:** Only 2 of 78 tools emit today; the UI shows them in a tab named 'tasks' and drops init_state.tool_logs (ChatPanel.tsx:110-119; useCommandCenter.ts:238-265). Absorbs tools K13 (activity), the JobsPanel of tools-info 'Dashboard panels' and the toasts of infra OPS-C4. Merged duplicate TI-27: Jobs panel UI: live progress, cancel, open on PC
 **Files:** `stonix_ui/src/features/tools/useToolLogs.ts (new)`, `stonix_ui/src/features/tools/ToolLogList.tsx (new)`, `stonix_ui/src/features/tools/JobsList.tsx (new)`, `stonix_ui/src/features/command-center/components/ChatPanel.tsx`, `stonix_ui/src/features/command-center/hooks/useCommandCenter.ts`, `stonix_ui/tests/e2e/tools.spec.ts (new)`, `stonix_ui/src/features/jobs/useJobs.ts`, `stonix_ui/src/features/jobs/JobsPanel.tsx`, `stonix_ui/src/features/command-center/Dashboard.tsx`, `stonix_ui/tests/e2e/jobs.spec.ts`
 **Depends on:** X-14, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS), K-13 (ToolSyncEvent), K-31 (job_progress_routing)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. useToolLogs: seed from init_state.tool_logs; upsert tool_update by id (legacy rows without an id get the key legacy-<ts>-<tool>); statuses running|success|error|blocked|denied|timeout|cancelled|needs_confirmation|degraded; keep 200; export runningCount and lastError for FlowMap.
@@ -4191,13 +4191,13 @@ Done tab jab (acceptance):
 Verify:
 - cd stonix_ui && npm run build && npx playwright test tests/e2e/tools.spec.ts
 
-#### X-20 · SystemTrace: crash-proof reasoning card, plan progress, turn_rejected feed, logs terminal with level filters, diagnostics/audit
-**Phase:** P3 · **Size:** M · **Feature:** Reasoning / SystemTrace panel
+#### X-20 ? SystemTrace: crash-proof reasoning card, plan progress, turn_rejected feed, logs terminal with level filters, diagnostics/audit
+**Phase:** P3 ? **Size:** M ? **Feature:** Reasoning / SystemTrace panel
 **Source:** UI-22 (dashboard-ui)
 **Kyun:** SystemTrace renders plan objects as React children (SystemTrace.tsx:46-50), the card is hidden below 1180 px (index.css:477-479), and logs have no level, filter or pause. Absorbs voice VCR-16 (plan + turn_rejected) and the SystemTrace part of infra OPS-C3.
 **Files:** `stonix_ui/src/features/command-center/components/SystemTrace.tsx`, `stonix_ui/src/assets/styles/index.css`, `stonix_ui/src/features/command-center/hooks/useCommandCenter.ts`, `stonix_ui/tests/e2e/trace.spec.ts (new)`
 **Depends on:** X-19, K-02 (DASH-UI-EVENTS), K-62 (CT-VC-TURN-GATE), K-67 (CT-VC-REASONING)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Reasoning card: intent title, ambiguity badge, top-3 confidence bars, plan items from normalizePlan (plan_steps descriptions first, else the strings); never render an object as a child; source badge, time, and a selector for the last 5.
@@ -4215,13 +4215,13 @@ Done tab jab (acceptance):
 Verify:
 - cd stonix_ui && npm run build && npx playwright test tests/e2e/trace.spec.ts
 
-#### X-21 · Settings drawer (core): session, connection, voice, persona, wake word, agent listening, voice-ID with confirmed state
-**Phase:** P3 · **Size:** M · **Feature:** Settings panel (settings_update/settings_sync)
+#### X-21 ? Settings drawer (core): session, connection, voice, persona, wake word, agent listening, voice-ID with confirmed state
+**Phase:** P3 ? **Size:** M ? **Feature:** Settings panel (settings_update/settings_sync)
 **Source:** UI-17 (dashboard-ui)
 **Kyun:** SettingsPanel shows only the bridge URL, a masked token and Reconnect; updateSettings, changePersona and toggleWakeWord have no caller (useCommandCenter.ts:303-340). Absorbs voice VCR-15 and the settings part of infra OPS-C3.
 **Files:** `stonix_ui/src/features/settings/useSettings.ts (new)`, `stonix_ui/src/shared/voices.ts (new)`, `stonix_ui/src/features/command-center/components/SettingsPanel.tsx`, `stonix_ui/src/features/command-center/components/TopBar.tsx`, `stonix_ui/src/features/command-center/hooks/useCommandCenter.ts`, `stonix_ui/tests/e2e/settings.spec.ts (new)`
 **Depends on:** X-15, X-16, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. useSettings: state from init_state.settings, settings_sync (normalizeSettings) and the legacy persona_update/wake_word_update/mute_update; update(partial) emits settings_update and marks those fields pending until settings_sync; after 5 s it reverts and shows an error toast.
@@ -4240,13 +4240,13 @@ Done tab jab (acceptance):
 Verify:
 - cd stonix_ui && npm run build && npx playwright test tests/e2e/settings.spec.ts
 
-#### X-22 · Settings drawer (advanced): turn mode, follow-up window, transcript script, automation toggles, vision mode, guarded-tools list
-**Phase:** P3 · **Size:** S · **Feature:** Settings panel (settings_update/settings_sync)
+#### X-22 ? Settings drawer (advanced): turn mode, follow-up window, transcript script, automation toggles, vision mode, guarded-tools list
+**Phase:** P3 ? **Size:** S ? **Feature:** Settings panel (settings_update/settings_sync)
 **Source:** UI-18 (dashboard-ui)
 **Kyun:** The voice and desktop-tools plans add settings (turn_mode, wake_followup_s, transcript_script, automation flags) and the camera adds a vision mode, so one drawer has to expose them. Absorbs tools K15. Merged duplicate TD-24: UI Settings: Automation section (desktop control, clipboard helper, speak tips, voice for high risk)
 **Files:** `stonix_ui/src/features/command-center/components/SettingsPanel.tsx`, `stonix_ui/src/features/settings/useSettings.ts`, `stonix_ui/tests/e2e/settings.spec.ts`, `stonix_ui/src/features/command-center/hooks/useCommandCenter.ts`
 **Depends on:** X-10, X-21, K-05 (DASH-CAMERA-VISION), K-03 (DASH-UI-COMMANDS), K-24 (AutomationSettings)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Conversation section: Turn mode (Secure gated / Fast) with a 'restart required' badge; Follow-up window 0/10/20/30 s; Transcript script Roman/Native (default Roman).
@@ -4263,13 +4263,13 @@ Done tab jab (acceptance):
 Verify:
 - cd stonix_ui && npm run build && npx playwright test tests/e2e/settings.spec.ts
 
-#### X-23 · Memory (Notes) tab: restore, stream, search, confirmed clear
-**Phase:** P3 · **Size:** S · **Feature:** Memory panel (memory_update)
+#### X-23 ? Memory (Notes) tab: restore, stream, search, confirmed clear
+**Phase:** P3 ? **Size:** S ? **Feature:** Memory panel (memory_update)
 **Source:** UI-24 (dashboard-ui)
 **Kyun:** init_state.memories is dropped on reload (useCommandCenter.ts:238-265), and clear_memory has no UI control. Absorbs the memory part of voice VCR-26.
 **Files:** `stonix_ui/src/features/memory/useMemories.ts (new)`, `stonix_ui/src/features/memory/MemoryList.tsx (new)`, `stonix_ui/src/features/command-center/components/ChatPanel.tsx`, `stonix_ui/tests/e2e/memory.spec.ts (new)`
 **Depends on:** X-19, X-10, K-07 (DASH-MEMORY-EVENTS)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. useMemories: seed from init_state.memories; prepend memory_sync items (newest first, 200 max); memory_cleared empties the short-term list and toasts the backup path when one is given.
@@ -4284,13 +4284,13 @@ Done tab jab (acceptance):
 Verify:
 - cd stonix_ui && npm run build && npx playwright test tests/e2e/memory.spec.ts
 
-#### X-24 · Tasks & Reminders tab with countdown and Cancel, due-item toasts and a notification bell
-**Phase:** P3 · **Size:** M · **Feature:** Task notifications + reminders UI
+#### X-24 ? Tasks & Reminders tab with countdown and Cancel, due-item toasts and a notification bell
+**Phase:** P3 ? **Size:** M ? **Feature:** Task notifications + reminders UI
 **Source:** UI-25 (dashboard-ui)
 **Kyun:** The UI subscribes to neither task_notification nor task_sync (0 hits in stonix_ui/src); reminders only appear as a chat line. Absorbs the UI part of voice VCR-20, the Scheduled tab of tools-info 'Dashboard panels' and the task part of infra OPS-C3.
 **Files:** `stonix_ui/src/features/tasks/useTasks.ts (new)`, `stonix_ui/src/features/tasks/TasksPanel.tsx (new)`, `stonix_ui/src/features/command-center/components/ChatPanel.tsx`, `stonix_ui/src/features/command-center/components/TopBar.tsx`, `stonix_ui/tests/e2e/tasks.spec.ts (new)`
 **Depends on:** X-23, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. useTasks: seed from init_state.tasks and init_state.notifications; task_sync through normalizeTasks ({tasks} or {pending}); task_notification appends (last 20).
@@ -4305,13 +4305,13 @@ Done tab jab (acceptance):
 Verify:
 - cd stonix_ui && npm run build && npx playwright test tests/e2e/tasks.spec.ts
 
-#### X-28 · System info: battery + CPU/RAM/disk ToolResult and collect_pc_vitals()
-**Phase:** P3 · **Size:** S · **Feature:** get_laptop_info
+#### X-28 ? System info: battery + CPU/RAM/disk ToolResult and collect_pc_vitals()
+**Phase:** P3 ? **Size:** S ? **Feature:** get_laptop_info
 **Source:** TD-35 (tools-desktop)
 **Kyun:** The tool returns a bare string and the PC vitals feed (OPS-16 / DASH-C14) needs a reusable collector.
 **Files:** `services/system/jarvis_system_info.py`, `tests/tools/test_system_info_tool.py (new)`
 **Depends on:** C-24, X-11, K-26 (VitalsPCHelper)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Add a sync collect_pc_vitals() returning {cpu: psutil.cpu_percent(interval=0.3), ram, disk (C:), battery, plugged, secs_left}; battery fields are None on desktops.
@@ -4324,13 +4324,13 @@ Done tab jab (acceptance):
 Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/tools/test_system_info_tool.py -q -p no:cacheprovider
 
-#### X-32 · TaskStore v2: schema columns, parse_when, schedule_task with args + confirm, cancel tool
-**Phase:** P3 · **Size:** M · **Feature:** Task scheduler (schedule_task / list_tasks)
+#### X-32 ? TaskStore v2: schema columns, parse_when, schedule_task with args + confirm, cancel tool
+**Phase:** P3 ? **Size:** M ? **Feature:** Task scheduler (schedule_task / list_tasks)
 **Source:** TI-17 (tools-info)
 **Kyun:** Scheduled tasks cannot carry tool arguments or results, there is no cancel tool, and 'das minute baad' raises ValueError in set_reminder. Review R38: risky actions are confirmed at schedule time and some actions may never be scheduled.
 **Files:** `services/automation/jarvis_task_manager.py`, `services/automation/jarvis_reminders.py`, `tests/tools/test_task_store_v2.py`
 **Depends on:** C-24, C-28, C-30, K-66 (CT-VC-PROACTIVE), K-33 (task_store_v2), K-32 (scheduled_action_runner)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. jarvis_task_manager._init_db: after CREATE TABLE add each missing column (PRAGMA table_info): kind TEXT DEFAULT 'task', action_args TEXT, result TEXT, attempts INTEGER DEFAULT 0, updated_at TEXT, confirm_id TEXT.
@@ -4352,13 +4352,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/tools/test_task_store_v2.py tests/test_reminders.py -q -p no:cacheprovider
 - ./.venv_312/Scripts/python.exe -c "import sqlite3; c=sqlite3.connect('conversations/tasks.db'); print(c.execute('pragma table_info(tasks)').fetchall())"
 
-#### X-33 · Voice-ID meter with real states and the voice enrollment wizard
-**Phase:** P3 · **Size:** M · **Feature:** Voice-match meter (voice ID)
+#### X-33 ? Voice-ID meter with real states and the voice enrollment wizard
+**Phase:** P3 ? **Size:** M ? **Feature:** Voice-match meter (voice ID)
 **Source:** UI-26 (dashboard-ui)
 **Kyun:** The meter is stuck at 0%, because voice_match_update only comes from the dead hook, and there is no way to enroll from the dashboard. Absorbs voice VCR-25 and the badge part of VCR-16.
 **Files:** `stonix_ui/src/features/voice/VoiceEnrollDialog.tsx (new)`, `stonix_ui/src/features/command-center/components/AssistantCore.tsx`, `stonix_ui/src/features/command-center/components/SettingsPanel.tsx`, `stonix_ui/tests/e2e/voiceid.spec.ts (new)`
 **Depends on:** X-21, X-13, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Meter states from settings_sync (voice_id, voice_id_enrolled, voice_id_threshold) and voice_match_update {confidence, accepted, threshold, enrolled, mode}: 'Not enrolled' (grey + Enroll link), 'Monitor' (blue, last score), 'Enforcing' (green at or above threshold, red below). The colour threshold comes from settings, not the hard-coded 70% (AssistantCore.tsx:113).
@@ -4374,13 +4374,13 @@ Done tab jab (acceptance):
 Verify:
 - cd stonix_ui && npm run build && npx playwright test tests/e2e/voiceid.spec.ts
 
-#### X-34 · YouTube play: real watch URL via yt-dlp search, browser paths from config
-**Phase:** P3 · **Size:** S · **Feature:** automate_youtube
+#### X-34 ? YouTube play: real watch URL via yt-dlp search, browser paths from config
+**Phase:** P3 ? **Size:** S ? **Feature:** automate_youtube
 **Source:** TD-27 (tools-desktop)
 **Kyun:** youtube_search is not installed (only youtubesearchpython, which breaks on httpx 0.28), so 'play' opens a results page and the downloader receives a search URL.
 **Files:** `services/automation/jarvis_youtube_automation.py`, `tests/automation/test_youtube_automation.py`, `tests/tools/test_youtube_tool.py (new)`
 **Depends on:** C-24, C-26, X-11, K-22 (YouTubeVideoUrl)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. get_video_url(query) runs yt_dlp.YoutubeDL({'quiet':True,'skip_download':True,'extract_flat':'in_playlist','noplaylist':True,'socket_timeout':10}).extract_info('ytsearch1:'+query, download=False) in to_thread and returns 'https://www.youtube.com/watch?v='+entries[0]['id']; youtubesearchpython/youtube_search stay as optional fallbacks inside try; it returns None, never a results URL.
@@ -4397,13 +4397,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/tools/test_youtube_tool.py tests/automation/test_youtube_automation.py -q -p no:cacheprovider
 - ./.venv_312/Scripts/python.exe -c "import asyncio; from services.automation.jarvis_youtube_automation import yt_bot; print(asyncio.run(yt_bot.get_video_url('lofi hip hop')))" (network; prints a watch URL)
 
-#### X-35 · File opener: config media dirs (+D:/ when present), background index outside outputs, safe open/close
-**Phase:** P3 · **Size:** M · **Feature:** play_file
+#### X-35 ? File opener: config media dirs (+D:/ when present), background index outside outputs, safe open/close
+**Phase:** P3 ? **Size:** M ? **Feature:** play_file
 **Source:** TD-34 (tools-desktop)
 **Kyun:** The index covers only D:/ (absent), so play_video, play_music and name search always fail; a fuzzy match could launch an .exe; close_file_window_tool can close the JARVIS UI.
 **Files:** `services/multimedia/jarvis_file_opener.py`, `tests/tools/test_file_opener_tools.py (new)`
 **Depends on:** C-24, C-26, X-03, X-11, K-16 (DesktopToolPolicy)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Index roots = getattr(config,'media_dirs', [Music, Videos, Downloads, Desktop, Documents, shared_dir]) plus 'D:/' when it exists, skipping missing folders; the hard-coded ['D:/'] (L194) is no longer the only root.
@@ -4425,13 +4425,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/tools/test_file_opener_tools.py -q -p no:cacheprovider
 - Manual voice checks for the phrases above.
 
-#### X-36 · Search chain hardening: Tavily Bearer, Google header + auto-disable, DDG, shared helpers
-**Phase:** P3 · **Size:** S · **Feature:** Internet search chain (search_internet)
+#### X-36 ? Search chain hardening: Tavily Bearer, Google header + auto-disable, DDG, shared helpers
+**Phase:** P3 ? **Size:** S ? **Feature:** Internet search chain (search_internet)
 **Source:** TI-08 (tools-info)
 **Kyun:** The Tavily key goes in the body, the Google key sits in the URL (and leaks through the exception log at line 186), Custom Search may be disabled for this key, and the chain can exceed 15 s. Research and image download need shared URL/image search helpers.
 **Files:** `services/info/jarvis_search.py`, `tests/automation/test_search.py`, `tests/tools/test_search_chain.py`
 **Depends on:** C-25, K-29 (redact_secrets)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. search_tavily: send 'Authorization: Bearer <TAVILY_API_KEY>' and drop api_key from the body (lines 124-129); search_depth from TAVILY_SEARCH_DEPTH (default 'advanced'); max_results 5; timeout 15; on 401/429/432/433 disable Tavily for 10 minutes.
@@ -4451,13 +4451,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/tools/test_search_chain.py tests/automation/test_search.py -q -p no:cacheprovider
 - ./.venv_312/Scripts/python.exe -c "import asyncio; from services.info.jarvis_search import search_internet; r=asyncio.run(search_internet('Lahore weather today')); print(r['status'], r.get('provider'), r.get('providers_tried'))"
 
-#### X-37 · Weather: auto-detected city + 24 h forecast + clear key errors
-**Phase:** P3 · **Size:** S · **Feature:** Weather (get_weather)
+#### X-37 ? Weather: auto-detected city + 24 h forecast + clear key errors
+**Phase:** P3 ? **Size:** S ? **Feature:** Weather (get_weather)
 **Source:** TI-09 (tools-info)
 **Kyun:** The default city='Lahore' (line 26) means the auto-detect branch never runs, and only current weather is fetched, so rain/tomorrow questions cannot be answered.
 **Files:** `services/info/jarvis_get_weather.py`, `tests/automation/test_get_weather.py`
 **Depends on:** C-25
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Signature get_weather(city: str = '', forecast: bool = False); an empty city uses get_current_city() (ipinfo from the PC), then USER_CITY.
@@ -4476,13 +4476,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/automation/test_get_weather.py -q -p no:cacheprovider
 - ./.venv_312/Scripts/python.exe -c "import asyncio; from services.info.jarvis_get_weather import get_weather; print(asyncio.run(get_weather('Lahore', forecast=True)))"
 
-#### X-38 · SIM lookup: authorized-API source with a clear 'provider not configured' mode
-**Phase:** P3 · **Size:** M · **Feature:** SIM lookup (open_sim_lookup_panel / lookup_sim_data)
+#### X-38 ? SIM lookup: authorized-API source with a clear 'provider not configured' mode
+**Phase:** P3 ? **Size:** M ? **Feature:** SIM lookup (open_sim_lookup_panel / lookup_sim_data)
 **Source:** TI-22 (tools-info)
 **Kyun:** User decision 30 Sep: an authorized API key will arrive as SIM_LOOKUP_API_URL/SIM_LOOKUP_API_KEY; build the adapter now and stay in a clear not-configured mode until both exist. EXT DASH-U18 defines the source protocol and hardens the dialog; this task plugs in the authorized source with purpose, rate limit, masking and audit. Lane fix: All its files are Cursor lane: services/info/sim_providers.py, services/info/jarvis_sim_lookup.py, tests/tools/test_sim_providers.py. TI-23 (agent handler and bridge validator) stays with Claude; the two connect through the sim_authorized_source contract.
 **Files:** `services/info/sim_providers.py`, `services/info/jarvis_sim_lookup.py`, `tests/tools/test_sim_providers.py`
 **Depends on:** C-25, C-24, C-28, K-34 (sim_authorized_source)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Create services/info/sim_providers.py implementing EXT DASH-U18's AuthorizedSimSource protocol with exactly two sources: NotConfiguredSource (default; today's 'blocked' result and SAFE_MESSAGE plus 'provider not configured') and AuthorizedApiSource; the module docstring prohibits leaked, scraped or 'SIM database' sources.
@@ -4503,13 +4503,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/tools/test_sim_providers.py -q -p no:cacheprovider
 - ./.venv_312/Scripts/python.exe services/info/tests/test_sim_lookup.py
 
-#### X-39 · QR generator: exact data (raw policy), safe filename, open_file parameter
-**Phase:** P3 · **Size:** S · **Feature:** QR code generator (generate_qr_code)
+#### X-39 ? QR generator: exact data (raw policy), safe filename, open_file parameter
+**Phase:** P3 ? **Size:** S ? **Feature:** QR code generator (generate_qr_code)
 **Source:** TI-14 (tools-info)
 **Kyun:** The sanitizer strips '&' from URLs and ';' from Wi-Fi strings, so encoded data is wrong; the filename is not sanitized; the file server (EXT K2) calls this function and needs it to keep working.
 **Files:** `services/multimedia/jarvis_qr_gen.py`, `tests/tools/test_qr_gen.py`
 **Depends on:** C-24, C-28, K-28 (tool_arg_policies)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Decorate generate_qr_code with X0 arg_policies {'data':'raw','filename':'plain'} so '&' and ';' survive (NFC only).
@@ -4526,13 +4526,13 @@ Done tab jab (acceptance):
 Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/tools/test_qr_gen.py -q -p no:cacheprovider
 
-#### X-40 · Image generation: FLUX.1-schnell via HF with Pollinations fallback and clear errors
-**Phase:** P3 · **Size:** S · **Feature:** Image generation (generate_image)
+#### X-40 ? Image generation: FLUX.1-schnell via HF with Pollinations fallback and clear errors
+**Phase:** P3 ? **Size:** S ? **Feature:** Image generation (generate_image)
 **Source:** TI-13 (tools-info)
 **Kyun:** SDXL base (line 64) may have no HF inference provider, Pollinations responses are not validated, and no image has ever been generated on this PC. Display comes from EXT DASH-U19's relay, so this task only fixes generation.
 **Files:** `services/multimedia/jarvis_image_gen.py`, `tests/tools/test_image_gen_provider.py`
 **Depends on:** C-25, C-24
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Model from JARVIS_IMAGE_MODEL (default 'black-forest-labs/FLUX.1-schnell') and provider from JARVIS_IMAGE_PROVIDER (default 'auto'); InferenceClient(provider=..., api_key=HF_TOKEN); log the chosen model.
@@ -4550,8 +4550,8 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/automation/test_image_gen_tool.py tests/tools/test_image_gen_provider.py -q -p no:cacheprovider
 - ./.venv_312/Scripts/python.exe -c "from huggingface_hub import HfApi; print(HfApi().model_info('black-forest-labs/FLUX.1-schnell', expand=['inferenceProviderMapping']).inference_provider_mapping)"
 
-#### X-41 · WhatsApp: install check, process-based window match, confirmed Unicode send, safe close
-**Phase:** P3 · **Size:** M · **Feature:** automate_whatsapp
+#### X-41 ? WhatsApp: install check, process-based window match, confirmed Unicode send, safe close
+**Phase:** P3 ? **Size:** M ? **Feature:** automate_whatsapp
 **Source:** TD-28 (tools-desktop)
 **Kyun:** WhatsApp Desktop is not installed, the focus code reads a wrong attribute (_hwnd), contact names lose Unicode, close presses Alt+F4 on whatever window is active, a title match would also hit WhatsApp Web browser windows, and messages send with no confirmation.
 **Files:** `services/automation/jarvis_whatsapp_automation.py`, `tests/automation/test_whatsapp_automation.py`, `tests/tools/test_whatsapp_tool.py (new)`
@@ -4577,13 +4577,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/tools/test_whatsapp_tool.py tests/automation/test_whatsapp_automation.py -q -p no:cacheprovider
 - Manual: send to 'Message yourself' or the consenting test contact, first with the alias file and then without it.
 
-#### X-42 · Window control 1/3: close_window (tool 'close' kept as routed alias), minimize/maximize, active-window context
-**Phase:** P3 · **Size:** M · **Feature:** close_window + close (alias kept)
+#### X-42 ? Window control 1/3: close_window (tool 'close' kept as routed alias), minimize/maximize, active-window context
+**Phase:** P3 ? **Size:** M ? **Feature:** close_window + close (alias kept)
 **Source:** TD-29 (tools-desktop)
 **Kyun:** 'close' force-kills every Notepad and can hit the JARVIS UI or the agent console; minimize/maximize return mixed types; vision needs pid and process name. Nothing is unregistered: 'close' routes through close_window.
 **Files:** `services/system/jarvis_window_ctrl.py`, `tests/tools/test_window_ctrl_tools.py (new)`
 **Depends on:** C-27, X-03, X-11, X-41, K-17 (ToolNamesV2), K-21 (ActiveWindowContext), K-16 (DesktopToolPolicy)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Add @jarvis_tool close_window(window_name: str, force: bool = False) with the docstring 'Closes an application WINDOW on the Windows desktop by name (calculator, chrome, notepad, vlc...). For the JARVIS automation browser use chrome_browser_close; for Notepad-only use close_notepad_tool.'
@@ -4604,13 +4604,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/tools/test_window_ctrl_tools.py -q -p no:cacheprovider
 - Manual: open Calculator and two Notepads, then say 'Jarvis calculator band karo'.
 
-#### X-43 · Window control 2/3: open_app with a universal app index and Chrome/YouTube/WhatsApp/Office/VLC routing
-**Phase:** P3 · **Size:** M · **Feature:** open_app
+#### X-43 ? Window control 2/3: open_app with a universal app index and Chrome/YouTube/WhatsApp/Office/VLC routing
+**Phase:** P3 ? **Size:** M ? **Feature:** open_app
 **Source:** TD-30 (tools-desktop)
 **Kyun:** Only mapped apps open, 'chrome' opens the default browser, the youtube URL is broken, WhatsApp reports success while not installed, Office/VLC are not installed, and a blocking 'with Popen' stalls the event loop.
 **Files:** `services/system/jarvis_window_ctrl.py`, `tests/tools/test_window_ctrl_tools.py`
 **Depends on:** C-26, X-26, X-34, X-41, X-42
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Build a cached app index (10 min, built in to_thread) from .lnk files under the %ProgramData% and %APPDATA% Start Menu Programs folders, 'powershell -NoProfile -Command "[Console]::OutputEncoding=[Text.Encoding]::UTF8; Get-StartApps | ConvertTo-Json"' (Name, AppID), the HKLM and HKCU App Paths keys, and APP_MAPPINGS.
@@ -4630,13 +4630,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/tools/test_window_ctrl_tools.py -q -p no:cacheprovider
 - Manual voice checks for the phrases above.
 
-#### X-44 · Window control 3/3: save_notepad, open_notepad_file, folder_file (+cv alias), create_folder, open_outputs_folder
-**Phase:** P3 · **Size:** M · **Feature:** save_notepad
+#### X-44 ? Window control 3/3: save_notepad, open_notepad_file, folder_file (+cv alias), create_folder, open_outputs_folder
+**Phase:** P3 ? **Size:** M ? **Feature:** save_notepad
 **Source:** TD-31 (tools-desktop)
 **Kyun:** save_notepad uses a D: path that does not exist and types the path into named documents; folder_file allows only C:/D: and runs .exe without confirmation; open_notepad_file can show .env or SSH keys; create_folder escapes the Desktop; the outputs mapping opens empty folders.
 **Files:** `services/system/jarvis_window_ctrl.py`, `tests/automation/test_window_ctrl_extra.py`, `tests/tools/test_window_ctrl_tools.py`
 **Depends on:** C-26, X-03, C-30, X-27, X-43
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. save_notepad(filename) uses outputs_dir via config (removes 'd:/Personal-Assistant-main', L225) and a safe basename, picks the foreground Notepad or the first non-protected ' - Notepad' window, and awaits force_foreground.
@@ -4658,13 +4658,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/tools/test_window_ctrl_tools.py tests/automation/test_window_ctrl_extra.py -q -p no:cacheprovider
 - Manual voice checks for the phrases above.
 
-#### X-45 · CameraPanel: opt-in camera, LiveKit publish, honest link badges, Socket.IO fallback only while sharing
-**Phase:** P3 · **Size:** M · **Feature:** Camera panel (LiveKit video + Socket.IO fallback)
+#### X-45 ? CameraPanel: opt-in camera, LiveKit publish, honest link badges, Socket.IO fallback only while sharing
+**Phase:** P3 ? **Size:** M ? **Feature:** Camera panel (LiveKit video + Socket.IO fallback)
 **Source:** UI-28 (dashboard-ui)
 **Kyun:** The camera starts on render with no login (CameraPanel.tsx:18-53), and frames go out every 2 s whether or not the user wants to share.
 **Files:** `stonix_ui/src/features/command-center/components/CameraPanel.tsx`, `stonix_ui/src/features/voice/LiveKitProvider.tsx`, `stonix_ui/tests/e2e/camera.spec.ts (new)`
 **Depends on:** X-13, K-05 (DASH-CAMERA-VISION)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. The default state is 'Camera off'; never call getUserMedia on mount.
@@ -4681,13 +4681,13 @@ Done tab jab (acceptance):
 Verify:
 - cd stonix_ui && npm run build && npx playwright test tests/e2e/camera.spec.ts
 
-#### X-46 · Location card + Map panel: device location and map focus kept separate, OpenStreetMap view
-**Phase:** P3 · **Size:** S · **Feature:** Location card + map focus
+#### X-46 ? Location card + Map panel: device location and map focus kept separate, OpenStreetMap view
+**Phase:** P3 ? **Size:** S ? **Feature:** Location card + map focus
 **Source:** UI-29 (dashboard-ui)
 **Kyun:** show_location_on_map posts on the same event as the 60 s device loop, so the map result gets overwritten, and the card shows only city and coordinates. Absorbs the MapPanel of tools-info 'Dashboard panels'.
 **Files:** `stonix_ui/src/features/location/MapFocus.tsx (new)`, `stonix_ui/src/features/command-center/components/OperationsRail.tsx`, `stonix_ui/tests/e2e/location.spec.ts (new)`
 **Depends on:** X-17, K-08 (DASH-LOCATION)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Device card: location_update with kind 'device' or no kind (city, coordinates, 'updated X min ago').
@@ -4701,13 +4701,13 @@ Done tab jab (acceptance):
 Verify:
 - cd stonix_ui && npm run build && npx playwright test tests/e2e/location.spec.ts
 
-#### X-47 · SIM dialog: provider-not-configured state, purpose field, masked results, 20 s timeout
-**Phase:** P3 · **Size:** S · **Feature:** SIM panel + SimAccessDialog
+#### X-47 ? SIM dialog: provider-not-configured state, purpose field, masked results, 20 s timeout
+**Phase:** P3 ? **Size:** S ? **Feature:** SIM panel + SimAccessDialog
 **Source:** UI-30 (dashboard-ui)
 **Kyun:** The dialog shows 'Checking source...' forever when the agent is offline, and the user's authorized API (SIM_LOOKUP_API_URL/KEY, added later) needs a clear not-configured state until then. Absorbs the tools-info SIM dialog UI. Merged duplicate TI-24: SIM dialog: purpose field + provider banner
 **Files:** `stonix_ui/src/features/command-center/components/SimAccessDialog.tsx`, `stonix_ui/src/features/command-center/hooks/useCommandCenter.ts`, `stonix_ui/tests/e2e/sim.spec.ts (new)`, `stonix_ui/tests/e2e/dashboard.spec.ts`, `stonix_ui/tests/e2e/sim.spec.ts`
 **Depends on:** X-15, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS), K-34 (sim_authorized_source)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Provider banner from sim_panel_open / sim_data_result.provider: 'Authorized source configure nahi hua (SIM_LOOKUP_API_URL / SIM_LOOKUP_API_KEY)' when the provider is disabled or not configured, otherwise the provider name.
@@ -4723,13 +4723,13 @@ Done tab jab (acceptance):
 Verify:
 - cd stonix_ui && npm run build && npx playwright test tests/e2e/sim.spec.ts tests/e2e/dashboard.spec.ts
 
-#### X-48 · Controls: Terminate (guarded session restart), Swarm entry points, answer feedback thumbs
-**Phase:** P3 · **Size:** S · **Feature:** Terminate button
+#### X-48 ? Controls: Terminate (guarded session restart), Swarm entry points, answer feedback thumbs
+**Phase:** P3 ? **Size:** S ? **Feature:** Terminate button
 **Source:** UI-32 (dashboard-ui)
 **Kyun:** Terminate has no onClick (AssistantCore.tsx:119-122), swarm has no UI control, and POST /feedback has no caller. Absorbs voice VCR-33, the swarm part of VCR-26 and the Swarm toggle of tools-info 'Dashboard panels'.
 **Files:** `stonix_ui/src/features/command-center/components/AssistantCore.tsx`, `stonix_ui/src/features/command-center/components/ChatPanel.tsx`, `stonix_ui/src/features/chat/useChat.ts`, `stonix_ui/tests/e2e/controls.spec.ts (new)`
 **Depends on:** X-24, X-10, K-03 (DASH-UI-COMMANDS)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Terminate sends ui_command shutdown_agent; the agent's confirm_request opens the ConfirmDialog (UI-16); after Allow show 'Agent session restart ho raha hai' until agent_status is online again (the reconciler re-dispatches).
@@ -4745,13 +4745,13 @@ Done tab jab (acceptance):
 Verify:
 - cd stonix_ui && npm run build && npx playwright test tests/e2e/controls.spec.ts
 
-#### X-49 · FlowMap from real state (Voice, Vision, Memory, Tools, Core); 'unknown' instead of a fake 'ready'
-**Phase:** P3 · **Size:** S · **Feature:** FlowMap
+#### X-49 ? FlowMap from real state (Voice, Vision, Memory, Tools, Core); 'unknown' instead of a fake 'ready'
+**Phase:** P3 ? **Size:** S ? **Feature:** FlowMap
 **Source:** UI-23 (dashboard-ui)
 **Kyun:** The module list is static and every node except Voice always says 'ready' (FlowMap.tsx:12-39).
 **Files:** `stonix_ui/src/features/command-center/components/FlowMap.tsx`, `stonix_ui/src/features/command-center/hooks/useCommandCenter.ts`, `stonix_ui/tests/e2e/trace.spec.ts`
 **Depends on:** X-20, X-19, X-13, K-06 (DASH-MODULE-HEALTH)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Voice node: roomState, micEnabled and agentState (UI-09).
@@ -4767,13 +4767,13 @@ Done tab jab (acceptance):
 Verify:
 - cd stonix_ui && npm run build && npx playwright test tests/e2e/trace.spec.ts
 
-#### X-50 · Real audio visualizer and 'You are speaking' indicator
-**Phase:** P3 · **Size:** S · **Feature:** Audio visualizer + user-speaking indicator
+#### X-50 ? Real audio visualizer and 'You are speaking' indicator
+**Phase:** P3 ? **Size:** S ? **Feature:** Audio visualizer + user-speaking indicator
 **Source:** UI-33 (dashboard-ui)
 **Kyun:** spectralDataRef is filled with random numbers and nothing reads it (useCommandCenter.ts:118,361-379); the orb animates on isSpeaking || voiceLive, and voiceLive stays true for the whole session after UI-09.
 **Files:** `stonix_ui/src/features/voice/useAudioLevels.ts (new)`, `stonix_ui/src/features/command-center/components/AssistantCore.tsx`, `stonix_ui/src/features/command-center/hooks/useCommandCenter.ts`
 **Depends on:** X-13, X-33
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. useAudioLevels: a Web Audio AnalyserNode on the agent's remote MediaStreamTrack (32 bins, requestAnimationFrame throttled to 30 fps); feed real values into spectralDataRef (export kept).
@@ -4789,13 +4789,13 @@ Verify:
 - cd stonix_ui && npm run build
 - Manual on the live dashboard (UI-34): mic on, speak, watch the indicator; ask a question, watch the bars
 
-#### X-52 · Dashboard 'Voice & Conversation' settings and enrollment extras (delta on the dashboard drawer and dialog)
-**Phase:** P3 · **Size:** M · **Feature:** Voice-ID and wake-word toggles / settings_update
+#### X-52 ? Dashboard 'Voice & Conversation' settings and enrollment extras (delta on the dashboard drawer and dialog)
+**Phase:** P3 ? **Size:** M ? **Feature:** Voice-ID and wake-word toggles / settings_update
 **Source:** VR-38 (voice-runtime)
 **Kyun:** The dashboard drawer (DASH-U09) and enrollment dialog (DASH-U15) lack turn mode, follow-up window, transcript script, typed-reply speech, quiet hours, voice-ID reject mode/threshold and enrollment quality feedback.
 **Files:** `stonix_ui/src/features/command-center/components/SettingsPanel.tsx`, `stonix_ui/src/features/settings/useSettings.ts`, `stonix_ui/src/features/voice/VoiceEnrollDialog.tsx`, `stonix_ui/src/shared/voices.ts`, `stonix_ui/tests/e2e/voice-settings.spec.ts`
 **Depends on:** X-22, X-33, K-61 (CT-VC-SETTINGS), K-63 (CT-VC-VOICE-ENROLL)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. 'Voice & Conversation' section: Turn mode (Secure gated / Fast) with 'restart required' from pending_restart; Follow-up window 0/10/20/30 s; Transcript script Roman/Native; Speak typed replies Auto/Always/Never; Quiet hours (HH:MM-HH:MM or off).
@@ -4813,13 +4813,13 @@ Done tab jab (acceptance):
 Verify:
 - cd stonix_ui; npm run lint; npm run build; npx playwright test tests/e2e/voice-settings.spec.ts
 
-#### X-53 · Dashboard glue: spoken indicator on reminders, memory backup path, Terminate sends shutdown_agent
-**Phase:** P3 · **Size:** S · **Feature:** Proactive reminders and task alerts
+#### X-53 ? Dashboard glue: spoken indicator on reminders, memory backup path, Terminate sends shutdown_agent
+**Phase:** P3 ? **Size:** S ? **Feature:** Proactive reminders and task alerts
 **Source:** VR-39 (voice-runtime)
 **Kyun:** Users must see whether a reminder was spoken and where cleared memory was backed up; Terminate must not send 'stop', which now only interrupts speech.
 **Files:** `stonix_ui/src/features/tasks/TasksPanel.tsx`, `stonix_ui/src/features/memory/MemoryList.tsx`, `stonix_ui/src/features/command-center/components/AssistantCore.tsx`, `stonix_ui/tests/e2e/voice-glue.spec.ts`
 **Depends on:** X-23, X-24, X-48, K-66 (CT-VC-PROACTIVE), K-60 (CT-VC-CONTROL)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. task_notification toast and bell rows: speaker icon when spoken:true, 'screen only' when false.
@@ -4836,8 +4836,8 @@ Done tab jab (acceptance):
 Verify:
 - cd stonix_ui; npm run lint; npm run build; npx playwright test tests/e2e/voice-glue.spec.ts
 
-#### X-54 · Email tool: multi-line UTF-8 body, SMTP timeout, attachment allow-list, approval
-**Phase:** P3 · **Size:** S · **Feature:** Email (send_email)
+#### X-54 ? Email tool: multi-line UTF-8 body, SMTP timeout, attachment allow-list, approval
+**Phase:** P3 ? **Size:** S ? **Feature:** Email (send_email)
 **Source:** TI-10 (tools-info)
 **Kyun:** The sanitizer strips newlines and $&;<> from the body, smtplib has no timeout, a missing attachment is silently skipped and there is no approval before a real send. Review correction: non-ASCII subjects are already RFC2047-encoded, so the subject code stays.
 **Files:** `services/multimedia/jarvis_advanced_tools.py`, `tests/tools/test_send_email.py`
@@ -4862,13 +4862,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/tools/test_send_email.py tests/core/test_advanced_tools.py -q -p no:cacheprovider
 - Manual: self-send to EMAIL_USER and check the inbox.
 
-#### X-55 · download_images + zip_files: contained paths, safe names, concurrent downloads, honoured zip_name
-**Phase:** P3 · **Size:** M · **Feature:** Image search download (download_images)
+#### X-55 ? download_images + zip_files: contained paths, safe names, concurrent downloads, honoured zip_name
+**Phase:** P3 ? **Size:** M ? **Feature:** Image search download (download_images)
 **Source:** TI-12 (tools-info)
 **Kyun:** folder_name allows path traversal, file names can contain characters Windows rejects, downloads run sequentially against a 15 s timeout, zip_name is ignored (line 148) and any absolute path can be zipped.
 **Files:** `services/multimedia/jarvis_advanced_tools.py`, `tests/tools/test_download_zip.py`
 **Depends on:** X-36, X-54, C-24, C-28, K-28 (tool_arg_policies)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Base paths from config.project_root instead of os.getcwd() (lines 37 and 153): Jarvis_Outputs/Downloads and Jarvis_Outputs/Archives (review R42).
@@ -4888,13 +4888,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/tools/test_download_zip.py -q -p no:cacheprovider
 - Get-ChildItem Jarvis_Outputs/Downloads/Downloaded_Images, Jarvis_Outputs/Archives
 
-#### X-56 · Google Maps leads scraper: Chrome channel, background job, resilient selectors
-**Phase:** P3 · **Size:** M · **Feature:** scrape_google_maps_leads
+#### X-56 ? Google Maps leads scraper: Chrome channel, background job, resilient selectors
+**Phase:** P3 ? **Size:** M ? **Feature:** scrape_google_maps_leads
 **Source:** TD-33 (tools-desktop)
 **Kyun:** Playwright's bundled Chromium revision was missing so launch fails; runs block the conversation for up to 300 s; CSS class selectors are brittle.
 **Files:** `services/automation/jarvis_maps_scraper.py`, `tests/tools/test_maps_scraper_tools.py (new)`
 **Depends on:** C-06, C-26, X-11, C-57
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Launch with p.chromium.launch(channel=getattr(config,'playwright_channel','chrome'), headless=headless, slow_mo=50); on error retry without channel (bundled chromium-1200 from TD-01); if both fail return error_code BROWSER_MISSING with the hint './.venv_312/Scripts/python.exe -m playwright install chromium'.
@@ -4912,8 +4912,8 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/tools/test_maps_scraper_tools.py -q -p no:cacheprovider
 - Manual voice run, then Get-ChildItem Jarvis_Outputs/leads
 
-#### X-57 · Deep research (multi-source + LLM report) and research-and-email as an approved background job
-**Phase:** P3 · **Size:** M · **Feature:** Deep web research (perform_web_research)
+#### X-57 ? Deep research (multi-source + LLM report) and research-and-email as an approved background job
+**Phase:** P3 ? **Size:** M ? **Feature:** Deep web research (perform_web_research)
 **Source:** TI-11 (tools-info)
 **Kyun:** Research uses Google CSE only, its result is always replaced by the 5000-char rule and it runs past 15 s; research+email emails raw text plus an LLM '[INSTRUCTION]' line with no approval.
 **Files:** `services/info/jarvis_researcher.py`, `tests/tools/test_researcher.py`
@@ -4939,13 +4939,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/tools/test_researcher.py -q -p no:cacheprovider
 - Manual: run both flows above and check the EMAIL_USER inbox.
 
-#### X-58 · YouTube downloader as a background job (single task, absorbs desktop K16)
-**Phase:** P3 · **Size:** M · **Feature:** YouTube download (download_youtube_media)
+#### X-58 ? YouTube downloader as a background job (single task, absorbs desktop K16)
+**Phase:** P3 ? **Size:** M ? **Feature:** YouTube download (download_youtube_media)
 **Source:** TI-15 (tools-info)
 **Kyun:** Text queries become a results-page playlist, yt-dlp-ejs and ffmpeg are missing, the 15 s timeout kills downloads and 'url' can be unbound (lines 118-122). Review R46/R23: one task owns jarvis_youtube_downloader.py.
 **Files:** `services/multimedia/jarvis_youtube_downloader.py`, `tests/automation/test_youtube_downloader.py`, `tests/tools/test_youtube_job.py`
 **Depends on:** C-47, C-24, C-28, C-55, C-57, K-31 (job_progress_routing)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. Command [sys.executable, '-m', 'yt_dlp', ...] instead of the bare 'yt-dlp' (lines 67, 73), so it works outside the activated venv too (desktop K16 item).
@@ -4967,8 +4967,8 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/automation/test_youtube_downloader.py tests/tools/test_youtube_job.py -q -p no:cacheprovider
 - Get-ChildItem C:/Users/Matloob/Jarvis_Shared/Downloads/YouTube
 
-#### X-62 · PinchTab Chrome tools: auth, autostart, profile/instance lifecycle, text + refs, degraded mode, untrusted page text
-**Phase:** P3 · **Size:** M · **Feature:** automate_chrome_browser
+#### X-62 ? PinchTab Chrome tools: auth, autostart, profile/instance lifecycle, text + refs, degraded mode, untrusted page text
+**Phase:** P3 ? **Size:** M ? **Feature:** automate_chrome_browser
 **Source:** TD-32 (tools-desktop)
 **Kyun:** The client sends no token, re-creates profiles, opens tabs before the instance is running, reads a non-existent snapshot field, maps 'press' wrongly, and page text can carry prompt injection.
 **Files:** `services/automation/jarvis_browser_pinchtab.py`, `tests/tools/test_pinchtab_tools.py (new)`
@@ -4996,16 +4996,16 @@ Verify:
 - ./.venv_312/Scripts/python.exe -m pytest tests/tools/test_pinchtab_tools.py -q -p no:cacheprovider
 - During the manual test: curl.exe -s -H "Authorization: Bearer $env:PINCHTAB_TOKEN" http://127.0.0.1:9867/instances (token loaded from .env into the shell, never pasted)
 
-### P4 · Ops, tests, docs
+### P4 ? Ops, tests, docs
 _Deploy script, monitoring, tests, README._
 
-#### X-09 · Electron shell: canonical VPS URL, offline page, hybrid-safe opt-in backend via agent_ctl, browser-hidden window controls, real Electron test
-**Phase:** P4 · **Size:** L · **Feature:** Electron window controls + desktop build
+#### X-09 ? Electron shell: canonical VPS URL, offline page, hybrid-safe opt-in backend via agent_ctl, browser-hidden window controls, real Electron test
+**Phase:** P4 ? **Size:** L ? **Feature:** Electron window controls + desktop build
 **Source:** UI-36 (dashboard-ui)
 **Kyun:** main.cjs and launcher.js start vortex.py (a local bridge plus a second agent worker) by default (main.cjs:3-4,14-53,138-146; launcher.js:13-18), which conflicts with the hybrid PC worker; window controls are dead buttons in browsers; smoke:electron only checks that files exist. Absorbs infra OPS-C2. Merged duplicate OP-20: Electron loads the canonical URL, local backend spawn becomes opt-in, navigation allow-list, window controls kept
 **Files:** `stonix_ui/electron/main.cjs`, `stonix_ui/electron/preload.cjs`, `stonix_ui/electron/offline.html (new)`, `stonix_ui/launcher.js`, `stonix_ui/src/shared/ui/WindowControls.tsx`, `stonix_ui/scripts/electron-prod-smoke.cjs`, `stonix_ui/tests/electron/electron.spec.ts (new)`, `stonix_ui/package.json`, `stonix_ui/package-lock.json`
 **Depends on:** X-07, X-08, C-09, K-01 (DASH-UI-RUNTIME), K-49 (C-ORIGIN-1)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. main.cjs: loadURL(JARVIS_UI_URL, default https://jarvis.srv1802669.hstgr.cloud); if it is unreachable, load the bundled offline.html ('VPS unreachable - Retry'); load dist/index.html only with JARVIS_ELECTRON_BACKEND=local or JARVIS_UI_OFFLINE=1; keep the literal strings ELECTRON_IS_DEV and ../dist/index.html that the smoke script checks.
@@ -5026,13 +5026,13 @@ Verify:
 - cd stonix_ui && npm run build && npm run smoke:electron && npm run test:electron
 - powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | Select-Object CommandLine"   (after opening Electron in hybrid mode: no new src.core.agent or vortex process)
 
-#### X-51 · Responsive layout for tablet and phone (bottom tabs, chips always visible, camera kept mounted)
-**Phase:** P4 · **Size:** M · **Feature:** Responsive / phone layout
+#### X-51 ? Responsive layout for tablet and phone (bottom tabs, chips always visible, camera kept mounted)
+**Phase:** P4 ? **Size:** M ? **Feature:** Responsive / phone layout
 **Source:** UI-35 (dashboard-ui)
 **Kyun:** The layout is a fixed 300px + minmax(420px) + 410px grid (index.css:121-124) with no single-column mode, so it is unusable on phones.
 **Files:** `stonix_ui/src/assets/styles/index.css`, `stonix_ui/src/features/command-center/Dashboard.tsx`, `stonix_ui/src/features/command-center/components/MobileTabBar.tsx (new)`, `stonix_ui/src/features/command-center/components/TopBar.tsx`, `stonix_ui/tests/e2e/responsive.spec.ts (new)`
 **Depends on:** X-20, X-45, X-15
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. At 1180 px and up keep 3 columns; at 900-1179 px use two columns with the operations rail as a slide-in drawer.
@@ -5047,13 +5047,13 @@ Done tab jab (acceptance):
 Verify:
 - cd stonix_ui && npm run build && npx playwright test tests/e2e/responsive.spec.ts
 
-#### X-59 · Complete mock-bridge e2e suite and verify:prod
-**Phase:** P4 · **Size:** M · **Feature:** Playwright e2e tests
+#### X-59 ? Complete mock-bridge e2e suite and verify:prod
+**Phase:** P4 ? **Size:** M ? **Feature:** Playwright e2e tests
 **Source:** UI-37 (dashboard-ui)
 **Kyun:** Each panel has its own spec; this task closes the gaps, adds shared helpers and makes one command prove the whole UI. Absorbs voice VCR-29.
 **Files:** `stonix_ui/tests/e2e/helpers.ts (new)`, `stonix_ui/tests/e2e/*.spec.ts`, `stonix_ui/playwright.config.ts`, `stonix_ui/package.json`, `stonix_ui/README.md`
 **Depends on:** X-08, X-13, X-14, X-15, X-16, X-19, X-10, X-21, X-22, X-17, X-20, X-49, X-23, X-24, X-33, X-45, X-46, X-47, X-18, X-48, X-51, X-09
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. helpers.ts: login(page) (test-pass + TOTP from scenarios.mjs), emit(event, payload) via /__mock/emit, setAgent(online), lastCommands().
@@ -5069,13 +5069,13 @@ Done tab jab (acceptance):
 Verify:
 - cd stonix_ui && npm run verify:prod
 
-#### X-60 · Opt-in live smoke suite against the VPS (session-cookie storageState, no stored TOTP seed)
-**Phase:** P4 · **Size:** S · **Feature:** Playwright e2e tests
+#### X-60 ? Opt-in live smoke suite against the VPS (session-cookie storageState, no stored TOTP seed)
+**Phase:** P4 ? **Size:** S ? **Feature:** Playwright e2e tests
 **Source:** UI-39 (dashboard-ui)
 **Kyun:** Only a live run proves login, agent online, exactly-once chat and a stable LiveKit identity end to end; storing the TOTP seed would collapse 2FA into one factor.
 **Files:** `stonix_ui/tests/live/live.spec.ts (new)`, `stonix_ui/playwright.live.config.ts (new)`, `stonix_ui/.gitignore`, `stonix_ui/package.json`
 **Depends on:** X-59, C-65
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. playwright.live.config.ts: baseURL from E2E_BASE_URL (default https://jarvis.srv1802669.hstgr.cloud); storageState from E2E_STORAGE_STATE (a file outside the repo that Claude writes in UI-40); httpCredentials from E2E_BASIC_USER/E2E_BASIC_PASS only while the temporary basic auth exists.
@@ -5089,13 +5089,13 @@ Done tab jab (acceptance):
 Verify:
 - cd stonix_ui && npx playwright test -c playwright.live.config.ts --list
 
-#### X-61 · Info/media tools smoke harness (--dry / --live)
-**Phase:** P4 · **Size:** S · **Feature:** Ops, env and docs for info/media tools (env keys, VPS deploy, smoke, TOOLS.md)
+#### X-61 ? Info/media tools smoke harness (--dry / --live)
+**Phase:** P4 ? **Size:** S ? **Feature:** Ops, env and docs for info/media tools (env keys, VPS deploy, smoke, TOOLS.md)
 **Source:** TI-30 (tools-info)
 **Kyun:** One command proves every tool in this area works with the current keys, including the ones delivered by other areas (jarvis_audio) and the already-working date/time tool.
 **Files:** `tests/tools/smoke_info_media_tools.py`, `tests/tools/README.md`
 **Depends on:** C-48, X-36, X-37, X-57, X-40, X-39, X-58, C-78, X-04
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. tests/tools/smoke_info_media_tools.py CLI with --dry (all network mocked, bridge_url set to http://127.0.0.1:9) and --live.
@@ -5113,13 +5113,13 @@ Verify:
 - ./.venv_312/Scripts/python.exe tests/tools/smoke_info_media_tools.py --dry
 - ./.venv_312/Scripts/python.exe tests/tools/smoke_info_media_tools.py --live
 
-#### X-63 · Tool registry/policy tests + legacy test-script cleanup
-**Phase:** P4 · **Size:** S · **Feature:** Desktop tool tests
+#### X-63 ? Tool registry/policy tests + legacy test-script cleanup
+**Phase:** P4 ? **Size:** S ? **Feature:** Desktop tool tests
 **Source:** TD-37 (tools-desktop)
 **Kyun:** A registry test must catch any desktop tool that is dropped, renamed or loses its policy, and the legacy scripts still call a non-existent WindowController.
 **Files:** `tests/tools/test_tool_registry.py (new)`, `tests/scripts/test_all_tools.py`, `tests/scripts/test_all_tools_fixed.py`
 **Depends on:** X-29, X-30, X-26, X-27, X-31, X-25, X-34, X-41, X-42, X-43, X-44, X-62, X-56, X-35, X-28, K-16 (DesktopToolPolicy)
-**User se chahiye:** —
+**User se chahiye:** ?
 
 Steps:
 1. tests/tools/test_tool_registry.py imports every area module via 'services.' paths and asserts that all 50 area tool names (the 48 existing ones including 'close', plus close_window and cancel_shutdown) are in plugin_manager.get_tools().
@@ -5149,7 +5149,7 @@ Verify:
 | Vitals: PC (agent) vs VPS (server) | fake. The only numbers shown are the VPS container's, in an unlabelled card. Fixed by UI-19 with EXT infra OPS-16. | X-17 |
 | Telemetry panel | stub. Never rendered, computed on the wrong host, and /telemetry/production returns 500 (that endpoint is fixed by EXT infra OPS-16). Card in UI-19. | X-17 |
 | Location card + map focus | partial. The 60 s device loop overwrites the map result, and only city/coordinates are shown. Fixed by UI-20 (device cadence) and UI-29 (map view), with the EXT tools-info map focus tool. | C-93, X-46 |
-| Tool logs panel (tool events for every tool) | partial. 2 of 78 tools emit, shown in a tab called 'tasks', and lost on reload. Fixed by UI-15 with EXT tools-desktop C1/C2 (tool_sync for every call). | X-19 |
+| Tool logs panel (tool events for every tool) | UI done (X-19): tools tab, upsert rows, jobs + cancel; agent-side tool_sync for all 78 tools still via EXT C1/C2. | X-19, C-27, C-29 |
 | Memory panel (memory_update) | partial. Memories stream but are lost on reload; clear has no UI. Fixed by UI-21 (events) and UI-24 (tab), with EXT voice VCR-07/VCR-08. | C-94, X-23 |
 | Reasoning / SystemTrace panel | partial. Plan objects would crash the whole page; voice turns emit nothing; hidden below 1180 px. Fixed by UI-21 (voice reasoning) and UI-22 (panel), with EXT voice VCR-05. | C-94, X-20 |
 | Vortex/system logs panel + Alerts (log flooding, 429 risk) | partial. Every INFO record is its own POST (105 in 1.1 s), with no level; Alerts filter by logger name. Fixed by UI-22 (logs) and UI-19 (alerts), with EXT infra OPS-17 (batching; INFO kept). | X-17, X-20 |
@@ -5545,22 +5545,22 @@ Verify:
 
 ---
 
-## 11. Handoff: Claude ↔ Cursor messages
+## 11. Handoff: Claude ? Cursor messages
 
-Format: `- [YYYY-MM-DD HH:MM] from → to: message (task id)`. Jawab isi line ke neeche indent karke. Purani lines mat mitao.
+Format: `- [YYYY-MM-DD HH:MM] from ? to: message (task id)`. Jawab isi line ke neeche indent karke. Purani lines mat mitao.
 
-- [2026-09-30 23:00] claude → cursor: Plan ready. Tumhari lane section 2.1 me hai. P0 ke dauran apne tools tasks shuru kar sakte ho. Room delete fix DONE hone tak live site par voice button mat dabana. (C-01..)
-- [2026-10-01 13:05] claude → cursor: Git ab ready hai (C-04 DONE). Commits: sirf apni files, explicit paths, `[cursor] X-NN: ...`, push nahi. C-05 ke baad hook har commit par `JARVIS_AGENT=cursor` maangega: `JARVIS_AGENT=cursor git commit -m "[cursor] X-NN: ..." -- <paths>`. pytest abhi venv me nahi tha; C-06 install kar raha hai, us ke DONE hone tak pytest mat chalao. (C-05, C-06)
-- [2026-10-01 14:20] claude → cursor: **plan.md encoding:** tumhare pehle plan.md edit (commit 127433c) ne poori file double-encode kar di thi (`·` ki jagah 'A-circumflex + dot'). Claude ne repair kar di. plan.md / done_highlight.md sirf apne editor ke UTF-8 edit tool se badlo, Windows PowerShell 5.1 `Get-Content`/`Set-Content` se nahi (zaroori ho to `-Encoding UTF8`). Hook ab aisi text (MOJIBAKE) wala commit rokta hai. (C-05)
-- [2026-10-01 14:20] claude → cursor: **Log file:** `stonix_ui/done_highlight.md` mat use karo; sirf root wali `done_highlight.md` (aakhir me append). Apni entries root file me daal do aur stonix_ui wali copy hata do (woh tumhari lane me hai).
-- [2026-10-01 14:20] claude → cursor: **pytest ab seedha chalta hai:** `pytest.ini` me `-p no:phoenix` (venv ka toota phoenix plugin) aur `tests/conftest.py` tests ko live VPS bridge aur live log se alag rakhta hai. `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1` se kiye gaye verify (jaise X-05) dobara chalao, us me pytest-asyncio band tha to async tests asal me chale hi nahi. (C-06, C-07)
-- [2026-10-01 14:20] claude → cursor: `tests/core/test_advanced_tools.py::test_download_images_mock` theek kar diya (sahi `jarvis_advanced_tools.DDGS` patch). Asal tool me ab bhi masla hai: `ddgs`/`primp` ka 'Invalid impersonate' error, yani asli DuckDuckGo image search fail hota hai. Tumhare download_images / search task me dekhna. (C-07)
-- [2026-10-01 14:20] claude → all: REQ C-07 (tests/exhaustive lane) band: `.coord/lanes.json` me `tests/exhaustive/**` = Claude. Is folder ko C-61 (side-effect guard) se pehle koi na chalaye; yeh asli mouse/keyboard/Notepad chalata hai.
-- [2026-10-01 14:30] claude → cursor: **Khule tasks:** C-05, C-06, C-07, C-11, C-38 DONE (commits 9f24aa3..5d6b368). X-11 ab shuru karo (C-06 DONE). X-19 aur X-21 ke saare deps bhi DONE hain (X-14, X-15, X-16); board par unka 'BLOCKED' purana hai, unhe bhi shuru karo. Status hamesha deps column ko board ki current halat se mila kar tay karo.
-- [2026-10-01 14:30] claude → cursor: **Claude ka agla order (tumhari request par):** C-24 + C-26 (abhi), phir C-25 + C-27, phir C-28; saath me C-08 → C-09 → C-12. C-24 + C-26 ke baad X-25, X-28, X-34, X-35 khulenge; C-25 + C-27 ke baad X-26, X-36, X-37, X-40; C-28 ke baad X-27, X-38, X-39. X-11 ke baad X-12, X-20, X-22, X-23, X-33 bhi khul jate hain.
-- [2026-10-01 14:30] claude → cursor: **REQ jawab:** (a) `.gitignore` me `!assets/audio/*.wav` add kar diya (baaki recordings ab bhi ignored). (b) REQ-RESTART VR-37 = task C-91 (deps X-02 DONE + C-09); C-09 ke baad Claude chime wire karke `agent_ctl` se restart karega. (c) Asli bridge par cookie login (C-AUTH) = C-17..C-22 ki chain; us se pehle C-08, C-09, C-12, C-13, C-14 zaroori hain.
-- [2026-10-01 14:30] claude → cursor: `stonix_ui/done_highlight.md` me X-08 ki entry hai jo root `done_highlight.md` me nahi. Woh entry root file ke aakhir me append karo, phir `stonix_ui/done_highlight.md` hata do (untracked, tumhari lane).
-- [2026-10-01 14:35] claude → user/cursor: Wave A shuru: C-24, C-26, C-08 DOING (alag files, saath chal rahe). C-37 verify: three.vercel.app 302 theek; sigma host par Vercel deployment hi nahi (404, kuch serve nahi hota) - user chahe to dashboard se redeploy, warna koi khatra nahi.
+- [2026-09-30 23:00] claude ? cursor: Plan ready. Tumhari lane section 2.1 me hai. P0 ke dauran apne tools tasks shuru kar sakte ho. Room delete fix DONE hone tak live site par voice button mat dabana. (C-01..)
+- [2026-10-01 13:05] claude ? cursor: Git ab ready hai (C-04 DONE). Commits: sirf apni files, explicit paths, `[cursor] X-NN: ...`, push nahi. C-05 ke baad hook har commit par `JARVIS_AGENT=cursor` maangega: `JARVIS_AGENT=cursor git commit -m "[cursor] X-NN: ..." -- <paths>`. pytest abhi venv me nahi tha; C-06 install kar raha hai, us ke DONE hone tak pytest mat chalao. (C-05, C-06)
+- [2026-10-01 14:20] claude ? cursor: **plan.md encoding:** tumhare pehle plan.md edit (commit 127433c) ne poori file double-encode kar di thi (`?` ki jagah 'A-circumflex + dot'). Claude ne repair kar di. plan.md / done_highlight.md sirf apne editor ke UTF-8 edit tool se badlo, Windows PowerShell 5.1 `Get-Content`/`Set-Content` se nahi (zaroori ho to `-Encoding UTF8`). Hook ab aisi text (MOJIBAKE) wala commit rokta hai. (C-05)
+- [2026-10-01 14:20] claude ? cursor: **Log file:** `stonix_ui/done_highlight.md` mat use karo; sirf root wali `done_highlight.md` (aakhir me append). Apni entries root file me daal do aur stonix_ui wali copy hata do (woh tumhari lane me hai).
+- [2026-10-01 14:20] claude ? cursor: **pytest ab seedha chalta hai:** `pytest.ini` me `-p no:phoenix` (venv ka toota phoenix plugin) aur `tests/conftest.py` tests ko live VPS bridge aur live log se alag rakhta hai. `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1` se kiye gaye verify (jaise X-05) dobara chalao, us me pytest-asyncio band tha to async tests asal me chale hi nahi. (C-06, C-07)
+- [2026-10-01 14:20] claude ? cursor: `tests/core/test_advanced_tools.py::test_download_images_mock` theek kar diya (sahi `jarvis_advanced_tools.DDGS` patch). Asal tool me ab bhi masla hai: `ddgs`/`primp` ka 'Invalid impersonate' error, yani asli DuckDuckGo image search fail hota hai. Tumhare download_images / search task me dekhna. (C-07)
+- [2026-10-01 14:20] claude ? all: REQ C-07 (tests/exhaustive lane) band: `.coord/lanes.json` me `tests/exhaustive/**` = Claude. Is folder ko C-61 (side-effect guard) se pehle koi na chalaye; yeh asli mouse/keyboard/Notepad chalata hai.
+- [2026-10-01 14:30] claude ? cursor: **Khule tasks:** C-05, C-06, C-07, C-11, C-38 DONE (commits 9f24aa3..5d6b368). X-11 ab shuru karo (C-06 DONE). X-19 aur X-21 ke saare deps bhi DONE hain (X-14, X-15, X-16); board par unka 'BLOCKED' purana hai, unhe bhi shuru karo. Status hamesha deps column ko board ki current halat se mila kar tay karo.
+- [2026-10-01 14:30] claude ? cursor: **Claude ka agla order (tumhari request par):** C-24 + C-26 (abhi), phir C-25 + C-27, phir C-28; saath me C-08 ? C-09 ? C-12. C-24 + C-26 ke baad X-25, X-28, X-34, X-35 khulenge; C-25 + C-27 ke baad X-26, X-36, X-37, X-40; C-28 ke baad X-27, X-38, X-39. X-11 ke baad X-12, X-20, X-22, X-23, X-33 bhi khul jate hain.
+- [2026-10-01 14:30] claude ? cursor: **REQ jawab:** (a) `.gitignore` me `!assets/audio/*.wav` add kar diya (baaki recordings ab bhi ignored). (b) REQ-RESTART VR-37 = task C-91 (deps X-02 DONE + C-09); C-09 ke baad Claude chime wire karke `agent_ctl` se restart karega. (c) Asli bridge par cookie login (C-AUTH) = C-17..C-22 ki chain; us se pehle C-08, C-09, C-12, C-13, C-14 zaroori hain.
+- [2026-10-01 14:30] claude ? cursor: `stonix_ui/done_highlight.md` me X-08 ki entry hai jo root `done_highlight.md` me nahi. Woh entry root file ke aakhir me append karo, phir `stonix_ui/done_highlight.md` hata do (untracked, tumhari lane).
+- [2026-10-01 14:35] claude ? user/cursor: Wave A shuru: C-24, C-26, C-08 DOING (alag files, saath chal rahe). C-37 verify: three.vercel.app 302 theek; sigma host par Vercel deployment hi nahi (404, kuch serve nahi hota) - user chahe to dashboard se redeploy, warna koi khatra nahi.
 
 ---
 
@@ -5646,7 +5646,7 @@ Format: `- [YYYY-MM-DD HH:MM] from → to: message (task id)`. Jawab isi line ke
 Cursor blocked on Claude: C-06 (for X-11+), C-24/C-26/C-27/C-28/C-30 (desktop tool chain). Please prioritize C-06 then decorator/lock/confirm stack.
 
 
-### Handoff � Cursor batch 01 Oct ~13:25 PKT
+### Handoff ? Cursor batch 01 Oct ~13:25 PKT
 REQ-CURSOR: Please prioritize Claude P0 so Cursor unblocks:
 - C-06 (side-effect guard / X-11)
 - C-24 decorator v2, C-26 config keys, C-27 tool core, C-28 confirm broker, C-30 kill switch (desktop tool chain X-26+)
