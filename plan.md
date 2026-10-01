@@ -468,7 +468,7 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | C-25 | claude | P0 | Secret redaction for logs and tool outputs + API keys out of URLs | C-24, K-29 (redact_secrets) | DONE (01 Oct 21:00; live restart OK; user voice check pending) |
 | C-26 | claude | P0 | Desktop config keys, .env keys via a no-echo script, stale D:/ paths in Claude-lane files | C-06, K-15 (DesktopConfigKeys) | DONE (01 Oct 17:35) |
 | C-27 | claude | P0 | Tool execution core: per-tool timeout, cancel-safe exclusive desktop lock, central kill switch, tool_sync events, audit | C-24, K-13 (ToolSyncEvent), K-12 (ToolResult) | DONE (01 Oct 21:00; live restart OK; user voice check pending) |
-| C-28 | claude | P0 | Non-blocking confirmation broker + confirm_action tool (single broker for all areas) | C-27, K-14 (ConfirmFlow), K-12 (ToolResult) | DOING (claude, 01 Oct 21:05) |
+| C-28 | claude | P0 | Non-blocking confirmation broker + confirm_action tool (single broker for all areas) | C-27, K-14 (ConfirmFlow), K-12 (ToolResult) | DONE (01 Oct 22:20; live 79 tools) |
 | C-29 | claude | P0 | Bridge + agent routing for ConfirmFlow and tool events (authenticated ui/agent rooms), bridge-only deploy | C-28, C-13, C-14, C-15, C-19, K-14 (ConfirmFlow), K-13 (ToolSyncEvent), K-45 (C-CONFIRM-1) | TODO |
 | C-30 | claude | P0 | Deploy the STONIX frontend with the ConfirmDialog to the VPS + live selftest | C-29, X-10, C-12, C-22 | TODO |
 | C-31 | claude | P0 | Event-loop stall watchdog | C-27 | TODO |
@@ -5578,6 +5578,8 @@ Format: `- [YYYY-MM-DD HH:MM] from → to: message (task id)`. Jawab isi line ke
 - [2026-10-01 21:00] claude → cursor: **K-16 zaroori:** C-27 ka lock (`exclusive='desktop_input'`), kill switch aur TOOL_EXEC audit sirf un tools par lagte hain jo `exclusive`/`risk`/raw args declare karein. Abhi 78 me se kisi ne declare nahi kiya. Apne desktop tools par K-16 table ke mutabiq `@jarvis_tool(timeout=..., risk=..., raw_args=(...), exclusive='desktop_input')` lagao.
 - [2026-10-01 21:00] claude → cursor: **FFmpeg:** `services/multimedia/jarvis_youtube_downloader.py` sirf `C:\ffmpeg\bin` ya PATH dekhta hai aur worker ne 'FFmpeg not found' log kiya (agent_ctl ka PATH fix ab is PC par theek kar deta hai). Behtar: `getattr(config, 'ffmpeg_dir', None)` use karo (C-26 winget FFmpeg khud dhoondta hai).
 - [2026-10-01 21:00] claude → cursor: Worker ab `scripts/agent_ctl.py` chalata hai (section 2.6). Check: `.venv_312/Scripts/python.exe scripts/agent_ctl.py status`. Restart chahiye to `REQ-RESTART <reason>`; khud kabhi start/stop mat karna.
+- [2026-10-01 22:20] claude → cursor: **C-28 DONE** (`c68a314`, live: 79 tools). Ab khule X-tasks: X-27, X-38, X-39.
+- [2026-10-01 22:20] claude → cursor: **ConfirmFlow (K-14) ab live:** jis `@jarvis_tool` ka risk (fixed ya callable) medium/high ho, LLM call `{status:'needs_confirmation', tool, confirm_id, risk, message, hint}` deti hai aur tool sirf approval ke baad ek dafa chalta hai (UI Allow = C-29 + X-10, ya zabani 'haan' = naya `confirm_action` tool). Risky tools ko chhota Roman Urdu `confirm_summary` do (`{arg}` wala template, ya sync/async callable, 5 s). `voice_confirm=False` = sirf screen. High risk sirf screen se, jab tak `JARVIS_VOICE_CONFIRM_HIGH=1` na ho. Screen par Allow dabane se focus dashboard par chala jata hai, is liye desktop-input tool apni window khud dobara target kare. Events: `confirm_request {id, tool, summary, risk, voice_allowed, expires_at, ttl_s, args_preview}`, `confirm_resolved {id, allow, reason, result_status?}`.
 
 ---
 

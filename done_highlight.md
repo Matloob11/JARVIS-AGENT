@@ -486,3 +486,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `cd stonix_ui && npm run verify:prod` — 94 e2e + 3 electron passed
 - **Commit:** abhi commit ho raha hai · **Deploy:** no
 - **Doosre agent ke liye:** X-60 live suite ab X-59 par unblock (C-65 ab bhi chahiye)
+
+### ✅ 🔁 [claude] C-28 · Risky tools ab poochh kar chalte hain (confirmation broker) · 2026-10-01 21:05–22:20 PKT
+- **Kya kiya:** Naya `services/ai_core/jarvis_confirm.py`: jis tool ka risk medium/high ho woh foran nahi chalta. Pehle "Sir, confirm karein ..." poochta hai, aur Allow (screen, C-29 ke baad) ya zabani "haan" (naya `confirm_action` tool) ke baad sirf ek dafa chalta hai. Inkaar ya 60 s guzar jayein to kabhi nahi chalta, aur wahi call dobara aaye to naya sawal nahi banta. High risk sirf screen se approve hota hai. Tools 78 se 79 hue; purane 78 tools ke schema bilkul wahi hain.
+- **Files:** `services/ai_core/jarvis_confirm.py`, `services/ai_core/confirmation.py`, `services/ai_core/jarvis_plugin_manager.py`, `tests/unit/test_confirm_broker.py`, `tests/unit/test_tool_exec_core.py`
+- **Verify:** 42 tests passed · full suite 608 passed, 0 failed · pylint 10/10 · review approve (4 minor theek) · live `agent_ctl restart` 22:17: "Plugin discovery complete. Total tools: 79", agent room me, koi warning/error nahi
+- **Commit:** `c68a314` · **Deploy:** PC agent restart 22:17 PKT
+- **Doosre agent ke liye:** Abhi sirf `press_hotkey_tool` (browser close combo) medium hai; woh zabani "haan" se chalega. Screen ka Allow button C-29 (bridge routing) ke baad. Transcript wali "haan" verification ka hook tayyar hai, wiring C-75 me.
