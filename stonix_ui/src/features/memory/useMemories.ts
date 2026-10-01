@@ -72,6 +72,8 @@ function mergeSeed(prev: MemoryItem[], seeded: MemoryItem[]): MemoryItem[] {
 function backupPathFromCleared(payload: Record<string, unknown>): string | null {
   const backup = payload.backup;
   if (typeof backup === 'string' && backup.trim()) return backup.trim();
+  const backupPath = payload.backup_path;
+  if (typeof backupPath === 'string' && backupPath.trim()) return backupPath.trim();
   return null;
 }
 
@@ -89,10 +91,16 @@ export function useMemories(emitCommand: (type: string, payload?: unknown) => vo
   const applyCleared = useCallback((raw: unknown) => {
     setRows([]);
     if (!raw || typeof raw !== 'object') return;
-    const path = backupPathFromCleared(raw as Record<string, unknown>);
-    if (path) {
-      toast(`Backup: ${path}`, { icon: '💾' });
-    }
+    const data = raw as Record<string, unknown>;
+    const scopeRaw = data.scope;
+    const scope =
+      typeof scopeRaw === 'string' && scopeRaw.trim()
+        ? scopeRaw.trim().replace(/_/g, ' ')
+        : 'memory';
+    const path = backupPathFromCleared(data);
+    const parts = [`${scope} cleared`];
+    if (path) parts.push(`Backup: ${path}`);
+    toast(parts.join(' · '), { icon: '💾', duration: 12_000 });
   }, []);
 
   const seedFromInit = useCallback((state: Record<string, unknown>) => {

@@ -1,5 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bell, Loader2, LogOut, PanelLeft, Radar, Settings, ShieldCheck, Volume2, Wifi, Zap } from 'lucide-react';
+import {
+  Bell,
+  Loader2,
+  LogOut,
+  PanelLeft,
+  Radar,
+  Settings,
+  ShieldCheck,
+  Volume2,
+  VolumeX,
+  Wifi,
+  Zap,
+} from 'lucide-react';
 import type { TaskNotification } from '@/features/tasks/useTasks';
 import WindowControls from '@/shared/ui/WindowControls';
 import { StatusDot } from '@/shared/ui/Panel';
@@ -225,7 +237,18 @@ const TopBar = ({
                       <p className="task-bell-row__text">{note.description}</p>
                       <p className="task-bell-row__meta">
                         {note.due_at ? `Due ${formatNotifTime(note.due_at)}` : formatNotifTime(note.ts)}
-                        {note.spoken === true ? ' · 🔊' : note.spoken === false ? ' · screen only' : ''}
+                        {note.spoken === true ? (
+                          <span className="task-bell-row__spoken" data-testid="task-notif-spoken">
+                            <Volume2 size={12} aria-hidden />
+                            spoken
+                          </span>
+                        ) : null}
+                        {note.spoken === false ? (
+                          <span className="task-bell-row__spoken" data-testid="task-notif-screen-only">
+                            <VolumeX size={12} aria-hidden />
+                            screen only
+                          </span>
+                        ) : null}
                       </p>
                     </li>
                   ))}
