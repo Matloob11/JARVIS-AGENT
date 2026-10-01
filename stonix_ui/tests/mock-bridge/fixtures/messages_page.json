@@ -1,0 +1,22 @@
+{
+  "messages": [
+    {
+      "id": "msg-page-1",
+      "role": "user",
+      "text": "Older user message",
+      "source": "text",
+      "final": true,
+      "ts": 1727699000
+    },
+    {
+      "id": "msg-page-2",
+      "role": "assistant",
+      "text": "Older assistant reply",
+      "source": "text",
+      "final": true,
+      "ts": 1727699050
+    }
+  ],
+  "next_cursor": null,
+  "has_more": false
+}

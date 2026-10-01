@@ -1,0 +1,91 @@
+{
+  "messages": [
+    {
+      "id": "msg-welcome-001",
+      "role": "assistant",
+      "text": "Mock bridge ready. STONIX dashboard online.",
+      "source": "system",
+      "final": true,
+      "ts": 1727700000,
+      "timestamp": 1727700000,
+      "is_final": true
+    }
+  ],
+  "logs": [
+    {
+      "text": "Mock bridge started",
+      "category": "system",
+      "level": "info",
+      "ts": 1727700000
+    }
+  ],
+  "memories": [],
+  "tool_logs": [],
+  "tasks": [],
+  "settings": {
+    "persona": "jarvis",
+    "language": "ur",
+    "voice": "Aoede",
+    "wake_word_active": true,
+    "muted": false
+  },
+  "persona": "jarvis",
+  "muted": false,
+  "wake_word_active": true,
+  "voice_match": { "enrolled": false, "confidence": 0 },
+  "agent_status": {
+    "online": true,
+    "voice_ready": true,
+    "in_room": true,
+    "paused": false,
+    "since": 1727700000,
+    "last_heartbeat": 1727700060
+  },
+  "vitals_pc": {
+    "cpu": 12.5,
+    "ram": 48.2,
+    "disk": 61.0,
+    "disk_label": "C:",
+    "host": "mock-pc",
+    "ts": 1727700060
+  },
+  "vitals_vps": {
+    "cpu": 4.1,
+    "ram": 22.0,
+    "disk": 35.5,
+    "host": "mock-vps",
+    "ts": 1727700060
+  },
+  "telemetry": {
+    "success_rate": 0.98,
+    "avg_latency": 420,
+    "confusion_rate": 0.02,
+    "total_samples": 1200,
+    "status": "ok",
+    "source": "mock"
+  },
+  "location": {
+    "city": "Karachi",
+    "lat": 24.8607,
+    "lng": 67.0011,
+    "kind": "device",
+    "source": "mock",
+    "ts": 1727700000
+  },
+  "sim_records": [],
+  "sim_loading": false,
+  "sim_status": "idle",
+  "sim_message": "",
+  "sim_panel_open": false,
+  "confirmations": [],
+  "module_health": {
+    "voice": { "ok": true, "detail": "mock" },
+    "gemini": { "ok": true, "detail": "mock" },
+    "vision": { "ok": true, "detail": "mock", "model": "mock", "camera_source": "none" },
+    "memory": { "ok": true, "detail": "mock" },
+    "tools": { "ok": true, "count": 12, "failures_1h": 0 },
+    "voice_id": { "ok": true, "state": "idle", "enrolled": false },
+    "ts": 1727700060
+  },
+  "server_time": 1727700100
+}

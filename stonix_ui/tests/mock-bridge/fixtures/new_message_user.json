@@ -1,0 +1,10 @@
+{
+  "id": "msg-user-echo",
+  "role": "user",
+  "text": "",
+  "source": "text",
+  "final": true,
+  "ts": 1727700110,
+  "timestamp": 1727700110,
+  "is_final": true
+}

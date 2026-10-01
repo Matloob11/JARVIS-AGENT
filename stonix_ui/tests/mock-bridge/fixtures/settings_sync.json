@@ -1,0 +1,17 @@
+{
+  "settings": {
+    "persona": "jarvis",
+    "language": "ur",
+    "voice": "Aoede",
+    "wake_word_active": true,
+    "muted": false,
+    "automation": {
+      "desktop_control": false,
+      "clipboard_helper": true,
+      "clipboard_speak": false,
+      "voice_confirm_high": true
+    },
+    "vision_mode": "live"
+  },
+  "applied": true
+}

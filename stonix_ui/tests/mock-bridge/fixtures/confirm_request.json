@@ -1,0 +1,10 @@
+{
+  "id": "confirm-mock-001",
+  "tool": "run_shell",
+  "summary": "Run mock command?",
+  "risk": "high",
+  "args_preview": "echo hello",
+  "voice_allowed": true,
+  "expires_at": 1727704000,
+  "ttl_ms": 120000
+}

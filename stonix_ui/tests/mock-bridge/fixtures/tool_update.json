@@ -1,0 +1,12 @@
+{
+  "id": "tool-run-001",
+  "tool": "web_search",
+  "status": "done",
+  "phase": "end",
+  "details": "Mock search completed",
+  "result_summary": "3 results",
+  "duration_ms": 890,
+  "risk": "low",
+  "ts": 1727700400,
+  "timestamp": 1727700400
+}

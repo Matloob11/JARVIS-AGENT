@@ -77,3 +77,11 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Commit:** pending · **Deploy:** no
 - **Doosre agent ke liye:** Bridge cookie auth (C-AUTH) still needed for live login; X-07 mock bridge next for e2e without VPS.
 
+
+### ✅ [cursor] X-07 · Mock bridge for local/e2e · 2026-10-01 12:42 PKT
+- **Kya kiya:** Node mock bridge :5199 (auth+TOTP, socket cookie, scripted ui_commands, __mock controls), fixtures for events/commands, playwright dual webServer, npm scripts mock:bridge / dev:mock.
+- **Files:** stonix_ui/tests/mock-bridge/*, playwright.config.ts, package.json, package-lock.json
+- **Verify:** /vortex/health ok; npm run test:e2e 7/7 pass
+- **Commit:** pending · **Deploy:** no
+- **Doosre agent ke liye:** UI-38 can replay fixtures; X-08 uses test-pass + TOTP secret JBSWY3DPEHPK3PXP / recovery TEST-0000-0000
+

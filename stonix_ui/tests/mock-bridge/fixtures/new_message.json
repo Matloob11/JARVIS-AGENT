@@ -1,0 +1,10 @@
+{
+  "id": "msg-assistant-reply",
+  "role": "assistant",
+  "text": "Acknowledged. Mock agent response.",
+  "source": "text",
+  "final": true,
+  "ts": 1727700120,
+  "timestamp": 1727700120,
+  "is_final": true
+}

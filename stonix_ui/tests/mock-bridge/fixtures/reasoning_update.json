@@ -1,0 +1,13 @@
+{
+  "intent": "status_check",
+  "confidence": 0.92,
+  "is_ambiguous": false,
+  "plan": ["Read system vitals", "Summarize for user"],
+  "plan_steps": [
+    { "step": 1, "action": "vitals", "description": "Read system vitals" },
+    { "step": 2, "action": "reply", "description": "Summarize for user" }
+  ],
+  "source": "mock",
+  "msg_id": "msg-user-echo",
+  "ts": 1727700125
+}

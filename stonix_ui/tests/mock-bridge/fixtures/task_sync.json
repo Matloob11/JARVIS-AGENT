@@ -1,0 +1,12 @@
+{
+  "tasks": [
+    {
+      "id": "task-mock-1",
+      "description": "Mock reminder",
+      "due_at": 1727703600,
+      "source": "reminder",
+      "status": "pending"
+    }
+  ],
+  "pending": []
+}

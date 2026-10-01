@@ -1,0 +1,9 @@
+{
+  "voice": { "ok": true, "detail": "mock" },
+  "gemini": { "ok": true, "detail": "mock" },
+  "vision": { "ok": true, "detail": "mock", "model": "mock", "camera_source": "none" },
+  "memory": { "ok": true, "detail": "mock" },
+  "tools": { "ok": true, "count": 12, "failures_1h": 0 },
+  "voice_id": { "ok": true, "state": "idle", "enrolled": false },
+  "ts": 1727700600
+}
