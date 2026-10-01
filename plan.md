@@ -564,7 +564,7 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | X-22 | cursor | P3 | Settings drawer (advanced): turn mode, follow-up window, transcript script, automation toggles, vision mode, guarded-tools list | X-10, X-21, K-05 (DASH-CAMERA-VISION), K-03 (DASH-UI-COMMANDS), K-24 (AutomationSettings) | DONE (cursor, 01 Oct 2026 16:55 PKT) |
 | X-23 | cursor | P3 | Memory (Notes) tab: restore, stream, search, confirmed clear | X-19, X-10, K-07 (DASH-MEMORY-EVENTS) | DONE (01 Oct 16:35 PKT) |
 | X-24 | cursor | P3 | Tasks & Reminders tab with countdown and Cancel, due-item toasts and a notification bell | X-23, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS) | DONE (01 Oct 17:05) |
-| X-28 | cursor | P3 | System info: battery + CPU/RAM/disk ToolResult and collect_pc_vitals() | C-24, X-11, K-26 (VitalsPCHelper) | DOING (cursor, 01 Oct 17:35) |
+| X-28 | cursor | P3 | System info: battery + CPU/RAM/disk ToolResult and collect_pc_vitals() | C-24, X-11, K-26 (VitalsPCHelper) | DONE (cursor, 01 Oct 17:40) |
 | X-32 | cursor | P3 | TaskStore v2: schema columns, parse_when, schedule_task with args + confirm, cancel tool | C-24, C-28, C-30, K-66 (CT-VC-PROACTIVE), K-33 (task_store_v2), K-32 (scheduled_action_runner) | BLOCKED (waiting C-24,C-28,C-30) |
 | X-33 | cursor | P3 | Voice-ID meter with real states and the voice enrollment wizard | X-21, X-13, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS) | DONE (01 Oct 16:45 PKT) |
 | X-34 | cursor | P3 | YouTube play: real watch URL via yt-dlp search, browser paths from config | C-24, C-26, X-11, K-22 (YouTubeVideoUrl) | DOING (cursor, 01 Oct 17:35) |
