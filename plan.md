@@ -582,7 +582,7 @@ Names only in .env.example; values never logged. JARVIS_USER_ID (matloob), JARVI
 | X-46 | cursor | P3 | Location card + Map panel: device location and map focus kept separate, OpenStreetMap view | X-17, K-08 (DASH-LOCATION) | DONE (01 Oct 13:35) |
 | X-47 | cursor | P3 | SIM dialog: provider-not-configured state, purpose field, masked results, 20 s timeout | X-15, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS), K-34 (sim_authorized_source) | DONE (01 Oct 13:50) |
 | X-48 | cursor | P3 | Controls: Terminate (guarded session restart), Swarm entry points, answer feedback thumbs | X-24, X-10, K-03 (DASH-UI-COMMANDS) | BLOCKED (waiting X-24,X-10; X-10 done but X-24 still blocked) |
-| X-49 | cursor | P3 | FlowMap from real state (Voice, Vision, Memory, Tools, Core); 'unknown' instead of a fake 'ready' | X-20, X-19, X-13, K-06 (DASH-MODULE-HEALTH) | DOING (cursor, 01 Oct 15:25) |
+| X-49 | cursor | P3 | FlowMap from real state (Voice, Vision, Memory, Tools, Core); 'unknown' instead of a fake 'ready' | X-20, X-19, X-13, K-06 (DASH-MODULE-HEALTH) | DONE (01 Oct 17:05) |
 | X-50 | cursor | P3 | Real audio visualizer and 'You are speaking' indicator | X-13, X-33 | DONE (01 Oct 17:00) |
 | X-52 | cursor | P3 | Dashboard 'Voice & Conversation' settings and enrollment extras (delta on the dashboard drawer and dialog) | X-22, X-33, K-61 (CT-VC-SETTINGS), K-63 (CT-VC-VOICE-ENROLL) | DOING (cursor, 01 Oct 15:25) |
 | X-53 | cursor | P3 | Dashboard glue: spoken indicator on reminders, memory backup path, Terminate sends shutdown_agent | X-23, X-24, X-48, K-66 (CT-VC-PROACTIVE), K-60 (CT-VC-CONTROL) | BLOCKED (waiting X-23,X-24,X-48) |
