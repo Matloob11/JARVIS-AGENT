@@ -857,7 +857,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | C-11 | claude | P0 | Reusable backup/restore tooling (PC + VPS), restore drill, PC mirror of the emergency VPS snapshot | C-01, C-04, K-54 (COORD-4) | DONE (01 Oct 14:20) |
 | C-12 | claude | P0 | Deploy tooling: deploy_from_pc.sh (committed HEAD only), deploy.sh v2 (lock, backup, nginx -t, health gate, other-apps smoke), rollback.sh, smoke_other_apps.sh + first full sync deploy | C-04, C-09, C-11, K-54 (COORD-4) | DONE (02 Oct 03:00; first sync deploy OK) |
 | C-13 | claude | P0 | Bridge SQLite store on a volume + message normalization + init_state/history from the DB | C-12, K-41 (C-MSG-1), K-42 (C-STATE-1) | DONE (claude, 02 Oct 13:58) |
-| C-14 | claude | P0 | Agent link v2, bridge side: AGENT_TOKEN + HMAC v2 notify with replay protection, Socket.IO roles/rooms with a legacy transition, env-only origins, secrets tooling | C-13, C-09, K-38 (C-SOCK-1), K-39 (C-NOTIFY-1), K-40 (C-EVT-1), K-47 (C-ENV-1) | DOING (claude, 02 Oct 14:10) |
+| C-14 | claude | P0 | Agent link v2, bridge side: AGENT_TOKEN + HMAC v2 notify with replay protection, Socket.IO roles/rooms with a legacy transition, env-only origins, secrets tooling | C-13, C-09, K-38 (C-SOCK-1), K-39 (C-NOTIFY-1), K-40 (C-EVT-1), K-47 (C-ENV-1) | DONE (claude, 02 Oct 16:25) |
 | C-15 | claude | P0 | Agent link v2, agent side: signed raw-body notify with retry queue, AGENT_TOKEN socket with reconnect-forever loop, chat id echo | C-14, C-09, K-39 (C-NOTIFY-1), K-38 (C-SOCK-1), K-41 (C-MSG-1) | TODO |
 | C-16 | claude | P0 | Network lockdown: nginx /agent + /twirp, PC agent on wss/https via the domain, 5101/7880 bound to 127.0.0.1, compose memory/log limits | C-12, C-09, C-15, K-48 (C-NET-1) | TODO |
 | C-17 | claude | P0 | Rotate the LiveKit API key/secret (they sat in world-readable files); values live only in env files | C-16, C-14 | TODO |
@@ -899,7 +899,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | C-42 | claude | P1 | ConversationRouter: typed chat (Socket.IO + lk.chat) goes into the Gemini session exactly once | C-34, C-41, K-59 (CT-VC-CHAT-INPUT), K-58 (CT-VC-MESSAGE) | TODO |
 | C-43 | claude | P1 | Router extras: reasoning_update for every typed and voice turn, '/swarm' through the swarm command | C-42, K-67 (CT-VC-REASONING) | TODO |
 | C-44 | claude | P1 | Bridge: voice event passthroughs, field-merging message upsert, voice command allow-list | C-12, C-13, C-14, C-19, K-58 (CT-VC-MESSAGE), K-62 (CT-VC-TURN-GATE), K-60 (CT-VC-CONTROL), K-63 (CT-VC-VOICE-ENROLL) | TODO |
-| C-45 | claude | P1 | llm_text helper: Gemini 3.x -> Groq -> OpenRouter with header auth | C-25, K-30 (llm_text) | DOING (claude, 02 Oct 14:10) |
+| C-45 | claude | P1 | llm_text helper: Gemini 3.x -> Groq -> OpenRouter with header auth | C-25, K-30 (llm_text) | DONE (claude, 02 Oct 16:25) |
 | C-46 | claude | P1 | Tools-info env keys via one append-only script | C-26, K-35 (tools_info_env) | TODO |
 | C-48 | claude | P1 | Vision tools on current models + fallbacks + fresh frames only | C-45, K-30 (llm_text) | TODO |
 | C-49 | claude | P1 | Instructions reach Gemini; compose_instructions per persona and turn mode (no rule deleted) | C-43 | TODO |
@@ -1015,7 +1015,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | C-115 | claude | P0 | Desktop Link protocol library (Ed25519, X25519/AEAD, replay, clock, resend) + key tooling | C-111 | DOING (claude, 02 Oct 02:55) |
 | C-116 | claude | P0 | Bridge: internal listener :5002, '/desktop' relay, presence and desktop_status, persisted link switch, minimal public health | C-13, C-115 | TODO |
 | C-117 | claude | P0 | Media relay (single media path) + node file, blob and backup endpoints + nginx locations | C-116 | TODO |
-| C-118 | claude | P0 | Placement table, manifest exporter and placement-aware VPS discovery | C-112, C-111 | DOING (claude, 02 Oct 14:10) |
+| C-118 | claude | P0 | Placement table, manifest exporter and placement-aware VPS discovery | C-112, C-111 | DONE (claude, 02 Oct 16:25) |
 | C-119 | claude | P0 | Agent DesktopLink client and laptop-tool proxies (honest outcomes, repeat guard, ordering, stop, fallback) | C-115, C-118, C-32, C-28 | TODO |
 | C-120 | claude | P0 | Desktop Node runtime: supervisor, link, tool executor, WAL, dead-man switch, health, power events | C-115, C-111, C-31 | TODO |
 | C-121 | claude | P0 | Node policy: modes, Windows-lock pause and presence, class floors, launch surfaces, path policy, ConfirmFlow approval check, stops | C-120 | TODO |
@@ -1033,7 +1033,8 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | C-133 | claude | P4 | (optional, deferred by user decision D3) Owner approval key: phone and UI approvals the laptop can verify (V9) | C-131, C-22, C-29, C-30, C-73 | NOT NEEDED (deferred by user decision D3; reopen only if local approvals return) |
 | C-134 | claude | P4 | Monitoring, alerts, incident runbook and VPS-brain documentation | C-131 | TODO |
 | C-135 | claude | P3 | UI spec v2: exact 'Neon Command Center' design from the user's reference image (replica mockup, ANNA variant, all pages and states, phone), tasks X-69..X-102 updated | — | DOING (claude, 02 Oct 13:00) |
-| C-136 | claude | P1 | PC worker: visible LiveKit link state and recovery after laptop sleep or network loss | C-09, C-112 | DOING (claude, 02 Oct 14:10) |
+| C-136 | claude | P1 | PC worker: visible LiveKit link state and recovery after laptop sleep or network loss | C-09, C-112 | DONE (claude, 02 Oct 16:25) |
+| C-137 | claude | P1 | Hotfixes from the 2 Oct live logs: vector memory init off the event loop (45 s stall at session start), ensure_room output without TURN credentials, loopwatch timing test under load | C-31 | TODO |
 | C-97 | claude | P4 | Voice and conversation regression suite + runbook | C-56, C-74, C-76, C-77, C-87, C-89, C-90, C-91, C-09 | TODO |
 | C-98 | claude | P4 | Internal-tool regression checks after the voice/dashboard fixes (change_voice, wake word, persona, identity, analyze_surroundings) | C-48, C-50, C-54, C-69, C-87 | TODO |
 | C-99 | claude | P4 | Live desktop-tools smoke run on the PC with Sir | C-31, C-75, C-55, C-84, C-85, X-63, C-96 | TODO |
@@ -1085,7 +1086,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 
 ---
 
-## 6. Claude tasks (135)
+## 6. Claude tasks (136)
 
 ### P0 · Security aur buniyad
 _Darwaza band, git, backup, keys, room delete ka bug. Claude pehle; Cursor isi dauran apne tools lane me kaam karta hai._
@@ -1509,6 +1510,7 @@ Verify:
 **Files:** `services/utils/jarvis_bridge.py`, `services/ai_core/agent_loops.py`, `tests/core/test_agent_loops.py`, `tests/unit/test_notify_signing.py`
 **Depends on:** C-14, C-09, K-39 (C-NOTIFY-1), K-38 (C-SOCK-1), K-41 (C-MSG-1)
 **User se chahiye:** —
+**As built (2 Oct):** C-14 is live (4f013b8): the bridge accepts HMAC v2 on /notify and auth.agent_token sockets (room 'agent'), and the PC .env files and the VPS bridge.env hold the same AGENT_TOKEN and BRIDGE_HMAC_SECRET (gen_secrets.py fingerprints match). LEGACY_TOKEN_AUTH=1 stays on until C-22.
 **VPS brain (2 Oct):** Before cutover (V3b; C-21 and C-29 need it). The listener slice (reconnect forever, socketio_path derivation) moves into C-112. The signed retry queue and the chat id echo stay here. On the VPS the agent's UI_BRIDGE_URL is http://jarvis-bridge:5002.
 
 Steps:
@@ -1599,6 +1601,7 @@ Verify:
 **Files:** `/opt/jarvis-agent/deploy/hostinger/.env (VPS)`, `/opt/jarvis-agent/deploy/hostinger/bridge.env (VPS)`, `deploy/hostinger/docker-compose.yml`, `deploy/hostinger/.env.example`, `deploy/hostinger/RUNBOOK.md`
 **Depends on:** C-14, C-17, K-47 (C-ENV-1)
 **User se chahiye:** In Google AI Studio/Cloud Console restrict the Gemini key (optionally regenerate it), create a new Gmail App Password, and paste the new values into C:/Users/Matloob/Desktop/JARVIS-AGENT-main/.env yourself.
+**As built (2 Oct):** C-14 created /opt/jarvis-agent/deploy/hostinger/bridge.env (600) with the bridge's 8 keys; compose reads .env and then bridge.env (required: false). This task removes the duplicates from .env.
 **VPS brain (2 Oct):** Before cutover (V3b; C-22 needs it) and after C-127, which it now also depends on: the bridge.env split is done by C-127 in two deploys (V2a code, V2b env). What remains: the user restricts the Gemini key and makes a new Gmail App Password (Groq, OpenRouter, Tavily and HF optional); Claude updates the PC root .env and .env.agent (and the DPAPI fallback file once it exists) without printing values.
 
 Steps:
@@ -2403,6 +2406,7 @@ Verify:
 **Files:** `scripts/ops/env_defaults.py`, `tests/unit/test_env_defaults.py`, `.env`, `deploy/windows-local/.env`, `.env.example`, `.env.production.example`
 **Depends on:** C-26, K-35 (tools_info_env)
 **User se chahiye:** —
+**As built (2 Oct):** C-45: the K-30/K-35 default Groq vision model returns 404 on this account; v5 contracts settle the default and this task writes JARVIS_GROQ_VISION_MODEL into the env files.
 
 Steps:
 1. Create scripts/ops/env_defaults.py: --file PATH (repeatable) --add KEY=VALUE ...; append only keys that have no 'KEY=' line yet; never rewrite existing lines; print key names only ('added X' / 'kept X'), never values.
@@ -3999,6 +4003,7 @@ Verify:
 **Files:** `.github/workflows/production.yml`, `.github/dependabot.yml`, `.gitleaks.toml`, `pytest.ini`
 **Depends on:** C-04, C-14, C-105
 **User se chahiye:** —
+**As built (2 Oct):** C-118: CI should run the manifest test with JARVIS_MANIFEST_STRICT=1 once docstring-parser is pinned in requirements.txt (the LiveKit tool schemas, and so the manifest, depend on its version).
 **VPS brain (2 Oct):** Add a Linux CI job (Linux import test, pytest core/unit, Dockerfile.agent build, strict manifest check). The Windows job keeps the node and the tools.
 
 Steps:
@@ -4562,6 +4567,7 @@ Verify:
 **Files:** `deploy/hostinger/Dockerfile.agent`, `deploy/hostinger/requirements-agent.txt`, `deploy/hostinger/constraints-agent.txt`, `deploy/hostinger/agent-bin/yt-dlp`, `deploy/hostinger/agent-bin/ffmpeg`, `deploy/hostinger/agent-bin/ffprobe`, `deploy/hostinger/docker-compose.yml`, `deploy/hostinger/.env.agent.example`, `scripts/models/check_models.py`, `.dockerignore`, `.gitignore`, `scripts/coord/precommit.py`, `tests/infrastructure/test_agent_requirements.py`
 **Depends on:** C-112, C-118
 **User se chahiye:** OK for the one-time build window (~10-15 min); the dedicated builder was approved on 2026-10-02 (D19).
+**As built (2 Oct):** C-118: pin docstring-parser in the agent image's requirements to the PC version so the remote manifest check matches; expect 'Remote discovery: 31 tools run here, 48 laptop proxies' in the agent log.
 
 Steps:
 1. Dockerfile.agent per K-75: - base image pinned by digest; - apt: ffmpeg, nodejs, curl, ca-certificates, tzdata; - torch/torchaudio/torchvision +cpu; - requirements + constraints; - agent-bin wrappers (nice/ionice only when JARVIS_MEDIA_PRIORITY=low); - bake the fixed ECAPA download and MiniLM, readable by uid 10001; - COPY src, services, scripts; chown the data dirs; - USER 10001; HEALTHCHECK; CMD start --drain-timeout 20.
@@ -4619,6 +4625,7 @@ Verify:
 **Files:** `deploy/hostinger/backup_vps.sh`, `deploy/hostinger/deploy.sh`, `deploy/hostinger/deploy_from_pc.sh`, `deploy/hostinger/rollback.sh`, `deploy/hostinger/RUNBOOK.md`, `scripts/ops/restore_agent_data.py`
 **Depends on:** C-12, C-126, C-127
 **User se chahiye:** —
+**As built (2 Oct):** C-118: run 'scripts/desktop/export_manifest.py --check' in the deploy preflight (strict) so a stale manifest never ships.
 
 Steps:
 1. backup_vps.sh v2: - env copies go into a separate sub-folder; - agent data (SQLite online copies plus a tar of conversations, chroma and data) is encrypted to the PC backup key as agent-volumes.tar.enc; - jarvis-agent tags are added to the tag and untag loops; - MANIFEST records the brain and the env layout; - Jarvis_Shared/Downloads is excluded unless --with-media.
@@ -4670,6 +4677,7 @@ Verify:
 **Files:** `scripts/smoke/vps_agent_canary.py`, `scripts/smoke/failure_drills.py`, `scripts/smoke/media_probe.py`, `tests/infrastructure/test_no_room_delete.py`
 **Depends on:** C-23, C-39, C-114, C-117, C-119, C-121, C-122, C-123, C-124, C-125, C-126, C-127, C-128, C-129
 **User se chahiye:** Check Gmail for a security alert after the test mail. Be reachable if a LiveKit window is needed. For the stop drills (about 5 min): press Ctrl+Alt+Shift+F12 once and click the tray Full three times when Claude asks.
+**As built (2 Oct):** C-136 drills: restart LiveKit (link goes retrying, then connected with a new worker id) and stop it for 3 min, then start it (status shows failed, then the worker is replaced through agent_ctl --by worker). Both interrupt voice: run them when the user is not talking to JARVIS.
 
 Steps:
 1. Canary rooms jarvis-canary-<epoch> (K-57 v4), explicitly dispatched to 'jarvis', with the node in --canary mode. Only the canary script creates or deletes them; test_no_room_delete allows only that pattern.
@@ -4809,6 +4817,28 @@ Done tab jab (acceptance):
 Verify:
 - $PY -m pytest tests/unit/test_agent_link_state.py -q -p no:cacheprovider
 - $PY scripts/agent_ctl.py status
+
+#### C-137 · Hotfixes from the 2 Oct live logs: vector memory init off the event loop, ensure_room output, loopwatch test
+**Phase:** P1 · **Size:** S · **Feature:** runtime reliability (PC brain)
+**Source:** C-31 watchdog, 2 Oct 14:39: EVENT_LOOP_STALL ms=45135 at session start, stack importlib_metadata packages_distributions <- utils/import_utils.py <- services/ai_core/jarvis_vector_memory.py:87 _ensure_initialized (JARVIS frozen for 45 s, the UI bridge dropped). agent_ctl restart printed ensure_room.py's whole Room object including turn_password. tests/unit/test_loopwatch.py::test_watcher_reports_a_loop_still_blocked_at_critical_ms failed once under heavy parallel load.
+**Kyun:** The first memory use in a session must never freeze the voice loop; TURN credentials must not reach consoles or logs; the suite must not flake.
+**Files:** `services/ai_core/jarvis_vector_memory.py`, `src/core/agent_runner.py`, `deploy/windows-local/ensure_room.py`, `tests/unit/test_loopwatch.py`, `tests/unit/test_vector_memory_offloop.py`
+**Depends on:** C-31
+**User se chahiye:** —
+
+Steps:
+1. Vector memory: the heavy imports and client creation run in a worker thread (asyncio.to_thread or a prewarm thread started at job start); callers on the event loop await a ready future or get a graceful "memory warming up" result, never a blocking import. Keep C-53's later design possible (prewarm per process).
+2. ensure_room.py prints only the room name, sid, empty/departure timeouts and whether the agent dispatch exists; never turn_password or any credential (redact the protobuf).
+3. test_loopwatch: make the critical-ms test robust under CPU load (deterministic clock or wider margins) without weakening what it checks.
+
+Done tab jab (acceptance):
+- A fresh worker's first session start shows no EVENT_LOOP_STALL above 1 s from jarvis_vector_memory; memory recall still works.
+- agent_ctl restart output and logs contain no turn_password.
+- The loopwatch test passes 20 runs in a row while the full suite runs in parallel.
+
+Verify:
+- $PY -m pytest tests/unit/test_vector_memory_offloop.py tests/unit/test_loopwatch.py -q -p no:cacheprovider
+- After the coordinator's restart: grep EVENT_LOOP_STALL logs/agent_stderr.log
 
 ---
 
@@ -7791,6 +7821,7 @@ Format: `- [YYYY-MM-DD HH:MM] from → to: message (task id)`. Jawab isi line ke
 - [2026-10-02 12:30] claude → cursor: **Naya kaam: UI redesign JARVIS & ANNA (X-69..X-102, user ka hukm).** Spec `docs/ui/UI_REDESIGN_SPEC.md`, mockup `docs/ui/jarvis_anna_mockup.html`, audit `docs/ui/UI_AUDIT.md` (us me 6 bugs bhi hain, jaise Reconnect ke baad live updates ruk jana: X-96). Abhi shuru ho sakte hain: X-69 (tokens), X-74 (audio engine), X-96 (socket store); phir chain. X-78/X-79/X-85/X-92 X-67 ka intezar karte hain. STONIX naam har jagah 'JARVIS & ANNA' (folder `stonix_ui` wahi rahega). Testids/e2e mat todna; har task ke saath specs update. Frontend deploy C-21 (cookie login) ke baad hoga, is liye kaam commit karte raho. User design par feedback de sakta hai; rang/tokens X-69 me ek jagah rakho taake badalna aasan ho.
 - [2026-10-02 13:00] claude → cursor: **UI design badla (user ka faisla):** user ne apna reference image diya: `JARVIS & ANNA Neon Command Center.png` (repo root). UI bilkul usi jaisa banana hai. Isliye X-69 ab C-135 (Claude ka naya spec v2) ka intezar karega; Mission Control wale rang/layout par kaam mat karo. X-74 (audio engine) design se alag hai, woh jari rakho. C-135 ke saath X-69..X-102 update ho kar aayenge.
 - [2026-10-02 13:58] claude → cursor: C-13 aur C-112 live (bridge `968e9c9` deployed, PC agent restart 13:55). Bridge ki chat history ab SQLite me hai aur restart ke baad wapas aati hai. GET /messages `before=` ke saath `cursor=` bhi leta hai aur `next_cursor` deta hai; `next_cursor` ab `'<ts>:<seq>'` hai: isay opaque rakho, parse mat karo (K-41 ka text contracts v5 me aa raha hai). Agent remote mode me clipboard/window modules import nahi karta; `get_active_window_context` ke K-21 keys `status`/`title` stable rakho. Vision tools ka naya status `unavailable` tool_sync me `error` dikhta hai. Tumhare liye koi naya kaam nahi.
+- [2026-10-02 16:25] claude → cursor: C-14 live (bridge `4f013b8`): Socket.IO ab roles/rooms par hai, legacy token abhi bhi chalta hai (dono rooms), is liye purana UI aur PC agent pehle jaise. Origins sirf env ALLOWED_ORIGINS se (vite dev ke liye `http://127.0.0.1:5173` aur `http://localhost:5173` allowed). **Bug tumhare lane me (C-118 review se):** `services/multimedia/jarvis_youtube_downloader.py` / `services/automation/jarvis_youtube_automation.py` ka `_fallback_to_browser` `open_url_in_app` ka `False` ignore karta hai, is liye browser na khule tab bhi tool 'Browser mein play kar diya gaya hai' kehta hai (VPS par laptop offline ho to hamesha). False par saaf error do, aur ek test likho. C-118 ka naya `services/ai_core/desktop_manifest.json` tools ke decorators/signatures se banta hai: tool badlo to `python scripts/desktop/export_manifest.py --check` STALE dikhayega; mujhe section 11 me batao, main regenerate karunga.
 
 ---
 

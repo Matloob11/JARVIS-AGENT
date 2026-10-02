@@ -595,3 +595,41 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
 - **Commit:** abhi nahi · **Deploy:** PC agent restart 13:55 PKT
 - **Doosre agent ke liye:** —
+
+### ✅ [claude] C-14 · Agent link v2, bridge side: HMAC v2 notify + replay, Socket.IO roles/rooms (legacy chalta rahe), env-only origins, secrets tooling · 2026-10-02 14:10–16:25 PKT
+- **Kya kiya:** /notify ab koi bhi state badalne se pehle raw body par auth karta hai (AGENT_TOKEN + HMAC v2, ±60 s, nonce replay memory aur bridge.db dono me). Socket.IO roles: agent, ui, legacy (LEGACY_TOKEN_AUTH=1 par legacy dono rooms me, is liye aaj ka UI aur PC agent bilkul pehle jaise). ui_command allow-list + rate limit, sirf room 'agent' ko. Origins sirf ALLOWED_ORIGINS se (Vercel 302 redirect C-37 se pehle hi). Bridge apne logs khud ko POST nahi karta. Hardcoded HMAC fallback key khatam. `gen_secrets.py` / `rotate_env_secret.py`: value kabhi print nahi hoti. Live: PC .env files me AGENT_TOKEN + BRIDGE_HMAC_SECRET, VPS par naya `bridge.env` (600, 8 keys, fingerprints PC jaise).
+- **Files:** `src/core/bridge_security.py` (naya), `src/core/ui_bridge.py`, `services/utils/jarvis_config.py`, `services/utils/jarvis_security.py`, `services/utils/jarvis_logger.py`, `scripts/ops/gen_secrets.py` (naya), `scripts/ops/rotate_env_secret.py` (naya), `deploy/hostinger/docker-compose.yml`, 3 env examples, `pytest.ini`, 6 test files
+- **Verify:** review approve + 4 minor theek; poora suite 1184 passed, 0 failed (C-115 ke tests alag); discovery TOOLS 79, PROBLEMS 0; deploy gate ok, doosri apps bilkul waisi; live: bridge log "Allowed origins" sirf domain + local dev, PC agent (legacy) ke /notify 200, socket connected, messages table me naya message, audit 0
+- **Commit:** `4f013b8` · **Deploy:** yes 🚀 ui-bridge `4f013b8` (backup `2026-10-02_1116Z-pre-deploy-4f013b8`); PC backup `backup_20261002_161606.zip` + env copies
+- **User se:** dashboard refresh karke ek voice sawal aur ek typed message (C-14 acceptance).
+- **Doosre agent ke liye:** Cursor: section 11 (origins + YouTube fallback bug).
+
+### ✅ [claude] C-118 · Placement table, desktop manifest exporter, placement-aware remote discovery · 2026-10-02 14:10–16:25 PKT
+- **Kya kiya:** Har tool ki jagah (VPS, laptop, split, routed) ek table me; `scripts/desktop/export_manifest.py` se deterministic `desktop_manifest.json` (79 tools) jo live registry se test me milaya jata hai; remote mode ke liye decision table (31 VPS par, 48 laptop proxies). Local mode bilkul wahi (79 tools, 83 names).
+- **Files:** `services/ai_core/tool_placement.py`, `services/ai_core/desktop_manifest.json`, `scripts/desktop/export_manifest.py`, `services/ai_core/jarvis_plugin_manager.py`, 2 test files
+- **Verify:** review approve + 4 minor theek; task tests 75+ pass; manifest `--check` up to date; discovery TOOLS 79, PROBLEMS 0; restart ke baad "Plugin discovery complete. Total tools: 79", 83 tools
+- **Commit:** `3797c84` · **Deploy:** no (restart 16:18 me load hua)
+- **Doosre agent ke liye:** Cursor: tool badlo to manifest STALE hoga, section 11 me batao.
+
+### ✅ [claude] C-136 · LiveKit link state, agent_ctl status/wait asli connection par, sleep/network ke baad recovery · 2026-10-02 14:10–16:25 PKT
+- **Kya kiya:** Worker ab "LIVEKIT LINK" lines likhta hai aur `run/agent_link.json` (connected/retrying/failed); `agent_ctl status` link dikhata hai aur `wait` sirf connected par ready. livekit-agents retry chhor de aur LiveKit host wapas mile to worker usi lock ke neeche `agent_ctl --by worker` se restart mangta hai.
+- **Files:** `src/core/livekit_link.py` (naya), `src/core/agent_runner.py`, `src/core/agent.py`, `scripts/agent_ctl.py`, `tests/unit/test_agent_link_state.py`
+- **Verify:** review approve + 5 minor theek; tests pass; pylint 10/10; live 16:18: `link connected for 0:00:18 (LiveKit worker AW_...)`, "LIVEKIT LINK connected ... registered with LiveKit", RUNTIME local, 83 tools, watchdog, UI Bridge Connected
+- **Commit:** `9e5d787` · **Deploy:** PC agent restart 16:18 PKT
+- **Note:** LiveKit restart/stop wali live drills (voice band karti hain) C-130 me, jab user baat na kar raha ho.
+- **Doosre agent ke liye:** —
+
+### ✅ [claude] C-45 · llm_text helper: Gemini 3.x → Groq → OpenRouter, header auth, masked reasons · 2026-10-02 14:10–16:25 PKT
+- **Kya kiya:** Ek helper jo text/vision ke liye pehle Gemini, phir Groq, phir OpenRouter try karta hai; keys sirf headers me, timeouts, K-29 redaction. Abhi koi module isay import nahi karta (C-48/C-81/C-82 karenge).
+- **Files:** `services/ai_core/llm_text.py`, `tests/unit/test_llm_text.py`
+- **Verify:** review approve + 3 minor theek; tests pass (sab providers mock); live smoke: Gemini "OK", Gemini key ke bagair Groq; logs me 'key=' 0
+- **Commit:** `f877397` · **Deploy:** no
+- **Note:** Contract wala default Groq vision model is account par 404 deta hai: faisla v5 contracts me, env C-46 me.
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] C-136 · Agent worker restart (agent_ctl) · 2026-10-02 16:18 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 29500) band, naya pid 28704; health 200 (11.4 s me), ensure_room.py OK.
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200, link connected
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 16:18 PKT
+- **Doosre agent ke liye:** —
