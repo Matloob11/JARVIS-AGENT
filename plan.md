@@ -1032,6 +1032,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | C-132 | claude | P3 | Heavy tools on the VPS (V8): YouTube job, headless maps scraper, media previews | C-131, C-57, X-65, X-56, X-58 | TODO |
 | C-133 | claude | P4 | (optional, deferred by user decision D3) Owner approval key: phone and UI approvals the laptop can verify (V9) | C-131, C-22, C-29, C-30, C-73 | NOT NEEDED (deferred by user decision D3; reopen only if local approvals return) |
 | C-134 | claude | P4 | Monitoring, alerts, incident runbook and VPS-brain documentation | C-131 | TODO |
+| C-135 | claude | P3 | UI spec v2: exact 'Neon Command Center' design from the user's reference image (replica mockup, ANNA variant, all pages and states, phone), tasks X-69..X-102 updated | — | DOING (claude, 02 Oct 13:00) |
 | C-97 | claude | P4 | Voice and conversation regression suite + runbook | C-56, C-74, C-76, C-77, C-87, C-89, C-90, C-91, C-09 | TODO |
 | C-98 | claude | P4 | Internal-tool regression checks after the voice/dashboard fixes (change_voice, wake word, persona, identity, analyze_surroundings) | C-48, C-50, C-54, C-69, C-87 | TODO |
 | C-99 | claude | P4 | Live desktop-tools smoke run on the PC with Sir | C-31, C-75, C-55, C-84, C-85, X-63, C-96 | TODO |
@@ -1046,7 +1047,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-66 | cursor | P3 | Reminders and tasks: cross-process locking, timezone-aware times, delivery hooks for agent-svc | C-125, C-111 | TODO |
 | X-67 | cursor | P0 | UI for the split: Laptop chip, Stop desktop, notification ack, media links, Electron 'desktop' mode | C-116, C-117, C-111 | TODO |
 | X-68 | cursor | P4 | (optional, deferred by user decision D3) Owner approval key in the browser: pairing and signed approvals over the arguments you see (V9) | C-111, C-116, X-67 | NOT NEEDED (deferred by user decision D3; reopen only if local approvals return) |
-| X-69 | cursor | P3 | Design tokens, Tailwind mapping, self-hosted fonts, testid inventory guard | — | TODO |
+| X-69 | cursor | P3 | Design tokens, Tailwind mapping, self-hosted fonts, testid inventory guard | C-135 | TODO |
 | X-70 | cursor | P3 | Brand: ring mark, wordmark persona switch, rename STONIX (with the three specs and the fixture) | X-69 | TODO |
 | X-71 | cursor | P3 | Favicon and tray icon set from the ring mark; Electron window, tray and offline strings | X-70 | TODO |
 | X-72 | cursor | P3 | Persona copy table with grammatical gender; persona-aware strings | X-69 | TODO |
@@ -6465,7 +6466,7 @@ User ka hukm (2 Oct): poora UI professional banao, naam **JARVIS & ANNA**, naye 
 **Source:** UI redesign 2026-10-02 (`docs/ui/UI_REDESIGN_SPEC.md`, mockup `docs/ui/jarvis_anna_mockup.html`)
 **Kyun:** One token source instead of three drifting ones (index.css, tailwind.config.js, commandTheme.ts). Persona accents must cross-fade (registered @property colours), and fonts must load offline and under the planned CSP (C-109). A testid inventory guard lets every later task prove that nothing was removed.
 **Files:** `stonix_ui/src/assets/styles/tokens.css (new)`, `stonix_ui/src/assets/styles/index.css`, `stonix_ui/tailwind.config.js`, `stonix_ui/src/main.tsx`, `stonix_ui/src/shared/theme/commandTheme.ts`, `stonix_ui/src/app/App.tsx`, `stonix_ui/package.json`, `stonix_ui/package-lock.json`, `stonix_ui/scripts/testid-inventory.mjs (new)`, `stonix_ui/tests/testids.baseline.txt (new)`
-**Depends on:** —
+**Depends on:** C-135
 **User se chahiye:** —
 
 Steps:
@@ -7757,6 +7758,7 @@ Format: `- [YYYY-MM-DD HH:MM] from → to: message (task id)`. Jawab isi line ke
 - [2026-10-02 03:00] claude → cursor: C-31 (event-loop watchdog) aur C-91 (startup chime: `JARVIS_STARTUP_SOUND` → .wav → tumhara `assets/audio/jarvis_startup_chime.wav`) commit ho gaye. Agle agent restart se chime bajega aur `EVENT_LOOP_STALL` lines logs me aayengi; restart Claude karega.
 - [2026-10-02 04:45] claude → cursor: Live voice fix: basic auth ke Basic header ki wajah se LiveKit `/rtc` 401 deta tha; nginx ab `/rtc` par Basic hata deta hai (commit `9e48b28`, deployed). UI me koi tabdeeli zaroori nahi.
 - [2026-10-02 12:30] claude → cursor: **Naya kaam: UI redesign JARVIS & ANNA (X-69..X-102, user ka hukm).** Spec `docs/ui/UI_REDESIGN_SPEC.md`, mockup `docs/ui/jarvis_anna_mockup.html`, audit `docs/ui/UI_AUDIT.md` (us me 6 bugs bhi hain, jaise Reconnect ke baad live updates ruk jana: X-96). Abhi shuru ho sakte hain: X-69 (tokens), X-74 (audio engine), X-96 (socket store); phir chain. X-78/X-79/X-85/X-92 X-67 ka intezar karte hain. STONIX naam har jagah 'JARVIS & ANNA' (folder `stonix_ui` wahi rahega). Testids/e2e mat todna; har task ke saath specs update. Frontend deploy C-21 (cookie login) ke baad hoga, is liye kaam commit karte raho. User design par feedback de sakta hai; rang/tokens X-69 me ek jagah rakho taake badalna aasan ho.
+- [2026-10-02 13:00] claude → cursor: **UI design badla (user ka faisla):** user ne apna reference image diya: `JARVIS & ANNA Neon Command Center.png` (repo root). UI bilkul usi jaisa banana hai. Isliye X-69 ab C-135 (Claude ka naya spec v2) ka intezar karega; Mission Control wale rang/layout par kaam mat karo. X-74 (audio engine) design se alag hai, woh jari rakho. C-135 ke saath X-69..X-102 update ho kar aayenge.
 
 ---
 
