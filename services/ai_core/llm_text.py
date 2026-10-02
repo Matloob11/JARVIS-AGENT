@@ -53,7 +53,7 @@ GEMINI_FALLBACK_MODELS: tuple[str, ...] = (
     "gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash",
 )
 DEFAULT_GROQ_TEXT_MODEL = "openai/gpt-oss-120b"
-DEFAULT_GROQ_VISION_MODEL = "qwen/qwen3.6-27b"
+DEFAULT_GROQ_VISION_MODEL = "qwen/qwen3.8-27b"  # contracts v5 (K-30/K-35): qwen3.6 left Groq's model list
 DEFAULT_OPENROUTER_MODEL = "openrouter/free"
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"

@@ -633,3 +633,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200, link connected
 - **Commit:** abhi nahi · **Deploy:** PC agent restart 16:18 PKT
 - **Doosre agent ke liye:** —
+
+### ✅ [claude] C-115 · Desktop Link protocol library (K-70 v5) + key tooling · 2026-10-02 02:55–18:15 PKT
+- **Kya kiya:** Laptop aur VPS ke beech ka mehfooz link: Ed25519 signed envelopes, X25519 + ChaCha20-Poly1305 encrypted bodies aur 1 MB blob chunks, K-70 ke receiver checks usi tarteeb se (size pehle), replay ke liye SQLite SeenStore (24 h, fail closed), signed ping/pong se clock offset aur "dobara naapo" state, do taraf ka refusal horizon aur store-epoch floor (koi jhoota "nahi chala" nahi), node → bridge signed unencrypted notices (sirf vitals/desktop_state/power/alert, har field ki allow-list, presence nahi), signed HTTP body se pehle verify. `gen_desktop_keys.py`: PC key DPAPI me, agent key `.env.agent.tmp` me; sirf public keys print.
+- **Files:** `services/utils/desktop_protocol.py`, `scripts/ops/gen_desktop_keys.py`, `tests/unit/test_desktop_protocol.py`
+- **Verify:** 5 adversarial review rounds (aakhri: approve, sirf minor, woh bhi theek); 122 tests pass; pylint 10/10; mutation checks (sab mutants pakde gaye); poora suite 1297 passed, 0 failed
+- **Commit:** `a62447c` · **Deploy:** no (C-116/C-119/C-120 isay istemal karenge)
+- **Doosre agent ke liye:** —
+
+### ✅ [claude] Contracts v5 · K-70/K-74 naye sire se; K-01, K-08, K-12, K-26, K-30, K-35, K-40, K-41, K-42, K-53, K-69, K-76 amended · 2026-10-02 18:15 PKT
+- **Kya kiya:** K-70 ab C-115 library jaisa hai (clock probes, refusal rules, notices); K-74 me desktop_status ke har field ka source, alerts, bridge sirf aakhri values rakhta hai; K-41/K-01 me `cursor`/`next_cursor` (C-13); K-12 me 'unavailable' (C-112); K-53/K-69 me C-136 ka link file, `--by worker` aur JARVIS_LINK_RECOVERY; K-30/K-35 me Groq vision default `qwen/qwen3.8-27b` (purana model account ki list se hat gaya; code bhi badla). Design doc (`docs/ARCHITECTURE_VPS_BRAIN.md`) aur task notes (C-116..C-134, C-63, C-64, C-70) bhi.
+- **Files:** `docs/CONTRACTS.md`, `docs/ARCHITECTURE_VPS_BRAIN.md`, `plan.md` (section 4 copy + notes), `.env.example`, `services/ai_core/llm_text.py`, `tests/unit/test_llm_text.py`
+- **Verify:** apply + alag verify agent (har text word-for-word, koi aur line nahi badli, non-ASCII salamat); section 4 = docs body (script check); llm_text tests 47 passed, pylint 10/10
+- **Commit:** isi entry wala commit · **Deploy:** no
+- **Doosre agent ke liye:** Cursor: section 11 (cursor/next_cursor, 'unavailable', desktop_status sources).

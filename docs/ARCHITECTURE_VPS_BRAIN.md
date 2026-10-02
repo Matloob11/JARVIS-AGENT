@@ -89,7 +89,7 @@ Approved by the user with the recommended defaults except D3 (no local Allow cli
 |---|---|---|
 | **B1** Input tools bypass the code-exec Allow; a laptop compromise reaches VPS root | <ul><li>User decision D3 (2026-10-02): no laptop-side approval and no manual step; the node acts as soon as it runs, and input pauses by itself while Windows is locked.</li><li>Confirm-class laptop actions (messaging, code_exec, availability, exposure) are sent only after the agent's ConfirmFlow approval (dashboard Allow or spoken yes); the node refuses a confirm-class exec without the agent-signed approval reference.</li><li>Launch-surface keys and windows count as code execution, so they need that approval too.</li><li>The threat model states that desktop control equals code execution while the node runs; D3 accepts the residual risk.</li><li>D18 asks the user about restricting the VPS SSH key.</li></ul> | C-121, C-119, C-134 |
 | **M2** Path tools can rewrite the node or leak secrets | <ul><li>Node argument hooks on every path tool.</li><li>Extended sensitive set: repo, venv `*.pth`, Startup folders, node files, `~/.ssh`, `*.env`.</li><li>The node runs from a read-only snapshot outside the repo.</li><li>Config and keys are DPAPI-protected from day one.</li><li>Captures are refused when the foreground title is sensitive.</li></ul> | C-121, C-123 |
-| **M3** Replay through the bridge clock | <ul><li>Freshness is checked on the receiver's own clock.</li><li>Skew is measured from agent-signed pings; above 60 s, actuation is refused.</li><li>Every exec is bound to the node's per-connection session nonce.</li><li>Seen-id stores keep 24 h.</li></ul> | K-70, C-115 |
+| **M3** Replay through the bridge clock | <ul><li>Freshness is checked on the receiver's own clock.</li><li>Skew is measured from every signed pong that answers the receiver's own pings, even outside the window, so a step above 120 s is measured too; above 60 s, actuation is refused with CLOCK_SKEW and the bridge warns (never critical). The node's CLOCK_SKEW holds until a new sample clears it. After a fix, the next hello passes on the raw clock; its handshake drops the old offset, and the new session measures again at once.</li><li>Every exec is bound to the node's per-connection session nonce.</li><li>Seen-id stores keep 24 h.</li></ul> | K-70, C-115 |
 | **M4** Weak chat and room channels can drive the laptop | <ul><li>The `lk.agent.*` RPCs are removed or made owner-only.</li><li>Text input is accepted only from the linked `owner-*` participant.</li><li>The bridge mints identities itself.</li><li>PC fallback secrets are DPAPI-wrapped.</li><li>Confirm-class laptop actions need the ConfirmFlow approval before the agent sends them.</li></ul> | C-124, C-116, C-127, C-121, C-119 |
 | **M5** The confirmation broker trusts the model | <ul><li>C-75 runs before cutover and accepts final voice transcripts only.</li><li>The check fails closed while unwired.</li><li>Voice never approves laptop actions before voice-ID.</li></ul> | C-75 |
 | **M6** Approval authority sits in the bridge; symlink race | <ul><li>The bridge holds no approval key.</li><li>Approvals come from the agent's ConfirmFlow (dashboard Allow or spoken yes) before a command is sent (D3); a dashboard Allow reaches the agent through the bridge's ConfirmFlow routing (C-29, live before cutover), and the laptop-verified owner key (C-133, X-68), which would take the bridge out of the approval path, is optional and deferred.</li><li>The bridge opens files component by component with O_NOFOLLOW.</li><li>Every fetch carries an agent-signed sha256.</li></ul> | C-117, C-119, C-29 (C-133 optional) |
@@ -164,7 +164,7 @@ PinchTab 127.0.0.1:9867, WhatsApp Desktop, Notepad          volumes jarvis_agent
 | Memory (Fernet JSON), Chroma + MiniLM, voice-ID (ECAPA) | jarvis-agent (volumes) | single Chroma opener; Chroma documents encrypted |
 | Confirm broker, jobs (K-20), announcer (K-18) | jarvis-agent | laptop effects go through the link |
 | Reminders, tasks, scheduler (K-32), delivery ledger, location cache, daily snapshot | jarvis-agent-svc | jobs never run these loops in vps mode |
-| Clipboard helper, active window, PC vitals, device location, power/lock, startup sound, speak_local, screen/webcam capture | Desktop Node | pushed as signed events |
+| Clipboard helper, active window, PC vitals, device location, power/lock, startup sound, speak_local, screen/webcam capture | Desktop Node | vitals, mode/lock/panic (with the 10 s heartbeat), power and alerts as signed notices to the bridge; location, window titles, clipboard tips and logs as encrypted events to one agent peer |
 | Bridge | VPS | adds the `/desktop` relay, :5002 listener, media relay, blobs, desktop_status and the reconciler |
 | PC brain | laptop | cold fallback; local mode is unchanged |
 
@@ -270,32 +270,35 @@ PinchTab 127.0.0.1:9867, WhatsApp Desktop, Notepad          volumes jarvis_agent
 - `DESKTOP_AGENT_SIGNING_KEY`: Ed25519, generated on the VPS, held only in `.env.agent`.
 - `DESKTOP_PC_SIGNING_KEY`: Ed25519, generated on the PC, DPAPI-wrapped.
 - Only the public halves are distributed; the bridge holds no private link key.
-- Each link session sends ephemeral X25519 keys inside the signed hellos, then HKDF-SHA256 → ChaCha20-Poly1305. Bodies of exec, result, progress, event and cancel messages, and blobs, are encrypted, so the bridge sees only routing headers.
+- Each link session sends ephemeral X25519 keys inside the signed hellos, then HKDF-SHA256 → ChaCha20-Poly1305. Bodies of exec, ack, progress, result, result_resend, cancel and event messages, and blobs, are encrypted. The bridge sees the headers and the plaintext bodies of hello, agent_hello, control, ping, pong, result_ack, sync_request and notice messages. None of these carries arguments, results, titles, clipboard text, locations or presence.
+- **Notices** (K-70/K-74 v5): the node's own state for the bridge, signed but not encrypted, addressed to `bridge` and never relayed: vitals_pc, desktop_state (mode, locked, panic; also sent every 10 s as the presence heartbeat), power and alert. Each has an exact field list and is at most 4 KiB. Location, window titles, clipboard tips and logs stay encrypted events to one agent peer.
 
 **Envelope:** `{v, typ, id, ts, from, to, sess, room, origin, call_id, tool, seq, start_by, body, sig}`, signed over `jarvis/desktop/msg/v1|canonical_json`.
 
 **Receiver checks, in order:**
-1. size cap (exec 96 KB, result 256 KB, event 32 KB);
-2. protocol version;
-3. `from`/`to` match the link;
+1. size cap (exec 96 KiB, result and result_resend 256, event 32, hello 64, notice 4, others 32);
+2. protocol version, then field formats;
+3. `from`/`to` match the link (only notices go to `bridge`, and only the bridge accepts them);
 4. signature;
-5. ±120 s against the receiver's own clock;
+5. ±120 s against the receiver's own clock plus the offset measured from signed pongs to its own pings (the bridge uses its own clock only). Pings, and pongs at the bridge, skip this check, so a clock step is measured and reported (CLOCK_SKEW, the bridge's warning) instead of silently cutting the link. A hello that passes only on the raw own clock is accepted, so a new session starts at once after a clock fix; its handshake drops the old offset, and CLOCK_SKEW holds until the new session's first pong;
 6. session nonce;
-7. id not seen in 24 h (persisted);
-8. `typ` allowed in that direction.
+7. id not seen in 24 h (persisted; the ids of authentic messages refused for their time or session are recorded too);
+8. `typ` allowed in that direction, with fixed plaintext bodies (control kinds, ping, pong, notice fields).
+
+A refused exec gets a signed refusal only when it provably never ran and never will. That means it is authentic, its id is new, the clock offset is measured, it is within 1 h of the receiver's clock, and it is newer than the seen store (allowing for a forward clock step). The node also checks its WAL, which keeps call_ids for 24 h. A policy refusal (K-76) uses the same ack {accepted:false, code}; the agent reads only DESKTOP_REJECTED and START_WINDOW_MISSED as "not executed" and returns every other code as it is.
 
 **Timers:**
 
 | Timer | Value |
 |---|---|
-| Heartbeat | 10 s; stale after 25 s |
+| Heartbeat | desktop_state notice from the node's link every 10 s in every mode; stale after 25 s without a verified node message (pings and pongs do not count) |
 | Ack | 3 s, plus 2 s after a cancel |
 | Stall | 30 s without progress |
 | Proxy cap | 3 + lock_wait + timeout + 10 s |
 | Cancel | answered within 5 s |
 | Outbox | 10 min / 200 entries |
 | Dead-man switch | link down for more than 5 s cancels running input-class calls (a WhatsApp send step finishes atomically) |
-| Ping/pong | 30 s; updates the offset and RTT |
+| Ping/pong | 30 s both ways, and once right after each handshake; every verified pong updates the offset and RTT, and so does a signed pong outside the window that answers our own ping, so clock steps above 120 s are measured; a handshake with a hello that passed only on the raw clock drops the old offset, and CLOCK_SKEW holds until the next sample |
 
 **Outcomes:**
 - Laptop offline → `DESKTOP_OFFLINE` in under 0.1 s.
@@ -656,8 +659,8 @@ Any of these → `agent_ctl brain pc`.
 | Threat | What it can do | Mitigation |
 |---|---|---|
 | Internet → `/desktop` | nothing without the PC key | signed hello, own-clock freshness, session nonce, nginx limits |
-| Compromised bridge | delay or drop messages, see routing metadata; forge typed chat or a dashboard Allow for a pending ConfirmFlow item | cannot forge or read link messages: Ed25519 signatures plus encrypted bodies; holds no key; tighten-only controls; owner login (C-19/C-22, before cutover); audit and alerts (C-116, C-121 from cutover); the optional owner key (C-133, X-68) would close the approval gap |
-| Compromised agent container | input-class actions while the node runs; confirm-class actions by skipping its own ConfirmFlow | laptop-side policy (paths, captures, launch-surface rules, protected windows, lock pause), caps, audit, panic, Stop desktop, kill switch; uid 10001, `cap_drop`, egress guard |
+| Compromised bridge | delay or drop messages; see routing metadata and the node's notices (vitals, mode, lock, panic and power events, which it shows the UI anyway and keeps only as latest values, and alert codes and short alert messages, kept as audit rows); forge typed chat or a dashboard Allow for a pending ConfirmFlow item | cannot forge or read link messages or forge notices: Ed25519 signatures plus encrypted bodies; holds no key; tighten-only controls; owner login (C-19/C-22, before cutover); audit and alerts (C-116, C-121 from cutover); the optional owner key (C-133, X-68) would close the approval gap |
+| Compromised agent container | input-class actions while the node runs; confirm-class actions by skipping its own ConfirmFlow | laptop-side policy (paths, captures, launch-surface rules, protected windows, lock pause), caps, audit, panic, Stop desktop, kill switch; uid 10001, `cap_drop`, egress guard; it cannot forge the laptop's state or vitals or hide the node's alerts, which are node-signed notices to the bridge |
 | LLM input channels: voice, typed chat (legacy token), lk.chat, LiveKit RPC, web pages, documents, window titles, clipboard, persistent facts | steer the model | owner-only RPC and text; quoted untrusted context; confirmations for side effects; facts injected as data; memory writes audited and visible in the Notes tab |
 | JARVIS approving itself | — | approvals come only from the dashboard Allow or a spoken yes on a final voice transcript (C-75), with voice-ID for laptop actions (D20); the node shows no prompt and checks the agent-signed approval reference; in normal operation the bridge only forwards the owner's dashboard Allow |
 | Laptop compromise → VPS root over Claude's SSH key | full VPS | node path policy denies `~/.ssh`; D18 forced-command user (needs your OK) |
@@ -667,7 +670,7 @@ Any of these → `agent_ctl brain pc`.
 
 ## 19. Monitoring
 - **Heartbeats** (agent and svc): session state, link RTT p50/p95, pending calls, unknowns per hour, cgroup memory and CPU, free disk, downloads size, restarts, brain, git sha.
-- **Alerts** go to the UI and a local toast on the laptop. From cutover the bridge (C-116) and the node (C-121) raise the signature, approval, node-replacement, new node_id, clock-skew, manifest-drift and rate-limit alerts; C-134 adds the restart, memory, disk, duplicate-agent and offline ones:
+- **Alerts** go to the UI (system_alert), an audit row and a local toast on the laptop. The node's alerts reach the bridge as signed K-70 alert notices, with the level fixed by the code and no agent in the path. An authentic node message refused only for its time raises the clock-skew warning at the bridge, never the critical alert. From cutover the bridge (C-116) and the node (C-121) raise the signature, approval, node-replacement, new node_id, clock-skew, manifest-drift and rate-limit alerts; C-134 adds the restart, memory, disk, duplicate-agent and offline ones:
 
   | Level | Trigger |
   |---|---|

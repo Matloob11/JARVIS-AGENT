@@ -7,10 +7,10 @@ Every interface between the Claude lane and the Cursor lane is defined here: HTT
 - **Versions:** the newest version heading below is the one in force. A change bumps the version (v2, v3, ...), edits the affected contracts in place under it, adds one Changelog line (version, date, contract IDs, what changed, which REQ-CONTRACT it answers) and updates the copy in `plan.md` section 4 in the same commit. Older wording stays in git history.
 - **Public repo:** no secrets, keys, passwords or details of non-JARVIS apps or servers go into this file.
 
-## v4 (2026-10-02)
+## v5 (2026-10-02)
 
 #### K-01 · DASH-UI-RUNTIME (config+http-client) · owner: Claude
-Owner: Cursor (UI), built on Claude's C-AUTH-1 / C-SOCK-1 / C-ORIGIN-1 (infra). Browser base BRIDGE_BASE = VITE_BRIDGE_BASE || VITE_VORTEX_URL || '/vortex' (relative, same origin; the bundle never contains a secret). Every fetch uses credentials 'include': POST /auth/login {password, totp} | {password, recovery_code}; GET /auth/me; POST /auth/logout; GET /livekit/token (a NEW token before every connect and reconnect); GET /messages?before=&limit=; GET /media/<id> and /media/<id>/sign; POST /feedback. Socket.IO: io(origin, {path: BRIDGE_BASE + '/socket.io', withCredentials: true, transports: ['websocket','polling'], tryAllTransports: true, reconnectionAttempts: Infinity, reconnectionDelayMax: 10000}) with no auth payload. Session expiry: on any connect_error or a 'session_expired' {reason} event the UI calls /auth/me, and a 401 shows the login screen, so it never depends on the refusal text. Dev: Vite proxies /vortex (http + ws) to VITE_DEV_BRIDGE: the mock on 5199, the local bridge on 5001 with VITE_DEV_BRIDGE_STRIP=1, or the VPS with the Origin header rewritten. Electron loads JARVIS_UI_URL (default https://jarvis.srv1802669.hstgr.cloud); file:// dist only with JARVIS_ELECTRON_BACKEND=local or JARVIS_UI_OFFLINE=1.
+Owner: Cursor (UI), built on Claude's C-AUTH-1 / C-SOCK-1 / C-ORIGIN-1 (infra). Browser base BRIDGE_BASE = VITE_BRIDGE_BASE || VITE_VORTEX_URL || '/vortex' (relative, same origin; the bundle never contains a secret). Every fetch uses credentials 'include': POST /auth/login {password, totp} | {password, recovery_code}; GET /auth/me; POST /auth/logout; GET /livekit/token (a NEW token before every connect and reconnect); GET /messages?before=&cursor=&limit= (K-41 v5); GET /media/<id> and /media/<id>/sign; POST /feedback. Socket.IO: io(origin, {path: BRIDGE_BASE + '/socket.io', withCredentials: true, transports: ['websocket','polling'], tryAllTransports: true, reconnectionAttempts: Infinity, reconnectionDelayMax: 10000}) with no auth payload. Session expiry: on any connect_error or a 'session_expired' {reason} event the UI calls /auth/me, and a 401 shows the login screen, so it never depends on the refusal text. Dev: Vite proxies /vortex (http + ws) to VITE_DEV_BRIDGE: the mock on 5199, the local bridge on 5001 with VITE_DEV_BRIDGE_STRIP=1, or the VPS with the Origin header rewritten. Electron loads JARVIS_UI_URL (default https://jarvis.srv1802669.hstgr.cloud); file:// dist only with JARVIS_ELECTRON_BACKEND=local or JARVIS_UI_OFFLINE=1.
 
 #### K-02 · DASH-UI-EVENTS (socketio-consumer) · owner: Claude
 Owner: Claude for the emitters (infra C-EVT-1/C-STATE-1, voice CT-VC-*, tools X0); Cursor for the reader. Every field is optional and unknown fields are ignored; the readers accept all three variants. init_state: C-STATE-1 plus optional memories, tool_logs, tasks, notifications, intelligence, map_focus, module_health, confirmations|pending_confirmations|pending_confirms, settings, agent_status, vitals_pc, vitals_vps, telemetry, server_time, desktop_status (v4, K-74). new_message/update_message: Message {id, role 'user'|'assistant' (legacy 'agent'), text, source 'voice'|'text'|'system', final|is_final, ts|timestamp in s or ms, turn_id?}. transcription_update: live caption only. agent_status {online, voice_ready|in_room, paused, since, last_heartbeat|last_seen, session?, mode?, restarting?}. status_change {speaking, thinking} and legacy status_update. vitals_pc {cpu, ram, disk, disk_label?, host, ts}; vitals_vps; legacy vitals_update. telemetry_update {success_rate, avg_latency, confusion_rate, total_samples, status, source}. tool_update {id, tool, status, phase?, args_summary|details, result_summary?, duration_ms?, progress?, risk?, ts|timestamp}. tool_progress {job_id, tool, title, status, percent, message, artifact?}. confirm_request {id, tool, summary, risk, args_preview?, voice_allowed?, expires_at|expires_ts, ttl_ms?}; confirm_resolved {id, allow|allowed, by|reason}. settings_sync: flat CT-VC-SETTINGS or {settings, applied}, plus optional enforced, available_voices, guarded_tools, automation, vision_mode, errors, pending, restart_required. Legacy persona_update, wake_word_update and mute_update. memory_sync and memory_cleared (DASH-MEMORY-EVENTS). reasoning_update {intent, confidence, is_ambiguous, plan: string[], plan_steps?: [{step, action, description}], source, msg_id|turn_id, ts}. plan_progress|plan_progress_update {current, total, action, status}. turn_rejected {reason, score?, threshold?}. voice_match_update {confidence, accepted?, threshold?, enrolled?, mode?}. voice_enroll_progress; voice_enroll_result. task_sync {tasks}|{pending}; task_notification {id, source|kind, description, action?, due_at?, spoken?, ts}. location_update and map_focus_update (DASH-LOCATION). intelligence_update {id?, type 'image'|'json'|'link'|'audio', label, url?, data?, ts}. new_log {text, category, level?, source?, count?, ts} and batch forms. system_alert; diagnostics_update; audit_update. module_health (DASH-MODULE-HEALTH). voice_link {identity, reason}. sim_panel_open {message, provider?, requires_purpose?}; sim_data_loading; sim_data_result {records, phone, status, message, provider?}. session_expired {reason}. v4 (VPS brain): desktop_status (K-74) drives the Laptop chip (online, stale, offline, locked, panic, read-only), and reminder_due (K-77, same shape as task_notification) stays in init_state.notifications until the UI sends notification_ack {id}. Legacy events stay readable forever.
@@ -31,7 +31,7 @@ Owner: Claude (UI-20). The agent sends notify 'module_health' at session start, 
 Owner: Claude (UI-21, on top of voice VCR-07/VCR-08). The agent's notify 'memory_update' {id, content (<=500), role? 'user'|'assistant', source 'extractor'|'fact'|'vector', user_id?, ts} becomes UI 'memory_sync' with the same payload; the bridge keeps the last 200 and puts the last 50 in init_state.memories. After clear_memory the agent sends 'memory_cleared' {scope: 'short_term', backup?, ts}, which becomes UI 'memory_cleared', and the bridge empties its stored short-term memories. memory_sync never carries the clear result.
 
 #### K-08 · DASH-LOCATION (socketio-event) · owner: Claude
-Owner: Claude (UI-20); the map tool emitter belongs to tools-info. Device: the agent's notify 'location_sync' {city, lat, lng, kind: 'device', source: 'ipinfo'|'device'|'user_city' (v4), ts}, sent at session start and every 600 s (v4, vps mode: the Desktop Node pushes the laptop's location over K-70 at start and every 600 s, agent-svc caches it in conversations/location.json, and the agent sends location_sync from that cache, or USER_CITY with source 'user_city'; ipinfo is never called on the VPS), becomes UI 'location_update' and init_state.location. Map focus: the map tool's 'map_focus' becomes UI 'map_focus_update' {query, display_name, lat, lng, zoom, ts} and init_state.map_focus (tools-info routing). For compatibility, a location_sync with kind 'map' is treated as map focus, and a missing kind means device.
+Owner: Claude (UI-20); the map tool emitter belongs to tools-info. Device: the agent's notify 'location_sync' {city, lat, lng, kind: 'device', source: 'ipinfo'|'device'|'user_city' (v4), ts}, sent at session start and every 600 s (v4, vps mode: the Desktop Node pushes the laptop's location over K-70 at start and every 600 s, agent-svc caches it in conversations/location.json, and the agent sends location_sync from that cache, or USER_CITY with source 'user_city'; ipinfo is never called on the VPS), becomes UI 'location_update' and init_state.location. Map focus: the map tool's 'map_focus' becomes UI 'map_focus_update' {query, display_name, lat, lng, zoom, ts} and init_state.map_focus (tools-info routing). For compatibility, a location_sync with kind 'map' is treated as map focus, and a missing kind means device. v5: the location travels only as an encrypted K-70 location event to the svc peer, never as a notice, so the bridge cannot read it. It is sent at node start, every 600 s, and again after each svc agent_hello. While no svc peer is connected the event is dropped, and the next one carries the current location.
 
 #### K-09 · DASH-LOCAL-AUTH (http+env) · owner: Claude
 Owner: Claude (UI-07, on top of infra OPS-08/OPS-09). COOKIE_SECURE=auto|1|0 on the bridge: auto sets Secure only for HTTPS requests, judged from the ASGI scheme or from X-Forwarded-Proto sent by a trusted proxy peer. Local mode (vortex.py bridge on http://127.0.0.1:5001, used by npm run dev and Electron local) reads SESSION_JWT_SECRET, OWNER_PASSWORD_HASH and OWNER_TOTP_SECRET from the PC root .env, written by the owner-credential script with --target local. Without them, /auth/login returns 503 {error: 'owner_not_enrolled'} and the UI shows a setup hint.
@@ -57,6 +57,7 @@ Owner: Cursor (stonix_ui/tests/mock-bridge, UI-04); checked by Claude (UI-38). s
 dict {status: 'success'|'error'|'not_found'|'cancelled'|'needs_confirmation'|'degraded'|'started'|'empty', message: str (one short Roman-Urdu sentence Jarvis can speak), tool: str, data?: object (path, url, count, output, elements, job_id, untrusted...), error_code?: UPPER_SNAKE str, hint?: str, confirm_id?: str (only with needs_confirmation)}.
 Known error_codes: PATH_NOT_ALLOWED, WHATSAPP_NOT_INSTALLED, FOCUS_LOST, PINCHTAB_UNAVAILABLE, DESKTOP_CONTROL_DISABLED, DESKTOP_BUSY, CONTROLLER_TOKEN_MISSING (reserved), NO_LAN, FILE_SERVER_ROOT_MISSING, NOT_CONFIRMED, UI_CONFIRM_REQUIRED, CONFIRM_UI_UNREACHABLE, NO_USER_AFFIRMATION, CV_PATH_NOT_SET, BROWSER_MISSING, TIMEOUT. v4 adds the Desktop Link, node, approval and media codes listed in K-76 (for example DESKTOP_OFFLINE, DESKTOP_RESULT_UNKNOWN, DESKTOP_LOCKED, APPROVAL_REQUIRED and MEDIA_DISK_LOW).
 Legacy top-level keys tools return today (file_path, path, url, files, media, count, title, is_maximized, is_minimized, app, contact, qr_path, opened_file, filename, action, query) stay for backward compatibility. Built with services.system.jarvis_desktop_common.tool_result(). The wrapper's own error dict {status:'error', tool, error_type, message} is unchanged.
+v5 (C-112 as built): analyze_screen and analyze_camera return {status:'unavailable', message, error}, with no error_code, when the host cannot load their capture backend: pyautogui for the screen, and OpenCV for the camera (used only when no browser frame is available). The headless VPS image is an example. The K-13 tool_sync end reports this status as 'error', as it does for every status outside its list.
 
 #### K-13 · ToolSyncEvent (event: agent POST /notify {type:'tool_sync'} -> bridge emits 'tool_update' (and 'tool_progress' for progress) to room ui) · owner: Claude
 payload {id: str (uuid per call or job id), tool: str, action: str (tool name or sub-action; the UI ToolLog needs it), phase: 'start'|'progress'|'end', status: 'running'|'success'|'error'|'not_found'|'cancelled'|'needs_confirmation'|'degraded'|'started'|'timeout'|'blocked', details: str (<=160 chars; args preview, raw args as '<N chars>', secrets redacted), result_summary?: str (end only, <=200, redacted), progress?: int 0-100, duration_ms?: int (end only), risk: 'low'|'medium'|'high', source: 'plugin'|'internal'|'job'|'desktop' (v4: a laptop tool run through the K-70 link; one start and one end per call under the proxy's id), timestamp: float epoch s}.
@@ -178,7 +179,7 @@ PinchTab (github.com/pinchtab/pinchtab): a local open-source HTTP server that dr
 - No import-time side effects.
 
 #### K-26 · VitalsPCHelper (python-api (Cursor provides, Claude may consume for vitals_pc)) · owner: Claude
-services.system.jarvis_system_info.collect_pc_vitals() -> {cpu: float, ram: float, disk: float, battery: int|None, plugged: bool|None, secs_left: int|None}. Synchronous, under 0.5 s, safe to call from asyncio.to_thread every 5-10 s; OPS-16 snapshot_vitals() may route through it. v4 (VPS brain): in vps mode the Desktop Node calls it every 10 s and sends vitals_pc over K-70; the bridge's own figures are vitals_vps.
+services.system.jarvis_system_info.collect_pc_vitals() -> {cpu: float, ram: float, disk: float, battery: int|None, plugged: bool|None, secs_left: int|None}. Synchronous, under 0.5 s, safe to call from asyncio.to_thread every 5-10 s; OPS-16 snapshot_vitals() may route through it. v4 (VPS brain): in vps mode the Desktop Node calls it every 10 s and sends vitals_pc over K-70; the bridge's own figures are vitals_vps. v5: the node sends these values as a K-70 vitals_pc notice straight to the bridge (K-74): cpu, ram and disk, plus disk_label, host, cores and ram_total_gb when known. battery, plugged and secs_left are not on the notice's field list and stay on the laptop.
 
 #### K-27 · TestSideEffectGuard (pytest fixture module (tests/tools/side_effect_guard.py, Cursor-owned; contract recorded by Claude)) · owner: Claude
 - Autouse fixture block_real_side_effects patches pyautogui input functions, pynput Controller methods, os.startfile, os.system, subprocess.Popen/run/call, asyncio.create_subprocess_exec/_shell, webbrowser.open, pyperclip, win32clipboard set/get, win32gui PostMessage/SetForegroundWindow/ShowWindow/BringWindowToTop, win32api keybd_event/PostMessage, ctypes user32 keybd_event/SendInput, shell32.SHEmptyRecycleBinW, smtplib.SMTP, requests.get/post and httpx get/post/AsyncClient to raise AssertionError('REAL SIDE EFFECT: <name>').
@@ -193,7 +194,7 @@ VortexGuard.sanitize_arg(value: str, policy='plain') -> str, raising ArgPolicyEr
 redact_secrets(text) -> str replaces with '***' the current values (length >= 8) of GOOGLE_API_KEY, GOOGLE_SEARCH_API_KEY, TAVILY_API_KEY, OPENROUTER_API_KEY, GROQ_API_KEY, HF_TOKEN, EMAIL_APP_PASSWORD, WEATHER_API_KEY, OPENWEATHER_API_KEY, VORTEX_SECURITY_TOKEN, CONTROLLER_TOKEN, JARVIS_ENCRYPTION_KEY, LIVEKIT_API_SECRET, AGENT_TOKEN, BRIDGE_HMAC_SECRET, SESSION_JWT_SECRET, POLLINATIONS_TOKEN, PINCHTAB_TOKEN, SIM_LOOKUP_API_KEY, VITE_VORTEX_SECURITY_TOKEN, OWNER_TOTP_SECRET, OWNER_PASSWORD_HASH, DESKTOP_AGENT_SIGNING_KEY (v4) and every value given to register_runtime_secret(value) (v4: the node registers its unwrapped DESKTOP_PC_SIGNING_KEY this way) (for example the per-start file-server token of EXT K2), and masks key=, api_key=, appid=, token=, sig= query values and 'Bearer <x>'. jarvis_logger.RedactingFormatter.format() returns redact_secrets(super().format(record)), covering messages, args, exc_info tracebacks and stack_info; every JARVIS handler (console, rotating file, UI bridge or batch) uses it, and later logger rewrites (EXT OPS-17, VCR-32) must keep it. httpx and httpcore loggers stay at WARNING. Conventions: Google keys go in the 'x-goog-api-key' header; Tavily, Pollinations and the SIM API use 'Authorization: Bearer'; HTTP errors are logged or returned only as redact_secrets(str(e)).
 
 #### K-30 · llm_text (python-api (Claude: services/ai_core/llm_text.py)) · owner: Claude
-async generate_text(prompt, *, system=None, model=None, max_output_tokens=2048, temperature=0.4, timeout=60.0) -> LLMResult(text, provider, model); async generate_vision(prompt, image: PIL.Image | bytes, *, timeout=60.0) -> LLMResult; both raise LLMUnavailableError(reasons) when every tier fails; async list_gemini_models() for diagnostics. Tier 1 Gemini (google-genai, GOOGLE_API_KEY): the model argument or JARVIS_TEXT_MODEL (gemini-3.5-flash) / JARVIS_VISION_MODEL (gemini-3.8-flash), then gemini-3.8-flash, gemini-3.5-flash, gemini-3.1-flash-lite, gemini-2.5-flash; a 404 marks the id dead and tries the next one, 429/5xx moves to the next tier. Tier 2 Groq (OpenAI-compatible): JARVIS_GROQ_TEXT_MODEL openai/gpt-oss-120b with reasoning_effort 'low'; JARVIS_GROQ_VISION_MODEL qwen/qwen3.6-27b with reasoning_effort 'none'. Tier 3 OpenRouter: JARVIS_OPENROUTER_MODEL openrouter/free. Keys only via SDK or headers; failure reasons pass through redact_secrets. Consumers: vision (TI-05), research (TI-11, Cursor), swarm (TI-19), bug hunter (TI-20), self-repair (TI-21).
+async generate_text(prompt, *, system=None, model=None, max_output_tokens=2048, temperature=0.4, timeout=60.0) -> LLMResult(text, provider, model); async generate_vision(prompt, image: PIL.Image | bytes, *, timeout=60.0) -> LLMResult; both raise LLMUnavailableError(reasons) when every tier fails; async list_gemini_models() for diagnostics. Tier 1 Gemini (google-genai, GOOGLE_API_KEY): the model argument or JARVIS_TEXT_MODEL (gemini-3.5-flash) / JARVIS_VISION_MODEL (gemini-3.8-flash), then gemini-3.8-flash, gemini-3.5-flash, gemini-3.1-flash-lite, gemini-2.5-flash; a 404 marks the id dead and tries the next one, 429/5xx moves to the next tier. Tier 2 Groq (OpenAI-compatible): JARVIS_GROQ_TEXT_MODEL openai/gpt-oss-120b with reasoning_effort 'low'; JARVIS_GROQ_VISION_MODEL qwen/qwen3.8-27b with reasoning_effort 'none' (v5: qwen/qwen3.6-27b no longer exists on the account; qwen/qwen3.8-27b is in the Groq model list on 2 Oct 2026). Tier 3 OpenRouter: JARVIS_OPENROUTER_MODEL openrouter/free. Keys only via SDK or headers; failure reasons pass through redact_secrets. Consumers: vision (TI-05), research (TI-11, Cursor), swarm (TI-19), bug hunter (TI-20), self-repair (TI-21).
 
 #### K-31 · job_progress_routing (events (agent /notify -> bridge -> room 'ui') + ui_command) · owner: Claude
 Producer: EXT C6 jobs (JobContext.progress and job end) post /notify tool_sync {id: job id, tool, action: job title, phase: 'start'|'progress'|'end', status, details, progress?: 0-100, duration_ms?, job: true, artifact?: {kind: 'audio'|'video'|'image'|'file', path, name}, timestamp}. Bridge: keeps today's tool_logs and 'tool_update'; for job events it upserts state.jobs[id] (newest 20) and emits 'tool_progress' {job_id, tool, title, status: 'queued'|'running'|'done'|'error'|'cancelled' (success maps to done), percent: number|null, message, artifact?, ts} to room 'ui'; a direct /notify 'tool_progress' of the same shape is also accepted. init_state gains jobs (newest first). UI -> agent: ui_command {type:'job_cancel', payload:{job_id}} and {type:'open_job_artifact', payload:{job_id}}, added to the ui_command allow-list and forwarded only to room 'agent'. Agent: job_cancel -> jarvis_jobs.cancel_job(job_id); open_job_artifact -> services.utils.jarvis_delivery.open_artifact(artifact.path) only for a finished job whose file exists under <project_root>/Jarvis_Outputs or config.shared_dir, audited (pc mode: os.startfile; v4 vps mode: pc.fetch {open:true} on the laptop through K-73, DESKTOP_OFFLINE while the laptop is offline; os.startfile never runs on the agent host). Producers: YouTube (TI-15), research+email (TI-11), swarm (TI-19); consumer: Jobs panel (TI-27).
@@ -208,7 +209,7 @@ conversations/tasks.db table tasks gains kind TEXT DEFAULT 'task', action_args T
 Exactly two sources: NotConfiguredSource (default: today's blocked result, SAFE_MESSAGE plus 'provider not configured') and AuthorizedApiSource. Leaked, scraped or 'SIM database' sources and any other source type are prohibited (a test asserts it). Selection: SIM_SOURCE='none' forces off; unset or empty = auto, AuthorizedApiSource only when SIM_LOOKUP_API_URL and SIM_LOOKUP_API_KEY are both set (user decision 30 Sep). AuthorizedApiSource.lookup(digits) -> list[{full_name, cnic_masked (last 4 digits visible), phone_masked, address? (only with SIM_LOOKUP_SHOW_ADDRESS=1)}] via POST SIM_LOOKUP_API_URL json {msisdn} with 'Authorization: Bearer <SIM_LOOKUP_API_KEY>' and a 10 s timeout; field names live in one FIELD_MAP that is confirmed against the provider's API doc. lookup_sim_data(phone_number, purpose=''): with a configured source a purpose of >= 5 chars and SIM_LOOKUP_DAILY_LIMIT (default 20 per day) are enforced; the audit row is {ts, provider, query_masked, status, count, purpose_sha256}, never the raw number or purpose. Events: sim_panel_open {message, provider, configured, requires_purpose}; sim_data_result gains provider. ui_command sim_lookup accepts the legacy string (<= 20 chars) or {query (<= 20 chars), purpose (<= 200 chars)}; the bridge allow-list (EXT OPS-08/DASH-C09) accepts both and forwards only to room 'agent'. v4 (D1): in vps mode the lookup runs in the agent container with SIM_LOOKUP_API_URL and SIM_LOOKUP_API_KEY from .env.agent (never the bridge), and the audit file sits on the jarvis_outputs volume.
 
 #### K-35 · tools_info_env (env (PC root .env + VPS agent containers)) · owner: Claude
-Added by scripts/ops/env_defaults.py (append-only; never rewrites or prints values) to the root .env and deploy/windows-local/.env (start-agent.bat copies the latter over .env until EXT C-ENV-1 changes that) and listed in .env.example and .env.production.example: JARVIS_TEXT_MODEL=gemini-3.5-flash, JARVIS_VISION_MODEL=gemini-3.8-flash, JARVIS_GROQ_TEXT_MODEL=openai/gpt-oss-120b, JARVIS_GROQ_VISION_MODEL=qwen/qwen3.6-27b, JARVIS_OPENROUTER_MODEL=openrouter/free, JARVIS_IMAGE_MODEL=black-forest-labs/FLUX.1-schnell, JARVIS_IMAGE_PROVIDER=auto, POLLINATIONS_TOKEN= (optional secret), TAVILY_SEARCH_DEPTH=advanced, SMTP_HOST=smtp.gmail.com, SMTP_PORT=587, JARVIS_DOC_DIRS= (';' list, empty = defaults), JARVIS_RAG_WARM_DELAY_S=120, JARVIS_FRAME_MAX_AGE_S=10, JARVIS_SELF_REPAIR_APPLY=0 (TI-32 sets 1), SIM_SOURCE= (empty = auto), SIM_LOOKUP_API_URL=, SIM_LOOKUP_API_KEY= (secret, filled by the user), SIM_LOOKUP_DAILY_LIMIT=20, SIM_LOOKUP_SHOW_ADDRESS=0. Existing names stay and already match the code: GOOGLE_API_KEY, WEATHER_API_KEY (OPENWEATHER_API_KEY alias), GOOGLE_SEARCH_API_KEY, SEARCH_ENGINE_ID, TAVILY_API_KEY, OPENROUTER_API_KEY, GROQ_API_KEY, HF_TOKEN, EMAIL_USER, EMAIL_APP_PASSWORD, JARVIS_SHARED_DIR, USER_CITY, LOG_FILE. Owned elsewhere: JARVIS_CONFIRM_TIMEOUT_S (EXT X0/C3, one value), JARVIS_FILE_SERVER_* and FFMPEG_DIR (EXT C3/C7), media relay settings (EXT DASH-C21). --update is allowed only for non-secret switches. v4 (D1, VPS brain): the same names also live in the VPS agent containers. scripts/ops/push_agent_env.py copies them from the PC root .env into deploy/hostinger/.env.agent (root 600, over ssh stdin, never printed). None of them goes to bridge.env or the compose .env. The PC root .env keeps its copy for the PC fallback, DPAPI-wrapped in vps mode (D13).
+Added by scripts/ops/env_defaults.py (append-only; never rewrites or prints values) to the root .env and deploy/windows-local/.env (start-agent.bat copies the latter over .env until EXT C-ENV-1 changes that) and listed in .env.example and .env.production.example: JARVIS_TEXT_MODEL=gemini-3.5-flash, JARVIS_VISION_MODEL=gemini-3.8-flash, JARVIS_GROQ_TEXT_MODEL=openai/gpt-oss-120b, JARVIS_GROQ_VISION_MODEL=qwen/qwen3.8-27b (v5, K-30: qwen/qwen3.6-27b no longer exists on the account), JARVIS_OPENROUTER_MODEL=openrouter/free, JARVIS_IMAGE_MODEL=black-forest-labs/FLUX.1-schnell, JARVIS_IMAGE_PROVIDER=auto, POLLINATIONS_TOKEN= (optional secret), TAVILY_SEARCH_DEPTH=advanced, SMTP_HOST=smtp.gmail.com, SMTP_PORT=587, JARVIS_DOC_DIRS= (';' list, empty = defaults), JARVIS_RAG_WARM_DELAY_S=120, JARVIS_FRAME_MAX_AGE_S=10, JARVIS_SELF_REPAIR_APPLY=0 (TI-32 sets 1), SIM_SOURCE= (empty = auto), SIM_LOOKUP_API_URL=, SIM_LOOKUP_API_KEY= (secret, filled by the user), SIM_LOOKUP_DAILY_LIMIT=20, SIM_LOOKUP_SHOW_ADDRESS=0. Existing names stay and already match the code: GOOGLE_API_KEY, WEATHER_API_KEY (OPENWEATHER_API_KEY alias), GOOGLE_SEARCH_API_KEY, SEARCH_ENGINE_ID, TAVILY_API_KEY, OPENROUTER_API_KEY, GROQ_API_KEY, HF_TOKEN, EMAIL_USER, EMAIL_APP_PASSWORD, JARVIS_SHARED_DIR, USER_CITY, LOG_FILE. Owned elsewhere: JARVIS_CONFIRM_TIMEOUT_S (EXT X0/C3, one value), JARVIS_FILE_SERVER_* and FFMPEG_DIR (EXT C3/C7), media relay settings (EXT DASH-C21). --update is allowed only for non-secret switches. v4 (D1, VPS brain): the same names also live in the VPS agent containers. scripts/ops/push_agent_env.py copies them from the PC root .env into deploy/hostinger/.env.agent (root 600, over ssh stdin, never printed). None of them goes to bridge.env or the compose .env. The PC root .env keeps its copy for the PC fallback, DPAPI-wrapped in vps mode (D13).
 
 #### K-36 · C-AUTH-1 (http-api) · owner: Claude
 Owner session auth on the bridge (nginx /vortex/ strips the prefix). POST /vortex/auth/login JSON {password, totp:'6 digits'} or {password, recovery_code}; the Origin header must be in ALLOWED_ORIGINS. 200 -> {ok:true, user:'owner', session_id, expires_at:<epoch s>} + Set-Cookie jarvis_session=<JWT>; Path=/vortex; HttpOnly; Secure; SameSite=Strict; Max-Age=43200. 401 -> {ok:false, error:'invalid_credentials'} (same body for any wrong field). 429 -> {ok:false, error:'rate_limited', retry_after:<s>} after 5 failures per 15 min per IP or 20 per hour globally (after OP-21 nginx also applies limit_req 10r/m burst 5 on this path). 503 -> {error:'owner_not_enrolled'}. POST /vortex/auth/logout -> 200 {ok:true}, cookie cleared (Max-Age=0), session revoked. GET /vortex/auth/me -> 200 {authenticated:true, user:'owner', session_id, expires_at} or 401 {authenticated:false}. JWT HS256 with SESSION_JWT_SECRET, claims {sub:'owner', sid, iat, exp=iat+43200, v:1}, valid only while sid exists unrevoked in the sessions table. Password: bcrypt cost 12 (OWNER_PASSWORD_HASH). TOTP: RFC 6238, 30 s, 6 digits, window +-1 step (OWNER_TOTP_SECRET); the last accepted timecode is stored and never accepted again. Recovery: 10 single-use codes (OWNER_RECOVERY_HASHES, bcrypt). Hashes are stored base64url-encoded in bridge.env (no '$' for compose to interpolate). Session required (401 {error:'auth_required'} otherwise): GET /vortex/livekit/token, /vortex/status, /vortex/messages, GET/POST /vortex/settings, /vortex/telemetry/production, POST /vortex/feedback and the Socket.IO UI connection. Public: GET /vortex/health, POST /vortex/auth/login, GET /vortex/auth/me. Agent credentials (C-NOTIFY-1 headers) accepted on POST /vortex/notify, POST /vortex/livekit/ensure, GET /vortex/settings, GET /vortex/status. Root-only CLI inside the container: 'python -m src.core.bridge_auth hash-password | mint-session --ttl N --label X (prints jarvis_session=<JWT>) | revoke-all | enroll-check | audit-summary --prefix P'. Transition: while LEGACY_TOKEN_AUTH=1 the header X-Vortex-Token or Socket.IO auth.token = VORTEX_SECURITY_TOKEN is also accepted (identity 'owner-legacy'); set to 0 at cut-over (OP-21). Every login attempt, logout and session mint writes an audit row.
@@ -223,13 +224,13 @@ Socket.IO path '/vortex/socket.io' on https://jarvis.srv1802669.hstgr.cloud (dev
 Agent -> bridge events: POST /vortex/notify with headers X-Agent-Token: AGENT_TOKEN; X-Agent-Timestamp: unix seconds (int); X-Agent-Nonce: at least 16 random hex chars; X-Agent-Signature: hex(HMAC-SHA256(BRIDGE_HMAC_SECRET, f'{timestamp}.{nonce}.'.encode() + raw_body_bytes)); Content-Type: application/json. The body is exactly the signed bytes of {'type': <event>, 'payload': <any>}, at most 256 KB. Server checks in order: token (401 bad_token), |now - ts| <= 60 s (401 stale), signature over the raw body (403 bad_signature), nonce unseen in the last 300 s (409 replay), size (413), rate buckets (429 with Retry-After; critical types 50/s, logs 10/s, others 20/s). Only after auth are last_runner_contact and the agent_link heartbeat updated. 200 -> {status:'ok'} or {status:'ignored', reason} for unknown types. The legacy headers X-Vortex-Token/X-Vortex-Signature (HMAC keyed with VORTEX_SECURITY_TOKEN over sorted JSON) are accepted only while LEGACY_TOKEN_AUTH=1. Agent side: services/utils/jarvis_bridge.notify_event signs the raw bytes once; critical types (transcription, confirm_request, settings_sync, tool_sync, agent_heartbeat) are retried up to 5 times with backoff 1->30 s from a bounded 500-item queue; signed_headers(raw) is reused by ensure_room.py and agent_ctl. POST /vortex/livekit/ensure uses the same headers with body {}. v4 (VPS brain): the VPS agent containers post to http://jarvis-bridge:5002/notify and /internal/livekit/ensure; the bridge accepts the agent role only on that jarvis-network listener (nginx answers 404 for /vortex/internal/), so AGENT_TOKEN never crosses the internet. The PC fallback keeps the signed public path above, and the laptop's /vortex/desktop/ensure uses K-70 PC-signed HTTP.
 
 #### K-40 · C-EVT-1 (socketio-events) · owner: Claude
-Agent->bridge notify types and what the bridge emits to room 'ui': transcription {id, role:'user'|'assistant' (legacy 'agent'), text, source?, final|is_final, ts|timestamp} -> normalized per C-MSG-1 -> new_message (first time the id is seen) or update_message, plus legacy transcription_update {text}. status 'START'|'STOP' and thinking 'START'|'STOP'|'REJECTED' -> status_change {speaking, thinking}. vitals_pc {cpu, ram, disk, cores, ram_total_gb, host, ts} -> vitals_pc and legacy vitals_update. agent_heartbeat {services, tasks:{name:{running, failures}}, version, ts} -> stored, refreshes agent_status. telemetry {total_samples, success_rate, avg_latency, confusion_rate, status, tools:{calls, failures}, ts} -> telemetry_update. tool_sync {tool, details, risk?, status?, duration_ms?, ts} -> tool_update. memory_update -> memory_sync. reasoning -> reasoning_update. intelligence_sync/intelligence_update -> intelligence_update. location_sync -> location_update. mute_sync (bool) -> mute_update. wake_word_sync (bool) -> wake_word_update. voice_id_sync {confidence, ts} -> voice_match_update. persona_change 'jarvis'|'anna' -> persona_update {persona}. task_alert -> task_notification. task_update -> task_sync. sim_data_result, sim_data_loading, sim_panel_open keep their names. vortex_log {text, category, ts} and vortex_log_batch {items:[<=50], dropped} -> new_log per item. confirm_request -> confirm_request (C-CONFIRM-1). settings_sync -> settings_sync (C-SETTINGS-1). diagnostics {checks, ts} -> diagnostics_update. audit_event {action, detail, ts} -> audit_update. qa_ping {n} -> counted only, never emitted. Legacy types kept working: 'token' -> token_stream; 'vitals' -> handled as vitals_pc (+ vitals_update); user_speaking_sync (bool) -> user_status_change {speaking} with the 1.5 s auto-reset. Bridge-originated (to 'ui'): init_state (C-STATE-1), agent_status (C-ROOM-1), vitals_vps {same shape as vitals_pc, host:'vps'} every 12 s, legacy vitals_update (latest vitals_pc if under 30 s old, else vitals_vps with source:'vps'), telemetry_update, confirm_resolved {id, allow, by:'owner'|'timeout'|'no_ui'}; v4: desktop_status (K-74) on every change, and stored UI notifications (reminder_due, K-77) until notification_ack. UI->bridge ui_command types: chat {id, text} (a legacy plain string is accepted), mute, unmute, wake_word_toggle (bool), stop, start, persona_change, clear_memory, open_sim_panel, sim_lookup, swarm, confirm_response {id, allow}, settings_update (C-SETTINGS-1), desktop_stop (v4, tighten-only, K-74) and notification_ack {id} (v4, K-77). Anything else gets ack {status:'rejected'}.
+Agent->bridge notify types and what the bridge emits to room 'ui': transcription {id, role:'user'|'assistant' (legacy 'agent'), text, source?, final|is_final, ts|timestamp} -> normalized per C-MSG-1 -> new_message (first time the id is seen) or update_message, plus legacy transcription_update {text}. status 'START'|'STOP' and thinking 'START'|'STOP'|'REJECTED' -> status_change {speaking, thinking}. vitals_pc {cpu, ram, disk, cores, ram_total_gb, host, ts} -> vitals_pc and legacy vitals_update. agent_heartbeat {services, tasks:{name:{running, failures}}, version, ts} -> stored, refreshes agent_status. telemetry {total_samples, success_rate, avg_latency, confusion_rate, status, tools:{calls, failures}, ts} -> telemetry_update. tool_sync {tool, details, risk?, status?, duration_ms?, ts} -> tool_update. memory_update -> memory_sync. reasoning -> reasoning_update. intelligence_sync/intelligence_update -> intelligence_update. location_sync -> location_update. mute_sync (bool) -> mute_update. wake_word_sync (bool) -> wake_word_update. voice_id_sync {confidence, ts} -> voice_match_update. persona_change 'jarvis'|'anna' -> persona_update {persona}. task_alert -> task_notification. task_update -> task_sync. sim_data_result, sim_data_loading, sim_panel_open keep their names. vortex_log {text, category, ts} and vortex_log_batch {items:[<=50], dropped} -> new_log per item. confirm_request -> confirm_request (C-CONFIRM-1). settings_sync -> settings_sync (C-SETTINGS-1). diagnostics {checks, ts} -> diagnostics_update. audit_event {action, detail, ts} -> audit_update. qa_ping {n} -> counted only, never emitted. Legacy types kept working: 'token' -> token_stream; 'vitals' -> handled as vitals_pc (+ vitals_update); user_speaking_sync (bool) -> user_status_change {speaking} with the 1.5 s auto-reset. Bridge-originated (to 'ui'): init_state (C-STATE-1), agent_status (C-ROOM-1), vitals_vps {same shape as vitals_pc, host:'vps'} every 12 s, legacy vitals_update (latest vitals_pc if under 30 s old, else vitals_vps with source:'vps'), telemetry_update, confirm_resolved {id, allow, by:'owner'|'timeout'|'no_ui'}; v4: desktop_status (K-74) on every change, and stored UI notifications (reminder_due, K-77) until notification_ack. UI->bridge ui_command types: chat {id, text} (a legacy plain string is accepted), mute, unmute, wake_word_toggle (bool), stop, start, persona_change, clear_memory, open_sim_panel, sim_lookup, swarm, confirm_response {id, allow}, settings_update (C-SETTINGS-1), desktop_stop (v4, tighten-only, K-74) and notification_ack {id} (v4, K-77). Anything else gets ack {status:'rejected'}. v5 (vps mode): vitals_pc and the legacy vitals_update come from the Desktop Node's K-70 vitals_pc notices (K-74), not from an agent notify. The node's WARNING+ log lines arrive only as vortex_log_batch from agent-svc (source 'desktop', redacted), and only while the svc is connected. The bridge emits system_alert {id, severity, code, title, count, ts} for every K-74 alert.
 
 #### K-41 · C-MSG-1 (schema) · owner: Claude
-Message = {id: string (uuid; for typed chat the UI-generated id), role: 'user'|'assistant', text: string, source: 'voice'|'text'|'system', final: boolean, ts: number (epoch seconds, float)}. The bridge normalizes legacy input: role 'agent' -> 'assistant'; is_final -> final (default true); timestamp -> ts (default now); source defaults to 'voice' for session transcriptions, 'text' when the id matches a chat command id, 'system' for reminders, the bug hunter and probes (the agent should set it explicitly). Emitted messages also carry the legacy aliases timestamp (=ts) and is_final (=final) for older UIs. Messages are upserted by id (text replaced, final updated), persisted in SQLite and never auto-pruned. Typed chat: the UI generates the id -> ui_command chat {id, text} -> optimistic render with that id -> the agent accepts {id, text} or a legacy string, echoes the user message with the SAME id and source 'text' (a new id only for legacy strings) and replies with source 'text' -> the UI de-duplicates by id. History: GET /vortex/messages?before=<ts>&limit=<=100 -> {messages:[ascending ts], has_more}.
+Message = {id: string (uuid; for typed chat the UI-generated id), role: 'user'|'assistant', text: string, source: 'voice'|'text'|'system', final: boolean, ts: number (epoch seconds, float)}. The bridge normalizes legacy input: role 'agent' -> 'assistant'; is_final -> final (default true); timestamp -> ts (default now); source defaults to 'voice' for session transcriptions, 'text' when the id matches a chat command id, 'system' for reminders, the bug hunter and probes (the agent should set it explicitly). Emitted messages also carry the legacy aliases timestamp (=ts) and is_final (=final) for older UIs. Messages are upserted by id (text replaced, final updated), persisted in SQLite and never auto-pruned. Typed chat: the UI generates the id -> ui_command chat {id, text} -> optimistic render with that id -> the agent accepts {id, text} or a legacy string, echoes the user message with the SAME id and source 'text' (a new id only for legacy strings) and replies with source 'text' -> the UI de-duplicates by id. History: GET /vortex/messages?before=<ts>&limit=<=100 -> {messages:[ascending ts], has_more, next_cursor} (v5, C-13 as built). before (epoch s or ms) returns the messages strictly older than before. next_cursor is opaque: today it is '<ts>:<seq>' of the page's oldest message, and clients never parse or build it. It is null on the last page. cursor=<next_cursor> returns the page before exactly that message, so messages that share a ts are never skipped. When both are given, before wins. A cursor that cannot be read gives 400.
 
 #### K-42 · C-STATE-1 (schema) · owner: Claude
-init_state is emitted to a UI socket on connect: {messages: last 100 (C-MSG-1, ascending, with legacy aliases), logs: last 30, memories: last 10, tool_logs: last 20, settings (C-SETTINGS-1), persona (legacy key), muted, wake_word_active, voice_match, agent_status (C-ROOM-1), vitals_pc|null, vitals_vps, telemetry|null, location, sim_records, sim_loading, sim_query_masked, sim_status, sim_message, sim_panel_open, server_time, desktop_status (v4, K-74), notifications (v4: unacknowledged K-77 deliveries)}. Storage: SQLite at BRIDGE_DB_PATH=/app/data/bridge.db on the named volume jarvis_bridge_data (WAL). Tables: messages, events, settings, sessions, audit, kv, confirmations, pending_commands, schema_version (v4: kv also holds desktop_link, active_job and last_activity_ts, and the store keeps the K-70 seen ids for 24 h and the persisted K-77 UI notifications); volatile flags (speaking, thinking, user_speaking) stay in memory. Everything survives bridge restarts and deploys. Event/log retention = BRIDGE_EVENT_RETENTION_DAYS (0 = keep forever until the user approves a value); messages are never auto-pruned. deploy/hostinger/backup_vps.sh takes an online SQLite backup; a corrupt DB is renamed (never deleted) and a fresh one is started with a CRITICAL log.
+init_state is emitted to a UI socket on connect: {messages: last 100 (C-MSG-1, ascending, with legacy aliases), logs: last 30, memories: last 10, tool_logs: last 20, settings (C-SETTINGS-1), persona (legacy key), muted, wake_word_active, voice_match, agent_status (C-ROOM-1), vitals_pc|null, vitals_vps, telemetry|null, location, sim_records, sim_loading, sim_query_masked, sim_status, sim_message, sim_panel_open, server_time, desktop_status (v4, K-74), notifications (v4: unacknowledged K-77 deliveries)}. Storage: SQLite at BRIDGE_DB_PATH=/app/data/bridge.db on the named volume jarvis_bridge_data (WAL). Tables: messages, events, settings, sessions, audit, kv, confirmations, pending_commands, schema_version (v4: kv also holds desktop_link, active_job and last_activity_ts, and the store keeps the persisted K-77 UI notifications. v5: kv also holds the latest vitals_pc, desktop_state and power notice values, overwritten in place, and no notice or desktop_status history goes into events or audit (K-74). The K-70 seen ids are kept for 24 h in their own file on the same volume, /app/data/desktop_seen.db, which is a library SeenStore (K-70 check 7), never in bridge.db; bridge.db's seen_ids table keeps the C-NOTIFY-1 nonces.); volatile flags (speaking, thinking, user_speaking) stay in memory. Everything survives bridge restarts and deploys. Event/log retention = BRIDGE_EVENT_RETENTION_DAYS (0 = keep forever until the user approves a value); messages are never auto-pruned. deploy/hostinger/backup_vps.sh takes an online SQLite backup; a corrupt DB is renamed (never deleted) and a fresh one is started with a CRITICAL log.
 
 #### K-43 · C-STATUS-1 (http-api) · owner: Claude
 GET /vortex/health (public liveness; used by the Docker healthcheck and deploy.sh) -> 200 {status:'ok', version:<GIT_SHA>, uptime_s} whenever the process serves requests. GET /vortex/status (session cookie or agent credentials) -> 200 {status:'ok'|'degraded'|'down', ts, bridge:{ok, version, uptime_s}, db:{ok, size_bytes}, livekit:{ok, latency_ms, room_exists, participants, agent_in_room, dispatch_id, last_job_state}, agent:{online, voice_ready, paused, since, last_heartbeat, host, version, services, tasks}, vitals_vps, vitals_pc, ui_clients:int, qa:{pings}, brain:'vps'|'pc' (v4), desktop:<K-74 desktop_status> (v4)}. 'degraded' = agent offline or LiveKit unreachable; 'down' = DB unusable. The bridge never reports CRITICAL because of heartbeats that belong to the PC process (jarvis_health is role-aware via JARVIS_ROLE). v4 (VPS brain): GET /vortex/status also accepts K-70 PC-signed HTTP (agent_ctl brain and node checks). The public /vortex/health keeps exactly {status, version, uptime_s} and never shows brain, presence or vitals.
@@ -263,6 +264,7 @@ Git: one working tree, one index, single branch main, remote origin = https://gi
 
 #### K-53 · COORD-3 (process) · owner: Claude
 Runtime lock for the single Windows agent worker. Only scripts/agent_ctl.py starts, stops or restarts it: $PY scripts/agent_ctl.py status|start|stop|restart|wait|logs --by claude|cursor|user --reason '<TASK-ID or why>' (PY=.venv_312/Scripts/python.exe, Git Bash in the repo root). The worker holds an OS lock on run/agent.lock (released on exit) and writes run/agent.pid.json; a second 'python -m src.core.agent' exits 3. restart takes run/restart.lock (fails fast; stale after 10 min) and keeps a 120 s cooldown unless --force (logged). Never: taskkill /IM python.exe, killing PIDs not started through agent_ctl, starting the agent directly, running Electron with JARVIS_LOCAL_BACKEND=1 while the hybrid worker runs, or pip install into .venv_312 while the worker runs. Python dependencies are Claude-only (stop, install, start); Cursor asks with 'REQ-DEP python <pkg>==<ver> <why>' in plan.md section 11. scripts/agent_ctl.py is live (C-09): exit codes 0 ok, 1 failed, 2 usage, 3 already running, 4 refused (cooldown, restart.lock held, pid is not the agent, port 8081 answers without a lock holder); status exits 0 when a worker runs, else 1. restart takes run/restart.lock (stale after 10 min or when its holder is dead) and keeps a 120 s cooldown from run/last_restart.json unless --force. start (default: background, hidden window) writes logs/agent_stdout.log and logs/agent_stderr.log (rotated at 5 MB, keep 5), waits until health is 200 while a worker holds run/agent.lock plus a 5 s settle, then runs deploy/windows-local/ensure_room.py once; --foreground runs the worker in the current console (start-agent.bat). The worker's PATH gets the registry PATH entries the calling shell lacks. stop touches only the worker's own process tree (never apps JARVIS opened). Every start/stop/restart/wait appends a JSON line to logs/agent_ctl.log. plan.md section 2.6 points here. After any restart append a done_highlight.md entry. PC ports: 5173 vite and 4173 preview/e2e (Cursor); 8081 worker health (127.0.0.1); 8765 metrics (optional); 6006/4317 Phoenix (optional); 8000 file-server tool. Lock module src/core/agent_lock.py (C-08): JARVIS_RUN_DIR overrides the folder of agent.lock and agent.pid.json (tests only); JARVIS_NO_LOCK=1 and pytest skip the lock; the worker health server binds JARVIS_WORKER_HOST:JARVIS_WORKER_PORT (default 127.0.0.1:8081); src/core/vortex.py starts no worker when JARVIS_HYBRID=1 (environment or root .env) or the lock is held, and an agent exit code 3 means 'already running'. v4 (VPS brain, K-72): there are two runtimes. In vps mode (JARVIS_BRAIN=vps) the brain runs in the VPS containers jarvis-agent and jarvis-agent-svc, which only Claude starts, stops or deploys (K-54, K-75), and the laptop runs the Desktop Node: 'agent_ctl node start|stop|status|logs|update [--sha] [--canary]' (start, stop and update by Claude or the user; Cursor uses status). The node holds run/desktop_node.lock (a second node exits 3) and the shared run/desktop_actor.lock, which the PC brain, vortex.py and Electron local also take, so none of them runs while the node runs. In vps mode 'agent_ctl start|stop|restart' act on the node and a worker start is refused; 'agent_ctl brain vps|pc [--when-idle|--now]' switches the brain (journal run/brain_switch.json). In pc mode the worker is 'jarvis-pc' and the rules above apply. Cursor never starts the node, the PC brain or the Electron local backend; it asks with 'REQ-RESTART'. The node health server binds 127.0.0.1:8082.
+v5 (C-136 as built): the PC brain's worker writes run/agent_link.json, the state of its LiveKit link, on every change (atomic write; no key, token or LiveKit address): {state: 'connecting'|'connected'|'retrying'|'failed', since (epoch s of the last state change), worker_id (LiveKit's id for the registered worker), detail (one line; LiveKit's address shown as '<livekit>', secrets masked per K-29), cause: 'network' (an attempt failed on the way to LiveKit: unreachable, refused, DNS, timeout, a dropped connection, a 5xx) | 'rejected' (LiveKit or TLS turned the worker away, or the cause is unknown) | '' (none since the start or the last connect), connected_once, recovery (false with JARVIS_LINK_RECOVERY=0), recoveries (this worker's JARVIS_LINK_RECOVERIES), pid (the writing process), lock_pid and lock_started_at (pid and started_at of run/agent.pid.json)}. agent_ctl ignores the file when lock_pid or lock_started_at differ from run/agent.pid.json (an earlier worker's file). Ready (start, restart, wait) = health 200 while a worker holds run/agent.lock and its link is connected; a worker without that file (started before C-136) is ready on health 200 plus the 5 s settle. start, restart and wait give up at once when the link reports failed. status prints a 'link' line: connected for <age> with the LiveKit worker id; connecting for <age>; retrying or failed for <age> with the detail, plus 'never connected' when it never registered; unknown when this worker wrote no file. While the link is not connected, status adds a WARNING line that says what happens next. --by also takes 'worker', which only the worker's own link recovery uses: 'restart --by worker --reason <why> --expect-pid <pid> --expect-started <started_at>' (both from run/agent.pid.json). That restart exits 4 (refused) when no worker runs any more, another worker holds run/agent.lock (another pid or started_at), the link is connected again, or the worker is gone when the restart comes to stop it (then no worker is started). Otherwise it is an ordinary restart under run/restart.lock and the 120 s cooldown (it never uses --force). Automatic restarts write no done_highlight.md entry: logs/agent_ctl.log records them with by=worker and expect_pid, the helper's output goes to logs/agent_recovery.log, and the worker logs each link change and each request as a 'LIVEKIT LINK' line. Self-restart rules: the worker asks only while its link is retrying or failed, never while it is connecting or connected, and never with JARVIS_LINK_RECOVERY=0 (K-69); a worker that never registered asks only when its attempts failed on the way to LiveKit (cause 'network') or a recovery started it; the LiveKit host of LIVEKIT_URL must accept a TCP connection at two checks in a row (one check every 15 s); no job may be running (the request waits); at most one request per 5 min. Timing: a worker that registered asks after 10 min of retrying since the disconnect, or at once after failed. A worker that never registered counts from its start: it needs the same 10 min of retrying (none after failed) and at least a pause of 5 min, doubled for each automatic restart in a row before it that did not register (JARVIS_LINK_RECOVERIES), at most 60 min.
 
 #### K-54 · COORD-4 (process) · owner: Claude
 VPS rules (Claude only; Cursor never runs ssh, scp or docker against the VPS). Allowed scope ONLY: Docker project jarvis (always 'docker compose -p jarvis'; code dir /opt/jarvis-agent, containers jarvis-* (v4: including jarvis-agent and jarvis-agent-svc), volumes jarvis_* (v4: including jarvis_agent_*), network jarvis-network, images jarvis-* (v4: including jarvis-agent:hostinger)), the dedicated buildx builder 'jarvis-builder' (v4, D19: its buildkit container and state volume, created once with 'docker buildx create --name jarvis-builder --driver docker-container'; never pruned without the user's OK), /etc/nginx/conf.d/jarvis.conf, /etc/nginx/jarvis.htpasswd and /root/jarvis-backups (backups, deploy lock, deploy.log, scratch). Not allowed: enabling or changing UFW (stays inactive), any other app, container, volume, network, vhost, cert or config, /etc/nginx/snippets, /etc/letsencrypt (read-only checks only), new systemd units, docker system/image/volume/builder prune, 'docker compose down' without -p jarvis, apt upgrade, reboot, restarting nginx or the docker daemon (only 'nginx -t && systemctl reload nginx'), deleting files or backups on the server without the user's explicit OK. Every change: backup_vps.sh -> change -> nginx -t before reload -> health gate + smoke_other_apps.sh pre/post diff -> done_highlight.md entry with the rollback command. Deploys only through deploy/hostinger/deploy_from_pc.sh from the committed HEAD. Verify commands use VPS='ssh -i ~/.ssh/id_ed25519_hostinger -o BatchMode=yes root@187.127.123.235'.
@@ -310,9 +312,11 @@ notify 'reasoning' for every accepted user message, typed and voice: {turn_id = 
 Fields the voice runtime adds, through a provider hook, to the agent heartbeat owned by infra OPS-16 / dashboard DASH-C08: {job_id, room, since, pid, mode:'gated'|'fast', session:'starting'|'running'|'restarting'|'idle'|'closed' ('idle' added in v4), agent_state, linked_identity, worker_agent_name}. One heartbeat at runtime start and {session:'closed'} at teardown. Probe jobs send none. v4 (VPS brain): the agent and agent-svc heartbeats also carry brain, git_sha, link {online, rtt_ms_p50, rtt_ms_p95}, pending_calls, unknowns_1h, cgroup {memory_current, cpu}, disk_free_gb, downloads_bytes and restarts (C-134); agent-svc adds the K-77 fields; canary jobs send none.
 
 #### K-69 · CT-VC-RUNTIME-ENV (config) · owner: Claude
-Names only in .env.example; values never logged. JARVIS_USER_ID (matloob; v4: set in every mode and role from stage V3, so the PC and the VPS share one memory file), JARVIS_TURN_MODE (spike decision, else fast), JARVIS_REALTIME_MODEL (models/gemini-2.5-flash-native-audio-latest, pinned because typed chat needs mid-session client content), JARVIS_STT_PROVIDER, JARVIS_STT_MODEL (whisper-large-v3-turbo), JARVIS_STT_LANGUAGE (ur), JARVIS_STT_PROMPT, JARVIS_STT_FALLBACK_MODEL and JARVIS_TRANSLIT_MODEL (resolved at startup from a list), JARVIS_VOICE_JARVIS (Charon), JARVIS_VOICE_ANNA (Aoede), JARVIS_VOICE_ID_THRESHOLD (0.45), JARVIS_LOAD_THRESHOLD (inf), JARVIS_PREWARM_TIMEOUT (120), JARVIS_IDLE_PROCS (1 on the PC; v4: 2 in the VPS agent container), JARVIS_CTX_TRIGGER_TOKENS (24000), JARVIS_THINKING_BUDGET (unset), JARVIS_AAD_SILENCE_MS / JARVIS_AAD_EOS_SENSITIVITY / JARVIS_AAD_PREFIX_MS (unset), JARVIS_TOOL_DESC (short|full), JARVIS_TOOL_DRY_RUN (0), JARVIS_DEBUG_SAVE_AUDIO (0), JARVIS_CV_PATH, JARVIS_SPEAK_TYPED (auto), JARVIS_STARTUP_SOUND, JARVIS_PROBE_DISABLED (0), JARVIS_SMOKE (0), JARVIS_SPIKE (0). JARVIS_AGENT_NAME belongs to OPS-15/C-ENV-1. Since C-09 the root .env is the single settings source: services/utils/jarvis_config.py loads it first and deploy/windows-local/.env only fills keys missing from it; no launcher copies one file over the other (setup.bat and start-agent.bat copy deploy/windows-local/.env to the root only when no root .env exists). v4 (VPS brain): the VPS agent containers read no root .env; they get these names from compose 'environment:' (TZ=Asia/Karachi, USER_CITY, JARVIS_USER_ID and the K-72 worker and session values) and secrets from .env.agent (K-47, K-75).
+Names only in .env.example; values never logged. JARVIS_USER_ID (matloob; v4: set in every mode and role from stage V3, so the PC and the VPS share one memory file), JARVIS_TURN_MODE (spike decision, else fast), JARVIS_REALTIME_MODEL (models/gemini-2.5-flash-native-audio-latest, pinned because typed chat needs mid-session client content), JARVIS_STT_PROVIDER, JARVIS_STT_MODEL (whisper-large-v3-turbo), JARVIS_STT_LANGUAGE (ur), JARVIS_STT_PROMPT, JARVIS_STT_FALLBACK_MODEL and JARVIS_TRANSLIT_MODEL (resolved at startup from a list), JARVIS_VOICE_JARVIS (Charon), JARVIS_VOICE_ANNA (Aoede), JARVIS_VOICE_ID_THRESHOLD (0.45), JARVIS_LOAD_THRESHOLD (inf), JARVIS_PREWARM_TIMEOUT (120), JARVIS_IDLE_PROCS (1 on the PC; v4: 2 in the VPS agent container), JARVIS_CTX_TRIGGER_TOKENS (24000), JARVIS_THINKING_BUDGET (unset), JARVIS_AAD_SILENCE_MS / JARVIS_AAD_EOS_SENSITIVITY / JARVIS_AAD_PREFIX_MS (unset), JARVIS_TOOL_DESC (short|full), JARVIS_TOOL_DRY_RUN (0), JARVIS_DEBUG_SAVE_AUDIO (0), JARVIS_CV_PATH, JARVIS_SPEAK_TYPED (auto), JARVIS_STARTUP_SOUND, JARVIS_PROBE_DISABLED (0), JARVIS_SMOKE (0), JARVIS_SPIKE (0). JARVIS_AGENT_NAME belongs to OPS-15/C-ENV-1. Since C-09 the root .env is the single settings source: services/utils/jarvis_config.py loads it first and deploy/windows-local/.env only fills keys missing from it; no launcher copies one file over the other (setup.bat and start-agent.bat copy deploy/windows-local/.env to the root only when no root .env exists). v4 (VPS brain): the VPS agent containers read no root .env; they get these names from compose 'environment:' (TZ=Asia/Karachi, USER_CITY, JARVIS_USER_ID and the K-72 worker and session values) and secrets from .env.agent (K-47, K-75). v5 (C-136): JARVIS_LINK_RECOVERY (1; 0, false, no or off, in any case, turns off the PC worker's automatic restarts when its LiveKit link stays lost, K-53 v5, and keeps run/agent_link.json and the LIVEKIT LINK log lines) and JARVIS_LINK_RECOVERIES (internal: only that recovery sets it, for the worker it starts, as the number of automatic restarts in a row that did not register; agent_ctl drops it from every other start, a worker reads it only when JARVIS_STARTED_BY=worker, and nobody sets it by hand).
 
 #### K-70 · DESKTOP-LINK (socketio+crypto) · owner: Claude
+One implementation, services/utils/desktop_protocol.py (C-115), serves the bridge, the agent peers and the node.
+
 Transport
 - Socket.IO namespace '/desktop' on the bridge.
 - PC node:
@@ -320,79 +324,264 @@ Transport
   - TLS is verified, and an http:// JARVIS_LINK_URL is refused;
   - reconnection=False with its own loop (backoff 1→30 s plus ≤1 s jitter, forever) and a fresh signed hello on every connect.
 - Agent peers (each job process and jarvis-agent-svc) connect to http://jarvis-bridge:5002, the internal listener that is never published. The role agent is accepted only on :5002.
-- Nothing from namespace '/' is ever relayed to '/desktop'.
+- Nothing from namespace '/' is ever relayed to '/desktop'. Notices are consumed by the bridge and never relayed.
 
 Keys
-- Ed25519 DESKTOP_AGENT_SIGNING_KEY: generated on the VPS; the private half lives only in .env.agent.
-- Ed25519 DESKTOP_PC_SIGNING_KEY: generated on the PC; the private half is kept DPAPI-wrapped in %LOCALAPPDATA%\JARVIS\node.
-- The public halves (DESKTOP_AGENT_PUBLIC_KEY, DESKTOP_PC_PUBLIC_KEY) go to bridge.env, .env.agent and the node config.
+- Ed25519 DESKTOP_AGENT_SIGNING_KEY: generated on the VPS. The private half lives only in .env.agent, as the 32-byte seed in hex.
+- Ed25519 DESKTOP_PC_SIGNING_KEY: generated on the PC, as the user who runs the node. The private half exists only in %LOCALAPPDATA%\JARVIS\node\keys.dpapi, never in an env file:
+  - DPAPI for the current user, CRYPTPROTECT_UI_FORBIDDEN, entropy 'jarvis/desktop/keys/v1';
+  - it wraps the canonical JSON {alg:'ed25519', created, kind:'desktop_pc_signing_key', public, seed, v:1}.
+- The public halves (DESKTOP_AGENT_PUBLIC_KEY, DESKTOP_PC_PUBLIC_KEY; 32 bytes as hex) go to bridge.env, .env.agent and the node config.
+  - A pinned key must be a canonical encoding and must not be one of the 8 small-order points (libsodium's rule).
+  - Anything else is a configuration error at load.
 - The bridge holds no private link key.
+- scripts/ops/gen_desktop_keys.py:
+  - It prints only KEY=VALUE lines with public keys and absolute paths. A public key is printed only after its file is written. It exits 0, or 2 with a message on stderr.
+  - It keeps an existing key unless --rotate is given.
+  - --role pc (Windows only):
+    - writes keys.dpapi (--key-file overrides the path);
+    - --rotate keeps the old file as keys.dpapi.<YYYYmmdd-HHMMSS>-<4 hex>.bak.
+  - --role agent --env-file PATH, checks before any key is made:
+    - PATH's directory must exist and be writable;
+    - PATH must not be mounted on its own, that is, on another device than its directory;
+    - PATH.tmp must not exist yet.
+  - --role agent, what it writes:
+    - only PATH.tmp (umask 077, mode 600, temp file, fsync, atomic rename);
+    - every existing line is kept, and DESKTOP_AGENT_SIGNING_KEY and DESKTOP_AGENT_PUBLIC_KEY are set;
+    - --pc-public also sets DESKTOP_PC_PUBLIC_KEY and refuses an unusable key;
+    - it prints WROTE=<PATH.tmp>, or KEPT=<PATH> when nothing changed.
+  - In a container, mount the directory that holds PATH, never the file alone. Check PATH.tmp on the host before distributing the public key.
+  - The deploy step (C-127) moves PATH.tmp over PATH.
 
 Encryption
-- Each side sends an ephemeral X25519 key inside its signed hello.
-- session key = HKDF-SHA256(X25519, salt = node sess || agent peer_id, info 'jarvis/desktop/aead/v1').
-- The bodies of exec, ack-details, progress, result, result_resend, cancel and event messages, and every blob, are ChaCha20-Poly1305 encrypted (12-byte random nonce, AAD = the canonical header).
-- The bridge sees only the header fields.
+- Each side sends a new ephemeral X25519 key (eph_pub) inside its signed hello.
+- Session key:
+  - session key = HKDF-SHA256(X25519 secret, salt = node sess (its 32 hex characters) || agent peer_id (UTF-8), info 'jarvis/desktop/aead/v1');
+  - it is 32 bytes, one per (node session, agent peer);
+  - a malformed or low-order eph_pub fails the handshake.
+- Encrypted bodies:
+  - the bodies of exec, ack, progress, result, result_resend, cancel and event messages are ChaCha20-Poly1305 encrypted;
+  - body = {enc:'chacha20-poly1305', data: base64(12-byte random nonce || ciphertext || tag)};
+  - AAD = canonical_json(header), where the header is the envelope without body and sig;
+  - an encrypted message names one peer, never '<role>:*'.
+- Blobs:
+  - 1 MiB chunks, each sealed with its own nonce and the AAD canonical_json({blob_id, i, n, size, typ:'blob', v:1});
+  - blob_id is 32 lowercase hex;
+  - size and sha256 come from the signed, encrypted result body;
+  - a reordered, truncated or changed chunk fails and yields no plaintext.
+- The bridge sees every header, and the plaintext bodies of hello, agent_hello, control, ping, pong, result_ack, sync_request and notice. None of them carries tool arguments, results, paths, window titles, clipboard text, locations or presence. Notices are limited by exact field lists; keeping such text out of their few short free-text fields is the node's duty (K-74).
 
 Envelope
-- Fields: {v:1, typ, id (32 hex), ts (sender epoch s), from ('agent:<peer>'|'pc:<node_id>'|'bridge'), to, sess (node session nonce, 32 hex, rotated per connect, required on every agent→pc message except agent_hello), room, origin ('llm'|'job'|'scheduler'|'internal'|'canary'), call_id?, tool?, seq? {speech_id, n}, start_by?, body, sig}.
+- Fields: {v:1, typ, id, ts, from, to, sess, room, origin, call_id?, tool?, seq?, start_by?, body, sig}. Any other field is refused.
+- Formats:
+  - v: an integer;
+  - id, sess and nonces: 32 lowercase hex; sig: 128 lowercase hex;
+  - ts and start_by: epoch seconds in (0, 1e11), as a JSON number, never a bool. Senders round ts, start_by and pong t1 to ms; receivers accept any precision;
+  - from: 'agent:<id>' or 'pc:<id>', with id [A-Za-z0-9][A-Za-z0-9._-]{0,63};
+  - to: the same, or '<role>:*' (unencrypted types only), or 'bridge' (notice only);
+  - typ: [a-z_]{1,32}; room: [A-Za-z0-9._:-]{0,64};
+  - origin: 'llm'|'job'|'scheduler'|'internal'|'canary';
+  - call_id: [A-Za-z0-9_-]{8,64}; tool: [A-Za-z0-9_.]{1,64};
+  - seq: {speech_id [A-Za-z0-9._:-]{1,64}, n integer 0..2^31−1}.
+- sess, the node session nonce, is rotated per connect.
+  - It is required on every message from either side except agent_hello.
+  - An agent_hello that names a sess (in the envelope or the body) must name the current one.
+- Required fields by type:
+  - exec also needs call_id, tool and start_by;
+  - ack, progress, result, result_resend, cancel and result_ack need call_id.
+- Notice header:
+  - a notice has to 'bridge', room '', origin 'internal' and sess;
+  - it has no call_id, tool, seq or start_by;
+  - nothing else may be addressed to 'bridge'.
 - Signed bytes = b'jarvis/desktop/msg/v1|' + canonical_json(envelope without sig), where canonical_json = json.dumps(sort_keys=True, separators=(',',':'), ensure_ascii=False).encode('utf-8').
-- HTTP requests are signed over method|path|query|ts|nonce|length|sha256(body), context 'jarvis/desktop/http/v1', in the headers X-Desk-Ts, X-Desk-Nonce, X-Desk-Len, X-Desk-Sha256 and X-Desk-Sig. They are verified before any body byte is read.
+  - canonical_json refuses NaN/±Infinity, non-string keys, lone surrogates, nesting deeper than 32 and non-JSON types.
+  - The wire parser also refuses invalid UTF-8, duplicate keys and numbers that overflow to infinity.
+  - For every other value the bytes are exactly that json.dumps.
+- Size caps, in KiB (1024 bytes), measured on the received bytes or on the canonical envelope with sig:
+  - exec 96, result and result_resend 256, event 32, hello 64, notice 4, every other type 32;
+  - the largest cap (256 KiB) is checked before parsing, and the type's cap right after;
+  - a sender refuses an oversized or malformed message with BAD_ARGS, giving the reason a receiver would give.
+
+Signed HTTP (node requests, K-73)
+- Headers:
+  - X-Desk-Ts (whole seconds), X-Desk-Nonce (32 lowercase hex), X-Desk-Len (bytes), X-Desk-Sha256 (64 lowercase hex), X-Desk-Sig (128 lowercase hex);
+  - names are case-insensitive, and each header appears exactly once;
+  - Ts and Len are decimals without sign or leading zeros, at most 12 digits.
+- Signed bytes = b'jarvis/desktop/http/v1|' + 'METHOD|path|query|ts|nonce|length|sha256':
+  - METHOD: letters only (1..16), upper-cased;
+  - path: percent-decoded, without the public '/vortex' mount (nginx strips it), re-quoted;
+  - query: the pairs sorted, RFC 3986-encoded and joined with '&' (at most 100 pairs; '' when there is none);
+  - the verifier passes the path and query as received (ASGI raw_path and query_string bytes, read as ASCII).
+- Checks before any body byte is read, in order:
+  1. all five headers are present;
+  2. X-Desk-Len and its cap (30 MiB unless the endpoint sets less);
+  3. the other formats;
+  4. Content-Length = X-Desk-Len;
+  5. the signature;
+  6. |own clock − ts| ≤ 120 s;
+  7. the nonce is unseen for 24 h.
+- The body is then streamed under a hard cap at the signed length, and its sha256 is compared.
+- Status: size 413; length, format and digest 400; signature 403; stale and future 401; replay 409; seen_store 503.
 
 Receiver checks, in order
-1. Size cap: exec 96 KB, result 256 KB, event 32 KB.
-2. v in the supported list.
-3. from/to match the link.
-4. Signature with the sender role's key.
-5. |own OS clock − ts| ≤ 120 s. The bridge clock is never used. The node refuses actuation with CLOCK_SKEW when the offset measured from agent-signed ping/pong exceeds 60 s.
-6. sess equals the node's current session.
-7. id unseen for 24 h (persisted: node run/desktop_link.db, agent conversations/desktop_seen.db, bridge store).
-8. typ allowed in that direction.
+1. Size cap (above).
+2. v in the supported list (else PROTO_MISMATCH), then the field formats and the notice rules (above).
+3. from/to match the link:
+   - the node takes only agent senders addressed to it or 'pc:*';
+   - an agent takes only the node of its verified hello, addressed to it or 'agent:*';
+   - so neither of them accepts anything addressed to 'bridge';
+   - the bridge binds each socket to the peer of that socket's verified hello, and after that takes only that peer's messages on it;
+   - a new hello rebinds an agent or the bridge;
+   - sender and target roles always differ.
+4. Signature, checked with the sender role's pinned key.
+5. |own clock + offset − ts| ≤ 120 s, where offset = sender clock − own clock.
+   - An agent or node takes the offset from its ClockEstimator: the latest sample, or 0 when no sample is younger than 600 s or the estimator must re-measure (below). Each keeps one Receiver and one ClockEstimator for the life of its process, across reconnects; a new estimator would forget a measured skew.
+   - The bridge has no estimator and uses its own clock. The bridge's server_time hint is never used.
+   - Clock probes:
+     - a ping skips this check at every receiver, because it only asks for a pong;
+     - a pong skips it at the bridge, which relays it;
+     - at an agent or node, every pong that passes all eight checks goes to the receiver's ClockEstimator;
+     - a pong outside the window is refused as a message. When it is authentic, in session, exactly {echo, t1} and new to the seen store, it is first offered to the ClockEstimator;
+     - the ClockEstimator takes a pong only when it echoes a ping this endpoint registered, comes from that ping's target (any peer of the role for '<role>:*'), arrives within 5 s on the monotonic clock, and its hold time t2 − t1 lies in [−2 ms, round trip + 2 ms]. One ping gives one sample;
+     - so a clock step above the window is measured and reported (CLOCK_SKEW) instead of leaving every later message refused without a reason.
+   - A new session after a clock fix: a sample counts for 600 s, and a hello is no clock probe. So a hello or agent_hello that fails this check with the offset, but passes |own clock − ts| ≤ 120 s, is accepted. When the handshake with it succeeds (accept_node_hello, accept_agent_hello), the receiver's ClockEstimator must re-measure: it drops its sample, so this check uses the own clock, and it reports CLOCK_SKEW until its first new sample.
+     - A hello that the bridge held back, or one sent after a partial clock fix, takes the same path. So it can hold actuation back until the next pong, but never allow it.
+     - A hello whose handshake fails leaves the sample alone. A replayed hello is still refused at check 7, and no other type gets this rule.
+   - The node refuses actuation with CLOCK_SKEW (ClockEstimator.check_actuation) while the latest sample is above 60 s, also after that sample has expired, and while the estimator must re-measure. Only a new sample ends it.
+     - It refuses also when the start window would pass: without a sample, start_by is converted on the own clock.
+     - Before the first sample, or after one within 60 s has expired, there is nothing to refuse.
+   - The agent answers laptop calls with CLOCK_SKEW at once while ClockEstimator.skew_exceeded(): a current sample above 60 s, or the re-measure state (C-119). An expired sample does not count there, so a laptop that went offline with a skewed clock reads as offline.
+6. sess equals the node's current session. A hello opens or rotates it.
+7. id unseen for 24 h, in the library's SeenStore (a Receiver refuses any other store type when it is built):
+   - SQLite owned by one thread, WAL mode, BEGIN IMMEDIATE writes;
+   - where it lives:
+     - node: run/desktop_link.db;
+     - agent: conversations/desktop_seen.db, one namespace per agent peer id, kept across restarts;
+     - bridge: its own file /app/data/desktop_seen.db on the volume jarvis_bridge_data, namespace 'bridge'. It is never bridge.db, because C-13 renames a corrupt bridge.db aside while connections are open. C-13's seen_ids table (async mark_seen) is not this store;
+   - rows (namespace, sess, kind, value) cover the kinds id, call_id, confirm_id and http_nonce, and expire 24 h after they are written;
+   - a value recorded under any session counts as seen;
+   - each namespace keeps created_at, the time it was first opened, kept across opens and never purged;
+   - a store that cannot answer fails closed (seen_store).
+   - An authentic message that fails check 5 or 6 has its id recorded too, and one seen before is a replay. So within the 24 h it can never pass later.
+   - The bridge's Receiver has a store as well, so a replayed authentic message is a replay there, never a clock-skew warning (K-74).
+8. typ allowed in that direction:
+   - agent → pc: agent_hello, exec, cancel, result_ack, control, ping, pong, sync_request;
+   - pc → agent: hello, ack, progress, result, result_resend, event, ping, pong;
+   - pc → bridge: notice.
+   - The plaintext bodies are fixed here:
+     - an agent control kind must be on its list (below);
+     - ping: {};
+     - pong: exactly {echo: 32 lowercase hex, t1: epoch seconds};
+     - notice: its kind's field list (K-74). A kind that is not on the list is refused as 'direction', and any field problem as 'format'.
+- Opening an encrypted body then checks:
+  - the session key of (sess, agent peer);
+  - the AEAD, with the header as AAD;
+  - the header fields repeated in the body (call_id, tool, room, origin, start_by, seq);
+  - exec args against args_sha256 (the sha256 of canonical_json(args));
+  - the event kind (below).
+  - A failure returns no plaintext.
+- A failure is dropped and audited as DL_REJECT: reason and code only, never content. Repeats of one reason on one socket within 60 s fold into one row with a count.
+- Whatever arrives, only DesktopLinkError leaves the receiver, the hint parser and the signed-HTTP check, so every refusal can be counted and alerted on (K-74).
 
-A failure is dropped and audited as DL_REJECT. An exec that fails gets a signed refusal.
+Refusals
+- A refusal is a signed, encrypted ack {accepted:false, code} for the exec's call_id. It means this exec did not start and never will, and the node sends nothing more for it. A call that started always ends with a result, also when it is cancelled or stopped (for example STOPPED_BY_USER).
+- code is one of:
+  - DESKTOP_REJECTED after a failed receiver check, and only when the rules below allow it;
+  - CLOCK_SKEW or START_WINDOW_MISSED from the node's clock checks;
+  - the K-76 code when the node's policy refuses the call before it starts, for example APPROVAL_REQUIRED, APPROVAL_INVALID, DESKTOP_LOCKED, DESKTOP_READ_ONLY, DESKTOP_PANIC, DESKTOP_RATE_LIMITED, PRESENCE_REQUIRED or DESKTOP_CONTROL_DISABLED. A policy refusal travels as this ack, never as a result.
+- The agent maps only DESKTOP_REJECTED and START_WINDOW_MISSED to DESKTOP_NOT_STARTED. It returns CLOCK_SKEW and every K-76 code as they are. APPROVAL_REQUIRED becomes a ConfirmFlow item, and the exec is re-sent with the approval (K-76).
+- After a failed receiver check, a refusal is sent only for an exec that provably never ran and never will (DesktopLinkError.refusal_code):
+  - never for a message whose signature was not verified, for a replay, or when the seen store could not answer;
+  - after a check 5 or 6 failure, only when all of these hold:
+    - the receiver has a seen store, and the id was new to it;
+    - the offset is measured: a receiver with a ClockEstimator needs a sample younger than 600 s. So there is no such refusal before its first pong, while it must re-measure (check 5), or after its sample has expired;
+    - |own clock + offset − ts| < the refusal horizon, min(store retention − 2 × 120 s, 1 h), which is 1 h with the 24 h retention;
+    - ts − offset ≥ the floor = the store's created_at + any forward step of the node's wall clock against its monotonic clock since the store was opened + 2 × 120 s. So the exec cannot have run before the store existed.
+      - The 2 × 120 s margin has to absorb every clock change the floor cannot see: a forward step of the node clock before the store's latest open (across a node restart), and a backward step of the agent's (VPS) clock between the exec's signing and its replay.
+      - A larger change, followed within 1 h by a replay of an exec that ran before the store was created, can still get a false refusal.
+  - A receiver without a seen store never refuses after check 5 or 6.
+  - Before signing, the node looks the call_id up in its WAL. A call that started gets its real outcome (result or result_resend), never a refusal.
+- The node keeps WAL call_ids, with their state, for at least 24 h.
+- An agent never sends an exec for a call_id more than 1 h after its first send.
 
 Messages
-- hello (node): node_id, boot_id, proto [1], version, git_sha, manifest_sha256, param_schema_sha256, eph_pub, sess, mode, locked, presence_s, wal_report[{call_id, state: completed|interrupted|never_started|start_window_missed, finished_at}].
-- agent_hello: peer_id, job_id|'svc', room, eph_pub, sess.
-- welcome and status (bridge, unsigned hints): server_time, limits, brain, active_job, desktop_status, alert hints (K-74) and, after a UI desktop_stop, a stop_all hint to the agent peers (tighten-only: an agent only cancels its own in-flight laptop calls).
-- exec: call_id, tool or pc.* operation, args, args_sha256, param_schema_sha256, timeout_s, lock_wait_s, start_by (agent clock = send + 2.5 s, converted by the node with the measured offset), seq, room, origin, approval? {confirm_id, channel 'ui'|'voice', risk, args_sha256} (the agent's ConfirmFlow result for a confirm-class call, K-76; inside the signed, encrypted body).
-- ack: accepted, risk, cls, code?.
+- hello (node, to 'agent:*'):
+  - fields: node_id (= the from id), boot_id, proto [1], version, git_sha, manifest_sha256, param_schema_sha256, eph_pub, sess (= the envelope sess), mode, locked, wal_report[{call_id, state: completed|interrupted|never_started|start_window_missed, finished_at}];
+  - it carries no presence value (K-76).
+- agent_hello: peer_id (= the from id), job_id|'svc', room (= the envelope room), eph_pub, and sess once known.
+- Bridge hints (unsigned, never authority):
+  - shape: {v, typ, id, ts, from:'bridge', to, body}, without sig;
+  - to: one 'agent:'/'pc:' ident or '<role>:*', never 'bridge';
+  - a hint never passes the receiver checks.
+  - Kinds:
+    - welcome and status: server_time, limits, brain, active_job, desktop_status, alert hints (K-74), and stop_all: true to the agent peers after a UI desktop_stop. stop_all is tighten-only: an agent cancels only its own in-flight laptop calls;
+    - control: to the node only, with the tighten-only kinds (below);
+    - dl_undeliverable {call_id, emitted, acked}: to an agent only.
+- exec:
+  - fields: call_id, tool or pc.* operation, args, args_sha256, param_schema_sha256, timeout_s, lock_wait_s, start_by, seq, room, origin, approval?;
+  - start_by is on the agent clock (send + 2.5 s). The node turns it, with the measured offset, into a monotonic deadline at most 30 s ahead, and past that deadline answers START_WINDOW_MISSED;
+  - approval? {confirm_id, channel 'ui'|'voice', risk, args_sha256} is the agent's ConfirmFlow result for a confirm-class call (K-76), inside the signed, encrypted body.
+- ack: accepted, risk, cls, code?. accepted:false with a code is a refusal (above): a link, clock or policy code.
 - progress: at least every 10 s while running.
 - result: status, K-12 result, duration_ms, effect none|done|possible, blobs[{blob_id, sha256, size, mime}].
 - result_ack.
-- result_resend: a fresh envelope with call_id, original_ts, finished_at, result.
+- result_resend:
+  - a fresh envelope: new id and ts, the current sess, to and session key;
+  - the header keeps the call's call_id, tool, room and origin;
+  - body {call_id, original_ts, finished_at, result};
+  - the agent dedupes it by call_id.
 - cancel: answered 'cancelled' within 5 s, or with the real result.
-- event: vitals_pc | location | window_context | clipboard_suggestion | desktop_state | power | log_batch | audit.
+- event (encrypted, to one agent peer):
+  - kinds: location | window_context | clipboard_suggestion | log_batch. Any other kind fails when the body is opened;
+  - location and log_batch go to the svc peer;
+  - window_context and clipboard_suggestion go to the job peer serving the owner room (not svc, not a canary or probe room);
+  - with no such peer, the event is dropped;
+  - the node sends its current location again after each svc agent_hello, and its current window_context after each owner-room agent_hello.
+- notice (node → 'bridge', signed, not encrypted, never relayed):
+  - {kind: vitals_pc | desktop_state | power | alert, ...}, with each kind's exact field list (K-74);
+  - a missing, unknown, null, mistyped or out-of-range field is refused when building (BAD_ARGS) and at check 8;
+  - the bridge uses notices for desktop_status, vitals and alerts.
 - control:
   - from the bridge, tighten-only kinds: desktop_stop (→ read), desktop_off, active_job, link_disabled;
-  - from an agent: tighten-only kinds plus stop_all.
-- ping/pong: agent↔node every 30 s; the offset is updated on every pong; deadlines use monotonic time.
+  - from an agent (signed): the tighten-only kinds plus stop_all.
+- ping/pong:
+  - agent↔node every 30 s in both directions, in every node run mode, and once right after each handshake, so that a new session is measured at once;
+  - ping body {}; pong body {echo: the ping id, t1: the ping's receive time}; t2 = the pong ts;
+  - the pinger registers each ping (id, send time, target) with ClockEstimator.ping_sent(). That is all the wiring a link needs: its Receiver hands every pong it verifies, and the usable ones outside the window, to that estimator (check 5);
+  - on a usable pong it computes offset = ((t1 − t0) + (t2 − t3)) / 2, where t3 = t0 + the round trip on the monotonic clock;
+  - a new sample replaces the previous one at once, counts for 600 s and ends the re-measure state. A handshake with a hello accepted only on the raw own clock drops it and starts that state (check 5);
+  - deadlines use monotonic time.
 - sync_request: sent by an agent after it starts.
 - Internal operations (never LLM-visible; on an allow-list): pc.ping, pc.capture_screen, pc.capture_webcam, pc.read_file, pc.fetch, pc.open_url, pc.speak_local, pc.play_sound.
 
 Semantics and timers
 - At most once. call_id is the idempotency key. Retries happen only for the read class.
 - Timers:
-  - presence heartbeat 10 s, stale after 25 s;
+  - presence:
+    - the bridge counts every verified node message except ping and pong, because the probes skip check 5 at the bridge;
+    - the node's link (C-120) sends a desktop_state notice every 10 s, in every run mode (active and --canary) and every desktop mode, whatever its sensors do;
+    - the node is stale after 25 s without a counted message;
   - ack 3 s, then cancel plus a 2 s grace;
   - stall 30 s without progress → cancel → DESKTOP_TIMEOUT;
   - proxy cap = 3 + lock_wait + timeout + 10 s;
   - outbox 10 min / 200 entries.
 - Dead-man switch: a link down for more than 5 s cancels running input-class calls; a messaging send step completes atomically.
 - Outcomes:
-  - 'Not executed' (DESKTOP_NOT_STARTED) only after an explicit refusal, tombstone or start_window_missed, or when the bridge reports dl_undeliverable{emitted:false}.
+  - 'Not executed' (DESKTOP_NOT_STARTED) only after a refusal coded DESKTOP_REJECTED or START_WINDOW_MISSED (above), a tombstone or start_window_missed, or when the bridge reports dl_undeliverable{emitted:false}. A refusal with another code returns that code.
   - A laptop that is offline before sending gives DESKTOP_OFFLINE.
-  - Every other loss gives DESKTOP_RESULT_UNKNOWN, reconciled on hello or sync_request; late outcomes are announced, and the tool_sync end is corrected under the same id.
+  - Every other loss gives DESKTOP_RESULT_UNKNOWN, reconciled on hello or sync_request. Late outcomes are announced, and the tool_sync end is corrected under the same id.
 
 Versioning
 - The highest version common to both proto lists is used; none in common gives PROTO_MISMATCH.
 - Rolling order: bridge → agent → node.
 
 Logging
-- The bridge logs only call_id, tool, sizes and timings, never arguments, results or window titles.
+- The bridge logs only call_id, tool, sizes and timings, never arguments, results, window titles or notice bodies.
+- Link errors carry a reason and a code, never message content, keys or plaintext.
 
 Rates (message rates, not CPU/RAM limits)
-- exec 10/s burst and 120/min; events 20/s; connects 10/min per IP. Only failed verifications count.
+- exec 10/s burst and 120/min; events and notices 20/s; connects 10/min per IP.
+- Only failed verifications count toward the per-IP limit. An authentic message refused only as stale or future is not a failed verification.
 
 #### K-71 · DESKTOP-MANIFEST + PLACEMENT (file-format+python-api) · owner: Claude
 Manifest file
@@ -521,27 +710,83 @@ Backup pull
 
 #### K-74 · DESKTOP-STATUS (socketio-event+http-api) · owner: Claude
 Event
-- desktop_status = {online: bool, state: 'online'|'stale'|'offline'|'locked'|'panic', mode: 'off'|'read'|'full', locked: bool, presence_s?: int, voice_active: bool, node_id, version, git_sha, manifest_ok: bool, since, last_seen, rtt_ms_p50, busy_tool?, brain: 'vps'|'pc'}.
+- desktop_status = {online: bool, state: 'online'|'stale'|'offline'|'locked'|'panic', mode: 'off'|'read'|'full', locked: bool, voice_active: bool, node_id, version, git_sha, manifest_ok: bool, since, last_seen, rtt_ms_p50, busy_tool?, brain: 'vps'|'pc'}.
+  - Presence stays on the node (K-76): there is no presence_s.
+- The bridge builds it from the K-70 link alone, so it stays right with no agent peer connected:
+  - node_id, version and git_sha come from the node's verified hello;
+  - mode and locked come from the hello, then from each desktop_state notice, which also gives panic;
+  - last_seen = the bridge's receive time of the last verified node message other than a ping or pong;
+  - state, in this order:
+    - offline while no node socket has a verified hello;
+    - offline after a power notice suspend, shutdown or logoff, until a power resume notice, any later verified node message or the next hello;
+    - else stale when last_seen is more than 25 s old;
+    - else panic, locked or online;
+  - online = state is online, locked or panic; since = when state last changed;
+  - manifest_ok is false from a MANIFEST_MISMATCH alert notice until the next hello;
+  - busy_tool = the tool of the oldest exec the bridge relayed to the node without its result;
+  - rtt_ms_p50 = the median round trip, timed at the bridge, from an agent ping it relays to the node's pong;
+  - voice_active and brain come from the bridge's own state.
 - The bridge sends it:
   - to K-70 agent peers as 'status';
-  - to UI sockets on '/' as 'desktop_status', and in init_state.desktop_status;
+  - to UI sockets on '/' as 'desktop_status' on every change, and in init_state.desktop_status;
   - inside GET /vortex/status as the 'desktop' block (session or agent credentials).
 - Public GET /vortex/health stays {status, version, uptime_s} (K-43). It never carries presence, brain or vitals.
 
+Notices (K-70: node → 'bridge', signed, not encrypted, never relayed)
+- Each body is {kind, ...} with exactly that kind's fields.
+  - Optional fields may be absent but never null. Anything else is refused: BAD_ARGS when building, check 8 at the bridge.
+  - number: a JSON int or float, never a bool, range inclusive.
+  - integer: an int, never a bool or float.
+  - text: 1..N characters, all printable (Python str.isprintable(): no control, bidi, zero-width, private-use or unassigned characters, and no separator except the ASCII space).
+- {kind:'vitals_pc', cpu, ram, disk, disk_label?, host?, cores?, ram_total_gb?}:
+  - cpu, ram and disk are numbers 0..100;
+  - disk_label is text ≤ 32; host is text ≤ 64; cores is an integer 1..4096; ram_total_gb is a number 0..65536;
+  - sent every 10 s from the active-mode sensors (C-122).
+- {kind:'desktop_state', mode: 'off'|'read'|'full', locked: bool, panic: bool}: sent after every hello, on every change, and every 10 s as the presence heartbeat. The heartbeat is a C-120 link duty in every node run mode.
+- {kind:'power', state: 'suspend'|'resume'|'shutdown'|'logoff'}:
+  - sent on the Windows notification;
+  - after suspend the node sends nothing until it wakes. Then it sends a resume notice if the socket survived, or else a new hello;
+  - shutdown and logoff are the last message on that connection.
+- {kind:'alert', code, level, count?, message?, call_id?, tool?, peer?}:
+  - count is an integer 1..1000000; message is text ≤ 200; peer is 'agent:<id>' or 'pc:<id>'; call_id and tool use the K-70 formats;
+  - code and level are fixed pairs: SIGNATURE_INVALID and APPROVAL_INVALID are 'critical'; CLOCK_SKEW, MANIFEST_MISMATCH and DESKTOP_RATE_LIMITED are 'warning'. Any other pair is refused;
+  - the node folds repeats of a code within 60 s into one notice, with count.
+- A notice is at most 4 KiB. It never carries arguments, results, paths, window titles, clipboard text, locations or presence. Those stay on the node, or go only to agent peers as encrypted events (K-70).
+  - The library refuses any field outside the kind's list (BAD_ARGS, check 8), so there is no field for them.
+  - It cannot see what a free-text field holds. Keeping that text out of alert message, host and disk_label is the node's duty, tested in C-121 and C-122.
+- Storage:
+  - the bridge keeps only the latest vitals_pc, desktop_state and power values, in the C-13 kv, overwritten in place;
+  - it never writes notices or desktop_status history to its events or audit tables;
+  - an alert notice becomes a system_alert and an audit row, and it is the only notice that writes an audit row.
+
 Vitals
-- The node sends vitals_pc every 10 s.
+- The bridge emits each vitals_pc notice to UI sockets as vitals_pc {cpu, ram, disk, disk_label?, cores?, ram_total_gb?, host, ts}. host = node_id when the notice has none; ts = the bridge's receive time.
 - The legacy vitals_update prefers a vitals_pc reading less than 30 s old; the bridge's own psutil figures are vitals_vps.
 - The UI shows a stale state after 30 s.
 
 Commands from the UI (tighten-only)
-- ui_command 'desktop_stop' → node mode read and every in-flight laptop call cancelled. The bridge accepts it only from UI sockets (K-40 v4), persists it until the node reports read or off (re-sent after a node reconnect), sends the tighten-only control desktop_stop to the node and a stop_all hint to the agent peers, and emits desktop_status. Only the laptop tray switches back to full (K-76).
+- ui_command 'desktop_stop' → node mode read, and every in-flight laptop call cancelled.
+  - The bridge accepts it only from UI sockets (K-40 v4).
+  - It persists it until a desktop_state notice or a hello reports mode read or off, and re-sends it after a node reconnect.
+  - It sends the tighten-only control desktop_stop to the node and a stop_all hint to the agent peers, and emits desktop_status.
+  - Only the laptop tray switches back to full (K-76).
 - ui_command 'notification_ack' {id} → the K-77 delivery ledger.
 
 Alerts (system_alert to the UI, an audit row, and a local toast on the laptop)
+- system_alert = {id, severity: 'critical'|'warning'|'info', code, title, count, ts}.
+  - title is the alert's message, or else a short text for the code.
+  - Repeats of one code within 60 s are folded into one, with count.
 - critical: any signature or approval verification failure.
 - warning: desktop_replaced, a new node_id, manifest drift, clock skew above 60 s, duplicate agent participants, rate-limit trips, more than 3 agent restarts per hour, memory above 4 GiB (warn) or 6 GiB (critical), disk below 30 GB (warn) or 15 GB (critical).
 - info: laptop offline for more than 30 min while a UI is connected.
-- Who raises them: from cutover the bridge (C-116: signature failures on '/desktop', desktop_replaced, a new node_id, rate-limit trips) and the node (C-121: signature and approval failures, clock skew, manifest drift, cap trips); C-134 adds the restart, memory, disk, duplicate-agent and offline alerts.
+- Clock skew seen at the bridge: a node hello or notice whose signature verified, but which is refused only as stale or future, raises the clock-skew warning.
+  - Its title states the measured skew: the message ts minus the bridge clock.
+  - It never raises the critical alert, and it never counts as a failed verification for the per-IP limit (K-70 Rates).
+  - Pings and pongs still pass the bridge, so the agent and the node measure the step themselves (K-70 check 5).
+- Who raises them:
+  - from cutover, the bridge (C-116): signature failures on '/desktop', desktop_replaced, a new node_id, rate-limit trips, and the clock skew above. Each one also goes to the node as an alert hint, which the node shows as a toast;
+  - from cutover, the node (C-121): each alert is a local toast plus an alert notice, which the bridge turns into system_alert and an audit row;
+  - C-134 adds the restart, memory, disk, duplicate-agent and offline alerts.
 
 #### K-75 · AGENT-CONTAINERS (deploy) · owner: Claude
 Image
@@ -595,10 +840,10 @@ Authority
 Modes and session state
 - Modes: off | read | full. The node starts in full as soon as it runs (logon autostart, D11), unless run/desktop_state.json holds a panic latch, a remote stop or a tray Off/Read choice: these survive a reboot or logon, the node then starts in that mode (off or read), and desktop_status shows it on the Laptop chip until the tray Full clears it.
 - Remote callers (UI 'desktop_stop', chat, agent, bridge) can only tighten. Loosening (full after a remote stop or a panic, desktop_control back on) happens only at the laptop (tray, or the PC root .env for desktop_control), never from the UI or the bridge.
-- Windows lock (WTS session notifications): while the session is locked, every call that needs the desktop_input lock (K-16) returns DESKTOP_LOCKED without running, because Windows blocks input injection then, and captures are refused; other calls run under their normal rules. Unlock resumes input automatically, with no user action. Sleep or logoff takes the node offline (DESKTOP_OFFLINE) until resume or logon.
+- Windows lock (WTS session notifications): while the session is locked, every call that needs the desktop_input lock (K-16) returns DESKTOP_LOCKED without running, because Windows blocks input injection then, and captures are refused; other calls run under their normal rules. Unlock resumes input automatically, with no user action. Sleep or logoff takes the node offline (DESKTOP_OFFLINE) until resume or logon. The node first sends a K-70 power notice (suspend, shutdown or logoff), so desktop_status shows offline at once (K-74). After a suspend it sends nothing until it wakes; shutdown and logoff are the last message of the connection.
 - Kill switch: JARVIS_DESKTOP_CONTROL=false (config.desktop_control_enabled, K-15) refuses every actuation with DESKTOP_CONTROL_DISABLED; de-escalation still runs. The node reads it from the PC root .env at start and within seconds of a change (K-72 settings source); the UI can only turn it off, and only after C-59.
-- Check order on the node: kill switch, panic, mode and Windows lock first, then class and approval, then origin, then paths. A canary or probe call therefore gets a state or approval refusal first, and nothing actuates.
-- Presence = genuine local input (keyboard/mouse hook events without LLKHF_INJECTED/LLMHF_INJECTED) within JARVIS_PRESENCE_WINDOW_S; captures use JARVIS_CAPTURE_PRESENCE_S.
+- Check order on the node: kill switch, panic, mode and Windows lock first, then class and approval, then origin, then paths. A canary or probe call therefore gets a state or approval refusal first, and nothing actuates. Every refusal before the start, with its K-76 code, reaches the agent as the K-70 refusal ack {accepted:false, code}, never as a result (v5). A call that started ends with its result.
+- Presence = genuine local input (keyboard/mouse hook events without LLKHF_INJECTED/LLMHF_INJECTED) within JARVIS_PRESENCE_WINDOW_S; captures use JARVIS_CAPTURE_PRESENCE_S. Presence stays on the node (v5). No presence value goes to the bridge or the agents: the hello, the notices and desktop_status carry none.
 
 Classes
 - read: vitals, active window, Notepad list, page read, documents, pc.ping. Needs mode read or full.
@@ -645,14 +890,14 @@ Stops
 - Bridge desktop_link off, persisted.
 
 Caps (message rates, not CPU/RAM limits)
-- input 600/min, messaging 60/h, approvals 30/h, uploads 60/h and 200 MB/h, deliveries 5 GB/day. A trip returns DESKTOP_RATE_LIMITED and shows a toast.
+- input 600/min, messaging 60/h, approvals 30/h, uploads 60/h and 200 MB/h, deliveries 5 GB/day. A trip returns DESKTOP_RATE_LIMITED, shows a toast and sends a DESKTOP_RATE_LIMITED alert notice (warning, K-74); an APPROVAL_INVALID also sends the critical APPROVAL_INVALID alert notice.
 
 Process rules
 - The node refuses an elevated token.
 - It runs only from the read-only snapshot of the deployed SHA, never from the working tree.
 - It scrubs secrets from its environment, makes dotenv a no-op, and checks before every spawn.
 - Its settings come only from the allow-listed parser and JARVIS_DATA_ROOT/JARVIS_RUN_DIR (K-72), so the audit log, the WAL, run/desktop_state.json and the shared run/desktop_actor.lock are the repo's files, never inside the snapshot.
-- Audit goes to logs/desktop_audit.jsonl (5 MB × 10), with no raw arguments; the write-ahead log run/desktop_link.db records every call (K-70).
+- Audit goes to logs/desktop_audit.jsonl (5 MB × 10), with no raw arguments; the write-ahead log run/desktop_link.db records every call and keeps each call_id with its state for at least 24 h; the node checks it before it signs a refusal (K-70).
 
 K-12 codes added
 - Link: DESKTOP_OFFLINE, DESKTOP_NOT_STARTED, DESKTOP_RESULT_UNKNOWN, DESKTOP_TIMEOUT, DESKTOP_REJECTED, DESKTOP_LINK_DISABLED, PROTO_MISMATCH, CLOCK_SKEW, START_WINDOW_MISSED, MANIFEST_MISMATCH, BAD_ARGS.
@@ -707,3 +952,4 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 - **v2** · 2026-10-01 · K-11, K-28, K-53 · Aligned with C-24 and C-08 as built: 'raw' keeps CR; more 'path' rejections; get_tool_meta fields; the positional-argument transition rule; the new kwargs are usable now; agent lock env names and vortex rules. Claude's own alignment (no REQ-CONTRACT).
 - **v3** · 2026-10-01 · K-29, K-53, K-69 · K-29 masks three more secret names; K-53 records agent_ctl as built (C-09); K-69: the root .env is the single settings source. Claude's own alignment after Wave B (no REQ-CONTRACT).
 - **v4** · 2026-10-02 · K-70 to K-77 new; K-02, K-03, K-04, K-08, K-11, K-12, K-13, K-14, K-15, K-16, K-17, K-19, K-20, K-21, K-24, K-26, K-27, K-29, K-31, K-32, K-33, K-34, K-35, K-37, K-38, K-39, K-40, K-42, K-43, K-44, K-45, K-47, K-48, K-50, K-53, K-54, K-56, K-57, K-60, K-64, K-68, K-69 amended · VPS brain + laptop Desktop Node (user decision 2026-10-01/02, D3 changed by the user: no local Allow, no manual arming). Design: `docs/ARCHITECTURE_VPS_BRAIN.md`.
+- **v5** · 2026-10-02 · K-70, K-74 rewritten; K-01, K-08, K-12, K-26, K-30, K-35, K-40, K-41, K-42, K-53, K-69, K-76 amended · K-70 records the C-115 library as built: offset-corrected freshness with clock probes (pings skip check 5, the bridge relays pongs, every verified pong feeds the receiver's ClockEstimator, and a signed pong outside the window that answers the receiver's own ping still measures a clock step); a hello that passes only on the raw own clock starts a new session after a clock fix, and its handshake makes the receiver re-measure; the node's CLOCK_SKEW fails closed (it holds while the receiver must re-measure and after a skewed sample expires, until a new sample); one ClockEstimator per process, and a ping right after each handshake; size caps per type; sess on every message; encodings and field formats; canonical-JSON refusals; signed HTTP canonical forms, check order, status codes and lowercase hex; the library SeenStore everywhere (keying with created_at, failing closed; the bridge's in its own file, never bridge.db; agent namespaces per peer id); one refusal form, the ack {accepted:false, code}, also for K-76 policy refusals, with only DESKTOP_REJECTED and START_WINDOW_MISSED read as DESKTOP_NOT_STARTED; link refusals only for an exec that provably never ran (a measured offset, a two-sided 1 h horizon, a store-epoch floor that follows forward clock steps, WAL call_ids kept 24 h); the pinned-key rule and the key tool (mount the directory). v4's 'the bridge sees only the header fields' is corrected: hello, agent_hello, control, ping and pong bodies were always plaintext. New node → bridge type notice (signed, not encrypted, never relayed, 4 KiB: vitals_pc, desktop_state, power, alert with exact field lists, room '' and origin 'internal'), so desktop_status, vitals and node alerts no longer need an agent; event kinds narrowed to location, window_context, clipboard_suggestion and log_batch; presence stays on the node (presence_s dropped); the 10 s heartbeat is a desktop_state notice from the node's link in every mode; the bridge keeps only the latest notice values, writes audit rows only for alert notices, and warns on clock skew, never with the critical alert. K-41 and K-01: GET /messages cursor and next_cursor (C-13 as built). K-12: status 'unavailable' (C-112 as built). K-30 and K-35: the default Groq vision model is qwen/qwen3.8-27b, because qwen/qwen3.6-27b no longer exists on the account (Groq model list, 2 Oct). K-53 records C-136 as built: run/agent_link.json and its fields; ready only with a connected LiveKit link (health 200 plus the 5 s settle for a worker without that file); start, restart and wait give up at once on 'failed'; the status 'link' line; 'restart --by worker --expect-pid --expect-started' and its exit-4 refusals; the worker's self-restart rules, with the 5 to 60 min pause of a worker that never registered; automatic restarts are logged as by=worker in logs/agent_ctl.log (helper output in logs/agent_recovery.log) and write no done_highlight.md entry. K-69: JARVIS_LINK_RECOVERY (default 1) and the internal JARVIS_LINK_RECOVERIES. Claude's own alignment after C-115, C-13, C-112, C-136 and the Groq model check (no REQ-CONTRACT).

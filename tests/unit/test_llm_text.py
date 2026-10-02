@@ -356,9 +356,9 @@ async def test_groq_vision_turns_qwen_reasoning_off(providers):
     fakes = providers(gemini={"gemini-3.8-flash": _gemini_error(429, "RESOURCE_EXHAUSTED")},
                       groq=_completion("a red square"))
     result = await generate_vision("what is this?", jpeg)
-    assert result == LLMResult("a red square", "groq", "qwen/qwen3.6-27b")
+    assert result == LLMResult("a red square", "groq", "qwen/qwen3.8-27b")
     call = fakes.groq.calls[0]
-    assert call["model"] == "qwen/qwen3.6-27b"
+    assert call["model"] == "qwen/qwen3.8-27b"
     assert call["extra_body"] == {"reasoning_effort": "none"}
     assert "reasoning_effort" not in call
     assert call["messages"] == [{"role": "user", "content": [
@@ -370,7 +370,7 @@ async def test_groq_vision_turns_qwen_reasoning_off(providers):
 
 def test_groq_reasoning_follows_the_model_family():
     assert llm_text._groq_reasoning("openai/gpt-oss-120b") == {"reasoning_effort": "low"}
-    assert llm_text._groq_reasoning("qwen/qwen3.6-27b") == {"extra_body": {"reasoning_effort": "none"}}
+    assert llm_text._groq_reasoning("qwen/qwen3.8-27b") == {"extra_body": {"reasoning_effort": "none"}}
     assert llm_text._groq_reasoning("qwen/qwen3-32b") == {"extra_body": {"reasoning_effort": "none"}}
     assert not llm_text._groq_reasoning("llama-3.3-70b-versatile")
 
@@ -698,14 +698,14 @@ async def test_real_sdk_vision_requests(http):
         "api.groq.com": _reply(200, _chat_body("a red square")),
     })
     assert await generate_vision("what is this?", jpeg) == LLMResult(
-        "a red square", "groq", "qwen/qwen3.6-27b")
+        "a red square", "groq", "qwen/qwen3.8-27b")
     gemini, groq = http.seen
     image_part, text_part = json.loads(gemini.content)["contents"][0]["parts"]
     assert image_part["inlineData"]["mimeType"] == "image/jpeg"
     assert base64.urlsafe_b64decode(image_part["inlineData"]["data"]) == jpeg  # the SDK's encoding
     assert text_part == {"text": "what is this?"}
     body = json.loads(groq.content)
-    assert body["model"] == "qwen/qwen3.6-27b" and body["reasoning_effort"] == "none"
+    assert body["model"] == "qwen/qwen3.8-27b" and body["reasoning_effort"] == "none"
     assert body["messages"][0]["content"][1]["image_url"]["url"] == (
         "data:image/jpeg;base64," + base64.b64encode(jpeg).decode("ascii"))
 
