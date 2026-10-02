@@ -37,8 +37,14 @@ export type GeminiVoice = (typeof GEMINI_VOICES)[number];
 export const DEFAULT_VOICE_JARVIS: GeminiVoice = 'Charon';
 export const DEFAULT_VOICE_ANNA: GeminiVoice = 'Aoede';
 
+/** Default Gemini Live voice per persona (see `persona.ts` for display copy). */
+export const PERSONA_DEFAULT_VOICE: Record<'jarvis' | 'anna', GeminiVoice> = {
+  jarvis: DEFAULT_VOICE_JARVIS,
+  anna: DEFAULT_VOICE_ANNA,
+};
+
 export function defaultVoiceForPersona(persona: 'jarvis' | 'anna'): GeminiVoice {
-  return persona === 'anna' ? DEFAULT_VOICE_ANNA : DEFAULT_VOICE_JARVIS;
+  return PERSONA_DEFAULT_VOICE[persona];
 }
 
 export function resolveVoiceList(available: unknown): readonly string[] {

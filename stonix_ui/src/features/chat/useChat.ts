@@ -3,7 +3,9 @@ import { normalizeMessage } from '@/shared/contracts/events';
 import { bridgeUrl } from '@/shared/config/runtime';
 import { getSocket } from '@/shared/realtime/socket';
 import { useSocketEvent } from '@/shared/realtime/subscriptions';
+import { useSettings } from '@/features/settings/useSettings';
 import { useLiveKit } from '@/features/voice/LiveKitProvider';
+import { replyStatusHint } from '@/shared/persona';
 import { registerLiveCaptions } from './liveCaptions';
 import type { ChatMessage, LiveCaption } from './types';
 
@@ -62,6 +64,9 @@ export function useChat() {
   const captionTimersRef = useRef(new Map<'user' | 'assistant', number>());
   const agentOnlineRef = useRef(true);
   const voice = useLiveKit();
+  const { persona } = useSettings();
+  const personaRef = useRef(persona);
+  personaRef.current = persona;
 
   const syncFromMap = useCallback(() => {
     setMessages(trimMessages(mapRef.current));
@@ -107,7 +112,7 @@ export function useChat() {
         next = {
           ...next,
           status: 'delivered',
-          statusHint: 'JARVIS jawab de raha hai…',
+          statusHint: replyStatusHint(personaRef.current),
         };
         awaitingReplyRef.current.add(next.id);
       }

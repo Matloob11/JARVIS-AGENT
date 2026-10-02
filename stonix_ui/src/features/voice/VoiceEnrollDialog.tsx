@@ -3,14 +3,15 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Mic, MicOff, Volume2, X } from 'lucide-react';
 import { useSocketEvent } from '@/shared/realtime/subscriptions';
 import { emitUiCommandWithAck, useAgentListeningMuted } from '@/features/status/AgentControls';
+import { useSettings } from '@/features/settings/useSettings';
 import { useLiveKit } from '@/features/voice/LiveKitProvider';
 import { useLocalMicLevel } from '@/features/voice/useLocalMicLevel';
+import { enrollSentence1 } from '@/shared/persona';
 
-const ENROLL_SENTENCES = [
-  'Assalam o alaikum, main apni awaaz register kar raha hoon.',
-  'JARVIS sun raha hai? Main tez aur saaf bol raha hoon.',
+const ENROLL_SENTENCES_TAIL = [
+  'Main tez aur saaf bol raha hoon.',
   'Yeh meri asli awaaz hai, enrollment ke liye theek hai.',
-];
+] as const;
 
 const TARGET_SECONDS = 20;
 const ENROLL_TIMEOUT_MS = 3 * 60 * 1000;
@@ -83,7 +84,12 @@ interface VoiceEnrollDialogProps {
 
 const VoiceEnrollDialog = ({ open, onClose }: VoiceEnrollDialogProps) => {
   const voice = useLiveKit();
+  const { persona } = useSettings();
   const agentMuted = useAgentListeningMuted();
+  const enrollSentences = useMemo(
+    () => [enrollSentence1(persona), ...ENROLL_SENTENCES_TAIL],
+    [persona],
+  );
   const room = voice.getRoom();
   const micLevel = useLocalMicLevel(room, open && voice.micEnabled && voice.roomState === 'connected');
 
@@ -252,7 +258,7 @@ const VoiceEnrollDialog = ({ open, onClose }: VoiceEnrollDialogProps) => {
             ) : null}
 
             <ol className="mb-4 space-y-2 text-[11px] text-command-text">
-              {ENROLL_SENTENCES.map((line, index) => (
+              {enrollSentences.map((line, index) => (
                 <li key={line} className="rounded border border-white/10 bg-white/[0.02] px-3 py-2">
                   <span className="mr-2 font-mono text-command-muted">{index + 1}.</span>
                   {line}

@@ -1297,7 +1297,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-69 | cursor | P3 | Design tokens, Tailwind mapping, self-hosted fonts, icon sprite, full testid inventory baseline | C-135 | DONE (cursor, 02 Oct 21:50 PKT) |
 | X-70 | cursor | P3 | Brand: the reference ring logo, wordmark, rename STONIX (with the three specs and the fixture) | X-69 | DONE (cursor, 02 Oct 22:15 PKT) |
 | X-71 | cursor | P3 | Favicon and tray icons from the ring logo; Electron window, tray and offline strings | X-70 | TODO |
-| X-72 | cursor | P3 | Persona copy table with grammatical gender, the owner constant, persona-aware strings | X-69 | DOING (cursor, 02 Oct 22:12 PKT) |
+| X-72 | cursor | P3 | Persona copy table with grammatical gender, the owner constant, persona-aware strings | X-69 | DONE (cursor, 02 Oct 22:20 PKT) |
 | X-73 | cursor | P3 | UI primitives (the n- kit) and StatusShape | X-69 | DONE (cursor, 02 Oct 22:45 PKT) |
 | X-74 | cursor | P3 | AudioReactiveEngine outside React, plus an e2e-only test hook | — | DONE (cursor, 02 Oct 13:45 PKT) |
 | X-75 | cursor | P3 | Orb renderer: the reference orb with its fitted data, state looks, loop policy, reduced motion | X-70, X-74, X-104 | TODO |

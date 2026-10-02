@@ -12,7 +12,9 @@ import { toast } from '@/toast';
 import { getSocket } from '@/shared/realtime/socket';
 import { useLiveKit } from '@/features/voice/LiveKitProvider';
 import { useAgentStatus } from '@/features/status/useAgentStatus';
+import { useSettings } from '@/features/settings/useSettings';
 import { useAgentListeningMuted } from '@/features/status/agentListeningStore';
+import { listeningMutedTitle, stopTitle } from '@/shared/persona';
 import { StatusDot } from '@/shared/ui/Panel';
 
 type UiCommandAck = {
@@ -50,6 +52,7 @@ export { useAgentListeningMuted } from '@/features/status/agentListeningStore';
 
 export function TopBarStopButton() {
   const handleAck = useUiCommandAck();
+  const { persona } = useSettings();
 
   const onStop = () => {
     getSocket().emit('ui_command', { type: 'stop', payload: {} }, (ack: UiCommandAck) => {
@@ -62,7 +65,7 @@ export function TopBarStopButton() {
       type="button"
       className="icon-button"
       data-testid="topbar-stop"
-      title="JARVIS ko chup karao"
+      title={stopTitle(persona)}
       onClick={onStop}
     >
       <Square size={14} fill="currentColor" strokeWidth={0} />
@@ -202,6 +205,7 @@ export function AgentChipMenu({
 export function AgentListeningToggle() {
   const agentMuted = useAgentListeningMuted();
   const handleAck = useUiCommandAck();
+  const { persona } = useSettings();
 
   const onToggle = () => {
     const type = agentMuted ? 'unmute' : 'mute';
@@ -216,7 +220,7 @@ export function AgentListeningToggle() {
       className="icon-button"
       data-testid="topbar-agent-listening"
       data-muted={agentMuted ? 'true' : 'false'}
-      title="JARVIS mic se nahi sunega; typed chat chalti rahegi"
+      title={listeningMutedTitle(persona)}
       onClick={onToggle}
     >
       {agentMuted ? <EarOff size={15} className="text-command-danger" /> : <Ear size={15} />}

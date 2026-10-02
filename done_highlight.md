@@ -731,3 +731,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `npm --prefix stonix_ui run build` pass · e2e status/vitals/camera pass · `node stonix_ui/scripts/testid-inventory.mjs --check` pass (180)
 - **Commit:** (next) · **Deploy:** no
 - **Doosre agent ke liye:** X-78+ in primitives use karein; poora dashboard abhi migrate nahi.
+
+### ✅ [cursor] X-72 · Persona copy + owner constants · 2026-10-02 22:20 PKT
+- **Kya kiya:** `persona.ts` / `owner.ts` (Matloob, QUOTE, greeting, §9.2 status + §16.3 helpers); chat typing hint, Stop/listen titles, enrollment line 1 ab active persona ke mutabiq (raha/rahi, ga/gi); `persona-copy.spec.ts`.
+- **Files:** stonix_ui/src/shared/{persona,owner}.ts, useChat.ts, AgentControls.tsx, AssistantCore.tsx, VoiceEnrollDialog.tsx, voices.ts, tests/e2e/persona-copy.spec.ts
+- **Verify:** `npm --prefix stonix_ui run build` pass · e2e persona-copy + chat + voice-settings 15/15 pass · testid-inventory --check pass (180)
+- **Commit:** (next) · **Deploy:** no
+- **Doosre agent ke liye:** X-97 voice state machine isi `voiceStatusLine` / `voiceHelperLine` se hook kare.

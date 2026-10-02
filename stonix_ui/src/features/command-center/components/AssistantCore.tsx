@@ -7,6 +7,7 @@ import { useSettings } from '@/features/settings/useSettings';
 import { deriveVoiceMeterView, type VoiceMatchLive } from '@/features/voice/voiceMeter';
 import { audioEngine, bandsToDisplayBytes, DISPLAY_BAR_COUNT } from '@/features/voice/audioEngine';
 import { emitUiCommandWithAck, useAgentListeningMuted } from '@/features/status/AgentControls';
+import { listeningMutedTitle } from '@/shared/persona';
 import { useAgentStatus } from '@/features/status/useAgentStatus';
 
 interface AssistantCoreProps {
@@ -247,7 +248,7 @@ const AssistantCore = ({
             className="icon-button"
             data-testid="assistant-agent-listening"
             data-muted={agentMuted ? 'true' : 'false'}
-            title="JARVIS mic se nahi sunega; typed chat chalti rahegi"
+            title={listeningMutedTitle(persona)}
             onClick={() => emitUiCommandWithAck(agentMuted ? 'unmute' : 'mute')}
           >
             {agentMuted ? <EarOff size={14} className="text-command-danger" /> : <Ear size={14} />}
