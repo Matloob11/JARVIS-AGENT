@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { loginViaRecovery } from './helpers/login';
+import { gotoPage, loginViaRecovery } from './helpers';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -10,7 +10,9 @@ test.beforeEach(async ({ page }) => {
 test('production dashboard renders and accepts a command', async ({ page }) => {
   await expect(page).toHaveTitle(/JARVIS & ANNA/);
   await expect(page.getByRole('radiogroup', { name: 'Who answers' })).toBeVisible();
+  await gotoPage(page, 'agents');
   await expect(page.getByText(/System Flow/i)).toBeVisible();
+  await page.getByTestId('nav-overview').click();
   await expect(page.getByText(/System Logs/i)).toBeVisible();
 
   const commandInput = page.getByPlaceholder(/Message JARVIS|Message ANNA/i);

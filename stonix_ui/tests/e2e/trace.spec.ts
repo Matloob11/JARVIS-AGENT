@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { loginViaRecovery } from './helpers/login';
+import { gotoPage, loginViaRecovery } from './helpers';
 
 const MOCK = 'http://127.0.0.1:5199';
 
@@ -128,6 +128,7 @@ test('INFO logs stay hidden until toggled', async ({ page }) => {
 });
 
 test('FlowMap core shows offline when agent goes offline', async ({ page }) => {
+  await gotoPage(page, 'agents');
   await page.request.post(`${MOCK}/__mock/agent`, { data: { online: false } });
   await expect(page.getByTestId('flow-core-status')).toContainText(/offline/i, { timeout: 10_000 });
   await page.request.post(`${MOCK}/__mock/agent`, { data: { online: true } });
@@ -135,6 +136,7 @@ test('FlowMap core shows offline when agent goes offline', async ({ page }) => {
 });
 
 test('FlowMap tools node reflects a running tool', async ({ page }) => {
+  await gotoPage(page, 'agents');
   await mockEmit(page, 'tool_update', {
     id: 'flowmap-running-tool',
     tool: 'web_search',
@@ -145,6 +147,7 @@ test('FlowMap tools node reflects a running tool', async ({ page }) => {
 });
 
 test('FlowMap vision node reflects module_health vision fault', async ({ page }) => {
+  await gotoPage(page, 'agents');
   await mockEmit(page, 'module_health', {
     vision: { ok: false, detail: 'camera offline', model: 'gemini', camera_source: 'none' },
     ts: Math.floor(Date.now() / 1000),

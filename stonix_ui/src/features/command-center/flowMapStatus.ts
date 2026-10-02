@@ -2,6 +2,9 @@ import type { CameraState } from './components/cameraState';
 import type { ToolLogLastError } from '@/features/tools/useToolLogs';
 import type { AgentState, VoiceRoomState } from '@/features/voice/useVoiceRoom';
 import { toEpochMs } from '@/shared/contracts/events';
+import type { StatusKind } from '@/shared/ui/StatusShape';
+
+export type FlowNodeKey = 'voice' | 'vision' | 'core' | 'memory' | 'tools';
 
 export interface ModuleHealthSlice {
   ok?: boolean;
@@ -189,4 +192,46 @@ export function coreFlowStatus(input: {
 
 export function isFlowStatusUnknown(label: string): boolean {
   return label === 'unknown';
+}
+
+export function flowVoiceDataMoving(input: {
+  roomState: VoiceRoomState;
+  micEnabled: boolean;
+  isMuted: boolean;
+  agentState: AgentState;
+  isUserSpeaking?: boolean;
+}): boolean {
+  const { roomState, micEnabled, isMuted, agentState, isUserSpeaking } = input;
+  if (roomState !== 'connected' || isMuted || !micEnabled) return false;
+  if (isUserSpeaking) return true;
+  return agentState === 'listening' || agentState === 'thinking' || agentState === 'speaking';
+}
+
+export function flowToolsDataMoving(runningCount: number): boolean {
+  return runningCount > 0;
+}
+
+export function flowStatusKind(node: FlowNodeKey, status: string): StatusKind {
+  if (isFlowStatusUnknown(status)) return 'unknown';
+
+  const lower = status.toLowerCase();
+
+  if (lower.includes('fault') || lower.startsWith('error ·') || lower === 'offline' || lower === 'error') {
+    return 'err';
+  }
+  if (node === 'core' && lower === 'paused') return 'warn';
+  if (node === 'voice' && lower === 'muted') return 'mute';
+  if (node === 'vision' && lower === 'off') return 'off';
+  if (node === 'vision' && (lower === 'blocked' || lower === 'fallback')) return 'warn';
+  if (lower.includes('running') || lower.startsWith('active') || lower === 'speaking' || lower === 'listening' || lower === 'thinking') {
+    return 'acc';
+  }
+  if (lower.startsWith('sync ') || lower === 'linked' || lower === 'idle' || lower === 'standby' || lower === 'local') {
+    return 'ok';
+  }
+  if (lower.startsWith('online')) return 'ok';
+  if (lower === 'connecting' || lower === 'reconnecting' || lower === 'initializing') return 'busy';
+  if (lower === 'idle' || lower === 'connecting' || lower === 'reconnecting') return 'off';
+
+  return node === 'voice' ? 'off' : 'info';
 }

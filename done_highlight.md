@@ -913,3 +913,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `npm --prefix stonix_ui run build` pass; `persona-switch.spec.ts` + `settings.spec.ts` 12/12 pass; testid inventory 226 pass
 - **Commit:** (pending) · **Deploy:** no
 - **Doosre agent ke liye:** X-98 reduced motion + presence.spec motion part is file par continue karega.
+
+### ✅ [cursor] X-85 · Agents Devices & Machines cards · 2026-10-03 02:12 PKT
+- **Kya kiya:** Operations rail ko Agents › Devices par card layout me shift kiya: Agent VPS (Pause/Wake, Restart session), Laptop shell + location, This browser + camera (off-DOM capture video), Machines vitals/telemetry/map; alerts legacy strip; phone Ops tab ab `#/agents`; vitals-* aur camera testids waisay hi.
+- **Files:** `stonix_ui/src/features/agents/{AgentVpsCard,LaptopCard,BrowserCard,MachinesCards,MapCard,AgentsMountPortal,AgentsAlertsStrip}.tsx`, `OperationsRail.tsx`, `CameraPanel.tsx`, `Dashboard.tsx`, `AgentsPage.tsx`, `agents.css`, e2e specs + `testids.baseline.txt`
+- **Verify:** `npm --prefix stonix_ui run build` pass; camera/location/vitals/controls/voice-glue/responsive e2e 15/15 pass; testid inventory 230 pass
+- **Commit:** (pending) · **Deploy:** no
+- **Doosre agent ke liye:** X-79 Laptop card states; X-108 Alerts Timeline par move.
+
+### ✅ [cursor] X-81 · System Flow card on Agents · 2026-10-03 02:12 PKT
+- **Kya kiya:** System Flow ab Agents page par ek hi card me: paanch nodes (Voice → Vision → Core → Memory → Tools), `unknown` dashed + italic, link packets sirf desktop jab voice/tools data move karein; Overview se hata kar e2e `gotoPage('agents')` par shift.
+- **Files:** `SystemFlowCard.tsx`, `FlowMap.tsx`, `flowMapStatus.ts`, e2e `dashboard`/`trace`/`responsive`/`panel-error`
+- **Verify:** `npm --prefix stonix_ui run build` pass; dashboard + responsive + trace e2e 13/13 pass; testid inventory 230 pass
+- **Commit:** (pending) · **Deploy:** no
+- **Doosre agent ke liye:** —

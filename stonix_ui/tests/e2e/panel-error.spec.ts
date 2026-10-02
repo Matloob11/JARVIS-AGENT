@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { loginViaRecovery } from './helpers/login';
+import { gotoPage, loginViaRecovery } from './helpers';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -14,6 +14,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('panel crash shows fallback inside the card and retry restores it', async ({ page }) => {
+  await gotoPage(page, 'agents');
   const flowCard = page.locator('.flow-map');
   await expect(flowCard.getByRole('heading', { name: 'System Flow' })).toBeVisible();
 
