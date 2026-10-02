@@ -1,14 +1,12 @@
-import { LogOut, PanelLeft, Settings } from 'lucide-react';
+import { LogOut, PanelLeft } from 'lucide-react';
 
 interface TopBarProps {
-  onOpenSettings: () => void;
   onToggleOpsDrawer?: () => void;
   opsDrawerOpen?: boolean;
   onLogout: () => void;
 }
 
 const TopBar = ({
-  onOpenSettings,
   onToggleOpsDrawer,
   opsDrawerOpen = false,
   onLogout,
@@ -26,9 +24,6 @@ const TopBar = ({
         onClick={() => onToggleOpsDrawer?.()}
       >
         <PanelLeft size={15} />
-      </button>
-      <button className="icon-button" onClick={onOpenSettings} title="Open settings panel">
-        <Settings size={15} />
       </button>
       <button className="icon-button" onClick={onLogout} title="Logout" data-testid="logout">
         <LogOut size={15} />

@@ -864,3 +864,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `npm --prefix stonix_ui run build` pass; `panel-error.spec` 1/1 pass; testid inventory check pass
 - **Commit:** (pending) · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-88 · Neon Settings page (11 sections, D12) · 2026-10-03 01:45 PKT
+- **Kya kiya:** Settings ab `#/settings` par full page — sticky index, 11 cards (Session through About), saare `settings-*` testids; quiet hours blur/Enter aur threshold release par commit (D12); sidebar `nav-settings` par akela `title="Settings"`; header gear hata diya.
+- **Files:** `stonix_ui/src/features/settings/SettingsPage.tsx`, `assets/styles/neon/settings.css`, `Dashboard.tsx`, `SettingsPanel.tsx`, `TopBar.tsx`, `tests/e2e/settings.spec.ts`, `tests/e2e/voice-settings.spec.ts`
+- **Verify:** `npm --prefix stonix_ui run build` pass; settings + voice-settings + voiceid e2e 21/21 pass; testid inventory pass
+- **Commit:** (pending) · **Deploy:** no
+- **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-105 · Quick Stats + Recent Activity + feed store · 2026-10-03 01:06 PKT
+- **Kya kiya:** Hero ke neeche Overview grid me Quick Stats (vitals tiles, stale, laptop-offline VPS fallback) aur Recent Activity (4 feed rows); client-side `feedStore` socket registry se; `vitals-pc` / `vitals-vps` OperationsRail par same; overview e2e + tasks/confirm regressions fix.
+- **Files:** `stonix_ui/src/features/overview/QuickStatsCard.tsx`, `RecentActivityCard.tsx`, `useLaptopOnline.ts`, `OverviewPage.tsx`, `stonix_ui/src/features/activity/feedStore.ts`, `Dashboard.tsx`, `neon/overview.css`, `tests/e2e/overview.spec.ts`, `tests/e2e/tasks.spec.ts`, `tests/testids.baseline.txt`
+- **Verify:** `npm --prefix stonix_ui run build` pass; overview + tasks + confirm e2e 16/16 pass; testid inventory 221 static pass
+- **Commit:** (pending) · **Deploy:** no
+- **Doosre agent ke liye:** X-108 Timeline tab feed store reuse karega; `seedReferenceActivityRows` refdiff ke liye ready.

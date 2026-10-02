@@ -19,7 +19,7 @@ async function setSuppressSettingsSync(page: import('@playwright/test').Page, su
 }
 
 async function openSettingsDrawer(page: import('@playwright/test').Page) {
-  await page.getByTitle('Open settings panel').click();
+  await page.getByTitle('Settings').click();
   await expect(page.getByTestId('settings-drawer')).toBeVisible();
 }
 

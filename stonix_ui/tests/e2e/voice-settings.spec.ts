@@ -102,13 +102,8 @@ test('speak typed always emits speak_typed_replies', async ({ page }) => {
 
 test('quiet hours emits quiet_hours partial', async ({ page }) => {
   await openSettingsDrawer(page);
-  await page.getByTestId('settings-quiet-hours').evaluate((el, value) => {
-    const input = el as HTMLInputElement;
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
-    setter?.call(input, value);
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-  }, '22:00-07:00');
+  await page.getByTestId('settings-quiet-hours').fill('22:00-07:00');
+  await page.getByTestId('settings-quiet-hours').blur();
 
   await expect
     .poll(async () =>
@@ -137,10 +132,9 @@ test('voice-ID reject polite and threshold slider emit updates', async ({ page }
 
   await page.getByTestId('settings-voice-id-threshold').evaluate(el => {
     const input = el as HTMLInputElement;
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
-    setter?.call(input, '0.55');
+    input.value = '0.55';
     input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.dispatchEvent(new Event('change', { bubbles: true }));
+    input.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
   });
 
   await expect

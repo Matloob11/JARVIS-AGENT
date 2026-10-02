@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AnimatePresence } from 'framer-motion';
 import AssistantCore from './components/AssistantCore';
 import OverviewPage from '@/features/overview/OverviewPage';
 import QuickStatsCard from '@/features/overview/QuickStatsCard';
@@ -16,7 +15,7 @@ import ChatPanel from './components/ChatPanel';
 import FlowMap from './components/FlowMap';
 import OperationsRail from './components/OperationsRail';
 import { defaultCameraState, type CameraState } from './components/cameraState';
-import SettingsPanel from './components/SettingsPanel';
+import SettingsPage from '@/features/settings/SettingsPage';
 import SimAccessDialog from './components/SimAccessDialog';
 import VoiceEnrollDialog from '@/features/voice/VoiceEnrollDialog';
 import ConfirmDialog from '@/features/confirm/ConfirmDialog';
@@ -48,7 +47,6 @@ const DashboardInner = () => {
   const liveKit = useLiveKit();
   const agentStatus = useAgentStatus();
   const command = useCommandCenter();
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [voiceEnrollOpen, setVoiceEnrollOpen] = useState(false);
   const [cameraState, setCameraState] = useState<CameraState>(defaultCameraState);
   const [mobileTab, setMobileTab] = useState<MobileTab>('core');
@@ -104,7 +102,6 @@ const DashboardInner = () => {
 
   const openVoiceEnroll = () => {
     setVoiceEnrollOpen(true);
-    setSettingsOpen(false);
   };
 
   const handleReconnect = () =>
@@ -280,7 +277,6 @@ const DashboardInner = () => {
             </ErrorBoundary>
             <ErrorBoundary name="TopBar">
               <TopBar
-                onOpenSettings={() => setSettingsOpen(true)}
                 onToggleOpsDrawer={toggleOpsDrawer}
                 opsDrawerOpen={opsDrawerOpen}
                 onLogout={() => {
@@ -307,9 +303,20 @@ const DashboardInner = () => {
               </div>
             </ShellPage>
             <ShellPage page="settings" active={route.page === 'settings'} className="settings-drawer-host">
-              <div className="command-panel p-4" data-legacy>
-                <p className="text-sm text-command-muted">Settings page (open Settings from the header).</p>
-              </div>
+              <ErrorBoundary name="SettingsPage">
+                <SettingsPage
+                  isConnected={command.isConnected}
+                  onReconnect={handleReconnect}
+                  onOpenVoiceEnroll={openVoiceEnroll}
+                  onLogout={() => {
+                    void liveKit.disconnectRoom();
+                    void logout();
+                  }}
+                  onOpenSim={command.openSimPanel}
+                  simProvider={command.simProvider}
+                  simProviderConfigured={command.simProviderConfigured}
+                />
+              </ErrorBoundary>
             </ShellPage>
           </>
         }
@@ -362,23 +369,6 @@ const DashboardInner = () => {
           />
         }
       />
-
-      <AnimatePresence>
-        {settingsOpen && (
-          <ErrorBoundary name="SettingsPanel">
-            <SettingsPanel
-              isConnected={command.isConnected}
-              onClose={() => setSettingsOpen(false)}
-              onReconnect={handleReconnect}
-              onOpenVoiceEnroll={openVoiceEnroll}
-              onLogout={() => {
-                void liveKit.disconnectRoom();
-                void logout();
-              }}
-            />
-          </ErrorBoundary>
-        )}
-      </AnimatePresence>
 
       <ErrorBoundary name="VoiceEnrollDialog">
         <VoiceEnrollDialog open={voiceEnrollOpen} onClose={() => setVoiceEnrollOpen(false)} />

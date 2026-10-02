@@ -1300,7 +1300,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-72 | cursor | P3 | Persona copy table with grammatical gender, the owner constant, persona-aware strings | X-69 | DONE (cursor, 02 Oct 22:20 PKT) |
 | X-73 | cursor | P3 | UI primitives (the n- kit) and StatusShape | X-69 | DONE (cursor, 02 Oct 22:45 PKT) |
 | X-74 | cursor | P3 | AudioReactiveEngine outside React, plus an e2e-only test hook | — | DONE (cursor, 02 Oct 13:45 PKT) |
-| X-75 | cursor | P3 | Orb renderer: the reference orb with its fitted data, state looks, loop policy, reduced motion | X-70, X-74, X-104 | TODO |
+| X-75 | cursor | P3 | Orb renderer: the reference orb with its fitted data, state looks, loop policy, reduced motion | X-70, X-74, X-104 | DOING (cursor, 03 Oct 01:20 PKT) |
 | X-76 | cursor | P3 | Waveform: the 30 measured bars and their reactive modes (agent-audio-visualizer) | X-75 | TODO |
 | X-77 | cursor | P3 | Persona switch motion: View Transition circle from the orb, name roll, palette ease, reduced motion | X-70, X-75, X-104 | TODO |
 | X-78 | cursor | P3 | Page header: title and subtitle, the three status pills, divider, account block; interim Reconnect | X-73, X-80 | DONE (cursor, 02 Oct 2026 PKT) |
@@ -1313,7 +1313,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-85 | cursor | P3 | Agents › Devices and Machines: Agent (VPS), Laptop card shell + location, This browser + camera, vitals, telemetry, map | X-73, X-103, X-107 | TODO |
 | X-86 | cursor | P3 | Activity › Media: featured item, media states, history, lightbox Esc, chat media chip | X-83, X-108 | TODO |
 | X-87 | cursor | P3 | Activity › Logs: System Logs terminal and toolbar, All levels, system feed, Reasoning | X-108 | TODO |
-| X-88 | cursor | P3 | Settings page: eleven sections, the index, field status, commit on blur or release (D12) | X-73, X-96, X-103 | TODO |
+| X-88 | cursor | P3 | Settings page: eleven sections, the index, field status, commit on blur or release (D12) | X-73, X-96, X-103 | DONE (cursor, 03 Oct 01:45 PKT) |
 | X-89 | cursor | P3 | Dialogs: SIM and enrollment in the neon dialog, semantics, focus trap, Esc, enrollment error and timeout | X-72, X-73 | DONE (cursor, 03 Oct 01:10 PKT) |
 | X-90 | cursor | P3 | Login, session check and the Electron offline page in the neon look | X-70, X-73 | DONE (cursor, 03 Oct 01:05 PKT) |
 | X-91 | cursor | P3 | Per-card error boundary fallback (panel-error with Retry) | X-73 | DONE (cursor, 03 Oct 01:15 PKT) |

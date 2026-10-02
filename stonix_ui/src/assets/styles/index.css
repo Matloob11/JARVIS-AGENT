@@ -4,9 +4,11 @@
 @import './neon/panel.css';
 @import './neon/phone.css';
 @import './neon/overview.css';
+@import './neon/orb.css';
 @import './neon/overlays.css';
 @import './neon/screens.css';
 @import './neon/dialogs.css';
+@import './neon/settings.css';
 
 @tailwind base;
 @tailwind components;
