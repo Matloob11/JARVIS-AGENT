@@ -1,6 +1,7 @@
 export type PersonaSwitchBridge = {
   appendChatSystemLine?: (text: string) => void;
   pushPersonaFeedRow?: (persona: 'jarvis' | 'anna', voice: string) => void;
+  snapOrbPalette?: () => void;
 };
 
 let bridge: PersonaSwitchBridge = {};

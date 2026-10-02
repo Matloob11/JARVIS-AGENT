@@ -4,6 +4,7 @@ import { useSettings, type Persona } from '@/features/settings/useSettings';
 import { pushPersonaFeedRow } from '@/features/activity/feedStore';
 import { getPersona, type PersonaKey } from '@/shared/persona';
 import { getPersonaSwitchBridge } from './personaSwitchBridge';
+import { runPersonaApply } from './personaSwitchMotion';
 
 function personaRadiogroupTitle(active: PersonaKey): string {
   const self = getPersona(active);
@@ -55,7 +56,9 @@ export function usePersonaSwitch() {
     (next: Persona) => {
       if (next === settings.persona || settings.isPersonaPending) return;
       requestedRef.current = next;
-      settings.changePersona(next);
+      runPersonaApply(false, () => {
+        settings.changePersona(next);
+      });
     },
     [settings],
   );

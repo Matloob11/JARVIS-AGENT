@@ -311,3 +311,19 @@ html[data-persona='anna'] {
   --acc-tint: rgba(190, 60, 240, 0.14);
   --acc-edge: rgba(211, 92, 224, 0.55);
 }
+
+/* Persona switch: instant accents during View Transition or reduced-motion switches */
+:root.vt-run,
+:root.no-acc-tr {
+  transition: none !important;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-new(root) {
+  z-index: 2;
+}

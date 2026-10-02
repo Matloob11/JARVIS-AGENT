@@ -906,3 +906,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `npm --prefix stonix_ui run build` pass; presence + voice + controls-agent + persona-copy e2e 30/30 pass; testid inventory 226 pass
 - **Commit:** (pending) · **Deploy:** no
 - **Doosre agent ke liye:** X-98 motion/layout presence.spec part isi file par continue karega.
+
+### ✅ [cursor] X-77 · Persona switch motion (VT, name roll) · 2026-10-03 02:30 PKT
+- **Kya kiya:** JARVIS ⇄ ANNA switch ab orb centre se View Transition circle (760 ms) ya reduced/instant `:root.no-acc-tr` path; hero name roll (−14 / +14 px); orb `snapPalette` bridge; accent leak scan e2e.
+- **Files:** `personaSwitchMotion.ts`, `usePersonaSwitch.ts`, `personaSwitchBridge.ts`, `HeroCard.tsx` (name motion), `tokens.css`, `OrbCanvas.tsx`, `Dashboard.tsx`, `tests/e2e/persona-switch.spec.ts`
+- **Verify:** `npm --prefix stonix_ui run build` pass; `persona-switch.spec.ts` + `settings.spec.ts` 12/12 pass; testid inventory 226 pass
+- **Commit:** (pending) · **Deploy:** no
+- **Doosre agent ke liye:** X-98 reduced motion + presence.spec motion part is file par continue karega.

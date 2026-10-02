@@ -1302,7 +1302,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-74 | cursor | P3 | AudioReactiveEngine outside React, plus an e2e-only test hook | — | DONE (cursor, 02 Oct 13:45 PKT) |
 | X-75 | cursor | P3 | Orb renderer: the reference orb with its fitted data, state looks, loop policy, reduced motion | X-70, X-74, X-104 | DONE (cursor, 03 Oct 2026 PKT) |
 | X-76 | cursor | P3 | Waveform: the 30 measured bars and their reactive modes (agent-audio-visualizer) | X-75 | DONE (cursor, 03 Oct 2026 PKT) |
-| X-77 | cursor | P3 | Persona switch motion: View Transition circle from the orb, name roll, palette ease, reduced motion | X-70, X-75, X-104 | DOING (cursor, 03 Oct 01:45 PKT) |
+| X-77 | cursor | P3 | Persona switch motion: View Transition circle from the orb, name roll, palette ease, reduced motion | X-70, X-75, X-104 | DONE (cursor, 03 Oct 02:30 PKT) |
 | X-78 | cursor | P3 | Page header: title and subtitle, the three status pills, divider, account block; interim Reconnect | X-73, X-80 | DONE (cursor, 02 Oct 2026 PKT) |
 | X-79 | cursor | P3 | Laptop states and Stop desktop: the Devices popover Laptop row and the Agents › Laptop card (X-67 data) | X-67, X-85, X-99 | TODO |
 | X-80 | cursor | P3 | App shell: the fluid reference grid (dk/tl/ph), slots, hash router with mounted pages, app-ready marker | X-69, X-73 | DONE (cursor, 02 Oct 23:10 PKT) |
