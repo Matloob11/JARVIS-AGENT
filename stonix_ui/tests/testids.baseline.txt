@@ -6,6 +6,7 @@ agent-wake
 agent-wake-spinner
 app-ready
 assistant-agent-listening
+brand-mark
 camera-link-badge
 camera-share-switch
 camera-toggle
@@ -22,6 +23,8 @@ chat-retry
 chat-status-hint
 chip-agent
 chip-agent-menu
+chip-bridge
+chip-voice
 confirm-allow
 confirm-cancel-notice
 confirm-deny

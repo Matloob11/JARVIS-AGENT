@@ -1303,7 +1303,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-75 | cursor | P3 | Orb renderer: the reference orb with its fitted data, state looks, loop policy, reduced motion | X-70, X-74, X-104 | TODO |
 | X-76 | cursor | P3 | Waveform: the 30 measured bars and their reactive modes (agent-audio-visualizer) | X-75 | TODO |
 | X-77 | cursor | P3 | Persona switch motion: View Transition circle from the orb, name roll, palette ease, reduced motion | X-70, X-75, X-104 | TODO |
-| X-78 | cursor | P3 | Page header: title and subtitle, the three status pills, divider, account block; interim Reconnect | X-73, X-80 | TODO |
+| X-78 | cursor | P3 | Page header: title and subtitle, the three status pills, divider, account block; interim Reconnect | X-73, X-80 | DOING (cursor, 02 Oct 23:13 PKT) |
 | X-79 | cursor | P3 | Laptop states and Stop desktop: the Devices popover Laptop row and the Agents › Laptop card (X-67 data) | X-67, X-85, X-99 | TODO |
 | X-80 | cursor | P3 | App shell: the fluid reference grid (dk/tl/ph), slots, hash router with mounted pages, app-ready marker | X-69, X-73 | DONE (cursor, 02 Oct 23:10 PKT) |
 | X-81 | cursor | P3 | Agents › System Flow card: five nodes, the 'unknown' state, packets only while data moves | X-73, X-107 | TODO |
@@ -1328,7 +1328,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-100 | cursor | P3 | Electron: header reserve, window buttons at the window edge, drag region, header-layout.spec | X-99 | TODO |
 | X-101 | cursor | P3 | Approvals tab, and the phone confirm sheet with "Decide later" and the approvals bar | X-82, X-84 | TODO |
 | X-102 | cursor | P3 | Hidden-tab confirm alert: title flash, one chime, browser notification, phone vibration | X-84 | TODO |
-| X-103 | cursor | P3 | Sidebar: ring logo, wordmark, navigation with the reference active state, silk wave, tagline; tl icon rail; nav marks | X-70, X-80 | TODO |
+| X-103 | cursor | P3 | Sidebar: ring logo, wordmark, navigation with the reference active state, silk wave, tagline; tl icon rail; nav marks | X-70, X-80 | DONE (cursor, 02 Oct 23:13 PKT) |
 | X-104 | cursor | P3 | Overview hero card: the reference composition, eyebrow persona switch, name sheen, buttons, quote and helper slot | X-72, X-73, X-80 | TODO |
 | X-105 | cursor | P3 | Quick Stats and Recent Activity cards, and the client-side activity feed store | X-73, X-96, X-104 | TODO |
 | X-106 | cursor | P3 | Composer: field, send square, task-mode chip, paperclip, hints, push-to-talk mic | X-83, X-97 | TODO |

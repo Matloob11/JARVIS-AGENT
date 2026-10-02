@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ChevronDown,
   Ear,
   EarOff,
   Loader2,
@@ -12,11 +11,10 @@ import { toast } from '@/toast';
 import { getSocket } from '@/shared/realtime/socket';
 import { useLiveKit } from '@/features/voice/LiveKitProvider';
 import { useAgentStatus } from '@/features/status/useAgentStatus';
+import type { AgentStatusSnapshot } from '@/features/status/agentStatusStore';
 import { useSettings } from '@/features/settings/useSettings';
 import { useAgentListeningMuted } from '@/features/status/agentListeningStore';
 import { listeningMutedTitle, stopTitle } from '@/shared/persona';
-import { StatusDot } from '@/shared/ui/Panel';
-
 type UiCommandAck = {
   status: 'sent' | 'queued' | 'agent_offline' | 'no_agent' | 'rejected';
   reason?: string;
@@ -73,18 +71,85 @@ export function TopBarStopButton() {
   );
 }
 
+function agentSystemPillCopy(
+  bridgeConnected: boolean,
+  agentStatusSeen: boolean,
+  agent: Pick<AgentStatusSnapshot, 'online' | 'paused' | 'restarting'>,
+): { full: string; compact: string; active: boolean; shape: 'online' | 'warn' | 'err' | 'unknown' | 'spinner' } {
+  if (!bridgeConnected) {
+    return {
+      full: 'System Unreachable',
+      compact: 'Unreachable',
+      active: false,
+      shape: 'warn',
+    };
+  }
+  if (!agentStatusSeen) {
+    return {
+      full: 'System Unknown',
+      compact: 'Unknown',
+      active: false,
+      shape: 'unknown',
+    };
+  }
+  if (agent.restarting) {
+    return {
+      full: 'System Restarting',
+      compact: 'Restarting',
+      active: false,
+      shape: 'spinner',
+    };
+  }
+  if (agent.paused) {
+    return {
+      full: 'System Paused',
+      compact: 'Paused',
+      active: false,
+      shape: 'warn',
+    };
+  }
+  if (!agent.online) {
+    return {
+      full: 'System Offline',
+      compact: 'Offline',
+      active: false,
+      shape: 'err',
+    };
+  }
+  return {
+    full: 'System Online',
+    compact: 'Online',
+    active: true,
+    shape: 'online',
+  };
+}
+
+function AgentPillShape({ shape }: { shape: 'online' | 'warn' | 'err' | 'unknown' | 'spinner' }) {
+  if (shape === 'spinner') {
+    return <Loader2 size={16} className="header-pill-spin animate-spin" aria-hidden />;
+  }
+  if (shape === 'online') {
+    return <span className="dot-online dot-online--ok" aria-hidden />;
+  }
+  if (shape === 'unknown') {
+    return <span className="dot-online dot-online--unknown" aria-hidden />;
+  }
+  if (shape === 'warn') {
+    return <span className="dot-online" data-s="warn" aria-hidden />;
+  }
+  return <span className="dot-online" data-s="err" aria-hidden />;
+}
+
 export function AgentChipMenu({
-  label,
-  detail,
-  active,
-  tone,
-  tooltip,
+  bridgeConnected,
+  agentStatusSeen,
+  compact,
+  title,
 }: {
-  label: string;
-  detail?: string;
-  active: boolean;
-  tone: 'accent' | 'danger' | 'blue';
-  tooltip: string;
+  bridgeConnected: boolean;
+  agentStatusSeen: boolean;
+  compact: boolean;
+  title: string;
 }) {
   const agent = useAgentStatus();
   const handleAck = useUiCommandAck();
@@ -153,22 +218,31 @@ export function AgentChipMenu({
 
   useEffect(() => () => clearWakeTimer(), [clearWakeTimer]);
 
+  const pill = agentSystemPillCopy(bridgeConnected, agentStatusSeen, agent);
+  const label = compact ? pill.compact : pill.full;
+  const pillShape: typeof pill.shape =
+    pill.shape === 'spinner' && agent.restarting ? 'spinner' : pill.shape === 'spinner' ? 'unknown' : pill.shape;
+
   return (
-    <div className="relative" ref={menuRef}>
+    <div className="relative header-pill-wrap" ref={menuRef}>
       <button
         type="button"
-        className="status-chip status-chip--compact cursor-pointer transition hover:bg-white/[0.06]"
+        className="header-pill edge header-pill--system"
         data-testid="chip-agent"
-        data-active={active ? 'true' : 'false'}
-        title={tooltip}
+        data-active={pill.active ? 'true' : 'false'}
+        title={title}
         onClick={() => setOpen(prev => !prev)}
+        aria-haspopup="dialog"
         aria-expanded={open}
       >
-        <ChevronDown size={13} className="shrink-0 opacity-80" />
-        <StatusDot active={active} tone={active ? tone : 'danger'} />
-        <span className="hidden lg:inline">{label}</span>
-        {detail ? <span className="hidden lg:inline text-command-muted">{detail}</span> : null}
-        {waking ? <Loader2 size={12} className="animate-spin text-command-accent" data-testid="agent-wake-spinner" /> : null}
+        {waking ? (
+          <Loader2 size={16} className="header-pill-spin animate-spin" data-testid="agent-wake-spinner" aria-hidden />
+        ) : pillShape === 'spinner' ? (
+          <Loader2 size={16} className="header-pill-spin animate-spin" aria-hidden />
+        ) : (
+          <AgentPillShape shape={pillShape} />
+        )}
+        <span className="header-pill-lbl">{label}</span>
       </button>
       {open ? (
         <div

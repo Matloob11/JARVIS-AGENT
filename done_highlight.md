@@ -752,3 +752,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `npm --prefix stonix_ui run build` pass · `npm --prefix stonix_ui run test:e2e` 117/117 pass · testid-inventory --check pass (192)
 - **Commit:** (next) · **Deploy:** no
 - **Doosre agent ke liye:** X-78 header, X-103 sidebar art, X-81 System Flow → Agents page.
+
+### ✅ [cursor] X-103 · Sidebar logo, nav, silk wave, tl rail · 2026-10-02 23:45 PKT
+- **Kya kiya:** `Sidebar` + `SilkWave` (prototype crest SVG), fluid wordmark/tagline/wave; sprite nav with active bar; tl 76px icon rail + tooltips; `brand-mark` sirf sidebar `LogoRing`; TopBar legacy strip se brand hata; off-nominal nav marks (alerts / agent offline / panic).
+- **Files:** stonix_ui/src/features/shell/{Sidebar,SilkWave,useSidebarNavMarks,AppShell}.tsx, neon/shell.css, TopBar.tsx, AgentControls.tsx, testids.baseline.txt
+- **Verify:** `npm --prefix stonix_ui run build` pass · e2e responsive + layout 21/21 pass · testid-inventory --check pass (195)
+- **Commit:** (next) · **Deploy:** no
+- **Doosre agent ke liye:** X-104 hero; Settings `title` abhi nav-settings + TopBar dono par (X-88).
