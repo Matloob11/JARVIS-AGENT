@@ -14,6 +14,11 @@ import {
   type Persona,
   type Ripple,
 } from './orbDraw';
+import {
+  drawWave,
+  invalidateWaveColorCache,
+  type WaveMode,
+} from './waveform';
 
 export type VoiceState =
   | 'offline'
@@ -117,14 +122,25 @@ export class OrbRenderer {
     else this.schedule();
   }
 
-  resize(orbCssPx: number, waveCssW: number, waveCssH = 40) {
+  resizeOrb(orbCssPx: number) {
     this.orbCssPx = orbCssPx;
-    this.waveCssW = waveCssW;
-    this.waveCssH = waveCssH;
     this.env.sphereKey = '';
     this.env.fastKey = '';
     if (this.reducedMotion) this.drawStatic();
     else this.schedule();
+  }
+
+  resizeWave(waveCssW: number, waveCssH = 40) {
+    this.waveCssW = waveCssW;
+    this.waveCssH = waveCssH;
+    if (this.reducedMotion) this.drawStatic();
+    else this.schedule();
+  }
+
+  resize(orbCssPx: number, waveCssW: number, waveCssH = 40) {
+    this.resizeOrb(orbCssPx);
+    this.waveCssW = waveCssW;
+    this.waveCssH = waveCssH;
   }
 
   setVisible(on: boolean) {
@@ -135,8 +151,26 @@ export class OrbRenderer {
 
   snapPalette() {
     snapPalette();
+    invalidateWaveColorCache();
     this.env.sphereKey = '';
     this.env.fastKey = '';
+  }
+
+  private waveMode(): WaveMode {
+    return STATE_CFG[this.state].wave as WaveMode;
+  }
+
+  private paintWave(t: number, L: number, bands: Float32Array | null) {
+    drawWave(
+      this.wave,
+      this.waveMode(),
+      t,
+      L,
+      bands,
+      this.waveCssW,
+      this.phone,
+      this.waveCssH,
+    );
   }
 
   stats() {
@@ -235,13 +269,8 @@ export class OrbRenderer {
       [],
       this.env,
     );
-    this.clearWave();
+    this.paintWave(0, L, null);
     this.loopMode = 'stop';
-  }
-
-  private clearWave() {
-    const { ctx } = setupOrbCanvas(this.wave, 216, 40, this.waveCssW, this.phone);
-    ctx.clearRect(0, 0, this.waveCssW, this.waveCssH);
   }
 
   private frame(now: number) {
@@ -259,7 +288,7 @@ export class OrbRenderer {
       audioEngine.setRate('coarse');
       const { ctx, k } = setupOrbCanvas(this.orb, 520, 520, this.orbCssPx, this.phone);
       drawOrbExact(ctx, k, t, 0, this.state, this.persona, true, this.look, [], this.env);
-      this.clearWave();
+      this.paintWave(t, 0, null);
       return;
     }
 
@@ -309,7 +338,14 @@ export class OrbRenderer {
 
     const { ctx, k } = setupOrbCanvas(this.orb, 520, 520, this.orbCssPx, this.phone);
     drawOrbFrame(ctx, k, t, this.L, this.state, this.persona, false, this.look, this.ripples, this.env);
-    this.clearWave();
+
+    const waveMode = this.waveMode();
+    let waveBands: Float32Array | null = null;
+    if (waveMode === 'speaking') waveBands = agent.bands;
+    else if (waveMode === 'listening') waveBands = user.bands;
+    const waveL =
+      waveMode === 'listening' ? this.userL : this.L;
+    this.paintWave(t, waveL, waveBands);
 
     if (this.state === 'listening' && this.userL > 0.01) {
       this.userRing.hidden = false;

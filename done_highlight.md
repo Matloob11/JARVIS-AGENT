@@ -885,3 +885,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `npm --prefix stonix_ui run build` pass; `voice.spec.ts` + `audio-engine.spec.ts` 4/4 pass; testid inventory 222 pass
 - **Commit:** (pending) · **Deploy:** no
 - **Doosre agent ke liye:** X-76 waveform isi loop me draw karega; X-97 voice state derivation abhi coarse (`deriveOrbVoiceState`).
+
+### ✅ [cursor] X-76 · Hero waveform (30 bars) · 2026-10-03 02:05 PKT
+- **Kya kiya:** `drawWave` + `WAVE` orbData se hero `agent-audio-visualizer` canvas me; orb loop ke sath idle/speaking/listening/thinking/dots/off modes; canvas hero wave slot me, palette cache + ANNA mix.
+- **Files:** `stonix_ui/src/features/voice/orb/waveform.ts`, `orbRenderer.ts`, `OrbCanvas.tsx`, `Dashboard.tsx`, `assets/styles/neon/overview.css`
+- **Verify:** `npm --prefix stonix_ui run build` pass; `audio-engine.spec.ts` + `voice.spec.ts` + `voice-glue.spec.ts` 8/8 pass; `agent-audio-visualizer` testid retained
+- **Commit:** (pending) · **Deploy:** no
+- **Doosre agent ke liye:** X-97 status line + voice machine ab orb/wave modes align karega.

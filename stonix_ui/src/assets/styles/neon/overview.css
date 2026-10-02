@@ -574,6 +574,12 @@
   opacity: 0.45;
 }
 
+.overview-hero__wave-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 .overview-hero__status,
 .overview-hero__status-user {
   left: calc(var(--ox) + 447 * var(--u));

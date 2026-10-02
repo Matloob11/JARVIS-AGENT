@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, type RefObject } from 'react';
 import { getPersona, type PersonaKey } from '@/shared/persona';
 import { Icon } from '@/shared/ui/icons/Icon';
 import type { IconName } from '@/shared/ui/icons/Sprite';
@@ -19,6 +19,7 @@ type OrbCanvasProps = {
   isThinking: boolean;
   isUserSpeaking: boolean;
   pageActive: boolean;
+  waveCanvasRef: RefObject<HTMLCanvasElement | null>;
 };
 
 const GLYPH: Partial<
@@ -42,12 +43,12 @@ const OrbCanvas = ({
   isThinking,
   isUserSpeaking,
   pageActive,
+  waveCanvasRef,
 }: OrbCanvasProps) => {
   const layout = useLayout();
   const route = useHashRouter(layout);
   const hostRef = useRef<HTMLDivElement>(null);
   const orbRef = useRef<HTMLCanvasElement>(null);
-  const waveRef = useRef<HTMLCanvasElement>(null);
   const ringRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<OrbRenderer | null>(null);
 
@@ -81,7 +82,7 @@ const OrbCanvas = ({
 
   useEffect(() => {
     const orb = orbRef.current;
-    const wave = waveRef.current;
+    const wave = waveCanvasRef.current;
     const ring = ringRef.current;
     const host = hostRef.current;
     if (!orb || !wave || !ring || !host) return undefined;
@@ -90,13 +91,22 @@ const OrbCanvas = ({
     const renderer = new OrbRenderer(orb, wave, ring, { phone });
     rendererRef.current = renderer;
 
-    const ro = new ResizeObserver(entries => {
+    const orbRo = new ResizeObserver(entries => {
       for (const e of entries) {
         const w = e.contentRect.width;
-        if (w > 0) renderer.resize(w, 216, 40);
+        if (w > 0) renderer.resizeOrb(w);
       }
     });
-    ro.observe(host);
+    orbRo.observe(host);
+
+    const waveRo = new ResizeObserver(entries => {
+      for (const e of entries) {
+        const { width, height } = e.contentRect;
+        if (width > 0) renderer.resizeWave(width, height > 0 ? height : 40);
+      }
+    });
+    const waveBox = wave.parentElement;
+    if (waveBox) waveRo.observe(waveBox);
 
     const io = new IntersectionObserver(
       entries => {
@@ -115,14 +125,15 @@ const OrbCanvas = ({
     mq.addEventListener('change', onMotion);
 
     return () => {
-      ro.disconnect();
+      orbRo.disconnect();
+      waveRo.disconnect();
       io.disconnect();
       document.removeEventListener('visibilitychange', onVis);
       mq.removeEventListener('change', onMotion);
       renderer.destroy();
       rendererRef.current = null;
     };
-  }, [layout, pageActive]);
+  }, [layout, pageActive, waveCanvasRef]);
 
   useEffect(() => {
     const renderer = rendererRef.current;
@@ -146,7 +157,6 @@ const OrbCanvas = ({
         role="img"
         aria-label={orbLabel}
       />
-      <canvas ref={waveRef} className="sr-only" aria-hidden width={216} height={40} />
       <div
         ref={ringRef}
         className="overview-hero__user-ring"
@@ -155,11 +165,7 @@ const OrbCanvas = ({
         hidden
       />
       {glyph ? (
-        <div
-          className="neon-orb-glyph"
-          data-tone={glyph.tone}
-          aria-hidden
-        >
+        <div className="neon-orb-glyph" data-tone={glyph.tone} aria-hidden>
           <Icon name={glyph.icon} />
         </div>
       ) : null}

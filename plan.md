@@ -1301,7 +1301,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-73 | cursor | P3 | UI primitives (the n- kit) and StatusShape | X-69 | DONE (cursor, 02 Oct 22:45 PKT) |
 | X-74 | cursor | P3 | AudioReactiveEngine outside React, plus an e2e-only test hook | — | DONE (cursor, 02 Oct 13:45 PKT) |
 | X-75 | cursor | P3 | Orb renderer: the reference orb with its fitted data, state looks, loop policy, reduced motion | X-70, X-74, X-104 | DONE (cursor, 03 Oct 2026 PKT) |
-| X-76 | cursor | P3 | Waveform: the 30 measured bars and their reactive modes (agent-audio-visualizer) | X-75 | TODO |
+| X-76 | cursor | P3 | Waveform: the 30 measured bars and their reactive modes (agent-audio-visualizer) | X-75 | DONE (cursor, 03 Oct 2026 PKT) |
 | X-77 | cursor | P3 | Persona switch motion: View Transition circle from the orb, name roll, palette ease, reduced motion | X-70, X-75, X-104 | TODO |
 | X-78 | cursor | P3 | Page header: title and subtitle, the three status pills, divider, account block; interim Reconnect | X-73, X-80 | DONE (cursor, 02 Oct 2026 PKT) |
 | X-79 | cursor | P3 | Laptop states and Stop desktop: the Devices popover Laptop row and the Agents › Laptop card (X-67 data) | X-67, X-85, X-99 | TODO |
@@ -1332,7 +1332,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-104 | cursor | P3 | Overview hero card: the reference composition, eyebrow persona switch, name sheen, buttons, quote and helper slot | X-72, X-73, X-80 | DONE (cursor, 03 Oct 00:42 PKT) |
 | X-105 | cursor | P3 | Quick Stats and Recent Activity cards, and the client-side activity feed store | X-73, X-96, X-104 | DONE (cursor, 03 Oct 01:06 PKT) |
 | X-106 | cursor | P3 | Composer: field, send square, task-mode chip, paperclip, hints, push-to-talk mic | X-83, X-97 | TODO |
-| X-107 | cursor | P3 | Agents page: the three groups, Who answers (mini orbs), Voice & wake, Voice-ID | X-73, X-80, X-104 | TODO |
+| X-107 | cursor | P3 | Agents page: the three groups, Who answers (mini orbs), Voice & wake, Voice-ID | X-73, X-80, X-104 | DOING (cursor, 03 Oct 01:35 PKT) |
 | X-108 | cursor | P3 | Activity page: sub-tabs, Timeline with the Alerts card, Tasks & reminders, Notes | X-73, X-80, X-96, X-105 | TODO |
 | X-109 | cursor | P3 | V-1: the visual-diff gate against the owner's reference image | X-75, X-76, X-78, X-83, X-84, X-97, X-103, X-104, X-105, X-106 | TODO |
 

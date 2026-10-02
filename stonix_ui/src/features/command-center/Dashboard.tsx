@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AssistantCore from './components/AssistantCore';
 import OverviewPage from '@/features/overview/OverviewPage';
 import QuickStatsCard from '@/features/overview/QuickStatsCard';
@@ -57,6 +57,7 @@ const DashboardInner = () => {
   const vortex = useVortexStatusPoll(command.isConnected);
   const laptopOnline = useLaptopOnline();
   const agentListeningMuted = useAgentListeningMuted();
+  const heroWaveCanvasRef = useRef<HTMLCanvasElement>(null);
   const deviceCount = useMemo(
     () => connectedDeviceCount(vortex.uiClients, agentStatus.online, vortex.laptopOnline),
     [vortex.uiClients, vortex.laptopOnline, agentStatus.online],
@@ -183,6 +184,15 @@ const DashboardInner = () => {
             persona={command.activePersona}
             isUserSpeaking={command.isUserSpeaking}
             stateLabel={heroStateLabel}
+            waveformSlot={
+              <canvas
+                ref={heroWaveCanvasRef}
+                className="overview-hero__wave-canvas"
+                aria-hidden
+                width={216}
+                height={40}
+              />
+            }
             orbSlot={
               <OrbCanvas
                 persona={command.activePersona}
@@ -196,6 +206,7 @@ const DashboardInner = () => {
                 isThinking={command.isThinking}
                 isUserSpeaking={command.isUserSpeaking}
                 pageActive={overviewOrbActive}
+                waveCanvasRef={heroWaveCanvasRef}
               />
             }
             legacyStrip={
