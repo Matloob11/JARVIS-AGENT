@@ -187,9 +187,20 @@ def test_vps_tools_that_open_a_browser_are_flagged_opens_urls(local):
         trees = {path.relative_to(PROJECT_ROOT).with_suffix("").as_posix().replace("/", "."):
                  ast.parse(path.read_text(encoding="utf-8"))
                  for path in (PROJECT_ROOT / "services").rglob("*.py") if "tests" not in path.parts}
-    openers = {func.name for tree in trees.values() for func in ast.walk(tree)
-               if isinstance(func, (ast.FunctionDef, ast.AsyncFunctionDef))
-               and _references_webbrowser_open(func)}
+    funcs = [func for tree in trees.values() for func in ast.walk(tree)
+             if isinstance(func, (ast.FunctionDef, ast.AsyncFunctionDef))]
+    openers = {func.name for func in funcs if _references_webbrowser_open(func)}
+    # Follow the chain: a function that reaches an opener (a direct call, or handing it to
+    # asyncio.to_thread) is itself an opener. X-65 moved the real webbrowser.open into
+    # _local_browser_open, so open_url_in_app reaches a browser one hop away (via to_thread).
+    def _mentions(func: ast.AST, names: set[str]) -> bool:
+        return any((isinstance(sub, ast.Attribute) and sub.attr in names)
+                   or (isinstance(sub, ast.Name) and sub.id in names) for sub in ast.walk(func))
+    while True:
+        more = {func.name for func in funcs if func.name not in openers and _mentions(func, openers)}
+        if not more:
+            break
+        openers |= more
     assert "open_url_in_app" in openers
     reaching = {name for name, module in local["tools"].items()
                 if _references_webbrowser_open(trees[module])

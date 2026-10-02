@@ -49,7 +49,6 @@ PROVIDER = {"get_current_city": jarvis_location.get_current_city,
 YOUTUBE = "https://www.youtube.com/watch?v=c113c113c11"
 SHIMMED_LOCATION = [
     (jarvis_search, "get_current_city"), (jarvis_search, "get_current_city_data"),
-    (jarvis_get_weather, "get_current_city"),
     (agent_runner, "get_current_city"), (agent_runner, "get_current_city_data"),
 ]
 
@@ -409,7 +408,6 @@ def test_local_mode_installs_nothing(compat, monkeypatch):
     assert {(id(module), name): getattr(module, name) for module, name in SHIMMED_LOCATION} == before
     # the PC brain keeps today's location: agent_runner binds jarvis_search's own function
     assert agent_runner.get_current_city is ORIGINAL["get_current_city"]
-    assert jarvis_get_weather.get_current_city is ORIGINAL["get_current_city"]
     report = remote_compat.self_test()
     assert report.ok and not report.shimmed and not report.missing
     assert remote_compat.health() == {"ok": True, "active": False, "detail": "", "missing": []}
@@ -428,7 +426,6 @@ def test_remote_mode_rebinds_every_shimmed_symbol(compat):
     for symbol in ("os.startfile -> jarvis_delivery.open_artifact",
                    "webbrowser.open -> pc.open_url inside ", "download_youtube_media",
                    "services.info.jarvis_search.get_current_city -> jarvis_location.get_current_city",
-                   "services.info.jarvis_get_weather.get_current_city",
                    "src.core.agent_runner.get_current_city_data"):
         assert symbol in shimmed
     assert compat.health() == {"ok": True, "active": True, "detail": "", "missing": []}
@@ -451,7 +448,6 @@ def test_a_failing_install_step_never_stops_the_import(compat, monkeypatch):
     monkeypatch.setattr(remote_compat, "_install_startfile", MagicMock(side_effect=RuntimeError("boom")))
     assert compat.install() is True
     assert webbrowser.open is remote_compat.open_url_shim
-    assert jarvis_get_weather.get_current_city is PROVIDER["get_current_city"]
     errors = [call.args for call in compat.logger.error.call_args_list]
     assert errors == [("%s %s (install: %s)", "COMPAT_SHIM_MISSING", "os.startfile", "RuntimeError")]
     assert compat.self_test().missing == ("os.startfile",)
@@ -661,7 +657,6 @@ async def test_generate_qr_code_with_the_laptop_online_sends_the_code(laptop, ar
 
 
 @pytest.mark.parametrize(("module", "name", "symbol"), [
-    (jarvis_get_weather, "get_current_city", "services.info.jarvis_get_weather.get_current_city"),
     (agent_runner, "get_current_city_data", "src.core.agent_runner.get_current_city_data"),
     (jarvis_search, "get_current_city", "services.info.jarvis_search.get_current_city"),
 ])
@@ -773,7 +768,8 @@ PROBE = textwrap.dedent(
         "health": remote_compat.health(),
         "runner": [agent_runner.get_current_city is jarvis_location.get_current_city,
                    agent_runner.get_current_city_data is jarvis_location.get_current_city_data],
-        "weather": weather is not None and weather.get_current_city is jarvis_location.get_current_city,
+        # X-64: weather calls jarvis_search.get_current_city() at runtime, no by-value binding
+        "weather": weather is not None and not hasattr(weather, "get_current_city"),
         "startfile": getattr(os, "startfile", None) is remote_compat.open_file_shim,
     }
     importlib.reload(jarvis_search)  # a binding that changes after install() must fail loudly
@@ -807,7 +803,7 @@ def test_the_self_test_passes_on_the_current_tree(remote_tree):
     assert remote_tree["missing"] == [] and remote_tree["health"]["ok"] is True
     assert remote_tree["runner"] == [True, True]  # the first get_current_city() of a session too
     assert remote_tree["weather"] is True and remote_tree["startfile"] is True
-    assert len(remote_tree["shimmed"]) == 7
+    assert len(remote_tree["shimmed"]) == 6
 
 
 def test_the_self_test_fails_when_a_binding_changes_after_install(remote_tree):

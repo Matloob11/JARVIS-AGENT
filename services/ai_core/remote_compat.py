@@ -12,7 +12,7 @@ module or discovery binds anything by value:
   for an http(s) URL. Otherwise, or when the laptop cannot take it, it logs and returns False like a
   browser that did not start; it never raises.
 - services.info.jarvis_search.get_current_city / get_current_city_data and every by-value consumer
-  (jarvis_get_weather, agent_runner and any other loaded JARVIS module that holds them) ->
+  (agent_runner and any other loaded JARVIS module that holds them) ->
   services.utils.jarvis_location: the device location cache, else USER_CITY; never ipinfo.
 
 A loaded JARVIS module (services.*, src.*) that holds one of the replaced originals by value, the
@@ -49,9 +49,9 @@ logger = setup_logger("REMOTE-COMPAT")
 MISSING_TAG = "COMPAT_SHIM_MISSING"
 SEARCH_MODULE = "services.info.jarvis_search"
 LOCATION_NAMES = ("get_current_city", "get_current_city_data")
-# The by-value consumers on 2026-10-02 (frozen until X-64): each binds a location name at import.
+# The by-value consumers: each binds a location name at import. X-64 dropped jarvis_get_weather's;
+# it now calls jarvis_search.get_current_city() at runtime and so rides the jarvis_search shim.
 LOCATION_CONSUMERS = (
-    ("services.info.jarvis_get_weather", "get_current_city"),
     ("src.core.agent_runner", "get_current_city"),
     ("src.core.agent_runner", "get_current_city_data"),
 )
