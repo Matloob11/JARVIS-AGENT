@@ -1312,7 +1312,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-84 | cursor | P3 | Confirm Command card: the pinned head of the queue, meta line, long commands, hold to approve, keys, announcements | X-83 | DONE (cursor, 03 Oct 00:10 PKT) |
 | X-85 | cursor | P3 | Agents › Devices and Machines: Agent (VPS), Laptop card shell + location, This browser + camera, vitals, telemetry, map | X-73, X-103, X-107 | DONE (cursor, 03 Oct 02:12 PKT) |
 | X-86 | cursor | P3 | Activity › Media: featured item, media states, history, lightbox Esc, chat media chip | X-83, X-108 | DONE (cursor, 03 Oct 02:55 PKT) |
-| X-87 | cursor | P3 | Activity › Logs: System Logs terminal and toolbar, All levels, system feed, Reasoning | X-108 | DOING (cursor, 03 Oct 02:41 PKT) |
+| X-87 | cursor | P3 | Activity › Logs: System Logs terminal and toolbar, All levels, system feed, Reasoning | X-108 | DONE (cursor, 03 Oct 02:47 PKT) |
 | X-88 | cursor | P3 | Settings page: eleven sections, the index, field status, commit on blur or release (D12) | X-73, X-96, X-103 | DONE (cursor, 03 Oct 01:45 PKT) |
 | X-89 | cursor | P3 | Dialogs: SIM and enrollment in the neon dialog, semantics, focus trap, Esc, enrollment error and timeout | X-72, X-73 | DONE (cursor, 03 Oct 01:10 PKT) |
 | X-90 | cursor | P3 | Login, session check and the Electron offline page in the neon look | X-70, X-73 | DONE (cursor, 03 Oct 01:05 PKT) |

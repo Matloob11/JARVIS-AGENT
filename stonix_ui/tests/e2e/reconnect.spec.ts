@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { loginViaRecovery } from './helpers/login';
+import { gotoPage, loginViaRecovery } from './helpers';
 
 const MOCK = 'http://127.0.0.1:5199';
 
@@ -28,6 +28,7 @@ test.describe.configure({ mode: 'serial', timeout: 90_000 });
 test.beforeEach(async ({ page }) => {
   await loginViaRecovery(page);
   await expect(page.getByTestId('chip-bridge')).toBeVisible({ timeout: 15_000 });
+  await gotoPage(page, 'activity', 'logs');
 });
 
 test('reconnect keeps live subscriptions and request_state once per connect', async ({ page }) => {

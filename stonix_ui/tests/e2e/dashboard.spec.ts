@@ -12,7 +12,7 @@ test('production dashboard renders and accepts a command', async ({ page }) => {
   await expect(page.getByRole('radiogroup', { name: 'Who answers' })).toBeVisible();
   await gotoPage(page, 'agents');
   await expect(page.getByText(/System Flow/i)).toBeVisible();
-  await page.getByTestId('nav-overview').click();
+  await gotoPage(page, 'activity', 'logs');
   await expect(page.getByText(/System Logs/i)).toBeVisible();
 
   const commandInput = page.getByPlaceholder(/Message JARVIS|Message ANNA/i);

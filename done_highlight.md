@@ -997,3 +997,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** intelligence e2e 3/3
 - **Commit:** acfcfc4 · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-87 · Activity Logs tab + System Trace · 2026-10-03 02:47 PKT
+- **Kya kiya:** System Logs trace Activity › Logs par move; terminal toolbar (WARN+, filter, pause buffer count, Live/Offline), all-logs-list, Reasoning tablist/a11y; chat legacy logs strip hata di; trace-* testids rakhe.
+- **Files:** `LogsTab.tsx`, `SystemTrace.tsx`, `activity.css`, e2e trace/dashboard/responsive/panel-error/reconnect, `plan.md`
+- **Verify:** `npm --prefix stonix_ui run build` pass; trace+dashboard+responsive+memory e2e 16/16; testid inventory 250 pass
+- **Commit:** (pending) · **Deploy:** no
+- **Doosre agent ke liye:** —

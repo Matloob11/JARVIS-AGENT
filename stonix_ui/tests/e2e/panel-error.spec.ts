@@ -26,6 +26,7 @@ test('panel crash shows fallback inside the card and retry restores it', async (
   await expect(flowCard.getByText('System Flow stopped working')).toBeVisible();
   await expect(flowCard.getByText('The rest of the dashboard keeps running.')).toBeVisible();
   await expect(page.getByTestId('app-ready')).toBeVisible();
+  await gotoPage(page, 'activity', 'logs');
   await expect(page.getByText(/System Logs/i).first()).toBeVisible();
 
   await flowCard.getByTestId('panel-error-retry').click();

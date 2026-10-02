@@ -390,3 +390,126 @@
   gap: 6px;
   margin-top: 6px;
 }
+
+.logs-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-height: min(70vh, 640px);
+}
+
+.activity-logs-trace {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.activity-logs-trace .system-trace {
+  flex: 1 1 auto;
+  min-height: 360px;
+  height: auto;
+}
+
+.system-trace__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: 500 11px/16px var(--font-ui);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--t3);
+}
+
+.all-logs-pane {
+  flex: none;
+}
+
+.all-logs-pane__title {
+  margin: 0 0 10px;
+  font: 600 14px/20px var(--font-ui);
+  color: var(--t1);
+}
+
+.all-logs-list {
+  max-height: 220px;
+  overflow: auto;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.18);
+  padding: 8px 10px;
+}
+
+.all-logs-list--empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+  padding: 24px 16px;
+}
+
+.all-logs-list__title {
+  margin: 0;
+  font: 600 14px/20px var(--font-ui);
+  color: var(--t2);
+}
+
+.all-logs-list__hint {
+  margin: 0;
+  max-width: 280px;
+  font: 400 12px/18px var(--font-ui);
+  color: var(--t3);
+}
+
+.all-logs-list__row {
+  padding: 10px 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.all-logs-list__row:last-child {
+  border-bottom: 0;
+}
+
+.all-logs-list__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font: 600 10px/14px var(--font-ui);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--acc-soft);
+}
+
+.all-logs-list__time {
+  margin-left: auto;
+  font: 400 10px/14px var(--font-mono);
+  color: var(--t3);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.all-logs-list__text {
+  margin: 6px 0 0;
+  font: 400 12px/18px var(--font-ui);
+  color: var(--t2);
+}
+
+.trace-dropped__word {
+  display: inline;
+}
+
+@media (max-width: 1439.98px) {
+  .trace-dropped__word {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}

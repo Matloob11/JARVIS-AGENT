@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, type KeyboardEvent } from 'react';
 import { Pause, Play, TerminalSquare, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
 import type { NormalizedPlan } from '@/shared/contracts/events';
@@ -18,6 +18,7 @@ interface SystemTraceProps {
   planProgress: PlanProgressLine | null;
   systemFeed: SystemFeedEntry[];
   logDroppedCount: number;
+  traceLogBufferCount: number;
   isConnected: boolean;
   onLogsPausedChange: (paused: boolean) => void;
 }
@@ -33,6 +34,7 @@ const SystemTrace = ({
   planProgress,
   systemFeed,
   logDroppedCount,
+  traceLogBufferCount,
   isConnected,
   onLogsPausedChange,
 }: SystemTraceProps) => {
@@ -69,41 +71,73 @@ const SystemTrace = ({
     setHiddenLogCount(logs.length);
   };
 
+  const selectTraceTab = useCallback((tab: TraceTab) => {
+    setTraceTab(tab);
+  }, []);
+
+  const onTabKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    selectTraceTab(traceTab === 'logs' ? 'reasoning' : 'logs');
+  };
+
+  const pauseLabel = paused ? 'Resume' : 'Pause';
+  const pauseCount =
+    paused && traceLogBufferCount > 0 ? ` (${traceLogBufferCount})` : '';
+
   return (
     <Panel
       className="system-trace"
       title="System Logs"
       action={
-        <div className="flex items-center gap-2 text-[10px] text-command-muted">
+        <div className="system-trace__live">
           <StatusDot active={isConnected} tone={isConnected ? 'accent' : 'danger'} />
-          {isConnected ? 'connected' : 'offline'}
+          <span>{isConnected ? 'Live' : 'Offline'}</span>
         </div>
       }
     >
-      <div className="system-trace__tabs" data-testid="system-trace-tabs">
+      <div
+        className="system-trace__tabs"
+        data-testid="system-trace-tabs"
+        role="tablist"
+        aria-label="System logs views"
+        onKeyDown={onTabKeyDown}
+      >
         <button
           type="button"
+          role="tab"
+          id="trace-tab-logs-btn"
+          aria-selected={traceTab === 'logs'}
+          aria-controls="trace-panel-logs"
+          tabIndex={traceTab === 'logs' ? 0 : -1}
           className={clsx('system-trace__tab', traceTab === 'logs' && 'is-active')}
           data-testid="trace-tab-logs"
-          onClick={() => setTraceTab('logs')}
+          onClick={() => selectTraceTab('logs')}
         >
           Logs
         </button>
         <button
           type="button"
+          role="tab"
+          id="trace-tab-reasoning-btn"
+          aria-selected={traceTab === 'reasoning'}
+          aria-controls="trace-panel-reasoning"
+          tabIndex={traceTab === 'reasoning' ? 0 : -1}
           className={clsx('system-trace__tab', traceTab === 'reasoning' && 'is-active')}
           data-testid="trace-tab-reasoning"
-          onClick={() => setTraceTab('reasoning')}
+          onClick={() => selectTraceTab('reasoning')}
         >
           Reasoning
         </button>
       </div>
 
-      <div
-        className={clsx('system-trace__grid', traceTab === 'reasoning' && 'system-trace__grid--reasoning-tab')}
-        data-testid="system-trace-panel"
-      >
-        <div className={clsx('trace-terminal-wrap', traceTab === 'reasoning' && 'is-hidden-narrow')}>
+      <div className="system-trace__grid" data-testid="system-trace-panel">
+        <div
+          id="trace-panel-logs"
+          role="tabpanel"
+          aria-labelledby="trace-tab-logs-btn"
+          className={clsx('trace-terminal-wrap', traceTab === 'reasoning' && 'is-hidden-narrow')}
+        >
           <div className="trace-toolbar">
             <div className="trace-level-chips">
               <span className="trace-chip trace-chip--active">WARN+</span>
@@ -119,6 +153,7 @@ const SystemTrace = ({
             <input
               className="trace-filter"
               placeholder="Filter logs…"
+              aria-label="Filter logs"
               value={filterText}
               onChange={event => setFilterText(event.target.value)}
               data-testid="trace-log-filter"
@@ -131,7 +166,8 @@ const SystemTrace = ({
               onClick={togglePause}
             >
               {paused ? <Play size={12} /> : <Pause size={12} />}
-              {paused ? 'Resume' : 'Pause'}
+              {pauseLabel}
+              {pauseCount}
             </button>
             <button
               type="button"
@@ -145,10 +181,18 @@ const SystemTrace = ({
           </div>
           {logDroppedCount > 0 && (
             <p className="trace-dropped" data-testid="trace-log-dropped">
-              Bridge ne {logDroppedCount} purane logs drop kiye
+              <span aria-hidden>▲ </span>
+              Bridge ne {logDroppedCount}{' '}
+              <span className="trace-dropped__word">purane logs</span> drop kiye
             </p>
           )}
-          <div className="trace-terminal custom-scrollbar" data-testid="trace-log-terminal">
+          <div
+            className="trace-terminal custom-scrollbar"
+            data-testid="trace-log-terminal"
+            role="log"
+            tabIndex={0}
+            aria-label="System log stream"
+          >
             {visibleLogs.length === 0 ? (
               <div className="trace-empty">
                 <TerminalSquare size={18} />
@@ -196,6 +240,7 @@ const SystemTrace = ({
             onSelectIndex={setSelectedReasoningIdx}
             planProgress={planProgress}
             className={clsx(traceTab === 'logs' && 'is-hidden-narrow')}
+            tabId="trace-panel-reasoning"
           />
         </ErrorBoundary>
       </div>
@@ -210,6 +255,7 @@ interface ReasoningCardProps {
   onSelectIndex: (index: number) => void;
   planProgress: PlanProgressLine | null;
   className?: string;
+  tabId: string;
 }
 
 const ReasoningCard = ({
@@ -219,6 +265,7 @@ const ReasoningCard = ({
   onSelectIndex,
   planProgress,
   className,
+  tabId,
 }: ReasoningCardProps) => {
   if (reasoning?.intent === E2E_MALFORMED_PROBE) {
     throw new Error('reasoning probe');
@@ -230,7 +277,14 @@ const ReasoningCard = ({
   const confidenceEntries = topConfidenceEntries(reasoning);
 
   return (
-    <div className={clsx('reasoning-card', className)} data-testid="trace-reasoning-card">
+    <div
+      id={tabId}
+      role="tabpanel"
+      aria-labelledby="trace-tab-reasoning-btn"
+      className={clsx('reasoning-card', className)}
+      data-testid="trace-reasoning-card"
+      aria-label="Reasoning"
+    >
       <div className="reasoning-card__header">
         <span className="panel-kicker">Reasoning</span>
         {history.length > 1 && (
@@ -239,8 +293,9 @@ const ReasoningCard = ({
             value={selectedIndex}
             onChange={event => onSelectIndex(Number(event.target.value))}
             data-testid="trace-reasoning-select"
+            title={formatReasoningOption(history[selectedIndex] ?? history[0], selectedIndex)}
           >
-            {history.map((item, index) => (
+            {history.slice(0, 5).map((item, index) => (
               <option key={`${item.msg_id ?? item.intent ?? index}-${index}`} value={index}>
                 {formatReasoningOption(item, index)}
               </option>

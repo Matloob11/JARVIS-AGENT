@@ -38,6 +38,7 @@ async function ensureDashboard(page: import('@playwright/test').Page) {
 
 test.beforeEach(async ({ page }) => {
   await ensureDashboard(page);
+  await gotoPage(page, 'activity', 'logs');
   await expect(page.getByText(/System Logs/i).first()).toBeVisible({ timeout: 15_000 });
   await waitForUiSocket(page);
 });
@@ -98,6 +99,7 @@ test('1000 log entries stay capped and UI stays responsive', async ({ page }) =>
 test('INFO logs stay hidden until toggled', async ({ page }) => {
   await page.reload();
   await loginViaRecovery(page);
+  await gotoPage(page, 'activity', 'logs');
   await waitForUiSocket(page);
 
   await mockEmit(page, 'new_log', {

@@ -35,6 +35,8 @@ async function expectMobileTabPanel(
     await expect(page.getByTestId('camera-toggle')).toBeVisible();
   } else if (tab === 'trace') {
     await expect(page.getByTestId('page-activity')).toBeVisible();
+    await page.getByTestId('activity-tab-logs').click();
+    await expect(page.getByTestId('system-trace-panel')).toBeVisible();
   } else {
     await expect(page.getByTestId('page-settings')).toBeVisible();
   }
