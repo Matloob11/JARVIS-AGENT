@@ -738,3 +738,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `npm --prefix stonix_ui run build` pass · e2e persona-copy + chat + voice-settings 15/15 pass · testid-inventory --check pass (180)
 - **Commit:** (next) · **Deploy:** no
 - **Doosre agent ke liye:** X-97 voice state machine isi `voiceStatusLine` / `voiceHelperLine` se hook kare.
+
+### ✅ [cursor] X-71 · Ring favicons + Electron tray strings · 2026-10-02 22:35 PKT
+- **Kya kiya:** Master `jarvis-anna-mark.svg` (24-segment ring, #060d1e); `render-favicons.mjs` Playwright + drawLogoRing se 16–512 PNGs; index theme-color + favicon.svg; Electron tray/title "JARVIS & ANNA"; offline page title update.
+- **Files:** assets/brand/jarvis-anna-mark.svg, stonix_ui/public/favicon/*, stonix_ui/scripts/render-favicons.mjs, stonix_ui/index.html, stonix_ui/electron/main.cjs, stonix_ui/electron/offline.html, stonix_ui/tests/testids.baseline.txt
+- **Verify:** render-favicons pass · smoke:electron pass · test:electron 3/3 · testid-inventory --check pass (183)
+- **Commit:** (next) · **Deploy:** no
+- **Doosre agent ke liye:** PNGs dubara chahiye ho to `node stonix_ui/scripts/render-favicons.mjs`.

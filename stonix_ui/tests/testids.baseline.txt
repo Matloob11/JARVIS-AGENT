@@ -4,6 +4,7 @@ agent-pause
 agent-session-restart-banner
 agent-wake
 agent-wake-spinner
+app-ready
 assistant-agent-listening
 camera-link-badge
 camera-share-switch
@@ -75,6 +76,7 @@ ops-drawer-backdrop
 ops-drawer-toggle
 panel-error
 panel-error-retry
+page-title
 settings-drawer
 settings-guarded-tools-list
 settings-language-select
@@ -94,6 +96,7 @@ settings-voice-id-reject
 settings-voice-id-threshold
 settings-voice-select
 settings-wake-followup-select
+shell-sidebar
 sim-agent-offline-hint
 sim-cnic-masked
 sim-dialog

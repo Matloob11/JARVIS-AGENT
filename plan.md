@@ -1296,7 +1296,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-68 | cursor | P4 | (optional, deferred by user decision D3) Owner approval key in the browser: pairing and signed approvals over the arguments you see (V9) | C-111, C-116, X-67 | NOT NEEDED (deferred by user decision D3; reopen only if local approvals return) |
 | X-69 | cursor | P3 | Design tokens, Tailwind mapping, self-hosted fonts, icon sprite, full testid inventory baseline | C-135 | DONE (cursor, 02 Oct 21:50 PKT) |
 | X-70 | cursor | P3 | Brand: the reference ring logo, wordmark, rename STONIX (with the three specs and the fixture) | X-69 | DONE (cursor, 02 Oct 22:15 PKT) |
-| X-71 | cursor | P3 | Favicon and tray icons from the ring logo; Electron window, tray and offline strings | X-70 | TODO |
+| X-71 | cursor | P3 | Favicon and tray icons from the ring logo; Electron window, tray and offline strings | X-70 | DONE (cursor, 02 Oct 22:35 PKT) |
 | X-72 | cursor | P3 | Persona copy table with grammatical gender, the owner constant, persona-aware strings | X-69 | DONE (cursor, 02 Oct 22:20 PKT) |
 | X-73 | cursor | P3 | UI primitives (the n- kit) and StatusShape | X-69 | DONE (cursor, 02 Oct 22:45 PKT) |
 | X-74 | cursor | P3 | AudioReactiveEngine outside React, plus an e2e-only test hook | — | DONE (cursor, 02 Oct 13:45 PKT) |
@@ -1305,7 +1305,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-77 | cursor | P3 | Persona switch motion: View Transition circle from the orb, name roll, palette ease, reduced motion | X-70, X-75, X-104 | TODO |
 | X-78 | cursor | P3 | Page header: title and subtitle, the three status pills, divider, account block; interim Reconnect | X-73, X-80 | TODO |
 | X-79 | cursor | P3 | Laptop states and Stop desktop: the Devices popover Laptop row and the Agents › Laptop card (X-67 data) | X-67, X-85, X-99 | TODO |
-| X-80 | cursor | P3 | App shell: the fluid reference grid (dk/tl/ph), slots, hash router with mounted pages, app-ready marker | X-69, X-73 | TODO |
+| X-80 | cursor | P3 | App shell: the fluid reference grid (dk/tl/ph), slots, hash router with mounted pages, app-ready marker | X-69, X-73 | DOING (cursor, 02 Oct 22:23 PKT) |
 | X-81 | cursor | P3 | Agents › System Flow card: five nodes, the 'unknown' state, packets only while data moves | X-73, X-107 | TODO |
 | X-82 | cursor | P3 | Phone shell: compact header and pill row, five-tab bar, mounted zones, keyboard rule | X-78, X-80 | TODO |
 | X-83 | cursor | P3 | Right panel: Chat / Approvals / Tools tabs, the reference chat, the Tools tab with the SIM opener | X-72, X-73, X-80, X-96 | TODO |

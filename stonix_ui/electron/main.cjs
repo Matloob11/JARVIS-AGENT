@@ -275,10 +275,10 @@ function createTray() {
     tray = new Tray(iconPath);
 
     const contextMenu = Menu.buildFromTemplate([
-      { label: 'Show JARVIS', click: () => mainWindow.show() },
+      { label: 'Show JARVIS & ANNA', click: () => mainWindow.show() },
       { type: 'separator' },
       {
-        label: 'Quit JARVIS',
+        label: 'Quit JARVIS & ANNA',
         click: () => {
           isQuitting = true;
           app.quit();
@@ -286,7 +286,7 @@ function createTray() {
       },
     ]);
 
-    tray.setToolTip('JARVIS-AGENT');
+    tray.setToolTip('JARVIS & ANNA');
     tray.setContextMenu(contextMenu);
     tray.on('double-click', () => mainWindow.show());
   } catch (err) {
@@ -305,7 +305,7 @@ function createWindow() {
     transparent: true,
     hasShadow: true,
     autoHideMenuBar: true,
-    title: 'JARVIS & ANNA Neural Interface',
+    title: 'JARVIS & ANNA',
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
