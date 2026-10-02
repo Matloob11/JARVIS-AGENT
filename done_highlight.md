@@ -843,3 +843,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** test_remote_compat 84 passed, test_tool_placement 44 passed, pylint 10/10
 - **Commit:** `a3c7e16` · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-90 · Neon login, session check, Electron offline · 2026-10-03 01:05 PKT
+- **Kya kiya:** Login screen, session-check splash aur Electron `offline.html` ko Neon Command Center look diya — bloom background, glass card, 58px LogoRing, neon inputs/buttons; session check par breathing ring + progress bar; offline page par inline tokens + canvas ring. Saare auth testids aur "VPS unreachable" / Retry anchors rakhe.
+- **Files:** `stonix_ui/src/features/auth/LoginScreen.tsx`, `stonix_ui/src/app/App.tsx`, `stonix_ui/src/assets/styles/neon/screens.css`, `stonix_ui/src/assets/styles/index.css`, `stonix_ui/electron/offline.html`
+- **Verify:** `npm --prefix stonix_ui run build` pass; auth e2e 7/7 pass; electron 3/3 pass; testid inventory — X-90 ne koi naya testid nahi add kiya (pehle se `voice-enroll-error` baseline gap)
+- **Commit:** (pending) · **Deploy:** no
+- **Doosre agent ke liye:** —

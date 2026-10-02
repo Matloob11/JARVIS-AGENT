@@ -7,53 +7,141 @@
     <style>
       :root {
         color-scheme: dark;
-        font-family: 'Segoe UI', system-ui, sans-serif;
+        --bg-top: #0a1023;
+        --bg: #060d1e;
+        --t1: #ffffff;
+        --t3: #a6b1d0;
+        --t4: #94a0be;
+        --acc-btn: linear-gradient(159deg, #2a66f2 0%, #2559f0 45%, #2348e3 100%);
+        --font-ui: 'Segoe UI', system-ui, sans-serif;
+        --font-brand: 'Montserrat', 'Segoe UI', sans-serif;
+      }
+      * {
+        box-sizing: border-box;
       }
       body {
         margin: 0;
         min-height: 100vh;
+        font-family: var(--font-ui);
+        color: var(--t1);
+        background:
+          radial-gradient(60vw 40vh at 18% 0%, rgba(27, 37, 111, 0.55), rgba(27, 37, 111, 0) 70%),
+          radial-gradient(40vw 40vh at 92% 8%, rgba(24, 69, 162, 0.35), rgba(24, 69, 162, 0) 70%),
+          radial-gradient(50vw 30vh at 10% 100%, rgba(21, 18, 67, 0.6), rgba(21, 18, 67, 0) 70%),
+          linear-gradient(180deg, var(--bg-top) 0%, var(--bg) 50%, #060d1e 100%);
         display: grid;
         place-items: center;
-        background: radial-gradient(circle at 50% 20%, #1a2744 0%, #06080f 55%);
-        color: #e8eefc;
+        padding: 24px;
       }
       main {
+        position: relative;
+        width: min(430px, 100%);
+        border-radius: 16px;
+        padding: 30px 30px 26px;
         text-align: center;
-        max-width: 28rem;
-        padding: 2rem;
+        background: linear-gradient(180deg, rgba(18, 27, 54, 0.92), rgba(11, 18, 38, 0.94));
+        box-shadow:
+          0 40px 90px rgba(0, 0, 0, 0.55),
+          inset 0 0 0 1px #2f3d66;
+      }
+      .brand {
+        display: grid;
+        justify-items: center;
+        margin-bottom: 18px;
+      }
+      .brand canvas {
+        display: block;
+        width: 64px;
+        height: 64px;
+        margin-bottom: 8px;
       }
       h1 {
-        font-size: 1.25rem;
-        font-weight: 600;
-        margin: 0 0 0.75rem;
+        margin: 0 0 10px;
+        font: 700 21px/28px var(--font-ui);
+        color: var(--t1);
       }
       p {
-        margin: 0 0 1.5rem;
-        opacity: 0.85;
-        line-height: 1.5;
+        margin: 0 0 22px;
+        font: 400 14.5px/22px var(--font-ui);
+        color: var(--t3);
       }
       button {
         cursor: pointer;
-        border: 1px solid #3d5a8a;
-        background: #152238;
-        color: inherit;
-        padding: 0.65rem 1.25rem;
-        border-radius: 0.5rem;
-        font-size: 0.95rem;
+        border: none;
+        height: 46px;
+        padding: 0 22px;
+        border-radius: 12px;
+        font: 600 15px/1 var(--font-ui);
+        color: var(--t1);
+        background: var(--acc-btn);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.12),
+          0 8px 24px rgba(0, 0, 0, 0.35);
       }
       button:hover {
-        background: #1c2d4d;
+        filter: brightness(1.08);
       }
     </style>
   </head>
   <body>
     <main>
-      <h1>VPS unreachable — Retry</h1>
-      <p>JARVIS dashboard abhi load nahi ho saka. Internet ya server check karein, phir dubara try karein.</p>
+      <div class="brand">
+        <canvas id="logo" width="128" height="128" role="img" aria-label="JARVIS & ANNA"></canvas>
+      </div>
+      <h1>JARVIS &amp; ANNA: VPS unreachable</h1>
+      <p>
+        JARVIS dashboard abhi load nahi ho saka. Internet ya server check karein, phir dubara try karein.
+      </p>
       <button type="button" id="retry">Retry</button>
     </main>
     <script>
-      document.getElementById('retry').addEventListener('click', () => {
+      (function () {
+        var LOGO_OUT = ['#5c45f7', '#8657fb', '#924efc', '#6941ec', '#3d35cf', '#282e9f', '#182065', '#0e1e63', '#0d205e', '#10236e', '#3949cd', '#4240ee'];
+        var LOGO_IN = ['#8c71fc', '#e1a4fc', '#fae4fd', '#c39dfc', '#7a73fb', '#5f66f6', '#4a6dff', '#76a5f1', '#85c2fa', '#7db4fc', '#cee9fe', '#a1aafd'];
+        var LOGO_EDGE = ['#6655f6', '#8d5ef5', '#bc7efc', '#9963e4', '#6e5ff0', '#3f47c8', '#344dca', '#2a4bb8', '#3250bd', '#314bb7', '#4e66dc', '#4f58e9'];
+        var cssSize = 64;
+        var cv = document.getElementById('logo');
+        var ctx = cv.getContext('2d');
+        var dpr = Math.min(window.devicePixelRatio || 1, 2);
+        cv.width = Math.round(cssSize * dpr);
+        cv.height = Math.round(cssSize * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        var cx = cssSize / 2;
+        var cy = cssSize / 2;
+        var ro = (29 * cssSize) / 64;
+        var k = ro / 29;
+        function hex2rgb(h) {
+          var s = h.replace('#', '');
+          return [parseInt(s.slice(0, 2), 16), parseInt(s.slice(2, 4), 16), parseInt(s.slice(4, 6), 16)];
+        }
+        function rgba(c, a) {
+          return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a + ')';
+        }
+        function logoConic(cols, a) {
+          var g = ctx.createConicGradient(0, cx, cy);
+          for (var i = 0; i < cols.length; i++) g.addColorStop(i / cols.length, rgba(hex2rgb(cols[i]), a));
+          g.addColorStop(1, rgba(hex2rgb(cols[0]), a));
+          return g;
+        }
+        function ring(r0, r1, style) {
+          ctx.beginPath();
+          ctx.arc(cx, cy, r1 * k, 0, Math.PI * 2);
+          ctx.arc(cx, cy, r0 * k, 0, Math.PI * 2, true);
+          ctx.fillStyle = style;
+          ctx.fill();
+        }
+        ring(23.3, 29.2, logoConic(LOGO_OUT, 1));
+        ring(16.8, 23.1, logoConic(LOGO_IN, 1));
+        ctx.strokeStyle = logoConic(LOGO_EDGE, 0.9);
+        ctx.lineWidth = 1.1 * k;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 28.1 * k, 0, Math.PI * 2);
+        ctx.stroke();
+      })();
+      document.getElementById('retry').addEventListener('click', function () {
+        try {
+          sessionStorage.setItem('jarvis-session-check-msg', 'reconnect');
+        } catch (e) {}
         if (window.electronAPI && typeof window.electronAPI.retryMainLoad === 'function') {
           window.electronAPI.retryMainLoad();
         } else {
