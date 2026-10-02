@@ -27,6 +27,7 @@ export type AgentActivitySnapshot = {
   legacyStatus: string;
   speaking: boolean;
   thinking: boolean;
+  agentStatusSeen: boolean;
 };
 
 type StoreSnapshot = AgentActivitySnapshot;
@@ -36,6 +37,7 @@ let snapshot: StoreSnapshot = {
   legacyStatus: 'idle',
   speaking: false,
   thinking: false,
+  agentStatusSeen: false,
 };
 
 const listeners = new Set<() => void>();
@@ -80,6 +82,7 @@ function ensureSocketSubscriptions() {
   subscribeSocketEvent('agent_status', payload => {
     setPartial({
       status: { ...snapshot.status, ...normalizeAgentStatus(payload) },
+      agentStatusSeen: true,
     });
   });
 
@@ -87,7 +90,10 @@ function ensureSocketSubscriptions() {
     if (!state || typeof state !== 'object') return;
     const agentStatus = (state as { agent_status?: unknown }).agent_status;
     if (agentStatus !== undefined) {
-      setPartial({ status: normalizeAgentStatus(agentStatus) });
+      setPartial({
+        status: normalizeAgentStatus(agentStatus),
+        agentStatusSeen: true,
+      });
     }
   });
 

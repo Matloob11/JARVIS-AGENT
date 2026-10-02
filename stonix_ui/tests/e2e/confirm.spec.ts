@@ -36,7 +36,7 @@ test.describe.configure({ mode: 'serial' });
 
 test.beforeEach(async ({ page }) => {
   await loginViaRecovery(page);
-  await expect(page.getByText('connected')).toBeVisible();
+  await expect(page.getByTestId('chip-bridge')).toHaveAttribute('data-active', 'true');
 });
 
 test('confirm_request shows modal; Deny emits allow:false once', async ({ page }) => {

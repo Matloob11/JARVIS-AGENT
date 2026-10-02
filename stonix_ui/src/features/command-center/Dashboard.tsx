@@ -11,6 +11,7 @@ import VoiceEnrollDialog from '@/features/voice/VoiceEnrollDialog';
 import ConfirmDialog from '@/features/confirm/ConfirmDialog';
 import SystemTrace from './components/SystemTrace';
 import TopBar from './components/TopBar';
+import PageHeader from '@/features/shell/PageHeader';
 import MobileTabBar, { type MobileTab } from './components/MobileTabBar';
 import { useCommandCenter } from './hooks/useCommandCenter';
 import { ErrorBoundary } from '@/shared/ui/ErrorBoundary';
@@ -163,23 +164,33 @@ const DashboardInner = () => {
         route={route}
         mobileTab={mobileTab}
         head={
-          <ErrorBoundary name="TopBar">
-            <TopBar
-              isConnected={command.isConnected}
-              onReconnect={handleReconnect}
-              onOpenSettings={() => setSettingsOpen(true)}
-              onOpenSim={command.openSimPanel}
-              onToggleOpsDrawer={toggleOpsDrawer}
-              opsDrawerOpen={opsDrawerOpen}
-              onLogout={() => {
-                void liveKit.disconnectRoom();
-                void logout();
-              }}
-              taskUnreadCount={command.taskUnreadCount}
-              taskNotifications={command.taskNotifications}
-              onOpenTaskBell={command.openTaskBell}
-            />
-          </ErrorBoundary>
+          <>
+            <ErrorBoundary name="PageHeader">
+              <PageHeader
+                route={route}
+                layout={layout}
+                bridgeConnected={command.isConnected}
+                isUserSpeaking={command.isUserSpeaking}
+                taskUnreadCount={command.taskUnreadCount}
+                taskNotifications={command.taskNotifications}
+                onOpenTaskBell={command.openTaskBell}
+              />
+            </ErrorBoundary>
+            <ErrorBoundary name="TopBar">
+              <TopBar
+                isConnected={command.isConnected}
+                onReconnect={handleReconnect}
+                onOpenSettings={() => setSettingsOpen(true)}
+                onOpenSim={command.openSimPanel}
+                onToggleOpsDrawer={toggleOpsDrawer}
+                opsDrawerOpen={opsDrawerOpen}
+                onLogout={() => {
+                  void liveKit.disconnectRoom();
+                  void logout();
+                }}
+              />
+            </ErrorBoundary>
+          </>
         }
         main={
           <>

@@ -759,3 +759,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `npm --prefix stonix_ui run build` pass · e2e responsive + layout 21/21 pass · testid-inventory --check pass (195)
 - **Commit:** (next) · **Deploy:** no
 - **Doosre agent ke liye:** X-104 hero; Settings `title` abhi nav-settings + TopBar dono par (X-88).
+
+### ✅ [cursor] X-78 · Page header + status pills + legacy strip · 2026-10-02 23:55 PKT
+- **Kya kiya:** `PageHeader` (title/subtitle, account+bell, ResizeObserver greet/compact), `StatusPills` (System/Devices/Voice + GET `/vortex/status` poll), legacy TopBar strip (wake/persona/mic/reconnect); X-96 in-place reconnect + toast; confirm/settings e2e anchors updated.
+- **Files:** stonix_ui/src/features/shell/{PageHeader,StatusPills,useVortexStatusPoll,voicePillState}.tsx, TopBar.tsx, AgentControls.tsx, agentStatusStore.ts, Dashboard.tsx, neon/shell.css, e2e confirm/settings.spec.ts, testids.baseline.txt, Sidebar.tsx, plan.md
+- **Verify:** `npm --prefix stonix_ui run build` pass · e2e status/confirm/settings/controls/responsive 23/23 pass · testid-inventory --check pass (195)
+- **Commit:** (next) · **Deploy:** no
+- **Doosre agent ke liye:** X-99 popovers; X-79 laptop row on Devices pill.
