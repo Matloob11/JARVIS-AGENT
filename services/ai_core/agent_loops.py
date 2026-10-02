@@ -7,10 +7,10 @@ import asyncio
 import os
 import uuid
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlsplit, urlunsplit
 
 import socketio
 
-from services.ai_core.jarvis_vision import vision_system
 from services.ai_core.swarm_manager import swarm_coordinator
 from services.automation.jarvis_reminders import check_due_reminders
 from services.ai_core.jarvis_vector_memory import jarvis_vector_db
@@ -48,7 +48,8 @@ async def start_adaptation_loop() -> None:
         try:
             stress = adaptive_engine.analyze_system_load()
 
-            if stress in ["CRITICAL", "STRESSED"]:
+            # In a container the engine only observes its cgroup (K-72): nothing is cancelled for load.
+            if stress in ["CRITICAL", "STRESSED"] and not adaptive_engine.observe_only:
                 # Throttling non-essential high-load tasks
                 logger.critical("🚨 SYSTEM OVERLOAD: Throttling high-load services...")
                 for task_name in ["reminder_loop", "bug_hunter_loop", "memory_loop"]:
@@ -122,11 +123,51 @@ async def start_bug_hunter_loop(session: "AgentSession") -> None:
             await asyncio.sleep(60) # Longer wait for log system recovery
 
 
+# K-38: the client's own reconnection is off; UIBridgeListener.start() waits 1, 2, 4, 8, 10, 10 ... s.
+RECONNECT_FIRST_S = 1.0
+RECONNECT_MAX_S = 10.0
+_STABLE_CONNECTION_S = 30.0  # a connection that lasted this long starts the next backoff at 1 s again
+_CONNECT_WAIT_S = 10  # how long connect() waits for the bridge to accept the namespace
+_RETRY_LOG_EVERY_S = 60.0
+# K-38 v4: the bridge takes the agent role only on its internal listener (jarvis-network, never published).
+INTERNAL_LISTENER_PORT = 5002
+
+
+def bridge_socket_target(url: str) -> tuple[str, str]:
+    """(connect URL, socketio_path) for UI_BRIDGE_URL: a URL ending in /vortex (the public nginx prefix)
+    gives 'vortex/socket.io', any other URL 'socket.io'. The connect URL keeps scheme, host and query."""
+    parts = urlsplit(url.strip())
+    path = parts.path.strip("/")
+    base = urlunsplit((parts.scheme, parts.netloc, "", parts.query, ""))
+    if path == "vortex" or path.endswith("/vortex"):
+        return base, f"{path}/socket.io"
+    return base, "socket.io"
+
+
+def is_internal_listener(url: str) -> bool:
+    """True for the bridge's internal :5002 listener (the VPS brain, e.g. http://jarvis-bridge:5002)."""
+    try:
+        return urlsplit(url.strip()).port == INTERNAL_LISTENER_PORT
+    except ValueError:
+        return False
+
+
+def _job_identity() -> tuple[str, str]:
+    """(room, job_id) of the LiveKit job running this listener; outside a job JARVIS_ROOM_NAME and ''."""
+    default_room = os.getenv("JARVIS_ROOM_NAME") or "jarvis-hybrid"
+    try:
+        from livekit.agents import get_job_context  # pylint: disable=import-outside-toplevel
+        job = get_job_context().job
+        return job.room.name or default_room, job.id
+    except Exception:  # pylint: disable=broad-exception-caught
+        return default_room, ""
+
+
 class UIBridgeListener:
     """Manages Socket.IO connection and command handling for the UI Bridge."""
     def __init__(self, assistant: "BrainAssistant") -> None:
         self.assistant = assistant
-        self.sio = socketio.AsyncClient()
+        self.sio = socketio.AsyncClient(reconnection=False)
         self._is_reconnecting = False
 
         self.sio.on('agent_command', self.on_command)
@@ -234,6 +275,7 @@ class UIBridgeListener:
         else:
             self.assistant.last_vision_frame = frame # type: ignore[attr-defined]
 
+        from services.ai_core.jarvis_vision import vision_system  # pylint: disable=import-outside-toplevel
         vision_system.update_webcam_frame(frame)
 
         if self.assistant._active_session: # type: ignore[attr-defined]
@@ -250,20 +292,57 @@ class UIBridgeListener:
         logger.warning("❌ UI Bridge Disconnected. Retrying...")
         self._is_reconnecting = True
 
+    def _auth(self, url: str) -> dict[str, Any]:
+        """Built anew for every connect. The internal :5002 listener (VPS brain) gets the agent role with
+        this job's room (K-38 v4); any other URL keeps today's token auth."""
+        if is_internal_listener(url):
+            room, job_id = _job_identity()
+            return {"role": "agent", "room": room, "job_id": job_id}
+        return {'token': config.security_token}
+
+    async def _close(self) -> None:
+        """Drops a live or half-open connection; never raises."""
+        try:
+            await asyncio.wait_for(self.sio.disconnect(), timeout=5)
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.debug("UI Bridge disconnect: %s", e)
+
     async def start(self) -> None:
-        """Main connection loop."""
+        """
+        Keeps the UI bridge connection for the life of the job and never returns (K-38). After a failed
+        connect or a lost connection it reconnects with a fresh auth, waiting 1, 2, 4 ... 10 s between
+        attempts (back to 1 s after a connection that held). Cancelling the task closes the socket.
+        """
+        url = config.bridge_url
+        base_url, socketio_path = bridge_socket_target(url)
+        loop = asyncio.get_running_loop()
+        delay = RECONNECT_FIRST_S
+        failures = 0
+        last_failure_log = float("-inf")
         while True:
+            connected_at: float | None = None
             try:
-                if not self.sio.connected:
-                    await self.sio.connect(config.bridge_url, auth={'token': config.security_token})
-                while self.sio.connected:
-                    await asyncio.sleep(1)
-                logger.warning("🔄 UI Bridge lost. Retrying via autonomous restart...")
-                break
+                await self.sio.connect(base_url, auth=self._auth(url), socketio_path=socketio_path,
+                                       wait_timeout=_CONNECT_WAIT_S)
+                connected_at = loop.time()
+                failures = 0
+                await self.sio.wait()
+                logger.warning("🔄 UI Bridge lost. Reconnecting...")
+            except asyncio.CancelledError:
+                await self._close()
+                raise
             except Exception as e:
-                logger.error("SocketIO connection error: %s", e)
-                await asyncio.sleep(5)
-                break
+                failures += 1
+                # WARNING, at most once a minute: the bridge may be down for a while (deploy, restart).
+                if failures == 1 or loop.time() - last_failure_log >= _RETRY_LOG_EVERY_S:
+                    last_failure_log = loop.time()
+                    logger.warning("SocketIO connection error (attempt %d, next in %.0f s): %s",
+                                   failures, delay, e)
+                await self._close()
+            if connected_at is not None and loop.time() - connected_at >= _STABLE_CONNECTION_S:
+                delay = RECONNECT_FIRST_S
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, RECONNECT_MAX_S)
 
 async def start_ui_command_listener(assistant: "BrainAssistant") -> None:
     """Entry point for the UI command listener."""

@@ -18,10 +18,10 @@ TARGET_DIR = PROJECT_ROOT / "pretrained_models" / "spkrec-ecapa-voxceleb"
 def main() -> None:
     """Download the voice fingerprint model into pretrained_models/."""
     TARGET_DIR.mkdir(parents=True, exist_ok=True)
+    # local_dir already gets real files; huggingface_hub 1.x rejects local_dir_use_symlinks.
     snapshot_download(
         repo_id=MODEL_REPO_ID,
         local_dir=str(TARGET_DIR),
-        local_dir_use_symlinks=False,
     )
     print(f"Voice model ready at: {TARGET_DIR}")
 

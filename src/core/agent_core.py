@@ -31,7 +31,7 @@ from services.ai_core.voice_fingerprint import voice_id_engine
 from services.utils.jarvis_adaptive import adaptive_engine
 from services.utils.jarvis_audit import jarvis_audit
 from services.utils.jarvis_autonomous import resilient_tool
-from services.utils.jarvis_config import config
+from services.utils.jarvis_config import config, is_local_mode
 from services.utils.jarvis_health import health_monitor
 from services.utils.jarvis_logger import setup_logger
 from services.utils.jarvis_security import vortex_guard
@@ -40,16 +40,64 @@ from services.utils.jarvis_telemetry import telemetry
 try:
     from .bridge_notifier import bridge_notifier
     from .persona_manager import PersonaManager
-    from .vision_handler import VisionHandler
 except (ImportError, ValueError):
     from src.core.bridge_notifier import bridge_notifier
     from src.core.persona_manager import PersonaManager
+
+# Optional handler: when it cannot load (e.g. a desktop-only import on a headless host) the agent runs
+# without vision instead of failing to import.
+_vision_import_error: Exception | None = None
+try:
     from src.core.vision_handler import VisionHandler
+except Exception as _exc:  # pylint: disable=broad-exception-caught
+    VisionHandler = None  # type: ignore[assignment,misc]
+    _vision_import_error = _exc
 
 from services.automation.jarvis_task_manager import task_manager
 
 logger = setup_logger("JARVIS-CORE")
 # pylint: disable=unused-import
+
+_handler_failures: set[str] = set()
+
+
+def _optional_handler_failed(what: str, exc: BaseException) -> None:
+    """An optional handler never stops the agent; each kind of failure is logged once per process."""
+    if what in _handler_failures:
+        logger.debug("%s failed again: %s: %s", what, type(exc).__name__, exc)
+        return
+    _handler_failures.add(what)
+    logger.warning("%s unavailable (%s: %s); continuing without it", what, type(exc).__name__, exc)
+
+
+class _NoVisionHandler:
+    """Stands in for VisionHandler when it cannot load: no frames, no window context, no loop."""
+
+    def __init__(self) -> None:
+        self.last_vision_frame: str | None = None
+        self.active_window_context: dict[str, Any] = {}
+
+    def start_loop(self) -> None:
+        """Nothing to poll."""
+
+    async def stop_loop(self) -> None:
+        """Nothing to stop."""
+
+    def on_window_context(self, event: Any) -> None:
+        """Window events are dropped."""
+
+    async def handle_vision_query(self, text: str, new_message: Any, turn_ctx: Any) -> None:
+        """No frame to inject."""
+
+    async def inject_window_context(self, turn_ctx: Any) -> None:
+        """No window context to inject."""
+
+    async def analyze_current_frame(self, prompt: str) -> str:
+        return "Sir, vision system abhi available nahi hai."
+
+
+if _vision_import_error is not None:
+    _optional_handler_failed("VisionHandler", _vision_import_error)
 
 INSTRUCTIONS_PROMPT = BEHAVIOR_PROMPT
 
@@ -142,18 +190,20 @@ class BrainAssistant(Agent):
 
         # Initialize Modular Handlers
         self.persona_manager = PersonaManager(self)
-        self.vision_handler = VisionHandler(self)
+        self.vision_handler = self._make_vision_handler()
         self.bridge_notifier = bridge_notifier
         self._background_tasks: set[asyncio.Task[Any]] = set()
         self._spawned_tasks: set[asyncio.Task[Any]] = set()
         self.last_vision_frame: bytes | None = None
-        
-        # Start Advanced Task Monitor when constructed inside an active event loop.
-        try:
-            asyncio.get_running_loop()
-            self._run_back(self._task_monitor_loop())
-        except RuntimeError:
-            logger.debug("Task monitor deferred: no running event loop during init.")
+
+        # Start Advanced Task Monitor when constructed inside an active event loop. Local mode only:
+        # with the VPS brain agent-svc checks due tasks (K-72).
+        if is_local_mode():
+            try:
+                asyncio.get_running_loop()
+                self._run_back(self._task_monitor_loop())
+            except RuntimeError:
+                logger.debug("Task monitor deferred: no running event loop during init.")
 
         # --- Wrap internal tools within this scope to capture 'self' ---
         @resilient_tool("set_wake_word_mode")
@@ -206,6 +256,15 @@ class BrainAssistant(Agent):
         )
 
 
+
+    def _make_vision_handler(self) -> Any:
+        """VisionHandler, or a stand-in without vision when it cannot load or start."""
+        if VisionHandler is not None:
+            try:
+                return VisionHandler(self)
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                _optional_handler_failed("VisionHandler", e)
+        return _NoVisionHandler()
 
     async def prune_chat_context(self) -> None:
         """
@@ -399,8 +458,8 @@ class BrainAssistant(Agent):
         logger.info("Live AgentSession attached to BrainAssistant (User: %s)", self.user_id)
         try:
             self.vision_handler.start_loop()
-        except RuntimeError as e:
-            logger.debug("Vision loop not started: %s", e)
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            _optional_handler_failed("Vision loop", e)
 
     async def _task_monitor_loop(self):
         """Background loop focused on proactive task execution."""
@@ -778,7 +837,10 @@ class BrainAssistant(Agent):
         """Gracefully shuts down the assistant and its modular services."""
         logger.info("Assistant shutting down...")
         # 1. Stop Vision Loop
-        await self.vision_handler.stop_loop()
+        try:
+            await self.vision_handler.stop_loop()
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            _optional_handler_failed("Vision loop stop", e)
         # 2. Close Bridge Notifier client
         await self.bridge_notifier.aclose()
         # 3. Cancel background tasks

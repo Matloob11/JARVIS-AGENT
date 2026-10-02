@@ -9,12 +9,11 @@ Google's Gemini multimodal AI model.
 import asyncio
 import base64
 import binascii
+import importlib
 import os
 from io import BytesIO
 from typing import Any
 
-import cv2  # Added for local webcam support
-import pyautogui
 import requests
 from dotenv import load_dotenv
 from google import genai
@@ -31,6 +30,28 @@ load_dotenv()
 
 # Global clients (lazy initialized where needed)
 _google_client = None
+
+# Capture backends, imported on first use: importing this module has no GUI side effect, so a headless
+# host (the VPS brain) can load it (K-72). pyautogui serves screenshots, cv2 the local webcam fallback.
+pyautogui: Any = None
+cv2: Any = None
+
+
+class CaptureUnavailable(ImportError):
+    """A capture backend cannot be imported on this host; the tools answer with status 'unavailable'."""
+
+
+def _capture_backend(name: str) -> Any:
+    """Imports pyautogui or cv2 once. Any import failure (ImportError, or KeyError 'DISPLAY' and
+    NotImplementedError on a headless Linux host) raises CaptureUnavailable."""
+    module = globals()[name]
+    if module is None:
+        try:
+            module = importlib.import_module(name)
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            raise CaptureUnavailable(f"{name} is not available on this host ({type(e).__name__}: {e})") from e
+        globals()[name] = module
+    return module
 
 def get_google_client() -> genai.Client | None:
     """Lazily initializes and returns the Google GenAI client."""
@@ -89,35 +110,37 @@ class ScreenPerceiver:
     async def capture_screen(self) -> bytes:
         """
         Captures the current primary screen and returns it as PNG bytes.
+        Raises CaptureUnavailable when pyautogui cannot be imported here.
         """
+        gui = _capture_backend("pyautogui")
         try:
             # Capture using pyautogui in a thread to avoid blocking
-            screenshot = await asyncio.to_thread(pyautogui.screenshot)
+            screenshot = await asyncio.to_thread(gui.screenshot)
 
             # Save to BytesIO to avoid disk I/O if possible,
             # but we need it in a format Gemini accepts (PIL or bytes)
             buffered = BytesIO()
             screenshot.save(buffered, format="PNG")
             return buffered.getvalue()
-        except (pyautogui.ImageNotFoundException, OSError) as e:
+        except (gui.ImageNotFoundException, OSError) as e:
             logger.error("Error capturing screen: %s", e)
             raise
 
     async def capture_webcam(self) -> bytes:
         """
         Captures a frame from the UI-provided buffer or local webcam.
-        Returns JPEG bytes.
+        Returns JPEG bytes. Without a UI frame, raises CaptureUnavailable when OpenCV cannot be imported here.
         """
         # Priority 1: Use frame captured from the UI Bridge
         if self.latest_frame:
             return self.latest_frame
 
         # Priority 2: Fallback to local webcam (OpenCV)
+        opencv = _capture_backend("cv2")
         try:
             # Run in thread to avoid blocking loop
             def do_capture() -> bytes | None:
-                # pylint: disable=no-member
-                cap = cv2.VideoCapture(0)
+                cap = opencv.VideoCapture(0)
                 if not cap.isOpened():
                     return None
                 ret, frame = cap.read()
@@ -125,8 +148,7 @@ class ScreenPerceiver:
                 if not ret:
                     return None
                 # Convert BGR to RGB
-                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                # pylint: enable=no-member
+                rgb_frame = opencv.cvtColor(frame, opencv.COLOR_BGR2RGB)
                 img = Image.fromarray(rgb_frame)
                 buffered = BytesIO()
                 img.save(buffered, format="JPEG")
@@ -291,6 +313,13 @@ async def analyze_screen(query: str = "Describe what you see on my screen in det
             "query": query,
             "message": f"👁️ Screen Analysis report taiyyar hai, Sir:\n{result}",
         }
+    except CaptureUnavailable as e:
+        logger.warning("Screen capture unavailable: %s", e)
+        return {
+            "status": "unavailable",
+            "message": "👁️ Sir, is machine par screen capture available nahi hai.",
+            "error": str(e),
+        }
     except (OSError, RuntimeError) as e:
         logger.error("Vision tool error: %s", e)
         return {
@@ -334,6 +363,13 @@ async def analyze_camera(query: str = "What do you see in the camera?") -> dict:
             "status": "success",
             "query": query,
             "message": f"📷 Camera view analysis, Sir:\n{result}",
+        }
+    except CaptureUnavailable as e:
+        logger.warning("Webcam capture unavailable: %s", e)
+        return {
+            "status": "unavailable",
+            "message": "📷 Sir, browser se camera frame nahi mila aur is machine par webcam capture available nahi hai.",
+            "error": str(e),
         }
     except (OSError, RuntimeError, ValueError) as e:
         logger.error("Camera tool error: %s", e)

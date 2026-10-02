@@ -1,13 +1,75 @@
 import asyncio
 import json
+import os
 import random
 import threading
+import time
 from pathlib import Path
 from typing import Any, cast
 
 from services.utils.jarvis_logger import setup_logger
 
 logger = setup_logger("JARVIS-ADAPTIVE")
+
+_CGROUP_ROOT = Path("/sys/fs/cgroup")
+_NO_LIMIT = 1 << 60  # cgroup v1 reports "no memory limit" as a huge number
+
+
+def in_container() -> bool:
+    """True inside a Docker/OCI container: Docker's /.dockerenv marker, or the 'container' variable that
+    Podman and systemd-nspawn set."""
+    return Path("/.dockerenv").exists() or bool(os.getenv("container"))
+
+
+def _read_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
+def _read_int(path: Path) -> int | None:
+    try:
+        return int(_read_text(path))
+    except ValueError:  # missing file, or 'max'
+        return None
+
+
+def _host_memory_bytes() -> int | None:
+    for line in _read_text(Path("/proc/meminfo")).splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[0] == "MemTotal:" and parts[1].isdigit():
+            return int(parts[1]) * 1024
+    return None
+
+
+def _cgroup_figures(root: Path) -> tuple[int | None, int | None, float | None, float]:
+    """(memory bytes, memory limit bytes or None, CPU seconds used, CPUs the cgroup may use) from cgroup v2,
+    else v1. Unreadable figures are None."""
+    cpus = float(os.cpu_count() or 1)
+    if (root / "cgroup.controllers").exists():
+        memory = _read_int(root / "memory.current")
+        limit = _read_int(root / "memory.max")
+        cpu_s = None
+        for line in _read_text(root / "cpu.stat").splitlines():
+            key, _, value = line.partition(" ")
+            if key == "usage_usec" and value.strip().isdigit():
+                cpu_s = int(value) / 1e6
+        quota, _, period = _read_text(root / "cpu.max").partition(" ")
+        if quota.isdigit() and period.strip().isdigit() and int(period) > 0:
+            cpus = min(cpus, int(quota) / int(period))
+    else:
+        memory = _read_int(root / "memory" / "memory.usage_in_bytes")
+        limit = _read_int(root / "memory" / "memory.limit_in_bytes")
+        usage_ns = _read_int(root / "cpuacct" / "cpuacct.usage")
+        cpu_s = usage_ns / 1e9 if usage_ns is not None else None
+        quota_us = _read_int(root / "cpu" / "cpu.cfs_quota_us")
+        period_us = _read_int(root / "cpu" / "cpu.cfs_period_us")
+        if quota_us and quota_us > 0 and period_us:
+            cpus = min(cpus, quota_us / period_us)
+    if limit is not None and (limit <= 0 or limit >= _NO_LIMIT):
+        limit = None
+    return memory, limit, cpu_s, max(cpus, 0.01)
 
 
 class JarvisAdaptiveEngine:
@@ -23,6 +85,11 @@ class JarvisAdaptiveEngine:
             self.data_path.parent.mkdir(parents=True, exist_ok=True)
         self.state: dict[str, Any] = self._load_state()
         self.stress_level: str = "NORMAL" # NORMAL, STRESSED, CRITICAL
+        # K-72: in a container the engine reads only its own cgroup and never cancels loops (the host's
+        # load belongs to other apps); on the PC it throttles as before.
+        self.observe_only: bool = in_container()
+        self.last_cgroup: dict[str, float] = {}
+        self._cpu_sample: tuple[float, float] | None = None
 
     def _load_state(self) -> dict[str, Any]:
         """Loads persistent learning state."""
@@ -67,11 +134,17 @@ class JarvisAdaptiveEngine:
 
         open_circuits = len([b for b in resilience_manager._breakers.values() if b.state.value == "OPEN"])
 
-        # 2. Resource Level Health (Vitals)
-        vitals = health_monitor.get_system_vitals()
-        cpu_usage = vitals.get("cpu", {}).get("usage", 0.0)
-        mem_usage = vitals.get("memory", {}).get("percent", 0.0)
-        disk_usage = vitals.get("disk", {}).get("percent", 0.0)
+        # 2. Resource Level Health (Vitals); in a container the cgroup's own figures, never the host's
+        if self.observe_only:
+            figures = self.cgroup_vitals()
+            cpu_usage = figures["cpu_percent"]
+            mem_usage = figures["memory_percent"]
+            disk_usage = 0.0
+        else:
+            vitals = health_monitor.get_system_vitals()
+            cpu_usage = vitals.get("cpu", {}).get("usage", 0.0)
+            mem_usage = vitals.get("memory", {}).get("percent", 0.0)
+            disk_usage = vitals.get("disk", {}).get("percent", 0.0)
 
         # 3. Decision Matrix — Windows hybrid desktops often sit at 70-85% RAM with browsers;
         # do not treat that alone as overload (it was canceling useful loops every 30s).
@@ -87,6 +160,28 @@ class JarvisAdaptiveEngine:
                            self.stress_level, cpu_usage, mem_usage, failures)
 
         return self.stress_level
+
+    def cgroup_vitals(self, root: Path = _CGROUP_ROOT) -> dict[str, float]:
+        """This container's own use: memory_mb, memory_percent (of the cgroup limit, or of host memory
+        when no limit is set) and cpu_percent (of the CPUs the cgroup may use, since the previous call;
+        0.0 on the first). Unreadable figures count as 0.0. The result is kept in last_cgroup."""
+        memory, limit, cpu_s, cpus = _cgroup_figures(root)
+        total = limit or _host_memory_bytes()
+        memory_percent = 100.0 * memory / total if memory is not None and total else 0.0
+        cpu_percent = 0.0
+        now = time.monotonic()
+        if cpu_s is not None:
+            previous = self._cpu_sample
+            if previous is not None and now > previous[1]:
+                used = max(cpu_s - previous[0], 0.0)
+                cpu_percent = min(100.0 * used / (now - previous[1]) / cpus, 100.0)
+            self._cpu_sample = (cpu_s, now)
+        self.last_cgroup = {
+            "memory_mb": round((memory or 0) / (1024 * 1024), 1),
+            "memory_percent": round(memory_percent, 1),
+            "cpu_percent": round(cpu_percent, 1),
+        }
+        return self.last_cgroup
 
     def select_strategy(self, intent_name: str) -> str:
         """

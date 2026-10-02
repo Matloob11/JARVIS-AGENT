@@ -131,9 +131,13 @@ def play_startup_voice(delay_s=10):
     Plays the first startup sound pygame can load (startup_sound_candidates) after a 10-second
     delay as requested by the user.
     Runs separately in a background thread to avoid blocking agent connection.
-    Returns that thread; under pytest none is started (tests never play real audio).
+    Returns that thread; under pytest none is started (tests never play real audio), and in remote
+    mode none either: the VPS has no speaker, the Desktop Node plays it on the laptop (K-72).
     """
     if running_under_pytest:
+        return None
+    from services.utils.jarvis_config import is_local_mode  # pylint: disable=import-outside-toplevel
+    if not is_local_mode():
         return None
     import threading  # pylint: disable=import-outside-toplevel
     thread = threading.Thread(target=_play_startup_sound, args=(delay_s,),

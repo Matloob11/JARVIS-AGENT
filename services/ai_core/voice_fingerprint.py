@@ -174,11 +174,12 @@ def _load_audio_deps() -> None:
 
     original_hf_hub_download = _huggingface_hub.hf_hub_download
 
+    # SpeechBrain 1.0 still passes use_auth_token; huggingface_hub 1.x accepts neither that nor
+    # local_dir_use_symlinks (a TypeError), so the first is renamed and the second dropped.
     def _patched_hf_hub_download(*args: Any, **kwargs: Any) -> str:
         if "use_auth_token" in kwargs:
             kwargs["token"] = kwargs.pop("use_auth_token")
-        if "local_dir_use_symlinks" not in kwargs:
-            kwargs["local_dir_use_symlinks"] = False
+        kwargs.pop("local_dir_use_symlinks", None)
         return cast(str, original_hf_hub_download(*args, **kwargs))
 
     _huggingface_hub.hf_hub_download = _patched_hf_hub_download  # type: ignore
@@ -188,8 +189,7 @@ def _load_audio_deps() -> None:
     def _patched_snapshot_download(*args: Any, **kwargs: Any) -> str:
         if "use_auth_token" in kwargs:
             kwargs["token"] = kwargs.pop("use_auth_token")
-        if "local_dir_use_symlinks" not in kwargs:
-            kwargs["local_dir_use_symlinks"] = False
+        kwargs.pop("local_dir_use_symlinks", None)
         return cast(str, original_snapshot_download(*args, **kwargs))
 
     _huggingface_hub.snapshot_download = _patched_snapshot_download  # type: ignore

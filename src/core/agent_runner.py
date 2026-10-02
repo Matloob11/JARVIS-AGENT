@@ -88,19 +88,35 @@ from services.ai_core.agent_loops import (
     start_ui_command_listener,
 )
 from services.ai_core.agent_memory import MemoryExtractor
-from services.automation.jarvis_clipboard import ClipboardMonitor
 from services.info.jarvis_search import (
     get_current_city,
     get_current_city_data,
     get_formatted_datetime,
 )
+from services.utils.jarvis_adaptive import in_container
 from services.utils.jarvis_autonomous import autonomous_protector
 from services.utils.jarvis_diagnostics import diagnostics as diagnostics_instance
 from services.utils.jarvis_healing import healing_engine
 from services.utils.jarvis_health import health_monitor
-from services.utils.jarvis_config import config
+from services.utils.jarvis_config import (
+    BRAIN_VPS,
+    DESKTOP_MODE_LOCAL,
+    DESKTOP_MODE_REMOTE,
+    ROLE_AGENT,
+    RuntimeProfile,
+    config,
+    desktop_mode,
+    runtime_profile,
+)
 from services.utils.jarvis_logger import setup_logger
 from services.utils.jarvis_loopwatch import LoopWatchdog
+
+# The clipboard helper needs a desktop. In remote mode (K-72) the Desktop Node runs it, so this process
+# never imports it. The mode is fixed for the life of the process.
+if desktop_mode() == DESKTOP_MODE_LOCAL:
+    from services.automation.jarvis_clipboard import ClipboardMonitor
+else:
+    ClipboardMonitor = None  # type: ignore[assignment,misc]
 
 # Notification functions moved inside entrypoint to handle potential scope/import issues
 
@@ -178,6 +194,37 @@ async def start_heartbeat_loop() -> None:
         await asyncio.sleep(30) # Reduced frequency to save resources
 
 
+async def _location_loop(notify_location: Callable[[Any], Awaitable[Any]]) -> None:
+    """Sends the ipinfo location to the UI every 60 s. Local mode only: from the VPS ipinfo answers for
+    the data centre, and the Desktop Node reports the device location instead (K-72)."""
+    while True:
+        try:
+            loc_data = await get_current_city_data()
+            await notify_location(loc_data)
+        except Exception as e:
+            logger.error("Location loop error: %s", e)
+        await asyncio.sleep(60) # Location doesn't change often
+
+
+def _resolve_user_id(room: Any) -> str:
+    """Memory identity: JARVIS_USER_ID in every mode (K-69 v4), so the PC and the VPS share one memory
+    file. When it is unset: the old per-job identity (the first remote participant, else this agent's
+    own), with a WARNING."""
+    if config.user_id:
+        return config.user_id
+    user_id = "User"
+    remote_participants = list(getattr(room, "remote_participants", {}).values())
+    if remote_participants:
+        # Take the first remote participant if available
+        first_participant = remote_participants[0]
+        user_id = first_participant.identity
+    elif getattr(room, "local_participant", None):
+        # Fallback to local participant identity if remote not found yet
+        user_id = room.local_participant.identity
+    logger.warning("JARVIS_USER_ID is not set; memory is keyed by this job's participant identity")
+    return user_id
+
+
 async def perform_startup_diagnostics() -> None:
     """Run pre-flight checks and log results."""
     logger.info("Initializing Pre-flight health check...")
@@ -190,8 +237,14 @@ async def perform_startup_diagnostics() -> None:
         logger.error("Startup diagnostics failed: %s", e)
 
 
-async def _start_background_tasks(session: AgentSession, assistant: BrainAssistant) -> list[asyncio.Task[Any]]:
-    """Starts all background loops and monitors via the autonomous protector."""
+async def _start_background_tasks(session: AgentSession, assistant: BrainAssistant,
+                                  mode: str | None = None) -> list[asyncio.Task[Any]]:
+    """Starts all background loops and monitors via the autonomous protector.
+
+    mode (default JARVIS_DESKTOP_MODE): remote mode (K-72) starts no reminder loop (agent-svc owns
+    reminders) and no clipboard monitor (the Desktop Node runs it); local mode starts everything.
+    """
+    local = (mode or desktop_mode()) == DESKTOP_MODE_LOCAL
     logger.info("🔄 Starting protected background tasks...")
 
     # Launch background loops via the autonomous protector to ensure resilience
@@ -200,7 +253,8 @@ async def _start_background_tasks(session: AgentSession, assistant: BrainAssista
     await autonomous_protector.run_protected("ui_command_listener", start_ui_command_listener, assistant)
 
     # 💥 NEW: Self-Monitoring & Proactive Analysis Loops
-    await autonomous_protector.run_protected("reminder_loop", start_reminder_loop, session)
+    if local:
+        await autonomous_protector.run_protected("reminder_loop", start_reminder_loop, session)
     await autonomous_protector.run_protected("bug_hunter_loop", start_bug_hunter_loop, session)
     await autonomous_protector.run_protected("memory_storage_loop", start_memory_storage_loop, assistant)
 
@@ -227,25 +281,28 @@ async def _start_background_tasks(session: AgentSession, assistant: BrainAssista
     healing_engine.register_recovery_action(
         "backend_core", _recover_backend_core)
 
-    clip_monitor = ClipboardMonitor()
+    clip_task = None
+    if local:
+        clip_monitor = ClipboardMonitor()
 
-    async def _on_clipboard_detected(solution):
-        logger.info("📋 Clipboard Detection: %s", solution)
-        if assistant and hasattr(assistant, "chat_ctx"):
-            assistant.chat_ctx.messages.append(
-                llm.ChatMessage(
-                    role="assistant",
-                    content=[f"[SYSTEM NOTIFICATION: CLIPBOARD ERROR DETECTED]\n{solution}"],
-                ),
-            )
+        async def _on_clipboard_detected(solution):
+            logger.info("📋 Clipboard Detection: %s", solution)
+            if assistant and hasattr(assistant, "chat_ctx"):
+                assistant.chat_ctx.messages.append(
+                    llm.ChatMessage(
+                        role="assistant",
+                        content=[f"[SYSTEM NOTIFICATION: CLIPBOARD ERROR DETECTED]\n{solution}"],
+                    ),
+                )
 
-    # Clipboard monitor doesn't naturally support a coro_func retry without refactor,
-    # so we wrap it in a custom task for now.
-    clip_task = asyncio.create_task(clip_monitor.start(_on_clipboard_detected))
+        # Clipboard monitor doesn't naturally support a coro_func retry without refactor,
+        # so we wrap it in a custom task for now.
+        clip_task = asyncio.create_task(clip_monitor.start(_on_clipboard_detected))
 
     # Return all managed tasks to be added to the session's active_tasks set
     managed_tasks = list(autonomous_protector._tasks.values())
-    managed_tasks.append(clip_task)
+    if clip_task is not None:
+        managed_tasks.append(clip_task)
     return managed_tasks
 
 
@@ -347,6 +404,7 @@ async def entrypoint(ctx: agents.JobContext):
     """Main job entrypoint."""
     # K-29 backstop for _mask_cli_log_handler(): masks any root handler added since then.
     redact_root_handlers()
+    local = desktop_mode() == DESKTOP_MODE_LOCAL
     max_retries = 5
     attempt = 0
 
@@ -397,16 +455,8 @@ async def entrypoint(ctx: agents.JobContext):
                 model="models/gemini-2.5-flash-native-audio-latest",
             )
 
-            # Try to resolve participant identity for memory/context
-            user_id = "User"
-            remote_participants = list(getattr(ctx.room, "remote_participants", {}).values())
-            if remote_participants:
-                # Take the first remote participant if available
-                first_participant = remote_participants[0]
-                user_id = first_participant.identity
-            elif getattr(ctx.room, "local_participant", None):
-                # Fallback to local participant identity if remote not found yet
-                user_id = ctx.room.local_participant.identity
+            # Memory identity: JARVIS_USER_ID, else the participant identity as before
+            user_id = _resolve_user_id(ctx.room)
 
             chat_ctx = llm.ChatContext()
             
@@ -449,17 +499,9 @@ async def entrypoint(ctx: agents.JobContext):
             logger.info("[AGENT] Session started successfully.")
             assistant.attach_session(session)
 
-            # --- Location Update Loop ---
-            async def location_loop():
-                while True:
-                    try:
-                        loc_data = await get_current_city_data()
-                        await notify_location(loc_data)
-                    except Exception as e:
-                        logger.error("Location loop error: %s", e)
-                    await asyncio.sleep(60) # Location doesn't change often
-
-            track(location_loop())
+            # --- Location Update Loop --- (local mode only, K-72)
+            if local:
+                track(_location_loop(notify_location))
 
 
             # --- Speaker Identification Subscription ---
@@ -568,6 +610,31 @@ async def entrypoint(ctx: agents.JobContext):
             await _cleanup_session_resources(session, list(active_tasks))
 
 
+def check_runtime_profile() -> RuntimeProfile:
+    """
+    K-72 start gate, run by build_worker_options for both start paths. The worker serves the agent role
+    only. Local mode belongs to the PC brain alone: with JARVIS_BRAIN=vps or inside a container it means
+    JARVIS_DESKTOP_MODE is missing or misspelt, and the start is refused instead of running the PC
+    sensors, reminders and task monitor there. Remote mode (the VPS containers) checks its keys first: a
+    missing JARVIS_ENCRYPTION_KEY stops the start, and so does any other missing key in production. The
+    PC brain starts as before.
+    """
+    profile = runtime_profile()
+    logger.info("RUNTIME role=%s brain=%s mode=%s", profile.role, profile.brain, profile.mode)
+    if profile.role != ROLE_AGENT:
+        raise SystemExit(f"JARVIS_ROLE={profile.role}: the LiveKit worker runs only the agent role")
+    if profile.mode == DESKTOP_MODE_LOCAL and (profile.brain == BRAIN_VPS or in_container()):
+        where = "JARVIS_BRAIN=vps" if profile.brain == BRAIN_VPS else "a container"
+        raise SystemExit(f"[JARVIS-ERROR] local desktop mode is the PC brain only; {where} needs "
+                         "JARVIS_DESKTOP_MODE=remote")
+    if profile.mode == DESKTOP_MODE_REMOTE:
+        try:
+            config.validate(ROLE_AGENT, DESKTOP_MODE_REMOTE)
+        except RuntimeError as e:
+            raise SystemExit(f"[JARVIS-ERROR] {e}") from e
+    return profile
+
+
 def build_worker_options(
     entrypoint_fnc: Callable[[agents.JobContext], Awaitable[None]] | None = None,
 ) -> agents.WorkerOptions:
@@ -576,8 +643,9 @@ def build_worker_options(
     Shared by both start paths: src.core.agent imports it from here, so this module never has to
     import src.core.agent (that would be an import cycle). The explicit port also replaces dev
     mode's random one. JARVIS_AGENT_NAME='' keeps automatic dispatch until OP-22 sets 'jarvis'
-    (explicit dispatch, K-44).
+    (explicit dispatch, K-44). check_runtime_profile() runs first.
     """
+    check_runtime_profile()
     return agents.WorkerOptions(
         entrypoint_fnc=entrypoint if entrypoint_fnc is None else entrypoint_fnc,
         host=os.getenv("JARVIS_WORKER_HOST") or "127.0.0.1",

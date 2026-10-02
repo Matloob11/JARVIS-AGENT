@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import contextlib
+import json
 from io import BytesIO
 from typing import Any
 
@@ -8,24 +9,92 @@ from livekit.agents import llm
 from PIL import Image
 
 from services.ai_core.jarvis_vision import vision_system
-from services.system.jarvis_window_ctrl import get_active_window_context
+from services.utils.jarvis_config import DESKTOP_MODE_LOCAL, desktop_mode
 from services.utils.jarvis_logger import setup_logger
 
 logger = setup_logger("VISION-HANDLER")
+
+WINDOW_POLL_S = 60
+_TITLE_MAX = 200
+
+
+async def _poll_active_window() -> dict[str, Any]:
+    """K-21 get_active_window_context. The desktop module is imported on the first poll (local mode only),
+    so importing this file pulls in no GUI module."""
+    from services.system.jarvis_window_ctrl import (  # pylint: disable=import-outside-toplevel
+        get_active_window_context,
+    )
+    return await get_active_window_context()
+
+
+class WindowContextProvider:
+    """
+    The window the user works in (K-21).
+
+    'local' (PC brain): VisionHandler polls jarvis_window_ctrl every 60 s, as before.
+    'remote' (VPS brain): a cache the Desktop Node fills with window_context events (K-70); nothing polls,
+    and the title is marked untrusted, so it is injected as quoted user-side data.
+    """
+
+    def __init__(self, mode: str | None = None) -> None:
+        self.mode: str = mode or desktop_mode()
+        self.context: dict[str, Any] = {}
+
+    @property
+    def polls(self) -> bool:
+        """True when this process reads the active window itself (local mode)."""
+        return self.mode == DESKTOP_MODE_LOCAL
+
+    async def poll_once(self) -> None:
+        """One local poll; keeps the last successful answer."""
+        ctx: dict[str, Any] = await _poll_active_window()
+        if ctx.get("status") == "success":
+            self.context = ctx
+
+    def on_window_context(self, event: Any) -> None:
+        """Stores one node window_context event ({title, ...}); an event without a title clears the cache."""
+        title = event.get("title") if isinstance(event, dict) else None
+        if not isinstance(title, str) or not title.strip():
+            self.context = {}
+            return
+        self.context = {
+            "status": "success",
+            "title": title.strip()[:_TITLE_MAX],
+            "untrusted": True,
+            "source": "desktop_node",
+            "ts": event.get("ts"),
+        }
+
 
 class VisionHandler:
     """
     Manages background vision tasks and environment context injection.
     """
 
-    def __init__(self, assistant_ref: Any) -> None:
+    def __init__(self, assistant_ref: Any, mode: str | None = None) -> None:
         self._assistant: Any = assistant_ref
         self.last_vision_frame: str | None = None
-        self.active_window_context: dict[str, Any] = {}
+        self.window_context = WindowContextProvider(mode)
         self._proactive_vision_task: asyncio.Task[None] | None = None
 
+    @property
+    def active_window_context(self) -> dict[str, Any]:
+        """The provider's current window context."""
+        return self.window_context.context
+
+    @active_window_context.setter
+    def active_window_context(self, value: dict[str, Any]) -> None:
+        self.window_context.context = value
+
+    def on_window_context(self, event: Any) -> None:
+        """Remote mode: a Desktop Node window_context event (K-70) updates the cached context."""
+        self.window_context.on_window_context(event)
+
     def start_loop(self) -> None:
-        """Starts the proactive awareness loop."""
+        """Starts the proactive awareness loop (local mode; in remote mode the Desktop Node pushes the window)."""
+        if not self.window_context.polls:
+            logger.debug("VisionHandler: window context comes from the Desktop Node; no polling.")
+            return
         if not self._proactive_vision_task:
             try:
                 asyncio.get_running_loop()
@@ -47,14 +116,16 @@ class VisionHandler:
         logger.info("🔭 AuraView 2.0: Proactive awareness loop started.")
         while True:
             try:
-                ctx: dict[str, Any] = await get_active_window_context()
-                if ctx.get("status") == "success":
-                    self.active_window_context = ctx
+                await self.window_context.poll_once()
             except asyncio.CancelledError:
                 raise
             except RuntimeError as e:
                 logger.error("Vision loop error: %s", e)
-            await asyncio.sleep(60)
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                # Such an error (e.g. the window module failing to import) used to end this task silently.
+                logger.warning("Vision loop stopped: %s: %s", type(e).__name__, e)
+                return
+            await asyncio.sleep(WINDOW_POLL_S)
 
     async def handle_vision_query(self, text: str, new_message: Any, turn_ctx: Any) -> None:
         """Detects vision-related keywords and injects image frame if available."""
@@ -124,6 +195,13 @@ class VisionHandler:
         """Injects current window context into the chat messages."""
         if self.active_window_context and self.active_window_context.get("status") == "success":
             title: str = str(self.active_window_context.get("title", "Unknown"))
+            if self.active_window_context.get("untrusted"):
+                # K-21 v4: a title from the laptop is data, never an instruction: quoted and user-side.
+                self._append_context_message(turn_ctx, llm.ChatMessage(
+                    role="user",
+                    content=[f"[ENVIRONMENT, untrusted window title from the laptop]: {json.dumps(title, ensure_ascii=False)}"],
+                ))
+                return
             system_msg: str = f"[ENVIRONMENT]: User is focused on: '{title}'."
             self._append_context_message(turn_ctx, llm.ChatMessage(
                 role="system", content=[system_msg],

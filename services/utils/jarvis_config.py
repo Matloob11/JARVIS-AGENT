@@ -1,6 +1,7 @@
 import logging
 import os
 import shutil
+from typing import NamedTuple
 
 from dotenv import load_dotenv
 
@@ -27,6 +28,94 @@ _ENV_FILES = (
     os.path.join(_PROJECT_ROOT, ".env"),
     os.path.join(_PROJECT_ROOT, "deploy", "windows-local", ".env"),
 )
+
+# Runtime profile (K-72): the role this process plays, the active brain and where the desktop is.
+ROLE_AGENT, ROLE_SVC, ROLE_BRIDGE, ROLE_DESKTOP = "agent", "svc", "bridge", "desktop"
+ROLES = (ROLE_AGENT, ROLE_SVC, ROLE_BRIDGE, ROLE_DESKTOP)
+BRAIN_PC, BRAIN_VPS = "pc", "vps"
+BRAINS = (BRAIN_PC, BRAIN_VPS)
+DESKTOP_MODE_LOCAL, DESKTOP_MODE_REMOTE = "local", "remote"
+DESKTOP_MODES = (DESKTOP_MODE_LOCAL, DESKTOP_MODE_REMOTE)
+_warned_choices: set[tuple[str, str]] = set()
+
+
+class RuntimeProfile(NamedTuple):
+    """JARVIS_ROLE, JARVIS_BRAIN and JARVIS_DESKTOP_MODE as this process sees them (K-72)."""
+
+    role: str
+    brain: str
+    mode: str
+
+
+def _env_choice(name: str, choices: tuple[str, ...], default: str) -> str:
+    """Lower-cased value when it is one of choices; unset or empty gives the default. Anything else gives
+    the default plus one WARNING per value, naming the variable only (K-69: values are never logged)."""
+    value = (os.getenv(name) or "").strip().lower()
+    if not value:
+        return default
+    if value in choices:
+        return value
+    if (name, value) not in _warned_choices:
+        _warned_choices.add((name, value))
+        logger.warning("%s is not one of %s; using %s", name, "/".join(choices), default)
+    return default
+
+
+def runtime_role() -> str:
+    """JARVIS_ROLE: agent (default) | svc | bridge | desktop."""
+    return _env_choice("JARVIS_ROLE", ROLES, ROLE_AGENT)
+
+
+def active_brain() -> str:
+    """JARVIS_BRAIN: pc (default) | vps. The VPS compose .env holds the real switch (K-72)."""
+    return _env_choice("JARVIS_BRAIN", BRAINS, BRAIN_PC)
+
+
+def desktop_mode() -> str:
+    """JARVIS_DESKTOP_MODE: local (default: the PC brain, every desktop sensor runs in this process) or
+    remote (the VPS brain: the laptop's Desktop Node owns the clipboard, the active window, the device
+    location and the startup sound, and agent-svc owns reminders and tasks)."""
+    return _env_choice("JARVIS_DESKTOP_MODE", DESKTOP_MODES, DESKTOP_MODE_LOCAL)
+
+
+def is_local_mode() -> bool:
+    """True for the PC brain (JARVIS_DESKTOP_MODE unset or local)."""
+    return desktop_mode() == DESKTOP_MODE_LOCAL
+
+
+def runtime_profile() -> RuntimeProfile:
+    """The current (role, brain, mode), read from the environment on every call."""
+    return RuntimeProfile(runtime_role(), active_brain(), desktop_mode())
+
+
+class _Needs(NamedTuple):
+    """Keys one (role, mode) pair needs: required (raise only in production), fatal (always raise) and
+    any_of (at least one group must be complete)."""
+
+    required: tuple[str, ...]
+    fatal: tuple[str, ...] = ()
+    any_of: tuple[tuple[str, ...], ...] = ()
+
+
+_LIVEKIT_KEYS = ("LIVEKIT_API_KEY", "LIVEKIT_API_SECRET")
+# Without it jarvis_crypto encrypts memory with a throw-away session key, so nothing written survives a restart.
+_ENCRYPTION_KEY = "JARVIS_ENCRYPTION_KEY"
+_AGENT_LINK_KEY = "DESKTOP_AGENT_SIGNING_KEY"
+
+
+def _role_needs(role: str, mode: str) -> _Needs:
+    if role == ROLE_AGENT and mode == DESKTOP_MODE_LOCAL:
+        # The legacy shared token, or the C-14 agent credentials once the PC env moves to them.
+        return _Needs(("GOOGLE_API_KEY", *_LIVEKIT_KEYS),
+                      any_of=(("VORTEX_SECURITY_TOKEN",), ("AGENT_TOKEN", "BRIDGE_HMAC_SECRET")))
+    if role == ROLE_AGENT:
+        return _Needs(("GOOGLE_API_KEY", *_LIVEKIT_KEYS, _AGENT_LINK_KEY), fatal=(_ENCRYPTION_KEY,))
+    if role == ROLE_SVC:
+        return _Needs((_AGENT_LINK_KEY,), fatal=(_ENCRYPTION_KEY,))
+    if role == ROLE_BRIDGE:
+        legacy = ("VORTEX_SECURITY_TOKEN",) if _env_bool("LEGACY_TOKEN_AUTH", True) else ()
+        return _Needs((*_LIVEKIT_KEYS, *legacy))
+    return _Needs(("DESKTOP_PC_SIGNING_KEY", "DESKTOP_AGENT_PUBLIC_KEY"))
 
 
 def _load_env_files() -> None:
@@ -279,6 +368,18 @@ class JarvisConfig:
     whatsapp_app_id: str
     whatsapp_contacts_file: str
     cv_path: str | None
+    user_id: str | None
+    desktop_pc_signing_key: str | None
+
+    # validate(role, mode) reads these names from their attribute, so a key a role holds only in memory
+    # (the Desktop Node's unwrapped DESKTOP_PC_SIGNING_KEY) counts; other names come from the environment.
+    _SETTING_ATTRS = {
+        "GOOGLE_API_KEY": "google_api_key",
+        "VORTEX_SECURITY_TOKEN": "security_token",
+        "LIVEKIT_API_KEY": "livekit_key",
+        "LIVEKIT_API_SECRET": "livekit_secret",
+        "DESKTOP_PC_SIGNING_KEY": "desktop_pc_signing_key",
+    }
 
     def __init__(self) -> None:
         """Loads environment variables and sets up configuration attributes."""
@@ -312,6 +413,9 @@ class JarvisConfig:
         # User Info
         self.user_name = os.getenv("USER_NAME", "Sir Matloob")
         self.user_city = os.getenv("USER_CITY", "Lahore")
+        # Memory identity (K-69 v4): the same in every mode, so the PC and the VPS share one memory file.
+        self.user_id = _env_str("JARVIS_USER_ID")
+        self.desktop_pc_signing_key = _env_str("DESKTOP_PC_SIGNING_KEY")
 
         # Root Directory
         self.project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -398,8 +502,49 @@ class JarvisConfig:
         """Returns True if the environment is set to production."""
         return self.env == "production"
 
-    def validate(self) -> bool:
-        """Mandatory validation for critical keys."""
+    @property
+    def role(self) -> str:
+        """JARVIS_ROLE (K-72), read on every access."""
+        return runtime_role()
+
+    @property
+    def brain(self) -> str:
+        """JARVIS_BRAIN (K-72), read on every access."""
+        return active_brain()
+
+    @property
+    def desktop_mode(self) -> str:
+        """JARVIS_DESKTOP_MODE (K-72), read on every access."""
+        return desktop_mode()
+
+    def _setting(self, name: str) -> str | None:
+        attr = self._SETTING_ATTRS.get(name)
+        if attr:
+            return (getattr(self, attr, None) or "").strip() or None
+        return _env_str(name)
+
+    def validate(self, role: str | None = None, mode: str | None = None) -> bool:
+        """Mandatory validation for critical keys; names are logged, values never.
+
+        validate() keeps the original check: GOOGLE_API_KEY, VORTEX_SECURITY_TOKEN, LIVEKIT_API_KEY and
+        LIVEKIT_API_SECRET, each missing one logged CRITICAL and a RuntimeError in production.
+
+        validate(role, mode) (K-72) asks only for what that pair uses, so the old single env file and the
+        split ones (bridge.env, .env.agent) both pass:
+        - agent + local (the PC brain): GOOGLE_API_KEY, LIVEKIT_API_KEY/SECRET and VORTEX_SECURITY_TOKEN,
+          or AGENT_TOKEN with BRIDGE_HMAC_SECRET in its place;
+        - agent + remote (the VPS brain): GOOGLE_API_KEY, LIVEKIT_API_KEY/SECRET, DESKTOP_AGENT_SIGNING_KEY
+          and JARVIS_ENCRYPTION_KEY;
+        - svc: JARVIS_ENCRYPTION_KEY and DESKTOP_AGENT_SIGNING_KEY;
+        - bridge: LIVEKIT_API_KEY/SECRET, plus VORTEX_SECURITY_TOKEN while the legacy token is in use
+          (LEGACY_TOKEN_AUTH unset or true);
+        - desktop: DESKTOP_PC_SIGNING_KEY and DESKTOP_AGENT_PUBLIC_KEY.
+        role and mode default to JARVIS_ROLE and JARVIS_DESKTOP_MODE; the mode matters only for the agent.
+        A missing JARVIS_ENCRYPTION_KEY raises in every environment; any other missing key raises only in
+        production, as before. Returns True when nothing is missing.
+        """
+        if role is not None or mode is not None:
+            return self._validate_role(role, mode)
         critical_keys: dict[str, str | None] = {
             "GOOGLE_API_KEY": self.google_api_key,
             "VORTEX_SECURITY_TOKEN": self.security_token,
@@ -416,6 +561,28 @@ class JarvisConfig:
                 raise RuntimeError(
                     f"Production safety check failed: Missing {missing}")
 
+        return not missing
+
+    def _validate_role(self, role: str | None, mode: str | None) -> bool:
+        role = (role or runtime_role()).strip().lower()
+        mode = (mode or desktop_mode()).strip().lower()
+        if role not in ROLES:
+            raise ValueError(f"Unknown role {role!r}; expected one of {', '.join(ROLES)}")
+        if mode not in DESKTOP_MODES:
+            raise ValueError(f"Unknown desktop mode {mode!r}; expected one of {', '.join(DESKTOP_MODES)}")
+        needs = _role_needs(role, mode)
+        label = f"{role}/{mode}" if role == ROLE_AGENT else role
+        fatal = [name for name in needs.fatal if not self._setting(name)]
+        missing = [name for name in needs.required if not self._setting(name)]
+        if needs.any_of and not any(all(self._setting(name) for name in group) for group in needs.any_of):
+            missing.append(" or ".join("+".join(group) for group in needs.any_of))
+
+        if fatal or missing:
+            logger.critical("❌ CRITICAL CONFIG MISSING (%s): %s", label, ", ".join(fatal + missing))
+        if fatal:
+            raise RuntimeError(f"Missing {fatal} for {label}: refusing to start")
+        if missing and self.is_production():
+            raise RuntimeError(f"Production safety check failed for {label}: Missing {missing}")
         return not missing
 
 
