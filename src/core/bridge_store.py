@@ -1,0 +1,1140 @@
+"""
+# bridge_store.py
+SQLite store of the UI bridge (plan task C-13; contracts C-STATE-1 and C-MSG-1).
+
+One file, BRIDGE_DB_PATH (default <project>/data/bridge.db, which is /app/data/bridge.db on the
+jarvis_bridge_data volume in the container), keeps everything the bridge must not lose on a
+restart: chat messages, UI log/memory/tool events, settings, owner sessions, the audit trail, a
+key-value table, confirmations, the offline command queue, seen message ids and stored UI
+notifications. Volatile flags (speaking, thinking, ...) stay in the bridge's memory.
+
+One connection guarded by a threading.Lock serves every call, and the async methods run the
+SQLite work through asyncio.to_thread, so the bridge's event loop never waits on the disk. WAL
+mode lets deploy/hostinger/backup_vps.sh copy the file online while the bridge writes. A corrupt
+file is renamed to bridge.db.corrupt-<UTC time> (never deleted) and a fresh one is started with a
+CRITICAL log. Stdlib only, so the CLI runs in the slim bridge image:
+
+    python -m src.core.bridge_store stats [--db PATH]   # row counts per table and role, no content
+"""
+# pylint: disable=too-many-lines  # one module per database: the schema, every table's calls, the CLI
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import json
+import logging
+import math
+import os
+import secrets
+import sqlite3
+import sys
+import threading
+import time
+import uuid
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Any, Concatenate, ParamSpec, TypeVar
+
+# The bridge's own logger name: jarvis_logger never forwards "UI-BRIDGE" records to /notify, so a
+# store log line can never come back into the store as a vortex_log event.
+logger = logging.getLogger("UI-BRIDGE")
+
+P = ParamSpec("P")
+T = TypeVar("T")
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_DB_PATH = PROJECT_ROOT / "data" / "bridge.db"
+SCHEMA_VERSION = 1
+MESSAGE_PAGE_MAX = 100
+
+# init_state sizes (C-STATE-1)
+INIT_LOGS = 30
+INIT_MEMORIES = 10
+INIT_TOOL_LOGS = 20
+INIT_NOTIFICATIONS = 50
+
+EVENT_LOG = "log"        # notify vortex_log    -> init_state vortex_logs / logs
+EVENT_MEMORY = "memory"  # notify memory_update -> init_state memories
+EVENT_TOOL = "tool"      # notify tool_sync     -> init_state tool_logs
+
+# kv keys of the VPS brain (C-STATE-1 v4). Their writers arrive with C-23 and C-116; the names
+# live here so every writer and reader agrees on them.
+KV_DESKTOP_LINK = "desktop_link"          # 'on' | 'off': the persisted Desktop Link switch (K-70)
+KV_ACTIVE_JOB = "active_job"              # the one agent job allowed to drive the laptop
+KV_PAUSED = "paused"                      # bool: the owner paused the agent (C-ROOM-1)
+KV_LAST_ACTIVITY_TS = "last_activity_ts"  # epoch s of the last owner activity
+
+SEEN_DESKTOP = "desktop"  # K-70 envelope ids
+SEEN_NOTIFY = "notify"    # C-NOTIFY-1 nonces
+SEEN_TTL_S: dict[str, float] = {SEEN_DESKTOP: 24 * 3600.0, SEEN_NOTIFY: 300.0}
+
+MESSAGE_SOURCES = ("voice", "text", "system")
+_ROLE_ALIASES = {
+    "user": "user",
+    "assistant": "assistant",
+    "agent": "assistant",
+    "model": "assistant",
+    "system": "assistant",
+}
+_MESSAGE_KEYS = ("id", "role", "text", "source", "final", "ts")
+_LEGACY_KEYS = ("timestamp", "is_final")
+_MS_EPOCH_MIN = 1e11  # larger epoch values are milliseconds (1e11 s would be the year 5138)
+_BUSY_TIMEOUT_S = 10.0
+_PRUNE_BATCH = 5000
+_SQLITE_CORRUPT = 11
+_SQLITE_NOTADB = 26
+_DB_SUFFIXES = ("", "-wal", "-shm", "-journal")
+
+_MESSAGE_SELECT = "SELECT seq, id, role, text, source, final, ts, extra FROM messages"
+_SESSION_SELECT = (
+    "SELECT sid, user, created_ts, expires_ts, last_seen_ts, revoked_ts, label, ip, user_agent"
+    " FROM sessions"
+)
+_CONFIRM_SELECT = (
+    "SELECT id, tool, risk, data, status, created_ts, expires_ts, decided_by, decided_ts"
+    " FROM confirmations"
+)
+
+_SCHEMA = """
+BEGIN;
+CREATE TABLE IF NOT EXISTS schema_version (
+    version    INTEGER PRIMARY KEY,
+    applied_ts REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS messages (
+    seq        INTEGER PRIMARY KEY AUTOINCREMENT,
+    id         TEXT NOT NULL UNIQUE,
+    role       TEXT NOT NULL,
+    text       TEXT NOT NULL,
+    source     TEXT NOT NULL,
+    final      INTEGER NOT NULL,
+    ts         REAL NOT NULL,
+    extra      TEXT NOT NULL DEFAULT '{}',
+    created_ts REAL NOT NULL,
+    updated_ts REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS messages_by_ts ON messages (ts, seq);
+CREATE TABLE IF NOT EXISTS events (
+    seq  INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL,
+    ts   REAL NOT NULL,
+    data TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS events_by_kind ON events (kind, seq);
+CREATE INDEX IF NOT EXISTS events_by_ts ON events (ts);
+CREATE TABLE IF NOT EXISTS settings (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_by TEXT NOT NULL,
+    updated_ts REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS sessions (
+    sid          TEXT PRIMARY KEY,
+    user         TEXT NOT NULL,
+    created_ts   REAL NOT NULL,
+    expires_ts   REAL NOT NULL,
+    last_seen_ts REAL,
+    revoked_ts   REAL,
+    label        TEXT NOT NULL DEFAULT '',
+    ip           TEXT NOT NULL DEFAULT '',
+    user_agent   TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS audit (
+    seq    INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts     REAL NOT NULL,
+    actor  TEXT NOT NULL,
+    action TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    ip     TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS audit_by_action ON audit (action, seq);
+CREATE TABLE IF NOT EXISTS kv (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_ts REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS confirmations (
+    id         TEXT PRIMARY KEY,
+    tool       TEXT NOT NULL DEFAULT '',
+    risk       TEXT NOT NULL DEFAULT '',
+    data       TEXT NOT NULL,
+    status     TEXT NOT NULL DEFAULT 'pending',
+    created_ts REAL NOT NULL,
+    expires_ts REAL NOT NULL,
+    decided_by TEXT,
+    decided_ts REAL
+);
+CREATE INDEX IF NOT EXISTS confirmations_by_status ON confirmations (status, expires_ts);
+CREATE TABLE IF NOT EXISTS pending_commands (
+    seq        INTEGER PRIMARY KEY AUTOINCREMENT,
+    type       TEXT NOT NULL,
+    payload    TEXT NOT NULL,
+    created_ts REAL NOT NULL,
+    expires_ts REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS seen_ids (
+    scope      TEXT NOT NULL,
+    id         TEXT NOT NULL,
+    expires_ts REAL NOT NULL,
+    PRIMARY KEY (scope, id)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS seen_ids_by_expiry ON seen_ids (expires_ts);
+CREATE TABLE IF NOT EXISTS notifications (
+    id         TEXT PRIMARY KEY,
+    kind       TEXT NOT NULL,
+    data       TEXT NOT NULL,
+    created_ts REAL NOT NULL,
+    acked_ts   REAL,
+    acked_by   TEXT
+);
+CREATE INDEX IF NOT EXISTS notifications_by_ack ON notifications (acked_ts, created_ts);
+COMMIT;
+"""
+
+
+def bridge_db_path() -> str:
+    """BRIDGE_DB_PATH, or <project>/data/bridge.db (/app/data/bridge.db in the bridge image)."""
+    return (os.environ.get("BRIDGE_DB_PATH") or "").strip() or str(DEFAULT_DB_PATH)
+
+
+def event_retention_days() -> float:
+    """BRIDGE_EVENT_RETENTION_DAYS: days of event/log rows to keep. 0 (the default), empty or
+    invalid keeps them forever, until the user approves a value (C-STATE-1)."""
+    raw = (os.environ.get("BRIDGE_EVENT_RETENTION_DAYS") or "").strip()
+    try:
+        days = float(raw) if raw else 0.0
+    except ValueError:
+        logger.warning("BRIDGE_EVENT_RETENTION_DAYS=%r is not a number; events are kept forever", raw)
+        return 0.0
+    return days if math.isfinite(days) and days > 0 else 0.0
+
+
+def _as_bool(value: Any, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        text = value.strip().lower()
+        if text in ("1", "true", "yes", "on"):
+            return True
+        if text in ("0", "false", "no", "off", ""):
+            return False
+    return default
+
+
+def _epoch_seconds(value: Any) -> float | None:
+    """Epoch seconds from seconds or milliseconds (number or numeric string); None if unusable."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        seconds = float(value)
+    elif isinstance(value, str):
+        try:
+            seconds = float(value.strip())
+        except ValueError:
+            return None
+    else:
+        return None
+    if not math.isfinite(seconds) or seconds <= 0:
+        return None
+    return seconds / 1000.0 if seconds > _MS_EPOCH_MIN else seconds
+
+
+def _message_fields(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """The C-MSG-1 fields the payload actually carries, normalized; other keys go to 'extra'."""
+    fields: dict[str, Any] = {}
+    msg_id = payload.get("id")
+    if msg_id not in (None, ""):
+        fields["id"] = str(msg_id)
+    role = payload.get("role")
+    if role:
+        fields["role"] = _ROLE_ALIASES.get(str(role).strip().lower(), "assistant")
+    if "text" in payload:
+        fields["text"] = "" if payload["text"] is None else str(payload["text"])
+    source = str(payload.get("source") or "").strip().lower()
+    if source in MESSAGE_SOURCES:
+        fields["source"] = source
+    for key in ("final", "is_final"):
+        if key in payload:
+            fields["final"] = _as_bool(payload[key], True)
+            break
+    for key in ("ts", "timestamp"):
+        seconds = _epoch_seconds(payload.get(key))
+        if seconds is not None:
+            fields["ts"] = seconds
+            break
+    extra = {k: v for k, v in payload.items() if k not in _MESSAGE_KEYS and k not in _LEGACY_KEYS}
+    if extra:
+        fields["extra"] = extra
+    return fields
+
+
+def normalize_message(payload: Mapping[str, Any], default_source: str = "voice", *,
+                      now: float | None = None) -> dict[str, Any]:
+    """A C-MSG-1 message from an agent transcription payload, legacy fields included.
+
+    role 'agent' becomes 'assistant'; final comes from final or is_final (default True); ts from
+    ts or timestamp, in seconds or milliseconds (default now); text is a str; source is the
+    payload's ('voice'|'text'|'system'), else 'system' for the legacy role 'system', else
+    default_source. The id is the payload's, or a new uuid4. Other fields (turn_id, text_native,
+    score, persona, ...) are kept as they are.
+    """
+    fields = _message_fields(payload)
+    extra = fields.pop("extra", {})
+    if "source" not in fields and str(payload.get("role") or "").strip().lower() == "system":
+        fields["source"] = "system"
+    default = str(default_source or "").strip().lower()
+    msg: dict[str, Any] = {
+        "id": fields.get("id") or str(uuid.uuid4()),
+        "role": fields.get("role", "assistant"),
+        "text": fields.get("text", ""),
+        "source": fields.get("source") or (default if default in MESSAGE_SOURCES else "voice"),
+        "final": fields.get("final", True),
+        "ts": fields.get("ts") or (time.time() if now is None else now),
+    }
+    msg.update(extra)
+    return msg
+
+
+def ui_message(msg: Mapping[str, Any]) -> dict[str, Any]:
+    """The message as UIs receive it: C-MSG-1 plus the legacy aliases timestamp (= ts, seconds)
+    and is_final (= final) that the current dashboard reads."""
+    out = dict(msg)
+    out["timestamp"] = out.get("ts")
+    out["is_final"] = out.get("final")
+    return out
+
+
+def message_cursor(ts: float, seq: int) -> str:
+    """next_cursor of a history page: '<ts>:<seq>' of its oldest message. It names that message
+    exactly, so the next page never skips older messages that share its ts."""
+    return f"{ts!r}:{seq}"
+
+
+def parse_message_cursor(cursor: str) -> tuple[float, int | None]:
+    """(ts, seq) from a next_cursor; a bare epoch in s or ms (like `before`) gives seq None.
+    Raises ValueError for anything else."""
+    ts_text, sep, seq_text = str(cursor).strip().partition(":")
+    ts = float(ts_text)
+    if not math.isfinite(ts):
+        raise ValueError(f"not a message cursor: {cursor!r}")
+    return ts, int(seq_text) if sep else None
+
+
+def _dumps(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"), default=str)
+
+
+def _loads(text: str | None, default: Any = None) -> Any:
+    if text is None:
+        return default
+    try:
+        return json.loads(text)
+    except ValueError:
+        return default
+
+
+def _deep_merge(base: Mapping[str, Any], update: Mapping[str, Any]) -> dict[str, Any]:
+    merged = dict(base)
+    for key, value in update.items():
+        old = merged.get(key)
+        if isinstance(old, Mapping) and isinstance(value, Mapping):
+            merged[key] = _deep_merge(old, value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _extra_of(msg: Mapping[str, Any]) -> dict[str, Any]:
+    return {k: v for k, v in msg.items() if k not in _MESSAGE_KEYS}
+
+
+def _message_from_row(row: sqlite3.Row) -> dict[str, Any]:
+    msg: dict[str, Any] = {
+        "id": row["id"],
+        "role": row["role"],
+        "text": row["text"],
+        "source": row["source"],
+        "final": bool(row["final"]),
+        "ts": row["ts"],
+    }
+    extra = _loads(row["extra"], {})
+    if isinstance(extra, dict):
+        for key, value in extra.items():
+            msg.setdefault(key, value)
+    return msg
+
+
+def _confirmation_from_row(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "id": row["id"],
+        "tool": row["tool"],
+        "risk": row["risk"],
+        "status": row["status"],
+        "created_ts": row["created_ts"],
+        "expires_ts": row["expires_ts"],
+        "decided_by": row["decided_by"],
+        "decided_ts": row["decided_ts"],
+        "payload": _loads(row["data"], {}),
+    }
+
+
+def _session_from_row(row: sqlite3.Row, now: float) -> dict[str, Any]:
+    record = dict(row)
+    record["active"] = record["revoked_ts"] is None and record["expires_ts"] > now
+    return record
+
+
+class _CorruptDatabase(Exception):
+    """PRAGMA quick_check found damage."""
+
+
+def _is_corruption(exc: BaseException) -> bool:
+    """True only for real damage (SQLITE_CORRUPT, SQLITE_NOTADB), never for 'database is locked',
+    a full disk or a permission problem, which must not get a good file renamed aside."""
+    if isinstance(exc, _CorruptDatabase):
+        return True
+    if not isinstance(exc, sqlite3.DatabaseError):
+        return False
+    code = getattr(exc, "sqlite_errorcode", None)
+    if isinstance(code, int):
+        return code & 0xFF in (_SQLITE_CORRUPT, _SQLITE_NOTADB)
+    text = str(exc).lower()
+    return "malformed" in text or "not a database" in text
+
+
+@contextmanager
+def _transaction(conn: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        yield conn
+    except BaseException:
+        try:
+            conn.execute("ROLLBACK")
+        except sqlite3.Error:
+            pass
+        raise
+    conn.execute("COMMIT")
+
+
+def _collect_stats(conn: sqlite3.Connection, path: str) -> dict[str, Any]:
+    tables = [row[0] for row in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+        " ORDER BY name")]
+    counts = {name: int(conn.execute(f'SELECT COUNT(*) FROM "{name}"').fetchone()[0])
+              for name in tables}
+    roles: dict[str, int] = {}
+    if "messages" in tables:
+        roles = {str(role): int(count) for role, count in conn.execute(
+            "SELECT role, COUNT(*) FROM messages GROUP BY role ORDER BY role")}
+    version = None
+    if "schema_version" in tables:
+        version = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
+    # The WAL holds the newest pages until a checkpoint, so it counts towards the size.
+    size = sum(os.path.getsize(path + suffix) for suffix in ("", "-wal")
+               if os.path.exists(path + suffix))
+    return {
+        "path": path,
+        "size_bytes": size,
+        "schema_version": version,
+        "journal_mode": str(conn.execute("PRAGMA journal_mode").fetchone()[0]),
+        "tables": counts,
+        "message_roles": roles,
+    }
+
+
+class BridgeStore:  # pylint: disable=too-many-public-methods  # one flat facade over all tables
+    """The bridge's SQLite database (C-STATE-1).
+
+    The async methods are for the bridge's event loop: each one runs its SQLite work in a worker
+    thread under the store lock. The file is opened on first use, or earlier with open(). With
+    repair=False (a second process, such as an admin CLI) a corrupt file raises instead of being
+    renamed aside, because only the bridge itself may replace its database.
+    """
+
+    def __init__(self, path: str | os.PathLike[str] | None = None, *,
+                 clock: Callable[[], float] = time.time, repair: bool = True) -> None:
+        self.path = os.fspath(path) if path is not None else bridge_db_path()
+        self._clock = clock
+        self._repair = repair
+        self._lock = threading.Lock()
+        self._conn: sqlite3.Connection | None = None
+
+    # ------------------------------------------------------------------ lifecycle
+
+    async def open(self) -> None:
+        """Opens (creates, migrates, checks) the database now instead of on first use."""
+        await asyncio.to_thread(self._open_now)
+
+    async def close(self) -> None:
+        await asyncio.to_thread(self._close_now)
+
+    def _open_now(self) -> None:
+        with self._lock:
+            self._connection()
+
+    def _close_now(self) -> None:
+        with self._lock:
+            if self._conn is not None:
+                self._conn.close()
+                self._conn = None
+
+    async def _run(self, fn: Callable[Concatenate[sqlite3.Connection, P], T],
+                   *args: P.args, **kwargs: P.kwargs) -> T:
+        return await asyncio.to_thread(self._call, fn, *args, **kwargs)
+
+    def _call(self, fn: Callable[Concatenate[sqlite3.Connection, P], T],
+              *args: P.args, **kwargs: P.kwargs) -> T:
+        with self._lock:
+            conn = self._connection()
+            try:
+                return fn(conn, *args, **kwargs)
+            except sqlite3.DatabaseError as exc:
+                if not (self._repair and _is_corruption(exc)):
+                    raise
+                self._discard_corrupt(f"{exc} (during {getattr(fn, '__name__', 'a query')})")
+                return fn(self._connection(), *args, **kwargs)
+
+    def _connection(self) -> sqlite3.Connection:
+        """The open connection; the caller holds self._lock."""
+        if self._conn is None:
+            try:
+                self._conn = self._connect()
+            except (sqlite3.DatabaseError, _CorruptDatabase) as exc:
+                if not (self._repair and _is_corruption(exc)):
+                    raise
+                self._discard_corrupt(str(exc))
+                self._conn = self._connect()
+        return self._conn
+
+    def _connect(self) -> sqlite3.Connection:
+        folder = os.path.dirname(self.path)
+        if folder:
+            os.makedirs(folder, exist_ok=True)
+        created = not os.path.exists(self.path)
+        conn = sqlite3.connect(self.path, timeout=_BUSY_TIMEOUT_S, isolation_level=None,
+                               check_same_thread=False)
+        try:
+            conn.row_factory = sqlite3.Row
+            if created:
+                # Chat history and session ids: owner-only. SQLite gives -wal/-shm the same mode.
+                try:
+                    os.chmod(self.path, 0o600)
+                except OSError:
+                    pass
+            mode = str(conn.execute("PRAGMA journal_mode=WAL").fetchone()[0]).lower()
+            if mode != "wal":
+                logger.warning("Bridge DB %s runs in journal mode %s, not WAL", self.path, mode)
+            conn.execute("PRAGMA synchronous=NORMAL")
+            if not created:
+                problems = [str(row[0]) for row in conn.execute("PRAGMA quick_check").fetchall()]
+                if problems != ["ok"]:
+                    raise _CorruptDatabase("quick_check: " + "; ".join(problems[:3]))
+            self._migrate(conn)
+        except BaseException:
+            conn.close()
+            raise
+        return conn
+
+    def _migrate(self, conn: sqlite3.Connection) -> None:
+        conn.executescript(_SCHEMA)
+        current = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] or 0
+        if current < SCHEMA_VERSION:
+            conn.execute("INSERT INTO schema_version (version, applied_ts) VALUES (?, ?)",
+                         (SCHEMA_VERSION, self._clock()))
+        elif current > SCHEMA_VERSION:
+            logger.warning("Bridge DB %s has schema v%s, newer than this code (v%s); continuing "
+                           "with the tables this code knows", self.path, current, SCHEMA_VERSION)
+
+    def _discard_corrupt(self, reason: str) -> None:
+        """Closes the connection and renames the damaged files aside; they are never deleted."""
+        if self._conn is not None:
+            try:
+                self._conn.close()
+            except sqlite3.Error:
+                pass
+            self._conn = None
+        stamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime(self._clock()))
+        base = f"{self.path}.corrupt-{stamp}"
+        target, n = base, 1
+        while any(os.path.exists(target + suffix) for suffix in _DB_SUFFIXES):
+            target, n = f"{base}-{n}", n + 1
+        moved = []
+        for suffix in _DB_SUFFIXES:
+            if os.path.exists(self.path + suffix):
+                os.rename(self.path + suffix, target + suffix)
+                moved.append(os.path.basename(target + suffix))
+        logger.critical("Bridge DB %s is corrupt (%s): renamed to %s (kept, never deleted); "
+                        "started a fresh database", self.path, reason, ", ".join(moved) or "-")
+
+    # ------------------------------------------------------------------ messages (C-MSG-1)
+
+    async def upsert_message(self, payload: Mapping[str, Any],
+                             default_source: str = "voice") -> tuple[str, dict[str, Any]]:
+        """Stores a transcription by id: ('new', msg) the first time, then ('updated', msg) with
+        every field the payload carries merged in (K-58). msg is the emitted form (ui_message)."""
+        return await self._run(self._upsert_message, payload, default_source)
+
+    async def get_message(self, msg_id: str) -> dict[str, Any] | None:
+        return await self._run(self._get_message, msg_id)
+
+    async def list_messages(self, limit: int = MESSAGE_PAGE_MAX,
+                            before: float | None = None) -> tuple[list[dict[str, Any]], bool]:
+        """Up to limit (1..100) messages with ts < before (all when None), ascending by ts, and
+        whether older ones exist. Messages are never pruned automatically."""
+        return await self._run(self._list_messages, limit, before)
+
+    async def message_page(self, limit: int = MESSAGE_PAGE_MAX, before: float | None = None,
+                           before_seq: int | None = None) -> dict[str, Any]:
+        """One history page: {messages (ascending), has_more, next_cursor (None on the last
+        page)}. Without before_seq it holds messages with ts < before, as list_messages; with
+        it, the messages before (before, before_seq) in (ts, seq) order, the position a
+        next_cursor names, so messages that share a ts are never skipped."""
+        return await self._run(self._message_page, limit, before, before_seq)
+
+    def _upsert_message(self, conn: sqlite3.Connection, payload: Mapping[str, Any],
+                        default_source: str) -> tuple[str, dict[str, Any]]:
+        now = self._clock()
+        fields = _message_fields(payload)
+        msg_id = fields.pop("id", None) or str(uuid.uuid4())
+        with _transaction(conn):
+            row = conn.execute(f"{_MESSAGE_SELECT} WHERE id = ?", (msg_id,)).fetchone()
+            if row is None:
+                msg = normalize_message({**payload, "id": msg_id}, default_source, now=now)
+                conn.execute(
+                    "INSERT INTO messages (id, role, text, source, final, ts, extra, created_ts,"
+                    " updated_ts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (msg_id, msg["role"], msg["text"], msg["source"], int(msg["final"]),
+                     msg["ts"], _dumps(_extra_of(msg)), now, now))
+                status = "new"
+            else:
+                msg = _message_from_row(row)
+                msg.update(fields.pop("extra", {}))
+                msg.update(fields)
+                conn.execute(
+                    "UPDATE messages SET role = ?, text = ?, source = ?, final = ?, ts = ?,"
+                    " extra = ?, updated_ts = ? WHERE id = ?",
+                    (msg["role"], msg["text"], msg["source"], int(msg["final"]), msg["ts"],
+                     _dumps(_extra_of(msg)), now, msg_id))
+                status = "updated"
+        return status, ui_message(msg)
+
+    def _get_message(self, conn: sqlite3.Connection, msg_id: str) -> dict[str, Any] | None:
+        row = conn.execute(f"{_MESSAGE_SELECT} WHERE id = ?", (str(msg_id),)).fetchone()
+        return None if row is None else ui_message(_message_from_row(row))
+
+    def _list_messages(self, conn: sqlite3.Connection, limit: int,
+                       before: float | None) -> tuple[list[dict[str, Any]], bool]:
+        page = self._message_page(conn, limit, before, None)
+        return page["messages"], page["has_more"]
+
+    def _message_page(self, conn: sqlite3.Connection, limit: int, before: float | None,
+                      before_seq: int | None) -> dict[str, Any]:
+        limit = max(1, min(int(limit), MESSAGE_PAGE_MAX))
+        where = ""
+        params: list[Any] = []
+        if before is not None:
+            cutoff = float(before)
+            if cutoff > _MS_EPOCH_MIN:
+                cutoff /= 1000.0
+            if before_seq is None:
+                where, params = " WHERE ts < ?", [cutoff]
+            else:
+                where, params = " WHERE (ts, seq) < (?, ?)", [cutoff, int(before_seq)]
+        rows = conn.execute(f"{_MESSAGE_SELECT}{where} ORDER BY ts DESC, seq DESC LIMIT ?",
+                            (*params, limit + 1)).fetchall()
+        has_more = len(rows) > limit
+        rows = rows[:limit]
+        return {
+            "messages": [ui_message(_message_from_row(row)) for row in reversed(rows)],
+            "has_more": has_more,
+            "next_cursor": message_cursor(rows[-1]["ts"], rows[-1]["seq"]) if has_more else None,
+        }
+
+    # ------------------------------------------------------------------ events (logs, memories, tools)
+
+    async def append_event(self, kind: str, data: Any) -> int:
+        """Stores one UI event (EVENT_LOG, EVENT_MEMORY, EVENT_TOOL) exactly as received."""
+        return await self._run(self._append_event, kind, data)
+
+    async def recent_events(self, kind: str, limit: int = INIT_LOGS) -> list[Any]:
+        """The newest `limit` events of a kind, oldest first."""
+        return await self._run(self._recent_events, kind, limit)
+
+    async def delete_events(self, kind: str) -> int:
+        return await self._run(self._delete_events, kind)
+
+    async def prune_events(self, retention_days: float) -> int:
+        """Deletes event rows older than retention_days (<= 0 keeps everything), in batches so
+        other calls are never held up for long. Returns the number of rows deleted."""
+        if not math.isfinite(retention_days) or retention_days <= 0:
+            return 0
+        cutoff = self._clock() - retention_days * 86400.0
+        total = 0
+        while True:
+            deleted = await self._run(self._prune_events_batch, cutoff)
+            total += deleted
+            if deleted < _PRUNE_BATCH:
+                return total
+
+    def _append_event(self, conn: sqlite3.Connection, kind: str, data: Any) -> int:
+        cur = conn.execute("INSERT INTO events (kind, ts, data) VALUES (?, ?, ?)",
+                           (str(kind), self._clock(), _dumps(data)))
+        return int(cur.lastrowid or 0)
+
+    def _recent_events(self, conn: sqlite3.Connection, kind: str, limit: int) -> list[Any]:
+        rows = conn.execute("SELECT data FROM events WHERE kind = ? ORDER BY seq DESC LIMIT ?",
+                            (str(kind), max(0, int(limit)))).fetchall()
+        return [_loads(row["data"]) for row in reversed(rows)]
+
+    def _delete_events(self, conn: sqlite3.Connection, kind: str) -> int:
+        return int(conn.execute("DELETE FROM events WHERE kind = ?", (str(kind),)).rowcount)
+
+    def _prune_events_batch(self, conn: sqlite3.Connection, cutoff: float) -> int:
+        return int(conn.execute(
+            "DELETE FROM events WHERE seq IN (SELECT seq FROM events WHERE ts < ? LIMIT ?)",
+            (cutoff, _PRUNE_BATCH)).rowcount)
+
+    # ------------------------------------------------------------------ settings (C-SETTINGS-1)
+
+    async def get_settings(self) -> dict[str, Any]:
+        """The stored settings object ({} until something is stored)."""
+        return await self._run(self._get_settings)
+
+    async def merge_settings(self, partial: Mapping[str, Any], by: str) -> dict[str, Any]:
+        """Merges a partial settings object (nested objects merge key by key), records who
+        changed each key ('ui' | 'agent') and when, and returns the full stored object."""
+        return await self._run(self._merge_settings, partial, by)
+
+    def _get_settings(self, conn: sqlite3.Connection) -> dict[str, Any]:
+        rows = conn.execute("SELECT key, value FROM settings ORDER BY key").fetchall()
+        return {row["key"]: _loads(row["value"]) for row in rows}
+
+    def _merge_settings(self, conn: sqlite3.Connection, partial: Mapping[str, Any],
+                        by: str) -> dict[str, Any]:
+        now = self._clock()
+        with _transaction(conn):
+            current = self._get_settings(conn)
+            for raw_key, value in partial.items():
+                key = str(raw_key)
+                old = current.get(key)
+                if isinstance(old, Mapping) and isinstance(value, Mapping):
+                    value = _deep_merge(old, value)
+                conn.execute(
+                    "INSERT INTO settings (key, value, updated_by, updated_ts) VALUES (?, ?, ?, ?)"
+                    " ON CONFLICT(key) DO UPDATE SET value = excluded.value,"
+                    " updated_by = excluded.updated_by, updated_ts = excluded.updated_ts",
+                    (key, _dumps(value), str(by), now))
+                current[key] = value
+        return current
+
+    # ------------------------------------------------------------------ kv
+
+    async def kv_get(self, key: str, default: Any = None) -> Any:
+        return await self._run(self._kv_get, key, default)
+
+    async def kv_get_many(self, keys: Iterable[str]) -> dict[str, Any]:
+        """The stored values of the given keys; keys never stored are left out."""
+        return await self._run(self._kv_get_many, list(keys))
+
+    async def kv_set(self, key: str, value: Any) -> None:
+        await self._run(self._kv_set_many, {key: value})
+
+    async def kv_set_many(self, items: Mapping[str, Any]) -> None:
+        """Stores several keys in one transaction."""
+        await self._run(self._kv_set_many, dict(items))
+
+    async def kv_delete(self, key: str) -> bool:
+        return await self._run(self._kv_delete, key)
+
+    def _kv_get(self, conn: sqlite3.Connection, key: str, default: Any) -> Any:
+        row = conn.execute("SELECT value FROM kv WHERE key = ?", (str(key),)).fetchone()
+        return default if row is None else _loads(row["value"], default)
+
+    def _kv_get_many(self, conn: sqlite3.Connection, keys: list[str]) -> dict[str, Any]:
+        wanted = list(dict.fromkeys(str(key) for key in keys))
+        if not wanted:
+            return {}
+        marks = ", ".join("?" * len(wanted))
+        rows = conn.execute(f"SELECT key, value FROM kv WHERE key IN ({marks})", wanted).fetchall()
+        return {row["key"]: _loads(row["value"]) for row in rows}
+
+    def _kv_set_many(self, conn: sqlite3.Connection, items: dict[str, Any]) -> None:
+        now = self._clock()
+        rows = [(str(key), _dumps(value), now) for key, value in items.items()]
+        if not rows:
+            return
+        with _transaction(conn):
+            conn.executemany(
+                "INSERT INTO kv (key, value, updated_ts) VALUES (?, ?, ?) ON CONFLICT(key)"
+                " DO UPDATE SET value = excluded.value, updated_ts = excluded.updated_ts", rows)
+
+    def _kv_delete(self, conn: sqlite3.Connection, key: str) -> bool:
+        return conn.execute("DELETE FROM kv WHERE key = ?", (str(key),)).rowcount > 0
+
+    # ------------------------------------------------------------------ audit
+
+    async def audit(self, actor: str, action: str, detail: Any = "", ip: str = "") -> int:
+        """Appends one audit row; a non-string detail is stored as JSON. Audit rows are not
+        touched by the event retention."""
+        return await self._run(self._audit, actor, action, detail, ip)
+
+    async def recent_audit(self, limit: int = 50, action_prefix: str = "") -> list[dict[str, Any]]:
+        """The newest audit rows first, optionally only actions starting with action_prefix."""
+        return await self._run(self._recent_audit, limit, action_prefix)
+
+    def _audit(self, conn: sqlite3.Connection, actor: str, action: str, detail: Any,
+               ip: str) -> int:
+        text = detail if isinstance(detail, str) else _dumps(detail)
+        cur = conn.execute("INSERT INTO audit (ts, actor, action, detail, ip) VALUES (?, ?, ?, ?, ?)",
+                           (self._clock(), str(actor), str(action), text, str(ip or "")))
+        return int(cur.lastrowid or 0)
+
+    def _recent_audit(self, conn: sqlite3.Connection, limit: int,
+                      action_prefix: str) -> list[dict[str, Any]]:
+        sql = "SELECT seq, ts, actor, action, detail, ip FROM audit"
+        params: list[Any] = []
+        if action_prefix:
+            escaped = action_prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            sql += " WHERE action LIKE ? ESCAPE '\\'"
+            params.append(escaped + "%")
+        params.append(max(0, int(limit)))
+        rows = conn.execute(sql + " ORDER BY seq DESC LIMIT ?", params).fetchall()
+        return [dict(row) for row in rows]
+
+    # ------------------------------------------------------------------ sessions (C-AUTH-1)
+
+    async def create_session(self, ttl_s: float, *, sid: str | None = None, user: str = "owner",
+                             label: str = "", ip: str = "", user_agent: str = "") -> dict[str, Any]:
+        """A new owner session (sid: 32 random hex chars unless given) valid for ttl_s."""
+        return await self._run(self._create_session, ttl_s, sid=sid, user=user, label=label, ip=ip,
+                               user_agent=user_agent)
+
+    async def get_session(self, sid: str) -> dict[str, Any] | None:
+        """The session row with 'active' (not revoked, not expired), or None."""
+        return await self._run(self._get_session, sid)
+
+    async def touch_session(self, sid: str) -> bool:
+        """Records activity on an active session; False when it is unknown, revoked or expired."""
+        return await self._run(self._touch_session, sid)
+
+    async def revoke_session(self, sid: str) -> bool:
+        return await self._run(self._revoke_session, sid)
+
+    async def revoke_all_sessions(self) -> int:
+        return await self._run(self._revoke_all_sessions)
+
+    async def list_sessions(self, include_inactive: bool = False) -> list[dict[str, Any]]:
+        return await self._run(self._list_sessions, include_inactive)
+
+    def _create_session(self, conn: sqlite3.Connection, ttl_s: float, *, sid: str | None,
+                        user: str, label: str, ip: str, user_agent: str) -> dict[str, Any]:
+        now = self._clock()
+        record: dict[str, Any] = {
+            "sid": sid or secrets.token_hex(16),
+            "user": str(user),
+            "created_ts": now,
+            "expires_ts": now + float(ttl_s),
+            "last_seen_ts": now,
+            "revoked_ts": None,
+            "label": str(label),
+            "ip": str(ip),
+            "user_agent": str(user_agent),
+        }
+        conn.execute(
+            "INSERT INTO sessions (sid, user, created_ts, expires_ts, last_seen_ts, revoked_ts,"
+            " label, ip, user_agent) VALUES (:sid, :user, :created_ts, :expires_ts,"
+            " :last_seen_ts, :revoked_ts, :label, :ip, :user_agent)", record)
+        record["active"] = float(ttl_s) > 0
+        return record
+
+    def _get_session(self, conn: sqlite3.Connection, sid: str) -> dict[str, Any] | None:
+        row = conn.execute(f"{_SESSION_SELECT} WHERE sid = ?", (str(sid),)).fetchone()
+        return None if row is None else _session_from_row(row, self._clock())
+
+    def _touch_session(self, conn: sqlite3.Connection, sid: str) -> bool:
+        now = self._clock()
+        return conn.execute(
+            "UPDATE sessions SET last_seen_ts = ? WHERE sid = ? AND revoked_ts IS NULL"
+            " AND expires_ts > ?", (now, str(sid), now)).rowcount > 0
+
+    def _revoke_session(self, conn: sqlite3.Connection, sid: str) -> bool:
+        return conn.execute("UPDATE sessions SET revoked_ts = ? WHERE sid = ? AND revoked_ts IS NULL",
+                            (self._clock(), str(sid))).rowcount > 0
+
+    def _revoke_all_sessions(self, conn: sqlite3.Connection) -> int:
+        return int(conn.execute("UPDATE sessions SET revoked_ts = ? WHERE revoked_ts IS NULL",
+                                (self._clock(),)).rowcount)
+
+    def _list_sessions(self, conn: sqlite3.Connection,
+                       include_inactive: bool) -> list[dict[str, Any]]:
+        now = self._clock()
+        if include_inactive:
+            rows = conn.execute(f"{_SESSION_SELECT} ORDER BY created_ts, rowid").fetchall()
+        else:
+            rows = conn.execute(f"{_SESSION_SELECT} WHERE revoked_ts IS NULL AND expires_ts > ?"
+                                " ORDER BY created_ts, rowid", (now,)).fetchall()
+        return [_session_from_row(row, now) for row in rows]
+
+    # ------------------------------------------------------------------ confirmations (C-CONFIRM-1)
+
+    async def add_confirmation(self, payload: Mapping[str, Any],
+                               ttl_s: float = 60.0) -> dict[str, Any]:
+        """Stores a confirm_request as pending until its expires_ts (or expires_at; default
+        now + ttl_s). A repeated id keeps the first record. Returns the record, whose 'payload'
+        is the request as received."""
+        return await self._run(self._add_confirmation, payload, ttl_s)
+
+    async def get_confirmation(self, confirm_id: str) -> dict[str, Any] | None:
+        return await self._run(self._get_confirmation, confirm_id)
+
+    async def list_confirmations(self, pending_only: bool = True) -> list[dict[str, Any]]:
+        """Records oldest first; by default only the pending ones that have not expired."""
+        return await self._run(self._list_confirmations, pending_only)
+
+    async def resolve_confirmation(self, confirm_id: str, allow: bool,
+                                   by: str) -> dict[str, Any] | None:
+        """Decides a pending, unexpired confirmation ('allowed' | 'denied'); None otherwise."""
+        return await self._run(self._resolve_confirmation, confirm_id, allow, by)
+
+    async def expire_confirmations(self) -> int:
+        """Marks pending confirmations past their expiry as 'expired'; returns how many."""
+        return await self._run(self._expire_confirmations)
+
+    def _add_confirmation(self, conn: sqlite3.Connection, payload: Mapping[str, Any],
+                          ttl_s: float) -> dict[str, Any]:
+        now = self._clock()
+        data = dict(payload)
+        data["id"] = str(data.get("id") or uuid.uuid4())
+        expires = _epoch_seconds(data.get("expires_ts")) or _epoch_seconds(data.get("expires_at"))
+        conn.execute(
+            "INSERT OR IGNORE INTO confirmations (id, tool, risk, data, status, created_ts,"
+            " expires_ts) VALUES (?, ?, ?, ?, 'pending', ?, ?)",
+            (data["id"], str(data.get("tool") or ""), str(data.get("risk") or ""), _dumps(data),
+             now, expires or now + float(ttl_s)))
+        row = conn.execute(f"{_CONFIRM_SELECT} WHERE id = ?", (data["id"],)).fetchone()
+        return _confirmation_from_row(row)
+
+    def _get_confirmation(self, conn: sqlite3.Connection,
+                          confirm_id: str) -> dict[str, Any] | None:
+        row = conn.execute(f"{_CONFIRM_SELECT} WHERE id = ?", (str(confirm_id),)).fetchone()
+        return None if row is None else _confirmation_from_row(row)
+
+    def _list_confirmations(self, conn: sqlite3.Connection,
+                            pending_only: bool) -> list[dict[str, Any]]:
+        if pending_only:
+            rows = conn.execute(f"{_CONFIRM_SELECT} WHERE status = 'pending' AND expires_ts > ?"
+                                " ORDER BY created_ts, rowid", (self._clock(),)).fetchall()
+        else:
+            rows = conn.execute(f"{_CONFIRM_SELECT} ORDER BY created_ts, rowid").fetchall()
+        return [_confirmation_from_row(row) for row in rows]
+
+    def _resolve_confirmation(self, conn: sqlite3.Connection, confirm_id: str, allow: bool,
+                              by: str) -> dict[str, Any] | None:
+        now = self._clock()
+        updated = conn.execute(
+            "UPDATE confirmations SET status = ?, decided_by = ?, decided_ts = ?"
+            " WHERE id = ? AND status = 'pending' AND expires_ts > ?",
+            ("allowed" if allow else "denied", str(by), now, str(confirm_id), now)).rowcount
+        return self._get_confirmation(conn, confirm_id) if updated else None
+
+    def _expire_confirmations(self, conn: sqlite3.Connection) -> int:
+        return int(conn.execute(
+            "UPDATE confirmations SET status = 'expired' WHERE status = 'pending'"
+            " AND expires_ts <= ?", (self._clock(),)).rowcount)
+
+    # ------------------------------------------------------------------ offline command queue
+
+    async def push_pending(self, cmd_type: str, payload: Any, ttl_s: float = 600.0) -> int:
+        """Queues a UI command for an offline agent (kept ttl_s, default 10 min)."""
+        return await self._run(self._push_pending, cmd_type, payload, ttl_s)
+
+    async def pop_pending(self) -> list[dict[str, Any]]:
+        """Takes every queued command (expired ones are dropped), oldest first."""
+        return await self._run(self._pop_pending)
+
+    async def count_pending(self) -> int:
+        return await self._run(self._count_pending)
+
+    def _push_pending(self, conn: sqlite3.Connection, cmd_type: str, payload: Any,
+                      ttl_s: float) -> int:
+        now = self._clock()
+        cur = conn.execute(
+            "INSERT INTO pending_commands (type, payload, created_ts, expires_ts)"
+            " VALUES (?, ?, ?, ?)", (str(cmd_type), _dumps(payload), now, now + float(ttl_s)))
+        return int(cur.lastrowid or 0)
+
+    def _pop_pending(self, conn: sqlite3.Connection) -> list[dict[str, Any]]:
+        now = self._clock()
+        with _transaction(conn):
+            rows = conn.execute("SELECT seq, type, payload, created_ts, expires_ts"
+                                " FROM pending_commands ORDER BY seq").fetchall()
+            if rows:
+                conn.execute("DELETE FROM pending_commands WHERE seq <= ?", (rows[-1]["seq"],))
+        return [{"type": row["type"], "payload": _loads(row["payload"]),
+                 "created_ts": row["created_ts"]} for row in rows if row["expires_ts"] > now]
+
+    def _count_pending(self, conn: sqlite3.Connection) -> int:
+        return int(conn.execute("SELECT COUNT(*) FROM pending_commands WHERE expires_ts > ?",
+                                (self._clock(),)).fetchone()[0])
+
+    # ------------------------------------------------------------------ seen ids (K-70, C-NOTIFY-1)
+
+    async def mark_seen(self, scope: str, item_id: str, ttl_s: float | None = None) -> bool:
+        """True the first time an id is seen in its scope within ttl_s (default by scope: K-70
+        envelope ids 24 h, notify nonces 300 s); False for a replay."""
+        return await self._run(self._mark_seen, scope, item_id, ttl_s)
+
+    async def prune_seen(self) -> int:
+        """Deletes expired seen ids; returns how many."""
+        return await self._run(self._prune_seen)
+
+    def _mark_seen(self, conn: sqlite3.Connection, scope: str, item_id: str,
+                   ttl_s: float | None) -> bool:
+        now = self._clock()
+        ttl = SEEN_TTL_S.get(scope, SEEN_TTL_S[SEEN_DESKTOP]) if ttl_s is None else float(ttl_s)
+        with _transaction(conn):
+            row = conn.execute("SELECT expires_ts FROM seen_ids WHERE scope = ? AND id = ?",
+                               (str(scope), str(item_id))).fetchone()
+            if row is not None and row["expires_ts"] > now:
+                return False
+            conn.execute(
+                "INSERT INTO seen_ids (scope, id, expires_ts) VALUES (?, ?, ?) ON CONFLICT(scope, id)"
+                " DO UPDATE SET expires_ts = excluded.expires_ts",
+                (str(scope), str(item_id), now + ttl))
+        return True
+
+    def _prune_seen(self, conn: sqlite3.Connection) -> int:
+        return int(conn.execute("DELETE FROM seen_ids WHERE expires_ts <= ?",
+                                (self._clock(),)).rowcount)
+
+    # ------------------------------------------------------------------ UI notifications (K-77)
+
+    async def add_notification(self, payload: Mapping[str, Any],
+                               kind: str = "reminder_due") -> tuple[str, dict[str, Any]]:
+        """Stores a UI notification until it is acknowledged: ('new', payload), or ('exists',
+        stored payload) for an id stored before, so a reminder is never delivered twice."""
+        return await self._run(self._add_notification, payload, kind)
+
+    async def get_notification(self, notification_id: str) -> dict[str, Any] | None:
+        """{id, kind, created_ts, acked_ts, acked_by, payload}, or None."""
+        return await self._run(self._get_notification, notification_id)
+
+    async def list_notifications(self, include_acked: bool = False,
+                                 limit: int = INIT_NOTIFICATIONS) -> list[dict[str, Any]]:
+        """Stored payloads, newest first; by default only the unacknowledged ones."""
+        return await self._run(self._list_notifications, include_acked, limit)
+
+    async def ack_notification(self, notification_id: str, by: str = "ui") -> bool:
+        """True when this call acknowledged it (False: unknown or acknowledged before)."""
+        return await self._run(self._ack_notification, notification_id, by)
+
+    def _add_notification(self, conn: sqlite3.Connection, payload: Mapping[str, Any],
+                          kind: str) -> tuple[str, dict[str, Any]]:
+        data = dict(payload)
+        data["id"] = str(data.get("id") or uuid.uuid4())
+        inserted = conn.execute(
+            "INSERT OR IGNORE INTO notifications (id, kind, data, created_ts) VALUES (?, ?, ?, ?)",
+            (data["id"], str(kind), _dumps(data), self._clock())).rowcount
+        if inserted:
+            return "new", data
+        row = conn.execute("SELECT data FROM notifications WHERE id = ?", (data["id"],)).fetchone()
+        return "exists", _loads(row["data"], data)
+
+    def _get_notification(self, conn: sqlite3.Connection,
+                          notification_id: str) -> dict[str, Any] | None:
+        row = conn.execute("SELECT id, kind, data, created_ts, acked_ts, acked_by FROM notifications"
+                           " WHERE id = ?", (str(notification_id),)).fetchone()
+        if row is None:
+            return None
+        return {"id": row["id"], "kind": row["kind"], "created_ts": row["created_ts"],
+                "acked_ts": row["acked_ts"], "acked_by": row["acked_by"],
+                "payload": _loads(row["data"], {})}
+
+    def _list_notifications(self, conn: sqlite3.Connection, include_acked: bool,
+                            limit: int) -> list[dict[str, Any]]:
+        where = "" if include_acked else " WHERE acked_ts IS NULL"
+        rows = conn.execute(f"SELECT data FROM notifications{where}"
+                            " ORDER BY created_ts DESC, rowid DESC LIMIT ?",
+                            (max(0, int(limit)),)).fetchall()
+        return [_loads(row["data"], {}) for row in rows]
+
+    def _ack_notification(self, conn: sqlite3.Connection, notification_id: str, by: str) -> bool:
+        return conn.execute(
+            "UPDATE notifications SET acked_ts = ?, acked_by = ? WHERE id = ? AND acked_ts IS NULL",
+            (self._clock(), str(by), str(notification_id))).rowcount > 0
+
+    # ------------------------------------------------------------------ init_state + stats
+
+    async def init_snapshot(self, kv_keys: Iterable[str] = ()) -> dict[str, Any]:
+        """Everything init_state (C-STATE-1) reads from the DB, in one locked read: messages
+        (last 100, ascending, with legacy aliases), logs (30), memories (10), tool_logs (20),
+        settings, unacknowledged notifications and the stored values of kv_keys ('kv')."""
+        return await self._run(self._init_snapshot, list(kv_keys))
+
+    async def stats(self) -> dict[str, Any]:
+        """Row counts per table and per message role, schema version, size; never content."""
+        return await self._run(self._stats)
+
+    def _init_snapshot(self, conn: sqlite3.Connection, kv_keys: list[str]) -> dict[str, Any]:
+        messages, _ = self._list_messages(conn, MESSAGE_PAGE_MAX, None)
+        return {
+            "messages": messages,
+            "logs": self._recent_events(conn, EVENT_LOG, INIT_LOGS),
+            "memories": self._recent_events(conn, EVENT_MEMORY, INIT_MEMORIES),
+            "tool_logs": self._recent_events(conn, EVENT_TOOL, INIT_TOOL_LOGS),
+            "settings": self._get_settings(conn),
+            "notifications": self._list_notifications(conn, False, INIT_NOTIFICATIONS),
+            "kv": self._kv_get_many(conn, kv_keys),
+        }
+
+    def _stats(self, conn: sqlite3.Connection) -> dict[str, Any]:
+        return _collect_stats(conn, self.path)
+
+
+def read_stats(path: str) -> dict[str, Any]:
+    """Stats of a database file through a read-only connection: safe next to the running bridge,
+    and it never migrates, repairs or renames anything."""
+    conn = sqlite3.connect(Path(path).absolute().as_uri() + "?mode=ro", uri=True,
+                           timeout=_BUSY_TIMEOUT_S)
+    try:
+        return _collect_stats(conn, path)
+    finally:
+        conn.close()
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="python -m src.core.bridge_store",
+                                     description="UI bridge SQLite store tools.")
+    commands = parser.add_subparsers(dest="command", required=True)
+    stats_cmd = commands.add_parser(
+        "stats", help="row counts per table and per message role (never any content)")
+    stats_cmd.add_argument("--db", default=None,
+                           help="database file (default: BRIDGE_DB_PATH or <project>/data/bridge.db)")
+    args = parser.parse_args(argv)
+
+    path = args.db or bridge_db_path()
+    if not os.path.isfile(path):
+        print(f"no database at {path}", file=sys.stderr)
+        return 1
+    try:
+        info = read_stats(path)
+    except sqlite3.Error as exc:
+        print(f"cannot read {path}: {exc}", file=sys.stderr)
+        return 2
+    print(f"db: {info['path']}")
+    print(f"size_bytes: {info['size_bytes']}")
+    print(f"schema_version: {info['schema_version']}")
+    print(f"journal_mode: {info['journal_mode']}")
+    for name, count in info["tables"].items():
+        print(f"table {name}: {count}")
+    for role, count in info["message_roles"].items():
+        print(f"messages role {role}: {count}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

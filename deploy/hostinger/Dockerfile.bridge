@@ -19,8 +19,9 @@ ENV VORTEX_ENV=production
 ENV PYTHONPATH=/app
 ENV JARVIS_SHARED_DIR=/app/Jarvis_Shared
 
+# /app/data holds bridge.db (named volume jarvis_bridge_data)
 RUN mkdir -p /app/logs /app/Jarvis_Outputs /app/Jarvis_Shared \
-    /app/conversations /app/chroma_db /app/pretrained_models /app/backups
+    /app/conversations /app/chroma_db /app/pretrained_models /app/backups /app/data
 
 EXPOSE 5001
 

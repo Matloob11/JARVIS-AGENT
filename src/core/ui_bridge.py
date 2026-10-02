@@ -1,17 +1,22 @@
 """
 # ui_bridge.py
 WebSocket server to bridge JARVIS core events to the React-based STONIX UI.
+
+What must survive a restart (chat messages, logs, memories, tool logs, persona, mute, wake word,
+location, voice match, SIM results) lives in the SQLite store (src/core/bridge_store.py,
+C-STATE-1); BridgeStateManager keeps only volatile flags.
 """
 
 import asyncio
 import copy
 import json
+import math
 import os
 import time
-import uuid
-from collections.abc import AsyncGenerator
+from collections import OrderedDict
+from collections.abc import AsyncGenerator, Awaitable
 from contextlib import asynccontextmanager
-from typing import Any, cast
+from typing import Any, TypeVar, cast
 
 import socketio
 import uvicorn
@@ -24,6 +29,18 @@ from services.utils.jarvis_health import health_monitor
 from services.utils.jarvis_logger import setup_logger
 from services.utils.jarvis_security import security_manager
 from services.utils.jarvis_telemetry import telemetry
+from src.core.bridge_store import (
+    EVENT_LOG,
+    EVENT_MEMORY,
+    EVENT_TOOL,
+    MESSAGE_PAGE_MAX,
+    BridgeStore,
+    bridge_db_path,
+    event_retention_days,
+    normalize_message,
+    parse_message_cursor,
+    ui_message,
+)
 
 # Validate on import/startup
 config.validate()
@@ -47,14 +64,22 @@ sio: socketio.AsyncServer = socketio.AsyncServer(
 async def lifespan(_app_instance: FastAPI) -> AsyncGenerator[None, None]:
     """Lifecycle manager for the FastAPI application."""
     # Startup tasks
+    store_task = asyncio.create_task(open_store())
     vitals_task = asyncio.create_task(vitals_heartbeat())
     telemetry_task = asyncio.create_task(telemetry_heartbeat())
     speaking_task = asyncio.create_task(user_speaking_monitor())
+    retention_task = asyncio.create_task(store_retention_loop())
     yield
     # Shutdown tasks
     vitals_task.cancel()
     telemetry_task.cancel()
     speaking_task.cancel()
+    retention_task.cancel()
+    store_task.cancel()
+    try:
+        await store.close()
+    except Exception:  # pylint: disable=broad-exception-caught
+        logger.warning("Bridge store did not close cleanly", exc_info=True)
 
 app: FastAPI = FastAPI(lifespan=lifespan)
 
@@ -73,36 +98,31 @@ app_asgi = socketio.ASGIApp(sio, other_asgi_app=app)
 
 # State Management
 
+_CHAT_IDS_KEPT = 500
+
+
 class BridgeStateManager:
-    """Thread-safe state manager for the UI Bridge."""
+    """Thread-safe manager of the bridge's volatile state; persisted state lives in `store`."""
     def __init__(self) -> None:
         self.lock: asyncio.Lock = asyncio.Lock()
         self.state: dict[str, Any] = {
             "speaking": False,
             "user_speaking": False,
             "thinking": False,
-            "muted": False,
-            "wake_word_active": True,
             "last_transcription": "",
-            "messages": [],
-            "memories": [],
-            "tool_logs": [],
-            "active_persona": "jarvis",
             "vitals": {"cpu": 0, "ram": 0, "disk": 0},
             "telemetry": {"success_rate": 1.0, "avg_latency": 0.5, "status": "HEALTHY"},
-            "location": {"city": "Detecting...", "lat": 0, "lng": 0},
             "runner_status": "online",
             "last_runner_contact": time.time(),
             "last_user_speak_pulse": 0.0,
-            "vortex_logs": [],
-            "voice_match": 0.0,
-            "sim_records": [],
-            "sim_loading": False,
-            "sim_query_masked": "",
-            "sim_status": "idle",
-            "sim_message": "",
+            # Volatile on purpose: nothing ever resets it (the UI closes the panel locally), so
+            # persisting it would reopen the SIM panel on every page load forever.
             "sim_panel_open": False,
         }
+        # Ids of typed chat commands: their transcriptions default to source 'text' (C-MSG-1).
+        self._chat_ids: OrderedDict[str, None] = OrderedDict()
+        # time.monotonic() when this process saw the running SIM lookup start (sim_data_loading).
+        self.sim_loading_since: float | None = None
 
     async def get_state(self) -> dict[str, Any]:
         """Provides a safe deepcopy of the state, excluding coroutines or other un-pickleable objects."""
@@ -149,19 +169,61 @@ class BridgeStateManager:
         async with self.lock:
             return self.state.get(key, default)
 
-    async def find_message(self, msg_id: str) -> dict[str, Any] | None:
-        async with self.lock:
-            return next((m for m in self.state["messages"] if m["id"] == msg_id), None)
+    def remember_chat_id(self, msg_id: Any) -> None:
+        if isinstance(msg_id, str) and msg_id:
+            self._chat_ids[msg_id] = None
+            self._chat_ids.move_to_end(msg_id)
+            while len(self._chat_ids) > _CHAT_IDS_KEPT:
+                self._chat_ids.popitem(last=False)
 
-    async def update_message(self, msg_id: str, text: str) -> bool:
-        async with self.lock:
-            for m in self.state["messages"]:
-                if m["id"] == msg_id:
-                    m["text"] = text
-                    return True
-            return False
+    def is_chat_id(self, msg_id: Any) -> bool:
+        return isinstance(msg_id, str) and msg_id in self._chat_ids
 
 bridge_manager: BridgeStateManager = BridgeStateManager()
+
+# SQLite store (C-STATE-1): BRIDGE_DB_PATH, /app/data/bridge.db on the jarvis_bridge_data volume.
+store: BridgeStore = BridgeStore(bridge_db_path())
+
+# Persisted UI state (store kv table) and the value each key has until the agent reports one.
+PERSISTED_DEFAULTS: dict[str, Any] = {
+    "active_persona": "jarvis",
+    "muted": False,
+    "wake_word_active": True,
+    "location": {"city": "Detecting...", "lat": 0, "lng": 0},
+    "voice_match": 0.0,
+    "sim_records": [],
+    "sim_loading": False,
+    "sim_query_masked": "",
+    "sim_status": "idle",
+    "sim_message": "",
+}
+# A SIM lookup answers within the provider's 10 s timeout. A stored loading state that this process
+# did not see start, or that is older than this, lost its sim_data_result.
+SIM_LOADING_MAX_S = 30.0
+
+T = TypeVar("T")
+_STORE_ERROR_LOG_INTERVAL_S = 60.0
+_store_errors: dict[str, float] = {"last_logged": float("-inf")}
+
+
+def _log_store_error(action: str) -> None:
+    """Logs a failed store call with its traceback, at most once a minute."""
+    now = time.monotonic()
+    if now - _store_errors["last_logged"] >= _STORE_ERROR_LOG_INTERVAL_S:
+        _store_errors["last_logged"] = now
+        logger.exception("Bridge store: %s failed; live UI events still go out", action)
+    else:
+        logger.debug("Bridge store: %s failed again", action)
+
+
+async def stored(action: str, call: Awaitable[T], fallback: T) -> T:
+    """Awaits one store call. A failing database never stops live UI events: the error is
+    logged and the fallback returned."""
+    try:
+        return await call
+    except Exception:  # pylint: disable=broad-exception-caught
+        _log_store_error(action)
+        return fallback
 
 
 async def verify_vortex_request(request: Request, data: dict[str, Any]) -> None:
@@ -232,22 +294,23 @@ async def _handle_thinking_event(payload: Any) -> None:
     })
 
 
-async def _handle_transcription_event(payload: dict[str, Any]) -> None:
-    """Handle transcription events with persistence and sync."""
-    msg_id: str = cast(str, payload.get("id") or str(uuid.uuid4()))
-    payload["id"] = msg_id
+async def _handle_transcription_event(payload: Any) -> None:
+    """Normalize (C-MSG-1), upsert into the store, emit new_message (first time the id is seen)
+    or update_message with the normalized dict, plus the legacy live caption."""
+    raw: dict[str, Any] = (
+        payload if isinstance(payload, dict) else {"text": "" if payload is None else str(payload)}
+    )
+    default_source = "text" if bridge_manager.is_chat_id(raw.get("id")) else "voice"
+    try:
+        status, msg = await store.upsert_message(raw, default_source)
+    except Exception:  # pylint: disable=broad-exception-caught
+        _log_store_error("message upsert")
+        status, msg = "new", ui_message(normalize_message(raw, default_source))
 
-    logger.info("📝 Transcription: role=%s, id=%s",
-                payload.get('role'), msg_id)
+    logger.info("📝 Transcription: role=%s, id=%s (%s)", msg["role"], msg["id"], status)
 
-    updated: bool = await bridge_manager.update_message(msg_id, cast(str, payload.get("text", "")))
-    if updated:
-        await sio.emit("update_message", payload)
-    else:
-        await bridge_manager.append_log("messages", payload, limit=50)
-        await sio.emit("new_message", payload)
-
-    await sio.emit("transcription_update", {"text": payload.get("text", "")})
+    await sio.emit("new_message" if status == "new" else "update_message", msg)
+    await sio.emit("transcription_update", {"text": msg["text"]})
 
 
 @app.post("/notify")
@@ -295,16 +358,16 @@ async def notify_bridge(data: dict[str, Any], request: Request) -> dict[str, str
     if handler:
         await handler(payload)
     elif event_type == "location_sync":
-        await bridge_manager.update_state("location", payload)
+        await stored("location", store.kv_set("location", payload), None)
         await sio.emit("location_update", payload)
     elif event_type == "mute_sync":
-        await bridge_manager.update_state("muted", payload)
+        await stored("mute", store.kv_set("muted", payload), None)
         await sio.emit("mute_update", payload)
     elif event_type == "wake_word_sync":
-        await bridge_manager.update_state("wake_word_active", payload)
+        await stored("wake word", store.kv_set("wake_word_active", payload), None)
         await sio.emit("wake_word_update", payload)
     elif event_type == "vortex_log":
-        await bridge_manager.append_log("vortex_logs", payload, limit=30)
+        await stored("log", store.append_event(EVENT_LOG, payload), 0)
         await sio.emit("new_log", payload)
     elif event_type == "user_speaking_sync":
         await bridge_manager.update_state("user_speaking", payload)
@@ -313,10 +376,10 @@ async def notify_bridge(data: dict[str, Any], request: Request) -> dict[str, str
         await sio.emit("user_status_change", {"speaking": payload})
     elif event_type == "voice_id_sync":
         confidence: float = payload.get("confidence", 0.0) if isinstance(payload, dict) else 0.0
-        await bridge_manager.update_state("voice_match", confidence)
+        await stored("voice match", store.kv_set("voice_match", confidence), None)
         await sio.emit("voice_match_update", payload)
     elif event_type == "persona_change":
-        await bridge_manager.update_state("active_persona", payload)
+        await stored("persona", store.kv_set("active_persona", payload), None)
         await sio.emit("persona_update", {"persona": payload})
     elif event_type == "task_alert":
         # Proactive task notification for the UI
@@ -326,29 +389,35 @@ async def notify_bridge(data: dict[str, Any], request: Request) -> dict[str, str
         # General task list sync
         await sio.emit("task_sync", payload)
     elif event_type == "memory_update":
-        await bridge_manager.append_log("memories", payload, limit=10)
+        await stored("memory", store.append_event(EVENT_MEMORY, payload), 0)
         await sio.emit("memory_sync", payload)
     elif event_type == "tool_sync":
-        await bridge_manager.append_log("tool_logs", payload, limit=20)
+        await stored("tool log", store.append_event(EVENT_TOOL, payload), 0)
         await sio.emit("tool_update", payload)
     elif event_type == "sim_data_result":
         records: list[Any] = payload.get("records", []) if isinstance(payload, dict) else []
         query_masked: str = payload.get("phone", "") if isinstance(payload, dict) else ""
         status: str = payload.get("status", "success") if isinstance(payload, dict) else "success"
         message: str = payload.get("message", "") if isinstance(payload, dict) else ""
-        await bridge_manager.update_state("sim_records", records)
-        await bridge_manager.update_state("sim_loading", False)
-        await bridge_manager.update_state("sim_query_masked", query_masked)
-        await bridge_manager.update_state("sim_status", status)
-        await bridge_manager.update_state("sim_message", message)
+        bridge_manager.sim_loading_since = None
+        await stored("sim result", store.kv_set_many({
+            "sim_records": records,
+            "sim_loading": False,
+            "sim_query_masked": query_masked,
+            "sim_status": status,
+            "sim_message": message,
+        }), None)
         await sio.emit("sim_data_result", payload)
     elif event_type == "sim_data_loading":
-        query_masked: str = payload.get("query_masked", "") if isinstance(payload, dict) else ""
-        await bridge_manager.update_state("sim_loading", True)
-        await bridge_manager.update_state("sim_records", [])
-        await bridge_manager.update_state("sim_query_masked", query_masked)
-        await bridge_manager.update_state("sim_status", "loading")
-        await bridge_manager.update_state("sim_message", "Secure lookup workflow started.")
+        query_masked = payload.get("query_masked", "") if isinstance(payload, dict) else ""
+        bridge_manager.sim_loading_since = time.monotonic()
+        await stored("sim loading", store.kv_set_many({
+            "sim_loading": True,
+            "sim_records": [],
+            "sim_query_masked": query_masked,
+            "sim_status": "loading",
+            "sim_message": "Secure lookup workflow started.",
+        }), None)
         await sio.emit("sim_data_loading", payload)
     elif event_type == "sim_panel_open":
         await bridge_manager.update_state("sim_panel_open", True)
@@ -363,6 +432,33 @@ async def notify_bridge(data: dict[str, Any], request: Request) -> dict[str, str
 async def get_health() -> dict[str, Any]:
     """Returns detailed system health state."""
     return health_monitor.generate_health_report()
+
+
+@app.get("/messages")
+async def get_messages(request: Request, before: float | None = None,
+                       limit: int = MESSAGE_PAGE_MAX, cursor: str | None = None) -> dict[str, Any]:
+    """
+    Chat history (C-MSG-1): up to `limit` (1..100) messages older than `before` (epoch s or ms),
+    ascending, has_more, and next_cursor for the dashboard's pager. `cursor` takes a previous
+    next_cursor, which names the page's oldest message exactly, so messages that share a ts are
+    never skipped; `before` wins when both are given.
+    Auth: X-Vortex-Token header (legacy token, until the session login of OP-17).
+    """
+    if request.headers.get("X-Vortex-Token") != VORTEX_SECURITY_TOKEN:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    before_seq: int | None = None
+    if before is None and cursor:
+        try:
+            before, before_seq = parse_message_cursor(cursor)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Bad cursor") from exc
+    if before is not None and not math.isfinite(before):
+        raise HTTPException(status_code=400, detail="Bad cursor")
+    try:
+        return await store.message_page(limit, before, before_seq)
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        _log_store_error("history read")
+        raise HTTPException(status_code=503, detail="History unavailable") from exc
 
 
 @app.get("/livekit/token")
@@ -553,6 +649,73 @@ async def user_speaking_monitor() -> None:
         await asyncio.sleep(1.5)
 
 
+async def open_store() -> None:
+    """Opens bridge.db in the background, so a long integrity check never delays /health."""
+    try:
+        await store.open()
+        logger.info("Bridge store ready: %s", store.path)
+    except Exception:  # pylint: disable=broad-exception-caught
+        logger.critical("Bridge store unavailable (%s); live events still reach the UI, but "
+                        "nothing is persisted", store.path, exc_info=True)
+
+
+async def store_retention_loop() -> None:
+    """Hourly: deletes event/log rows older than BRIDGE_EVENT_RETENTION_DAYS (0, the default,
+    keeps them forever) and expired seen ids. Chat messages are never pruned."""
+    retention_days = event_retention_days()
+    logger.info("Event/log retention: %s", f"{retention_days:g} days" if retention_days
+                else "kept forever (BRIDGE_EVENT_RETENTION_DAYS=0)")
+    while True:
+        try:
+            deleted = await store.prune_events(retention_days)
+            if deleted:
+                logger.info("Retention: deleted %d event rows older than %g days",
+                            deleted, retention_days)
+            await store.prune_seen()
+        except asyncio.CancelledError:
+            logger.info("Store retention task cancelled.")
+            break
+        except Exception:  # pylint: disable=broad-exception-caught
+            _log_store_error("retention")
+
+        await asyncio.sleep(3600.0)
+
+
+async def build_init_state() -> dict[str, Any]:
+    """init_state (C-STATE-1): volatile flags from memory, the rest from the store, with every
+    legacy key the current dashboard reads (persona, vortex_logs, ...)."""
+    state: dict[str, Any] = await bridge_manager.get_state()
+    snapshot: dict[str, Any] | None = await stored(
+        "init_state read", store.init_snapshot(PERSISTED_DEFAULTS), None)
+    persisted = copy.deepcopy(PERSISTED_DEFAULTS)
+    if snapshot is None:
+        snapshot = {"messages": [], "logs": [], "memories": [], "tool_logs": [], "settings": {},
+                    "notifications": []}
+    else:
+        persisted.update(snapshot["kv"])
+    state.update(persisted)
+    since = bridge_manager.sim_loading_since
+    if since is None or time.monotonic() - since > SIM_LOADING_MAX_S:
+        # The stored lookup's sim_data_result was lost (agent or bridge restart, dropped notify):
+        # report it idle, or the panel's lookup form would stay blocked on every page load.
+        state["sim_loading"] = False
+        if state.get("sim_status") == "loading":
+            state["sim_status"], state["sim_message"] = "idle", ""
+    # Frontend expects 'persona' key, not 'active_persona'
+    state["persona"] = state.get("active_persona", "jarvis")
+    state["messages"] = snapshot["messages"]
+    state["vortex_logs"] = snapshot["logs"]
+    state["logs"] = snapshot["logs"]
+    state["memories"] = snapshot["memories"]
+    state["tool_logs"] = snapshot["tool_logs"]
+    state["notifications"] = snapshot["notifications"]
+    if snapshot["settings"]:
+        # Only a stored object: an empty one would hide persona/muted from the settings panel.
+        state["settings"] = snapshot["settings"]
+    state["server_time"] = time.time()
+    return state
+
+
 @sio.on("connect") # type: ignore[untyped-decorator]
 async def handle_connect(sid: str, environ: dict[str, Any], auth: dict[str, Any] | None = None) -> bool:
     """
@@ -577,9 +740,7 @@ async def handle_connect(sid: str, environ: dict[str, Any], auth: dict[str, Any]
         return False
 
     logger.info("✅ UI Authenticated & Connected: %s", sid)
-    state: dict[str, Any] = await bridge_manager.get_state()
-    # Frontend expects 'persona' key, not 'active_persona'
-    state["persona"] = state.get("active_persona", "jarvis")
+    state: dict[str, Any] = await build_init_state()
     await sio.emit('init_state', state, room=sid)
     return True
 
@@ -593,6 +754,8 @@ async def handle_disconnect(sid: str) -> None:
 @sio.on('ui_command') # type: ignore[untyped-decorator]
 async def handle_ui_command(_sid: str, data: Any) -> dict[str, str]:
     """Relay commands from UI to the Agent."""
+    if isinstance(data, dict) and data.get("type") == "chat" and isinstance(data.get("payload"), dict):
+        bridge_manager.remember_chat_id(data["payload"].get("id"))
     await sio.emit('agent_command', data)
     return {"status": "success"}
 

@@ -39,12 +39,15 @@ services:
       LIVEKIT_PUBLIC_URL: wss://jarvis.srv1802669.hstgr.cloud
       JARVIS_ROOM_NAME: jarvis-hybrid
       ALLOWED_ORIGINS: https://jarvis.srv1802669.hstgr.cloud,http://187.127.123.235:5100,http://127.0.0.1:5100,http://localhost:5100
+      # Bridge SQLite store (C-STATE-1); backup_vps.sh copies it online
+      BRIDGE_DB_PATH: /app/data/bridge.db
     depends_on:
       - livekit
     volumes:
       - jarvis_logs:/app/logs
       - jarvis_outputs:/app/Jarvis_Outputs
       - jarvis_shared:/app/Jarvis_Shared
+      - jarvis_bridge_data:/app/data
     restart: unless-stopped
     networks:
       - jarvis-net
@@ -86,3 +89,5 @@ volumes:
     name: jarvis_outputs
   jarvis_shared:
     name: jarvis_shared
+  jarvis_bridge_data:
+    name: jarvis_bridge_data
