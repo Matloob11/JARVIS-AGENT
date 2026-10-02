@@ -858,7 +858,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | C-12 | claude | P0 | Deploy tooling: deploy_from_pc.sh (committed HEAD only), deploy.sh v2 (lock, backup, nginx -t, health gate, other-apps smoke), rollback.sh, smoke_other_apps.sh + first full sync deploy | C-04, C-09, C-11, K-54 (COORD-4) | DONE (02 Oct 03:00; first sync deploy OK) |
 | C-13 | claude | P0 | Bridge SQLite store on a volume + message normalization + init_state/history from the DB | C-12, K-41 (C-MSG-1), K-42 (C-STATE-1) | DONE (claude, 02 Oct 13:58) |
 | C-14 | claude | P0 | Agent link v2, bridge side: AGENT_TOKEN + HMAC v2 notify with replay protection, Socket.IO roles/rooms with a legacy transition, env-only origins, secrets tooling | C-13, C-09, K-38 (C-SOCK-1), K-39 (C-NOTIFY-1), K-40 (C-EVT-1), K-47 (C-ENV-1) | DONE (claude, 02 Oct 16:25) |
-| C-15 | claude | P0 | Agent link v2, agent side: signed raw-body notify with retry queue, AGENT_TOKEN socket with reconnect-forever loop, chat id echo | C-14, C-09, K-39 (C-NOTIFY-1), K-38 (C-SOCK-1), K-41 (C-MSG-1) | TODO |
+| C-15 | claude | P0 | Agent link v2, agent side: signed raw-body notify with retry queue, AGENT_TOKEN socket with reconnect-forever loop, chat id echo | C-14, C-09, K-39 (C-NOTIFY-1), K-38 (C-SOCK-1), K-41 (C-MSG-1) | DOING (claude, 02 Oct 16:30) |
 | C-16 | claude | P0 | Network lockdown: nginx /agent + /twirp, PC agent on wss/https via the domain, 5101/7880 bound to 127.0.0.1, compose memory/log limits | C-12, C-09, C-15, K-48 (C-NET-1) | TODO |
 | C-17 | claude | P0 | Rotate the LiveKit API key/secret (they sat in world-readable files); values live only in env files | C-16, C-14 | TODO |
 | C-18 | claude | P0 | Least-privilege VPS env: bridge reads only bridge.env, compose .env keeps interpolation vars, unused VPS key copies moved to backups; user rotates Google/Gmail keys | C-14, C-17, K-47 (C-ENV-1) | TODO |
@@ -910,7 +910,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | C-54 | claude | P1 | Agent settings service: settings_update -> validate -> apply -> persist -> settings_sync | C-50, C-51, C-44, K-61 (CT-VC-SETTINGS) | TODO |
 | C-55 | claude | P1 | Announcer API (single module) + clipboard tip delivery (fix the chat_ctx append) | C-28, C-29, X-25, K-18 (AnnouncerAPI), K-19 (ClipboardSuggestion) | TODO |
 | C-56 | claude | P1 | Proactive speech primitive (CT-VC-PROACTIVE) and spoken reminders/tasks (interim wiring) | C-54, C-41, C-51, C-55, K-66 (CT-VC-PROACTIVE), K-18 (AnnouncerAPI) | TODO |
-| C-61 | claude | P1 | Guard and update the exhaustive test suite to the new desktop behaviour | X-11, X-26, X-27, K-27 (TestSideEffectGuard) | TODO |
+| C-61 | claude | P1 | Guard and update the exhaustive test suite to the new desktop behaviour | X-11, X-26, X-27, K-27 (TestSideEffectGuard) | DOING (claude, 02 Oct 16:30) |
 | C-66 | claude | P1 | Gated turn mode implementation: JarvisGeminiRealtimeModel + TeeSTT (behind turn_mode=gated) | C-40, C-54, K-65 (CT-VC-GEMINI-GATE) | TODO |
 | C-67 | claude | P1 | Gemini session longevity: context compression, go_away notice, resumption without history re-send | C-66 | TODO |
 | C-68 | claude | P1 | SPIKE run: gated vs fast decision (variant B STT-level reject first) | C-67, C-40 | TODO |
@@ -1010,7 +1010,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | C-110 | claude | P4 | Enable self-repair apply mode after the two-agent build-out | C-46, C-83, C-109 | TODO |
 | C-111 | claude | P0 | Contracts v4 (K-70..K-77) + plan, CLAUDE.md and Cursor rules for the VPS brain | — | DONE (02 Oct 01:25) |
 | C-112 | claude | P0 | Linux-importable agent with role/brain/mode gating, validate by (role, mode), stable user id, reconnecting UI listener | C-111 | DONE (claude, 02 Oct 13:58) |
-| C-113 | claude | P0 | Compat layer: location provider, delivery helper, startfile/webbrowser shims with a startup self-test | C-112 | TODO |
+| C-113 | claude | P0 | Compat layer: location provider, delivery helper, startfile/webbrowser shims with a startup self-test | C-112 | DOING (claude, 02 Oct 16:30) |
 | C-114 | claude | P0 | 24/7 voice session safety: compression, real truncation, re-seed, liveness attribute, idle close and recycle | C-33, C-35, C-111 | TODO |
 | C-115 | claude | P0 | Desktop Link protocol library (Ed25519, X25519/AEAD, replay, clock, resend) + key tooling | C-111 | DOING (claude, 02 Oct 02:55) |
 | C-116 | claude | P0 | Bridge: internal listener :5002, '/desktop' relay, presence and desktop_status, persisted link switch, minimal public health | C-13, C-115 | TODO |
@@ -1034,7 +1034,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | C-134 | claude | P4 | Monitoring, alerts, incident runbook and VPS-brain documentation | C-131 | TODO |
 | C-135 | claude | P3 | UI spec v2: exact 'Neon Command Center' design from the user's reference image (replica mockup, ANNA variant, all pages and states, phone), tasks X-69..X-102 updated | — | DOING (claude, 02 Oct 13:00) |
 | C-136 | claude | P1 | PC worker: visible LiveKit link state and recovery after laptop sleep or network loss | C-09, C-112 | DONE (claude, 02 Oct 16:25) |
-| C-137 | claude | P1 | Hotfixes from the 2 Oct live logs: vector memory init off the event loop (45 s stall at session start), ensure_room output without TURN credentials, loopwatch timing test under load | C-31 | TODO |
+| C-137 | claude | P1 | Hotfixes from the 2 Oct live logs: vector memory init off the event loop (45 s stall at session start), ensure_room output without TURN credentials, loopwatch timing test under load | C-31 | DOING (claude, 02 Oct 16:30) |
 | C-97 | claude | P4 | Voice and conversation regression suite + runbook | C-56, C-74, C-76, C-77, C-87, C-89, C-90, C-91, C-09 | TODO |
 | C-98 | claude | P4 | Internal-tool regression checks after the voice/dashboard fixes (change_voice, wake word, persona, identity, analyze_surroundings) | C-48, C-50, C-54, C-69, C-87 | TODO |
 | C-99 | claude | P4 | Live desktop-tools smoke run on the PC with Sir | C-31, C-75, C-55, C-84, C-85, X-63, C-96 | TODO |
