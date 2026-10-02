@@ -983,3 +983,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** composer+chat+controls e2e 13/13
 - **Commit:** 560948e · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-86 · Activity Media tab + chat chip · 2026-10-03 02:55 PKT
+- **Kya kiya:** Intelligence panel Activity › Media tab par move; featured/history/16:9 placeholders, lightbox Esc + close focus; image par toast, feed row, chat media chip; intelligence testids rakhe.
+- **Files:** `IntelligencePanel.tsx`, `intelligenceNotify.tsx`, `useBridgeMediaUrl.ts`, `ActivityPage.tsx`, `Dashboard.tsx`, `useCommandCenter.ts`, `ChatList.tsx`, `intelligence.spec.ts`, `testids.baseline.txt`
+- **Verify:** `npm --prefix stonix_ui run build` pass; `intelligence.spec.ts` 3/3; testid inventory 250 pass
+- **Commit:** (pending) · **Deploy:** no
+- **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-86 · commit note · 2026-10-03 02:56 PKT
+- **Kya kiya:** Local commit for X-86 Activity Media tab.
+- **Files:** (see prior X-86 entry)
+- **Verify:** intelligence e2e 3/3
+- **Commit:** acfcfc4 · **Deploy:** no
+- **Doosre agent ke liye:** —
