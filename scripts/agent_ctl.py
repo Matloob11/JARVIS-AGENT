@@ -9,26 +9,36 @@ Usage (Git Bash in the repo root, PY=.venv_312/Scripts/python.exe):
     $PY scripts/agent_ctl.py logs    [-n 50] [--file all|stdout|stderr|ctl]
 
 The worker holds run/agent.lock for its whole life (src/core/agent_lock.py): the lock is the source of
-truth, run/agent.pid.json only describes the holder and stays behind after it exits.
+truth, run/agent.pid.json only describes the holder and stays behind after it exits. Since C-136 it also
+writes run/agent_link.json, the state of its LiveKit link (src/core/livekit_link.py): connecting,
+connected, retrying or failed. /health stays 200 while that link retries, so 'ready' means health 200
+and a connected link; a worker from before C-136 writes no such file and is ready on health 200 alone.
 
 start    Exit 3 while a worker holds the lock. Rotates logs/agent_stdout.log and logs/agent_stderr.log
          (5 MB, keeps .1-.5) and runs '.venv_312 python -m src.core.agent <mode>' with JARVIS_STARTED_BY,
          JARVIS_START_REASON, PYTHONPATH, PYTHONIOENCODING and JARVIS_HYBRID=1. Default: hidden, output
-         appended to those logs, waits for health 200 on 127.0.0.1:8081 (max 60 s), then runs
-         deploy/windows-local/ensure_room.py once. --foreground: in this console until the worker exits.
+         appended to those logs, waits until the worker is ready (health 200 on 127.0.0.1:8081 and its
+         LiveKit link connected, max 60 s), then runs deploy/windows-local/ensure_room.py once.
+         --foreground: in this console until the worker exits.
 stop     Only the pid in agent.pid.json, and only when its command line runs src.core.agent: Ctrl+Break,
          then after --timeout 'taskkill /PID <pid> /F' for the worker, its agent children and its launcher
          (no /T: apps that JARVIS opened for the user are its children too). --force skips the Ctrl+Break.
 restart  Takes run/restart.lock (fails fast; stale after 10 min or once its holder has exited), refuses
-         within 120 s of the last successful restart unless --force (logged), then stop + start.
-wait     Waits for health 200 (start-agent.bat runs it before ensure_room.py).
-status   pid, by, reason, mode, uptime, health code and active jobs; exit 0 when a worker runs, else 1.
+         within 120 s of the last successful restart unless --force (logged), then stop + start. The worker
+         itself runs 'restart --by worker --expect-pid P --expect-started T' when its LiveKit link stays lost
+         while LiveKit answers (C-136); that request is refused (exit 4) once worker P no longer holds the
+         lock or its link is connected again, and it never starts a worker that someone else stopped.
+wait     Waits until the worker is ready, as start does (start-agent.bat runs it before ensure_room.py);
+         fails at once when the worker reports that its LiveKit link failed.
+status   pid, by, reason, mode, uptime, health code, LiveKit link state and its age, active jobs; exit 0
+         when a worker runs, else 1.
 logs     Tails of the agent logs and of logs/agent_ctl.log.
 
 start/stop/restart/wait append a JSON line to logs/agent_ctl.log; start/stop/restart by claude or cursor
 also print a ready-to-paste done_highlight.md entry (K-53: log every restart there).
 Exit codes: 0 ok, 1 failed, 2 usage, 3 a worker already runs (start), 4 refused for safety (restart
-cooldown, a restart in progress, a pid that is not the agent, port 8081 answered by another process).
+cooldown, a restart in progress, a pid that is not the agent, port 8081 answered by another process, a
+worker's recovery request that no longer applies).
 """
 # pylint: disable=too-many-lines  # one self-contained CLI; the six commands share these helpers
 from __future__ import annotations
@@ -53,7 +63,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.core import agent_lock  # noqa: E402  pylint: disable=wrong-import-position
+from src.core import agent_lock, livekit_link  # noqa: E402  pylint: disable=wrong-import-position
 
 LOG_DIR = ROOT / "logs"
 AGENT_LOG_NAMES = ("agent_stdout.log", "agent_stderr.log")
@@ -64,7 +74,8 @@ ENSURE_ROOM = ROOT / "deploy" / "windows-local" / "ensure_room.py"
 # Same order as services/utils/jarvis_config.py (K-47): the root .env wins, the hybrid file fills gaps.
 ENV_FILES = (ROOT / ".env", ROOT / "deploy" / "windows-local" / ".env")
 
-WHO = ("claude", "cursor", "user")
+# 'worker': the worker's own LiveKit link recovery (C-136, src/core/livekit_link.py) runs 'restart'.
+WHO = ("claude", "cursor", "user", "worker")
 MODES = ("start", "dev")
 LOG_CHOICES = {"all": (*AGENT_LOG_NAMES, CTL_LOG_NAME), "stdout": AGENT_LOG_NAMES[:1],
                "stderr": AGENT_LOG_NAMES[1:], "ctl": (CTL_LOG_NAME,)}
@@ -347,6 +358,8 @@ def agent_env(by: str, reason: str, *, background: bool) -> dict[str, str]:
     # A worker started here always takes the lock.
     for name in ("JARVIS_NO_LOCK", "PYTEST_CURRENT_TEST"):
         env.pop(name, None)
+    if by != "worker":  # only the worker's own recovery hands its count on (C-136)
+        env.pop(livekit_link.RECOVERIES_ENV, None)
     env["PATH"] = fresh_path(env.get("PATH", ""), _registry_path_values())
     env.update(JARVIS_STARTED_BY=by, JARVIS_START_REASON=reason, PYTHONPATH=str(ROOT),
                PYTHONIOENCODING="utf-8", JARVIS_HYBRID="1")
@@ -365,9 +378,71 @@ def _wait_until(condition: Callable[[], bool], timeout: float, step: float = 0.5
         _sleep(step)
 
 
+def worker_link(info: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    """The LiveKit link state (C-136) that the worker of run/agent.pid.json reports in run/agent_link.json;
+    None when unknown: a worker from before C-136 writes no such file, and an earlier worker's is ignored."""
+    return livekit_link.read_link(agent_lock.read_pid_info() if info is None else info)
+
+
+def describe_link(link: dict[str, Any] | None) -> str:
+    """The 'link' line of status: the state and its age."""
+    if link is None:
+        return "unknown (no run/agent_link.json from this worker: it started before C-136)"
+    since = link.get("since")
+    age = str(timedelta(seconds=max(0, int(time.time() - since)))) if isinstance(since, (int, float)) else "?"
+    state, detail = link["state"], _one_line(str(link.get("detail") or ""), 160)
+    if state == livekit_link.CONNECTED:
+        return f"connected for {age} (LiveKit worker {link.get('worker_id') or '?'})"
+    if state == livekit_link.CONNECTING:
+        return f"connecting for {age} (not registered with LiveKit yet)"
+    never = "" if link.get("connected_once") else ", never connected"
+    return f"{state} for {age} ({detail or 'no detail'}{never})"
+
+
+def link_hint(link: dict[str, Any]) -> str:
+    """What comes next for a worker whose LiveKit link is not connected (the WARNING line of status), by the
+    rules of livekit_link.LinkMonitor.recovery_reason."""
+    if link["state"] == livekit_link.CONNECTING:
+        return "it registers within seconds once LiveKit answers; if this lasts, see logs/agent_stderr.log"
+    if link.get("recovery") is False:
+        return "JARVIS_LINK_RECOVERY=0, so it never restarts itself"
+    if link.get("connected_once"):
+        return ("it asks agent_ctl for a fresh worker once LiveKit answers again (after 10 min of retrying, "
+                "at once after failed)")
+    if livekit_link.self_recovers(link):
+        try:
+            pause = livekit_link.pause_s(int(link.get("recoveries") or 0)) / 60
+        except (TypeError, ValueError):
+            pause = livekit_link.REQUEST_EVERY_S / 60
+        return ("it has not registered since it started; once LiveKit answers again it asks agent_ctl for a "
+                f"fresh worker, at the earliest {pause:.0f} min after its start")
+    return ("LiveKit or TLS turned it away and it never restarts itself for that: check LIVEKIT_URL and its "
+            "keys, then restart it")
+
+
+def _link_ready() -> bool:
+    """True unless the running worker reports a LiveKit link that is not connected."""
+    link = worker_link() if agent_lock.is_locked() else None
+    return link is None or link["state"] == livekit_link.CONNECTED
+
+
+def _gone(proc: subprocess.Popen[Any] | None, link: dict[str, Any] | None) -> str:
+    """Why waiting is pointless: the worker started here exited, or its LiveKit link failed; else ''."""
+    if proc is not None and proc.poll() is not None:
+        if proc.returncode == EXIT_ALREADY_RUNNING:
+            return "another worker already holds run/agent.lock"
+        return f"the worker exited with code {proc.returncode}"
+    if link is not None and link["state"] == livekit_link.FAILED:
+        return f"the worker's LiveKit link failed ({_one_line(str(link.get('detail') or ''), 160)})"
+    return ""
+
+
 def wait_healthy(timeout: float, proc: subprocess.Popen[Any] | None = None, *,
                  progress: bool = False) -> tuple[bool, str]:
-    """Wait for health 200. Gives up early when the worker exits or never takes run/agent.lock."""
+    """Wait until the worker is ready: health 200 while a worker holds run/agent.lock and, when it reports its
+    LiveKit link in run/agent_link.json (C-136), that link connected; a 200 alone no longer counts. A worker
+    without that file (started before C-136) is ready on 200 plus the register settle, as before. Gives up
+    early when the worker exits, never takes run/agent.lock or reports that its link failed."""
     started = _monotonic()
     was_down = False
     seen_lock = False
@@ -375,15 +450,16 @@ def wait_healthy(timeout: float, proc: subprocess.Popen[Any] | None = None, *,
     while True:
         code = probe_health()
         locked = agent_lock.is_locked()
-        if code == 200 and locked:  # a 200 without the lock is some other process on the port
-            if was_down:
+        link = worker_link() if locked else None
+        # A 200 without the lock is some other process on the port.
+        if code == 200 and locked and (link is None or link["state"] == livekit_link.CONNECTED):
+            if link is None and was_down:  # no link file: 200 comes a moment before the registration
                 _sleep(REGISTER_SETTLE_S)
             return True, ""
         was_down = True
-        if proc is not None and proc.poll() is not None:
-            if proc.returncode == EXIT_ALREADY_RUNNING:
-                return False, "another worker already holds run/agent.lock"
-            return False, f"the worker exited with code {proc.returncode}"
+        why = _gone(proc, link)
+        if why:
+            return False, why
         now = _monotonic()
         if locked:
             seen_lock = True
@@ -394,9 +470,11 @@ def wait_healthy(timeout: float, proc: subprocess.Popen[Any] | None = None, *,
                            else f"no worker took run/agent.lock within {LOCK_GRACE_S} s")
         if now - started >= timeout:
             last = code if code is not None else "no answer"
-            return False, f"no health 200 within {timeout:g} s (last: {last})"
+            return False, (f"no health 200 within {timeout:g} s (last: {last})" if link is None else
+                           f"no LiveKit link within {timeout:g} s (health {last}; link {describe_link(link)})")
         if progress and now >= next_note:
-            print(f"[agent_ctl] still waiting for the worker ({now - started:.0f} s)...", flush=True)
+            state = f", link {link['state']}" if link is not None else ""
+            print(f"[agent_ctl] still waiting for the worker ({now - started:.0f} s{state})...", flush=True)
             next_note += 10
         _sleep(1.0)
 
@@ -454,7 +532,7 @@ def _one_line(text: str, limit: int = 200) -> str:
 def audit(action: str, args: argparse.Namespace | None, **fields: Any) -> None:
     """One JSON line per action in logs/agent_ctl.log."""
     entry: dict[str, Any] = {"ts": _now().isoformat(timespec="seconds"), "action": action}
-    for key in ("by", "reason", "mode", "foreground", "force"):
+    for key in ("by", "reason", "mode", "foreground", "force", "expect_pid"):
         value = getattr(args, key, None)
         if value is not None:
             entry[key] = value
@@ -562,8 +640,12 @@ def _start_background(cmd: list[str], env: dict[str, str], timeout: float,
         print(f"[agent_ctl] The worker did not come up: {why}. See logs/agent_stderr.log", file=sys.stderr)
         code = EXIT_ALREADY_RUNNING if proc.poll() == EXIT_ALREADY_RUNNING else EXIT_FAILED
         return code, {"result": "failed", "error": why, **details}
-    details.update(health=200, new_pid=(agent_lock.read_pid_info() or {}).get("pid"))
-    print(f"[agent_ctl] Worker pid {details['new_pid']} healthy (200) after {details['start_s']} s.", flush=True)
+    info = agent_lock.read_pid_info() or {}
+    link = worker_link(info)
+    details.update(health=200, new_pid=info.get("pid"), **({"link": link["state"]} if link else {}))
+    linked = " and connected to LiveKit" if link else ""
+    print(f"[agent_ctl] Worker pid {details['new_pid']} healthy (200){linked} after {details['start_s']} s.",
+          flush=True)
     room = run_ensure_room(env)
     details["ensure_room"] = room
     if room != 0:
@@ -603,7 +685,7 @@ def _run_foreground(cmd: list[str], env: dict[str, str], args: argparse.Namespac
                 print("[agent_ctl] Stop requested; waiting for the worker to exit...", flush=True)
             if not healthy and _monotonic() >= next_probe:
                 next_probe = _monotonic() + 2
-                if probe_health(timeout=1.0) == 200:
+                if probe_health(timeout=1.0) == 200 and _link_ready():
                     healthy = True
                     pid = (agent_lock.read_pid_info() or {}).get("pid")
                     seconds = round(_monotonic() - started, 1)
@@ -616,9 +698,14 @@ def _run_foreground(cmd: list[str], env: dict[str, str], args: argparse.Namespac
         for sig, handler in previous.items():
             signal.signal(sig, handler)
     ran = round(_monotonic() - started, 1)
-    audit("start", args, result="exited", exit=code, ran_s=ran)
+    replaced = code == STATUS_CONTROL_C_EXIT and worker_recovery_running()
+    audit("start", args, result="exited", exit=code, ran_s=ran, **({"replaced_by": "worker"} if replaced else {}))
     if code == STATUS_CONTROL_C_EXIT:
         print(f"[agent_ctl] Worker stopped by Ctrl+C / Ctrl+Break after {ran} s.", flush=True)
+        if replaced:
+            print("[agent_ctl] Its own LiveKit link recovery (C-136, 'restart --by worker') replaces it: the new "
+                  "worker runs hidden in the background, so closing this window no longer stops JARVIS. "
+                  "See 'agent_ctl status'; stop it with 'agent_ctl stop --by user'.", flush=True)
         return EXIT_OK
     if code == EXIT_ALREADY_RUNNING:
         print("[agent_ctl] Another worker already holds run/agent.lock (see the message above).", file=sys.stderr)
@@ -821,6 +908,12 @@ def take_restart_lock(args: argparse.Namespace) -> tuple[Path | None, str]:
     return None, "another restart took run/restart.lock first"
 
 
+def worker_recovery_running() -> bool:
+    """True while run/restart.lock belongs to a live 'restart --by worker' (C-136 link recovery)."""
+    path = agent_lock.run_dir() / "restart.lock"
+    return _read_json(path).get("by") == "worker" and not _restart_lock_state(path)[0]
+
+
 def release_restart_lock(path: Path) -> None:
     if _read_json(path).get("pid") in (os.getpid(), None):
         try:
@@ -841,7 +934,31 @@ def _problem(details: dict[str, Any]) -> str:
     return str(details.get("error") or details.get("result") or "unknown")
 
 
+def _expected_worker_problem(args: argparse.Namespace) -> str:
+    """For 'restart --expect-pid' (the worker's own LiveKit link recovery, C-136): why that request no longer
+    applies, else ''. The worker that asked must still hold run/agent.lock with its link down: a stop,
+    another restart or a reconnect in the meantime wins."""
+    pid = getattr(args, "expect_pid", None)
+    if pid is None:
+        return ""
+    if not agent_lock.is_locked():
+        return f"worker pid {pid} asked for it, but no worker runs any more (stopped in the meantime)"
+    info = agent_lock.read_pid_info() or {}
+    started = getattr(args, "expect_started", None)
+    if info.get("pid") != pid or (started and info.get("started_at") != started):
+        return (f"worker pid {pid} asked for it, but another worker holds run/agent.lock now (pid "
+                f"{info.get('pid', '?')}, started {info.get('started_at', '?')})")
+    link = worker_link(info)
+    if link is not None and link["state"] == livekit_link.CONNECTED:
+        return f"worker pid {pid} asked for it, but its LiveKit link is connected again"
+    return ""
+
+
 def _restart(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+    expected = _expected_worker_problem(args)
+    if expected:
+        print(f"[agent_ctl] Restart refused: {expected}.", file=sys.stderr)
+        return EXIT_REFUSED, {"result": "refused", "error": expected}
     left, last = _cooldown_left()
     if left > 0 and not args.force:
         error = (f"the last restart (by {last.get('by', '?')}) was {RESTART_COOLDOWN_S - left:.0f} s ago; "
@@ -857,6 +974,10 @@ def _restart(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
     code, details["stop"] = stop_worker(args.timeout)
     if code != EXIT_OK:
         return code, {"result": "failed", "error": "stop: " + _problem(details["stop"]), **details}
+    if getattr(args, "expect_pid", None) is not None and details["stop"].get("result") == "not_running":
+        error = f"worker pid {args.expect_pid} exited before this restart stopped it; no new worker is started"
+        print(f"[agent_ctl] Restart refused: {error}.", file=sys.stderr)
+        return EXIT_REFUSED, {"result": "refused", "error": error, **details}
     code, details["start"] = start_worker(args, mode, foreground=False)
     details["restart_s"] = round(_monotonic() - started, 1)
     if code != EXIT_OK:
@@ -929,6 +1050,8 @@ def cmd_status(_args: argparse.Namespace) -> int:
     print(f"  mode     {_previous_mode(info) or '?'}")
     print(f"  since    {info.get('started_at', '?')} (uptime {_uptime(proc, info)})")
     print(f"  health   {health_text}")
+    link = worker_link(info)
+    print(f"  link     {describe_link(link)}")
     worker = worker_info() if health == 200 else None
     if worker:
         load = worker.get("worker_load")
@@ -936,6 +1059,8 @@ def cmd_status(_args: argparse.Namespace) -> int:
         print(f"  jobs     {worker.get('active_jobs', '?')} active (load {load_text})")
     if info.get("git_sha"):
         print(f"  git      {str(info['git_sha'])[:7]}")
+    if link is not None and link["state"] != livekit_link.CONNECTED:
+        print(f"  WARNING  not connected to LiveKit, so no room gets this worker: {link_hint(link)}")
     if problem:
         print(f"  WARNING  {problem}")
     return 0
@@ -946,9 +1071,12 @@ def cmd_wait(args: argparse.Namespace) -> int:
     healthy, why = wait_healthy(args.timeout, progress=True)
     waited = round(_monotonic() - started, 1)
     if healthy:
-        pid = (agent_lock.read_pid_info() or {}).get("pid")
-        print(f"[agent_ctl] Worker pid {pid} is healthy (200 on {health_url()}) after {waited} s.")
-        audit("wait", args, result="healthy", health=200, pid=pid, waited_s=waited)
+        info = agent_lock.read_pid_info() or {}
+        link = worker_link(info)
+        linked = ", LiveKit link connected," if link else ""
+        print(f"[agent_ctl] Worker pid {info.get('pid')} is healthy (200 on {health_url()}){linked} after {waited} s.")
+        audit("wait", args, result="healthy", health=200, pid=info.get("pid"), waited_s=waited,
+              **({"link": link["state"]} if link else {}))
         return EXIT_OK
     print(f"[agent_ctl] Worker not healthy: {why}.", file=sys.stderr)
     audit("wait", args, result="failed", error=why, waited_s=waited)
@@ -992,7 +1120,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
         prog="agent_ctl.py",
         description="Start, stop and watch the single JARVIS agent worker (K-53 COORD-3).")
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("status", help="pid, by, reason, uptime and health; exit 0 when a worker runs")
+    sub.add_parser("status", help="pid, by, reason, uptime, health and LiveKit link; exit 0 when a worker runs")
     actions = {}
     for name, text in (("start", "start the worker unless one runs (exit 3 if one does)"),
                        ("stop", "stop the worker that holds run/agent.lock"),
@@ -1015,7 +1143,13 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     actions["restart"].add_argument("--timeout", type=_positive, default=STOP_TIMEOUT_S,
                                     help="seconds between Ctrl+Break and taskkill")
     actions["restart"].add_argument("--force", action="store_true", help="ignore the 120 s cooldown (logged)")
-    wait = sub.add_parser("wait", help="wait for health 200 (exit 1 on timeout or when the worker exits)")
+    actions["restart"].add_argument("--expect-pid", type=int, default=None,
+                                    help="only while this worker pid holds the lock with its LiveKit link down "
+                                         "(the worker's own recovery, C-136)")
+    actions["restart"].add_argument("--expect-started", default=None,
+                                    help="with --expect-pid: that worker's started_at in run/agent.pid.json")
+    wait = sub.add_parser("wait", help="wait for health 200 and a connected LiveKit link (exit 1 on timeout, "
+                                         "when the worker exits or its link failed)")
     wait.add_argument("--timeout", type=_positive, default=START_TIMEOUT_S)
     logs = sub.add_parser("logs", help="last lines of the agent logs and logs/agent_ctl.log")
     logs.add_argument("-n", "--lines", type=_positive_int, default=50)

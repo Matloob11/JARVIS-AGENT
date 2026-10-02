@@ -30,6 +30,12 @@ if __name__ == "__main__":
     from src.core.agent_lock import acquire_or_exit
     acquire_or_exit()
 
+from src.core import agent_lock, livekit_link
+
+# C-136: the environment this worker started with, taken before jarvis_logger loads the .env files. An
+# automatic restart hands it to agent_ctl, so the fresh worker reads those files again.
+_START_ENV = dict(os.environ)
+
 # K-29: every root handler masks secrets. Kept below the lock: jarvis_logger loads .env.
 from services.utils.jarvis_logger import redact_root_handlers
 
@@ -110,6 +116,8 @@ from services.utils.jarvis_config import (
 )
 from services.utils.jarvis_logger import setup_logger
 from services.utils.jarvis_loopwatch import LoopWatchdog
+from services.utils.jarvis_security import redact_secrets
+from dotenv import dotenv_values
 
 # The clipboard helper needs a desktop. In remote mode (K-72) the Desktop Node runs it, so this process
 # never imports it. The mode is fixed for the life of the process.
@@ -485,7 +493,7 @@ async def entrypoint(ctx: agents.JobContext):
             # --- Internal Session Signaling Handlers ---
             # Set to WARNING to see important SDK signals but ignore trivial ones
             logging.getLogger("livekit").setLevel(logging.WARNING)
-            logging.getLogger("livekit.agents").setLevel(logging.WARNING)
+            _quiet_livekit_agents_logger()
 
             @ctx.room.on("data_received")
             def on_data_received(data: rtc.DataPacket): # pylint: disable=useless-return
@@ -608,6 +616,75 @@ async def entrypoint(ctx: agents.JobContext):
                 await asyncio.sleep(retry_delay)
         finally:
             await _cleanup_session_resources(session, list(active_tasks))
+
+
+# --------------------------------------------------------------------------- C-136: LiveKit link state
+
+_ENV_FILES = (agent_lock.PROJECT_ROOT / ".env", agent_lock.PROJECT_ROOT / "deploy" / "windows-local" / ".env")
+_link_monitor: livekit_link.LinkMonitor | None = None
+
+
+def _restart_env() -> dict[str, str]:
+    """This worker's start environment without the keys of the .env files: load_dotenv never overrides,
+    so the fresh worker takes them from the files again, with any edit made since this worker started."""
+    from_files: set[str] = set()
+    for path in _ENV_FILES:
+        if path.is_file():
+            from_files.update(dotenv_values(path))
+    return {name: value for name, value in _START_ENV.items() if name not in from_files}
+
+
+def start_link_monitor() -> livekit_link.LinkMonitor | None:
+    """
+    C-136 (src/core/livekit_link.py): the LiveKit link monitor of the PC brain's worker, in the process that
+    holds run/agent.lock or whose parent does; elsewhere nothing changes. JARVIS_LINK_RECOVERY=0 keeps the
+    state file and the log lines but never asks agent_ctl for a fresh worker.
+    """
+    global _link_monitor  # pylint: disable=global-statement
+    if _link_monitor is not None or desktop_mode() != DESKTOP_MODE_LOCAL or in_container():
+        return _link_monitor
+    owner = livekit_link.lock_owner()
+    if owner is None:
+        return None
+    recovery = (os.getenv("JARVIS_LINK_RECOVERY") or "1").strip().lower() not in ("0", "false", "no", "off")
+    monitor = livekit_link.LinkMonitor(
+        livekit_link.link_path(), owner, recovery=recovery, recoveries=livekit_link.inherited_recoveries(),
+        base_env=_restart_env, redact=redact_secrets, log=logger.info)
+    monitor.start()
+    _link_monitor = monitor
+    return monitor
+
+
+def _quiet_livekit_agents_logger() -> None:
+    """The entrypoint's WARNING level for livekit.agents, but INFO while the link monitor runs in this
+    process (thread job executors, the Windows default): its handler prints no other INFO line."""
+    level = logging.INFO if _link_monitor is not None else logging.WARNING
+    logging.getLogger(livekit_link.LK_LOGGER).setLevel(level)
+
+
+def _hook_link_monitor() -> None:
+    """
+    C-136: start_link_monitor() right after LiveKit's CLI configures logging, which it does in the process
+    that runs the LiveKit worker (start mode: this one; dev mode: the reloader's child), never in a job.
+    A LiveKit release without the hook starts as before, without the monitor.
+    """
+    configure_logger = getattr(livekit_cli_module, "_configure_logger", None)
+    if not callable(configure_logger) or getattr(configure_logger, "starts_link_monitor", False):
+        return
+
+    @functools.wraps(configure_logger)
+    def configure_and_monitor(*args: Any, **kwargs: Any) -> None:
+        configure_logger(*args, **kwargs)
+        try:
+            start_link_monitor()
+        except Exception as exc:  # the worker starts without the monitor
+            logger.warning("LIVEKIT LINK monitor not started: %s", exc)
+
+    configure_and_monitor.starts_link_monitor = True  # type: ignore[attr-defined]
+    livekit_cli_module._configure_logger = configure_and_monitor  # pylint: disable=protected-access
+
+
+_hook_link_monitor()
 
 
 def check_runtime_profile() -> RuntimeProfile:

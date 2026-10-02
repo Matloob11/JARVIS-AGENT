@@ -132,12 +132,16 @@ def play_startup_voice(delay_s=10):
     delay as requested by the user.
     Runs separately in a background thread to avoid blocking agent connection.
     Returns that thread; under pytest none is started (tests never play real audio), and in remote
-    mode none either: the VPS has no speaker, the Desktop Node plays it on the laptop (K-72).
+    mode none either: the VPS has no speaker, the Desktop Node plays it on the laptop (K-72). Nor for a
+    worker that the LiveKit link recovery started (JARVIS_STARTED_BY=worker, C-136): that comes at any hour.
     """
     if running_under_pytest:
         return None
     from services.utils.jarvis_config import is_local_mode  # pylint: disable=import-outside-toplevel
     if not is_local_mode():
+        return None
+    if os.getenv("JARVIS_STARTED_BY") == "worker":
+        print("[JARVIS-INFO] Startup voice skipped: automatic restart (C-136 LiveKit link recovery)", flush=True)
         return None
     import threading  # pylint: disable=import-outside-toplevel
     thread = threading.Thread(target=_play_startup_sound, args=(delay_s,),
