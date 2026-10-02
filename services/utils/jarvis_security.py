@@ -1,6 +1,7 @@
 """
 # services/utils/jarvis_security.py
-Security module for JARVIS, handling input sanitization, threat detection and secret redaction.
+Security module for JARVIS, handling input sanitization, threat detection, secret redaction and the
+agent -> bridge notify signatures (C-NOTIFY-1 v2 and the legacy one).
 """
 import functools
 import hashlib
@@ -12,6 +13,7 @@ import re
 import threading
 import typing
 import unicodedata
+from secrets import token_bytes
 from typing import Any
 from urllib.parse import quote, quote_plus, urlsplit
 
@@ -358,23 +360,77 @@ class VortexGuard:
         return None
 
 
+_HEX_SHA256 = re.compile(r"[0-9a-fA-F]{64}")
+_key_warnings: set[str] = set()
+_dev_notify_key: list[bytes] = []
+_dev_notify_key_lock = threading.Lock()
+
+
+def _critical_once(name: str, message: str) -> None:
+    """One CRITICAL line per process for a missing key, naming the variable only."""
+    if name not in _key_warnings:
+        _key_warnings.add(name)
+        logger.critical(message)
+
+
+def _notify_key() -> bytes:
+    """BRIDGE_HMAC_SECRET. Missing in production raises RuntimeError; missing in development gives a random
+    key that lives only as long as this process (so only signatures made by this process verify)."""
+    from services.utils.jarvis_config import config  # pylint: disable=import-outside-toplevel
+    secret = (getattr(config, "bridge_hmac_secret", None) or "").strip()
+    if secret:
+        return secret.encode("utf-8")
+    if config.is_production():
+        raise RuntimeError("BRIDGE_HMAC_SECRET is not set: agent notify signing is off in production")
+    with _dev_notify_key_lock:
+        if not _dev_notify_key:
+            _dev_notify_key.append(token_bytes(32))
+            _critical_once("BRIDGE_HMAC_SECRET",
+                           "❌ BRIDGE_HMAC_SECRET is not set: using a random key for this process only "
+                           "(development); notifies signed by another process will not verify")
+        return _dev_notify_key[0]
+
+
+def sign_notify(ts: int | str, nonce: str, raw: bytes) -> str:
+    """
+    Contract C-NOTIFY-1 (K-39): hex HMAC-SHA256(BRIDGE_HMAC_SECRET, f'{ts}.{nonce}.'.encode() + raw), where raw
+    is exactly the body bytes sent. ts and nonce are the header strings as sent.
+    Raises RuntimeError in production when BRIDGE_HMAC_SECRET is not set.
+    """
+    message = f"{ts}.{nonce}.".encode("utf-8") + bytes(raw)
+    return hmac.new(_notify_key(), message, hashlib.sha256).hexdigest()
+
+
+def verify_notify(ts: int | str, nonce: str, raw: bytes, signature: Any) -> bool:
+    """
+    True when signature (64 hex chars, either case) is sign_notify(ts, nonce, raw); compared in constant time.
+    Raises RuntimeError in production when BRIDGE_HMAC_SECRET is not set.
+    """
+    if not isinstance(signature, str) or not _HEX_SHA256.fullmatch(signature):
+        return False
+    return hmac.compare_digest(sign_notify(ts, nonce, raw), signature.lower())
+
+
 class SecurityManager:
     """
-    Zero Trust Security Manager for service-to-service auth and IPC signing.
+    Legacy notify signing: HMAC-SHA256 keyed with VORTEX_SECURITY_TOKEN over the sorted JSON (C-NOTIFY-1
+    legacy headers, accepted by the bridge only while LEGACY_TOKEN_AUTH=1). There is no fallback key.
     """
     @classmethod
     def _get_secret_key(cls) -> str:
-        """Lazily fetches the secret key from config to avoid import-time race conditions."""
-        from services.utils.jarvis_config import config
+        """Lazily fetches the secret key from config to avoid import-time race conditions.
+        Raises RuntimeError when VORTEX_SECURITY_TOKEN is not set."""
+        from services.utils.jarvis_config import config  # pylint: disable=import-outside-toplevel
         token = config.security_token
         if not token:
-            logger.critical("❌ SECURITY VIOLATION: VORTEX_SECURITY_TOKEN not set!")
-            return "insecure_default_secret_token_change_immediately"
+            _critical_once("VORTEX_SECURITY_TOKEN",
+                           "❌ VORTEX_SECURITY_TOKEN is not set: legacy notify signatures are off")
+            raise RuntimeError("VORTEX_SECURITY_TOKEN is not set: no key for the legacy signature")
         return str(token)
 
     @classmethod
     def generate_signature(cls, payload: str) -> str:
-        """Generate HMAC-SHA256 signature for a payload."""
+        """HMAC-SHA256 signature of payload; raises RuntimeError when VORTEX_SECURITY_TOKEN is not set."""
         return hmac.new(
             cls._get_secret_key().encode(),
             payload.encode(),
@@ -382,10 +438,15 @@ class SecurityManager:
         ).hexdigest()
 
     @classmethod
-    def verify_signature(cls, payload: str, signature: str) -> bool:
-        """Verify the integrity of a signed payload."""
-        expected = cls.generate_signature(payload)
-        return hmac.compare_digest(expected, signature)
+    def verify_signature(cls, payload: str, signature: Any) -> bool:
+        """True when signature matches payload; False for any other signature or without a key."""
+        if not isinstance(signature, str) or not _HEX_SHA256.fullmatch(signature):
+            return False
+        try:
+            expected = cls.generate_signature(payload)
+        except RuntimeError:
+            return False
+        return hmac.compare_digest(expected, signature.lower())
 
 
 # Global instances

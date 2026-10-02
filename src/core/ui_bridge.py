@@ -5,35 +5,46 @@ WebSocket server to bridge JARVIS core events to the React-based STONIX UI.
 What must survive a restart (chat messages, logs, memories, tool logs, persona, mute, wake word,
 location, voice match, SIM results) lives in the SQLite store (src/core/bridge_store.py,
 C-STATE-1); BridgeStateManager keeps only volatile flags.
+
+Agent link v2 (C-14, C-SOCK-1 / C-NOTIFY-1): every Socket.IO client gets a role at connect. An agent
+(auth.agent_token = AGENT_TOKEN) joins room 'agent'; the legacy shared token joins BOTH rooms while
+LEGACY_TOKEN_AUTH=1 (today's broadcast, so the current UI and PC agent keep working); C-19 adds the
+session cookie for role 'ui' (room 'ui'). ui_command and vision_frame go only to room 'agent', every
+notify and periodic event only to room 'ui'. POST /notify is authenticated before it changes anything.
 """
 
 import asyncio
 import copy
-import json
+import ipaddress
 import math
 import os
 import time
 from collections import OrderedDict
-from collections.abc import AsyncGenerator, Awaitable
+from collections.abc import AsyncGenerator, Awaitable, Mapping
 from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
 from typing import Any, TypeVar, cast
+from urllib.parse import unquote
 
 import socketio
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from services.utils.jarvis_adaptive import adaptive_engine
-from services.utils.jarvis_config import config
+from services.utils.jarvis_config import ROLE_BRIDGE, config
 from services.utils.jarvis_health import health_monitor
 from services.utils.jarvis_logger import setup_logger
-from services.utils.jarvis_security import security_manager
 from services.utils.jarvis_telemetry import telemetry
+from src.core import bridge_security
+from src.core.bridge_security import NonceCache, NotifyAuthError, TokenBucket, same_secret
 from src.core.bridge_store import (
     EVENT_LOG,
     EVENT_MEMORY,
     EVENT_TOOL,
     MESSAGE_PAGE_MAX,
+    SEEN_NOTIFY,
     BridgeStore,
     bridge_db_path,
     event_retention_days,
@@ -42,22 +53,54 @@ from src.core.bridge_store import (
     ui_message,
 )
 
-# Validate on import/startup
-config.validate()
+# Validate on import/startup: only what the bridge itself uses (LiveKit keys, plus the legacy token
+# while LEGACY_TOKEN_AUTH is on); names are logged, values never.
+config.validate(ROLE_BRIDGE)
 
 logger = setup_logger("UI-BRIDGE")
 
-VORTEX_SECURITY_TOKEN: str = str(config.security_token) # Ensure string type
-ALLOWED_ORIGINS: list[str] = [o.strip() for o in config.allowed_origins if o.strip()]
-if "https://jarvis-agent-three.vercel.app" not in ALLOWED_ORIGINS:
-    ALLOWED_ORIGINS.append("https://jarvis-agent-three.vercel.app")
-print(f"DEBUG: FINAL ALLOWED_ORIGINS: {ALLOWED_ORIGINS}")
+# Legacy shared token ('' when unset: then nothing matches it).
+VORTEX_SECURITY_TOKEN: str = config.security_token or ""
+# Browser origins come only from ALLOWED_ORIGINS (K-49); '*' would switch the origin check off.
+ALLOWED_ORIGINS: list[str] = [o for o in config.allowed_origins if o != "*"]
+if len(ALLOWED_ORIGINS) != len(config.allowed_origins):
+    logger.warning("ALLOWED_ORIGINS: '*' ignored; list the allowed origins instead")
+logger.info("Allowed origins: %s", ", ".join(ALLOWED_ORIGINS) or "same origin only")
+_MISSING_LINK_KEYS = [name for name, value in (("AGENT_TOKEN", config.agent_token),
+                                                ("BRIDGE_HMAC_SECRET", config.bridge_hmac_secret))
+                      if not value]
+if _MISSING_LINK_KEYS:
+    logger.warning("Agent link v2 is off until %s %s set; agents use the legacy token (legacy auth %s)",
+                   " and ".join(_MISSING_LINK_KEYS), "is" if len(_MISSING_LINK_KEYS) == 1 else "are",
+                   "on" if config.legacy_token_auth else "OFF")
 
 sio: socketio.AsyncServer = socketio.AsyncServer(
     async_mode='asgi',
-    cors_allowed_origins=ALLOWED_ORIGINS,
+    # None = same origin only; an empty list would turn python-engineio's origin check off.
+    cors_allowed_origins=ALLOWED_ORIGINS or None,
     logger=False,
     engineio_logger=False)
+
+# Socket.IO roles and rooms (C-SOCK-1).
+ROOM_UI, ROOM_AGENT = "ui", "agent"
+ROLE_UI, ROLE_AGENT, ROLE_LEGACY = "ui", "agent", "legacy"
+ROLE_ROOMS: dict[str, tuple[str, ...]] = {
+    ROLE_UI: (ROOM_UI,),
+    ROLE_AGENT: (ROOM_AGENT,),
+    ROLE_LEGACY: (ROOM_UI, ROOM_AGENT),
+}
+# ui_command types the bridge forwards (C-EVT-1 / K-40 plus the dashboard set of DASH-UI-COMMANDS / K-03);
+# anything else is answered {status: 'rejected'}.
+UI_COMMAND_TYPES = frozenset({
+    "chat", "mute", "unmute", "wake_word_toggle", "stop", "start", "persona_change", "clear_memory",
+    "open_sim_panel", "sim_lookup", "swarm", "confirm_response", "settings_update", "desktop_stop",
+    "notification_ack", "shutdown_agent", "pause_agent", "task_cancel", "tasks_refresh",
+    "voice_take_over", "voice_enroll", "feedback", "job_cancel", "open_job_artifact", "request_state",
+})
+UI_COMMANDS_PER_S = 10.0
+VISION_FRAMES_PER_S = 1.0
+VISION_FRAME_MAX_CHARS = 600 * 1024
+_SHORT_TEXT = 64
 
 
 @asynccontextmanager
@@ -226,31 +269,41 @@ async def stored(action: str, call: Awaitable[T], fallback: T) -> T:
         return fallback
 
 
-async def verify_vortex_request(request: Request, data: dict[str, Any]) -> None:
-    """Verifies the token and signature for incoming requests."""
-    token: str | None = request.headers.get("X-Vortex-Token")
-    signature: str | None = request.headers.get("X-Vortex-Signature")
+def _peer_ip(peer: str, real_ip: str | None) -> str:
+    """The client address for logs and audit rows: nginx's X-Real-IP when the peer is the proxy (a
+    loopback or private address), else the peer itself."""
+    try:
+        behind_proxy = bool(peer) and (ipaddress.ip_address(peer).is_loopback
+                                       or ipaddress.ip_address(peer).is_private)
+    except ValueError:
+        behind_proxy = False
+    real = (real_ip or "").strip()
+    return real[:_SHORT_TEXT] if real and behind_proxy else (peer or "unknown")
 
-    if token != VORTEX_SECURITY_TOKEN:
-        logger.warning(
-            "UNAUTHORIZED /NOTIFY: Invalid Token from %s",
-            request.client.host if request.client else "unknown",
-        )
-        raise HTTPException(status_code=401, detail="Unauthorized")
 
-    if not signature:
-        logger.warning(
-            "UNAUTHORIZED /NOTIFY: Missing Signature from %s",
-            request.client.host if request.client else "unknown",
-        )
-        raise HTTPException(
-            status_code=401, detail="Missing Security Signature")
+def _request_ip(request: Request) -> str:
+    return _peer_ip(request.client.host if request.client else "", request.headers.get("x-real-ip"))
 
-    json_payload: str = json.dumps(data, sort_keys=True)
-    if not security_manager.verify_signature(json_payload, signature):
-        logger.warning("🚫 FORGED /NOTIFY: Signature Mismatch")
-        raise HTTPException(
-            status_code=403, detail="Signature Mismatch")
+
+def _legacy_header_ok(request: Request) -> bool:
+    """X-Vortex-Token equals the legacy token, and legacy auth is still on (C-AUTH-1 transition)."""
+    return config.legacy_token_auth and same_secret(request.headers.get("X-Vortex-Token"),
+                                                    VORTEX_SECURITY_TOKEN)
+
+
+async def emit_ui(event: str, data: Any = None) -> None:
+    """Every notify and periodic event goes only to room 'ui' (UI sockets and legacy sockets)."""
+    await sio.emit(event, data, to=ROOM_UI)
+
+
+# Replay protection for signed notifies: in memory for speed, in the store across bridge restarts.
+_notify_nonces = NonceCache()
+
+
+async def _mark_nonce_seen(nonce: str) -> bool:
+    """False when the store saw this nonce before (a replay across a restart); a failing store counts
+    as unseen, since the in-memory cache has already checked it."""
+    return await stored("notify nonce", store.mark_seen(SEEN_NOTIFY, nonce), True)
 
 
 def update_rate_limit(request: Request) -> None:
@@ -263,7 +316,8 @@ def update_rate_limit(request: Request) -> None:
 
     if len(window) > 500:
         logger.warning("⚠️ RATE LIMIT TRIGGERED on /notify")
-        raise HTTPException(status_code=429, detail="Throttling")
+        raise HTTPException(status_code=429, detail="Throttling",
+                            headers=bridge_security.retry_after_header(60 - (now - window[0])))
 
     window.append(now)
     request.app.state.rate_limit_window = window
@@ -277,7 +331,7 @@ async def _handle_status_event(payload: Any) -> None:
     if state["speaking"]:
         await bridge_manager.update_state("thinking", False)
 
-    await sio.emit("status_change", {
+    await emit_ui("status_change", {
         "speaking": state["speaking"],
         "thinking": state.get("thinking", False),
     })
@@ -288,7 +342,7 @@ async def _handle_thinking_event(payload: Any) -> None:
     is_thinking: bool = payload == "START"
     await bridge_manager.update_state("thinking", is_thinking)
     speaking: bool = cast(bool, await bridge_manager.get_field("speaking", False))
-    await sio.emit("status_change", {
+    await emit_ui("status_change", {
         "speaking": speaking,
         "thinking": is_thinking,
     })
@@ -309,39 +363,48 @@ async def _handle_transcription_event(payload: Any) -> None:
 
     logger.info("📝 Transcription: role=%s, id=%s (%s)", msg["role"], msg["id"], status)
 
-    await sio.emit("new_message" if status == "new" else "update_message", msg)
-    await sio.emit("transcription_update", {"text": msg["text"]})
+    await emit_ui("new_message" if status == "new" else "update_message", msg)
+    await emit_ui("transcription_update", {"text": msg["text"]})
 
 
 @app.post("/notify")
-async def notify_bridge(data: dict[str, Any], request: Request) -> dict[str, str]:
+async def notify_bridge(request: Request) -> Any:
     """
-    Main notification endpoint for JARVIS updates.
-    Routes events to connected UI clients after auth.
+    Main notification endpoint for JARVIS updates (C-NOTIFY-1).
+    The raw body is authenticated first (agent HMAC v2, or the legacy headers while
+    LEGACY_TOKEN_AUTH=1); only then does the runner contact count and the event reach room 'ui'.
     """
-    health_monitor.record_heartbeat("ui_bridge")
-    # Using bridge_manager instead of the removed bridge_state
-    await bridge_manager.update_state("last_runner_contact", time.time())
+    try:
+        raw = await bridge_security.read_body(request)
+        auth = await bridge_security.verify_notify_request(
+            request, raw, agent_token=config.agent_token, legacy_token=VORTEX_SECURITY_TOKEN,
+            legacy_enabled=config.legacy_token_auth, nonces=_notify_nonces,
+            mark_seen=_mark_nonce_seen)
+    except NotifyAuthError as exc:
+        logger.warning("🚫 /notify refused (%d %s) from %s", exc.status, exc.error, _request_ip(request))
+        return JSONResponse({"error": exc.error}, status_code=exc.status, headers=exc.headers)
 
-    await verify_vortex_request(request, data)
+    health_monitor.record_heartbeat("ui_bridge")
+    await bridge_manager.update_state("last_runner_contact", time.time())
     update_rate_limit(request) # Corrected to pass request context
 
+    data: dict[str, Any] = auth.data
     event_type: str | None = data.get("type")
     if not isinstance(event_type, str):
         return {"status": "ignored", "reason": "missing_type"}
     payload: Any = data.get("payload")
 
     async def _handle_token(p: dict[str, Any]) -> None:
-        await sio.emit("token_stream", p)
+        await emit_ui("token_stream", p)
 
     async def _handle_vitals_event(p: dict[str, Any]) -> None:
-        await sio.emit("vitals_update", p)
+        await emit_ui("vitals_update", p)
 
     async def _handle_reasoning(p: dict[str, Any]) -> None:
-        await sio.emit("reasoning_update", p)
+        await emit_ui("reasoning_update", p)
 
     async def _handle_intelligence(p: dict[str, Any]) -> None:
-        await sio.emit("intelligence_update", p)
+        await emit_ui("intelligence_update", p)
 
     handlers: dict[str, Any] = {
         "status": _handle_status_event,
@@ -359,41 +422,41 @@ async def notify_bridge(data: dict[str, Any], request: Request) -> dict[str, str
         await handler(payload)
     elif event_type == "location_sync":
         await stored("location", store.kv_set("location", payload), None)
-        await sio.emit("location_update", payload)
+        await emit_ui("location_update", payload)
     elif event_type == "mute_sync":
         await stored("mute", store.kv_set("muted", payload), None)
-        await sio.emit("mute_update", payload)
+        await emit_ui("mute_update", payload)
     elif event_type == "wake_word_sync":
         await stored("wake word", store.kv_set("wake_word_active", payload), None)
-        await sio.emit("wake_word_update", payload)
+        await emit_ui("wake_word_update", payload)
     elif event_type == "vortex_log":
         await stored("log", store.append_event(EVENT_LOG, payload), 0)
-        await sio.emit("new_log", payload)
+        await emit_ui("new_log", payload)
     elif event_type == "user_speaking_sync":
         await bridge_manager.update_state("user_speaking", payload)
         if payload:
             await bridge_manager.update_state("last_user_speak_pulse", time.time())
-        await sio.emit("user_status_change", {"speaking": payload})
+        await emit_ui("user_status_change", {"speaking": payload})
     elif event_type == "voice_id_sync":
         confidence: float = payload.get("confidence", 0.0) if isinstance(payload, dict) else 0.0
         await stored("voice match", store.kv_set("voice_match", confidence), None)
-        await sio.emit("voice_match_update", payload)
+        await emit_ui("voice_match_update", payload)
     elif event_type == "persona_change":
         await stored("persona", store.kv_set("active_persona", payload), None)
-        await sio.emit("persona_update", {"persona": payload})
+        await emit_ui("persona_update", {"persona": payload})
     elif event_type == "task_alert":
         # Proactive task notification for the UI
         logger.info("🔔 Notifying UI of due task: %s", payload.get('description'))
-        await sio.emit("task_notification", payload)
+        await emit_ui("task_notification", payload)
     elif event_type == "task_update":
         # General task list sync
-        await sio.emit("task_sync", payload)
+        await emit_ui("task_sync", payload)
     elif event_type == "memory_update":
         await stored("memory", store.append_event(EVENT_MEMORY, payload), 0)
-        await sio.emit("memory_sync", payload)
+        await emit_ui("memory_sync", payload)
     elif event_type == "tool_sync":
         await stored("tool log", store.append_event(EVENT_TOOL, payload), 0)
-        await sio.emit("tool_update", payload)
+        await emit_ui("tool_update", payload)
     elif event_type == "sim_data_result":
         records: list[Any] = payload.get("records", []) if isinstance(payload, dict) else []
         query_masked: str = payload.get("phone", "") if isinstance(payload, dict) else ""
@@ -407,7 +470,7 @@ async def notify_bridge(data: dict[str, Any], request: Request) -> dict[str, str
             "sim_status": status,
             "sim_message": message,
         }), None)
-        await sio.emit("sim_data_result", payload)
+        await emit_ui("sim_data_result", payload)
     elif event_type == "sim_data_loading":
         query_masked = payload.get("query_masked", "") if isinstance(payload, dict) else ""
         bridge_manager.sim_loading_since = time.monotonic()
@@ -418,10 +481,10 @@ async def notify_bridge(data: dict[str, Any], request: Request) -> dict[str, str
             "sim_status": "loading",
             "sim_message": "Secure lookup workflow started.",
         }), None)
-        await sio.emit("sim_data_loading", payload)
+        await emit_ui("sim_data_loading", payload)
     elif event_type == "sim_panel_open":
         await bridge_manager.update_state("sim_panel_open", True)
-        await sio.emit("sim_panel_open", payload)
+        await emit_ui("sim_panel_open", payload)
     else:
         logger.warning("⚠️ UNKNOWN EVENT: %s", event_type)
 
@@ -444,7 +507,7 @@ async def get_messages(request: Request, before: float | None = None,
     never skipped; `before` wins when both are given.
     Auth: X-Vortex-Token header (legacy token, until the session login of OP-17).
     """
-    if request.headers.get("X-Vortex-Token") != VORTEX_SECURITY_TOKEN:
+    if not _legacy_header_ok(request):
         raise HTTPException(status_code=401, detail="Unauthorized")
     before_seq: int | None = None
     if before is None and cursor:
@@ -467,8 +530,7 @@ async def livekit_token(request: Request, identity: str = "web-user") -> dict[st
     Issue a LiveKit access token for the browser voice client.
     Auth: X-Vortex-Token header (same as UI socket auth).
     """
-    token_hdr: str | None = request.headers.get("X-Vortex-Token")
-    if token_hdr != VORTEX_SECURITY_TOKEN:
+    if not _legacy_header_ok(request):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     api_key = os.getenv("LIVEKIT_API_KEY", "")
@@ -567,8 +629,7 @@ async def get_production_telemetry() -> dict[str, Any]:
 @app.post("/feedback")
 async def record_user_feedback(data: dict[str, Any], request: Request) -> dict[str, str]:
     """Receives user feedback and updates adaptive engine."""
-    token: str | None = request.headers.get("X-Vortex-Token")
-    if token != VORTEX_SECURITY_TOKEN:
+    if not _legacy_header_ok(request):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     intent: str | None = data.get("intent")
@@ -596,7 +657,7 @@ async def vitals_heartbeat() -> None:
                 "disk": vitals.get("disk", {}).get("percent", 0),
             }
             await bridge_manager.update_state("vitals", vitals_pkg)
-            await sio.emit("vitals_update", vitals_pkg)
+            await emit_ui("vitals_update", vitals_pkg)
         except asyncio.CancelledError:
             logger.info("Vitals heartbeat task cancelled.")
             break
@@ -615,7 +676,7 @@ async def telemetry_heartbeat() -> None:
         try:
             metrics: dict[str, Any] = await telemetry.get_production_metrics()
             await bridge_manager.update_state("telemetry", metrics)
-            await sio.emit("telemetry_update", metrics)
+            await emit_ui("telemetry_update", metrics)
         except asyncio.CancelledError:
             logger.info("Telemetry heartbeat task cancelled.")
             break
@@ -636,7 +697,7 @@ async def user_speaking_monitor() -> None:
             if state.get("user_speaking"):
                 if time.time() - state.get("last_user_speak_pulse", 0) > 1.5:
                     await bridge_manager.update_state("user_speaking", False)
-                    await sio.emit("user_status_change", {"speaking": False})
+                    await emit_ui("user_status_change", {"speaking": False})
         except asyncio.CancelledError:
             logger.info("User speaking monitor task cancelled.")
             break
@@ -716,55 +777,182 @@ async def build_init_state() -> dict[str, Any]:
     return state
 
 
+@dataclass
+class SocketClient:
+    """One authenticated Socket.IO connection (C-SOCK-1)."""
+
+    role: str
+    ip: str
+    since: float = field(default_factory=time.time)
+    host: str = ""
+    version: str = ""
+    commands: TokenBucket = field(default_factory=lambda: TokenBucket(UI_COMMANDS_PER_S))
+    frames: TokenBucket = field(default_factory=lambda: TokenBucket(VISION_FRAMES_PER_S))
+
+
+_clients: dict[str, SocketClient] = {}
+# Audit rows for refused sockets: a steady trickle, so a flood of bad connects cannot fill the disk.
+_refusal_audit = TokenBucket(1.0, 30.0)
+
+
+def _short(value: Any) -> str:
+    """A client-supplied label for logs and the session: printable characters only, cut short."""
+    return "".join(ch for ch in str(value or "") if ch.isprintable())[:_SHORT_TEXT]
+
+
+def _rejected(reason: str) -> dict[str, str]:
+    return {"status": "rejected", "reason": reason}
+
+
+def _legacy_tokens(environ: Mapping[str, Any], auth: Mapping[str, Any]) -> list[Any]:
+    """auth.token, else the last ?token= query parameter, as sent and percent-decoded."""
+    token = auth.get("token")
+    if token:
+        return [token]
+    raw = ""
+    for part in str(environ.get("QUERY_STRING") or "").split("&"):
+        name, sep, value = part.partition("=")
+        if sep and name == "token":
+            raw = value
+    return list(dict.fromkeys((raw, unquote(raw)))) if raw else []
+
+
+def _socket_role(environ: Mapping[str, Any], auth: Any) -> tuple[str | None, str]:
+    """(role, '') for valid credentials, else (None, reason). An agent_token decides on its own; the
+    legacy token counts only while LEGACY_TOKEN_AUTH=1. C-19 adds the jarvis_session cookie (role 'ui')."""
+    auth = auth if isinstance(auth, dict) else {}
+    if "agent_token" in auth:
+        if same_secret(auth.get("agent_token"), config.agent_token):
+            return ROLE_AGENT, ""
+        return None, "bad_agent_token"
+    tokens = _legacy_tokens(environ, auth)
+    if not tokens:
+        return None, "no_credentials"
+    if not config.legacy_token_auth:
+        return None, "legacy_off"
+    if any(same_secret(token, VORTEX_SECURITY_TOKEN) for token in tokens):
+        return ROLE_LEGACY, ""
+    return None, "bad_token"
+
+
+def _socket_ip(environ: Mapping[str, Any]) -> str:
+    scope = environ.get("asgi.scope")
+    peer = scope.get("client") if isinstance(scope, dict) else None
+    return _peer_ip(str(peer[0]) if peer else "", environ.get("HTTP_X_REAL_IP"))
+
+
+async def _join_rooms(sid: str, client: SocketClient) -> None:
+    """Puts the socket in its role's rooms and records the role in its Socket.IO session."""
+    try:
+        for room in ROLE_ROOMS[client.role]:
+            await sio.enter_room(sid, room)
+        await sio.save_session(sid, {"role": client.role, "ip": client.ip, "since": client.since})
+    except (KeyError, ValueError):  # no such live socket (it has already gone)
+        logger.debug("Socket %s left before joining its rooms", sid)
+
+
+def _agent_status(client: SocketClient) -> dict[str, Any]:
+    """agent_status for room 'ui' while an agent socket is connected (C-SOCK-1); C-23 adds voice_ready,
+    paused and heartbeats."""
+    return {"online": True, "since": client.since, "host": client.host, "version": client.version}
+
+
 @sio.on("connect") # type: ignore[untyped-decorator]
 async def handle_connect(sid: str, environ: dict[str, Any], auth: dict[str, Any] | None = None) -> bool:
     """
-    Handle new UI connections with Zero-Trust Authentication.
-    Accepts token via 'auth' payload or query string for maximum compatibility.
+    Socket.IO roles (C-SOCK-1): auth.agent_token = AGENT_TOKEN -> 'agent' (room 'agent');
+    auth.token or ?token= = VORTEX_SECURITY_TOKEN -> 'legacy' in both rooms while LEGACY_TOKEN_AUTH=1.
+    Anything else is refused (False) and audited as 'socket_auth_failed'. UI and legacy sockets get
+    init_state; the first agent socket turns agent_status online.
     """
-    token: str | None = None
-
-    # 1. Check Auth Payload (Recommended)
-    if auth and isinstance(auth, dict):
-        token = auth.get("token")
-
-    # 2. Fallback to Query String
-    if not token:
-        query_string = environ.get('QUERY_STRING', '')
-        params = dict(qc.split('=') for qc in query_string.split('&') if '=' in qc)
-        token = params.get('token')
-
-    if token != VORTEX_SECURITY_TOKEN:
-        logger.warning("🚨 UNAUTHORIZED UI CONNECT attempt from SID: %s", sid)
-        # Returning False refuses the connection in python-socketio
+    role, reason = _socket_role(environ, auth)
+    ip = _socket_ip(environ)
+    if role is None:
+        logger.warning("🚨 Socket refused (%s) from %s: %s", reason, ip, sid)
+        if _refusal_audit.take():
+            await stored("audit", store.audit("anonymous", "socket_auth_failed",
+                                              {"reason": reason, "sid": sid}, ip), 0)
         return False
 
-    logger.info("✅ UI Authenticated & Connected: %s", sid)
+    client = SocketClient(role=role, ip=ip)
+    if role == ROLE_AGENT and isinstance(auth, dict):
+        client.host, client.version = _short(auth.get("agent_id")), _short(auth.get("version"))
+    _clients[sid] = client
+    await _join_rooms(sid, client)
+    logger.info("✅ Socket connected: role=%s sid=%s from %s%s", role, sid, ip,
+                f" host={client.host}" if client.host else "")
+    if role == ROLE_AGENT:
+        if sum(1 for c in _clients.values() if c.role == ROLE_AGENT) == 1:
+            await emit_ui("agent_status", _agent_status(client))
+        return True
     state: dict[str, Any] = await build_init_state()
     await sio.emit('init_state', state, room=sid)
     return True
 
 
 @sio.on("disconnect") # type: ignore[untyped-decorator]
-async def handle_disconnect(sid: str) -> None:
-    """Handle UI disconnections."""
-    logger.info("UI Disconnected: %s", sid)
+async def handle_disconnect(sid: str, *_reason: Any) -> None:
+    """Forgets the socket; when the last agent socket leaves, agent_status goes offline in room 'ui'."""
+    client = _clients.pop(sid, None)
+    logger.info("Socket disconnected: role=%s sid=%s", client.role if client else "unknown", sid)
+    if client is not None and client.role == ROLE_AGENT and not any(
+            c.role == ROLE_AGENT for c in _clients.values()):
+        await emit_ui("agent_status", {"online": False, "since": time.time()})
+
+
+@sio.on("agent_hello") # type: ignore[untyped-decorator]
+async def handle_agent_hello(sid: str, data: Any) -> dict[str, str]:
+    """The only event an agent socket may send: {version, host} (C-SOCK-1)."""
+    client = _clients.get(sid)
+    if client is None or client.role != ROLE_AGENT:
+        return _rejected("not_allowed")
+    if isinstance(data, dict):
+        client.version = _short(data.get("version")) or client.version
+        client.host = _short(data.get("host")) or client.host
+    logger.info("Agent hello: host=%s version=%s sid=%s", client.host or "-", client.version or "-", sid)
+    await emit_ui("agent_status", _agent_status(client))
+    return {"status": "ok"}
 
 
 @sio.on('ui_command') # type: ignore[untyped-decorator]
-async def handle_ui_command(_sid: str, data: Any) -> dict[str, str]:
-    """Relay commands from UI to the Agent."""
-    if isinstance(data, dict) and data.get("type") == "chat" and isinstance(data.get("payload"), dict):
+async def handle_ui_command(sid: str, data: Any) -> dict[str, str]:
+    """
+    Relays a dashboard command to room 'agent' (C-SOCK-1): only from UI or legacy sockets, at most 10 a
+    second per socket, and only the allow-listed types. Ack {status: 'sent'} or {status: 'rejected', reason}.
+    """
+    client = _clients.get(sid)
+    if client is None or client.role not in (ROLE_UI, ROLE_LEGACY):
+        logger.warning("ui_command refused from role=%s sid=%s", client.role if client else "none", sid)
+        return _rejected("not_allowed")
+    if not client.commands.take():
+        logger.debug("ui_command rate-limited for sid=%s", sid)
+        return _rejected("rate_limited")
+    cmd_type = data.get("type") if isinstance(data, dict) else None
+    if not isinstance(cmd_type, str) or cmd_type not in UI_COMMAND_TYPES:
+        logger.warning("ui_command rejected: unknown type '%s'", _short(cmd_type))
+        return _rejected("unknown_type")
+    if cmd_type == "chat" and isinstance(data.get("payload"), dict):
         bridge_manager.remember_chat_id(data["payload"].get("id"))
-    await sio.emit('agent_command', data)
-    return {"status": "success"}
+    await sio.emit('agent_command', data, to=ROOM_AGENT)
+    return {"status": "sent"}
 
 
 @sio.on('vision_frame') # type: ignore[untyped-decorator]
-async def handle_vision_frame(_sid: str, data: Any) -> dict[str, str]:
-    """Relay camera frame from UI to the Agent."""
-    await sio.emit('agent_vision_frame', data)
-    return {"status": "success"}
+async def handle_vision_frame(sid: str, data: Any) -> dict[str, str]:
+    """
+    Relays a camera frame to room 'agent' (C-SOCK-1, K-05): only from UI or legacy sockets, at most one a
+    second per socket and at most 600 KB of frame data.
+    """
+    client = _clients.get(sid)
+    if client is None or client.role not in (ROLE_UI, ROLE_LEGACY):
+        return _rejected("not_allowed")
+    frame = data.get("frame") if isinstance(data, dict) else data
+    if isinstance(frame, (str, bytes)) and len(frame) > VISION_FRAME_MAX_CHARS:
+        return _rejected("too_large")
+    if not client.frames.take():
+        return _rejected("rate_limited")
+    await sio.emit('agent_vision_frame', data, to=ROOM_AGENT)
+    return {"status": "sent"}
 
 
 if __name__ == "__main__":

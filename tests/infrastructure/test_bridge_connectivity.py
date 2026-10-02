@@ -1,57 +1,79 @@
-import asyncio
-import httpx
-import time
+"""Live probes of a running UI bridge (plan task C-14; marker 'live').
+
+Skipped unless JARVIS_LIVE_BRIDGE_URL names the bridge, for example
+    JARVIS_LIVE_BRIDGE_URL=https://jarvis.srv1802669.hstgr.cloud/vortex $PY -m pytest -m live tests/infrastructure -q
+Credentials come from the environment through jarvis_config (the root .env): VORTEX_SECURITY_TOKEN for the legacy
+probe, AGENT_TOKEN + BRIDGE_HMAC_SECRET for the signed one; a probe whose credentials are missing is skipped. No
+credential is printed. The only events sent are 'qa_ping' (no UI effect) and forgeries the bridge must refuse.
+"""
+from __future__ import annotations
+
+import json
 import os
-from dotenv import load_dotenv
+import secrets
+import time
 
-load_dotenv()
+import httpx
+import pytest
 
-VORTEX_SECURITY_TOKEN = os.getenv(
-    "VORTEX_SECURITY_TOKEN", "jarvis_secure_token_2025")
-BRIDGE_URL = "http://localhost:5001"
+from services.utils.jarvis_config import config
+from services.utils.jarvis_security import security_manager, sign_notify
+
+BRIDGE_URL = (os.getenv("JARVIS_LIVE_BRIDGE_URL") or "").strip().rstrip("/")
+pytestmark = [pytest.mark.live,
+              pytest.mark.skipif(not BRIDGE_URL, reason="set JARVIS_LIVE_BRIDGE_URL to probe a running bridge")]
+TIMEOUT = 15.0
 
 
-async def verify_ui_bridge_endpoints():
-    print("Starting UI Bridge Connectivity Verification (Header-Based Auth)...")
+def _body(n: int) -> bytes:
+    return json.dumps({"type": "qa_ping", "payload": {"n": n}}, separators=(",", ":")).encode()
 
-    headers = {"X-Vortex-Token": VORTEX_SECURITY_TOKEN}
 
-    async with httpx.AsyncClient() as client:
-        # 1. Test Health Endpoint
-        try:
-            resp = await client.get(f"{BRIDGE_URL}/health")
-            print(f"[HEALTH] Code: {resp.status_code}, Body: {resp.json()}")
-        except Exception as e:
-            print(f"[HEALTH] Failed: {e}")
+def _agent_headers(raw: bytes, token: str) -> dict[str, str]:
+    ts, nonce = str(int(time.time())), secrets.token_hex(16)
+    return {"Content-Type": "application/json", "X-Agent-Token": token, "X-Agent-Timestamp": ts,
+            "X-Agent-Nonce": nonce, "X-Agent-Signature": sign_notify(ts, nonce, raw)}
 
-        # 2. Test Secure Notify Endpoint
-        print("\n[NOTIFY] Testing auth and message routing...")
-        payload = {
-            "type": "TEST_EVENT",
-            "data": {"message": "Verification Pulse", "timestamp": time.time()}
-        }
-        try:
-            resp = await client.post(f"{BRIDGE_URL}/notify", json=payload, headers=headers)
-            print(f"[NOTIFY] Code: {resp.status_code}, Body: {resp.json()}")
-            if resp.status_code == 200:
-                print("[NOTIFY] Authentication and routing PASSED.")
-            else:
-                print("[NOTIFY] Verification FAILED.")
-        except Exception as e:
-            print(f"[NOTIFY] Request Error: {e}")
 
-        # 3. Test Unauthorized Access
-        print("\n[AUTH] Testing security gate (invalid token)...")
-        bad_headers = {"X-Vortex-Token": "WRONG_TOKEN"}
-        try:
-            resp = await client.post(f"{BRIDGE_URL}/notify", json=payload, headers=bad_headers)
-            if resp.status_code == 401:
-                print("[AUTH] Blocked invalid access as expected (401).")
-            else:
-                print(
-                    f"[AUTH] SECURITY GAP: Allowed request with code {resp.status_code}")
-        except Exception as e:
-            print(f"[AUTH] Error: {e}")
+async def test_health_answers():
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        resp = await client.get(f"{BRIDGE_URL}/health")
+    assert resp.status_code == 200
 
-if __name__ == "__main__":
-    asyncio.run(verify_ui_bridge_endpoints())
+
+async def test_forged_notifies_are_refused():
+    raw = _body(0)
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        forged_agent = await client.post(f"{BRIDGE_URL}/notify", content=raw, headers={
+            "Content-Type": "application/json", "X-Agent-Token": "c14-wrong-" + secrets.token_hex(8),
+            "X-Agent-Timestamp": str(int(time.time())), "X-Agent-Nonce": secrets.token_hex(16),
+            "X-Agent-Signature": "0" * 64})
+        forged_legacy = await client.post(f"{BRIDGE_URL}/notify", content=raw, headers={
+            "Content-Type": "application/json", "X-Vortex-Token": "c14-wrong-" + secrets.token_hex(8),
+            "X-Vortex-Signature": "0" * 64})
+        nothing = await client.post(f"{BRIDGE_URL}/notify", content=raw,
+                                    headers={"Content-Type": "application/json"})
+    assert (forged_agent.status_code, forged_legacy.status_code, nothing.status_code) == (401, 401, 401)
+
+
+async def test_the_legacy_headers_still_work():
+    if not config.security_token:
+        pytest.skip("VORTEX_SECURITY_TOKEN is not set here")
+    raw = _body(1)
+    signature = security_manager.generate_signature(json.dumps(json.loads(raw), sort_keys=True))
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        resp = await client.post(f"{BRIDGE_URL}/notify", content=raw, headers={
+            "Content-Type": "application/json", "X-Vortex-Token": config.security_token,
+            "X-Vortex-Signature": signature})
+    assert resp.status_code == 200, "legacy auth is off on this bridge (LEGACY_TOKEN_AUTH=0) or the token differs"
+
+
+async def test_a_signed_notify_is_accepted_once():
+    if not (config.agent_token and config.bridge_hmac_secret):
+        pytest.skip("AGENT_TOKEN and BRIDGE_HMAC_SECRET are not both set here")
+    raw = _body(2)
+    headers = _agent_headers(raw, config.agent_token)
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        first = await client.post(f"{BRIDGE_URL}/notify", content=raw, headers=headers)
+        replay = await client.post(f"{BRIDGE_URL}/notify", content=raw, headers=headers)
+    assert (first.status_code, replay.status_code) == (200, 409)

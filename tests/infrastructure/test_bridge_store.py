@@ -730,9 +730,10 @@ async def test_agent_transcription_is_stored_and_emitted_as_assistant(bridge):
 
 
 async def test_typed_exchange_survives_restart_and_reload_with_the_same_ids(bridge):
+    await _connect_ui(bridge, "sid-ui")  # since C-14 only an authenticated UI socket may send ui_command
     ack = await bridge.module.handle_ui_command("sid-ui", {"type": "chat",
                                                            "payload": {"id": "u-123", "text": "hello"}})
-    assert ack == {"status": "success"}
+    assert ack == {"status": "sent"}  # C-SOCK-1 ack (was 'success' before C-14)
     assert _events(bridge, "agent_command") == [{"type": "chat", "payload": {"id": "u-123", "text": "hello"}}]
     await _notify(bridge.module, "transcription", {"id": "u-123", "role": "user", "text": "hello",
                                                    "timestamp": T0})

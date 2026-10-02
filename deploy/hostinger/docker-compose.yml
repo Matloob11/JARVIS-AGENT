@@ -29,16 +29,23 @@ services:
     container_name: jarvis-bridge
     ports:
       - "5101:5001"
+    # bridge.env (root 600, gitignored; scripts/ops/gen_secrets.py --vps writes it) holds the agent link
+    # secrets (C-ENV-1). Optional, so the bridge also starts before it exists; its values win over .env.
     env_file:
       - .env
+      - path: bridge.env
+        required: false
     environment:
+      JARVIS_ROLE: bridge
       VORTEX_ENV: production
       JARVIS_SHARED_DIR: /app/Jarvis_Shared
-      UI_BRIDGE_URL: http://187.127.123.235:5101
       LIVEKIT_URL: ws://jarvis-livekit:7880
       LIVEKIT_PUBLIC_URL: wss://jarvis.srv1802669.hstgr.cloud
       JARVIS_ROOM_NAME: jarvis-hybrid
-      ALLOWED_ORIGINS: https://jarvis.srv1802669.hstgr.cloud,http://187.127.123.235:5100,http://127.0.0.1:5100,http://localhost:5100
+      # Env only (K-49): the domain and the Vite dev origins; no raw-IP or Vercel origins
+      ALLOWED_ORIGINS: https://jarvis.srv1802669.hstgr.cloud,http://127.0.0.1:5173,http://localhost:5173
+      COOKIE_PATH: /vortex
+      COOKIE_SECURE: "1"
       # Bridge SQLite store (C-STATE-1); backup_vps.sh copies it online
       BRIDGE_DB_PATH: /app/data/bridge.db
     depends_on:

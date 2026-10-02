@@ -11,12 +11,18 @@ from services.utils.jarvis_security import redact_secrets
 
 # Import config safely
 try:
-    from services.utils.jarvis_config import config
+    from services.utils.jarvis_config import ROLE_AGENT, config, runtime_role
     _HAS_CONFIG: bool = True
 except ImportError:
     # Fallback for early startup or standalone scripts
     config = cast(Any, None)
     _HAS_CONFIG = False
+    ROLE_AGENT = "agent"
+
+    def runtime_role() -> str:
+        """JARVIS_ROLE without the config module (agent when unset)."""
+        import os  # pylint: disable=import-outside-toplevel
+        return (os.getenv("JARVIS_ROLE") or "").strip().lower() or ROLE_AGENT
 
 # Internal UI Bridge link for automated logging
 _BRIDGE_NOTIFY_LOG: Callable[[str, str], Any] | None = None
@@ -283,8 +289,8 @@ def setup_logger(name: str, log_file: str | Path | None = None,
     logger.addHandler(console_handler)
     logger.addHandler(file_handler)
 
-    # Attach UI Bridge handler if config allows and not already attached
-    if not any(isinstance(h, UIBridgeHandler) for h in logger.handlers):
+    # Only the agent forwards its logs to the UI: the bridge must not POST its own logs to itself (C-14).
+    if runtime_role() == ROLE_AGENT and not any(isinstance(h, UIBridgeHandler) for h in logger.handlers):
         ui_handler: UIBridgeHandler = UIBridgeHandler()
         ui_handler.setLevel(logging.INFO)
         logger.addHandler(ui_handler)

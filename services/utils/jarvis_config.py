@@ -17,6 +17,8 @@ _FALSE_WORDS = frozenset({"0", "false", "no", "off"})
 # Optional second drive: used for media, open roots and the file server only when it exists (this PC has only C:).
 _D_DRIVE = "D:/"
 _FFMPEG_FALLBACK_DIR = "C:/ffmpeg/bin"
+# Browser origins the bridge accepts when ALLOWED_ORIGINS is unset or empty: the Vite dev server (K-49).
+_DEV_ORIGINS = ("http://localhost:5173", "http://127.0.0.1:5173")
 _PINCHTAB_URL = "http://127.0.0.1:9867"
 _WHATSAPP_APP_ID = "5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App"
 # Windows long-path prefixes \\?\ and \\?\UNC\ (os.path.realpath keeps them when its input had one).
@@ -180,6 +182,13 @@ def _env_list(name: str, default: list[str], paths: bool = True) -> list[str]:
     return items or list(default)
 
 
+def _env_origins(name: str) -> list[str]:
+    """','-separated browser origins, each without spaces or a trailing '/'; unset or empty gives the Vite dev
+    origins. Nothing is appended in code: the deployed list comes only from the environment (K-49)."""
+    origins = [part.strip().rstrip("/") for part in (os.getenv(name) or "").split(",")]
+    return list(dict.fromkeys(origin for origin in origins if origin)) or list(_DEV_ORIGINS)
+
+
 def _unique(paths: list[str]) -> list[str]:
     """Drops repeated folders (compared case-insensitively on Windows); keeps the first spelling."""
     seen: set[str] = set()
@@ -322,6 +331,10 @@ class JarvisConfig:
 
     env: str
     security_token: str | None
+    agent_token: str | None
+    bridge_hmac_secret: str | None
+    legacy_token_auth: bool
+    bridge_db_path: str
     bridge_url: str
     ui_bridge_url: str
     google_api_key: str | None
@@ -376,6 +389,8 @@ class JarvisConfig:
     _SETTING_ATTRS = {
         "GOOGLE_API_KEY": "google_api_key",
         "VORTEX_SECURITY_TOKEN": "security_token",
+        "AGENT_TOKEN": "agent_token",
+        "BRIDGE_HMAC_SECRET": "bridge_hmac_secret",
         "LIVEKIT_API_KEY": "livekit_key",
         "LIVEKIT_API_SECRET": "livekit_secret",
         "DESKTOP_PC_SIGNING_KEY": "desktop_pc_signing_key",
@@ -385,7 +400,12 @@ class JarvisConfig:
         """Loads environment variables and sets up configuration attributes."""
         _load_env_files()
         self.env = os.getenv("VORTEX_ENV", "development").lower()
+        # Legacy shared token (UI and agent alike); accepted by the bridge only while LEGACY_TOKEN_AUTH is on.
         self.security_token = os.getenv("VORTEX_SECURITY_TOKEN")
+        # Agent link v2 (C-SOCK-1, C-NOTIFY-1): the agent's own bridge token and the notify HMAC key.
+        self.agent_token = _env_str("AGENT_TOKEN")
+        self.bridge_hmac_secret = _env_str("BRIDGE_HMAC_SECRET")
+        self.legacy_token_auth = _env_bool("LEGACY_TOKEN_AUTH", True)
         self.bridge_url = os.getenv("UI_BRIDGE_URL", "http://127.0.0.1:5001")
         self.ui_bridge_url = self.bridge_url  # alias for compatibility
 
@@ -433,11 +453,9 @@ class JarvisConfig:
         self.backups_dir = os.path.join(self.project_root, "backups")
 
         # Network
-        origins: str = os.getenv(
-            "ALLOWED_ORIGINS",
-            "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000",
-        )
-        self.allowed_origins = origins.split(",")
+        self.allowed_origins = _env_origins("ALLOWED_ORIGINS")
+        # Bridge SQLite store (C-STATE-1); the same rule as src/core/bridge_store.bridge_db_path().
+        self.bridge_db_path = _env_str("BRIDGE_DB_PATH") or os.path.join(self.project_root, "data", "bridge.db")
 
         # Shared Assets: JARVIS_SHARED_DIR wins; the default is ~/Jarvis_Shared because this PC has no D: drive
         self.shared_dir = _env_path("JARVIS_SHARED_DIR") or os.path.join(home, "Jarvis_Shared")
@@ -537,7 +555,9 @@ class JarvisConfig:
           and JARVIS_ENCRYPTION_KEY;
         - svc: JARVIS_ENCRYPTION_KEY and DESKTOP_AGENT_SIGNING_KEY;
         - bridge: LIVEKIT_API_KEY/SECRET, plus VORTEX_SECURITY_TOKEN while the legacy token is in use
-          (LEGACY_TOKEN_AUTH unset or true);
+          (LEGACY_TOKEN_AUTH unset or true). AGENT_TOKEN and BRIDGE_HMAC_SECRET stay optional: without them
+          the public agent link v2 (C-14) is off and src/core/ui_bridge.py logs which names are missing;
+          the VPS brain's agents use the internal :5002 listener instead (K-38 v4);
         - desktop: DESKTOP_PC_SIGNING_KEY and DESKTOP_AGENT_PUBLIC_KEY.
         role and mode default to JARVIS_ROLE and JARVIS_DESKTOP_MODE; the mode matters only for the agent.
         A missing JARVIS_ENCRYPTION_KEY raises in every environment; any other missing key raises only in
