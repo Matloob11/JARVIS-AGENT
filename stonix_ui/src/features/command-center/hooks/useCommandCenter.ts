@@ -1103,6 +1103,7 @@ export const useCommandCenter = () => {
     simRequiresPurpose,
     isSimPanelOpen,
     confirmCurrent: confirmQueue.current,
+    confirmQueue: confirmQueue.queue,
     confirmQueueCount: confirmQueue.queueCount,
     confirmCancelNotice: confirmQueue.cancelNotice,
     respondConfirmAllow: (id: string) => respondConfirm(id, true),

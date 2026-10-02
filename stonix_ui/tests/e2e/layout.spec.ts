@@ -152,3 +152,51 @@ for (const size of phoneSizes) {
     expect(layout.composerBottom!).toBeLessThanOrEqual(layout.windowHeight + 1);
   });
 }
+
+const MOCK = 'http://127.0.0.1:5199';
+
+async function emitLongConfirm(page: Page) {
+  const lines = Array.from({ length: 36 }, (_, i) => `line ${i} do-work`).join('\n');
+  const res = await page.request.post(`${MOCK}/__mock/emit`, {
+    data: {
+      event: 'confirm_request',
+      payload: {
+        id: 'layout-long-confirm',
+        tool: 'run_shell',
+        summary: 'Layout long confirm',
+        risk: 'high',
+        args_preview: lines,
+        ttl_ms: 120_000,
+      },
+    },
+  });
+  expect(res.ok()).toBeTruthy();
+}
+
+async function composerFullyVisible(page: Page): Promise<boolean> {
+  return page.evaluate(() => {
+    const composer = document.querySelector('.command-input') as HTMLElement | null;
+    if (!composer) return false;
+    const rect = composer.getBoundingClientRect();
+    return rect.top >= -1 && rect.bottom <= window.innerHeight + 1 && rect.height > 0;
+  });
+}
+
+const confirmLayoutSizes: { width: number; height: number }[] = [
+  { width: 1024, height: 768 },
+  { width: 1200, height: 800 },
+  { width: 1280, height: 720 },
+  { width: 1366, height: 768 },
+  { width: 1536, height: 730 },
+  { width: 1672, height: 941 },
+  { width: 1920, height: 1080 },
+];
+
+for (const size of confirmLayoutSizes) {
+  test(`long confirm keeps composer visible at ${size.width}x${size.height}`, async ({ page }) => {
+    await page.setViewportSize(size);
+    await emitLongConfirm(page);
+    await expect(page.getByTestId('confirm-dialog')).toBeVisible();
+    await expect.poll(() => composerFullyVisible(page)).toBe(true);
+  });
+}

@@ -118,3 +118,88 @@ test('second confirm_request stays queued until first is handled', async ({ page
   await expect(page.getByText('Second queued action')).toBeVisible({ timeout: 10_000 });
   await expect(page.getByText('Queue: 1')).toBeVisible();
 });
+
+test('Enter never allows a pending confirmation', async ({ page }) => {
+  await emitConfirm(page, {
+    id: 'confirm-e2e-enter',
+    tool: 'run_shell',
+    summary: 'Enter should not allow',
+    risk: 'medium',
+    ttl_ms: 120_000,
+  });
+  await expect(page.getByTestId('confirm-dialog')).toBeVisible();
+  await page.getByTestId('confirm-dialog').click();
+  const before = (await confirmResponses(page)).length;
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(300);
+  const after = await confirmResponses(page);
+  expect(after.length).toBe(before);
+  await expect(page.getByTestId('confirm-dialog')).toBeVisible();
+});
+
+test('short Space press does not allow high-risk confirmation', async ({ page }) => {
+  await emitConfirm(page, {
+    id: 'confirm-e2e-space-short',
+    tool: 'run_shell',
+    summary: 'Space short',
+    risk: 'high',
+    args_preview: 'echo space-short',
+    ttl_ms: 120_000,
+  });
+  await expect(page.getByTestId('confirm-allow')).toBeVisible();
+  const allow = page.getByTestId('confirm-allow');
+  await allow.focus();
+  const before = (await confirmResponses(page)).length;
+  await page.keyboard.down('Space');
+  await page.waitForTimeout(400);
+  await page.keyboard.up('Space');
+  await page.waitForTimeout(200);
+  const after = await confirmResponses(page);
+  expect(after.length).toBe(before);
+});
+
+test('1 s Space hold allows high-risk confirmation', async ({ page }) => {
+  await emitConfirm(page, {
+    id: 'confirm-e2e-space-hold',
+    tool: 'run_shell',
+    summary: 'Space hold',
+    risk: 'high',
+    args_preview: 'echo space-hold',
+    ttl_ms: 120_000,
+  });
+  await expect(page.getByTestId('confirm-allow')).toBeVisible();
+  const allow = page.getByTestId('confirm-allow');
+  await allow.focus();
+  const before = (await confirmResponses(page)).length;
+  await page.keyboard.down('Space');
+  await page.waitForTimeout(1100);
+  await page.keyboard.up('Space');
+  await expect(page.getByTestId('confirm-dialog')).toBeHidden({ timeout: 10_000 });
+  const after = await confirmResponses(page);
+  expect(after.length).toBeGreaterThanOrEqual(before + 1);
+  const mine = after.filter(r => r.payload?.id === 'confirm-e2e-space-hold');
+  expect(mine.some(r => r.payload?.allow === true)).toBeTruthy();
+});
+
+function longShellPreview(lineCount: number): string {
+  return Array.from({ length: lineCount }, (_, i) => `cmd segment ${i} --verbose`).join('\n');
+}
+
+test('long high-risk command gates allow until scrolled to end', async ({ page }) => {
+  await emitConfirm(page, {
+    id: 'confirm-e2e-long-gate',
+    tool: 'run_shell',
+    summary: 'Long gated command',
+    risk: 'high',
+    args_preview: longShellPreview(40),
+    ttl_ms: 120_000,
+  });
+  await expect(page.getByTestId('confirm-allow')).toBeVisible();
+  await expect(page.getByTestId('confirm-allow')).toHaveAttribute('aria-disabled', 'true');
+
+  const code = page.getByRole('region', { name: /Command to run/i });
+  await code.evaluate(el => {
+    el.scrollTop = el.scrollHeight;
+  });
+  await expect(page.getByTestId('confirm-allow')).not.toHaveAttribute('aria-disabled', 'true');
+});

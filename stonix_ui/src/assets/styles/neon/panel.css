@@ -148,6 +148,193 @@
   flex: 0 1 auto;
   max-height: 64%;
   min-height: 0;
+  margin: calc(21 * var(--vu, 1px)) calc(17 * var(--vu, 1px)) 0 calc(19 * var(--vu, 1px));
+}
+
+.chat-panel[data-confirm-expanded='true'] .panel-feed {
+  flex: 0 0 0;
+  min-height: 0;
+  overflow: hidden;
+  margin-top: 0;
+}
+
+.confirm-card {
+  background: var(--warn-card, rgba(45, 32, 12, 0.92));
+  border: 1px solid var(--warn-card-edge, rgba(216, 154, 72, 0.45));
+  border-radius: var(--r-confirm, 14px);
+  padding: calc(21 * var(--vu, 1px)) calc(21 * var(--vu, 1px)) calc(21 * var(--vu, 1px))
+    calc(22 * var(--vu, 1px));
+  animation: confirm-card-in 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes confirm-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.confirm-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.confirm-card__title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.confirm-card__title-row h2 {
+  font-size: 16px;
+  font-weight: 560;
+  color: var(--t1, #eef2ff);
+  margin: 0;
+}
+
+.confirm-card__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--warn-pill, rgba(60, 40, 16, 0.9));
+  border: 1px solid var(--warn-pill-edge, rgba(216, 154, 72, 0.35));
+  color: var(--t-cf-pill, #d89a48);
+  font-size: 12.25px;
+  font-weight: 600;
+}
+
+.confirm-card__question {
+  font-size: 16.25px;
+  line-height: 24px;
+  font-weight: 400;
+  color: var(--t-cf-q, #a8b3cd);
+  margin: 0 0 12px;
+}
+
+.confirm-card__code {
+  max-height: clamp(70px, 22vh, 160px);
+  white-space: pre-wrap;
+  word-break: normal;
+  overflow-wrap: normal;
+  overflow: auto;
+  background: var(--code, #060c1c);
+  color: var(--t-code, #e6e7ec);
+  border-radius: 12px;
+  padding: calc(19 * var(--vu, 1px)) 20px calc(13 * var(--vu, 1px));
+}
+
+.chat-panel[data-confirm-expanded='true'] .confirm-card__code {
+  max-height: min(48vh, 420px);
+}
+
+.confirm-dialog__ln {
+  display: block;
+  padding-left: 2ch;
+  text-indent: -2ch;
+}
+
+.confirm-dialog__tk {
+  white-space: nowrap;
+}
+
+.confirm-card__expand-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin: 8px 0 12px;
+}
+
+.confirm-card__expand {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 9px;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--acc-text, #9ec5ff);
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 0 0 1px #2a3654;
+  cursor: pointer;
+}
+
+.confirm-card__gate {
+  font-size: 12.5px;
+  line-height: 17px;
+  color: var(--warn-t, #f0b429);
+}
+
+.confirm-card__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+  margin-top: 0;
+}
+
+.confirm-card__actions .confirm-dialog__deny,
+.confirm-card__actions .confirm-dialog__allow {
+  height: clamp(40px, 5.2vh, 49px);
+  width: 100%;
+  justify-content: center;
+}
+
+.confirm-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--t4, #94a4ca);
+}
+
+.confirm-card__meta strong {
+  color: #d9e0f0;
+  font-weight: 600;
+}
+
+.confirm-card__voice {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.confirm-toast {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(18, 24, 42, 0.96);
+  border: 1px solid rgba(216, 154, 72, 0.35);
+  box-shadow: var(--shadow-toast, 0 16px 40px rgba(0, 0, 0, 0.55));
+  color: #eef2ff;
+  font-size: 14px;
+}
+
+.confirm-toast__review {
+  border: none;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-weight: 600;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--acc-text, #9ec5ff);
 }
 
 .panel-feed {

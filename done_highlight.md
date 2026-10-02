@@ -787,3 +787,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `.venv_312\Scripts\python.exe -m pytest services/info/tests/test_cnic_lookup.py -q` → 7 passed
 - **Commit:** (next) · **Deploy:** no
 - **Doosre agent ke liye:** Claude please `SIM_SOURCE=auto` in PC `.env` + REQ-RESTART for owner live lookup test.
+
+### ✅ [cursor] X-84 · Confirm Command card (inline, hold, gate) · 2026-10-03 00:10 PKT
+- **Kya kiya:** ConfirmCard pinned in right panel: meta line, long-command scroll/expand gate, 1s hold + Esc/Enter rules, #cf-announce + toast Review, shared/time.ts; e2e confirm + layout composer checks.
+- **Files:** stonix_ui/src/features/confirm/*, shared/time.ts, App.tsx, neon/panel.css, useCommandCenter.ts, Dashboard.tsx, tests/e2e/confirm.spec.ts, layout.spec.ts, testids.baseline.txt, plan.md
+- **Verify:** `npm --prefix stonix_ui run build` pass · e2e confirm+chat+layout 50/50 pass · testid-inventory --check pass (199)
+- **Commit:** (next) · **Deploy:** no
+- **Doosre agent ke liye:** X-101 phone confirm sheet; X-102 hidden-tab alerts build on chime/title flash here.

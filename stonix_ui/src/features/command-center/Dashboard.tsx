@@ -264,6 +264,7 @@ const DashboardInner = () => {
               confirmSlot={
                 <ConfirmDialog
                   current={command.confirmCurrent}
+                  queue={command.confirmQueue}
                   queueCount={command.confirmQueueCount}
                   cancelNotice={command.confirmCancelNotice}
                   onAllow={command.respondConfirmAllow}

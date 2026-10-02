@@ -32,13 +32,18 @@ function computeDeadline(
   receivedAt: number,
   serverOffsetMs: number,
 ): number {
+  const ttlCap =
+    item.ttl_ms != null && Number.isFinite(item.ttl_ms) ? receivedAt + item.ttl_ms : undefined;
+  let deadline: number;
   if (item.expires_at != null && Number.isFinite(item.expires_at)) {
-    return item.expires_at - serverOffsetMs;
+    deadline = item.expires_at - serverOffsetMs;
+  } else if (ttlCap != null) {
+    deadline = ttlCap;
+  } else {
+    deadline = receivedAt + 120_000;
   }
-  if (item.ttl_ms != null && Number.isFinite(item.ttl_ms)) {
-    return receivedAt + item.ttl_ms;
-  }
-  return receivedAt + 120_000;
+  if (ttlCap != null) deadline = Math.min(deadline, ttlCap);
+  return deadline;
 }
 
 function toQueued(raw: unknown, receivedAt: number, serverOffsetMs: number): QueuedConfirm | null {

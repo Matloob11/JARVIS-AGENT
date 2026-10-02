@@ -32,6 +32,7 @@ confirm-allow
 confirm-cancel-notice
 confirm-deny
 confirm-dialog
+confirm-expand
 device-location-card
 device-location-updated
 enable-audio

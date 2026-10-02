@@ -47,6 +47,13 @@ const AuthenticatedApp = () => {
 
 export const App = () => (
   <Toast>
+    <div
+      id="cf-announce"
+      className="vh"
+      role="status"
+      aria-live="assertive"
+      aria-atomic="true"
+    />
     <Sprite />
     <AuthProvider>
       <div className="relative min-h-screen">
