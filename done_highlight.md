@@ -948,3 +948,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `npm --prefix stonix_ui run build` pass; header-layout e2e 16/16; test:electron 3/3; smoke:electron pass; testid inventory 235 pass
 - **Commit:** (pending) · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-100 · commit note · 2026-10-03 02:36 PKT
+- **Kya kiya:** Local commit for X-100 (Electron header reserve + window controls).
+- **Files:** (see prior X-100 entry)
+- **Verify:** header-layout 16/16; test:electron 3/3; smoke:electron pass
+- **Commit:** 2350b56 · **Deploy:** no
+- **Doosre agent ke liye:** —
