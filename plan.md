@@ -1103,7 +1103,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | C-13 | claude | P0 | Bridge SQLite store on a volume + message normalization + init_state/history from the DB | C-12, K-41 (C-MSG-1), K-42 (C-STATE-1) | DONE (claude, 02 Oct 13:58) |
 | C-14 | claude | P0 | Agent link v2, bridge side: AGENT_TOKEN + HMAC v2 notify with replay protection, Socket.IO roles/rooms with a legacy transition, env-only origins, secrets tooling | C-13, C-09, K-38 (C-SOCK-1), K-39 (C-NOTIFY-1), K-40 (C-EVT-1), K-47 (C-ENV-1) | DONE (claude, 02 Oct 16:25) |
 | C-15 | claude | P0 | Agent link v2, agent side: signed raw-body notify with retry queue, AGENT_TOKEN socket with reconnect-forever loop, chat id echo | C-14, C-09, K-39 (C-NOTIFY-1), K-38 (C-SOCK-1), K-41 (C-MSG-1) | DONE (claude, 02 Oct 19:20) |
-| C-16 | claude | P0 | Network lockdown: nginx /agent + /twirp, PC agent on wss/https via the domain, 5101/7880 bound to 127.0.0.1, compose memory/log limits | C-12, C-09, C-15, K-48 (C-NET-1) | TODO |
+| C-16 | claude | P0 | Network lockdown: nginx /agent + /twirp, PC agent on wss/https via the domain, 5101/7880 bound to 127.0.0.1, compose memory/log limits | C-12, C-09, C-15, K-48 (C-NET-1) | DOING (claude, 02 Oct 20:50) |
 | C-17 | claude | P0 | Rotate the LiveKit API key/secret (they sat in world-readable files); values live only in env files | C-16, C-14 | TODO |
 | C-18 | claude | P0 | Least-privilege VPS env: bridge reads only bridge.env, compose .env keeps interpolation vars, unused VPS key copies moved to backups; user rotates Google/Gmail keys | C-14, C-17, K-47 (C-ENV-1) | TODO |
 | C-19 | claude | P0 | Owner session auth backend: password + TOTP + recovery codes, JWT cookie on /vortex, session-protected endpoints, LiveKit token per C-LK-1 | C-13, C-14, C-16, K-36 (C-AUTH-1), K-37 (C-LK-1) | TODO |
@@ -1257,11 +1257,11 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | C-113 | claude | P0 | Compat layer: location provider, delivery helper, startfile/webbrowser shims with a startup self-test | C-112 | DONE (claude, 02 Oct 19:20) |
 | C-114 | claude | P0 | 24/7 voice session safety: compression, real truncation, re-seed, liveness attribute, idle close and recycle | C-33, C-35, C-111 | TODO |
 | C-115 | claude | P0 | Desktop Link protocol library (Ed25519, X25519/AEAD, replay, clock, resend) + key tooling | C-111 | DONE (claude, 02 Oct 18:15) |
-| C-116 | claude | P0 | Bridge: internal listener :5002, '/desktop' relay, presence and desktop_status, persisted link switch, minimal public health | C-13, C-115 | TODO |
+| C-116 | claude | P0 | Bridge: internal listener :5002, '/desktop' relay, presence and desktop_status, persisted link switch, minimal public health | C-13, C-115 | DOING (claude, 02 Oct 20:50) |
 | C-117 | claude | P0 | Media relay (single media path) + node file, blob and backup endpoints + nginx locations | C-116 | TODO |
 | C-118 | claude | P0 | Placement table, manifest exporter and placement-aware VPS discovery | C-112, C-111 | DONE (claude, 02 Oct 16:25) |
 | C-119 | claude | P0 | Agent DesktopLink client and laptop-tool proxies (honest outcomes, repeat guard, ordering, stop, fallback) | C-115, C-118, C-32, C-28 | TODO |
-| C-120 | claude | P0 | Desktop Node runtime: supervisor, link, tool executor, WAL, dead-man switch, health, power events | C-115, C-111, C-31 | TODO |
+| C-120 | claude | P0 | Desktop Node runtime: supervisor, link, tool executor, WAL, dead-man switch, health, power events | C-115, C-111, C-31 | DOING (claude, 02 Oct 20:50) |
 | C-121 | claude | P0 | Node policy: modes, Windows-lock pause and presence, class floors, launch surfaces, path policy, ConfirmFlow approval check, stops | C-120 | TODO |
 | C-122 | claude | P0 | Node capabilities, sensors, file mirror and encrypted backup pull | C-120, C-121, C-117 | TODO |
 | C-123 | claude | P0 | agent_ctl node and brain commands, pinned node snapshot, logon autostart (limited), brain journal | C-120, C-12 | TODO |
