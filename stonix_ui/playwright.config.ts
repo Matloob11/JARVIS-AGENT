@@ -40,6 +40,24 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
+      grepInvert: /@gate|refdiff port/,
+    },
+    {
+      name: 'gates',
+      use: {
+        ...devices['Desktop Chrome'],
+        channel: 'chromium',
+        viewport: { width: 1672, height: 941 },
+        deviceScaleFactor: 1,
+        timezoneId: 'Asia/Karachi',
+        locale: 'en-US',
+        colorScheme: 'dark',
+        reducedMotion: 'reduce',
+        launchOptions: {
+          args: ['--force-color-profile=srgb'],
+        },
+      },
+      grep: /@gate/,
     },
   ],
 });

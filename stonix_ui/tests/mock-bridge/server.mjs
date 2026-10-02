@@ -31,6 +31,8 @@ const persistedChatMessages = [];
 const persistedMemories = [];
 /** @type {number} */
 let visionFrameCount = 0;
+let mockDesktopOnline = true;
+const REFERENCE_FIXTURE_PATH = join(__dirname, '../visual/reference_fixture.json');
 
 /** @type {Map<string, { count: number, resetAt: number }>} */
 const loginRate = new Map();
@@ -172,6 +174,84 @@ function rememberMemorySync(payload) {
   if (persistedMemories.length > 200) {
     persistedMemories.splice(200);
   }
+}
+
+function applyReferenceScenario() {
+  /** @type {Record<string, unknown>} */
+  let fixture;
+  try {
+    fixture = JSON.parse(readFileSync(REFERENCE_FIXTURE_PATH, 'utf8'));
+  } catch {
+    return { ok: false, error: 'reference_fixture_missing' };
+  }
+  const sock = fixture.socket_events_from_mock;
+  if (!sock || typeof sock !== 'object') {
+    return { ok: false, error: 'invalid_fixture' };
+  }
+  const serverTime = Math.floor(Date.parse('2026-10-02T21:42:10+05:00') / 1000);
+  agentOnline = true;
+  mockDesktopOnline = true;
+  persistedChatMessages.length = 0;
+
+  const init = buildInitState();
+  const initPayload = {
+    ...init,
+    agent_status: { ...(init.agent_status || {}), ...(sock.agent_status || {}) },
+    desktop_status: sock.desktop_status,
+    vitals_pc: {
+      cpu: sock.vitals_pc?.cpu ?? 21,
+      ram: sock.vitals_pc?.ram ?? 63,
+      disk: sock.vitals_pc?.disk ?? 82,
+      disk_label: sock.vitals_pc?.disk_label ?? 'Disk (C:)',
+      host: sock.vitals_pc?.host ?? 'MATLOOB-PC',
+      ts: serverTime,
+    },
+    server_time: serverTime,
+    messages: [],
+    confirmations: [],
+  };
+  emitToUi('init_state', initPayload);
+  emitToUi('agent_status', {
+    ...loadFixture('agent_status'),
+    ...(sock.agent_status || {}),
+  });
+  if (sock.desktop_status) {
+    emitToUi('desktop_status', sock.desktop_status);
+  }
+
+  for (const row of sock.messages || []) {
+    const base =
+      row.role === 'user' ? loadFixture('new_message_user') : loadFixture('new_message');
+    const ts = Math.floor(Date.parse(String(row.ts)) / 1000);
+    const msg = {
+      ...base,
+      ...row,
+      ts,
+      timestamp: ts,
+      final: true,
+      is_final: true,
+    };
+    persistedChatMessages.push(msg);
+    emitToUi('new_message', msg);
+  }
+
+  const cr = sock.confirm_request;
+  if (cr) {
+    emitToUi('confirm_request', {
+      id: cr.id ?? 'ref-confirm-1',
+      tool: cr.tool ?? 'run_cmd_command',
+      risk: cr.risk ?? 'medium',
+      voice_allowed: cr.voice_allowed ?? false,
+      summary: cr.summary ?? 'Run this PowerShell command on your laptop?',
+      args_preview:
+        cr.args_preview ??
+        'Get-Process | Sort-Object CPU -Descending |\nSelect-Object -First 5',
+      ttl_ms: cr.ttl_ms ?? 600000,
+      expires_at: serverTime + Math.floor((cr.ttl_ms ?? 600000) / 1000),
+    });
+  }
+
+  return { ok: true, server_time: serverTime };
 }
 
 function emitToUi(event, payload) {
@@ -485,6 +565,12 @@ async function handleMockControl(req, res, pathname, method) {
     return true;
   }
 
+  if (pathname === '/__mock/scenario/reference' && method === 'POST') {
+    const result = applyReferenceScenario();
+    json(res, result.ok ? 200 : 500, result);
+    return true;
+  }
+
   return false;
 }
 
@@ -499,7 +585,8 @@ async function handleVortex(req, res, subPath, method, url) {
       ok: true,
       bridge: 'mock',
       agent_online: agentOnline,
-      ui_clients: uiSockets.length,
+      ui_clients: Math.max(1, uiSockets.length),
+      desktop: { online: mockDesktopOnline },
     });
     return;
   }

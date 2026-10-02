@@ -283,6 +283,7 @@ export class OrbRenderer {
     );
     this.paintWave(0, L, null);
     this.loopMode = 'stop';
+    this.drawCount += 1;
   }
 
   private frame(now: number) {

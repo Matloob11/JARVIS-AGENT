@@ -2,6 +2,8 @@
   clearE2EPanelCrash,
   setE2EPanelCrashTarget,
 } from '@/shared/e2e/panelCrash';
+import { seedReferenceActivityRows, type ActivityFeedRow } from '@/features/activity/feedStore';
+import { toast } from '@/toast';
 import { audioEngine } from './audioEngine';
 import { getActiveOrbRenderer } from './orb/orbRenderer';
 export type { E2EVoiceInputs, E2EVoiceState } from './e2eVoiceOverride';
@@ -40,6 +42,8 @@ type JarvisTestApi = {
   readAgentDbfs: () => number;
   readAgentBands: () => number[];
   agentContextState: () => string;
+  referenceFrame: (on: boolean) => void;
+  frameReady: () => boolean;
 };
 
 declare global {
@@ -49,6 +53,53 @@ declare global {
 }
 
 let dashboardCommits = 0;
+
+const REFERENCE_ACTIVITY: ActivityFeedRow[] = [
+  {
+    id: 'ref-act-1',
+    kind: 'system',
+    level: 'ok',
+    title: 'System online',
+    subtitle: 'All systems operational',
+    ts: Date.parse('2026-10-02T21:41:00+05:00'),
+  },
+  {
+    id: 'ref-act-2',
+    kind: 'voice',
+    level: 'info',
+    title: 'Voice service ready',
+    subtitle: 'Microphone initialized',
+    ts: Date.parse('2026-10-02T21:40:00+05:00'),
+  },
+  {
+    id: 'ref-act-3',
+    kind: 'device',
+    level: 'info',
+    title: 'Laptop connected',
+    subtitle: 'Windows 11 • 3 devices online',
+    ts: Date.parse('2026-10-02T21:38:00+05:00'),
+  },
+  {
+    id: 'ref-act-4',
+    kind: 'sync',
+    level: 'neutral',
+    title: 'Agent sync complete',
+    subtitle: 'JARVIS & ANNA ready',
+    ts: Date.parse('2026-10-02T21:37:00+05:00'),
+  },
+];
+
+function setConfirmMetaHidden(hidden: boolean) {
+  document.querySelectorAll<HTMLElement>('.confirm-dialog__meta').forEach(el => {
+    if (hidden) {
+      el.dataset.refHidden = '1';
+      el.style.display = 'none';
+    } else if (el.dataset.refHidden) {
+      delete el.dataset.refHidden;
+      el.style.display = '';
+    }
+  });
+}
 
 export { getE2EVoiceOverrides };
 
@@ -131,6 +182,24 @@ export function install() {
     },
     agentContextState() {
       return audioEngine.getAgentContextState();
+    },
+    referenceFrame(on) {
+      if (on) {
+        seedReferenceActivityRows(REFERENCE_ACTIVITY);
+        setConfirmMetaHidden(true);
+        toast.dismiss();
+        document.documentElement.setAttribute('data-reference-frame', '1');
+        getActiveOrbRenderer()?.setReducedMotion(true);
+      } else {
+        setConfirmMetaHidden(false);
+        document.documentElement.removeAttribute('data-reference-frame');
+      }
+    },
+    frameReady() {
+      const orb = getActiveOrbRenderer();
+      if (!orb) return false;
+      const st = orb.stats();
+      return st.draws >= 1;
     },
   };
 

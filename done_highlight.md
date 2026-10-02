@@ -1039,3 +1039,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** presence.spec 26/26 ×3
 - **Commit:** 968eb7e · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### 🟡 [cursor] X-109 · V-1 visual-diff gate (refdiff) · 2026-10-03 03:55 PKT
+- **Kya kiya:** Owner reference PNG copy `stonix_ui/tests/visual/reference/neon-command-center.png`; `refdiff.ts` (pngjs) port of `replica_work/diff.py` — MAE/SSIM/ΔE, regions, 96 ink boxes, 104 container edges, inferno heat map, side-by-side; Playwright `@gate` + `test:refdiff`; mock `/__mock/scenario/reference`; `referenceFrame`/`frameReady` e2e hooks; prototype validation frames ±0.05 MAE / ±0.002 SSIM pass.
+- **Files:** stonix_ui/tests/visual/**, stonix_ui/tests/e2e/refdiff.spec.ts, stonix_ui/src/features/voice/e2eHooks.ts, stonix_ui/tests/mock-bridge/server.mjs, stonix_ui/playwright.config.ts, stonix_ui/package.json, stonix_ui/package-lock.json, stonix_ui/src/features/voice/orb/orbRenderer.ts, plan.md
+- **Verify:** `npm --prefix stonix_ui run build` pass; `npm --prefix stonix_ui run test:refdiff` port test pass; V-1 product frame **baseline** MAE **16.65** SSIM **0.7111** dE76 **10.74** px dE&lt;10 **78.6%**; worst regions **hero_buttons 46.09**, **orb 32.65**, **hero 27.52**; ink **15/96 ≤2px** (max **125**); container edges **30/104 ≤1px** (max **9**); side-by-side `test-results/.../attachments/refdiff-side-by-side-*.png` (thresholds not met — UI polish follow-up); plain build no `__jarvisTest`; testid inventory pass. **DevDependency:** pngjs.
+- **Commit:** (pending) · **Deploy:** no
+- **Doosre agent ke liye:** Gate infrastructure ready; product pixel match still fails thresholds (hero/orb/panel). Re-run `npm --prefix stonix_ui run test:refdiff` after layout/visual fixes.
