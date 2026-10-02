@@ -1,14 +1,11 @@
-import { FormEvent, ReactNode, useState } from 'react';
-import { Send } from 'lucide-react';
+import { ReactNode, useState } from 'react';
 import type { ChatMessage, LiveCaption } from '@/features/chat/types';
 import type { JobEntry } from '@/features/jobs/useJobs';
-import MemoryList from '@/features/memory/MemoryList';
 import type { MemoryItem } from '@/features/memory/useMemories';
-import TasksPanel from '@/features/tasks/TasksPanel';
 import type { TaskItem, TaskSource } from '@/features/tasks/useTasks';
 import type { ToolLogEntry } from '@/features/tools/useToolLogs';
-import { personaAccent } from '@/shared/theme/commandTheme';
-import { composerPlaceholder, type PersonaKey } from '@/shared/persona';
+import type { PersonaKey } from '@/shared/persona';
+import Composer from './Composer';
 type VortexLog = {
   category?: string;
   text: string;
@@ -21,7 +18,7 @@ import ApprovalsTab from './ApprovalsTab';
 import ToolsTab from './ToolsTab';
 import { useSwarmMode } from './useSwarmMode';
 
-type LegacyTab = 'logs' | 'notes' | 'tasks';
+type LegacyTab = 'logs';
 
 interface RightPanelProps {
   persona: PersonaKey;
@@ -54,7 +51,7 @@ interface RightPanelProps {
   confirmDecisions?: ConfirmDecision[];
 }
 
-const legacyTabs: LegacyTab[] = ['logs', 'notes', 'tasks'];
+const legacyTabs: LegacyTab[] = ['logs'];
 
 const formatLogTime = (timestamp: number) =>
   new Date(timestamp * 1000).toLocaleTimeString('en-US', {
@@ -95,15 +92,15 @@ const RightPanel = ({
   persona,
   messages,
   logs,
-  memories,
-  onClearMemory,
+  memories: _memories,
+  onClearMemory: _onClearMemory,
   toolLogs,
   jobs,
   onCancelJob,
   onOpenJobArtifact,
-  tasks,
-  onCancelTask,
-  onRefreshTasks,
+  tasks: _tasks,
+  onCancelTask: _onCancelTask,
+  onRefreshTasks: _onRefreshTasks,
   onSend,
   onSendSwarm,
   onFeedback,
@@ -125,7 +122,6 @@ const RightPanel = ({
   const [legacyTab, setLegacyTab] = useState<LegacyTab | null>(null);
   const [text, setText] = useState('');
   const { swarmMode } = useSwarmMode();
-  const accent = personaAccent(persona);
 
   const liveUser =
     voiceConnected && liveCaptions?.user?.text
@@ -141,13 +137,11 @@ const RightPanel = ({
     setLegacyTab(null);
   };
 
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    if (!text.trim()) return;
+  const submitText = (value: string) => {
     if (swarmMode) {
-      onSendSwarm(text);
+      onSendSwarm(value);
     } else {
-      onSend(text);
+      onSend(value);
     }
     setText('');
     setMainTab('chat');
@@ -166,12 +160,6 @@ const RightPanel = ({
   let feed: ReactNode;
   if (legacyTab === 'logs') {
     feed = <LogsPane logs={logs} />;
-  } else if (legacyTab === 'notes') {
-    feed = <MemoryList rows={memories} onClearConfirmed={onClearMemory} />;
-  } else if (legacyTab === 'tasks') {
-    feed = (
-      <TasksPanel rows={tasks} onCancelConfirmed={onCancelTask} onRefresh={onRefreshTasks} />
-    );
   } else if (mainTab === 'chat') {
     feed = (
       <ChatList
@@ -243,31 +231,18 @@ const RightPanel = ({
         />
       ) : null}
 
-      <form
-        onSubmit={submit}
-        className="command-input panel-composer"
+      <Composer
+        persona={persona}
+        text={text}
+        onTextChange={setText}
+        onSubmit={submitText}
         onFocusCapture={() => document.documentElement.classList.add('typing')}
         onBlurCapture={event => {
           if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
             document.documentElement.classList.remove('typing');
           }
         }}
-      >
-        <input
-          value={text}
-          onChange={event => setText(event.target.value)}
-          placeholder={composerPlaceholder(persona)}
-          className="command-input__field"
-        />
-        <button
-          type="submit"
-          disabled={!text.trim()}
-          className={`command-input__button ${text.trim() ? accent.text : 'text-ink-muted-40'}`}
-          title="Send command"
-        >
-          <Send size={16} />
-        </button>
-      </form>
+      />
     </section>
   );
 };

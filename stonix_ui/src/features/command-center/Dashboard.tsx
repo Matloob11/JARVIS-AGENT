@@ -19,7 +19,7 @@ import OperationsRail from './components/OperationsRail';
 import AgentsMountPortal from '@/features/agents/AgentsMountPortal';
 import MachinesCards from '@/features/agents/MachinesCards';
 import MapCard from '@/features/agents/MapCard';
-import AgentsAlertsStrip from '@/features/agents/AgentsAlertsStrip';
+import ActivityPage from '@/features/activity/ActivityPage';
 import { defaultCameraState, type CameraState } from './components/cameraState';
 import SettingsPage from '@/features/settings/SettingsPage';
 import SimAccessDialog from './components/SimAccessDialog';
@@ -214,6 +214,7 @@ const DashboardInner = () => {
                 agentState={liveKit.agentState}
                 agentListeningMuted={agentListeningMuted}
                 micEnabled={liveKit.micEnabled}
+                pushToTalkActive={liveKit.pushToTalkActive}
                 isSpeaking={command.isSpeaking}
                 isThinking={command.isThinking}
                 isUserSpeaking={command.isUserSpeaking}
@@ -332,19 +333,26 @@ const DashboardInner = () => {
                     agentPaused: agentStatus.paused,
                     agentSession: agentStatus.session,
                   }}
-                  alertsStrip={
-                    <AgentsAlertsStrip
-                      systemAlerts={command.systemAlerts}
-                      logs={command.vortexLogs}
-                    />
-                  }
                 />
               </ErrorBoundary>
             </ShellPage>
             <ShellPage page="activity" active={route.page === 'activity'}>
-              <div className="command-panel p-4" data-legacy>
-                <p className="text-sm text-command-muted">Activity page (legacy trace remains on Overview).</p>
-              </div>
+              <ErrorBoundary name="ActivityPage">
+                <ActivityPage
+                  route={route}
+                  timelineAlertCount={
+                    navMarks.showActivityBadge ? navMarks.activityCount : 0
+                  }
+                  systemAlerts={command.systemAlerts}
+                  logs={command.vortexLogs}
+                  tasks={command.tasks}
+                  taskNotifications={command.taskNotifications}
+                  onCancelTask={command.cancelTask}
+                  onRefreshTasks={command.refreshTasks}
+                  memories={command.memories}
+                  onClearMemory={command.clearShortTermMemory}
+                />
+              </ErrorBoundary>
             </ShellPage>
             <ShellPage page="settings" active={route.page === 'settings'} className="settings-drawer-host">
               <ErrorBoundary name="SettingsPage">

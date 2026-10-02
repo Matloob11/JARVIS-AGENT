@@ -955,3 +955,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** header-layout 16/16; test:electron 3/3; smoke:electron pass
 - **Commit:** 2350b56 · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-108 · Activity page Timeline/Tasks/Notes · 2026-10-03 02:35 PKT
+- **Kya kiya:** Activity page (`page-activity`) with Timeline (alerts card + feed filters), Tasks & reminders (reminder history), and Notes; chat legacy notes/tasks removed; Agents alerts strip removed; e2e specs use `gotoPage('activity')`.
+- **Files:** `stonix_ui/src/features/activity/*`, `neon/activity.css`, `Dashboard.tsx`, `RightPanel.tsx`, `TasksPanel.tsx`, `MemoryList.tsx`, e2e memory/tasks/vitals/voice-glue, `testids.baseline.txt`
+- **Verify:** `npm --prefix stonix_ui run build` pass; memory/tasks/voice-glue/vitals e2e 12/12; testid inventory 246 pass
+- **Commit:** (pending) · **Deploy:** no
+- **Doosre agent ke liye:** X-86/X-87 add Logs and Media sub-tabs on Activity; trace stays on Overview until then.

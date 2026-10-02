@@ -62,6 +62,7 @@ test('PC and VPS vitals, telemetry, stale badge, and critical log alerts', async
     ts: baseSec + 40,
   });
 
+  await gotoPage(page, 'activity', 'timeline');
   await expect(page.getByTestId('log-alert-row').filter({ hasText: 'Disk threshold exceeded' })).toBeVisible();
   await expect(page.getByTestId('log-alert-row').first()).toHaveAttribute('data-level', 'CRITICAL');
 });

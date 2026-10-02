@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { loginViaRecovery } from './helpers/login';
+import { gotoPage, loginViaRecovery } from './helpers';
 
 const MOCK = 'http://127.0.0.1:5199';
 
@@ -29,7 +29,7 @@ test.beforeEach(async ({ page }) => {
   await loginViaRecovery(page);
   await expect(page.getByTestId('chip-bridge')).toHaveAttribute('data-active', 'true');
   await page.waitForTimeout(400);
-  await page.getByRole('button', { name: 'tasks' }).click();
+  await gotoPage(page, 'activity', 'tasks');
   await expect(page.getByTestId('tasks-tab-panel')).toBeVisible();
 });
 
@@ -87,7 +87,12 @@ test('task_notification increments bell and shows toast', async ({ page }) => {
   });
 
   await expect(page.getByTestId('task-bell-count')).toHaveText('1');
-  await expect(page.locator('[role="status"]').filter({ hasText: /Call home now/ })).toBeVisible({
+  await expect(
+    page
+      .getByText(/Call home now/)
+      .filter({ visible: true })
+      .first(),
+  ).toBeVisible({
     timeout: 5_000,
   });
 

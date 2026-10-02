@@ -2,6 +2,10 @@
 activity-card
 activity-open
 activity-row
+activity-tab-notes
+activity-tab-tasks
+activity-tab-timeline
+alerts-card
 agent-audio-visualizer
 agent-card
 agent-pause
@@ -20,6 +24,9 @@ browser-card
 camera-link-badge
 camera-share-switch
 camera-toggle
+chat-composer
+chat-composer-input
+chat-composer-send
 chat-empty
 chat-feedback
 chat-feedback-down
@@ -47,6 +54,8 @@ confirm-deny
 confirm-dialog
 confirm-expand
 confirm-later
+composer-attach
+composer-mic
 device-location-card
 device-location-updated
 devices-menu
@@ -122,6 +131,7 @@ qs-disk
 qs-memory
 qs-open
 qs-stale
+reminder-history-row
 settings-drawer
 settings-guarded-tools-list
 settings-language-select
@@ -174,6 +184,7 @@ tasks-empty
 tasks-list
 tasks-refresh-btn
 tasks-tab-panel
+timeline-row
 telemetry-card
 telemetry-confusion
 telemetry-latency

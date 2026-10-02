@@ -130,7 +130,9 @@ const MemoryList = ({ rows, onClearConfirmed }: MemoryListProps) => {
             Saved short-term memory saaf karo
           </button>
         )}
-        <p className="memory-panel__note">Live voice conversation par asar nahi hota</p>
+        <p className="memory-panel__note" lang="ur-Latn">
+          Live voice conversation par asar nahi hota.
+        </p>
       </div>
     </div>
   );

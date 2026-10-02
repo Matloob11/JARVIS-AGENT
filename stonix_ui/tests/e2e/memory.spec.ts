@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { loginViaRecovery } from './helpers/login';
+import { gotoPage, loginViaRecovery } from './helpers';
 
 const MOCK = 'http://127.0.0.1:5199';
 
@@ -28,9 +28,9 @@ test.describe.configure({ mode: 'serial' });
 test.beforeEach(async ({ page }) => {
   await page.request.post(`${MOCK}/__mock/memories/reset`);
   await loginViaRecovery(page);
-  await expect(page.getByText(/connected|Secure link|JARVIS Ready/i).first()).toBeVisible();
+  await expect(page.getByTestId('chip-bridge')).toHaveAttribute('data-active', 'true');
   await page.waitForTimeout(400);
-  await page.getByRole('button', { name: 'notes' }).click();
+  await gotoPage(page, 'activity', 'notes');
   await expect(page.getByTestId('memory-tab-panel')).toBeVisible();
 });
 
@@ -51,7 +51,7 @@ test('memory items render after reload from init_state seed', async ({ page }) =
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await loginViaRecovery(page);
-  await page.getByRole('button', { name: 'notes' }).click();
+  await gotoPage(page, 'activity', 'notes');
   await expect(page.getByTestId('memory-tab-panel')).toBeVisible();
   await expect(page.locator(`[data-testid="memory-row"][data-id="${memId}"]`)).toBeVisible({
     timeout: 15_000,

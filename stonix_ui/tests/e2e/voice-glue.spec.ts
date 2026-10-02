@@ -66,7 +66,7 @@ test('task_notification toast and bell show spoken vs screen-only', async ({ pag
 });
 
 test('memory_cleared toast shows scope and backup path', async ({ page }) => {
-  await page.getByRole('button', { name: 'notes' }).click();
+  await gotoPage(page, 'activity', 'notes');
   await expect(page.getByTestId('memory-tab-panel')).toBeVisible();
 
   await mockEmit(page, 'memory_cleared', {

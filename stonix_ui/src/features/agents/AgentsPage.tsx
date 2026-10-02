@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect } from 'react';
 import { PersonasCard } from './PersonasCard';
 import { VoiceWakeCard } from './VoiceWakeCard';
 import { VoiceIdCard } from './VoiceIdCard';
@@ -10,7 +10,6 @@ type AgentsPageProps = {
   voiceMatchLive: VoiceMatchLive;
   onOpenVoiceEnroll: () => void;
   systemFlow: SystemFlowCardProps;
-  alertsStrip?: ReactNode;
 };
 
 export function AgentsPage({
@@ -18,7 +17,6 @@ export function AgentsPage({
   voiceMatchLive,
   onOpenVoiceEnroll,
   systemFlow,
-  alertsStrip,
 }: AgentsPageProps) {
   useEffect(() => {
     if (!anchor) return;
@@ -41,7 +39,6 @@ export function AgentsPage({
 
       <h2 className="n-group agents-group-title">Devices</h2>
       <div className="agents-devices-mount" data-anchor="agent" />
-      {alertsStrip ? <div className="agents-alerts-legacy-host">{alertsStrip}</div> : null}
 
       <h2 className="n-group agents-group-title">Machines and place</h2>
       <div className="agents-machines-mount" data-anchor="machines" />

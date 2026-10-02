@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { TaskItem, TaskSource } from './useTasks';
+import type { TaskItem, TaskNotification, TaskSource } from './useTasks';
 
 interface TasksPanelProps {
   rows: TaskItem[];
+  notifications?: TaskNotification[];
   onCancelConfirmed: (id: string, source: TaskSource) => void;
   onRefresh: () => void;
 }
@@ -50,7 +51,22 @@ function statusPill(status?: string): string {
   return 'task-pill task-pill--pending';
 }
 
-const TasksPanel = ({ rows, onCancelConfirmed, onRefresh }: TasksPanelProps) => {
+function formatNotifTime(ts: number): string {
+  return new Date(ts).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
+}
+
+const TasksPanel = ({
+  rows,
+  notifications = [],
+  onCancelConfirmed,
+  onRefresh,
+}: TasksPanelProps) => {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [pendingCancel, setPendingCancel] = useState<{ id: string; source: TaskSource } | null>(
     null,
@@ -157,6 +173,35 @@ const TasksPanel = ({ rows, onCancelConfirmed, onRefresh }: TasksPanelProps) => 
           })}
         </div>
       )}
+
+      <section className="tasks-reminder-history">
+        <h4 className="tasks-reminder-history__title">
+          Reminder history <small>Delivered notifications</small>
+        </h4>
+        {notifications.length === 0 ? (
+          <p className="tasks-reminder-history__empty">No reminders delivered yet.</p>
+        ) : (
+          <div className="tasks-reminder-history__list">
+            {notifications.map(note => (
+              <div
+                key={`${note.id}-${note.ts}`}
+                className="tasks-reminder-history__row"
+                data-testid="reminder-history-row"
+              >
+                <p>{note.description}</p>
+                <time>{formatNotifTime(note.ts)}</time>
+                <div className="tasks-reminder-history__tags">
+                  {note.spoken === true ? (
+                    <span className="task-pill task-pill--reminder">Spoken aloud</span>
+                  ) : (
+                    <span className="task-pill task-pill--muted">Screen only</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 };
