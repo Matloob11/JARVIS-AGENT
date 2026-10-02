@@ -1,0 +1,477 @@
+
+/* =====================================================================================================
+   FLUID LAYOUTS: the product layout at every window size. No transform scaling; text keeps real sizes.
+   The calibrated 1672x941 artboard above is only the measured reference frame (visual diff: ?still=1 at
+   exactly 1672x941, or ?layout=art). Build these grids, not the artboard's absolute positions.
+     html.fluid.dk   >= 1180 px wide: the reference's three columns as a fluid grid
+     html.fluid.tl   1024-1179 px: icon rail + the same main column and right panel
+     html.fluid.ph   < 1024 px: phone shell (header, main, bottom tab bar)
+     html.comp       = dk or tl (hero composition, Quick Stats + Recent Activity row, desktop right panel)
+   --vu = min(1px, 100vh / 941): one reference pixel vertically. Reference sizes are the maxima; floors keep
+   text at 12-13 px or more. At 1672x941 every clamp sits on its reference value.
+   ===================================================================================================== */
+html.fluid{--vu:min(1px,calc(100vh / 941));--hu:min(1px,calc(100vw / 1672))}
+html.fluid #sizer{display:none}
+html.fluid .viewport{overflow:hidden}
+html.fluid .stage{position:absolute;inset:0;width:auto;height:auto;transform:none!important;will-change:auto!important;overflow:hidden;display:grid}
+html.fluid .t{position:static}
+html.fluid [hidden]{display:none!important}
+html.dk{--sw:clamp(220px,16.27vw,272px);--pw:clamp(360px,30.63vw,512px);--gl:clamp(16px,1.376vw,23px);--gm:clamp(14px,1.077vw,18px);--gr:clamp(12px,1.017vw,17px);
+  --hh:clamp(66px,12.115vh,114px);--gb:clamp(14px,2.87vh,27px)}
+html.tl{--pw:clamp(340px,33vw,372px);--gl:16px;--gm:14px;--gr:14px;--gb:14px}
+
+/* page background: the reference's fitted gradients in % of the window */
+html.comp .stage{background:
+  radial-gradient(30.92% 18.38% at 53.65% 2.87%,rgba(13,30,84,.414) 0%,rgba(13,30,84,.345) 25%,rgba(13,30,84,.226) 50%,rgba(13,30,84,.097) 75%,rgba(13,30,84,0) 100%),
+  radial-gradient(20.87% 7.76% at 41.93% 11.58%,rgba(12,28,69,.578) 0%,rgba(12,28,69,.444) 25%,rgba(12,28,69,.316) 50%,rgba(12,28,69,.336) 75%,rgba(12,28,69,0) 100%),
+  radial-gradient(7.36% 34.54% at 19.14% 34.75%,rgba(18,24,71,.141) 0%,rgba(18,24,71,.182) 25%,rgba(18,24,71,.495) 50%,rgba(18,24,71,.281) 75%,rgba(18,24,71,0) 100%),
+  radial-gradient(23.98% 9.78% at 81.58% .74%,rgba(9,25,62,.43) 0%,rgba(9,25,62,.345) 25%,rgba(9,25,62,.289) 50%,rgba(9,25,62,.259) 75%,rgba(9,25,62,0) 100%),
+  linear-gradient(180deg,rgb(10,16,35) 0%,rgb(6,13,32) 31.88%,rgb(6,13,30) 100%)}
+html.ph .stage{background:radial-gradient(90vw 40vh at 60% -8%,rgba(13,30,84,.5),rgba(13,30,84,0) 70%),radial-gradient(50vw 40vh at 0% 100%,rgba(21,18,67,.45),rgba(21,18,67,0) 70%),
+  linear-gradient(180deg,#0a1023 0,#060d20 320px,#060d1e 100%)}
+html.dk .stage{grid-template-columns:var(--sw) minmax(0,1fr) calc(var(--pw) + var(--gr));grid-template-rows:var(--hh) minmax(0,1fr);grid-template-areas:"side head head" "side main panel"}
+html.tl .stage{grid-template-columns:76px minmax(0,1fr) calc(var(--pw) + var(--gr));grid-template-rows:auto minmax(0,1fr);grid-template-areas:"side head head" "side main panel"}
+html.ph .stage{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto;grid-template-areas:"head" "main" "tabs"}
+
+/* ------------------------------------------------------------------ sidebar (dk: the reference sidebar; tl: icon rail; ph: none) */
+html.ph .sidebar{display:none}
+html.comp .sidebar{grid-area:side;position:relative;left:auto;top:auto;width:auto;height:auto;min-height:0}
+html.dk .sidebar{--lg:max(44px,calc(64 * var(--vu)));display:flex;flex-direction:column;align-items:stretch;padding-left:1px;
+  background:
+    radial-gradient(45.96% 14.03% at -2.21% -2.02%,rgba(28,31,84,1) 0%,rgba(28,31,84,.19) 25%,rgba(28,31,84,.093) 50%,rgba(28,31,84,.041) 75%,rgba(28,31,84,0) 100%),
+    radial-gradient(102.57% 14.24% at 4.41% 101.81%,rgba(21,18,67,.373) 0%,rgba(21,18,67,.219) 25%,rgba(21,18,67,.099) 50%,rgba(21,18,67,.093) 75%,rgba(21,18,67,0) 100%),
+    linear-gradient(180deg,rgb(11,18,37) 0%,rgb(10,17,35) 49.95%,rgb(11,17,42) 100%)}
+html.dk .logo{position:relative;left:auto;top:auto;flex:none;align-self:center;width:var(--lg);height:var(--lg);margin:calc(22 * var(--vu)) 0 0 -1px}
+html.dk .brand-title{position:relative;flex:none;text-align:center;margin-top:calc(12 * var(--vu));font-size:clamp(17px,2.232vh,21px);line-height:1.24;letter-spacing:-.3px}
+html.dk .brand-sub{position:relative;flex:none;text-align:center;margin-top:calc(2 * var(--vu));font-size:clamp(12.5px,1.541vh,14.5px);line-height:1.38;letter-spacing:.3px}
+html.dk .sidebar nav{position:relative;flex:none;display:flex;flex-direction:column;gap:max(3px,calc(3 * var(--vu)));margin-top:calc(39 * var(--vu));padding:0 15px 0 16px;z-index:1}
+html.dk .nav-item{position:relative;left:auto;top:auto!important;width:auto;height:max(44px,calc(61 * var(--vu)));flex:none;display:flex;align-items:center;padding-left:76px}
+html.dk #nav-agents{margin-top:max(0px,calc(2 * var(--vu)))}
+html.dk .nav-item .ic{top:50%!important;transform:translateY(-50%)}
+html.dk .nav-item .lbl{position:relative;font-size:clamp(15px,1.86vh,17.5px);line-height:24px;letter-spacing:0}
+html.dk .nav-item.active .lbl{font-size:clamp(14.5px,1.78vh,16.75px)}
+html.dk .side-wave{top:auto;bottom:calc(51 * var(--vu));left:0;width:100%;height:max(150px,calc(330 * var(--vu)))}
+html.dk .tag1,html.dk .tag2{position:absolute;left:clamp(24px,13.24%,36px);font-size:11.5px;line-height:16px;letter-spacing:clamp(2.6px,.2392vw,4px)}
+html.dk .tag1{bottom:calc(70 * var(--vu))}
+html.dk .tag2{bottom:calc(48 * var(--vu))}
+html.tl .sidebar{border-right:1px solid var(--sidebar-divider);background:linear-gradient(180deg,#0b1225,#0a1123 60%,#0b112a)}
+html.tl .logo{left:6px;top:14px;width:64px;height:64px}
+html.tl .brand-title,html.tl .brand-sub,html.tl .side-wave,html.tl .tag1,html.tl .tag2,html.tl .nav-item .lbl{display:none}
+html.tl .nav-item{left:10px!important;width:56px!important;height:56px!important;border-radius:14px}
+html.tl #nav-overview{top:104px!important}html.tl #nav-agents{top:168px!important}html.tl #nav-activity{top:232px!important}html.tl #nav-settings{top:296px!important}
+html.tl .nav-item .ic{left:15px!important;top:15px!important;width:26px!important;height:26px!important}
+html.tl .nav-item.active::after{top:12px;bottom:12px}
+html.tl .nav-badge{right:-4px;top:-4px;min-width:20px;height:20px;line-height:20px;font-size:11px;padding:0 5px}
+html.tl .nav-dot{left:40px;top:8px}
+
+/* ------------------------------------------------------------------ header */
+html.fluid .topbar{grid-area:head;position:relative;left:auto;top:auto;width:auto;height:auto;min-width:0}
+html.fluid .page-title{grid-area:title;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;outline:0}
+html.fluid .pills{grid-area:pills;display:flex;align-items:center;min-width:0}
+html.fluid .pill{position:relative;left:auto!important;top:auto;width:auto!important;display:flex;align-items:center;min-width:0}
+html.fluid .pill .lbl{position:static!important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+html.fluid .pill .ic{position:static!important;flex:none}
+html.fluid .dot-online{position:relative;left:auto!important;top:auto!important;flex:none;width:11px;height:11px}
+html.fluid .dot-online[data-s="warn"]{width:13px;height:12px}
+html.fluid .dot-online[data-s="err"]{width:9px;height:9px}
+html.fluid .pill .ping{left:6px;top:6px}
+html.fluid .acct{grid-area:acct;position:relative}
+html.fluid .avatar{position:relative;left:auto;top:auto}
+/* dk: title + subtitle, pills, divider, avatar + greeting (right-aligned, the reference's spacing at full size) */
+html.dk .topbar{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;grid-template-rows:auto auto;align-content:center;
+  grid-template-areas:"title pills div acct" "sub pills div acct";padding:0 calc(38 * var(--hu)) 0 calc(var(--gl) + 19 * var(--hu))}
+html.dk .page-title{font-size:clamp(23px,3.348vh,31.5px);line-height:1.27;letter-spacing:0}
+html.dk .page-sub{grid-area:sub;position:relative;left:auto;top:auto;display:block;margin:calc(3 * var(--vu)) 0 calc(11 * var(--vu));font-size:clamp(13.5px,1.753vh,16.5px);line-height:1.333;letter-spacing:.06px;
+  max-width:none;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+html.dk .pills{gap:clamp(10px,.927vw,15.5px);margin-left:16px}
+html.comp .pill{height:clamp(40px,5.74vh,54px);gap:clamp(9px,.718vw,12px);padding:0 clamp(13px,1.077vw,18px) 0 clamp(12px,.957vw,16px);flex:none}
+html.comp .pill .lbl{font-size:clamp(13.5px,1.62vh,15.25px)!important;line-height:20px!important}
+html.comp .pill .ic{width:clamp(18px,2.48vh,23.4px)!important;height:clamp(18px,2.48vh,23.4px)!important}
+html.dk #pill-system{min-width:calc(163 * var(--hu));padding-left:clamp(12px,1.226vw,20.5px);gap:clamp(9px,.927vw,15.5px)}
+html.dk #pill-devices{min-width:calc(205 * var(--hu));padding-left:clamp(12px,.966vw,16.15px);gap:clamp(9px,.806vw,13.47px)}
+html.dk #pill-voice{min-width:calc(153 * var(--hu));padding-left:clamp(12px,.952vw,15.91px);gap:clamp(8px,.63vw,10.54px)}
+html.dk #pill-devices .lbl{font-size:clamp(13px,1.514vh,14.25px)!important}
+html.dk #pill-voice .lbl{font-size:clamp(13.5px,1.594vh,15px)!important}
+html.comp #pill-voice .ic{width:clamp(20px,2.82vh,26.5px)!important;height:clamp(20px,2.82vh,26.5px)!important;margin:0 -2px}
+html.comp .dot-online{width:12px;height:12px}
+html.comp .pill-mark{left:24px;top:calc(50% - 15px)}
+html.dk .hdr-div{grid-area:div;align-self:center;position:static;width:1px;height:clamp(24px,3.4vh,32px);margin:0 clamp(16px,calc(7.653vw - 78.96px),49px) 0 clamp(16px,calc(7.653vw - 77.96px),50px)}
+html.dk .acct{align-self:center;display:grid;grid-template-columns:auto auto auto;grid-template-rows:auto auto;grid-template-areas:"av g1 ch" "av g2 ch";align-items:center}
+html.dk .account{position:absolute;left:-6px;right:-16px;top:-4px;bottom:-4px;width:auto;height:auto;border-radius:14px}
+html.dk .avatar{grid-area:av;width:clamp(42px,6.38vh,60px);height:clamp(42px,6.38vh,60px);font-size:clamp(15px,2.02vh,19px)}
+html.dk .greet1{grid-area:g1;align-self:end;margin-left:calc(18 * var(--hu));font-size:clamp(13.5px,1.7vh,16px);line-height:1.375}
+html.dk .greet2{grid-area:g2;align-self:start;position:static;margin:calc(4 * var(--vu)) 0 0 calc(18 * var(--hu));font-size:clamp(14px,1.81vh,17px);line-height:1.3}
+html.dk .chev-down{grid-area:ch;position:static!important;margin-left:calc(19 * var(--hu))}
+html.comp .avatar-badge{left:calc(clamp(42px,6.38vh,60px) - 16px);top:-6px}
+html.dk .topbar[data-greet="off"] .greet1,html.dk .topbar[data-greet="off"] .greet2{display:none}
+html.dk .topbar[data-greet="off"] .chev-down{margin-left:6px}
+/* tl and ph: compact header */
+html.tl .topbar,html.ph .topbar{display:grid;align-items:center;column-gap:12px;row-gap:10px}
+html.tl .topbar{grid-template-columns:minmax(0,1fr) auto auto;grid-template-areas:"title pills acct";padding:16px 18px 12px 20px}
+html.ph .topbar{grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"logo title acct" "pills pills pills";padding:10px 16px 10px;border-bottom:1px solid #121a30}
+html.ph .logo-sm{display:block;grid-area:logo;width:30px;height:30px}
+html.tl .page-title{font-size:26px;line-height:32px;letter-spacing:-.2px}
+html.ph .page-title{font-size:21px;line-height:28px;letter-spacing:-.2px}
+html.tl .page-sub,html.ph .page-sub{display:none}
+html.tl .pills,html.ph .pills{gap:10px}
+html.tl .pill{height:42px;border-radius:13px;gap:8px;padding:0 14px 0 12px}
+html.ph .pill{flex:1 1 0;height:38px;padding:0 8px;justify-content:center;gap:7px;border-radius:12px}
+html.tl .pill .lbl{font-size:14px!important;line-height:18px!important}
+html.ph .pill .lbl{font-size:13px!important;line-height:18px!important}
+html.tl .pill .ic{width:19px!important;height:19px!important}
+html.ph .pill .ic{width:16px!important;height:16px!important}
+html.tl .pill-mark{left:22px;top:6px}
+html.ph .pill-mark{left:auto;right:6px;top:5px}
+html.tl .hdr-div,html.ph .hdr-div,html.tl .greet1,html.tl .greet2,html.ph .greet1,html.ph .greet2,html.tl .chev-down,html.ph .chev-down{display:none}
+html.tl .acct{width:44px;height:44px}
+html.ph .acct{width:38px;height:38px}
+html.tl .account,html.ph .account{left:0;top:0;width:100%;height:100%;border-radius:50%}
+html.tl .avatar,html.ph .avatar{width:100%;height:100%;font-size:16px}
+html.tl .avatar-badge,html.ph .avatar-badge{left:auto;right:-8px;top:-6px}
+
+/* ------------------------------------------------------------------ main column + pages */
+html.fluid .page-ov,html.fluid .page{grid-area:main;position:relative;left:auto;top:auto;width:auto;height:auto;min-height:0;overflow-x:hidden;outline:0}
+html.comp .page-ov{margin:calc(2 * var(--vu)) var(--gm) 0 var(--gl);display:grid;grid-template-columns:minmax(0,411fr) minmax(0,404fr);grid-template-rows:auto minmax(150px,1fr);
+  column-gap:calc(15 * var(--hu));row-gap:calc(16 * var(--vu));padding-bottom:calc(29 * var(--vu));overflow-y:auto;container-type:inline-size;scrollbar-width:thin;scrollbar-color:#2a3655 transparent}
+html.comp .page-ov[hidden]{display:none}
+html.comp .page{margin:calc(2 * var(--vu)) calc(var(--gm) - 8px) 0 var(--gl);padding:0 8px calc(29 * var(--vu)) 0;overflow-y:auto;container-type:inline-size}
+html.comp .page.n-scroll,html.comp #page-activity,html.comp #page-settings{overflow-y:auto}
+html.ph .page-ov,html.ph .page{overflow-y:auto;padding:4px 16px 20px;container-type:inline-size}
+html.ph .page-ov{display:grid;grid-template-columns:minmax(0,1fr);grid-auto-rows:max-content;gap:16px;align-content:start}
+html.fluid .act-page{height:auto;min-height:100%}
+html.fluid .act-body{padding:16px}
+html.comp .act-body{padding:18px 20px 20px}
+html.fluid .set-wrap{grid-template-columns:minmax(0,1fr);height:auto}
+html.fluid .set-index{display:flex;overflow-x:auto;gap:4px;padding:6px;border-radius:13px;position:sticky;top:0;z-index:5;background:#0d1529;scrollbar-width:none}
+html.fluid .set-index a{flex:none;height:36px;font-size:14px}
+html.fluid .set-index a[aria-current="true"]::before{left:8px;right:8px;top:auto;bottom:0;width:auto;height:2px}
+html.fluid .set-main{overflow:visible;padding-right:0}
+@container (min-width:860px){
+  html.comp .set-wrap{grid-template-columns:214px minmax(0,1fr);align-items:start}
+  html.comp .set-index{display:grid;position:sticky;top:0;overflow:visible;padding:10px;border-radius:14px;background:var(--n-card)}
+  html.comp .set-index a{height:40px;font-size:14.5px}
+  html.comp .set-index a[aria-current="true"]::before{left:0;right:auto;top:6px;bottom:6px;width:2px;height:auto}
+}
+
+/* ------------------------------------------------------------------ hero: the reference composition, scaled as one piece (dk, tl) */
+/* --u = one reference pixel of the 830x474 hero; the composition is centred in the card (no transform: real text) */
+html.comp .hero{grid-column:1/-1;position:relative;left:auto;top:auto;width:auto;height:min(clamp(240px,calc(58vh - 71.5px),474px),calc(100cqw * .5712));min-height:0;container-type:size;
+  --u:min(calc(100cqw / 830),calc(100cqh / 474));--ox:calc((100cqw - 830 * var(--u)) / 2);--oy:calc((100cqh - 474 * var(--u)) / 2);
+  background:
+    radial-gradient(34.34% 26.79% at .36% -3.16%,rgba(var(--hg1),.870) 0%,rgba(var(--hg1),.551) 25%,rgba(var(--hg1),.502) 50%,rgba(var(--hg1),.039) 75%,rgba(var(--hg1),0) 100%),
+    radial-gradient(19.88% 37.76% at 94.7% 9.49%,rgba(var(--hg2),.822) 0%,rgba(var(--hg2),.505) 25%,rgba(var(--hg2),.218) 50%,rgba(var(--hg2),.097) 75%,rgba(var(--hg2),0) 100%),
+    radial-gradient(9.28% 16.46% at .84% 71.73%,rgba(var(--hg3),.701) 0%,rgba(var(--hg3),.470) 25%,rgba(var(--hg3),.207) 50%,rgba(var(--hg3),.081) 75%,rgba(var(--hg3),0) 100%),
+    radial-gradient(50.48% 18.14% at 39.4% 98.31%,rgba(var(--hg4),.275) 0%,rgba(var(--hg4),.185) 25%,rgba(var(--hg4),.077) 50%,rgba(var(--hg4),0) 75%,rgba(var(--hg4),0) 100%),
+    radial-gradient(31.57% 48.73% at 66.39% 48.52%,rgba(var(--hg5),.588) 0%,rgba(var(--hg5),.768) 25%,rgba(var(--hg5),.693) 50%,rgba(var(--hg5),.531) 75%,rgba(var(--hg5),0) 100%),
+    linear-gradient(180deg,rgb(var(--hgt)) 0%,rgb(var(--hgm)) 50%,rgb(var(--hgb)) 100%)}
+html.comp .hero-flare{inset:0;width:100%;height:100%}
+html.comp .hero .t{position:absolute}
+html.comp .hero-text{display:contents}
+html.comp #orb{position:absolute;left:calc(var(--ox) - 21 * var(--u));top:calc(var(--oy) - 57 * var(--u));width:calc(520 * var(--u));height:calc(520 * var(--u));margin:0}
+html.comp .user-ring{position:absolute;left:calc(var(--ox) + 115.6 * var(--u));top:calc(var(--oy) + 79.7 * var(--u));width:calc(248 * var(--u));height:calc(248 * var(--u));margin:0}
+html.comp .orb-glyph{position:absolute;left:calc(var(--ox) + 213.6 * var(--u));top:calc(var(--oy) + 177.7 * var(--u));width:max(40px,calc(52 * var(--u)));height:max(40px,calc(52 * var(--u)));margin:0;transform:translate(min(0px,calc(26 * var(--u) - 20px)),min(0px,calc(26 * var(--u) - 20px)))}
+html.comp .eyebrow{left:calc(var(--ox) + 447 * var(--u));top:calc(var(--oy) + 67 * var(--u));font-size:max(12px,calc(14.25 * var(--u)));line-height:max(16px,calc(20 * var(--u)));letter-spacing:max(2.4px,calc(4.3 * var(--u)))}
+html.comp .hero-name{left:calc(var(--ox) + 447 * var(--u));top:calc(var(--oy) + 96 * var(--u));font-size:max(30px,calc(65.5 * var(--u)));line-height:max(34px,calc(72 * var(--u)));letter-spacing:calc(-.5 * var(--u))}
+html.comp .hero-role{left:calc(var(--ox) + 448 * var(--u));top:calc(var(--oy) + 167 * var(--u));font-size:max(14.5px,calc(26.25 * var(--u)));line-height:max(19px,calc(32 * var(--u)))}
+html.comp .hero-rule{position:absolute;left:calc(var(--ox) + 447 * var(--u));top:calc(var(--oy) + 214 * var(--u));width:calc(57 * var(--u));height:max(2px,calc(3 * var(--u)));margin:0}
+html.comp #wave{position:absolute;left:calc(var(--ox) + 446 * var(--u));top:calc(var(--oy) + 238 * var(--u));width:calc(216 * var(--u));height:calc(40 * var(--u))}
+html.comp .hero-status,html.comp .hero-status-user{left:calc(var(--ox) + 447 * var(--u));top:calc(var(--oy) + 280 * var(--u));font-size:max(13.5px,calc(20.25 * var(--u)));line-height:max(19px,calc(28 * var(--u)));
+  white-space:nowrap;max-width:calc(100cqw - var(--ox) - 447 * var(--u) - 12px);overflow:hidden;text-overflow:ellipsis}
+html.comp .hero-status .act{font-size:max(12.5px,calc(14 * var(--u)))}
+html.comp .hero-btns{display:flex;position:absolute;left:calc(var(--ox) + 108 * var(--u));top:calc(var(--oy) + 360 * var(--u));gap:calc(15 * var(--u))}
+html.comp .hbtn{position:relative;left:auto!important;top:auto;flex:none;height:max(36px,calc(56 * var(--u)));min-width:max-content;justify-content:flex-start;padding:0 calc(14 * var(--u)) 0 var(--ix);gap:var(--ig)}
+html.comp #btn-listen{width:calc(217 * var(--u));--ix:calc(37.5 * var(--u));--ig:calc(10.62 * var(--u))}
+html.comp #btn-task{width:calc(193 * var(--u));--ix:calc(40.04 * var(--u));--ig:calc(11.74 * var(--u))}
+html.comp #btn-micoff{width:calc(180 * var(--u));--ix:calc(43.82 * var(--u));--ig:calc(12.44 * var(--u))}
+html.comp .hbtn .ic{position:static!important;flex:none;width:max(17px,calc(26.88 * var(--u)))!important;height:max(17px,calc(26.88 * var(--u)))!important}
+html.comp #btn-task .ic{width:max(16px,calc(26.22 * var(--u)))!important;height:max(16px,calc(26.22 * var(--u)))!important}
+html.comp #btn-micoff .ic{width:max(16px,calc(24.74 * var(--u)))!important;height:max(16px,calc(24.74 * var(--u)))!important}
+html.comp .hbtn .lbl{position:static!important;font-size:max(13px,calc(14.875 * var(--u)));line-height:20px}
+html.comp #btn-task .lbl{font-size:max(13px,calc(15 * var(--u)))}
+html.comp #btn-micoff .lbl{font-size:max(13px,calc(15.125 * var(--u)))}
+html.comp #btn-listen .live{left:calc(20 * var(--u));top:calc(50% - 4px)}
+html.comp .hero-quote{left:calc(var(--ox) + 399.5 * var(--u));top:calc(var(--oy) + 437 * var(--u));transform:translateX(-50%);font-size:max(12px,calc(14.25 * var(--u)));line-height:max(16px,calc(20 * var(--u)));letter-spacing:max(.8px,calc(1.6 * var(--u)))}
+html.comp .hero-quote[data-helper]{left:calc(var(--ox) + 108 * var(--u));transform:none;letter-spacing:.2px;max-width:calc(100cqw - var(--ox) - 108 * var(--u) - 16px);overflow:hidden;text-overflow:ellipsis}
+
+/* ------------------------------------------------------------------ hero: phone (orb on top, centred text) */
+html.ph .hero{position:relative;left:auto;top:auto;width:auto;height:auto;display:grid;grid-template-columns:minmax(0,1fr);grid-template-areas:"orb" "text" "btns" "quote";
+  padding:0 16px 18px;border-radius:16px;
+  background:radial-gradient(70% 45% at 0% 0%,rgba(var(--hg1),.75),rgba(var(--hg1),0) 70%),radial-gradient(40% 35% at 100% 0%,rgba(var(--hg2),.55),rgba(var(--hg2),0) 70%),linear-gradient(180deg,rgb(var(--hgt)) 0,rgb(var(--hgm)) 50%,rgb(var(--hgb)) 100%)}
+html.ph .hero-flare{display:none}
+html.ph #orb{grid-area:orb;position:relative;left:auto;top:auto;width:340px;height:340px;margin:-56px auto -78px;justify-self:center}
+html.ph .orb-glyph,html.ph .user-ring{grid-area:orb;position:relative;left:auto;top:auto;justify-self:center;align-self:start}
+html.ph .orb-glyph{margin-top:88px}
+html.ph .user-ring{width:162px;height:162px;margin-top:33px}
+html.ph .hero-text{grid-area:text;display:flex;flex-direction:column;align-items:center;text-align:center;position:relative;z-index:1}
+html.ph .eyebrow{font-size:13px;letter-spacing:3.6px;line-height:18px}
+html.ph .hero-name{font-size:44px;line-height:50px;margin-top:6px}
+html.ph .hero-role{font-size:19px;line-height:24px}
+html.ph .hero-rule{position:relative;left:auto;top:auto;margin:12px 0 4px}
+html.ph #wave{position:relative;left:auto;top:auto}
+html.ph .hero-status,html.ph .hero-status-user{font-size:18px;line-height:25px;white-space:normal}
+html.ph .hero-btns{grid-area:btns;display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px;position:relative;z-index:1}
+html.ph .hbtn{position:relative;left:auto!important;top:auto;width:auto!important;height:48px;gap:10px;padding:0 12px}
+html.ph #btn-listen{grid-column:1/-1;height:50px}
+html.ph .hbtn .ic{position:static!important;width:22px!important;height:22px!important}
+html.ph .hbtn .lbl{position:static!important;font-size:15.5px}
+html.ph #btn-listen .live{left:14px;top:21px}
+html.ph .hero-quote{grid-area:quote;margin-top:16px;text-align:center;white-space:normal;font-size:13.5px;letter-spacing:1px;line-height:20px;position:relative;z-index:1}
+html.ph .hero-quote[data-helper]{letter-spacing:.1px}
+@container (min-width:620px){
+  html.ph .hero{grid-template-columns:300px minmax(0,1fr);grid-template-areas:"orb text" "btns btns" "quote quote";padding:0 24px 20px;min-height:0}
+  html.ph #orb{width:420px;height:420px;margin:-70px -60px -50px}
+  html.ph .orb-glyph{margin-top:114px}
+  html.ph .user-ring{width:200px;height:200px;margin-top:40px}
+  html.ph .hero-text{align-items:flex-start;text-align:left;padding-top:44px}
+  html.ph .hero-name{font-size:56px;line-height:64px}
+  html.ph .hero-btns{grid-template-columns:1.15fr 1fr 1fr}
+  html.ph #btn-listen{grid-column:auto}
+}
+@container (min-width:740px){html.ph .page-ov{grid-template-columns:minmax(0,1fr) minmax(0,1fr)} html.ph .hero{grid-column:1/-1}}
+
+/* ------------------------------------------------------------------ Quick Stats + Recent Activity: the reference cards; bodies scroll inside */
+html.fluid .card{position:relative;left:auto!important;top:auto!important;width:auto!important;height:auto!important;min-height:0}
+html.comp .card{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr);padding-top:calc(15 * var(--vu));overflow:hidden}
+html.comp #qs{grid-column:1;container-type:inline-size}
+html.comp #act{grid-column:2;padding-top:calc(17 * var(--vu));container-type:inline-size}
+html.comp .card>.ic{top:max(10px,calc(23.5 * var(--vu)))!important}
+html.comp .card .card-title{grid-row:1;position:relative;margin-left:67px;margin-right:46px;font-size:clamp(14px,1.581vh,14.875px);line-height:22px;letter-spacing:1.2px;overflow:hidden;text-overflow:ellipsis}
+html.comp #act .card-title{margin-left:65px;font-size:clamp(14.5px,1.833vh,17.25px);letter-spacing:0}
+html.comp .card .card-sub{grid-row:2;position:relative;margin:calc(3 * var(--vu)) 46px 0 66px;font-size:clamp(13px,1.567vh,14.75px);line-height:20px;overflow:hidden;text-overflow:ellipsis}
+html.comp #act .card-sub{margin:calc(1 * var(--vu)) 46px 0 65px;font-size:clamp(13px,1.541vh,14.5px)}
+html.comp .card-open{left:auto!important;right:19px;top:max(8px,calc(23 * var(--vu)))!important}
+html.comp #act .card-open{right:14px;top:max(8px,calc(24 * var(--vu)))!important}
+html.comp .qs-src{position:static;grid-row:3;margin:0 0 0 66px}
+html.comp .qs-tiles{grid-row:3;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-auto-rows:max-content;align-content:start;column-gap:15px;row-gap:max(10px,calc(14 * var(--vu)));
+  margin-top:calc(16 * var(--vu));padding:0 16px max(12px,calc(19 * var(--vu))) 20px;min-height:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#2a3655 transparent}
+html.comp .tile{position:relative;left:auto!important;top:auto!important;width:auto;height:clamp(64px,calc(91 * var(--vu)),91px);display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:auto auto;
+  align-content:start;column-gap:0;padding:max(8px,calc(18 * var(--vu))) 8px 0 16.6px}
+html.comp #tile-disk,html.comp #tile-dev{height:clamp(64px,calc(95 * var(--vu)),95px);padding-top:max(8px,calc(20 * var(--vu)))}
+html.comp .tile>.ic{position:static!important;grid-row:1/3;align-self:start;width:max(22px,calc(29.33 * var(--vu)))!important;height:max(22px,calc(29.33 * var(--vu)))!important;margin:max(1px,calc(2.6 * var(--vu))) calc(25 * var(--hu)) 0 0}
+html.comp .tile .val{position:static;grid-column:2;font-size:clamp(15px,1.86vh,17.5px);line-height:clamp(17px,2.34vh,22px);letter-spacing:0}
+html.comp #tile-cpu .val{letter-spacing:1px}
+html.comp #tile-dev .val{font-size:clamp(14.5px,1.753vh,16.5px)}
+html.comp .tile .lab{position:static;grid-column:2;margin-top:max(0px,calc(1 * var(--vu)));font-size:12.75px;line-height:clamp(15px,1.913vh,18px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+html.comp #tile-mem .val,html.comp #tile-disk .val{font-size:clamp(15px,1.966vh,18.5px)}
+html.comp #tile-dev .lab{font-size:12px}
+html.comp #tile-mem .lab{font-size:12.5px}
+html.comp #tile-disk .lab{font-size:clamp(12.75px,1.461vh,13.75px);letter-spacing:.25px}
+html.comp .tile .track{left:16px;right:17px;width:auto;top:auto!important;bottom:max(7px,calc(13 * var(--vu)));height:max(6px,calc(9 * var(--vu)))}
+html.comp .tile .stale{right:10px;top:8px}
+.lab-s{display:none}
+@container (max-width:340px){html.comp #act .card-sub{font-size:12.5px;margin-right:38px} html.comp #act .card-title{margin-right:38px}}
+@container (max-width:290px){html.comp #tile-cpu .lab-l{display:none} html.comp #tile-cpu .lab-s{display:inline}}
+/* composer hint on narrow panels: a shorter wording below 390 px, and below 366 px only the paperclip and the mic stay (Shift+Enter still works) */
+@container (max-width:389px){html.comp .hint-kbd .lab-l{display:none} html.comp .hint-kbd .lab-s{display:inline}}
+@container (max-width:365px){html.comp .hint-kbd{visibility:hidden}}
+@container (max-width:400px){
+  html.comp .tile{padding-left:12px}
+  html.comp .tile>.ic{margin-right:10px}
+  html.comp #tile-dev .lab-l{display:none}
+  html.comp #tile-dev .lab-s{display:inline}
+  html.comp .tile .track{left:12px;right:12px}
+}
+html.comp .act-line{display:none}
+html.comp .act-list{grid-row:3;position:relative;left:auto;top:auto;width:auto;margin-top:calc(19 * var(--vu));min-height:0;overflow-y:auto;padding-bottom:6px;scrollbar-width:thin;scrollbar-color:#2a3655 transparent}
+html.comp .act-list::before{content:"";position:absolute;left:29.5px;top:15px;height:calc(100% - 66px);max-height:calc(3 * clamp(46px,calc(54 * var(--vu)),54px));width:1px;background:#2b3552}
+html.comp .act-row,html.comp .act-row:first-child{height:clamp(46px,calc(54 * var(--vu)),54px)}
+html.comp .act-row .ttl{font-size:clamp(13.5px,1.514vh,14.25px)}
+html.comp .act-row .sub{font-size:clamp(13px,1.514vh,14.25px);right:16px;overflow:hidden;text-overflow:ellipsis}
+html.comp .act-row .tm{font-size:clamp(12.5px,1.488vh,14px)}
+html.fluid .card>.panel-error{inset:70px 14px 14px}
+/* phone cards */
+html.ph .card .card-title{position:absolute;left:62px;top:16px;font-size:16.5px;line-height:22px}
+html.ph .card .card-sub{position:absolute;left:62px;top:40px;font-size:14px;line-height:20px;white-space:nowrap}
+html.ph #qs{padding:78px 16px 16px}
+html.ph .card-open{left:auto!important;right:12px}
+html.ph .qs-tiles{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+html.ph .tile{position:relative;left:auto!important;top:auto!important;width:auto;height:100px!important}
+html.ph .tile .ic{left:14px!important;top:16px!important;width:26px!important;height:26px!important}
+html.ph .tile .val{position:absolute!important;left:50px!important;top:15px!important;font-size:18px;line-height:24px}
+html.ph .tile .lab{position:absolute!important;left:14px!important;top:50px!important;font-size:13px;line-height:18px;right:8px;overflow:hidden;text-overflow:ellipsis}
+html.ph .tile .track{left:14px;right:14px;width:auto;top:76px!important}
+html.ph #act{padding-bottom:10px}
+html.ph .act-list{position:relative;top:auto;width:auto;margin-top:79px}
+html.ph .act-row .tm{right:16px}
+
+/* ------------------------------------------------------------------ right panel: tabs, confirm card (capped), feed (shrinks to 0), composer (always visible) */
+html.fluid .panel{position:relative;left:auto;top:auto;width:auto;height:auto;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+html.comp .panel{grid-area:panel;margin:0 var(--gr) var(--gb) 0;container-type:inline-size}
+html.ph .panel{grid-area:main;margin:0;border-radius:0;box-shadow:none;background:transparent}
+html.ph .panel::before{display:none}
+html.ph:not(.route-chat) .panel{visibility:hidden;pointer-events:none}
+html.fluid .tabs{position:relative;left:auto;top:auto;width:auto;flex:none;display:flex;padding:0 6px}
+html.comp .tabs{height:clamp(50px,7.12vh,67px)}
+html.ph .tabs{height:60px}
+html.fluid .tabs::after{left:1px;right:1px;top:auto;bottom:0}
+html.fluid .tab{position:relative;top:0;left:auto!important;width:auto!important;flex:1 1 auto;height:100%;display:flex;align-items:center;justify-content:center;gap:9px;padding:0 6px}
+html.comp .tab{padding:0 6px calc(1 * var(--vu))}
+html.dk .tabs{padding:0 0 0 calc(8 * var(--hu))}
+html.dk .tab{flex:none;justify-content:flex-start;min-width:max-content}
+html.dk #tab-chat{width:calc(123 * var(--hu))!important;padding-left:calc(21 * var(--hu));gap:calc(14 * var(--hu))}
+html.dk #tab-appr{width:calc(181 * var(--hu))!important;margin-left:calc(16 * var(--hu));padding-left:calc(19.6 * var(--hu));gap:calc(14 * var(--hu))}
+html.dk #tab-tools{width:calc(106 * var(--hu))!important;margin-left:calc(54 * var(--hu));padding-left:calc(12 * var(--hu));gap:calc(13 * var(--hu))}
+html.comp .tab[aria-pressed="true"] .lbl{font-size:clamp(14.5px,1.687vh,15.875px)}
+html.dk #tab-chat:not([aria-pressed="true"]) .lbl{font-size:clamp(15px,1.727vh,16.25px)}
+html.dk .badge{margin-left:calc(-4 * var(--hu))}
+html.fluid .tab .ic{position:static!important;width:21px!important;height:21px!important}
+html.comp .tab .ic{width:clamp(20px,2.5vh,23.6px)!important;height:clamp(20px,2.5vh,23.6px)!important}
+html.fluid .tab .lbl{position:static!important;font-size:15.5px;line-height:22px}
+html.comp .tab .lbl{font-size:clamp(15px,1.8vh,17px)}
+html.fluid .badge{position:static;width:22px;height:22px;line-height:22px;font-size:12px;margin-left:-2px;flex:none}
+html.comp .badge{width:clamp(22px,2.76vh,26px);height:clamp(22px,2.76vh,26px);line-height:clamp(22px,2.76vh,26px);font-size:12.5px}
+html.fluid .badge[hidden]{display:none}
+html.fluid .tab-ul{top:auto;bottom:0}
+/* the confirm card: a flex column in the flow, capped at 64 % of the panel. Only the command block shrinks (it scrolls),
+   so the question, the buttons and the meta line always stay visible */
+html.fluid .confirm{position:relative;left:auto;top:auto;width:auto;height:auto!important;display:flex;flex-direction:column;align-items:stretch;min-height:0}
+html.comp .confirm{flex:0 1 auto;max-height:64%;overflow-x:hidden;overflow-y:auto;margin:calc(21 * var(--vu)) 17px 0 19px;padding:max(14px,calc(21 * var(--vu))) 21px max(14px,calc(21 * var(--vu))) 22px;scrollbar-width:thin}
+html.ph .confirm{flex:none;margin:14px 14px 4px;padding:16px}
+/* "Show full command": the card may then use the whole panel between the tabs and the composer (the messages shrink to 0) */
+html.comp .confirm[data-expanded="true"]{max-height:none}
+html.fluid .cf-hd{display:flex;align-items:center;gap:15px;flex:none;min-width:0}
+html.ph .cf-hd{gap:12px}
+html.fluid .cf-hd>.ic{position:static!important;flex:none;width:24px!important;height:24px!important}
+html.comp .cf-hd>.ic{width:clamp(22px,2.87vh,27px)!important;height:clamp(22px,2.87vh,27px)!important}
+html.fluid .cf-title{position:static;flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+html.comp .cf-title{font-size:clamp(14.5px,1.714vh,16.125px);line-height:22px}
+html.ph .cf-title{font-size:15.5px;line-height:22px}
+html.fluid .cf-pill{position:relative;left:auto;top:auto;flex:none;width:auto;height:28px;padding:0 11px 0 28px;margin-left:auto}
+html.comp .cf-pill{height:clamp(26px,3.19vh,30px);padding:0 14px 0 34px}
+html.fluid .cf-pill .ic{left:10px!important;top:calc(50% - 6.5px)!important}
+html.comp .cf-pill .ic{left:11px!important}
+html.fluid .cf-pill .lbl{position:static!important;display:block;font-size:12px;white-space:nowrap;line-height:28px}
+html.comp .cf-pill .lbl{font-size:12.25px;line-height:clamp(26px,3.19vh,30px)}
+html.fluid .cf-q{position:static;flex:none;white-space:normal}
+html.comp .cf-q{margin-top:max(8px,calc(14 * var(--vu)));font-size:clamp(14px,1.727vh,16.25px);line-height:clamp(20px,2.55vh,24px);letter-spacing:.07px}
+html.ph .cf-q{margin-top:10px;font-size:15px;line-height:22px}
+html.fluid .cf-code{position:relative;left:auto;top:auto;width:auto;height:auto;min-width:0;flex:0 1 auto;min-height:56px}
+html.comp .cf-code{margin-top:max(8px,calc(17 * var(--vu)));padding:max(10px,calc(19 * var(--vu))) 20px max(8px,calc(13 * var(--vu)));font-size:clamp(12.5px,1.594vh,15px);line-height:clamp(19px,2.55vh,24px);
+  max-height:clamp(70px,22vh,160px)}
+html.ph .cf-code{margin-top:10px;padding:12px 14px;font-size:12.5px;line-height:20px;max-height:132px}
+html.fluid .cf-code span{letter-spacing:0!important;top:0!important}
+html.fluid .cf-exp-row{flex:none}
+html.fluid .cf-meta,html.fluid .cf-cancel{position:static;flex:none;margin-top:10px}
+html.fluid .cf-btns{display:grid;grid-template-columns:1fr 1fr;flex:none}
+html.comp .cf-btns{gap:15px;margin-top:max(10px,calc(12 * var(--vu)))}
+html.ph .cf-btns{gap:12px;margin-top:12px}
+html.fluid .cf-btn{position:relative;left:auto!important;top:auto;width:auto;height:46px}
+html.comp .cf-btn{height:clamp(40px,5.2vh,49px)}
+html.fluid .cf-btn .lbl{position:static!important;font-size:clamp(14px,1.62vh,15.25px)}
+@container (max-width:430px){html.comp .cf-title-w{display:none} html.comp .confirm{padding-left:18px;padding-right:18px} html.comp .cf-hd{gap:12px}}
+html.fluid .feed{position:relative;left:auto;top:auto!important;width:auto;bottom:auto;flex:1 1 0;min-height:0}
+html.comp .feed{margin-top:calc(29 * var(--vu))}
+html.comp #confirm[hidden]~.feed{margin-top:calc(17 * var(--vu))}
+html.fluid .feed-scroll{scrollbar-width:thin;scrollbar-color:#2a3655 transparent}
+html.fluid .feed-scroll::-webkit-scrollbar{display:block;width:8px}
+html.fluid .feed-scroll::-webkit-scrollbar-thumb{background:#253150;border-radius:8px}
+html.comp .msg{margin-bottom:max(14px,calc(23 * var(--vu)))}
+html.comp .bubble{font-size:clamp(15px,1.727vh,16.25px)}
+html.ph .msg{margin-left:70px;margin-right:14px}
+html.ph .msg .av{left:-54px;width:42px;height:42px}
+html.ph .msg.ai .av{left:-54px}
+html.ph .bubble{font-size:15px;line-height:22px;padding:12px 16px 14px}
+html.ph .msg.user .bubble{min-height:0;padding-bottom:30px}
+html.ph .msg.user .bubble .time{bottom:9px}
+html.ph .bubble .txt{max-width:none}
+html.ph .bubble .txt br{display:none}
+html.ph .msg.sys,html.ph .chat-day{margin-left:70px}
+@container (max-width:480px){
+  html.comp .bubble .txt{max-width:none}
+  html.comp .bubble .txt br{display:none}
+  html.comp .msg{margin-left:72px;margin-right:14px}
+  html.comp .msg .av{left:-58px}
+  html.comp .msg.user .bubble{min-height:0;padding-bottom:30px}
+  html.comp .msg.user .bubble .time{bottom:9px}
+  html.comp .bubble{padding:12px 16px 14px 17px;line-height:23px}
+  html.comp .msg.sys,html.comp .chat-day{margin-left:72px}
+}
+html.fluid .captions{position:relative;left:auto;right:auto;bottom:auto;top:auto;flex:none;margin:6px 15px 0}
+/* composer: input row + hints row; never pushed out of the panel */
+html.fluid .composer{position:relative;left:auto;top:auto;width:auto;height:auto;flex:none;display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"input input input" "attach kbd mic";align-items:center}
+html.comp .composer{margin:max(8px,calc(12 * var(--vu))) 16px max(12px,calc(15 * var(--vu))) 15px;padding:max(10px,calc(15 * var(--vu))) 15px max(8px,calc(16 * var(--vu)));column-gap:12px;row-gap:max(8px,calc(16 * var(--vu)))}
+html.ph .composer{margin:6px 12px 12px;padding:12px;gap:10px 8px}
+html.fluid .input{grid-area:input;position:relative;left:auto;top:auto;width:auto;display:flex}
+html.comp .input{height:clamp(46px,6.16vh,58px)}
+html.ph .input{height:54px}
+html.fluid .input textarea{position:relative;flex:1;width:auto;height:100%;min-width:0}
+html.comp .input textarea{padding-top:max(9px,calc(11 * var(--vu)));font-size:clamp(15px,1.727vh,16.25px)}
+html.ph .input textarea{padding-top:15px;font-size:15.5px}
+html.fluid .send{position:relative;left:auto;top:auto;flex:none;margin:2px 2px 2px 0;align-self:center}
+html.comp .send{width:clamp(42px,5.74vh,54px);height:clamp(42px,5.74vh,54px)}
+html.ph .send{width:50px;height:50px}
+html.fluid .send .ic{left:50%!important;top:50%!important;transform:translate(-52%,-48%);width:clamp(24px,3vh,28.25px)!important;height:clamp(24px,3vh,28.25px)!important}
+html.fluid .hint{position:relative;left:auto!important;top:auto;width:auto;height:26px;display:flex;align-items:center;gap:8px}
+html.fluid .hint .ic{position:static!important}
+html.fluid .hint .lbl{position:static!important;font-size:13px;line-height:18px}
+html.fluid .hint-attach{grid-area:attach;width:26px;justify-content:center}
+html.fluid .hint-kbd{grid-area:kbd;min-width:0;overflow:hidden}
+html.fluid .hint-kbd .lbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+html.fluid .hint-mic{grid-area:mic}
+html.comp .hint-mic{gap:12px;padding-right:calc(7 * var(--hu))}
+html.comp .hint-kbd{gap:12px}
+html.fluid .chip-task{left:12px;top:-30px}
+html.ph .hint-kbd{visibility:hidden}
+
+/* ------------------------------------------------------------------ phone: approvals bar, tab bar, sheets, toasts at the top */
+html.ph .tabbar{grid-area:tabs;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));height:calc(64px + env(safe-area-inset-bottom));padding-bottom:env(safe-area-inset-bottom);
+  background:linear-gradient(180deg,#0c1328,#0a1124);border-top:1px solid #1a2440;position:relative;z-index:30}
+html.ph.typing .tabbar{display:none}
+.tabbar button{position:relative;display:grid;justify-items:center;align-content:center;gap:4px;color:#9ba7cf;font:500 11.5px/14px var(--font-ui)}
+.tabbar button .n-ic{width:22px;height:22px}
+.tabbar button[aria-current="page"]{color:#fff;font-weight:700}
+.tabbar button[aria-current="page"] .n-ic{color:var(--acc-icon)}
+.tabbar button[aria-current="page"]::before{content:"";position:absolute;top:0;left:28%;right:28%;height:3px;border-radius:0 0 3px 3px;background:var(--acc-line);box-shadow:0 0 10px rgba(var(--acc-glow),.6)}
+.tabbar .tb-mark{position:absolute;top:8px;left:calc(50% + 8px);min-width:18px;height:18px;padding:0 5px;border-radius:999px;font:700 11px/18px var(--font-ui);color:#fff;background:var(--badge-red)}
+.tabbar .tb-mark[data-s="warn"]{background:var(--warn);color:#1b1408}
+.tabbar .tb-mark[hidden]{display:none}
+/* the pinned card collapses to a 48 px bar on phones; the full card is the bottom sheet */
+html.ph:not(.sheet) #confirm{display:none}
+html.ph:not(.sheet) .cf-bar:not([hidden]){display:flex}
+html.ph.sheet .confirm{position:fixed!important;left:0;right:0;bottom:calc(64px + env(safe-area-inset-bottom));top:auto;margin:0;z-index:85;border-radius:20px 20px 0 0;visibility:visible;pointer-events:auto;padding:18px;
+  max-height:calc(100% - 64px - env(safe-area-inset-bottom) - 8px);overflow-y:auto;box-shadow:0 -20px 50px rgba(0,0,0,.5);animation:nsheet .3s cubic-bezier(.2,.8,.2,1)}
+html.ph.sheet.typing .confirm{bottom:0}
+@keyframes nsheet{from{transform:translateY(40px);opacity:0}}
+@media (min-width:640px){html.ph.sheet .confirm,html.ph .pop,html.ph .n-dlg{max-width:600px;margin-left:auto;margin-right:auto}html.ph .pop{left:0!important;right:0!important}}
+html.ph.sheet .confirm::before{border-radius:20px 20px 0 0}
+html.ph.sheet .confirm .cf-later{display:inline-flex;align-self:center;margin-top:8px}
+html.ph.sheet .cf-btns{grid-template-columns:1fr;gap:10px}
+html.ph.sheet #cf-allow{order:-1;height:50px}
+html.ph .pop{position:fixed;left:0!important;right:0;top:auto!important;bottom:0;width:auto;max-height:82%;overflow-y:auto;border-radius:20px 20px 0 0;padding:18px 18px calc(22px + env(safe-area-inset-bottom));z-index:95;animation:nsheet .3s cubic-bezier(.2,.8,.2,1)}
+html.ph .pop::before{border-radius:20px 20px 0 0}
+html.ph .pop-scrim{z-index:94}
+html.ph .layer{padding:0;place-items:end stretch}
+html.ph .n-dlg{width:100%;max-height:94%;border-radius:20px 20px 0 0}
+html.ph .layer.lightbox{place-items:center;padding:12px}
+html.fluid .toasts{bottom:24px}
+html.comp .toasts{left:calc(var(--sw,76px) + (100vw - var(--sw,76px) - var(--pw) - var(--gr)) / 2)}
+html.ph .toasts{top:calc(10px + env(safe-area-inset-top));bottom:auto;max-width:calc(100vw - 24px)}
+html.ph .ntoast{animation-name:ntoastdown}
+html.ph .ntoast.out{transform:translateY(-8px)}
+@keyframes ntoastdown{from{opacity:0;transform:translateY(-14px)}}
+/* the Activity sub-tab strip scrolls sideways on narrow screens: an edge fade says there is more */
+html.fluid .set-index[data-more="right"],html.fluid .n-tabs[data-more="right"]{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 44px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 44px),transparent)}
+html.fluid .set-index[data-more="left"],html.fluid .n-tabs[data-more="left"]{-webkit-mask-image:linear-gradient(270deg,#000 calc(100% - 44px),transparent);mask-image:linear-gradient(270deg,#000 calc(100% - 44px),transparent)}
+html.fluid .set-index[data-more="both"],html.fluid .n-tabs[data-more="both"]{-webkit-mask-image:linear-gradient(90deg,transparent,#000 44px,#000 calc(100% - 44px),transparent);mask-image:linear-gradient(90deg,transparent,#000 44px,#000 calc(100% - 44px),transparent)}
+
+/* ------------------------------------------------------------------ Electron: window controls fixed at the window edge, 140 px reserved in the header */
+html.is-electron.dk .topbar{padding-right:calc(140px + 12px)}
+html.is-electron.tl .topbar{padding-right:150px}
+html.is-electron.ph .acct{margin-right:132px}
+
+/* ------------------------------------------------------------------ page content on narrow main columns */
+@container (max-width:719px){
+  .n-grid2,.n-grid3,.n-persona-grid,.cam-row{grid-template-columns:minmax(0,1fr)}
+  .n-flow{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .n-flow::before{display:none}
+  .conn-rows{grid-template-columns:1fr 1fr}
+  .term .ln{grid-template-columns:auto auto minmax(0,1fr);row-gap:0;column-gap:10px;padding-top:3px;padding-bottom:3px}
+  .term .ln span:last-child{grid-column:1/-1;color:#e6ebf7}
+  .term.small .ln .ct{display:block}
+  .conf .cr{grid-template-columns:110px minmax(0,1fr) 40px}
+  .field{grid-template-columns:minmax(0,1fr)}
+  .field>.fc{justify-self:start}
+  .n-tabs{overflow-x:auto;scrollbar-width:none;padding:0 4px}
+  .n-tabs button{padding:0 12px;font-size:15px}
+}
+@container (min-width:720px) and (max-width:900px){.n-grid3{grid-template-columns:1fr 1fr}}

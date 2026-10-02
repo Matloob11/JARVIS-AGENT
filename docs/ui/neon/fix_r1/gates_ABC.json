@@ -1,0 +1,1390 @@
+{
+ "1280x595:nominal": {
+  "layout": "dk",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 464,
+   "bottom": 566,
+   "panelBottom": 578,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 81,
+  "confirmH": 221,
+  "hero": [
+   623,
+   274
+  ],
+  "minFont": [
+   12,
+   "Jarvis"
+  ],
+  "taglineFont": 11.5,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1280x595:long-cmd": {
+  "layout": "dk",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 464,
+   "bottom": 566,
+   "panelBottom": 578,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 0,
+  "confirmH": 302,
+  "hero": [
+   623,
+   274
+  ],
+  "minFont": [
+   12,
+   "Jarvis"
+  ],
+  "taglineFont": 11.5,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1280x595:typing-long": {
+  "layout": "dk",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 464,
+   "bottom": 566,
+   "panelBottom": 578,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 81,
+  "confirmH": 221,
+  "hero": [
+   623,
+   274
+  ],
+  "minFont": [
+   12,
+   "Jarvis"
+  ],
+  "taglineFont": 11.5,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1280x635:nominal": {
+  "layout": "dk",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 501,
+   "bottom": 605,
+   "panelBottom": 617,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 109,
+  "confirmH": 224,
+  "hero": [
+   623,
+   297
+  ],
+  "minFont": [
+   12,
+   "Jarvis"
+  ],
+  "taglineFont": 11.5,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1280x635:long-cmd": {
+  "layout": "dk",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 501,
+   "bottom": 605,
+   "panelBottom": 617,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 0,
+  "confirmH": 332,
+  "hero": [
+   623,
+   297
+  ],
+  "minFont": [
+   12,
+   "Jarvis"
+  ],
+  "taglineFont": 11.5,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1280x635:typing-long": {
+  "layout": "dk",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 501,
+   "bottom": 605,
+   "panelBottom": 617,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 109,
+  "confirmH": 224,
+  "hero": [
+   623,
+   297
+  ],
+  "minFont": [
+   12,
+   "Jarvis"
+  ],
+  "taglineFont": 11.5,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1200x800:nominal": {
+  "layout": "dk",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 649,
+   "bottom": 764,
+   "panelBottom": 777,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 194,
+  "confirmH": 249,
+  "hero": [
+   570,
+   325
+  ],
+  "minFont": [
+   12,
+   "Jarvis"
+  ],
+  "taglineFont": 11.5,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1200x800:long-cmd": {
+  "layout": "dk",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 649,
+   "bottom": 764,
+   "panelBottom": 777,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 11,
+  "confirmH": 431,
+  "hero": [
+   570,
+   325
+  ],
+  "minFont": [
+   12,
+   "Jarvis"
+  ],
+  "taglineFont": 11.5,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1200x800:typing-long": {
+  "layout": "dk",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 649,
+   "bottom": 764,
+   "panelBottom": 777,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 194,
+  "confirmH": 249,
+  "hero": [
+   570,
+   325
+  ],
+  "minFont": [
+   12,
+   "Jarvis"
+  ],
+  "taglineFont": 11.5,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1200x800?electron=1:nominal": {
+  "layout": "dk",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 649,
+   "bottom": 764,
+   "panelBottom": 777,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 194,
+  "confirmH": 249,
+  "hero": [
+   570,
+   325
+  ],
+  "minFont": [
+   12,
+   "Jarvis"
+  ],
+  "taglineFont": 11.5,
+  "hscroll": 0,
+  "errors": [],
+  "winctl": [
+   0,
+   0
+  ]
+ },
+ "1200x800?electron=1:long-cmd": {
+  "layout": "dk",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 649,
+   "bottom": 764,
+   "panelBottom": 777,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 11,
+  "confirmH": 431,
+  "hero": [
+   570,
+   325
+  ],
+  "minFont": [
+   12,
+   "Jarvis"
+  ],
+  "taglineFont": 11.5,
+  "hscroll": 0,
+  "errors": [],
+  "winctl": [
+   0,
+   0
+  ]
+ },
+ "1200x800?electron=1:typing-long": {
+  "layout": "dk",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 649,
+   "bottom": 764,
+   "panelBottom": 777,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 194,
+  "confirmH": 249,
+  "hero": [
+   570,
+   325
+  ],
+  "minFont": [
+   12,
+   "Jarvis"
+  ],
+  "taglineFont": 11.5,
+  "hscroll": 0,
+  "errors": [],
+  "winctl": [
+   0,
+   0
+  ]
+ },
+ "1366x657:nominal": {
+  "layout": "dk",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 521,
+   "bottom": 626,
+   "panelBottom": 638,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 122,
+  "confirmH": 226,
+  "hero": [
+   678,
+   310
+  ],
+  "minFont": [
+   12,
+   "Jarvis"
+  ],
+  "taglineFont": 11.5,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1366x657:long-cmd": {
+  "layout": "dk",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 521,
+   "bottom": 626,
+   "panelBottom": 638,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 0,
+  "confirmH": 349,
+  "hero": [
+   678,
+   310
+  ],
+  "minFont": [
+   12,
+   "Jarvis"
+  ],
+  "taglineFont": 11.5,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1366x657:typing-long": {
+  "layout": "dk",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 521,
+   "bottom": 626,
+   "panelBottom": 638,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 122,
+  "confirmH": 226,
+  "hero": [
+   678,
+   310
+  ],
+  "minFont": [
+   12,
+   "Jarvis"
+  ],
+  "taglineFont": 11.5,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1536x730:nominal": {
+  "layout": "dk",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 589,
+   "bottom": 697,
+   "panelBottom": 709,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 185,
+  "confirmH": 215,
+  "hero": [
+   762,
+   352
+  ],
+  "minFont": [
+   12,
+   "Jarvis"
+  ],
+  "taglineFont": 11.5,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1536x730:long-cmd": {
+  "layout": "dk",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 589,
+   "bottom": 697,
+   "panelBottom": 709,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 38,
+  "confirmH": 362,
+  "hero": [
+   762,
+   352
+  ],
+  "minFont": [
+   12,
+   "Jarvis"
+  ],
+  "taglineFont": 11.5,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1536x730:typing-long": {
+  "layout": "dk",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 589,
+   "bottom": 697,
+   "panelBottom": 709,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 185,
+  "confirmH": 215,
+  "hero": [
+   762,
+   352
+  ],
+  "minFont": [
+   12,
+   "Jarvis"
+  ],
+  "taglineFont": 11.5,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1179x640:nominal": {
+  "layout": "tl",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 510,
+   "bottom": 614,
+   "panelBottom": 626,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 122,
+  "confirmH": 224,
+  "hero": [
+   687,
+   300
+  ],
+  "minFont": [
+   12,
+   "Jarvis"
+  ],
+  "taglineFont": null,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1179x640:long-cmd": {
+  "layout": "tl",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 510,
+   "bottom": 614,
+   "panelBottom": 626,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 0,
+  "confirmH": 346,
+  "hero": [
+   687,
+   300
+  ],
+  "minFont": [
+   12,
+   "Jarvis"
+  ],
+  "taglineFont": null,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1179x640:typing-long": {
+  "layout": "tl",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 510,
+   "bottom": 614,
+   "panelBottom": 626,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 122,
+  "confirmH": 224,
+  "hero": [
+   687,
+   300
+  ],
+  "minFont": [
+   12,
+   "Jarvis"
+  ],
+  "taglineFont": null,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1024x600:nominal": {
+  "layout": "tl",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 472,
+   "bottom": 574,
+   "panelBottom": 586,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 69,
+  "confirmH": 241,
+  "hero": [
+   564,
+   277
+  ],
+  "minFont": [
+   12,
+   "Jarvis"
+  ],
+  "taglineFont": null,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1024x600:long-cmd": {
+  "layout": "tl",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 472,
+   "bottom": 574,
+   "panelBottom": 586,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 0,
+  "confirmH": 310,
+  "hero": [
+   564,
+   277
+  ],
+  "minFont": [
+   12,
+   "Jarvis"
+  ],
+  "taglineFont": null,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1024x600:typing-long": {
+  "layout": "tl",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 472,
+   "bottom": 574,
+   "panelBottom": 586,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 69,
+  "confirmH": 241,
+  "hero": [
+   564,
+   277
+  ],
+  "minFont": [
+   12,
+   "Jarvis"
+  ],
+  "taglineFont": null,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1024x768:nominal": {
+  "layout": "tl",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 630,
+   "bottom": 742,
+   "panelBottom": 754,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 193,
+  "confirmH": 260,
+  "hero": [
+   564,
+   322
+  ],
+  "minFont": [
+   12,
+   "Jarvis"
+  ],
+  "taglineFont": null,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1024x768:long-cmd": {
+  "layout": "tl",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 630,
+   "bottom": 742,
+   "panelBottom": 754,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 26,
+  "confirmH": 427,
+  "hero": [
+   564,
+   322
+  ],
+  "minFont": [
+   12,
+   "Jarvis"
+  ],
+  "taglineFont": null,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1024x768:typing-long": {
+  "layout": "tl",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 630,
+   "bottom": 742,
+   "panelBottom": 754,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 193,
+  "confirmH": 260,
+  "hero": [
+   564,
+   322
+  ],
+  "minFont": [
+   12,
+   "Jarvis"
+  ],
+  "taglineFont": null,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1672x941:nominal": {
+  "layout": "dk",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 768,
+   "bottom": 899,
+   "panelBottom": 914,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 257,
+  "confirmH": 268,
+  "hero": [
+   830,
+   474
+  ],
+  "minFont": [
+   12,
+   "Connected Devices"
+  ],
+  "taglineFont": 11.5,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1672x941:long-cmd": {
+  "layout": "dk",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 768,
+   "bottom": 899,
+   "panelBottom": 914,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 89,
+  "confirmH": 436,
+  "hero": [
+   830,
+   474
+  ],
+  "minFont": [
+   12,
+   "Connected Devices"
+  ],
+  "taglineFont": 11.5,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1672x941:typing-long": {
+  "layout": "dk",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 768,
+   "bottom": 899,
+   "panelBottom": 914,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 257,
+  "confirmH": 268,
+  "hero": [
+   830,
+   474
+  ],
+  "minFont": [
+   12,
+   "Connected Devices"
+  ],
+  "taglineFont": 11.5,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1920x1080:nominal": {
+  "layout": "dk",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 907,
+   "bottom": 1038,
+   "panelBottom": 1053,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 396,
+  "confirmH": 268,
+  "hero": [
+   1078,
+   474
+  ],
+  "minFont": [
+   12,
+   "Connected Devices"
+  ],
+  "taglineFont": 11.5,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1920x1080:long-cmd": {
+  "layout": "dk",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 907,
+   "bottom": 1038,
+   "panelBottom": 1053,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 228,
+  "confirmH": 436,
+  "hero": [
+   1078,
+   474
+  ],
+  "minFont": [
+   12,
+   "Connected Devices"
+  ],
+  "taglineFont": 11.5,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1920x1080:typing-long": {
+  "layout": "dk",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 907,
+   "bottom": 1038,
+   "panelBottom": 1053,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 396,
+  "confirmH": 268,
+  "hero": [
+   1078,
+   474
+  ],
+  "minFont": [
+   12,
+   "Connected Devices"
+  ],
+  "taglineFont": 11.5,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1440x900:nominal": {
+  "layout": "dk",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 733,
+   "bottom": 860,
+   "panelBottom": 874,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 222,
+  "confirmH": 279,
+  "hero": [
+   715,
+   408
+  ],
+  "minFont": [
+   12,
+   "Devices"
+  ],
+  "taglineFont": 11.5,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1440x900:long-cmd": {
+  "layout": "dk",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 733,
+   "bottom": 860,
+   "panelBottom": 874,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 50,
+  "confirmH": 451,
+  "hero": [
+   715,
+   408
+  ],
+  "minFont": [
+   12,
+   "Devices"
+  ],
+  "taglineFont": 11.5,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1440x900:typing-long": {
+  "layout": "dk",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 733,
+   "bottom": 860,
+   "panelBottom": 874,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 222,
+  "confirmH": 279,
+  "hero": [
+   715,
+   408
+  ],
+  "minFont": [
+   12,
+   "Devices"
+  ],
+  "taglineFont": 11.5,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1280x560:nominal": {
+  "layout": "dk",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 431,
+   "bottom": 532,
+   "panelBottom": 544,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 57,
+  "confirmH": 219,
+  "hero": [
+   623,
+   253
+  ],
+  "minFont": [
+   12,
+   "Jarvis"
+  ],
+  "taglineFont": 11.5,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1280x560:long-cmd": {
+  "layout": "dk",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 431,
+   "bottom": 532,
+   "panelBottom": 544,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 0,
+  "confirmH": 275,
+  "hero": [
+   623,
+   253
+  ],
+  "minFont": [
+   12,
+   "Jarvis"
+  ],
+  "taglineFont": 11.5,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1280x560:typing-long": {
+  "layout": "dk",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 431,
+   "bottom": 532,
+   "panelBottom": 544,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 57,
+  "confirmH": 219,
+  "hero": [
+   623,
+   253
+  ],
+  "minFont": [
+   12,
+   "Jarvis"
+  ],
+  "taglineFont": 11.5,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1600x900:nominal": {
+  "layout": "dk",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 733,
+   "bottom": 860,
+   "panelBottom": 874,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 245,
+  "confirmH": 256,
+  "hero": [
+   794,
+   451
+  ],
+  "minFont": [
+   12,
+   "Devices"
+  ],
+  "taglineFont": 11.5,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1600x900:long-cmd": {
+  "layout": "dk",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 733,
+   "bottom": 860,
+   "panelBottom": 874,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 73,
+  "confirmH": 428,
+  "hero": [
+   794,
+   451
+  ],
+  "minFont": [
+   12,
+   "Devices"
+  ],
+  "taglineFont": 11.5,
+  "hscroll": 0,
+  "errors": []
+ },
+ "1600x900:typing-long": {
+  "layout": "dk",
+  "transform": "none",
+  "problems": [],
+  "composer": {
+   "top": 733,
+   "bottom": 860,
+   "panelBottom": 874,
+   "inPanel": true,
+   "inViewport": true
+  },
+  "feedH": 245,
+  "confirmH": 256,
+  "hero": [
+   794,
+   451
+  ],
+  "minFont": [
+   12,
+   "Devices"
+  ],
+  "taglineFont": 11.5,
+  "hscroll": 0,
+  "errors": []
+ },
+ "phone 390x844": {
+  "sheetOnArrival": true,
+  "chat": {
+   "composerTop": 654,
+   "composerBottom": 768,
+   "tabbarTop": 780,
+   "visible": true,
+   "feedH": 421,
+   "bar": true,
+   "barH": 48,
+   "sheet": false
+  },
+  "approvals": {
+   "composerTop": 654,
+   "composerBottom": 768,
+   "tabbarTop": 780,
+   "visible": true,
+   "feedH": 421,
+   "bar": true,
+   "barH": 48,
+   "sheet": false
+  },
+  "tools": {
+   "composerTop": 654,
+   "composerBottom": 768,
+   "tabbarTop": 780,
+   "visible": true,
+   "feedH": 421,
+   "bar": true,
+   "barH": 48,
+   "sheet": false
+  },
+  "typing": {
+   "typing": true,
+   "tabbar": "none",
+   "composerBottom": 832,
+   "h": 844
+  },
+  "ok": true
+ },
+ "phone 375x667": {
+  "sheetOnArrival": true,
+  "chat": {
+   "composerTop": 477,
+   "composerBottom": 591,
+   "tabbarTop": 603,
+   "visible": true,
+   "feedH": 244,
+   "bar": true,
+   "barH": 48,
+   "sheet": false
+  },
+  "approvals": {
+   "composerTop": 477,
+   "composerBottom": 591,
+   "tabbarTop": 603,
+   "visible": true,
+   "feedH": 244,
+   "bar": true,
+   "barH": 48,
+   "sheet": false
+  },
+  "tools": {
+   "composerTop": 477,
+   "composerBottom": 591,
+   "tabbarTop": 603,
+   "visible": true,
+   "feedH": 244,
+   "bar": true,
+   "barH": 48,
+   "sheet": false
+  },
+  "typing": {
+   "typing": true,
+   "tabbar": "none",
+   "composerBottom": 655,
+   "h": 667
+  },
+  "ok": true
+ },
+ "phone 360x640": {
+  "sheetOnArrival": true,
+  "chat": {
+   "composerTop": 450,
+   "composerBottom": 564,
+   "tabbarTop": 576,
+   "visible": true,
+   "feedH": 217,
+   "bar": true,
+   "barH": 48,
+   "sheet": false
+  },
+  "approvals": {
+   "composerTop": 450,
+   "composerBottom": 564,
+   "tabbarTop": 576,
+   "visible": true,
+   "feedH": 217,
+   "bar": true,
+   "barH": 48,
+   "sheet": false
+  },
+  "tools": {
+   "composerTop": 450,
+   "composerBottom": 564,
+   "tabbarTop": 576,
+   "visible": true,
+   "feedH": 217,
+   "bar": true,
+   "barH": 48,
+   "sheet": false
+  },
+  "typing": {
+   "typing": true,
+   "tabbar": "none",
+   "composerBottom": 628,
+   "h": 640
+  },
+  "ok": true
+ },
+ "phone 320x640": {
+  "sheetOnArrival": true,
+  "chat": {
+   "composerTop": 450,
+   "composerBottom": 564,
+   "tabbarTop": 576,
+   "visible": true,
+   "feedH": 217,
+   "bar": true,
+   "barH": 48,
+   "sheet": false
+  },
+  "approvals": {
+   "composerTop": 450,
+   "composerBottom": 564,
+   "tabbarTop": 576,
+   "visible": true,
+   "feedH": 217,
+   "bar": true,
+   "barH": 48,
+   "sheet": false
+  },
+  "tools": {
+   "composerTop": 450,
+   "composerBottom": 564,
+   "tabbarTop": 576,
+   "visible": true,
+   "feedH": 217,
+   "bar": true,
+   "barH": 48,
+   "sheet": false
+  },
+  "typing": {
+   "typing": true,
+   "tabbar": "none",
+   "composerBottom": 628,
+   "h": 640
+  },
+  "ok": true
+ },
+ "phone 360x740": {
+  "sheetOnArrival": true,
+  "chat": {
+   "composerTop": 550,
+   "composerBottom": 664,
+   "tabbarTop": 676,
+   "visible": true,
+   "feedH": 317,
+   "bar": true,
+   "barH": 48,
+   "sheet": false
+  },
+  "approvals": {
+   "composerTop": 550,
+   "composerBottom": 664,
+   "tabbarTop": 676,
+   "visible": true,
+   "feedH": 317,
+   "bar": true,
+   "barH": 48,
+   "sheet": false
+  },
+  "tools": {
+   "composerTop": 550,
+   "composerBottom": 664,
+   "tabbarTop": 676,
+   "visible": true,
+   "feedH": 317,
+   "bar": true,
+   "barH": 48,
+   "sheet": false
+  },
+  "typing": {
+   "typing": true,
+   "tabbar": "none",
+   "composerBottom": 728,
+   "h": 740
+  },
+  "ok": true
+ },
+ "phone 412x915": {
+  "sheetOnArrival": true,
+  "chat": {
+   "composerTop": 725,
+   "composerBottom": 839,
+   "tabbarTop": 851,
+   "visible": true,
+   "feedH": 492,
+   "bar": true,
+   "barH": 48,
+   "sheet": false
+  },
+  "approvals": {
+   "composerTop": 725,
+   "composerBottom": 839,
+   "tabbarTop": 851,
+   "visible": true,
+   "feedH": 492,
+   "bar": true,
+   "barH": 48,
+   "sheet": false
+  },
+  "tools": {
+   "composerTop": 725,
+   "composerBottom": 839,
+   "tabbarTop": 851,
+   "visible": true,
+   "feedH": 492,
+   "bar": true,
+   "barH": 48,
+   "sheet": false
+  },
+  "typing": {
+   "typing": true,
+   "tabbar": "none",
+   "composerBottom": 903,
+   "h": 915
+  },
+  "ok": true
+ },
+ "C": {
+  "sheetLater": {
+   "sheet_after_later": false,
+   "sheet_after_new": true,
+   "toasts": [
+    "Approval is waiting in ChatOpen Chat to decide."
+   ],
+   "focus": "cf-deny",
+   "announce": "Another approval is waiting: Delete files. Queue 2.",
+   "sheet_after_empty_then_new": true
+  },
+  "desktopToast": [
+   "Approval needed: Emailemail_send, expires in 1:30"
+  ],
+  "ariaLive": {
+   "card_aria_live": null,
+   "mutations_3_2s": 3,
+   "announcer": "assertive",
+   "countdown_live": "off",
+   "announcements_3_2s": []
+  },
+  "focusRing": {
+   "active": "msg",
+   "inputShadow": "rgb(75, 168, 255) 0px 0px 0px 2px, rgba(37, 90, 255, 0.25) 0px 0px 0px 4px"
+  },
+  "eyebrow": [
+   {
+    "name": "Jarvis",
+    "h": 19,
+    "hitUp": true,
+    "hitDown": true,
+    "underline": "underline"
+   },
+   {
+    "name": "Anna",
+    "h": 19,
+    "hitUp": true,
+    "hitDown": true,
+    "underline": "none"
+   }
+  ],
+  "a11y": {
+   "feedRole": "log",
+   "feedLive": "polite",
+   "feedScrollbar": "thin",
+   "attachName": "Attach (coming soon)",
+   "kbdHintIsButton": "SPAN",
+   "micName": "Use microphone: hold to talk"
+  },
+  "routeFocus": {
+   "focus": "page-title",
+   "sr": "Agents page"
+  },
+  "helperLang": "ur-Latn",
+  "aliases": {
+   "appReady": true,
+   "opsDrawerToggle": true,
+   "chipWakeActive": "true",
+   "appReadyVisibleApp": true,
+   "appReadyVisibleLogin": false,
+   "jobRowStatus": [
+    "j1:running",
+    "j2:running",
+    "j3:done"
+   ],
+   "toolFilterActive": 5,
+   "settingsTurnMode": "pending",
+   "segDataActive": 13,
+   "vitalsVpsStale": true,
+   "simStatus": "idle"
+  },
+  "protoHandle": {
+   "display": "none",
+   "w": 0
+  },
+  "protoAfterAltP": {
+   "handle": "inline-flex",
+   "panel": true
+  },
+  "postLogin": {
+   "screen": "app",
+   "micOn": false,
+   "voice": "mic-off",
+   "status": "Mic is off"
+  }
+ }
+}

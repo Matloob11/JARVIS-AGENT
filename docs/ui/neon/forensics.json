@@ -1,0 +1,5650 @@
+{
+ "meta": {
+  "source": "C:/Users/Matloob/Desktop/JARVIS-AGENT-main/JARVIS & ANNA Neon Command Center.png",
+  "source_size": [
+   1672,
+   941
+  ],
+  "mode": "RGB, no metadata (AI-generated render; text and spacing have small irregularities)",
+  "units": "reference-image pixels; bbox = {x,y,w,h} with x,y = top-left inclusive pixel",
+  "design_scale": "1 image px = 1 CSS px. Body text measures 16px, labels 12-14px, so the render is a 1:1 desktop frame (~1672x941 viewport). For a 1920 wide screen scale x1.148, for 1440 scale x0.861 (or keep px and let the fluid columns absorb width).",
+  "method": "PIL/numpy/scipy/OpenCV pixel analysis: luminance-peak border tracing, diagonal corner-radius fits, grey-opening background subtraction + connected components for text/icon boxes, OpenCV thinning for icon stroke widths, polar unwrap + circle fits for the orb, Playwright-Chromium rendering of 28 sans + 15 mono candidate fonts scored by word-level NCC.",
+  "personalization": {
+   "greeting": "Good evening, Matloob",
+   "avatar_initials": "M",
+   "user_chat_avatar_letter": "M",
+   "note": "reference shows 'Alex' / 'AM' / 'A' - keep identical layout and styles"
+  }
+ },
+ "layout_grid": {
+  "sidebar": {
+   "x": 0,
+   "w": 271,
+   "divider_x": 271,
+   "divider_color": "#1f2a48",
+   "total_width_incl_divider": 272
+  },
+  "main_area": {
+   "x": 272,
+   "w": 1400
+  },
+  "header": {
+   "y": 0,
+   "h": 114,
+   "content_band_y": [
+    29,
+    82
+   ],
+   "content_center_y": 55.5,
+   "title_x": 314
+  },
+  "content": {
+   "x0": 295,
+   "x1": 1654,
+   "y0": 114,
+   "y1": 913,
+   "margins": {
+    "left_from_divider": 23,
+    "right": 17,
+    "bottom": 28
+   },
+   "columns": [
+    {
+     "name": "main",
+     "x": 295,
+     "w": 830
+    },
+    {
+     "name": "gap",
+     "w": 18
+    },
+    {
+     "name": "right_panel",
+     "x": 1143,
+     "w": 512
+    }
+   ],
+   "main_rows": [
+    {
+     "name": "hero",
+     "y": 116,
+     "h": 474
+    },
+    {
+     "name": "gap",
+     "h": 16
+    },
+    {
+     "name": "lower_cards",
+     "y": 606,
+     "h": 306
+    }
+   ],
+   "lower_row_columns": [
+    {
+     "name": "quickstats",
+     "x": 295,
+     "w": 411
+    },
+    {
+     "name": "gap",
+     "w": 15
+    },
+    {
+     "name": "activity",
+     "x": 721,
+     "w": 404
+    }
+   ]
+  },
+  "normalized_css_proposal": {
+   "app": "grid-template-columns: 272px 1fr",
+   "main": "padding: 0 18px 28px 24px; display:grid; grid-template-rows: 114px 1fr",
+   "content": "grid-template-columns: minmax(0,1fr) 512px; column-gap: 18px",
+   "left_column": "grid-template-rows: 474px 306px; row-gap: 16px",
+   "lower_row": "grid-template-columns: 1fr 1fr; column-gap: 16px  (measured 411 vs 404)",
+   "right_panel": "height: 800px (spans hero + lower cards; top 2px higher than hero)"
+  }
+ },
+ "tokens": {
+  "colors": {
+   "bg.canvas": {
+    "hex": "#070e1f",
+    "where": "page background bottom/right (1660,500), gaps between cards"
+   },
+   "bg.canvas_top_bloom": {
+    "hex": "#0c183b",
+    "where": "behind header/hero top (700..760, 92..110); peak #0d1737 at (1000,10)"
+   },
+   "bg.sidebar": {
+    "hex": "#0a1124",
+    "where": "sidebar body (100..260, 300..600)"
+   },
+   "bg.sidebar_top": {
+    "hex": "#0f1631",
+    "where": "sidebar top-left corner (5,5)"
+   },
+   "border.sidebar_divider": {
+    "hex": "#1f2a48",
+    "where": "x=271 (1px; #1d2845..#222c4b)"
+   },
+   "surface.hero": {
+    "hex": "#0c1329",
+    "where": "hero card body (950,330)"
+   },
+   "surface.card": {
+    "hex": "#0d152b",
+    "where": "quick stats / activity top; bottom #0a1325"
+   },
+   "surface.panel": {
+    "hex": "#0a1123",
+    "where": "right panel body; top #10172f"
+   },
+   "surface.tile": {
+    "hex": "#151e34",
+    "where": "stat tiles"
+   },
+   "surface.raised": {
+    "hex": "#192139",
+    "where": "user chat bubble"
+   },
+   "surface.raised_2": {
+    "hex": "#121b32",
+    "where": "assistant chat bubble"
+   },
+   "surface.input": {
+    "hex": "#15203d",
+    "where": "composer input"
+   },
+   "surface.composer": {
+    "hex": "#0e182c",
+    "where": "composer container (top #121b32)"
+   },
+   "surface.code": {
+    "hex": "#060c1c",
+    "where": "PowerShell code block"
+   },
+   "surface.ghost_button": {
+    "hex": "#121b34",
+    "where": "Run Task / Deny (Mic Off #18213b)"
+   },
+   "surface.pill": {
+    "hex": "#132145",
+    "where": "header pills (system #15233f, voice #111f43)"
+   },
+   "surface.nav_active": {
+    "hex": "#16285b -> #172141",
+    "where": "active nav item, left -> right"
+   },
+   "surface.warning_card": {
+    "hex": "#151826",
+    "where": "Confirm Command card"
+   },
+   "surface.warning_pill": {
+    "hex": "#2e231e",
+    "where": "Requires approval pill"
+   },
+   "surface.avatar_user": {
+    "hex": "#36405c",
+    "where": "chat user avatar circle"
+   },
+   "border.card": {
+    "hex": "#121e37",
+    "where": "quick stats / activity border (top); bottom #0f1a32 (~rgba(110,140,220,.10))"
+   },
+   "border.panel_top": {
+    "hex": "#232d47",
+    "where": "right panel top border; sides #18223a; bottom #111a30"
+   },
+   "border.hero_corner": {
+    "hex": "#2f3b81",
+    "where": "hero top-left border; top-right #25498d; mid #202b4b; bottom #172648"
+   },
+   "border.tile": {
+    "hex": "#1e2a43",
+    "where": "tile border"
+   },
+   "border.control": {
+    "hex": "#2e364f",
+    "where": "Deny / Mic Off border (Run Task #232e4c)"
+   },
+   "border.input": {
+    "hex": "#1b2744",
+    "where": "input border; composer top #23304e"
+   },
+   "border.code": {
+    "hex": "#151d2f",
+    "where": "code block border"
+   },
+   "border.warning": {
+    "hex": "#3a2c29",
+    "where": "confirm card border (#362a2a..#3f302a)"
+   },
+   "border.warning_pill": {
+    "hex": "#523a26",
+    "where": "requires-approval pill border"
+   },
+   "divider.tabs": {
+    "hex": "#172035",
+    "where": "y=179..180 across panel"
+   },
+   "divider.header": {
+    "hex": "#354369",
+    "where": "x=1366, y 40..71"
+   },
+   "text.strong": {
+    "hex": "#ffffff",
+    "where": "titles, values, active labels, button labels"
+   },
+   "text.pill": {
+    "hex": "#f2f5fa",
+    "where": "header pill labels (top-4% #f7f9fd)"
+   },
+   "text.chat_user": {
+    "hex": "#ced8ee",
+    "where": "user bubble text"
+   },
+   "text.chat_assistant": {
+    "hex": "#b0bcdb",
+    "where": "assistant bubble text"
+   },
+   "text.secondary": {
+    "hex": "#a7b1d3",
+    "where": "nav labels #a5b0dc, header subtitle #abb6de, greeting #a7b0d2, confirm question #b4bfd9"
+   },
+   "text.muted": {
+    "hex": "#97a3c2",
+    "where": "card subtitles #a0acca/#9baacb, item subs #94a1bf, tile labels #97a2c0, hints #96a3be"
+   },
+   "text.dim": {
+    "hex": "#7e8db4",
+    "where": "timestamps (#7e8db4 activity, #7186b4 user bubble, #5d739f assistant bubble), sidebar subtitle #7e89ac"
+   },
+   "text.faint": {
+    "hex": "#5c6a94",
+    "where": "sidebar footer tagline"
+   },
+   "text.hero_role": {
+    "hex": "#8192cc",
+    "where": "AI Assistant"
+   },
+   "text.hero_eyebrow": {
+    "hex": "#92a3d4",
+    "where": "JARVIS & ANNA eyebrow"
+   },
+   "text.hero_quote": {
+    "hex": "#95aadf",
+    "where": "quote"
+   },
+   "text.hero_title": {
+    "hex": "#e4eafc",
+    "where": "JARVIS (core #dde4fb)"
+   },
+   "accent.blue": {
+    "hex": "#3b82f6",
+    "where": "family of #2f75fc..#4ba8ff (buttons, underline, accents)"
+   },
+   "accent.blue_light": {
+    "hex": "#8dc4ff",
+    "where": "Listening for your command"
+   },
+   "accent.blue_icon": {
+    "hex": "#63aafb",
+    "where": "active nav icon / header icons #66b8fc"
+   },
+   "accent.cyan_underline": {
+    "hex": "#4ba8ff",
+    "where": "active tab underline"
+   },
+   "accent.rule": {
+    "hex": "#6290f2",
+    "where": "short rule under AI Assistant"
+   },
+   "accent.jarvis_label": {
+    "hex": "#acc8f9",
+    "where": "JARVIS label in assistant bubble"
+   },
+   "accent.badge": {
+    "hex": "#3a5fd2",
+    "where": "Approvals count badge"
+   },
+   "accent.send": {
+    "hex": "#163b80",
+    "where": "send button fill"
+   },
+   "status.green": {
+    "hex": "#22c086",
+    "where": "System Online dot (#2acc91 core), timeline dot 1 #23b084, CPU bar #35b992, chip icon #4ce0bf"
+   },
+   "status.blue": {
+    "hex": "#4a95fb",
+    "where": "timeline dot 2, memory bar #3590fc..#4898f9"
+   },
+   "status.violet": {
+    "hex": "#7a50f9",
+    "where": "timeline dot 3; devices bar #8981f6; laptop icon #bfbdf9"
+   },
+   "status.gray": {
+    "hex": "#8895bc",
+    "where": "timeline dot 4"
+   },
+   "status.amber": {
+    "hex": "#f9bc54",
+    "where": "disk bar; disk icon #fbc551; shield #f9c74c; requires-approval text #e6a64e, sparkle #f1a74d"
+   },
+   "track": {
+    "hex": "#222b46",
+    "where": "progress track"
+   },
+   "timeline.line": {
+    "hex": "#2b3552",
+    "where": "x=751 connector (1px)"
+   }
+  },
+  "radii": {
+   "measured": {
+    "hero": 15,
+    "right_panel": 15,
+    "quickstats": 13,
+    "activity": 13,
+    "confirm_card": 14,
+    "composer": 13,
+    "header_pill": 14,
+    "nav_active": 11,
+    "hero_buttons": 13,
+    "deny_approve": 12.5,
+    "tiles": 13,
+    "code_block": 12,
+    "input": 11,
+    "send_button": 12.5,
+    "chat_bubbles": 13.5,
+    "requires_pill": "full (h30)",
+    "badge": "circle d26",
+    "progress": "full (h9)"
+   },
+   "proposal": {
+    "r-sm": 12,
+    "r-md": 14,
+    "r-lg": 16,
+    "r-full": 9999,
+    "use": "r-lg: hero + right panel; r-md: cards, confirm card, composer, header pills, tiles, bubbles, hero buttons; r-sm: nav item, deny/approve, input, send, code"
+   }
+  },
+  "spacing": {
+   "page": {
+    "sidebar_to_content": 23,
+    "content_right_margin": 17,
+    "content_bottom_margin": 28,
+    "column_gap": 18,
+    "row_gap": 16,
+    "lower_cards_gap": 15
+   },
+   "hero": {
+    "orb_center": [
+     534,
+     319
+    ],
+    "orb_center_from_card_left": 239,
+    "text_column_x": 742,
+    "text_column_from_card_left": 447,
+    "buttons_row_y": [
+     476,
+     531
+    ],
+    "button_gap": [
+     15,
+     15
+    ],
+    "quote_baseline_from_bottom": 22
+   },
+   "card_header": {
+    "padding_left_to_icon": 22.5,
+    "icon_to_title": 22.5,
+    "title_baseline_to_sub_baseline": 22.5,
+    "chevron_right_padding": 24,
+    "padding_top_to_title_cap": 21.5
+   },
+   "tiles": {
+    "padding_left": 18,
+    "icon_to_value": 27,
+    "gap_x": 15,
+    "gap_y": 14,
+    "card_padding_left": 20,
+    "card_padding_right": 15,
+    "bar_inset_x": [
+     16,
+     17
+    ],
+    "bar_from_tile_bottom": [
+     13,
+     15
+    ]
+   },
+   "activity_items": {
+    "pitch": 53.5,
+    "dot_center_x_from_card_left": 30,
+    "text_x_from_card_left": 63,
+    "time_right_padding": 21,
+    "title_to_sub_baseline": 21
+   },
+   "right_panel": {
+    "tabs_y_band": [
+     125,
+     180
+    ],
+    "tab_icon_to_label": 16.5,
+    "confirm_inset": [
+     19,
+     17
+    ],
+    "confirm_padding": [
+     23,
+     24
+    ],
+    "confirm_button_gap": 15,
+    "avatar_to_bubble": 13,
+    "bubble_padding": [
+     16,
+     20
+    ],
+    "bubble_gap": 23,
+    "composer_inset": [
+     15,
+     16
+    ],
+    "composer_padding": [
+     15,
+     15
+    ]
+   },
+   "nav": {
+    "item_height": 61,
+    "item_pitch": 64,
+    "item_x": [
+     16,
+     256
+    ],
+    "icon_x": 42,
+    "label_x": 93,
+    "icon_to_label": 28
+   },
+   "header": {
+    "pill_height": 54,
+    "pill_gap": [
+     16,
+     15
+    ],
+    "pill_padding_x": 20,
+    "pill_icon_to_text": 16,
+    "divider_to_avatar": 51,
+    "avatar_to_greeting": 20
+   }
+  },
+  "typography": {
+   "families": {
+    "ui": "\"Segoe UI\", \"Noto Sans\", \"Open Sans\", system-ui, -apple-system, sans-serif  (Segoe UI is the measured match; Noto/Open Sans are the same designer's Google Fonts relatives for non-Windows)",
+    "brand": "\"Montserrat\", \"Segoe UI\", sans-serif  (sidebar wordmark 600, hero JARVIS 700)",
+    "mono": "\"JetBrains Mono\", \"Source Code Pro\", Consolas, monospace",
+    "google_fonts_only_alternative": {
+     "ui": "Noto Sans or Source Sans 3 (best Google body scores)",
+     "headings": "Figtree 700-800 (best Google heading score)",
+     "brand": "Montserrat"
+    }
+   },
+   "scale": [
+    {
+     "role": "hero-title",
+     "size": 64,
+     "weight": 700,
+     "family": "brand",
+     "ls": -0.5,
+     "color": "text.hero_title"
+    },
+    {
+     "role": "page-title",
+     "size": 30,
+     "weight": 700,
+     "family": "ui"
+    },
+    {
+     "role": "hero-role",
+     "size": 26,
+     "weight": 400,
+     "family": "ui",
+     "color": "text.hero_role"
+    },
+    {
+     "role": "brand-wordmark",
+     "size": 21,
+     "weight": 600,
+     "family": "brand",
+     "ls": -0.3
+    },
+    {
+     "role": "hero-status",
+     "size": 21,
+     "weight": 600,
+     "family": "ui",
+     "color": "accent.blue_light"
+    },
+    {
+     "role": "card-title / tab / nav",
+     "size": 17,
+     "weight": "700 (titles, active tab) / 600 (active nav) / 400 (inactive)",
+     "family": "ui"
+    },
+    {
+     "role": "value",
+     "size": 17,
+     "weight": 700,
+     "family": "ui"
+    },
+    {
+     "role": "body / chat / input / buttons / header subtitle / greeting",
+     "size": 16,
+     "weight": "400 (body) / 600 (buttons)",
+     "line_height": 24,
+     "family": "ui"
+    },
+    {
+     "role": "pill / activity title",
+     "size": 15,
+     "weight": "400 / 600",
+     "family": "ui"
+    },
+    {
+     "role": "code",
+     "size": 15,
+     "weight": 400,
+     "line_height": 24,
+     "family": "mono",
+     "char_advance": 8.92
+    },
+    {
+     "role": "card subtitle / item sub / sidebar subtitle / time",
+     "size": 14,
+     "weight": 400,
+     "family": "ui"
+    },
+    {
+     "role": "eyebrow",
+     "size": 14,
+     "weight": 400,
+     "ls": 4.3,
+     "transform": "uppercase",
+     "family": "ui"
+    },
+    {
+     "role": "quote",
+     "size": 14,
+     "weight": 400,
+     "ls": 1.6,
+     "family": "ui"
+    },
+    {
+     "role": "assistant label",
+     "size": 14,
+     "weight": 700,
+     "ls": 0.3,
+     "family": "ui"
+    },
+    {
+     "role": "hint / chat time / pill badge",
+     "size": 13,
+     "weight": 400,
+     "family": "ui"
+    },
+    {
+     "role": "tile label",
+     "size": 12.5,
+     "weight": 400,
+     "family": "ui"
+    },
+    {
+     "role": "sidebar footer",
+     "size": 11,
+     "weight": 600,
+     "ls": 4.0,
+     "transform": "uppercase",
+     "line_height": 22,
+     "family": "ui"
+    }
+   ],
+   "cap_height_ratio_used": 0.7,
+   "per_text_size_estimates": [
+    {
+     "id": "h1",
+     "family": "Segoe UI",
+     "weight": 700,
+     "size_by_width": 32.0,
+     "size_by_cap": 30.71,
+     "letter_spacing_px_at_cap_size": 0.81
+    },
+    {
+     "id": "header_sub",
+     "family": "Segoe UI",
+     "weight": 400,
+     "size_by_width": 16.61,
+     "size_by_cap": 15.71,
+     "letter_spacing_px_at_cap_size": 0.42
+    },
+    {
+     "id": "side_title",
+     "family": "Montserrat",
+     "weight": 600,
+     "size_by_width": 20.34,
+     "size_by_cap": 21.43,
+     "letter_spacing_px_at_cap_size": -0.73
+    },
+    {
+     "id": "side_title_segoe",
+     "family": "Segoe UI",
+     "weight": 700,
+     "size_by_width": 21.33,
+     "size_by_cap": 21.43,
+     "letter_spacing_px_at_cap_size": -0.07
+    },
+    {
+     "id": "side_sub",
+     "family": "Segoe UI",
+     "weight": 400,
+     "size_by_width": 14.99,
+     "size_by_cap": 14.29,
+     "letter_spacing_px_at_cap_size": 0.38
+    },
+    {
+     "id": "nav_active",
+     "family": "Segoe UI",
+     "weight": 600,
+     "size_by_width": 17.55,
+     "size_by_cap": 17.14,
+     "letter_spacing_px_at_cap_size": 0.25
+    },
+    {
+     "id": "nav_agents",
+     "family": "Segoe UI",
+     "weight": 400,
+     "size_by_width": 18.02,
+     "size_by_cap": 17.14,
+     "letter_spacing_px_at_cap_size": 0.54
+    },
+    {
+     "id": "nav_activity",
+     "family": "Segoe UI",
+     "weight": 400,
+     "size_by_width": 18.22,
+     "size_by_cap": 17.14,
+     "letter_spacing_px_at_cap_size": 0.5
+    },
+    {
+     "id": "nav_settings",
+     "family": "Segoe UI",
+     "weight": 400,
+     "size_by_width": 18.45,
+     "size_by_cap": 17.14,
+     "letter_spacing_px_at_cap_size": 0.65
+    },
+    {
+     "id": "pill_sys",
+     "family": "Segoe UI",
+     "weight": 400,
+     "size_by_width": 15.28,
+     "size_by_cap": 15.71,
+     "letter_spacing_px_at_cap_size": -0.23
+    },
+    {
+     "id": "pill_dev",
+     "family": "Segoe UI",
+     "weight": 400,
+     "size_by_width": 14.35,
+     "size_by_cap": 15.71,
+     "letter_spacing_px_at_cap_size": -0.69
+    },
+    {
+     "id": "pill_voice",
+     "family": "Segoe UI",
+     "weight": 400,
+     "size_by_width": 15.03,
+     "size_by_cap": 15.71,
+     "letter_spacing_px_at_cap_size": -0.37
+    },
+    {
+     "id": "greet1",
+     "family": "Segoe UI",
+     "weight": 400,
+     "size_by_width": 15.8,
+     "size_by_cap": 15.71,
+     "letter_spacing_px_at_cap_size": 0.05
+    },
+    {
+     "id": "greet_name",
+     "family": "Segoe UI",
+     "weight": 700,
+     "size_by_width": 16.28,
+     "size_by_cap": 17.86,
+     "letter_spacing_px_at_cap_size": -1.1
+    },
+    {
+     "id": "avatar_AM",
+     "family": "Segoe UI",
+     "weight": 700,
+     "size_by_width": 18.83,
+     "size_by_cap": 20.0,
+     "letter_spacing_px_at_cap_size": -1.86
+    },
+    {
+     "id": "hero_big",
+     "family": "Montserrat",
+     "weight": 700,
+     "size_by_width": 64.68,
+     "size_by_cap": 65.71,
+     "letter_spacing_px_at_cap_size": -0.77
+    },
+    {
+     "id": "hero_big_800",
+     "family": "Montserrat",
+     "weight": 800,
+     "size_by_width": 63.12,
+     "size_by_cap": 65.71,
+     "letter_spacing_px_at_cap_size": -1.98
+    },
+    {
+     "id": "hero_role",
+     "family": "Segoe UI",
+     "weight": 400,
+     "size_by_width": 26.38,
+     "size_by_cap": 25.71,
+     "letter_spacing_px_at_cap_size": 0.31
+    },
+    {
+     "id": "hero_role_light",
+     "family": "Segoe UI",
+     "weight": 300,
+     "size_by_width": 28.36,
+     "size_by_cap": 25.71,
+     "letter_spacing_px_at_cap_size": 1.14
+    },
+    {
+     "id": "hero_status",
+     "family": "Segoe UI",
+     "weight": 600,
+     "size_by_width": 20.33,
+     "size_by_cap": 21.43,
+     "letter_spacing_px_at_cap_size": -0.56
+    },
+    {
+     "id": "hero_status_r",
+     "family": "Segoe UI",
+     "weight": 400,
+     "size_by_width": 20.98,
+     "size_by_cap": 21.43,
+     "letter_spacing_px_at_cap_size": -0.22
+    },
+    {
+     "id": "btn_start",
+     "family": "Segoe UI",
+     "weight": 600,
+     "size_by_width": 16.2,
+     "size_by_cap": 16.43,
+     "letter_spacing_px_at_cap_size": -0.11
+    },
+    {
+     "id": "btn_run",
+     "family": "Segoe UI",
+     "weight": 600,
+     "size_by_width": 16.02,
+     "size_by_cap": 16.43,
+     "letter_spacing_px_at_cap_size": -0.23
+    },
+    {
+     "id": "btn_micoff",
+     "family": "Segoe UI",
+     "weight": 600,
+     "size_by_width": 16.31,
+     "size_by_cap": 16.43,
+     "letter_spacing_px_at_cap_size": -0.07
+    },
+    {
+     "id": "qs_title",
+     "family": "Segoe UI",
+     "weight": 700,
+     "size_by_width": 17.68,
+     "size_by_cap": 16.43,
+     "letter_spacing_px_at_cap_size": 0.65
+    },
+    {
+     "id": "qs_sub",
+     "family": "Segoe UI",
+     "weight": 400,
+     "size_by_width": 14.86,
+     "size_by_cap": 14.29,
+     "letter_spacing_px_at_cap_size": 0.26
+    },
+    {
+     "id": "tile_val",
+     "family": "Segoe UI",
+     "weight": 700,
+     "size_by_width": 16.41,
+     "size_by_cap": 17.86,
+     "letter_spacing_px_at_cap_size": -1.41
+    },
+    {
+     "id": "tile_lbl",
+     "family": "Segoe UI",
+     "weight": 400,
+     "size_by_width": 12.71,
+     "size_by_cap": 12.86,
+     "letter_spacing_px_at_cap_size": -0.09
+    },
+    {
+     "id": "tile_lbl2",
+     "family": "Segoe UI",
+     "weight": 400,
+     "size_by_width": 11.89,
+     "size_by_cap": 12.86,
+     "letter_spacing_px_at_cap_size": -0.5
+    },
+    {
+     "id": "ra_title",
+     "family": "Segoe UI",
+     "weight": 700,
+     "size_by_width": 17.54,
+     "size_by_cap": 17.14,
+     "letter_spacing_px_at_cap_size": 0.2
+    },
+    {
+     "id": "ra_sub",
+     "family": "Segoe UI",
+     "weight": 400,
+     "size_by_width": 14.39,
+     "size_by_cap": 14.29,
+     "letter_spacing_px_at_cap_size": 0.05
+    },
+    {
+     "id": "ra_item",
+     "family": "Segoe UI",
+     "weight": 600,
+     "size_by_width": 15.03,
+     "size_by_cap": 15.71,
+     "letter_spacing_px_at_cap_size": -0.36
+    },
+    {
+     "id": "ra_item_sub",
+     "family": "Segoe UI",
+     "weight": 400,
+     "size_by_width": 14.52,
+     "size_by_cap": 14.29,
+     "letter_spacing_px_at_cap_size": 0.11
+    },
+    {
+     "id": "ra_time",
+     "family": "Segoe UI",
+     "weight": 400,
+     "size_by_width": 14.25,
+     "size_by_cap": 14.29,
+     "letter_spacing_px_at_cap_size": -0.02
+    },
+    {
+     "id": "tab_chat",
+     "family": "Segoe UI",
+     "weight": 700,
+     "size_by_width": 16.56,
+     "size_by_cap": 17.14,
+     "letter_spacing_px_at_cap_size": -0.41
+    },
+    {
+     "id": "tab_appr",
+     "family": "Segoe UI",
+     "weight": 400,
+     "size_by_width": 17.15,
+     "size_by_cap": 17.14,
+     "letter_spacing_px_at_cap_size": 0.0
+    },
+    {
+     "id": "tab_tools",
+     "family": "Segoe UI",
+     "weight": 400,
+     "size_by_width": 17.11,
+     "size_by_cap": 17.14,
+     "letter_spacing_px_at_cap_size": -0.02
+    },
+    {
+     "id": "confirm_title",
+     "family": "Segoe UI",
+     "weight": 700,
+     "size_by_width": 16.51,
+     "size_by_cap": 17.14,
+     "letter_spacing_px_at_cap_size": -0.4
+    },
+    {
+     "id": "requires",
+     "family": "Segoe UI",
+     "weight": 400,
+     "size_by_width": 12.64,
+     "size_by_cap": 13.57,
+     "letter_spacing_px_at_cap_size": -0.45
+    },
+    {
+     "id": "confirm_q",
+     "family": "Segoe UI",
+     "weight": 400,
+     "size_by_width": 16.39,
+     "size_by_cap": 17.14,
+     "letter_spacing_px_at_cap_size": -0.37
+    },
+    {
+     "id": "deny",
+     "family": "Segoe UI",
+     "weight": 600,
+     "size_by_width": 16.36,
+     "size_by_cap": 16.43,
+     "letter_spacing_px_at_cap_size": -0.05
+    },
+    {
+     "id": "approve",
+     "family": "Segoe UI",
+     "weight": 600,
+     "size_by_width": 15.73,
+     "size_by_cap": 15.71,
+     "letter_spacing_px_at_cap_size": 0.01
+    },
+    {
+     "id": "user_msg",
+     "family": "Segoe UI",
+     "weight": 400,
+     "size_by_width": 16.32,
+     "size_by_cap": 17.14,
+     "letter_spacing_px_at_cap_size": -0.41
+    },
+    {
+     "id": "jarvis_lbl",
+     "family": "Segoe UI",
+     "weight": 700,
+     "size_by_width": 14.65,
+     "size_by_cap": 14.29,
+     "letter_spacing_px_at_cap_size": 0.24
+    },
+    {
+     "id": "jarvis_msg",
+     "family": "Segoe UI",
+     "weight": 400,
+     "size_by_width": 16.02,
+     "size_by_cap": 17.14,
+     "letter_spacing_px_at_cap_size": -0.5
+    },
+    {
+     "id": "time",
+     "family": "Segoe UI",
+     "weight": 400,
+     "size_by_width": 13.67,
+     "size_by_cap": 13.57,
+     "letter_spacing_px_at_cap_size": 0.06
+    },
+    {
+     "id": "placeholder",
+     "family": "Segoe UI",
+     "weight": 400,
+     "size_by_width": 15.88,
+     "size_by_cap": 16.43,
+     "letter_spacing_px_at_cap_size": -0.26
+    },
+    {
+     "id": "hint",
+     "family": "Segoe UI",
+     "weight": 400,
+     "size_by_width": 13.06,
+     "size_by_cap": 14.29,
+     "letter_spacing_px_at_cap_size": -0.53
+    },
+    {
+     "id": "hint2",
+     "family": "Segoe UI",
+     "weight": 400,
+     "size_by_width": 13.2,
+     "size_by_cap": 14.29,
+     "letter_spacing_px_at_cap_size": -0.6
+    },
+    {
+     "id": "code",
+     "family": "JetBrains Mono",
+     "weight": 400,
+     "size_by_width": 14.92,
+     "size_by_cap": 15.75,
+     "letter_spacing_px_at_cap_size": -0.51
+    },
+    {
+     "id": "code_scp",
+     "family": "Source Code Pro",
+     "weight": 400,
+     "size_by_width": 14.91,
+     "size_by_cap": 17.42,
+     "letter_spacing_px_at_cap_size": -1.53
+    },
+    {
+     "id": "code_consolas",
+     "family": "Consolas",
+     "weight": 400,
+     "size_by_width": 16.25,
+     "size_by_cap": 17.97,
+     "letter_spacing_px_at_cap_size": -0.96
+    },
+    {
+     "id": "eyebrow",
+     "family": "Segoe UI",
+     "weight": 400,
+     "size_by_width": 21.62,
+     "size_by_cap": 14.29,
+     "letter_spacing_px_at_cap_size": 4.35
+    },
+    {
+     "id": "quote",
+     "family": "Segoe UI",
+     "weight": 400,
+     "size_by_width": 18.02,
+     "size_by_cap": 14.29,
+     "letter_spacing_px_at_cap_size": 1.61
+    },
+    {
+     "id": "footer2",
+     "family": "Segoe UI",
+     "weight": 600,
+     "size_by_width": 17.3,
+     "size_by_cap": 11.43,
+     "letter_spacing_px_at_cap_size": 4.07
+    },
+    {
+     "id": "footer1",
+     "family": "Segoe UI",
+     "weight": 600,
+     "size_by_width": 17.42,
+     "size_by_cap": 11.43,
+     "letter_spacing_px_at_cap_size": 4.04
+    },
+    {
+     "id": "badge",
+     "family": "Segoe UI",
+     "weight": 700,
+     "size_by_width": 12.9,
+     "size_by_cap": 15.71,
+     "letter_spacing_px_at_cap_size": -0.87
+    }
+   ]
+  },
+  "shadows_glows": {
+   "cards": "no drop shadow (only 1px borders; a 1px darker ring hugs some borders = render sharpening, optional)",
+   "btn_primary_hero": "0 6px 22px rgba(37,90,255,.45) - glow measurable ~20px around Start Listening (#0d1f5f just below vs #0b132b)",
+   "btn_approve": "none outside; inner edge glow only",
+   "tab_underline": "0 0 10px 1px rgba(75,168,255,.45) (visible y 170..186)",
+   "status_dot": "0 0 8px rgba(34,197,134,.45)",
+   "timeline_dots": "blue/violet: 0 0 8px currentColor @ .5; green faint; gray none; each dot has a 2px ring of card background",
+   "progress_fill": "0 0 8px <fill colour> @ .35-.55",
+   "chat_avatar_ring": "0 0 10px rgba(58,115,200,.45)",
+   "nav_active_icon": "0 0 10px rgba(99,170,251,.45)",
+   "orb": "see orb.glow"
+  },
+  "gradients": {
+   "page_bg": "radial-gradient(900px 260px at 47% 0%, rgba(30,62,150,.35), transparent 70%), radial-gradient(600px 300px at 0% 75%, rgba(30,60,170,.18), transparent 70%), #070e1f",
+   "sidebar_bg": "linear-gradient(180deg,#0f1631 0%,#0b1326 12%,#0a1124 22%,#0a1124 100%) + wave decoration",
+   "hero_card": "#0c1329 + radial TL rgba(80,70,255,.20) 150px + radial TR rgba(40,110,255,.35) at (94%,11%) 120px + radial BL rgba(40,150,255,.15) at (0%,70%) 90px",
+   "hero_border": "linear-gradient(180deg, rgba(110,140,255,.38) 0%, rgba(110,140,255,.16) 30%, rgba(110,140,255,.12) 100%) as 1px border-box layer (corners brighter)",
+   "btn_start": "linear-gradient(115deg,#3aa8fd 0%,#3189fe 22%,#2d66fc 48%,#2645f8 78%,#2a5ffb 100%)",
+   "btn_approve": "radial-gradient(120% 140% at 50% 50%, #245afb 45%, #2f78fd 100%)",
+   "nav_active": "linear-gradient(90deg,#16285b 0%,#16244b 25%,#172141 70%)",
+   "panel": "linear-gradient(180deg,#10172f 0%,#0b1224 17%,#0a1123 40%)",
+   "cards": "linear-gradient(180deg,#0e152d 0%,#0a1325 100%)",
+   "composer": "linear-gradient(180deg,#121b32 0%,#0e172c 100%)",
+   "avatar": "linear-gradient(160deg,#0f2a70 0%,#0d1838 100%)",
+   "waveform": "linear-gradient(90deg, #3948a4 0%, #6880f8 22%, #53ccf9 50%, #4682eb 75%, rgba(19,32,73,0) 100%) applied per bar (alpha fades at both ends)",
+   "logo_ring_css_conic": "conic-gradient(from 0deg, #4775f1 0deg, #80b1fd 30deg, #7d90fc 60deg, #876bfc 90deg, #d089f9 120deg, #ebbdff 150deg, #906afb 180deg, #554bf0 210deg, #4c4ced 240deg, #303fdc 270deg, #3056e5 300deg, #3f72ef 330deg, #4775f1 360deg)"
+  }
+ },
+ "elements": [
+  {
+   "id": "sidebar",
+   "type": "panel",
+   "bbox": {
+    "x": 0,
+    "y": 0,
+    "w": 271,
+    "h": 941
+   },
+   "fill": "#0a1124 (top-left #0f1631 fading by y=185; wave glow bottom-left)",
+   "border": {
+    "right": "1px #1f2a48 at x=271 (measured #1d2845..#222c4b, AA at 270/272)"
+   }
+  },
+  {
+   "id": "sidebar.logo",
+   "type": "logo-ring",
+   "bbox": {
+    "x": 107,
+    "y": 26,
+    "w": 59,
+    "h": 58
+   },
+   "parent": "sidebar",
+   "center": [
+    136,
+    54.5
+   ],
+   "r_outer": 29,
+   "r_inner": 15.5,
+   "fill": "conic gradient ring, see logo spec",
+   "glow": "none (bg returns at r=30)"
+  },
+  {
+   "id": "sidebar.brand_title",
+   "type": "text",
+   "bbox": null,
+   "parent": "sidebar",
+   "text": {
+    "content": "JARVIS & ANNA",
+    "ink_bbox": {
+     "x": 54,
+     "y": 103,
+     "w": 165,
+     "h": 15
+    },
+    "cap_top_y": 103,
+    "baseline_y": 117,
+    "font_family": "brand",
+    "font_size_px": 21,
+    "font_weight": 600,
+    "color": "#ffffff",
+    "letter_spacing_px": -0.3
+   }
+  },
+  {
+   "id": "sidebar.brand_subtitle",
+   "type": "text",
+   "bbox": null,
+   "parent": "sidebar",
+   "text": {
+    "content": "Your AI Command Center",
+    "ink_bbox": {
+     "x": 53,
+     "y": 131,
+     "w": 168,
+     "h": 10
+    },
+    "cap_top_y": 131,
+    "baseline_y": 140,
+    "font_family": "ui",
+    "font_size_px": 14,
+    "font_weight": 400,
+    "color": "#7e89ac",
+    "letter_spacing_px": 0.3
+   }
+  },
+  {
+   "id": "sidebar.nav.overview",
+   "type": "nav-item-active",
+   "bbox": {
+    "x": 16,
+    "y": 185,
+    "w": 241,
+    "h": 61
+   },
+   "parent": "sidebar",
+   "radius": 11,
+   "fill": "linear-gradient(90deg,#16285b 0%,#162753 10%,#16244b 25%,#172347 45%,#172141 70%,#172141 100%)",
+   "border": "1px rgba(120,145,215,0.16) (top #1a2952..#253256, right #243051, bottom #192a53..#202a48)",
+   "accent": {
+    "left_bar": "2px #3b82f6-ish (#4688d6/#3381e6) x=16..17, y=188..243, inner glow to x=21"
+   },
+   "icon": {
+    "name": "house (filled)",
+    "bbox": {
+     "x": 42,
+     "y": 204,
+     "w": 24,
+     "h": 24
+    },
+    "size": 24,
+    "color": "#63aafb",
+    "filled": true
+   },
+   "text": {
+    "content": "Overview",
+    "ink_bbox": {
+     "x": 93,
+     "y": 210,
+     "w": 74,
+     "h": 13
+    },
+    "cap_top_y": 210,
+    "baseline_y": 222,
+    "font_family": "ui",
+    "font_size_px": 17,
+    "font_weight": 600,
+    "color": "#ffffff",
+    "letter_spacing_px": 0
+   }
+  },
+  {
+   "id": "sidebar.nav.agents",
+   "type": "nav-item",
+   "bbox": {
+    "x": 16,
+    "y": 251,
+    "w": 241,
+    "h": 61
+   },
+   "parent": "sidebar",
+   "icon": {
+    "name": "users",
+    "bbox": {
+     "x": 41,
+     "y": 272,
+     "w": 25,
+     "h": 20
+    },
+    "size": 24,
+    "stroke": 2.0,
+    "color": "#acb9e2"
+   },
+   "text": {
+    "content": "Agents",
+    "ink_bbox": {
+     "x": 93,
+     "y": 275,
+     "w": 55,
+     "h": 17
+    },
+    "cap_top_y": 275,
+    "baseline_y": 286,
+    "font_family": "ui",
+    "font_size_px": 17,
+    "font_weight": 400,
+    "color": "#a5b0dc",
+    "letter_spacing_px": 0
+   }
+  },
+  {
+   "id": "sidebar.nav.activity",
+   "type": "nav-item",
+   "bbox": {
+    "x": 16,
+    "y": 315,
+    "w": 241,
+    "h": 61
+   },
+   "parent": "sidebar",
+   "icon": {
+    "name": "activity",
+    "bbox": {
+     "x": 42,
+     "y": 336,
+     "w": 24,
+     "h": 19
+    },
+    "size": 24,
+    "stroke": 2.0,
+    "color": "#b0bbe3"
+   },
+   "text": {
+    "content": "Activity",
+    "ink_bbox": {
+     "x": 93,
+     "y": 338,
+     "w": 59,
+     "h": 18
+    },
+    "cap_top_y": 338,
+    "baseline_y": 350,
+    "font_family": "ui",
+    "font_size_px": 17,
+    "font_weight": 400,
+    "color": "#a5b2dc",
+    "letter_spacing_px": 0
+   }
+  },
+  {
+   "id": "sidebar.nav.settings",
+   "type": "nav-item",
+   "bbox": {
+    "x": 16,
+    "y": 379,
+    "w": 241,
+    "h": 61
+   },
+   "parent": "sidebar",
+   "icon": {
+    "name": "settings",
+    "bbox": {
+     "x": 42,
+     "y": 398,
+     "w": 24,
+     "h": 23
+    },
+    "size": 24,
+    "stroke": 2.0,
+    "color": "#b7c3e7"
+   },
+   "text": {
+    "content": "Settings",
+    "ink_bbox": {
+     "x": 93,
+     "y": 401,
+     "w": 64,
+     "h": 22
+    },
+    "cap_top_y": 401,
+    "baseline_y": 417,
+    "font_family": "ui",
+    "font_size_px": 17,
+    "font_weight": 400,
+    "color": "#a2aed6",
+    "letter_spacing_px": 0
+   }
+  },
+  {
+   "id": "sidebar.footer.line1",
+   "type": "text",
+   "bbox": null,
+   "parent": "sidebar",
+   "text": {
+    "content": "A SMARTER",
+    "ink_bbox": {
+     "x": 36,
+     "y": 858,
+     "w": 94,
+     "h": 8
+    },
+    "cap_top_y": 858,
+    "baseline_y": 865,
+    "font_family": "ui",
+    "font_size_px": 11,
+    "font_weight": 600,
+    "color": "#5c6a94",
+    "letter_spacing_px": 4.0,
+    "text_transform": "uppercase"
+   }
+  },
+  {
+   "id": "sidebar.footer.line2",
+   "type": "text",
+   "bbox": null,
+   "parent": "sidebar",
+   "text": {
+    "content": "TOMORROW TOGETHER",
+    "ink_bbox": {
+     "x": 36,
+     "y": 880,
+     "w": 192,
+     "h": 9
+    },
+    "cap_top_y": 880,
+    "baseline_y": 887,
+    "font_family": "ui",
+    "font_size_px": 11,
+    "font_weight": 600,
+    "color": "#5e6a95",
+    "letter_spacing_px": 4.0,
+    "line_height_px": 22,
+    "text_transform": "uppercase"
+   }
+  },
+  {
+   "id": "sidebar.wave",
+   "type": "decoration",
+   "bbox": {
+    "x": 0,
+    "y": 640,
+    "w": 271,
+    "h": 201
+   },
+   "parent": "sidebar",
+   "crest_main": [
+    [
+     0,
+     687
+    ],
+    [
+     30,
+     690
+    ],
+    [
+     60,
+     698
+    ],
+    [
+     90,
+     709
+    ],
+    [
+     120,
+     725
+    ],
+    [
+     150,
+     744
+    ],
+    [
+     180,
+     768
+    ],
+    [
+     210,
+     790
+    ],
+    [
+     240,
+     811
+    ],
+    [
+     270,
+     830
+    ]
+   ],
+   "crest_lower": [
+    [
+     0,
+     805
+    ],
+    [
+     30,
+     792
+    ],
+    [
+     60,
+     784
+    ],
+    [
+     90,
+     778
+    ],
+    [
+     120,
+     785
+    ],
+    [
+     150,
+     788
+    ],
+    [
+     180,
+     800
+    ],
+    [
+     210,
+     816
+    ],
+    [
+     240,
+     827
+    ]
+   ],
+   "ribbon_upper_edge": [
+    [
+     120,
+     676
+    ],
+    [
+     150,
+     680
+    ],
+    [
+     180,
+     688
+    ],
+    [
+     210,
+     694
+    ],
+    [
+     240,
+     698
+    ]
+   ],
+   "colors": {
+    "crest_left": "#152c69",
+    "crest_right": "#0d1431",
+    "ribbon_fill": "#101d49 (x 0-60, y 680-725)",
+    "violet_hint": "lower-left"
+   },
+   "note": "silk-ribbon waves: 1px bright crest line + blurred ribbon fill, fading left->right; SVG paths + blur(6px)"
+  },
+  {
+   "id": "header.title",
+   "type": "text",
+   "bbox": null,
+   "parent": "main",
+   "text": {
+    "content": "Overview",
+    "ink_bbox": {
+     "x": 315,
+     "y": 29,
+     "w": 140,
+     "h": 23
+    },
+    "cap_top_y": 29,
+    "baseline_y": 51,
+    "font_family": "ui",
+    "font_size_px": 30,
+    "font_weight": 700,
+    "color": "#ffffff",
+    "letter_spacing_px": 0
+   }
+  },
+  {
+   "id": "header.subtitle",
+   "type": "text",
+   "bbox": null,
+   "parent": "main",
+   "text": {
+    "content": "Control, collaborate, and automate with JARVIS & ANNA.",
+    "ink_bbox": {
+     "x": 314,
+     "y": 67,
+     "w": 416,
+     "h": 14
+    },
+    "cap_top_y": 68,
+    "baseline_y": 78,
+    "font_family": "ui",
+    "font_size_px": 16,
+    "font_weight": 400,
+    "color": "#abb6de",
+    "letter_spacing_px": 0
+   }
+  },
+  {
+   "id": "header.pill.system",
+   "type": "status-pill",
+   "bbox": {
+    "x": 764,
+    "y": 29,
+    "w": 163,
+    "h": 54
+   },
+   "parent": "main",
+   "radius": 14,
+   "fill": "#15233f",
+   "border": "1px #21405a near dot -> #203152 right (teal tint from dot glow)",
+   "dot": {
+    "center": [
+     790.5,
+     55.5
+    ],
+    "d": 12,
+    "color": "#22c086 (core #2acc91)",
+    "glow": "0 0 8px rgba(34,197,134,.45)"
+   },
+   "text": {
+    "content": "System Online",
+    "ink_bbox": {
+     "x": 813,
+     "y": 50,
+     "w": 95,
+     "h": 11
+    },
+    "cap_top_y": 50,
+    "baseline_y": 60,
+    "font_family": "ui",
+    "font_size_px": 15,
+    "font_weight": 400,
+    "color": "#f2f5fa",
+    "letter_spacing_px": 0
+   }
+  },
+  {
+   "id": "header.pill.devices",
+   "type": "status-pill",
+   "bbox": {
+    "x": 943,
+    "y": 29,
+    "w": 205,
+    "h": 54
+   },
+   "parent": "main",
+   "radius": 14,
+   "fill": "#132145",
+   "border": "1px #243765 (top-left) -> #1c2749 (right)",
+   "icon": {
+    "name": "monitor",
+    "bbox": {
+     "x": 960,
+     "y": 47,
+     "w": 23,
+     "h": 18
+    },
+    "size": 24,
+    "stroke": 2.0,
+    "color": "#66b8fc"
+   },
+   "text": {
+    "content": "3 Connected Devices",
+    "ink_bbox": {
+     "x": 997,
+     "y": 50,
+     "w": 131,
+     "h": 11
+    },
+    "cap_top_y": 50,
+    "baseline_y": 60,
+    "font_family": "ui",
+    "font_size_px": 15,
+    "font_weight": 400,
+    "color": "#f2f5fa",
+    "letter_spacing_px": 0
+   }
+  },
+  {
+   "id": "header.pill.voice",
+   "type": "status-pill",
+   "bbox": {
+    "x": 1163,
+    "y": 29,
+    "w": 153,
+    "h": 54
+   },
+   "parent": "main",
+   "radius": 14,
+   "fill": "#111f43",
+   "border": "1px #1a2d5d -> #1b2647",
+   "icon": {
+    "name": "mic (filled capsule)",
+    "bbox": {
+     "x": 1183,
+     "y": 44,
+     "w": 18,
+     "h": 24
+    },
+    "size": 24,
+    "color": "#69b3fc",
+    "filled": true
+   },
+   "text": {
+    "content": "Voice Ready",
+    "ink_bbox": {
+     "x": 1216,
+     "y": 50,
+     "w": 80,
+     "h": 15
+    },
+    "cap_top_y": 50,
+    "baseline_y": 60,
+    "font_family": "ui",
+    "font_size_px": 15,
+    "font_weight": 400,
+    "color": "#f2f5fa",
+    "letter_spacing_px": 0
+   }
+  },
+  {
+   "id": "header.divider",
+   "type": "divider",
+   "bbox": {
+    "x": 1366,
+    "y": 40,
+    "w": 1,
+    "h": 32
+   },
+   "parent": "main",
+   "color": "#354369 (AA #1d2848 at x=1365)"
+  },
+  {
+   "id": "header.avatar",
+   "type": "avatar",
+   "bbox": {
+    "x": 1417,
+    "y": 27,
+    "w": 59,
+    "h": 59
+   },
+   "parent": "main",
+   "center": [
+    1446,
+    56
+   ],
+   "d": 59,
+   "fill": "linear-gradient(160deg,#0f2a70 0%,#0e2460 35%,#0d1c47 70%,#0d1838 100%)",
+   "border": "1px #213977 (top) .. #314170 (bottom)",
+   "text": {
+    "content": "AM",
+    "ink_bbox": {
+     "x": 1431,
+     "y": 49,
+     "w": 30,
+     "h": 14
+    },
+    "cap_top_y": 49,
+    "baseline_y": 62,
+    "font_family": "ui",
+    "font_size_px": 19,
+    "font_weight": 700,
+    "color": "#74b9fd",
+    "letter_spacing_px": 0,
+    "note": "replace with 'M' for Matloob (same circle, same style)"
+   }
+  },
+  {
+   "id": "header.greeting.line1",
+   "type": "text",
+   "bbox": null,
+   "parent": "main",
+   "text": {
+    "content": "Good evening,",
+    "ink_bbox": {
+     "x": 1495,
+     "y": 36,
+     "w": 100,
+     "h": 16
+    },
+    "cap_top_y": 36,
+    "baseline_y": 47,
+    "font_family": "ui",
+    "font_size_px": 16,
+    "font_weight": 400,
+    "color": "#a7b0d2",
+    "letter_spacing_px": 0
+   }
+  },
+  {
+   "id": "header.greeting.name",
+   "type": "text",
+   "bbox": null,
+   "parent": "main",
+   "text": {
+    "content": "Alex",
+    "ink_bbox": {
+     "x": 1495,
+     "y": 62,
+     "w": 34,
+     "h": 13
+    },
+    "cap_top_y": 62,
+    "baseline_y": 74,
+    "font_family": "ui",
+    "font_size_px": 17,
+    "font_weight": 700,
+    "color": "#ffffff",
+    "letter_spacing_px": 0,
+    "note": "replace with 'Matloob'"
+   }
+  },
+  {
+   "id": "header.chevron",
+   "type": "icon",
+   "bbox": {
+    "x": 1618,
+    "y": 53,
+    "w": 13,
+    "h": 7
+   },
+   "parent": "main",
+   "icon": {
+    "name": "chevron-down",
+    "size": 16,
+    "stroke": 2.0,
+    "color": "#adbae8"
+   }
+  },
+  {
+   "id": "hero",
+   "type": "card",
+   "bbox": {
+    "x": 295,
+    "y": 116,
+    "w": 830,
+    "h": 474
+   },
+   "parent": "main",
+   "radius": 15,
+   "fill": "#0c1329 base (center #0b1126..#0d142a)",
+   "overlays": [
+    "radial TL: rgba(80,70,255,.20) at (305,124) fading by ~150px (#161e57 -> #0e132f)",
+    "radial TR flare: rgba(40,110,255,.35) at ~(1085,165) r~120 (#173c82 peak) + tiny sparkle at (1082,177) + faint 1px light arcs sweeping down-left",
+    "radial BL: cyan-blue rgba(40,150,255,.18) on left edge around y 420-470",
+    "orb glow (see orb.glow)"
+   ],
+   "border": "1px gradient: top-left #2f3b81/#384694, top-mid #202b4b, top-right #25498d/#2552a4, bottom #172648..#1d2c55 (~rgba(110,140,255,.30) top corners -> .12 bottom)",
+   "outer": "1px darker ring just outside border (#060b23) - sharpening halo; optional"
+  },
+  {
+   "id": "hero.eyebrow",
+   "type": "text",
+   "bbox": null,
+   "parent": "hero",
+   "text": {
+    "content": "JARVIS & ANNA",
+    "ink_bbox": {
+     "x": 742,
+     "y": 188,
+     "w": 154,
+     "h": 10
+    },
+    "cap_top_y": 188,
+    "baseline_y": 197,
+    "font_family": "ui",
+    "font_size_px": 14,
+    "font_weight": 400,
+    "color": "#92a3d4",
+    "letter_spacing_px": 4.3,
+    "text_transform": "uppercase"
+   }
+  },
+  {
+   "id": "hero.title",
+   "type": "text",
+   "bbox": null,
+   "parent": "hero",
+   "text": {
+    "content": "JARVIS",
+    "ink_bbox": {
+     "x": 742,
+     "y": 225,
+     "w": 241,
+     "h": 46
+    },
+    "cap_top_y": 225,
+    "baseline_y": 270,
+    "font_family": "brand",
+    "font_size_px": 64,
+    "font_weight": 700,
+    "color": "#e4eafc",
+    "letter_spacing_px": -0.5,
+    "note": "fill ~#dde4fb uniform (no visible gradient); 1px dark halo at glyph edges = sharpening"
+   }
+  },
+  {
+   "id": "hero.role",
+   "type": "text",
+   "bbox": null,
+   "parent": "hero",
+   "text": {
+    "content": "AI Assistant",
+    "ink_bbox": {
+     "x": 743,
+     "y": 290,
+     "w": 134,
+     "h": 18
+    },
+    "cap_top_y": 290,
+    "baseline_y": 307,
+    "font_family": "ui",
+    "font_size_px": 26,
+    "font_weight": 400,
+    "color": "#8192cc",
+    "letter_spacing_px": 0
+   }
+  },
+  {
+   "id": "hero.rule",
+   "type": "rule",
+   "bbox": {
+    "x": 742,
+    "y": 330,
+    "w": 57,
+    "h": 3
+   },
+   "parent": "hero",
+   "color": "#6290f2 (2px core at y=331, AA rows 330/332)"
+  },
+  {
+   "id": "hero.waveform",
+   "type": "waveform",
+   "bbox": {
+    "x": 742,
+    "y": 363,
+    "w": 212,
+    "h": 23
+   },
+   "parent": "hero",
+   "center_y": 374,
+   "bars": 31,
+   "pitch": 7.1
+  },
+  {
+   "id": "hero.status",
+   "type": "text",
+   "bbox": null,
+   "parent": "hero",
+   "text": {
+    "content": "Listening for your command",
+    "ink_bbox": {
+     "x": 743,
+     "y": 404,
+     "w": 258,
+     "h": 19
+    },
+    "cap_top_y": 404,
+    "baseline_y": 418,
+    "font_family": "ui",
+    "font_size_px": 21,
+    "font_weight": 600,
+    "color": "#8dc4ff",
+    "letter_spacing_px": 0
+   }
+  },
+  {
+   "id": "hero.btn.start",
+   "type": "button-primary",
+   "bbox": {
+    "x": 403,
+    "y": 476,
+    "w": 217,
+    "h": 56
+   },
+   "parent": "hero",
+   "radius": 13,
+   "fill": "linear-gradient(115deg,#3aa8fd 0%,#3189fe 22%,#2d66fc 48%,#2645f8 78%,#2541f8 88%,#2a5ffb 100%)",
+   "border": "1px inner highlight rgba(150,210,255,.35) top/left (#5db0e9 at top edge)",
+   "shadow": "0 6px 22px rgba(37,90,255,.45), 0 0 0 1px rgba(80,150,255,.25)",
+   "icon": {
+    "name": "mic (filled)",
+    "bbox": {
+     "x": 445,
+     "y": 492,
+     "w": 18,
+     "h": 24
+    },
+    "size": 24,
+    "color": "#ffffff",
+    "filled": true
+   },
+   "text": {
+    "content": "Start Listening",
+    "ink_bbox": {
+     "x": 479,
+     "y": 498,
+     "w": 103,
+     "h": 12
+    },
+    "cap_top_y": 498,
+    "baseline_y": 509,
+    "font_family": "ui",
+    "font_size_px": 16,
+    "font_weight": 600,
+    "color": "#ffffff",
+    "letter_spacing_px": 0
+   }
+  },
+  {
+   "id": "hero.btn.run",
+   "type": "button-ghost",
+   "bbox": {
+    "x": 635,
+    "y": 476,
+    "w": 193,
+    "h": 56
+   },
+   "parent": "hero",
+   "radius": 13,
+   "fill": "#121b34 (rgba(22,32,60,.85))",
+   "border": "1px #232e4c",
+   "icon": {
+    "name": "zap (filled)",
+    "bbox": {
+     "x": 680,
+     "y": 493,
+     "w": 15,
+     "h": 22
+    },
+    "size": 24,
+    "color": "#cdd9fb",
+    "filled": true
+   },
+   "text": {
+    "content": "Run Task",
+    "ink_bbox": {
+     "x": 714,
+     "y": 498,
+     "w": 63,
+     "h": 12
+    },
+    "cap_top_y": 498,
+    "baseline_y": 509,
+    "font_family": "ui",
+    "font_size_px": 16,
+    "font_weight": 600,
+    "color": "#ffffff",
+    "letter_spacing_px": 0
+   }
+  },
+  {
+   "id": "hero.btn.micoff",
+   "type": "button-ghost",
+   "bbox": {
+    "x": 843,
+    "y": 476,
+    "w": 180,
+    "h": 56
+   },
+   "parent": "hero",
+   "radius": 13,
+   "fill": "#18213b",
+   "border": "1px #2a3450",
+   "icon": {
+    "name": "mic-off",
+    "bbox": {
+     "x": 889,
+     "y": 492,
+     "w": 20,
+     "h": 24
+    },
+    "size": 24,
+    "stroke": 1.8,
+    "color": "#cedbf6"
+   },
+   "text": {
+    "content": "Mic Off",
+    "ink_bbox": {
+     "x": 924,
+     "y": 498,
+     "w": 54,
+     "h": 12
+    },
+    "cap_top_y": 498,
+    "baseline_y": 509,
+    "font_family": "ui",
+    "font_size_px": 16,
+    "font_weight": 600,
+    "color": "#fcfdff",
+    "letter_spacing_px": 0
+   }
+  },
+  {
+   "id": "hero.quote",
+   "type": "text",
+   "bbox": null,
+   "parent": "hero",
+   "text": {
+    "content": "\u201cIdeas become reality, faster.\u201d",
+    "ink_bbox": {
+     "x": 578,
+     "y": 558,
+     "w": 232,
+     "h": 10
+    },
+    "cap_top_y": 558,
+    "baseline_y": 567,
+    "font_family": "ui",
+    "font_size_px": 14,
+    "font_weight": 400,
+    "color": "#95aadf",
+    "letter_spacing_px": 1.6,
+    "note": "centered on x~694 (card centre 709.5; normalise to centre)"
+   }
+  },
+  {
+   "id": "quickstats",
+   "type": "card",
+   "bbox": {
+    "x": 295,
+    "y": 606,
+    "w": 411,
+    "h": 306
+   },
+   "parent": "main",
+   "radius": 13,
+   "fill": "linear-gradient(180deg,#0e152d 0%,#0d1529 25%,#0b1326 50%,#0a1325 100%)",
+   "border": "1px #131e3b (top) -> #0f1a32 (bottom), sides #15213a"
+  },
+  {
+   "id": "quickstats.icon",
+   "type": "icon",
+   "bbox": {
+    "x": 318,
+    "y": 631,
+    "w": 22,
+    "h": 23
+   },
+   "parent": "quickstats",
+   "icon": {
+    "name": "chart-no-axes-combined (bars + trend arrow)",
+    "size": 24,
+    "stroke": 2.0,
+    "color": "#80befd"
+   }
+  },
+  {
+   "id": "quickstats.title",
+   "type": "text",
+   "bbox": null,
+   "parent": "quickstats",
+   "text": {
+    "content": "Quick Stats",
+    "ink_bbox": {
+     "x": 362,
+     "y": 627,
+     "w": 92,
+     "h": 12
+    },
+    "cap_top_y": 627,
+    "baseline_y": 638,
+    "font_family": "ui",
+    "font_size_px": 17,
+    "font_weight": 700,
+    "color": "#ffffff",
+    "letter_spacing_px": 0
+   }
+  },
+  {
+   "id": "quickstats.subtitle",
+   "type": "text",
+   "bbox": null,
+   "parent": "quickstats",
+   "text": {
+    "content": "Live system status",
+    "ink_bbox": {
+     "x": 362,
+     "y": 651,
+     "w": 116,
+     "h": 11
+    },
+    "cap_top_y": 651,
+    "baseline_y": 661,
+    "font_family": "ui",
+    "font_size_px": 14,
+    "font_weight": 400,
+    "color": "#a0acca",
+    "letter_spacing_px": 0
+   }
+  },
+  {
+   "id": "quickstats.chevron",
+   "type": "icon",
+   "bbox": {
+    "x": 675,
+    "y": 638,
+    "w": 7,
+    "h": 11
+   },
+   "parent": "quickstats",
+   "icon": {
+    "name": "chevron-right",
+    "size": 16,
+    "stroke": 2.0,
+    "color": "#abb8e2"
+   }
+  },
+  {
+   "id": "quickstats.tile.cpu",
+   "type": "stat-tile",
+   "bbox": {
+    "x": 315,
+    "y": 682,
+    "w": 180,
+    "h": 91
+   },
+   "parent": "quickstats",
+   "radius": 13,
+   "fill": "#151e34",
+   "border": "1px #1e2a43 (top) / #1c263e (bottom)",
+   "icon": {
+    "name": "cpu",
+    "bbox": {
+     "x": 333,
+     "y": 704,
+     "w": 28,
+     "h": 26
+    },
+    "size": 26,
+    "stroke": 2.0,
+    "color": "#4ce0bf (stroke #2ecc8f)"
+   },
+   "value": {
+    "content": "21%",
+    "ink_bbox": {
+     "x": 387,
+     "y": 706,
+     "w": 32,
+     "h": 13
+    },
+    "cap_top_y": 706,
+    "baseline_y": 718,
+    "font_family": "ui",
+    "font_size_px": 17,
+    "font_weight": 700,
+    "color": "#ffffff",
+    "letter_spacing_px": 0
+   },
+   "label": {
+    "content": "CPU Usage",
+    "ink_bbox": {
+     "x": 387,
+     "y": 728,
+     "w": 61,
+     "h": 9
+    },
+    "cap_top_y": 728,
+    "baseline_y": 736,
+    "font_family": "ui",
+    "font_size_px": 12.5,
+    "font_weight": 400,
+    "color": "#97a2c0",
+    "letter_spacing_px": 0
+   },
+   "bar": {
+    "track": {
+     "x": 331,
+     "y": 751,
+     "w": 147,
+     "h": 9
+    },
+    "track_color": "#222b46 (rgba(148,163,184,.12))",
+    "radius": 4.5,
+    "fill": {
+     "x": 331,
+     "y": 751,
+     "w": 38,
+     "h": 9
+    },
+    "fill_color": "#35b992 (left cap #3ed29e)",
+    "fill_glow": "0 0 8px rgba(52,185,146,.45)",
+    "fill_ratio_measured": 0.259
+   }
+  },
+  {
+   "id": "quickstats.tile.memory",
+   "type": "stat-tile",
+   "bbox": {
+    "x": 510,
+    "y": 682,
+    "w": 180,
+    "h": 91
+   },
+   "parent": "quickstats",
+   "radius": 13,
+   "fill": "#151e34",
+   "border": "1px #1e2a43 (top) / #1c263e (bottom)",
+   "icon": {
+    "name": "memory-stick",
+    "bbox": {
+     "x": 528,
+     "y": 707,
+     "w": 28,
+     "h": 22
+    },
+    "size": 26,
+    "stroke": 2.0,
+    "color": "#65b7fa"
+   },
+   "value": {
+    "content": "63%",
+    "ink_bbox": {
+     "x": 582,
+     "y": 706,
+     "w": 35,
+     "h": 13
+    },
+    "cap_top_y": 706,
+    "baseline_y": 718,
+    "font_family": "ui",
+    "font_size_px": 17,
+    "font_weight": 700,
+    "color": "#ffffff",
+    "letter_spacing_px": 0
+   },
+   "label": {
+    "content": "Memory",
+    "ink_bbox": {
+     "x": 582,
+     "y": 728,
+     "w": 45,
+     "h": 9
+    },
+    "cap_top_y": 728,
+    "baseline_y": 736,
+    "font_family": "ui",
+    "font_size_px": 12.5,
+    "font_weight": 400,
+    "color": "#97a2c0",
+    "letter_spacing_px": 0
+   },
+   "bar": {
+    "track": {
+     "x": 526,
+     "y": 751,
+     "w": 147,
+     "h": 9
+    },
+    "track_color": "#222b46 (rgba(148,163,184,.12))",
+    "radius": 4.5,
+    "fill": {
+     "x": 526,
+     "y": 751,
+     "w": 93,
+     "h": 9
+    },
+    "fill_color": "#3590fc -> #4898f9",
+    "fill_glow": "0 0 8px rgba(56,146,252,.55)",
+    "fill_ratio_measured": 0.633
+   }
+  },
+  {
+   "id": "quickstats.tile.disk",
+   "type": "stat-tile",
+   "bbox": {
+    "x": 315,
+    "y": 787,
+    "w": 180,
+    "h": 95
+   },
+   "parent": "quickstats",
+   "radius": 13,
+   "fill": "#151e34",
+   "border": "1px #1e2a43 (top) / #1c263e (bottom)",
+   "icon": {
+    "name": "hard-drive",
+    "bbox": {
+     "x": 334,
+     "y": 812,
+     "w": 26,
+     "h": 23
+    },
+    "size": 26,
+    "stroke": 2.0,
+    "color": "#fbc551"
+   },
+   "value": {
+    "content": "82%",
+    "ink_bbox": {
+     "x": 387,
+     "y": 812,
+     "w": 36,
+     "h": 12
+    },
+    "cap_top_y": 812,
+    "baseline_y": 823,
+    "font_family": "ui",
+    "font_size_px": 17,
+    "font_weight": 700,
+    "color": "#ffffff",
+    "letter_spacing_px": 0
+   },
+   "label": {
+    "content": "Disk (C:)",
+    "ink_bbox": {
+     "x": 387,
+     "y": 834,
+     "w": 50,
+     "h": 10
+    },
+    "cap_top_y": 834,
+    "baseline_y": 843,
+    "font_family": "ui",
+    "font_size_px": 12.5,
+    "font_weight": 400,
+    "color": "#97a2c0",
+    "letter_spacing_px": 0
+   },
+   "bar": {
+    "track": {
+     "x": 331,
+     "y": 858,
+     "w": 147,
+     "h": 9
+    },
+    "track_color": "#222b46 (rgba(148,163,184,.12))",
+    "radius": 4.5,
+    "fill": {
+     "x": 331,
+     "y": 858,
+     "w": 117,
+     "h": 9
+    },
+    "fill_color": "#f9bc54 (right cap #fcc05e)",
+    "fill_glow": "0 0 8px rgba(249,188,84,.35)",
+    "fill_ratio_measured": 0.796
+   }
+  },
+  {
+   "id": "quickstats.tile.devices",
+   "type": "stat-tile",
+   "bbox": {
+    "x": 510,
+    "y": 787,
+    "w": 180,
+    "h": 95
+   },
+   "parent": "quickstats",
+   "radius": 13,
+   "fill": "#151e34",
+   "border": "1px #1e2a43 (top) / #1c263e (bottom)",
+   "icon": {
+    "name": "laptop",
+    "bbox": {
+     "x": 529,
+     "y": 813,
+     "w": 27,
+     "h": 21
+    },
+    "size": 26,
+    "stroke": 2.0,
+    "color": "#bfbdf9"
+   },
+   "value": {
+    "content": "3",
+    "ink_bbox": {
+     "x": 582,
+     "y": 812,
+     "w": 8,
+     "h": 12
+    },
+    "cap_top_y": 812,
+    "baseline_y": 823,
+    "font_family": "ui",
+    "font_size_px": 17,
+    "font_weight": 700,
+    "color": "#ffffff",
+    "letter_spacing_px": 0
+   },
+   "label": {
+    "content": "Connected Devices",
+    "ink_bbox": {
+     "x": 581,
+     "y": 834,
+     "w": 99,
+     "h": 10
+    },
+    "cap_top_y": 834,
+    "baseline_y": 843,
+    "font_family": "ui",
+    "font_size_px": 12.5,
+    "font_weight": 400,
+    "color": "#97a2c0",
+    "letter_spacing_px": 0
+   },
+   "bar": {
+    "track": {
+     "x": 526,
+     "y": 858,
+     "w": 147,
+     "h": 9
+    },
+    "track_color": "#222b46 (rgba(148,163,184,.12))",
+    "radius": 4.5,
+    "fill": {
+     "x": 526,
+     "y": 858,
+     "w": 40,
+     "h": 9
+    },
+    "fill_color": "#8981f6",
+    "fill_glow": "0 0 8px rgba(137,129,246,.35)",
+    "fill_ratio_measured": 0.272
+   }
+  },
+  {
+   "id": "activity",
+   "type": "card",
+   "bbox": {
+    "x": 721,
+    "y": 607,
+    "w": 404,
+    "h": 305
+   },
+   "parent": "main",
+   "radius": 13,
+   "fill": "linear-gradient(180deg,#0e152b 0%,#0d1528 50%,#0b1326 100%)",
+   "border": "1px #121e36 (top) -> #101b31 (bottom)"
+  },
+  {
+   "id": "activity.icon",
+   "type": "icon",
+   "bbox": {
+    "x": 743,
+    "y": 632,
+    "w": 23,
+    "h": 24
+   },
+   "parent": "activity",
+   "icon": {
+    "name": "clock",
+    "size": 24,
+    "stroke": 2.25,
+    "color": "#85bcfd"
+   }
+  },
+  {
+   "id": "activity.title",
+   "type": "text",
+   "bbox": null,
+   "parent": "activity",
+   "text": {
+    "content": "Recent Activity",
+    "ink_bbox": {
+     "x": 787,
+     "y": 629,
+     "w": 123,
+     "h": 16
+    },
+    "cap_top_y": 629,
+    "baseline_y": 640,
+    "font_family": "ui",
+    "font_size_px": 17,
+    "font_weight": 700,
+    "color": "#ffffff",
+    "letter_spacing_px": 0
+   }
+  },
+  {
+   "id": "activity.subtitle",
+   "type": "text",
+   "bbox": null,
+   "parent": "activity",
+   "text": {
+    "content": "Latest events from JARVIS & ANNA",
+    "ink_bbox": {
+     "x": 787,
+     "y": 653,
+     "w": 222,
+     "h": 10
+    },
+    "cap_top_y": 653,
+    "baseline_y": 662,
+    "font_family": "ui",
+    "font_size_px": 14,
+    "font_weight": 400,
+    "color": "#9baacb",
+    "letter_spacing_px": 0
+   }
+  },
+  {
+   "id": "activity.chevron",
+   "type": "icon",
+   "bbox": {
+    "x": 1094,
+    "y": 639,
+    "w": 7,
+    "h": 11
+   },
+   "parent": "activity",
+   "icon": {
+    "name": "chevron-right",
+    "size": 16,
+    "stroke": 2.0,
+    "color": "#a4b1dc"
+   }
+  },
+  {
+   "id": "activity.timeline.line",
+   "type": "rule",
+   "bbox": {
+    "x": 751,
+    "y": 708,
+    "w": 1,
+    "h": 148
+   },
+   "parent": "activity",
+   "color": "#25324c..#2d3654 (1px core, AA neighbours #151f36) - slight tint of adjacent dot colour near each dot"
+  },
+  {
+   "id": "activity.item1",
+   "type": "timeline-item",
+   "bbox": null,
+   "parent": "activity",
+   "dot": {
+    "center": [
+     751,
+     701
+    ],
+    "d": 13,
+    "color": "#23b084",
+    "ring": "2px ring of card bg (#0a1123-ish) separates dot from line",
+    "glow": "none/very faint"
+   },
+   "title": {
+    "content": "System online",
+    "ink_bbox": {
+     "x": 784,
+     "y": 691,
+     "w": 94,
+     "h": 14
+    },
+    "cap_top_y": 691,
+    "baseline_y": 701,
+    "font_family": "ui",
+    "font_size_px": 15,
+    "font_weight": 600,
+    "color": "#ffffff",
+    "letter_spacing_px": 0
+   },
+   "subtitle": {
+    "content": "All systems operational",
+    "ink_bbox": {
+     "x": 784,
+     "y": 713,
+     "w": 147,
+     "h": 10
+    },
+    "cap_top_y": 713,
+    "baseline_y": 722,
+    "font_family": "ui",
+    "font_size_px": 14,
+    "font_weight": 400,
+    "color": "#94a1bf",
+    "letter_spacing_px": 0
+   },
+   "time": {
+    "content": "9:41 PM",
+    "ink_bbox": {
+     "x": 1055,
+     "y": 694,
+     "w": 49,
+     "h": 10
+    },
+    "cap_top_y": 694,
+    "baseline_y": 703,
+    "font_family": "ui",
+    "font_size_px": 14,
+    "font_weight": 400,
+    "color": "#7e8db4",
+    "letter_spacing_px": 0,
+    "note": "right-aligned to x=1103"
+   }
+  },
+  {
+   "id": "activity.item2",
+   "type": "timeline-item",
+   "bbox": null,
+   "parent": "activity",
+   "dot": {
+    "center": [
+     751,
+     754
+    ],
+    "d": 13,
+    "color": "#4a95fb",
+    "ring": "2px ring of card bg (#0a1123-ish) separates dot from line",
+    "glow": "0 0 8px rgba(74,149,251,.55)"
+   },
+   "title": {
+    "content": "Voice service ready",
+    "ink_bbox": {
+     "x": 784,
+     "y": 744,
+     "w": 128,
+     "h": 15
+    },
+    "cap_top_y": 744,
+    "baseline_y": 754,
+    "font_family": "ui",
+    "font_size_px": 15,
+    "font_weight": 600,
+    "color": "#ffffff",
+    "letter_spacing_px": 0
+   },
+   "subtitle": {
+    "content": "Microphone initialized",
+    "ink_bbox": {
+     "x": 785,
+     "y": 766,
+     "w": 136,
+     "h": 10
+    },
+    "cap_top_y": 766,
+    "baseline_y": 775,
+    "font_family": "ui",
+    "font_size_px": 14,
+    "font_weight": 400,
+    "color": "#94a1bf",
+    "letter_spacing_px": 0
+   },
+   "time": {
+    "content": "9:40 PM",
+    "ink_bbox": {
+     "x": 1055,
+     "y": 747,
+     "w": 49,
+     "h": 11
+    },
+    "cap_top_y": 747,
+    "baseline_y": 757,
+    "font_family": "ui",
+    "font_size_px": 14,
+    "font_weight": 400,
+    "color": "#7e8db4",
+    "letter_spacing_px": 0,
+    "note": "right-aligned to x=1103"
+   }
+  },
+  {
+   "id": "activity.item3",
+   "type": "timeline-item",
+   "bbox": null,
+   "parent": "activity",
+   "dot": {
+    "center": [
+     751,
+     807
+    ],
+    "d": 13,
+    "color": "#7a50f9",
+    "ring": "2px ring of card bg (#0a1123-ish) separates dot from line",
+    "glow": "0 0 8px rgba(122,80,249,.5)"
+   },
+   "title": {
+    "content": "Laptop connected",
+    "ink_bbox": {
+     "x": 785,
+     "y": 798,
+     "w": 121,
+     "h": 14
+    },
+    "cap_top_y": 798,
+    "baseline_y": 808,
+    "font_family": "ui",
+    "font_size_px": 15,
+    "font_weight": 600,
+    "color": "#ffffff",
+    "letter_spacing_px": 0
+   },
+   "subtitle": {
+    "content": "Windows 11 \u2022 3 devices online",
+    "ink_bbox": {
+     "x": 784,
+     "y": 819,
+     "w": 192,
+     "h": 11
+    },
+    "cap_top_y": 819,
+    "baseline_y": 829,
+    "font_family": "ui",
+    "font_size_px": 14,
+    "font_weight": 400,
+    "color": "#94a1bf",
+    "letter_spacing_px": 0
+   },
+   "time": {
+    "content": "9:38 PM",
+    "ink_bbox": {
+     "x": 1055,
+     "y": 800,
+     "w": 49,
+     "h": 11
+    },
+    "cap_top_y": 800,
+    "baseline_y": 810,
+    "font_family": "ui",
+    "font_size_px": 14,
+    "font_weight": 400,
+    "color": "#7e8db4",
+    "letter_spacing_px": 0,
+    "note": "right-aligned to x=1103"
+   }
+  },
+  {
+   "id": "activity.item4",
+   "type": "timeline-item",
+   "bbox": null,
+   "parent": "activity",
+   "dot": {
+    "center": [
+     751,
+     861.5
+    ],
+    "d": 13,
+    "color": "#8895bc",
+    "ring": "2px ring of card bg (#0a1123-ish) separates dot from line",
+    "glow": "none"
+   },
+   "title": {
+    "content": "Agent sync complete",
+    "ink_bbox": {
+     "x": 784,
+     "y": 852,
+     "w": 142,
+     "h": 15
+    },
+    "cap_top_y": 852,
+    "baseline_y": 862,
+    "font_family": "ui",
+    "font_size_px": 15,
+    "font_weight": 600,
+    "color": "#ffffff",
+    "letter_spacing_px": 0
+   },
+   "subtitle": {
+    "content": "JARVIS & ANNA ready",
+    "ink_bbox": {
+     "x": 784,
+     "y": 874,
+     "w": 138,
+     "h": 11
+    },
+    "cap_top_y": 874,
+    "baseline_y": 883,
+    "font_family": "ui",
+    "font_size_px": 14,
+    "font_weight": 400,
+    "color": "#94a1bf",
+    "letter_spacing_px": 0
+   },
+   "time": {
+    "content": "9:37 PM",
+    "ink_bbox": {
+     "x": 1055,
+     "y": 855,
+     "w": 49,
+     "h": 11
+    },
+    "cap_top_y": 855,
+    "baseline_y": 865,
+    "font_family": "ui",
+    "font_size_px": 14,
+    "font_weight": 400,
+    "color": "#7e8db4",
+    "letter_spacing_px": 0,
+    "note": "right-aligned to x=1103"
+   }
+  },
+  {
+   "id": "panel",
+   "type": "panel",
+   "bbox": {
+    "x": 1143,
+    "y": 114,
+    "w": 512,
+    "h": 800
+   },
+   "parent": "main",
+   "radius": 15,
+   "fill": "linear-gradient(180deg,#10172f 0%,#0d1427 11%,#0b1224 17%,#0a1123 40%,#0a1123 100%)",
+   "border": "1px #232d47 (top) -> #18223a (sides) -> #111a30 (bottom)"
+  },
+  {
+   "id": "panel.tab.chat",
+   "type": "tab-active",
+   "bbox": {
+    "x": 1151,
+    "y": 125,
+    "w": 123,
+    "h": 56
+   },
+   "parent": "panel",
+   "icon": {
+    "name": "message-circle",
+    "bbox": {
+     "x": 1173,
+     "y": 138,
+     "w": 20,
+     "h": 20
+    },
+    "size": 20,
+    "stroke": 1.9,
+    "color": "#55b0fb"
+   },
+   "text": {
+    "content": "Chat",
+    "ink_bbox": {
+     "x": 1209,
+     "y": 142,
+     "w": 35,
+     "h": 12
+    },
+    "cap_top_y": 142,
+    "baseline_y": 153,
+    "font_family": "ui",
+    "font_size_px": 17,
+    "font_weight": 700,
+    "color": "#ffffff",
+    "letter_spacing_px": 0
+   },
+   "underline": {
+    "bbox": {
+     "x": 1151,
+     "y": 178,
+     "w": 123,
+     "h": 3
+    },
+    "color": "#4ba8ff (AA #408dde/#26549d)",
+    "glow": "0 0 10px 1px rgba(75,168,255,.45) (glow visible y 170..186)"
+   }
+  },
+  {
+   "id": "panel.tab.approvals",
+   "type": "tab",
+   "bbox": {
+    "x": 1290,
+    "y": 125,
+    "w": 181,
+    "h": 56
+   },
+   "parent": "panel",
+   "icon": {
+    "name": "clipboard-check",
+    "bbox": {
+     "x": 1312,
+     "y": 139,
+     "w": 18,
+     "h": 19
+    },
+    "size": 20,
+    "stroke": 1.7,
+    "color": "#afb9db"
+   },
+   "text": {
+    "content": "Approvals",
+    "ink_bbox": {
+     "x": 1346,
+     "y": 145,
+     "w": 75,
+     "h": 16
+    },
+    "cap_top_y": 145,
+    "baseline_y": 156,
+    "font_family": "ui",
+    "font_size_px": 17,
+    "font_weight": 400,
+    "color": "#a7b1ce",
+    "letter_spacing_px": 0,
+    "note": "reference baseline 3px lower than Chat/Tools (AI artifact) - align to 153"
+   },
+   "badge": {
+    "center": [
+     1444,
+     151
+    ],
+    "d": 26,
+    "fill": "#3a5fd2 (#3159d3..#3e62d0)",
+    "text": {
+     "content": "1",
+     "ink_bbox": {
+      "x": 1442,
+      "y": 146,
+      "w": 4,
+      "h": 11
+     },
+     "cap_top_y": 146,
+     "baseline_y": 156,
+     "font_family": "ui",
+     "font_size_px": 13,
+     "font_weight": 700,
+     "color": "#f6fafd",
+     "letter_spacing_px": 0
+    }
+   }
+  },
+  {
+   "id": "panel.tab.tools",
+   "type": "tab",
+   "bbox": {
+    "x": 1525,
+    "y": 125,
+    "w": 106,
+    "h": 56
+   },
+   "parent": "panel",
+   "icon": {
+    "name": "box",
+    "bbox": {
+     "x": 1539,
+     "y": 138,
+     "w": 19,
+     "h": 21
+    },
+    "size": 20,
+    "stroke": 1.7,
+    "color": "#adb8db"
+   },
+   "text": {
+    "content": "Tools",
+    "ink_bbox": {
+     "x": 1573,
+     "y": 141,
+     "w": 38,
+     "h": 13
+    },
+    "cap_top_y": 141,
+    "baseline_y": 153,
+    "font_family": "ui",
+    "font_size_px": 17,
+    "font_weight": 400,
+    "color": "#abb6da",
+    "letter_spacing_px": 0
+   }
+  },
+  {
+   "id": "panel.tabs.divider",
+   "type": "divider",
+   "bbox": {
+    "x": 1144,
+    "y": 179,
+    "w": 510,
+    "h": 2
+   },
+   "parent": "panel",
+   "color": "#161d32/#172035 (~rgba(148,163,184,.08))"
+  },
+  {
+   "id": "panel.confirm",
+   "type": "approval-card",
+   "bbox": {
+    "x": 1162,
+    "y": 202,
+    "w": 476,
+    "h": 268
+   },
+   "parent": "panel",
+   "radius": 14,
+   "fill": "#151826 (warm-tinted surface; ~rgba(255,255,255,.035) + amber tint)",
+   "border": "1px #362a2a..#3f302a (amber ~rgba(245,158,11,.18))"
+  },
+  {
+   "id": "panel.confirm.icon",
+   "type": "icon",
+   "bbox": {
+    "x": 1186,
+    "y": 225,
+    "w": 21,
+    "h": 25
+   },
+   "parent": "panel.confirm",
+   "icon": {
+    "name": "shield-alert",
+    "size": 26,
+    "stroke": 2.0,
+    "color": "#f9c74c"
+   }
+  },
+  {
+   "id": "panel.confirm.title",
+   "type": "text",
+   "bbox": null,
+   "parent": "panel.confirm",
+   "text": {
+    "content": "Confirm Command",
+    "ink_bbox": {
+     "x": 1226,
+     "y": 231,
+     "w": 146,
+     "h": 12
+    },
+    "cap_top_y": 231,
+    "baseline_y": 242,
+    "font_family": "ui",
+    "font_size_px": 17,
+    "font_weight": 700,
+    "color": "#ffffff",
+    "letter_spacing_px": 0
+   }
+  },
+  {
+   "id": "panel.confirm.badge",
+   "type": "pill-warning",
+   "bbox": {
+    "x": 1471,
+    "y": 223,
+    "w": 146,
+    "h": 30
+   },
+   "parent": "panel.confirm",
+   "radius": 15,
+   "fill": "#2e231e",
+   "border": "1px #4f392a/#523a26 (amber ~rgba(240,166,76,.30))",
+   "icon": {
+    "name": "sparkle (filled 4-point star)",
+    "bbox": {
+     "x": 1483,
+     "y": 233,
+     "w": 11,
+     "h": 10
+    },
+    "size": 12,
+    "color": "#f1a74d",
+    "filled": true
+   },
+   "text": {
+    "content": "Requires approval",
+    "ink_bbox": {
+     "x": 1506,
+     "y": 233,
+     "w": 98,
+     "h": 12
+    },
+    "cap_top_y": 233,
+    "baseline_y": 242,
+    "font_family": "ui",
+    "font_size_px": 13,
+    "font_weight": 500,
+    "color": "#e6a64e",
+    "letter_spacing_px": 0
+   }
+  },
+  {
+   "id": "panel.confirm.question",
+   "type": "text",
+   "bbox": null,
+   "parent": "panel.confirm",
+   "text": {
+    "content": "Run this PowerShell command on your laptop?",
+    "ink_bbox": {
+     "x": 1186,
+     "y": 274,
+     "w": 336,
+     "h": 16
+    },
+    "cap_top_y": 274,
+    "baseline_y": 285,
+    "font_family": "ui",
+    "font_size_px": 16,
+    "font_weight": 400,
+    "color": "#b4bfd9",
+    "letter_spacing_px": 0
+   }
+  },
+  {
+   "id": "panel.confirm.code",
+   "type": "code-block",
+   "bbox": {
+    "x": 1184,
+    "y": 308,
+    "w": 433,
+    "h": 80
+   },
+   "parent": "panel.confirm",
+   "radius": 12,
+   "fill": "#060c1c",
+   "border": "1px #151d2f",
+   "lines": [
+    {
+     "content": "Get-Process | Sort-Object CPU -Descending |",
+     "ink_bbox": {
+      "x": 1205,
+      "y": 331,
+      "w": 380,
+      "h": 12
+     },
+     "cap_top_y": 331,
+     "baseline_y": 342,
+     "font_family": "mono",
+     "font_size_px": 15,
+     "font_weight": 400,
+     "color": "#e6e7ec",
+     "letter_spacing_px": 0,
+     "line_height_px": 24
+    },
+    {
+     "content": "Select-Object -First 5",
+     "ink_bbox": {
+      "x": 1205,
+      "y": 355,
+      "w": 184,
+      "h": 11
+     },
+     "cap_top_y": 355,
+     "baseline_y": 365,
+     "font_family": "mono",
+     "font_size_px": 15,
+     "font_weight": 400,
+     "color": "#e6e7ec",
+     "letter_spacing_px": 0,
+     "line_height_px": 24
+    }
+   ],
+   "char_advance_px": 8.92
+  },
+  {
+   "id": "panel.confirm.deny",
+   "type": "button-ghost",
+   "bbox": {
+    "x": 1184,
+    "y": 400,
+    "w": 209,
+    "h": 49
+   },
+   "parent": "panel.confirm",
+   "radius": 12,
+   "fill": "#131b30",
+   "border": "1px #2e364f",
+   "text": {
+    "content": "Deny",
+    "ink_bbox": {
+     "x": 1270,
+     "y": 419,
+     "w": 37,
+     "h": 11
+    },
+    "cap_top_y": 419,
+    "baseline_y": 429,
+    "font_family": "ui",
+    "font_size_px": 16,
+    "font_weight": 600,
+    "color": "#ffffff",
+    "letter_spacing_px": 0
+   }
+  },
+  {
+   "id": "panel.confirm.approve",
+   "type": "button-primary",
+   "bbox": {
+    "x": 1408,
+    "y": 400,
+    "w": 209,
+    "h": 49
+   },
+   "parent": "panel.confirm",
+   "radius": 12,
+   "fill": "#2760fb + inner glow: radial(120% 140% at 50% 50%, #245afb 45%, #2f78fd 100%) (edges #2f75fc, centre #265cfb)",
+   "shadow": "none visible outside",
+   "text": {
+    "content": "Approve & Run",
+    "ink_bbox": {
+     "x": 1458,
+     "y": 419,
+     "w": 108,
+     "h": 11
+    },
+    "cap_top_y": 419,
+    "baseline_y": 429,
+    "font_family": "ui",
+    "font_size_px": 16,
+    "font_weight": 600,
+    "color": "#ffffff",
+    "letter_spacing_px": 0
+   }
+  },
+  {
+   "id": "panel.chat.user.avatar",
+   "type": "avatar",
+   "bbox": {
+    "x": 1171,
+    "y": 509,
+    "w": 45,
+    "h": 46
+   },
+   "parent": "panel",
+   "center": [
+    1193,
+    531.5
+   ],
+   "d": 46,
+   "fill": "#36405c",
+   "text": {
+    "content": "A",
+    "ink_bbox": {
+     "x": 1187,
+     "y": 525,
+     "w": 12,
+     "h": 14
+    },
+    "cap_top_y": 525,
+    "baseline_y": 538,
+    "font_family": "ui",
+    "font_size_px": 19,
+    "font_weight": 600,
+    "color": "#c6d3f4",
+    "letter_spacing_px": 0,
+    "note": "replace with 'M'"
+   }
+  },
+  {
+   "id": "panel.chat.user.bubble",
+   "type": "bubble-user",
+   "bbox": {
+    "x": 1229,
+    "y": 499,
+    "w": 409,
+    "h": 79
+   },
+   "parent": "panel",
+   "radius": 14,
+   "fill": "#192139",
+   "border": "none (top edge 1px #1c253d barely visible)",
+   "lines": [
+    {
+     "content": "Show me the top 5 processes by CPU",
+     "ink_bbox": {
+      "x": 1250,
+      "y": 519,
+      "w": 266,
+      "h": 12
+     },
+     "cap_top_y": 519,
+     "baseline_y": 530,
+     "font_family": "ui",
+     "font_size_px": 16,
+     "font_weight": 400,
+     "color": "#ced8ee",
+     "letter_spacing_px": 0,
+     "line_height_px": 24
+    },
+    {
+     "content": "usage on my laptop.",
+     "ink_bbox": {
+      "x": 1250,
+      "y": 543,
+      "w": 144,
+      "h": 16
+     },
+     "cap_top_y": 543,
+     "baseline_y": 554,
+     "font_family": "ui",
+     "font_size_px": 16,
+     "font_weight": 400,
+     "color": "#ced8ee",
+     "letter_spacing_px": 0,
+     "line_height_px": 24
+    }
+   ],
+   "time": {
+    "content": "9:42 PM",
+    "ink_bbox": {
+     "x": 1571,
+     "y": 549,
+     "w": 47,
+     "h": 9
+    },
+    "cap_top_y": 549,
+    "baseline_y": 557,
+    "font_family": "ui",
+    "font_size_px": 13,
+    "font_weight": 400,
+    "color": "#7186b4",
+    "letter_spacing_px": 0
+   }
+  },
+  {
+   "id": "panel.chat.jarvis.avatar",
+   "type": "avatar-logo",
+   "bbox": {
+    "x": 1171,
+    "y": 610,
+    "w": 45,
+    "h": 46
+   },
+   "parent": "panel",
+   "center": [
+    1193,
+    632.5
+   ],
+   "outer_ring": {
+    "d": 44,
+    "stroke": 1.5,
+    "color": "#3a73c8 (#448ed9 peak)",
+    "glow": "0 0 10px rgba(58,115,200,.45)"
+   },
+   "logo": {
+    "d": 34,
+    "hole_d": 20,
+    "fill": "same conic ring as sidebar logo"
+   },
+   "inner_bg": "#060d1f"
+  },
+  {
+   "id": "panel.chat.jarvis.bubble",
+   "type": "bubble-assistant",
+   "bbox": {
+    "x": 1229,
+    "y": 601,
+    "w": 409,
+    "h": 130
+   },
+   "parent": "panel",
+   "radius": 14,
+   "fill": "#121b32 (left edge #131b32 -> #141d34 very slight)",
+   "label": {
+    "content": "JARVIS",
+    "ink_bbox": {
+     "x": 1249,
+     "y": 622,
+     "w": 48,
+     "h": 10
+    },
+    "cap_top_y": 622,
+    "baseline_y": 631,
+    "font_family": "ui",
+    "font_size_px": 14,
+    "font_weight": 700,
+    "color": "#acc8f9",
+    "letter_spacing_px": 0.3
+   },
+   "time": {
+    "content": "9:42 PM",
+    "ink_bbox": {
+     "x": 1571,
+     "y": 622,
+     "w": 48,
+     "h": 10
+    },
+    "cap_top_y": 622,
+    "baseline_y": 631,
+    "font_family": "ui",
+    "font_size_px": 13,
+    "font_weight": 400,
+    "color": "#5d739f",
+    "letter_spacing_px": 0
+   },
+   "lines": [
+    {
+     "content": "I\u2019ll run that command for you after approval.",
+     "ink_bbox": {
+      "x": 1250,
+      "y": 650,
+      "w": 311,
+      "h": 12
+     },
+     "cap_top_y": 650,
+     "baseline_y": 661,
+     "font_family": "ui",
+     "font_size_px": 16,
+     "font_weight": 400,
+     "color": "#b0bcdb",
+     "letter_spacing_px": 0,
+     "line_height_px": 24
+    },
+    {
+     "content": "This will show the top 5 processes by CPU",
+     "ink_bbox": {
+      "x": 1249,
+      "y": 674,
+      "w": 300,
+      "h": 12
+     },
+     "cap_top_y": 674,
+     "baseline_y": 685,
+     "font_family": "ui",
+     "font_size_px": 16,
+     "font_weight": 400,
+     "color": "#b0bcdb",
+     "letter_spacing_px": 0,
+     "line_height_px": 24
+    },
+    {
+     "content": "usage, sorted from highest to lowest.",
+     "ink_bbox": {
+      "x": 1250,
+      "y": 698,
+      "w": 265,
+      "h": 13
+     },
+     "cap_top_y": 699,
+     "baseline_y": 710,
+     "font_family": "ui",
+     "font_size_px": 16,
+     "font_weight": 400,
+     "color": "#b0bcdb",
+     "letter_spacing_px": 0,
+     "line_height_px": 24
+    }
+   ]
+  },
+  {
+   "id": "panel.composer",
+   "type": "composer",
+   "bbox": {
+    "x": 1158,
+    "y": 770,
+    "w": 481,
+    "h": 129
+   },
+   "parent": "panel",
+   "radius": 14,
+   "fill": "linear-gradient(180deg,#121b32 0%,#0f192f 30%,#0e172c 100%)",
+   "border": "1px #23304e (top) -> #131f36 (bottom), sides #1d2742"
+  },
+  {
+   "id": "panel.composer.input",
+   "type": "input",
+   "bbox": {
+    "x": 1173,
+    "y": 785,
+    "w": 450,
+    "h": 58
+   },
+   "parent": "panel.composer",
+   "radius": 12,
+   "fill": "#15203d",
+   "border": "1px #1b2744",
+   "text": {
+    "content": "Message JARVIS...",
+    "ink_bbox": {
+     "x": 1191,
+     "y": 804,
+     "w": 122,
+     "h": 12
+    },
+    "cap_top_y": 804,
+    "baseline_y": 815,
+    "font_family": "ui",
+    "font_size_px": 16,
+    "font_weight": 400,
+    "color": "#94a4ca",
+    "letter_spacing_px": 0,
+    "note": "placeholder"
+   }
+  },
+  {
+   "id": "panel.composer.send",
+   "type": "icon-button",
+   "bbox": {
+    "x": 1570,
+    "y": 787,
+    "w": 54,
+    "h": 54
+   },
+   "parent": "panel.composer.input",
+   "radius": 12,
+   "fill": "#163b80 (#143a7f..#173e83)",
+   "border": "none/1px #1a376c",
+   "icon": {
+    "name": "send (filled paper plane)",
+    "bbox": {
+     "x": 1586,
+     "y": 803,
+     "w": 22,
+     "h": 22
+    },
+    "size": 22,
+    "color": "#eef3fd",
+    "filled": true
+   }
+  },
+  {
+   "id": "panel.composer.hint.attach",
+   "type": "hint",
+   "bbox": null,
+   "parent": "panel.composer",
+   "icon": {
+    "name": "paperclip",
+    "bbox": {
+     "x": 1178,
+     "y": 863,
+     "w": 16,
+     "h": 18
+    },
+    "size": 18,
+    "stroke": 1.45,
+    "color": "#b4bfdc"
+   },
+   "text": {
+    "content": "Shift + Enter for new line",
+    "ink_bbox": {
+     "x": 1211,
+     "y": 867,
+     "w": 142,
+     "h": 10
+    },
+    "cap_top_y": 867,
+    "baseline_y": 876,
+    "font_family": "ui",
+    "font_size_px": 13,
+    "font_weight": 400,
+    "color": "#96a3be",
+    "letter_spacing_px": 0
+   }
+  },
+  {
+   "id": "panel.composer.hint.mic",
+   "type": "hint",
+   "bbox": null,
+   "parent": "panel.composer",
+   "icon": {
+    "name": "mic (filled capsule)",
+    "bbox": {
+     "x": 1493,
+     "y": 863,
+     "w": 15,
+     "h": 19
+    },
+    "size": 18,
+    "color": "#b4bfe2",
+    "filled": true
+   },
+   "text": {
+    "content": "Use microphone",
+    "ink_bbox": {
+     "x": 1524,
+     "y": 867,
+     "w": 94,
+     "h": 10
+    },
+    "cap_top_y": 867,
+    "baseline_y": 876,
+    "font_family": "ui",
+    "font_size_px": 13,
+    "font_weight": 400,
+    "color": "#8e9ab7",
+    "letter_spacing_px": 0
+   }
+  }
+ ],
+ "orb": {
+  "center": [
+   534.1,
+   319.2
+  ],
+  "card_relative_center": [
+   239,
+   203
+  ],
+  "sphere": {
+   "r": 107,
+   "rim_thickness_px": 3,
+   "rim_glow_px": 6,
+   "rim_colors_by_angle_cw_from_right": {
+    "0": "#becffc",
+    "18": "#f1e4ff",
+    "36": "#e8d6fe",
+    "54": "#f5f5ff",
+    "72": "#e9ffff",
+    "90": "#acd9ff",
+    "108": "#8abdff",
+    "126": "#a0e5ff",
+    "144": "#9bd5fb",
+    "162": "#a2e5fb",
+    "180": "#c7f3fe",
+    "198": "#cdf5fe",
+    "216": "#d5ffff",
+    "234": "#c4f9fd",
+    "252": "#ecfbff",
+    "270": "#b0e7ff",
+    "288": "#9dc8fd",
+    "306": "#8796ff",
+    "324": "#809df0",
+    "342": "#78b4fa"
+   },
+   "rim_summary": "brightest cyan-white arc on the left/upper-left (180-260deg), white-pink highlight lower-right (20-60deg), dimmer blue-violet upper-right (290-340deg)"
+  },
+  "radial_profile_mean": {
+   "0": "#f6fefd",
+   "5": "#8de5fe",
+   "10": "#47acfc",
+   "15": "#2f82f4",
+   "20": "#2368e1",
+   "30": "#1747b2",
+   "40": "#123288",
+   "50": "#0e256a",
+   "60": "#0e2164",
+   "70": "#102269",
+   "80": "#152b86",
+   "90": "#223fb0",
+   "100": "#4667e4",
+   "105": "#5d8bf7",
+   "110": "#232fa6",
+   "120": "#16216f",
+   "125": "#2634a6",
+   "130": "#25339e",
+   "135": "#25328a",
+   "140": "#152166",
+   "150": "#101b4a",
+   "160": "#111e4a",
+   "180": "#132250",
+   "200": "#142252",
+   "220": "#13204a"
+  },
+  "layers_inside_out": [
+   {
+    "name": "core hotspot",
+    "r": [
+     0,
+     12
+    ],
+    "colors": [
+     "#ffffff",
+     "#8de5fe",
+     "#47acfc"
+    ],
+    "css": "radial-gradient(circle, #fff 0, #8de5fe 4px, #47acfc 10px, rgba(47,130,244,0) 18px)"
+   },
+   {
+    "name": "light streak / lens flare",
+    "angle_deg": 22,
+    "length_px": 180,
+    "through": "center",
+    "colors": [
+     "#ffffff core",
+     "#e9ffff",
+     "#8de5fe glow"
+    ],
+    "note": "thin white-cyan line from ~(460,290) to ~(610,355) with soft glow, brightest at centre; the polar unwrap shows it as bright columns at 20deg and 200deg reaching r~90"
+   },
+   {
+    "name": "sphere body",
+    "r": [
+     12,
+     104
+    ],
+    "gradient": "dark interior #0e2262 at r 55-65, brightening to #3151cd at r95 and #5d8bf7 at r105",
+    "css": "radial-gradient(circle, transparent 0 14px, #0e2262 55px, #102269 70px, #223fb0 90px, #5d8bf7 104px)"
+   },
+   {
+    "name": "inner swirl ribbons",
+    "r": [
+     60,
+     100
+    ],
+    "note": "3-5 translucent blue/violet arcs (orbit-like, intersecting) at opacity .25-.5; violet/magenta tint lower-right",
+    "colors": [
+     "#2f6bff",
+     "#5a4bff",
+     "#9b6bff"
+    ]
+   },
+   {
+    "name": "rim",
+    "r": 107,
+    "width": 3,
+    "glow": "0 0 6px #8fd8ff",
+    "colors": "see sphere.rim_colors_by_angle (conic)"
+   },
+   {
+    "name": "dark gap",
+    "r": [
+     109,
+     121
+    ],
+    "color": "#16216f"
+   },
+   {
+    "name": "orbit rings",
+    "radii": [
+     113.5,
+     124.5,
+     128,
+     134
+    ],
+    "stroke_px": 1,
+    "colors": [
+     "#2634a6",
+     "#3b5bd9 highlights",
+     "violet #6a5cff upper-right"
+    ],
+    "note": "outermost ring centre offset (-3,-3.5) -> slight 3D tilt; bright specks at ~65deg and ~250deg"
+   },
+   {
+    "name": "particle halo",
+    "r": [
+     140,
+     230
+    ],
+    "count_detected": 92,
+    "size_px": [
+     1,
+     4
+    ],
+    "median_area_px": 2,
+    "dotted_rings_r": [
+     147,
+     160,
+     175
+    ],
+    "colors": [
+     "#1a2f81",
+     "#244fc9",
+     "#3d63d2",
+     "#5748f4",
+     "#9fd8ff (rare bright)"
+    ],
+    "particles": [
+     {
+      "r": 141.1,
+      "x": 482.0,
+      "y": 188.0,
+      "area": 1,
+      "color": "#2756d1"
+     },
+     {
+      "r": 141.2,
+      "x": 423.0,
+      "y": 232.0,
+      "area": 1,
+      "color": "#1e44ac"
+     },
+     {
+      "r": 141.4,
+      "x": 424.0,
+      "y": 230.5,
+      "area": 2,
+      "color": "#1e46ad"
+     },
+     {
+      "r": 141.4,
+      "x": 422.0,
+      "y": 233.0,
+      "area": 1,
+      "color": "#1d43a9"
+     },
+     {
+      "r": 141.4,
+      "x": 426.0,
+      "y": 228.0,
+      "area": 1,
+      "color": "#2350ba"
+     },
+     {
+      "r": 141.5,
+      "x": 425.0,
+      "y": 229.0,
+      "area": 1,
+      "color": "#2049b6"
+     },
+     {
+      "r": 141.7,
+      "x": 483.0,
+      "y": 187.0,
+      "area": 1,
+      "color": "#244fc9"
+     },
+     {
+      "r": 142.1,
+      "x": 395.0,
+      "y": 348.5,
+      "area": 2,
+      "color": "#253ea1"
+     },
+     {
+      "r": 143.4,
+      "x": 595.0,
+      "y": 449.0,
+      "area": 1,
+      "color": "#253d99"
+     },
+     {
+      "r": 143.6,
+      "x": 398.0,
+      "y": 365.0,
+      "area": 1,
+      "color": "#1a2f81"
+     },
+     {
+      "r": 143.6,
+      "x": 609.7,
+      "y": 441.3,
+      "area": 3,
+      "color": "#354fad"
+     },
+     {
+      "r": 143.9,
+      "x": 627.0,
+      "y": 429.0,
+      "area": 1,
+      "color": "#20307f"
+     },
+     {
+      "r": 144.3,
+      "x": 577.0,
+      "y": 457.0,
+      "area": 1,
+      "color": "#202f71"
+     },
+     {
+      "r": 144.5,
+      "x": 559.0,
+      "y": 461.5,
+      "area": 2,
+      "color": "#22419f"
+     },
+     {
+      "r": 145.2,
+      "x": 672.5,
+      "y": 363.0,
+      "area": 2,
+      "color": "#263584"
+     },
+     {
+      "r": 145.7,
+      "x": 676.0,
+      "y": 352.0,
+      "area": 1,
+      "color": "#222e81"
+     },
+     {
+      "r": 145.9,
+      "x": 680.0,
+      "y": 316.5,
+      "area": 2,
+      "color": "#2e39a1"
+     },
+     {
+      "r": 146.0,
+      "x": 678.0,
+      "y": 344.0,
+      "area": 1,
+      "color": "#212c78"
+     },
+     {
+      "r": 146.1,
+      "x": 679.0,
+      "y": 301.0,
+      "area": 1,
+      "color": "#222c7b"
+     },
+     {
+      "r": 146.3,
+      "x": 502.5,
+      "y": 462.0,
+      "area": 2,
+      "color": "#1c2a7f"
+     },
+     {
+      "r": 146.4,
+      "x": 599.7,
+      "y": 188.3,
+      "area": 3,
+      "color": "#223888"
+     },
+     {
+      "r": 146.4,
+      "x": 617.0,
+      "y": 198.5,
+      "area": 2,
+      "color": "#243486"
+     },
+     {
+      "r": 146.5,
+      "x": 673.7,
+      "y": 274.7,
+      "area": 3,
+      "color": "#274298"
+     },
+     {
+      "r": 146.6,
+      "x": 659.0,
+      "y": 242.5,
+      "area": 4,
+      "color": "#3d4fc6"
+     },
+     {
+      "r": 146.8,
+      "x": 636.0,
+      "y": 213.5,
+      "area": 2,
+      "color": "#25367d"
+     },
+     {
+      "r": 147.2,
+      "x": 456.0,
+      "y": 444.0,
+      "area": 1,
+      "color": "#1e318a"
+     },
+     {
+      "r": 147.6,
+      "x": 502.7,
+      "y": 175.0,
+      "area": 7,
+      "color": "#6a98ff"
+     },
+     {
+      "r": 147.7,
+      "x": 443.5,
+      "y": 202.5,
+      "area": 4,
+      "color": "#346dcf"
+     },
+     {
+      "r": 147.8,
+      "x": 512.0,
+      "y": 173.0,
+      "area": 1,
+      "color": "#213993"
+     },
+     {
+      "r": 148.2,
+      "x": 530.5,
+      "y": 171.0,
+      "area": 6,
+      "color": "#4464e7"
+     },
+     {
+      "r": 149.8,
+      "x": 470.5,
+      "y": 183.5,
+      "area": 4,
+      "color": "#325cb7"
+     },
+     {
+      "r": 150.2,
+      "x": 435.5,
+      "y": 432.5,
+      "area": 4,
+      "color": "#2d4ab7"
+     },
+     {
+      "r": 150.7,
+      "x": 423.0,
+      "y": 421.0,
+      "area": 1,
+      "color": "#1c2f75"
+     },
+     {
+      "r": 151.2,
+      "x": 427.0,
+      "y": 426.0,
+      "area": 1,
+      "color": "#203692"
+     },
+     {
+      "r": 152.6,
+      "x": 406.5,
+      "y": 235.5,
+      "area": 4,
+      "color": "#215cbd"
+     },
+     {
+      "r": 152.8,
+      "x": 407.0,
+      "y": 404.0,
+      "area": 1,
+      "color": "#223879"
+     },
+     {
+      "r": 153.0,
+      "x": 392.0,
+      "y": 376.0,
+      "area": 1,
+      "color": "#1a2b6b"
+     },
+     {
+      "r": 153.4,
+      "x": 396.5,
+      "y": 387.0,
+      "area": 2,
+      "color": "#1f2e68"
+     },
+     {
+      "r": 153.4,
+      "x": 393.0,
+      "y": 379.5,
+      "area": 2,
+      "color": "#203480"
+     },
+     {
+      "r": 153.4,
+      "x": 417.0,
+      "y": 220.0,
+      "area": 1,
+      "color": "#1b3b84"
+     },
+     {
+      "r": 153.6,
+      "x": 412.0,
+      "y": 226.0,
+      "area": 1,
+      "color": "#183783"
+     },
+     {
+      "r": 154.0,
+      "x": 388.0,
+      "y": 368.0,
+      "area": 1,
+      "color": "#172d75"
+     },
+     {
+      "r": 154.4,
+      "x": 383.5,
+      "y": 353.5,
+      "area": 4,
+      "color": "#264bc3"
+     },
+     {
+      "r": 155.2,
+      "x": 380.0,
+      "y": 300.5,
+      "area": 2,
+      "color": "#204fb2"
+     },
+     {
+      "r": 155.3,
+      "x": 380.0,
+      "y": 338.5,
+      "area": 2,
+      "color": "#17317a"
+     },
+     {
+      "r": 155.6,
+      "x": 379.0,
+      "y": 332.5,
+      "area": 2,
+      "color": "#1e4099"
+     },
+     {
+      "r": 155.7,
+      "x": 380.5,
+      "y": 345.0,
+      "area": 2,
+      "color": "#1a3582"
+     },
+     {
+      "r": 156.1,
+      "x": 378.0,
+      "y": 318.5,
+      "area": 6,
+      "color": "#2f68dc"
+     },
+     {
+      "r": 156.2,
+      "x": 378.0,
+      "y": 326.0,
+      "area": 1,
+      "color": "#173386"
+     },
+     {
+      "r": 162.9,
+      "x": 627.0,
+      "y": 453.0,
+      "area": 1,
+      "color": "#1b2f70"
+     },
+     {
+      "r": 163.5,
+      "x": 688.0,
+      "y": 374.3,
+      "area": 7,
+      "color": "#3946dd"
+     },
+     {
+      "r": 163.6,
+      "x": 657.5,
+      "y": 426.5,
+      "area": 4,
+      "color": "#3d58d9"
+     },
+     {
+      "r": 163.6,
+      "x": 697.0,
+      "y": 304.5,
+      "area": 2,
+      "color": "#18286a"
+     },
+     {
+      "r": 163.7,
+      "x": 696.5,
+      "y": 339.5,
+      "area": 4,
+      "color": "#3950e9"
+     },
+     {
+      "r": 163.8,
+      "x": 691.5,
+      "y": 364.5,
+      "area": 4,
+      "color": "#3351dc"
+     },
+     {
+      "r": 164.0,
+      "x": 698.0,
+      "y": 315.5,
+      "area": 6,
+      "color": "#4053f0"
+     },
+     {
+      "r": 164.0,
+      "x": 688.5,
+      "y": 264.0,
+      "area": 4,
+      "color": "#3340c4"
+     },
+     {
+      "r": 164.0,
+      "x": 608.5,
+      "y": 173.0,
+      "area": 2,
+      "color": "#183375"
+     },
+     {
+      "r": 164.1,
+      "x": 698.0,
+      "y": 326.0,
+      "area": 1,
+      "color": "#1b2a61"
+     },
+     {
+      "r": 164.1,
+      "x": 691.6,
+      "y": 273.2,
+      "area": 5,
+      "color": "#3557e9"
+     },
+     {
+      "r": 164.1,
+      "x": 570.6,
+      "y": 159.2,
+      "area": 5,
+      "color": "#3a64cf"
+     },
+     {
+      "r": 164.1,
+      "x": 676.3,
+      "y": 237.3,
+      "area": 10,
+      "color": "#4253ff"
+     },
+     {
+      "r": 164.1,
+      "x": 598.0,
+      "y": 168.0,
+      "area": 1,
+      "color": "#153478"
+     },
+     {
+      "r": 164.2,
+      "x": 661.0,
+      "y": 215.0,
+      "area": 1,
+      "color": "#172e74"
+     },
+     {
+      "r": 164.3,
+      "x": 694.0,
+      "y": 281.5,
+      "area": 2,
+      "color": "#162c70"
+     },
+     {
+      "r": 164.3,
+      "x": 656.0,
+      "y": 209.0,
+      "area": 1,
+      "color": "#172e6b"
+     },
+     {
+      "r": 164.5,
+      "x": 624.0,
+      "y": 181.5,
+      "area": 2,
+      "color": "#3d63d2"
+     },
+     {
+      "r": 164.5,
+      "x": 615.7,
+      "y": 176.3,
+      "area": 3,
+      "color": "#294fa2"
+     },
+     {
+      "r": 164.5,
+      "x": 642.0,
+      "y": 195.0,
+      "area": 1,
+      "color": "#172a65"
+     },
+     {
+      "r": 164.6,
+      "x": 631.7,
+      "y": 186.7,
+      "area": 10,
+      "color": "#5748f4"
+     },
+     {
+      "r": 164.6,
+      "x": 682.0,
+      "y": 247.0,
+      "area": 1,
+      "color": "#1d2b5c"
+     },
+     {
+      "r": 164.7,
+      "x": 685.5,
+      "y": 254.5,
+      "area": 4,
+      "color": "#2848af"
+     },
+     {
+      "r": 165.2,
+      "x": 533.0,
+      "y": 154.0,
+      "area": 1,
+      "color": "#223e7a"
+     },
+     {
+      "r": 167.6,
+      "x": 366.5,
+      "y": 319.5,
+      "area": 4,
+      "color": "#173e9c"
+     },
+     {
+      "r": 170.7,
+      "x": 427.5,
+      "y": 452.5,
+      "area": 4,
+      "color": "#1036ae"
+     },
+     {
+      "r": 171.1,
+      "x": 366.5,
+      "y": 284.5,
+      "area": 4,
+      "color": "#1d3fa7"
+     },
+     {
+      "r": 172.1,
+      "x": 369.9,
+      "y": 267.6,
+      "area": 7,
+      "color": "#294bd6"
+     },
+     {
+      "r": 172.9,
+      "x": 372.8,
+      "y": 257.0,
+      "area": 4,
+      "color": "#2d6cdd"
+     },
+     {
+      "r": 173.2,
+      "x": 376.0,
+      "y": 248.5,
+      "area": 6,
+      "color": "#285ee5"
+     },
+     {
+      "r": 175.4,
+      "x": 392.4,
+      "y": 422.6,
+      "area": 13,
+      "color": "#2b4cf2"
+     },
+     {
+      "r": 175.5,
+      "x": 387.0,
+      "y": 415.0,
+      "area": 1,
+      "color": "#15265a"
+     },
+     {
+      "r": 176.1,
+      "x": 382.0,
+      "y": 408.0,
+      "area": 1,
+      "color": "#162768"
+     },
+     {
+      "r": 178.3,
+      "x": 370.0,
+      "y": 389.0,
+      "area": 9,
+      "color": "#5062ff"
+     },
+     {
+      "r": 179.6,
+      "x": 363.5,
+      "y": 375.5,
+      "area": 4,
+      "color": "#5a57d2"
+     },
+     {
+      "r": 180.5,
+      "x": 360.0,
+      "y": 367.0,
+      "area": 1,
+      "color": "#152b69"
+     },
+     {
+      "r": 181.4,
+      "x": 356.7,
+      "y": 356.9,
+      "area": 9,
+      "color": "#3c56f7"
+     },
+     {
+      "r": 184.3,
+      "x": 350.0,
+      "y": 329.0,
+      "area": 1,
+      "color": "#14285b"
+     },
+     {
+      "r": 186.1,
+      "x": 348.0,
+      "y": 320.5,
+      "area": 2,
+      "color": "#152b6c"
+     },
+     {
+      "r": 187.9,
+      "x": 347.0,
+      "y": 302.0,
+      "area": 1,
+      "color": "#1f48b7"
+     },
+     {
+      "r": 189.1,
+      "x": 594.5,
+      "y": 140.0,
+      "area": 2,
+      "color": "#19336e"
+     },
+     {
+      "r": 189.1,
+      "x": 661.0,
+      "y": 179.0,
+      "area": 1,
+      "color": "#19274e"
+     },
+     {
+      "r": 189.8,
+      "x": 674.0,
+      "y": 191.0,
+      "area": 1,
+      "color": "#172669"
+     }
+    ]
+   },
+   {
+    "name": "outer glow",
+    "r": [
+     107,
+     185
+    ],
+    "values": {
+     "r110": "#152c9c (left) / #26236d (right, violet)",
+     "r140": "#111e60 (left) / #14399d (upper-left)",
+     "r160": "#0d1641",
+     "r180": "#0c122b = bg"
+    },
+    "css": "radial-gradient(circle at center, rgba(40,90,255,.45) 107px, rgba(40,90,255,.18) 140px, rgba(40,90,255,0) 185px) + violet rgba(120,80,255,.25) bias on the right"
+   }
+  ],
+  "states_suggestion": "idle: slow rotate swirl (20s) + particle drift; listening: rim brightens, waveform active; speaking: scale 1.0->1.03 pulse with audio level"
+ },
+ "waveform": {
+  "bbox": {
+   "x": 742,
+   "y": 363,
+   "w": 212,
+   "h": 23
+  },
+  "center_y": 374,
+  "bar_count": 31,
+  "pitch_px": 7.1,
+  "bar_width_px": 3.5,
+  "radius": "full",
+  "tall_bars_x": [
+   814,
+   834,
+   855,
+   878
+  ],
+  "envelope": "Dots 2-5px at both ends; 10-12px mid bars alternate with 21-23px peaks",
+  "bars": [
+   {
+    "x_center": 743.0,
+    "ink_width": 3,
+    "height": 3,
+    "color": "#3948a4"
+   },
+   {
+    "x_center": 750.5,
+    "ink_width": 4,
+    "height": 4,
+    "color": "#2b3887"
+   },
+   {
+    "x_center": 757.0,
+    "ink_width": 3,
+    "height": 3,
+    "color": "#3443ae"
+   },
+   {
+    "x_center": 763.5,
+    "ink_width": 4,
+    "height": 4,
+    "color": "#2e399b"
+   },
+   {
+    "x_center": 770.0,
+    "ink_width": 3,
+    "height": 5,
+    "color": "#3543b4"
+   },
+   {
+    "x_center": 777.5,
+    "ink_width": 4,
+    "height": 5,
+    "color": "#4b56e2"
+   },
+   {
+    "x_center": 784.5,
+    "ink_width": 4,
+    "height": 6,
+    "color": "#536ceb"
+   },
+   {
+    "x_center": 792.0,
+    "ink_width": 5,
+    "height": 11,
+    "color": "#6880f8"
+   },
+   {
+    "x_center": 799.5,
+    "ink_width": 4,
+    "height": 7,
+    "color": "#577cf2"
+   },
+   {
+    "x_center": 807.0,
+    "ink_width": 5,
+    "height": 10,
+    "color": "#5c79f1"
+   },
+   {
+    "x_center": 814.0,
+    "ink_width": 5,
+    "height": 21,
+    "color": "#5a7bf7"
+   },
+   {
+    "x_center": 820.5,
+    "ink_width": 4,
+    "height": 10,
+    "color": "#3b60d9"
+   },
+   {
+    "x_center": 827.5,
+    "ink_width": 4,
+    "height": 12,
+    "color": "#436ddd"
+   },
+   {
+    "x_center": 834.0,
+    "ink_width": 5,
+    "height": 23,
+    "color": "#4799f9"
+   },
+   {
+    "x_center": 841.0,
+    "ink_width": 5,
+    "height": 11,
+    "color": "#51b4f6"
+   },
+   {
+    "x_center": 848.5,
+    "ink_width": 4,
+    "height": 11,
+    "color": "#5fc5f5"
+   },
+   {
+    "x_center": 855.0,
+    "ink_width": 7,
+    "height": 23,
+    "color": "#53ccf9"
+   },
+   {
+    "x_center": 864.0,
+    "ink_width": 7,
+    "height": 12,
+    "color": "#4cbdf3"
+   },
+   {
+    "x_center": 870.5,
+    "ink_width": 4,
+    "height": 10,
+    "color": "#43aaee"
+   },
+   {
+    "x_center": 878.0,
+    "ink_width": 5,
+    "height": 23,
+    "color": "#43b9f9"
+   },
+   {
+    "x_center": 885.5,
+    "ink_width": 4,
+    "height": 11,
+    "color": "#3d9ef3"
+   },
+   {
+    "x_center": 892.5,
+    "ink_width": 4,
+    "height": 8,
+    "color": "#4998f3"
+   },
+   {
+    "x_center": 899.5,
+    "ink_width": 6,
+    "height": 12,
+    "color": "#4682eb"
+   },
+   {
+    "x_center": 907.5,
+    "ink_width": 4,
+    "height": 6,
+    "color": "#3e60d2"
+   },
+   {
+    "x_center": 915.5,
+    "ink_width": 4,
+    "height": 5,
+    "color": "#2f49b0"
+   },
+   {
+    "x_center": 923.0,
+    "ink_width": 5,
+    "height": 4,
+    "color": "#293e94"
+   },
+   {
+    "x_center": 930.5,
+    "ink_width": 4,
+    "height": 4,
+    "color": "#223781"
+   },
+   {
+    "x_center": 937.5,
+    "ink_width": 4,
+    "height": 3,
+    "color": "#1b2f69"
+   },
+   {
+    "x_center": 944.0,
+    "ink_width": 1,
+    "height": 2,
+    "color": "#132049"
+   },
+   {
+    "x_center": 946.5,
+    "ink_width": 2,
+    "height": 3,
+    "color": "#132252"
+   },
+   {
+    "x_center": 952.5,
+    "ink_width": 2,
+    "height": 2,
+    "color": "#122249"
+   }
+  ]
+ },
+ "logo_ring": {
+  "sidebar": {
+   "center": [
+    136,
+    54.5
+   ],
+   "r_outer": 29,
+   "r_inner": 15.5,
+   "bands": "outer band r24-29 (darker), glossy inner tube r16-23",
+   "highlights": "light-blue specular arc at top (#85b8fb), pink-white highlight lower-right (#ebbdff)",
+   "samples_r22_5_css_angle": {
+    "0": "#2940a1",
+    "30": "#5b77e9",
+    "60": "#858cf9",
+    "90": "#9a82fc",
+    "120": "#d09ffd",
+    "150": "#ebbdff",
+    "180": "#bb99fc",
+    "210": "#6156e9",
+    "240": "#3339b7",
+    "270": "#1e288e",
+    "300": "#152570",
+    "330": "#1f3382"
+   }
+  },
+  "chat_avatar": {
+   "center": [
+    1193,
+    632.5
+   ],
+   "outer_ring_d": 44,
+   "outer_ring_color": "#3a73c8",
+   "logo_d": 34,
+   "hole_d": 20
+  }
+ },
+ "background": {
+  "canvas_samples": {
+   "(1660,500)": "#070e1f",
+   "(700,100)": "#0c173b",
+   "(1000,5)": "#0d1737",
+   "(1660,5)": "#0c142d",
+   "(1400,100)": "#091025",
+   "(400,935)": "#080e20"
+  },
+  "header_band_y0_18": "x280 #0b1125 -> x700 #0c1632 -> x1000 #0d1737 -> x1400 #0b132d -> x1660 #0c132c",
+  "between_header_and_cards_y92_110": "x280 #0d132e -> x700 #0c183b (peak) -> x1060 #0a132d -> x1660 #080f22",
+  "bottom_band": "#070e1f everywhere",
+  "sidebar_wave": "see elements sidebar.wave"
+ },
+ "fonts": {
+  "candidates_tested_sans": [
+   "Albert Sans",
+   "DM Sans",
+   "Exo 2",
+   "Figtree",
+   "Hanken Grotesk",
+   "IBM Plex Sans",
+   "Inter",
+   "Lato",
+   "Lexend",
+   "Manrope",
+   "Montserrat",
+   "Mulish",
+   "Noto Sans",
+   "Nunito Sans",
+   "Onest",
+   "Open Sans",
+   "Outfit",
+   "Plus Jakarta Sans",
+   "Poppins",
+   "Red Hat Display",
+   "Roboto",
+   "Rubik",
+   "Segoe UI",
+   "Sora",
+   "Source Sans 3",
+   "Space Grotesk",
+   "Urbanist",
+   "Work Sans"
+  ],
+  "candidates_tested_mono": [
+   "Consolas",
+   "Cousine",
+   "DM Mono",
+   "Fira Code",
+   "Fira Mono",
+   "Geist Mono",
+   "IBM Plex Mono",
+   "Inconsolata",
+   "JetBrains Mono",
+   "Red Hat Mono",
+   "Roboto Mono",
+   "Source Code Pro",
+   "Space Mono",
+   "Ubuntu Mono"
+  ],
+  "note_mono": "Cascadia Mono is not installed on this PC (fallback render) and was excluded",
+  "ranking_body": [
+   {
+    "family": "Segoe UI",
+    "score": 0.7256,
+    "word_ncc": 0.7512,
+    "mean_abs_log_width": 0.0255
+   },
+   {
+    "family": "Source Sans 3",
+    "score": 0.661,
+    "word_ncc": 0.6985,
+    "mean_abs_log_width": 0.0374
+   },
+   {
+    "family": "Roboto",
+    "score": 0.6542,
+    "word_ncc": 0.7054,
+    "mean_abs_log_width": 0.0512
+   },
+   {
+    "family": "Noto Sans",
+    "score": 0.6358,
+    "word_ncc": 0.6747,
+    "mean_abs_log_width": 0.0389
+   },
+   {
+    "family": "Open Sans",
+    "score": 0.6118,
+    "word_ncc": 0.6474,
+    "mean_abs_log_width": 0.0356
+   },
+   {
+    "family": "Urbanist",
+    "score": 0.6034,
+    "word_ncc": 0.6523,
+    "mean_abs_log_width": 0.0489
+   },
+   {
+    "family": "Mulish",
+    "score": 0.5572,
+    "word_ncc": 0.6198,
+    "mean_abs_log_width": 0.0626
+   },
+   {
+    "family": "Red Hat Display",
+    "score": 0.5259,
+    "word_ncc": 0.5799,
+    "mean_abs_log_width": 0.054
+   },
+   {
+    "family": "Hanken Grotesk",
+    "score": 0.5169,
+    "word_ncc": 0.5988,
+    "mean_abs_log_width": 0.0819
+   },
+   {
+    "family": "Outfit",
+    "score": 0.5068,
+    "word_ncc": 0.5926,
+    "mean_abs_log_width": 0.0858
+   },
+   {
+    "family": "Inter",
+    "score": 0.5055,
+    "word_ncc": 0.583,
+    "mean_abs_log_width": 0.0774
+   },
+   {
+    "family": "Onest",
+    "score": 0.4918,
+    "word_ncc": 0.5835,
+    "mean_abs_log_width": 0.0917
+   },
+   {
+    "family": "IBM Plex Sans",
+    "score": 0.4891,
+    "word_ncc": 0.5634,
+    "mean_abs_log_width": 0.0743
+   },
+   {
+    "family": "Lato",
+    "score": 0.4773,
+    "word_ncc": 0.5593,
+    "mean_abs_log_width": 0.082
+   },
+   {
+    "family": "Figtree",
+    "score": 0.4642,
+    "word_ncc": 0.5555,
+    "mean_abs_log_width": 0.0913
+   },
+   {
+    "family": "DM Sans",
+    "score": 0.457,
+    "word_ncc": 0.5469,
+    "mean_abs_log_width": 0.0899
+   },
+   {
+    "family": "Lexend",
+    "score": 0.4458,
+    "word_ncc": 0.5378,
+    "mean_abs_log_width": 0.0919
+   },
+   {
+    "family": "Albert Sans",
+    "score": 0.4414,
+    "word_ncc": 0.5443,
+    "mean_abs_log_width": 0.1029
+   },
+   {
+    "family": "Manrope",
+    "score": 0.4307,
+    "word_ncc": 0.5222,
+    "mean_abs_log_width": 0.0915
+   },
+   {
+    "family": "Poppins",
+    "score": 0.4186,
+    "word_ncc": 0.5081,
+    "mean_abs_log_width": 0.0895
+   },
+   {
+    "family": "Plus Jakarta Sans",
+    "score": 0.415,
+    "word_ncc": 0.5176,
+    "mean_abs_log_width": 0.1026
+   },
+   {
+    "family": "Nunito Sans",
+    "score": 0.4122,
+    "word_ncc": 0.5232,
+    "mean_abs_log_width": 0.1109
+   },
+   {
+    "family": "Rubik",
+    "score": 0.3777,
+    "word_ncc": 0.4675,
+    "mean_abs_log_width": 0.0898
+   },
+   {
+    "family": "Exo 2",
+    "score": 0.3675,
+    "word_ncc": 0.4842,
+    "mean_abs_log_width": 0.1168
+   },
+   {
+    "family": "Work Sans",
+    "score": 0.3536,
+    "word_ncc": 0.4644,
+    "mean_abs_log_width": 0.1107
+   },
+   {
+    "family": "Montserrat",
+    "score": 0.2413,
+    "word_ncc": 0.4126,
+    "mean_abs_log_width": 0.1713
+   },
+   {
+    "family": "Space Grotesk",
+    "score": 0.2364,
+    "word_ncc": 0.3941,
+    "mean_abs_log_width": 0.1577
+   },
+   {
+    "family": "Sora",
+    "score": 0.2071,
+    "word_ncc": 0.3826,
+    "mean_abs_log_width": 0.1756
+   }
+  ],
+  "ranking_heading": [
+   {
+    "family": "Figtree",
+    "score": 0.7184,
+    "word_ncc": 0.7529,
+    "mean_abs_log_width": 0.0344
+   },
+   {
+    "family": "Onest",
+    "score": 0.6948,
+    "word_ncc": 0.7214,
+    "mean_abs_log_width": 0.0266
+   },
+   {
+    "family": "Albert Sans",
+    "score": 0.6718,
+    "word_ncc": 0.7096,
+    "mean_abs_log_width": 0.0378
+   },
+   {
+    "family": "Inter",
+    "score": 0.6524,
+    "word_ncc": 0.6782,
+    "mean_abs_log_width": 0.0258
+   },
+   {
+    "family": "Poppins",
+    "score": 0.6481,
+    "word_ncc": 0.6952,
+    "mean_abs_log_width": 0.0471
+   },
+   {
+    "family": "Red Hat Display",
+    "score": 0.6454,
+    "word_ncc": 0.6783,
+    "mean_abs_log_width": 0.0329
+   },
+   {
+    "family": "Outfit",
+    "score": 0.6321,
+    "word_ncc": 0.6755,
+    "mean_abs_log_width": 0.0434
+   },
+   {
+    "family": "Lexend",
+    "score": 0.6182,
+    "word_ncc": 0.6576,
+    "mean_abs_log_width": 0.0395
+   },
+   {
+    "family": "Rubik",
+    "score": 0.6071,
+    "word_ncc": 0.6392,
+    "mean_abs_log_width": 0.0321
+   },
+   {
+    "family": "Urbanist",
+    "score": 0.5992,
+    "word_ncc": 0.6415,
+    "mean_abs_log_width": 0.0423
+   },
+   {
+    "family": "Segoe UI",
+    "score": 0.5978,
+    "word_ncc": 0.6491,
+    "mean_abs_log_width": 0.0513
+   },
+   {
+    "family": "Hanken Grotesk",
+    "score": 0.5547,
+    "word_ncc": 0.6132,
+    "mean_abs_log_width": 0.0585
+   },
+   {
+    "family": "DM Sans",
+    "score": 0.5521,
+    "word_ncc": 0.6084,
+    "mean_abs_log_width": 0.0563
+   },
+   {
+    "family": "Montserrat",
+    "score": 0.5388,
+    "word_ncc": 0.6021,
+    "mean_abs_log_width": 0.0632
+   },
+   {
+    "family": "Lato",
+    "score": 0.5359,
+    "word_ncc": 0.5985,
+    "mean_abs_log_width": 0.0625
+   },
+   {
+    "family": "Plus Jakarta Sans",
+    "score": 0.5041,
+    "word_ncc": 0.5682,
+    "mean_abs_log_width": 0.0641
+   },
+   {
+    "family": "Work Sans",
+    "score": 0.5028,
+    "word_ncc": 0.5669,
+    "mean_abs_log_width": 0.0641
+   },
+   {
+    "family": "IBM Plex Sans",
+    "score": 0.4998,
+    "word_ncc": 0.5514,
+    "mean_abs_log_width": 0.0516
+   },
+   {
+    "family": "Roboto",
+    "score": 0.4889,
+    "word_ncc": 0.5408,
+    "mean_abs_log_width": 0.0519
+   },
+   {
+    "family": "Nunito Sans",
+    "score": 0.4769,
+    "word_ncc": 0.537,
+    "mean_abs_log_width": 0.0601
+   },
+   {
+    "family": "Source Sans 3",
+    "score": 0.4292,
+    "word_ncc": 0.5026,
+    "mean_abs_log_width": 0.0734
+   },
+   {
+    "family": "Manrope",
+    "score": 0.427,
+    "word_ncc": 0.4965,
+    "mean_abs_log_width": 0.0695
+   },
+   {
+    "family": "Sora",
+    "score": 0.4097,
+    "word_ncc": 0.4901,
+    "mean_abs_log_width": 0.0804
+   },
+   {
+    "family": "Mulish",
+    "score": 0.3878,
+    "word_ncc": 0.476,
+    "mean_abs_log_width": 0.0882
+   },
+   {
+    "family": "Noto Sans",
+    "score": 0.3625,
+    "word_ncc": 0.4654,
+    "mean_abs_log_width": 0.1029
+   },
+   {
+    "family": "Exo 2",
+    "score": 0.3541,
+    "word_ncc": 0.4318,
+    "mean_abs_log_width": 0.0777
+   },
+   {
+    "family": "Open Sans",
+    "score": 0.3432,
+    "word_ncc": 0.43,
+    "mean_abs_log_width": 0.0868
+   },
+   {
+    "family": "Space Grotesk",
+    "score": 0.2445,
+    "word_ncc": 0.3361,
+    "mean_abs_log_width": 0.0915
+   }
+  ],
+  "ranking_all": [
+   {
+    "family": "Segoe UI",
+    "score": 0.673,
+    "word_ncc": 0.7091,
+    "mean_abs_log_width": 0.0361
+   },
+   {
+    "family": "Urbanist",
+    "score": 0.6017,
+    "word_ncc": 0.6479,
+    "mean_abs_log_width": 0.0462
+   },
+   {
+    "family": "Roboto",
+    "score": 0.5862,
+    "word_ncc": 0.6376,
+    "mean_abs_log_width": 0.0515
+   },
+   {
+    "family": "Onest",
+    "score": 0.5754,
+    "word_ncc": 0.6403,
+    "mean_abs_log_width": 0.0649
+   },
+   {
+    "family": "Red Hat Display",
+    "score": 0.5751,
+    "word_ncc": 0.6204,
+    "mean_abs_log_width": 0.0453
+   },
+   {
+    "family": "Figtree",
+    "score": 0.5689,
+    "word_ncc": 0.6368,
+    "mean_abs_log_width": 0.0679
+   },
+   {
+    "family": "Inter",
+    "score": 0.566,
+    "word_ncc": 0.6222,
+    "mean_abs_log_width": 0.0562
+   },
+   {
+    "family": "Source Sans 3",
+    "score": 0.5656,
+    "word_ncc": 0.6178,
+    "mean_abs_log_width": 0.0522
+   },
+   {
+    "family": "Outfit",
+    "score": 0.5584,
+    "word_ncc": 0.6267,
+    "mean_abs_log_width": 0.0683
+   },
+   {
+    "family": "Albert Sans",
+    "score": 0.5363,
+    "word_ncc": 0.6124,
+    "mean_abs_log_width": 0.0761
+   },
+   {
+    "family": "Hanken Grotesk",
+    "score": 0.5325,
+    "word_ncc": 0.6047,
+    "mean_abs_log_width": 0.0723
+   },
+   {
+    "family": "Noto Sans",
+    "score": 0.5232,
+    "word_ncc": 0.5885,
+    "mean_abs_log_width": 0.0653
+   },
+   {
+    "family": "Lexend",
+    "score": 0.5168,
+    "word_ncc": 0.5871,
+    "mean_abs_log_width": 0.0703
+   },
+   {
+    "family": "Poppins",
+    "score": 0.5131,
+    "word_ncc": 0.5851,
+    "mean_abs_log_width": 0.072
+   },
+   {
+    "family": "Lato",
+    "score": 0.5014,
+    "word_ncc": 0.5754,
+    "mean_abs_log_width": 0.074
+   },
+   {
+    "family": "Open Sans",
+    "score": 0.5012,
+    "word_ncc": 0.5579,
+    "mean_abs_log_width": 0.0567
+   },
+   {
+    "family": "DM Sans",
+    "score": 0.4962,
+    "word_ncc": 0.5722,
+    "mean_abs_log_width": 0.076
+   },
+   {
+    "family": "IBM Plex Sans",
+    "score": 0.4935,
+    "word_ncc": 0.5584,
+    "mean_abs_log_width": 0.0649
+   },
+   {
+    "family": "Mulish",
+    "score": 0.4875,
+    "word_ncc": 0.5606,
+    "mean_abs_log_width": 0.0731
+   },
+   {
+    "family": "Rubik",
+    "score": 0.4722,
+    "word_ncc": 0.5382,
+    "mean_abs_log_width": 0.066
+   },
+   {
+    "family": "Plus Jakarta Sans",
+    "score": 0.4517,
+    "word_ncc": 0.5385,
+    "mean_abs_log_width": 0.0868
+   },
+   {
+    "family": "Nunito Sans",
+    "score": 0.4389,
+    "word_ncc": 0.5289,
+    "mean_abs_log_width": 0.09
+   },
+   {
+    "family": "Manrope",
+    "score": 0.4292,
+    "word_ncc": 0.5116,
+    "mean_abs_log_width": 0.0825
+   },
+   {
+    "family": "Work Sans",
+    "score": 0.4151,
+    "word_ncc": 0.5066,
+    "mean_abs_log_width": 0.0916
+   },
+   {
+    "family": "Montserrat",
+    "score": 0.3638,
+    "word_ncc": 0.4906,
+    "mean_abs_log_width": 0.1268
+   },
+   {
+    "family": "Exo 2",
+    "score": 0.362,
+    "word_ncc": 0.4627,
+    "mean_abs_log_width": 0.1007
+   },
+   {
+    "family": "Sora",
+    "score": 0.2905,
+    "word_ncc": 0.4269,
+    "mean_abs_log_width": 0.1364
+   },
+   {
+    "family": "Space Grotesk",
+    "score": 0.2398,
+    "word_ncc": 0.3702,
+    "mean_abs_log_width": 0.1304
+   }
+  ],
+  "ranking_mono": [
+   {
+    "family": "Source Code Pro",
+    "score": 0.567,
+    "word_ncc": 0.6021
+   },
+   {
+    "family": "JetBrains Mono",
+    "score": 0.563,
+    "word_ncc": 0.5957
+   },
+   {
+    "family": "DM Mono",
+    "score": 0.5246,
+    "word_ncc": 0.5538
+   },
+   {
+    "family": "Inconsolata",
+    "score": 0.5146,
+    "word_ncc": 0.5433
+   },
+   {
+    "family": "Red Hat Mono",
+    "score": 0.5005,
+    "word_ncc": 0.5274
+   },
+   {
+    "family": "Fira Mono",
+    "score": 0.4999,
+    "word_ncc": 0.5589
+   },
+   {
+    "family": "IBM Plex Mono",
+    "score": 0.4901,
+    "word_ncc": 0.5701
+   },
+   {
+    "family": "Roboto Mono",
+    "score": 0.4378,
+    "word_ncc": 0.4732
+   },
+   {
+    "family": "Cousine",
+    "score": 0.4341,
+    "word_ncc": 0.4748
+   },
+   {
+    "family": "Fira Code",
+    "score": 0.4256,
+    "word_ncc": 0.5288
+   },
+   {
+    "family": "Space Mono",
+    "score": 0.4228,
+    "word_ncc": 0.489
+   },
+   {
+    "family": "Ubuntu Mono",
+    "score": 0.3685,
+    "word_ncc": 0.4446
+   },
+   {
+    "family": "Geist Mono",
+    "score": 0.3178,
+    "word_ncc": 0.4598
+   },
+   {
+    "family": "Consolas",
+    "score": 0.3072,
+    "word_ncc": 0.3805
+   }
+  ],
+  "verdict": "UI text = Segoe UI (score .726 body vs best Google Source Sans 3 .661 / Roboto .654 / Noto Sans .636 / Open Sans .612; requested list best: Urbanist .603, Outfit .507, Inter .506). Headings: Figtree .718, Onest .695, Albert Sans .672, Inter .652, Poppins .648 (Segoe UI .598). Brand words JARVIS / JARVIS & ANNA: Montserrat 700 / 600 (word NCC .85 / .83, best of all). Code: Source Code Pro .567 ~ JetBrains Mono .563 (Consolas .307)."
+ },
+ "text_colors_measured": {
+  "sidebar_title": {
+   "fg_top4": "#ffffff",
+   "fg_top10": "#ffffff",
+   "bg": "#0b1325"
+  },
+  "sidebar_subtitle": {
+   "fg_top4": "#7e89ac",
+   "fg_top10": "#737fa0",
+   "bg": "#0a1124"
+  },
+  "nav_active_label": {
+   "fg_top4": "#ffffff",
+   "fg_top10": "#fefeff",
+   "bg": "#172345"
+  },
+  "nav_label_agents": {
+   "fg_top4": "#a5b0dc",
+   "fg_top10": "#9ca9d0",
+   "bg": "#0a1123"
+  },
+  "nav_label_activity": {
+   "fg_top4": "#a5b2dc",
+   "fg_top10": "#9caad2",
+   "bg": "#0b1123"
+  },
+  "nav_label_settings": {
+   "fg_top4": "#a2aed6",
+   "fg_top10": "#98a3ca",
+   "bg": "#0b1223"
+  },
+  "footer_line1": {
+   "fg_top4": "#5c6a94",
+   "fg_top10": "#525f89",
+   "bg": "#0b1027"
+  },
+  "footer_line2": {
+   "fg_top4": "#5e6a95",
+   "fg_top10": "#55618b",
+   "bg": "#0c1129"
+  },
+  "h1_overview": {
+   "fg_top4": "#ffffff",
+   "fg_top10": "#fbfcff",
+   "bg": "#0b1126"
+  },
+  "header_subtitle": {
+   "fg_top4": "#abb6de",
+   "fg_top10": "#9fabd3",
+   "bg": "#0b142f"
+  },
+  "pill_text_system": {
+   "fg_top4": "#f7f9fd",
+   "fg_top10": "#e9eff4",
+   "bg": "#14203f"
+  },
+  "pill_text_devices": {
+   "fg_top4": "#f6f8fc",
+   "fg_top10": "#e9edf4",
+   "bg": "#121d3b"
+  },
+  "pill_text_voice": {
+   "fg_top4": "#f7fafd",
+   "fg_top10": "#e6eaf0",
+   "bg": "#121c36"
+  },
+  "greeting_line1": {
+   "fg_top4": "#a7b0d2",
+   "fg_top10": "#97a2c4",
+   "bg": "#0a1229"
+  },
+  "greeting_name": {
+   "fg_top4": "#ffffff",
+   "fg_top10": "#fefeff",
+   "bg": "#091126"
+  },
+  "avatar_initials": {
+   "fg_top4": "#74b9fd",
+   "fg_top10": "#71b4fc",
+   "bg": "#0c1c54"
+  },
+  "hero_eyebrow": {
+   "fg_top4": "#92a3d4",
+   "fg_top10": "#8494c4",
+   "bg": "#0d142b"
+  },
+  "hero_title_JARVIS": {
+   "fg_top4": "#edf3ff",
+   "fg_top10": "#e8eefd",
+   "bg": "#0d142a"
+  },
+  "hero_role": {
+   "fg_top4": "#8192cc",
+   "fg_top10": "#798ac2",
+   "bg": "#0b1225"
+  },
+  "hero_status": {
+   "fg_top4": "#8dc4ff",
+   "fg_top10": "#83baf9",
+   "bg": "#0b1226"
+  },
+  "hero_quote": {
+   "fg_top4": "#95aadf",
+   "fg_top10": "#849acc",
+   "bg": "#0d1637"
+  },
+  "btn_start_label": {
+   "fg_top4": "#ffffff",
+   "fg_top10": "#f8fbfe",
+   "bg": "#2551f9"
+  },
+  "btn_run_label": {
+   "fg_top4": "#ffffff",
+   "fg_top10": "#fdfeff",
+   "bg": "#111a33"
+  },
+  "btn_micoff_label": {
+   "fg_top4": "#fcfdff",
+   "fg_top10": "#eef0f8",
+   "bg": "#18203a"
+  },
+  "qs_title": {
+   "fg_top4": "#ffffff",
+   "fg_top10": "#ffffff",
+   "bg": "#0e162b"
+  },
+  "qs_subtitle": {
+   "fg_top4": "#a0acca",
+   "fg_top10": "#909cbc",
+   "bg": "#0c1428"
+  },
+  "tile_value_21": {
+   "fg_top4": "#ffffff",
+   "fg_top10": "#feffff",
+   "bg": "#161f36"
+  },
+  "tile_label_cpu": {
+   "fg_top4": "#97a2c0",
+   "fg_top10": "#8e98b4",
+   "bg": "#161e35"
+  },
+  "tile_value_63": {
+   "fg_top4": "#ffffff",
+   "fg_top10": "#fefeff",
+   "bg": "#161e34"
+  },
+  "tile_label_memory": {
+   "fg_top4": "#99a2be",
+   "fg_top10": "#8992b2",
+   "bg": "#141e36"
+  },
+  "tile_value_82": {
+   "fg_top4": "#ffffff",
+   "fg_top10": "#ffffff",
+   "bg": "#131c31"
+  },
+  "tile_label_disk": {
+   "fg_top4": "#a6b0cb",
+   "fg_top10": "#9aa4bf",
+   "bg": "#161e35"
+  },
+  "tile_value_3": {
+   "fg_top4": "#ffffff",
+   "fg_top10": "#ffffff",
+   "bg": "#121a2e"
+  },
+  "tile_label_devices": {
+   "fg_top4": "#909cbc",
+   "fg_top10": "#838fab",
+   "bg": "#141d34"
+  },
+  "ra_title": {
+   "fg_top4": "#ffffff",
+   "fg_top10": "#ffffff",
+   "bg": "#0d1529"
+  },
+  "ra_subtitle": {
+   "fg_top4": "#9baacb",
+   "fg_top10": "#8e9cbd",
+   "bg": "#0d1529"
+  },
+  "ra_item_title": {
+   "fg_top4": "#ffffff",
+   "fg_top10": "#f3f4f7",
+   "bg": "#0d1527"
+  },
+  "ra_item_sub": {
+   "fg_top4": "#94a1bf",
+   "fg_top10": "#8995b5",
+   "bg": "#0c1428"
+  },
+  "ra_item_time": {
+   "fg_top4": "#7e8db4",
+   "fg_top10": "#7382a8",
+   "bg": "#0d1529"
+  },
+  "tab_chat_label": {
+   "fg_top4": "#ffffff",
+   "fg_top10": "#fefdfe",
+   "bg": "#10172e"
+  },
+  "tab_approvals_label": {
+   "fg_top4": "#a7b1ce",
+   "fg_top10": "#9aa4c2",
+   "bg": "#0f1529"
+  },
+  "tab_tools_label": {
+   "fg_top4": "#abb6da",
+   "fg_top10": "#a2add1",
+   "bg": "#0e1529"
+  },
+  "badge_digit": {
+   "fg_top4": "#f6fafd",
+   "fg_top10": "#eaf2fc",
+   "bg": "#3a60d3"
+  },
+  "confirm_title": {
+   "fg_top4": "#ffffff",
+   "fg_top10": "#ffffff",
+   "bg": "#151828"
+  },
+  "requires_label": {
+   "fg_top4": "#e6a64e",
+   "fg_top10": "#d29747",
+   "bg": "#2d221b"
+  },
+  "confirm_question": {
+   "fg_top4": "#b4bfd9",
+   "fg_top10": "#a8b3cc",
+   "bg": "#161927"
+  },
+  "code_line1": {
+   "fg_top4": "#eaeaee",
+   "fg_top10": "#d5d7dd",
+   "bg": "#060c1d"
+  },
+  "code_line2": {
+   "fg_top4": "#f0f0f3",
+   "fg_top10": "#dcdfe4",
+   "bg": "#060c1d"
+  },
+  "deny_label": {
+   "fg_top4": "#feffff",
+   "fg_top10": "#f9fafc",
+   "bg": "#11192f"
+  },
+  "approve_label": {
+   "fg_top4": "#fdfeff",
+   "fg_top10": "#f5f9fe",
+   "bg": "#2458fb"
+  },
+  "user_msg_line1": {
+   "fg_top4": "#ced8ee",
+   "fg_top10": "#b8c1dc",
+   "bg": "#19223a"
+  },
+  "user_msg_line2": {
+   "fg_top4": "#cdd6ec",
+   "fg_top10": "#bbc4db",
+   "bg": "#19213a"
+  },
+  "user_msg_time": {
+   "fg_top4": "#7186b4",
+   "fg_top10": "#6c80ab",
+   "bg": "#19223b"
+  },
+  "jarvis_label": {
+   "fg_top4": "#acc8f9",
+   "fg_top10": "#a7c1f6",
+   "bg": "#121a31"
+  },
+  "jarvis_time": {
+   "fg_top4": "#5d739f",
+   "fg_top10": "#596b97",
+   "bg": "#131c34"
+  },
+  "jarvis_msg_line1": {
+   "fg_top4": "#acbad9",
+   "fg_top10": "#a1adcd",
+   "bg": "#121b32"
+  },
+  "jarvis_msg_line2": {
+   "fg_top4": "#b2bddc",
+   "fg_top10": "#a2adcd",
+   "bg": "#121b32"
+  },
+  "jarvis_msg_line3": {
+   "fg_top4": "#b3bfdd",
+   "fg_top10": "#a4aecd",
+   "bg": "#121b32"
+  },
+  "composer_placeholder": {
+   "fg_top4": "#94a4ca",
+   "fg_top10": "#8694ba",
+   "bg": "#15203d"
+  },
+  "hint_shift": {
+   "fg_top4": "#96a3be",
+   "fg_top10": "#8894af",
+   "bg": "#0e182c"
+  },
+  "hint_mic": {
+   "fg_top4": "#8e9ab7",
+   "fg_top10": "#828faa",
+   "bg": "#0e182c"
+  },
+  "user_avatar_letter": {
+   "fg_top4": "#c6d3f4",
+   "fg_top10": "#c0caed",
+   "bg": "#36405d"
+  }
+ },
+ "anomalies_to_normalize": [
+  "Approvals tab label sits 3px lower than Chat/Tools (baseline 156 vs 153)",
+  "Quick Stats inner padding is 20px left / 15px right; tiles 180px wide - use symmetric 18-20px",
+  "Quote centre is x~694 while card centre is 709.5",
+  "Right panel top (114) is 2px above hero top (116)",
+  "Lower cards: 411px vs 404px wide; use equal columns",
+  "Progress fills: CPU 25% drawn for 21%, Disk 79% drawn for 82%, Devices 27% for '3' - bind to real values",
+  "1px dark halos around bright text/borders are render sharpening - do not reproduce"
+ ],
+ "css_variables": ":root {\n  /* canvas and surfaces (measured) */\n  --bg: #070e1f;               --bg-bloom: #0c183b;\n  --sidebar: #0a1124;          --sidebar-top: #0f1631;      --sidebar-divider: #1f2a48;\n  --surface-hero: #0c1329;\n  --surface-card-top: #0e152d; --surface-card-bottom: #0a1325;\n  --surface-panel-top: #10172f; --surface-panel: #0a1123;\n  --surface-tile: #151e34;\n  --surface-bubble-user: #192139; --surface-bubble-ai: #121b32;\n  --surface-input: #15203d;    --surface-composer: #0e182c;  --surface-code: #060c1c;\n  --surface-ghost: #121b34;    --surface-pill: #132145;\n  --surface-warn: #151826;     --surface-warn-pill: #2e231e;\n  --surface-avatar-user: #36405c;\n  /* borders and dividers (1px, lit from the top) */\n  --border-card: #121e37;      --border-panel-top: #232d47;  --border-panel-side: #18223a;\n  --border-tile: #1e2a43;      --border-control: #2e364f;    --border-input: #1b2744;\n  --border-code: #151d2f;      --border-warn: #3a2c29;       --border-warn-pill: #523a26;\n  --divider: #172035;          --divider-header: #354369;\n  /* text */\n  --text-strong: #ffffff;      --text: #f2f5fa;\n  --text-chat-user: #ced8ee;   --text-chat-ai: #b0bcdb;\n  --text-secondary: #a7b1d3;   --text-muted: #97a3c2;        --text-dim: #7e8db4;   --text-faint: #5c6a94;\n  --text-hero-title: #e4eafc;  --text-hero-role: #8192cc;    --text-eyebrow: #92a3d4; --text-quote: #95aadf;\n  /* accents */\n  --accent: #3b82f6;\n  --accent-grad: linear-gradient(115deg,#3aa8fd 0%,#3189fe 22%,#2d66fc 48%,#2645f8 78%,#2a5ffb 100%);\n  --accent-approve: radial-gradient(120% 140% at 50% 50%, #245afb 45%, #2f78fd 100%);\n  --accent-light: #8dc4ff;     --accent-icon: #63aafb;       --accent-underline: #4ba8ff;\n  --accent-rule: #6290f2;      --accent-ai-label: #acc8f9;   --badge: #3a5fd2;      --send: #163b80;\n  /* status */\n  --green: #22c086;  --blue: #4a95fb;  --violet: #7a50f9;  --gray: #8895bc;\n  --amber: #f9bc54;  --amber-icon: #f9c74c;  --amber-text: #e6a64e;\n  --bar-cpu: #35b992; --bar-mem: #3590fc; --bar-disk: #f9bc54; --bar-dev: #8981f6; --track: #222b46;\n  /* glows */\n  --glow-primary: 0 6px 22px rgba(37,90,255,.45);\n  --glow-underline: 0 0 10px 1px rgba(75,168,255,.45);\n  --glow-dot-green: 0 0 8px rgba(34,197,134,.45);\n  /* radii */\n  --r-sm: 12px; --r-md: 14px; --r-lg: 16px; --r-full: 9999px;\n  /* type */\n  --font-ui: \"Segoe UI\", \"Noto Sans\", \"Open Sans\", system-ui, -apple-system, sans-serif;\n  --font-brand: \"Montserrat\", \"Segoe UI\", sans-serif;\n  --font-mono: \"JetBrains Mono\", \"Source Code Pro\", Consolas, monospace;\n}\n",
+ "crops_dir": "crops/ (see forensics.md section 13)"
+}

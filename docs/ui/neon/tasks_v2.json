@@ -1,0 +1,1674 @@
+[
+ {
+  "id": "X-69",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Design tokens, Tailwind mapping, self-hosted fonts, icon sprite, full testid inventory baseline",
+  "why": "One token source instead of three drifting ones (index.css, tailwind.config.js, commandTheme.ts), now holding the Neon tokens fitted to the owner's reference image for both personas (spec v2 §2). Fonts must load offline and under the planned CSP (C-109). The icon sprite was fitted to the reference ink boxes. X-74 shipped only a minimal testid guard; the full baseline lets every later task prove that nothing was removed.",
+  "files": [
+   "stonix_ui/src/assets/styles/tokens.css (new)",
+   "stonix_ui/src/assets/styles/index.css",
+   "stonix_ui/tailwind.config.js",
+   "stonix_ui/src/main.tsx",
+   "stonix_ui/src/shared/theme/commandTheme.ts",
+   "stonix_ui/src/app/App.tsx",
+   "stonix_ui/src/shared/ui/icons/Sprite.tsx (new)",
+   "stonix_ui/src/shared/ui/icons/Icon.tsx (new)",
+   "stonix_ui/package.json",
+   "stonix_ui/package-lock.json",
+   "stonix_ui/scripts/testid-inventory.mjs",
+   "stonix_ui/tests/testids.baseline.txt (new)"
+  ],
+  "depends_on": [
+   "C-135"
+  ],
+  "steps": [
+   "Add tokens.css exactly as spec v2 §2.1 (:root) and §2.2 (html[data-persona=\"anna\"]). Import it first in index.css and delete the Google Fonts @import at index.css:1.",
+   "npm i @fontsource-variable/noto-sans @fontsource-variable/montserrat @fontsource-variable/jetbrains-mono and import them at the top of main.tsx (spec v2 §3.1). Log the three packages in the root done_highlight.md.",
+   "tailwind.config.js: the theme extension of spec v2 §2.4 (screens, colours as var(), font families and sizes, radii, shadows, z-index, easings). Keep the command.* keys as var() aliases. Delete the dead families, shadows and animations.",
+   "Grep for `command-[a-z]+/[0-9]` and replace every opacity-modified command colour with a named token (Tailwind 3 drops /NN on var() colours).",
+   "commandTheme.ts: hex values become var() references; personaAccent() returns token class names. App sets data-persona on <html> from the synced settings persona (optimistic while a switch is pending).",
+   "Icons: port the bundle's icons.svg (75 symbols) to Sprite.tsx, mounted once in App, and Icon.tsx (`<Icon name filled? />`, aria-hidden, the base stroke style and `.fill` rule of spec v2 §4.8).",
+   "testid-inventory.mjs: list every data-testid literal and the dynamic families (settings-<field>, settings-status-<field>, settings-agent-pending-<field>, mobile-tab-<tab>, vitals-pc|vps(-updated|-stale), chip-* and chip-*-spinner, intelligence-history-<id>, intelligence-lan(-audio), flow-*-status). With --check it fails when a baseline id is missing, unless the baseline lists it under `retired:` with a reason. Commit today's list (180 static ids plus the families) as tests/testids.baseline.txt before any UI change; the REQUIRED voice ids of the X-74 stub stay in it."
+  ],
+  "acceptance": [
+   "The build passes and no request goes to fonts.googleapis.com or fonts.gstatic.com (offline Electron loads every font); document.fonts contains \"Noto Sans Variable\", \"Montserrat Variable\" and \"JetBrains Mono Variable\".",
+   "getComputedStyle(documentElement) gives --acc-fill #2d66fc and --acc-text #83bafa for JARVIS, and #9a2bc8 and #eba6f6 with data-persona=\"anna\".",
+   "No class with an opacity modifier on a command-* colour remains (grep is empty).",
+   "The sprite is in the DOM once with 75 symbols, and <Icon name=\"house\" filled /> renders the filled reference house.",
+   "Every existing e2e spec stays green.",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run lint",
+   "npm --prefix stonix_ui run test:e2e",
+   "node stonix_ui/scripts/testid-inventory.mjs --check",
+   "grep -R \"fonts.googleapis\" stonix_ui/src stonix_ui/index.html (no hits)",
+   "grep -rE \"command-[a-z]+/[0-9]\" stonix_ui/src (no hits)"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-70",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Brand: the reference ring logo, wordmark, rename STONIX (with the three specs and the fixture)",
+  "why": "The owner wants the product called JARVIS & ANNA, branded with the ring logo of the reference. Today 'STONIX' is on the login screen, the top bar and document.title (D10), plus three e2e specs and the mock fixture.",
+  "files": [
+   "stonix_ui/src/features/voice/orb/orbData.ts (new)",
+   "stonix_ui/src/shared/ui/LogoRing.tsx (new)",
+   "stonix_ui/src/features/command-center/components/TopBar.tsx",
+   "stonix_ui/src/features/auth/LoginScreen.tsx",
+   "stonix_ui/src/features/confirm/ConfirmDialog.tsx",
+   "stonix_ui/src/shared/ui/WindowControls.tsx",
+   "stonix_ui/index.html",
+   "stonix_ui/README.md",
+   "stonix_ui/tests/e2e/auth.spec.ts",
+   "stonix_ui/tests/e2e/dashboard.spec.ts",
+   "stonix_ui/tests/e2e/voice.spec.ts",
+   "stonix_ui/tests/mock-bridge/fixtures/init_state.json"
+  ],
+  "depends_on": [
+   "X-69"
+  ],
+  "steps": [
+   "orbData.ts: the bundle's orb_data.json as a typed `as const` export, values unchanged (spec v2 §8.2). The logo, the orb, the waveform and the mini orbs all read it.",
+   "LogoRing: a canvas (DPR capped at 2) that draws the reference ring from LOGO, LOGO_IN, LOGO_OUT and LOGO_EDGE (the prototype's drawLogo/logoConic); props size and label; role=\"img\" with the name \"JARVIS & ANNA\". Only the sidebar instance will carry data-testid=\"brand-mark\" (one testid per element).",
+   "Use LogoRing + \"JARVIS & ANNA\" + \"Your AI Command Center\" in place of the STONIX brand in TopBar (until X-103 moves it to the sidebar) and on the login card; apply the strings of spec v2 §19 (ConfirmDialog BASE_TITLE becomes the page title \"JARVIS & ANNA\", the index.html title, the README heading, the WindowControls toast).",
+   "Same commit: auth, dashboard and voice specs use `await expect(page).toHaveTitle(/JARVIS & ANNA/)` instead of getByText(/STONIX/i), and init_state.json:6 reads \"Mock bridge ready. JARVIS & ANNA dashboard online.\""
+  ],
+  "acceptance": [
+   "`grep -rwi stonix stonix_ui/src stonix_ui/tests stonix_ui/index.html stonix_ui/README.md` is empty (the whole-word match ignores the folder name stonix_ui and the stonixRoot variable, which stay).",
+   "After login document.title is exactly \"JARVIS & ANNA\" on the Overview.",
+   "The ring renders without clipping at 30, 58 and 64 px and both personas show the same ring.",
+   "The auth, dashboard and voice specs pass.",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "grep -rwi stonix stonix_ui/src stonix_ui/tests stonix_ui/index.html stonix_ui/README.md (no hits)",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/auth.spec.ts tests/e2e/dashboard.spec.ts tests/e2e/voice.spec.ts",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-71",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Favicon and tray icons from the ring logo; Electron window, tray and offline strings",
+  "why": "The stained-glass favicon (also the Electron tray icon) is unrelated to the product, and the tray still says 'Show JARVIS' and 'JARVIS-AGENT'. The mark is now the reference ring logo.",
+  "files": [
+   "assets/brand/jarvis-anna-mark.svg (new)",
+   "stonix_ui/public/favicon/favicon.svg (new)",
+   "stonix_ui/public/favicon/favicon-16x16.png",
+   "stonix_ui/public/favicon/favicon-32x32.png",
+   "stonix_ui/public/favicon/apple-touch-180x180.png",
+   "stonix_ui/public/favicon/android-chrome-192x192.png",
+   "stonix_ui/public/favicon/android-chrome-512x512.png",
+   "stonix_ui/scripts/render-favicons.mjs (new)",
+   "stonix_ui/index.html",
+   "stonix_ui/electron/main.cjs",
+   "stonix_ui/electron/offline.html"
+  ],
+  "depends_on": [
+   "X-70"
+  ],
+  "steps": [
+   "Master SVG: the reference ring (SVG has no conic gradient: 24 arc segments in the interpolated LOGO colours, inner and outer bands) on #060d1e with an 8/32 corner radius; favicon.svg is the same file.",
+   "render-favicons.mjs uses the installed Playwright chromium to draw the ring with the LogoRing code on a canvas and writes the 16, 32, 180, 192 and 512 px PNGs with the same file names (the Electron tray uses favicon-32x32.png).",
+   "index.html: the SVG icon link and <meta name=\"theme-color\" content=\"#060d1e\">.",
+   "main.cjs: tray items \"Show JARVIS & ANNA\" and \"Quit JARVIS & ANNA\", tooltip \"JARVIS & ANNA\", window title \"JARVIS & ANNA\". Keep the literal strings ELECTRON_IS_DEV and ../dist/index.html (the smoke test).",
+   "offline.html: title \"JARVIS & ANNA: VPS unreachable\" (the neon restyle comes with X-90); keep the texts \"VPS unreachable\" and \"Retry\"."
+  ],
+  "acceptance": [
+   "All five favicon PNGs and favicon.svg show the ring logo; the Electron tray shows it.",
+   "electron.spec passes (title /JARVIS & ANNA/, window buttons, offline page with \"VPS unreachable\" and Retry) and smoke:electron passes.",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "node stonix_ui/scripts/render-favicons.mjs",
+   "npm --prefix stonix_ui run smoke:electron",
+   "npm --prefix stonix_ui run test:electron",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-72",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Persona copy table with grammatical gender, the owner constant, persona-aware strings",
+  "why": "Several strings say 'JARVIS' whatever the persona, the Roman Urdu verbs must follow the persona (raha/rahi, ga/gi), and the reference's owner placeholders (\"Alex\", \"AM\", \"A\") become the owner's name everywhere.",
+  "files": [
+   "stonix_ui/src/shared/persona.ts (new)",
+   "stonix_ui/src/shared/owner.ts (new)",
+   "stonix_ui/src/features/chat/useChat.ts",
+   "stonix_ui/src/features/status/AgentControls.tsx",
+   "stonix_ui/src/features/command-center/components/AssistantCore.tsx",
+   "stonix_ui/src/features/voice/VoiceEnrollDialog.tsx",
+   "stonix_ui/src/shared/voices.ts",
+   "stonix_ui/tests/e2e/persona-copy.spec.ts (new)"
+  ],
+  "depends_on": [
+   "X-69"
+  ],
+  "steps": [
+   "persona.ts: name, initial, voice, trait, g (raha/rahi) and fut (ga/gi), and the copy of spec v2 §9.2 and §16.3: the ten status lines and helper lines for both personas, including the variants \"voice on another device\" and \"agent restarting\".",
+   "owner.ts: OWNER = {name \"Matloob\", initial \"M\", label \"Matloob (owner)\"}, QUOTE \"“Ideas become reality, faster.”\" and greeting(date): \"Good morning,\" before 12:00, \"Good afternoon,\" before 17:00, else \"Good evening,\" (local time).",
+   "Replace the fixed strings at useChat.ts:109, AgentControls.tsx:106 and :260, AssistantCore.tsx:239 and the first enrollment sentence (\"<NAME> sun <g> hai? Aaj ka kaam shuru karte hain.\").",
+   "persona-copy.spec.ts: with ANNA the typing hint \"ANNA jawab de rahi hai…\", the Stop title \"ANNA ko chup karao\" and the listening title containing \"sunegi\"; greeting() at 21:42 returns \"Good evening,\"."
+  ],
+  "acceptance": [
+   "Every persona string follows the active persona with the right gender.",
+   "The copy table covers all ten states and both personas (X-97's presence.spec reads it through the hook).",
+   "The persona-copy, chat and voice-settings specs pass.",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/persona-copy.spec.ts tests/e2e/chat.spec.ts tests/e2e/voice-settings.spec.ts",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-73",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "UI primitives (the n- kit) and StatusShape",
+  "why": "Every page reuses the reference's vocabulary: the card header (icon, title, subtitle, chevron), tiles, pills, switches, coloured bars and top-lit hairlines. StatusShape makes status a shape plus a word everywhere (colour alone is not accessible) and replaces StatusDot.",
+  "files": [
+   "stonix_ui/src/shared/ui/StatusShape.tsx (new)",
+   "stonix_ui/src/shared/ui/Card.tsx (new)",
+   "stonix_ui/src/shared/ui/Tile.tsx (new)",
+   "stonix_ui/src/shared/ui/Pill.tsx (new)",
+   "stonix_ui/src/shared/ui/Button.tsx (new)",
+   "stonix_ui/src/shared/ui/Switch.tsx (new)",
+   "stonix_ui/src/shared/ui/Segmented.tsx (new)",
+   "stonix_ui/src/shared/ui/Badge.tsx (new)",
+   "stonix_ui/src/shared/ui/Bar.tsx (new)",
+   "stonix_ui/src/shared/ui/Panel.tsx",
+   "stonix_ui/src/assets/styles/neon/base.css (new)",
+   "stonix_ui/src/assets/styles/index.css"
+  ],
+  "depends_on": [
+   "X-69"
+  ],
+  "steps": [
+   "Port the prototype's primitives (final_work/src/neon.css \"primitives\": .n-ic, .n-sh, .n-card, .n-tile, .n-pill, .n-btn sizes and variants, .n-sw, .n-seg, badges, bars) into neon/base.css, keeping the n- class names, and wrap them as the React components listed. Hairline edges use the mask technique of spec v2 §4.3.",
+   "StatusShape s = ok | info | acc | user | dev | warn | err | off | unknown | mute | busy | rec: 10 px shapes (warn a 12x11 triangle, err a 9 px diamond, off a dashed ring, unknown the dashed ring plus the italic word \"unknown\", busy a spinner, rec a red dot), always with a visible or visually hidden word; the optional ping is used only by the Voice pill and never under reduced motion.",
+   "Card: 26 px icon, title, subtitle, optional chevron (a 28 px button), body and a slot for the per-card error boundary (X-91). Bar: transform scaleX with transform-origin left and 600 ms ease-out, never width.",
+   "Panel.tsx renders the Card look; StatusDot becomes a thin wrapper around StatusShape until its last use moves (X-85, X-87)."
+  ],
+  "acceptance": [
+   "With DevTools achromatopsia emulation every StatusShape stays readable: shape and word survive.",
+   "Bars animate transform only (no width transitions in the computed styles).",
+   "The status, vitals and camera specs pass.",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/status.spec.ts tests/e2e/vitals.spec.ts tests/e2e/camera.spec.ts",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-74",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "AudioReactiveEngine outside React, plus an e2e-only test hook",
+  "why": "Status: DONE (cursor, 02 Oct 13:45 PKT); v2 keeps it as built. useAudioLevels called setState 30 times a second in the top-level hook, so the whole dashboard re-rendered for the entire voice session (audit 4.2), and fftSize 64 wasted most bars. The orb needs real bands from the agent track and from the local mic, and e2e runs need a hook because the mock bridge always answers /livekit/token with 503. v2 alignment lives in later tasks: X-75 adds the coarse 30 Hz sampling while the orb is idle and moves loop/draw stats to the orb renderer; X-97 wires the setVoiceState/setVoiceInputs overrides into the state derivation; X-109 adds referenceFrame() (spec v2 §8.4, §8.11).",
+  "files": [
+   "stonix_ui/src/features/voice/audioEngine.ts (new)",
+   "stonix_ui/src/features/voice/e2eHooks.ts (new)",
+   "stonix_ui/src/vite-env.d.ts",
+   "stonix_ui/src/features/voice/useAudioLevels.ts",
+   "stonix_ui/src/features/voice/useLocalMicLevel.ts",
+   "stonix_ui/src/features/command-center/hooks/useCommandCenter.ts",
+   "stonix_ui/src/features/command-center/Dashboard.tsx",
+   "stonix_ui/src/features/voice/LiveKitProvider.tsx",
+   "stonix_ui/src/features/status/AgentControls.tsx",
+   "stonix_ui/src/main.tsx",
+   "stonix_ui/vite.config.ts",
+   "stonix_ui/playwright.config.ts",
+   "stonix_ui/tests/e2e/audio-engine.spec.ts (new)"
+  ],
+  "depends_on": [],
+  "steps": [
+   "audioEngine.ts singleton. Bind the agent RemoteAudioTrack, and the local mic LocalAudioTrack with cloneTrack:true while the mic publishes, each through livekit createAudioAnalyser (fftSize 1024, smoothingTimeConstant 0.6, minDecibels -90, maxDecibels -22). In livekit-client 2.22 every call creates a new AudioContext: keep one analyser per bound track, call its cleanup() on every unbind (track unsubscribed, reconnect, mic off, unmount), and call resume() on each live analyser.context from the Enable audio click (with room.startAudio()) and from every Mic toggle gesture.",
+   "Per frame: getFloatTimeDomainData → RMS → dBFS = 20·log10(rms) → level = clamp((dBFS + 56) / 40). calculateVolume() is the RMS of the byte frequency bins (0..1), not dBFS: do not use it for the level. 24 log-spaced bands 80 Hz–5 kHz from getByteFrequencyData, a 128-sample waveform and an onset flag. Attack 30 ms, release 120 ms. Keep a timestamped ring of band snapshots so the renderer reads them by age in milliseconds. Expose subscribe/read; never call setState per frame.",
+   "Coarse React state only: agentState (lk.agent.state), isSpeaking (state speaking, or agent RMS above the threshold for ≥ 120 ms) and isUserSpeaking from a local VAD (mic dBFS above −45 for 100 ms, released after 400 ms below −50); ActiveSpeakersChanged including the local identity confirms it and alone enters listening when the mic analyser is unavailable. Remove setAgentLevel and setVizFrame, and stop passing agentLevel, vizFrame and spectralDataRef through the tree. Pause reading on document.hidden. Keep the hidden <audio> element.",
+   "E2E hook, compiled only into e2e builds: vite.config.ts `define: { __E2E_HOOKS__: JSON.stringify(process.env.VITE_E2E_HOOKS === '1') }`; declare it in src/vite-env.d.ts; in main.tsx `if (__E2E_HOOKS__) void import('./features/voice/e2eHooks').then(m => m.install())`; playwright.config.ts webServer[1].env gets VITE_E2E_HOOKS: '1'. Specs fail fast with 'e2e hook missing: rebuild with VITE_E2E_HOOKS=1'.",
+   "e2eHooks.ts installs window.__jarvisTest: setVoiceState(state / null) and setVoiceInputs({room, agentAbsent, audioBlocked, activity, micOn, listening}); feedAgent(level, bands[24]) / feedAgent('speech') / feedAgent(null) and the same feedUser; bindAgentStream(MediaStream) runs the real createAudioAnalyser path on a synthetic track; stats() returns {loop, draws, roomWrites, commits}, where commits counts DashboardInner renders through an e2e-only useEffect without deps.",
+   "audio-engine.spec.ts (launch args --autoplay-policy=no-user-gesture-required): two OscillatorNodes (440 Hz and 1.2 kHz, −20 dBFS together) bound with bindAgentStream read −20 ± 3 dBFS and their bands are the two largest; unbinding closes that AudioContext; setVoiceState('speaking') + feedAgent('speech') for 5 s adds at most 10 DashboardInner commits."
+  ],
+  "acceptance": [
+   "DashboardInner renders at most twice a second while the agent speaks: with the hook (setVoiceState('speaking') + feedAgent('speech') for 5 s) stats().commits grows by ≤ 10.",
+   "The real analyser path works without LiveKit: a −20 dBFS oscillator stream reads −20 ± 3 dBFS, the right bands light up, and cleanup() closes the context on unbind.",
+   "A plain `npm run build` (no VITE_E2E_HOOKS) leaves no trace of the hook: `grep -rl __jarvisTest stonix_ui/dist` is empty.",
+   "The voice and voice-glue specs pass.",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "grep -rl __jarvisTest stonix_ui/dist (after the plain build: no hits)",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/audio-engine.spec.ts tests/e2e/voice.spec.ts tests/e2e/voice-glue.spec.ts",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-75",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Orb renderer: the reference orb with its fitted data, state looks, loop policy, reduced motion",
+  "why": "The owner's first ask stays (the speaker visibly moves with the voice) and the reference now fixes its look: the glass orb with rings, a swirl and a particle halo. The prototype's renderer was fitted to the reference (orb region MAE 5.19, SSIM .924) and meets the performance gates (60 fps, 0.42–0.48 ms per draw; 58.8 fps at 4x CPU).",
+  "files": [
+   "stonix_ui/src/features/voice/orb/orbRenderer.ts (new)",
+   "stonix_ui/src/features/voice/orb/palette.ts (new)",
+   "stonix_ui/src/features/voice/orb/OrbCanvas.tsx (new)",
+   "stonix_ui/src/features/voice/orb/orbData.ts",
+   "stonix_ui/src/features/voice/audioEngine.ts",
+   "stonix_ui/src/features/voice/e2eHooks.ts",
+   "stonix_ui/src/features/overview/HeroCard.tsx",
+   "stonix_ui/src/assets/styles/neon/orb.css (new)"
+  ],
+  "depends_on": [
+   "X-70",
+   "X-74",
+   "X-104"
+  ],
+  "steps": [
+   "Port the prototype's orb (final_work/src/js/10_draw.js: drawOrb = the exact renderer, buildFast/drawOrbFast = the fast path, drawOrbOverlays and the ripples) into OrbRenderer with the API of spec v2 §8.3; no React state per frame; DPR capped at 2 (1.5 on phones); sizes only from ResizeObserver; no layout reads in the loop.",
+   "palette.ts: annaMap, pc() (palMix + greyMix), cached colour strings; persona, grey and dim ease with 1 − e^(−4.2·dt) (§2.3, §8.5); snapPalette() for the View Transition.",
+   "Loop policy of §8.7 (full with a 12.5 ms skip / breath at ~15 fps from a 66 ms timer / stop), restarted by any state, persona, size or visibility change; IntersectionObserver, the route (Overview only) and document.hidden stop it.",
+   "Inputs (§8.4): read audioEngine.readAgent() and readUser() each frame (L, bands, onset; U). Add audioEngine.setRate('frame' | 'coarse'): per-frame sampling only while the orb runs in full mode, a 30 Hz timer otherwise (isSpeaking and the VAD keep working).",
+   "OrbCanvas.tsx mounts the orb canvas (data-testid speaker-orb, role img, name \"<NAME> voice orb: <status line>\"), the user ring (user-speaking-indicator) and the glyph overlay at the hero positions of §7.1. Reduced motion draws one exact static frame per state, persona or size (§8.9). State looks of §8.5 (grey, dim, notch, dashed ring, comet, glyphs).",
+   "e2eHooks stats(): loop, draws and roomWrites (glow writes) now come from the OrbRenderer, plus engineLoop and engineTicks (§8.11)."
+  ],
+  "acceptance": [
+   "Through the hook: stats().loop is 'full' while speaking, 'breath' in idle and mic off (≤ 16 draws a second), and 'stop' with no new draws over 1 s in muted, offline, joining, agent absent and audio blocked.",
+   "With a 144 Hz requestAnimationFrame shim the loop draws at most 75 times a second.",
+   "engineTicks grows by ≤ 31 a second while the orb is in breath or stop with a stream bound (bindAgentStream).",
+   "At 1672x941 under reduced motion the idle orb matches the bundle's shots/d_01_overview.png in a side-by-side (formal check: V-1 orb region MAE ≤ 6.5, X-109).",
+   "The voice and audio-engine specs pass.",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/voice.spec.ts tests/e2e/audio-engine.spec.ts",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-76",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Waveform: the 30 measured bars and their reactive modes (agent-audio-visualizer)",
+  "why": "The waveform under \"AI Assistant\" is the second voice-reactive element of the reference. It carries the existing testid agent-audio-visualizer (today's 32-bar visualizer), which keeps its job.",
+  "files": [
+   "stonix_ui/src/features/voice/orb/waveform.ts (new)",
+   "stonix_ui/src/features/voice/orb/orbRenderer.ts",
+   "stonix_ui/src/features/voice/orb/OrbCanvas.tsx",
+   "stonix_ui/src/features/overview/HeroCard.tsx",
+   "stonix_ui/src/features/command-center/components/AssistantCore.tsx"
+  ],
+  "depends_on": [
+   "X-75"
+  ],
+  "steps": [
+   "Port drawWave (10_draw.js) with WAVE from orbData: 30 rounded bars 2.6 wide at the measured centres, colours and lengths; modes idle (the reference resting pattern), speaking, listening (white mix, your level), thinking (cosine sweep at 4 rad/s), dots (mic off, joining) and off (offline, agent absent, audio blocked, muted), as spec v2 §8.6.",
+   "Draw it in the orb's loop (no second loop); colours cached per (palette mix, mode); ANNA through annaMap.",
+   "The container keeps data-testid=\"agent-audio-visualizer\" (aria-hidden; the words live in voice-status). Delete the old 32-bar visualizer and its bandsToDisplayBytes use in AssistantCore."
+  ],
+  "acceptance": [
+   "agent-audio-visualizer is visible at 1672x941, 1280x720 and 390x844; a state change switches the mode without a React re-render per frame.",
+   "In idle at 1672x941 the bars sit on the reference waveform of forensics.md §11 (±1 px per bar centre).",
+   "The voice spec passes.",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/voice.spec.ts",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-77",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Persona switch motion: View Transition circle from the orb, name roll, palette ease, reduced motion",
+  "why": "Switching JARVIS ⇄ ANNA should feel like the light changing, not a colour jump; today ANNA mode is half green, half blue (D13).",
+  "files": [
+   "stonix_ui/src/features/overview/usePersonaSwitch.ts",
+   "stonix_ui/src/features/overview/HeroCard.tsx",
+   "stonix_ui/src/features/voice/orb/orbRenderer.ts",
+   "stonix_ui/src/assets/styles/tokens.css",
+   "stonix_ui/src/assets/styles/neon/overview.css",
+   "stonix_ui/tests/e2e/persona-switch.spec.ts (new)"
+  ],
+  "depends_on": [
+   "X-70",
+   "X-75",
+   "X-104"
+  ],
+  "steps": [
+   "Where document.startViewTransition exists and reduced motion is off: document.startViewTransition(() => flushSync(() => setPersonaLocal(p))); on vt.ready animate clip-path circle(0 → r) at the orb centre on ::view-transition-new(root), 760 ms cubic-bezier(.2,.7,.1,1); ::view-transition-old/new(root) { animation: none; mix-blend-mode: normal }; :root.vt-run while it runs; orbRenderer.snapPalette() (spec v2 §15).",
+   "Elsewhere the accents switch at once and only the orb palette eases; under reduced motion everything is instant (:root.no-acc-tr).",
+   "The hero name rolls: out 220 ms ease-in to −14 px, in 320 ms ease-out from +14 px.",
+   "persona-switch.spec.ts: after switching, scan computed colours; no JARVIS accent (#2d66fc, #83bafa, #4ba8ff, #63aafb) remains outside chat history in ANNA and no ANNA accent (#9a2bc8, #eba6f6, #d35ce0, #e483f4) in JARVIS; past replies keep their persona name and colour; the placeholder reads 'Message ANNA...'."
+  ],
+  "acceptance": [
+   "The colour scan is clean in both directions, the switch is instant under reduced motion, and the placeholder reads 'Message ANNA...'.",
+   "The settings and persona-switch specs pass.",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/settings.spec.ts tests/e2e/persona-switch.spec.ts",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-78",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Page header: title and subtitle, the three status pills, divider, account block; interim Reconnect",
+  "why": "The reference header replaces today's TopBar of ten unlabeled icons: the page title and subtitle, \"System Online\", \"3 Connected Devices\", \"Voice Ready\" and the avatar with the greeting. The pills keep the chip testids; the account block becomes the bell trigger. Reconnect leaves most hooks on the dead socket today (D1), so until X-96 it reloads.",
+  "files": [
+   "stonix_ui/src/features/shell/PageHeader.tsx (new)",
+   "stonix_ui/src/features/shell/StatusPills.tsx (new)",
+   "stonix_ui/src/features/command-center/components/TopBar.tsx",
+   "stonix_ui/src/features/status/AgentControls.tsx",
+   "stonix_ui/src/features/command-center/hooks/useCommandCenter.ts",
+   "stonix_ui/src/features/shell/AppShell.tsx",
+   "stonix_ui/src/assets/styles/neon/shell.css",
+   "stonix_ui/tests/e2e/status.spec.ts",
+   "stonix_ui/tests/e2e/confirm.spec.ts"
+  ],
+  "depends_on": [
+   "X-73",
+   "X-80"
+  ],
+  "steps": [
+   "PageHeader per spec v2 §6.2: h1#page-title (page-title, tabindex -1) with the page title and the dk subtitle, the pills, the 1 px divider and the account block (avatar \"M\", greeting(), \"Matloob\", chevron) at the reference sizes; a ResizeObserver sets data-greet (off below 1120 px) and data-compact (below 1000 px in dk, 760 px in tl); document.title \"JARVIS & ANNA\" on the Overview and \"JARVIS & ANNA · <Page>\" elsewhere.",
+   "StatusPills per §6.3: chip-agent (the six System states, data-active), chip-bridge (\"{N} Connected Devices\": this browser + other ui_clients from GET /vortex/status polled every 30 s while visible + agent online + laptop online; \"Bridge Offline\"), chip-voice (the label per voice state with the ping); each a button with aria-haspopup=\"dialog\" (the popovers arrive in X-99).",
+   "Legacy strip (data-legacy) next to the header: every TopBar control without a new home yet stays reachable (mic, listening, stop, wake, persona chip, bell + logout, SIM, Reconnect, Settings gear) until X-99, X-92, X-104, X-83 and X-88 move them. The pills replace the old Bridge, Agent and Voice chips (same testids); the Wake and Persona chips stay in the strip until X-99 and X-104.",
+   "Interim Reconnect (until X-96): leave the LiveKit room, set sessionStorage 'jarvis.reconnected' = '1', then location.reload(); after the reload the first socket connect shows the 'Reconnected' toast and clears the flag. Title 'Reconnect: reloads the dashboard and rejoins voice'. Always a secondary action.",
+   "Same commit: confirm.spec:39 `getByText('connected')` becomes `expect(page.getByTestId('chip-bridge')).toHaveAttribute('data-active', 'true')` (\"Connected Devices\" would match twice); status.spec keeps its chip words (the labels contain Online / Offline / Paused)."
+  ],
+  "acceptance": [
+   "status.spec (chip text Online/Offline/Paused visible at 1280, chips visible at 800, the Reconnect toast within 20 s), confirm, settings, controls and responsive specs are green.",
+   "The Devices pill reads \"2 Connected Devices\" with the agent online and no desktop_status, \"3 Connected Devices\" with the laptop online, and \"Bridge Offline\" when the socket drops.",
+   "At 1672x941 the pills, divider and account block sit on the reference boxes of forensics.md §8.2 (±1 px).",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/status.spec.ts tests/e2e/confirm.spec.ts tests/e2e/settings.spec.ts tests/e2e/controls.spec.ts tests/e2e/responsive.spec.ts",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-79",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Laptop states and Stop desktop: the Devices popover Laptop row and the Agents › Laptop card (X-67 data)",
+  "why": "X-67 brings desktop_status, the laptop states and Stop desktop. v2 shows the laptop in the Devices popover (chip-laptop, desktop-stop-menu) and on Agents › Laptop (desktop-stop), so the brake is reachable from any page.",
+  "files": [
+   "stonix_ui/src/features/shell/popovers/DevicesPopover.tsx",
+   "stonix_ui/src/features/agents/LaptopCard.tsx",
+   "stonix_ui/src/features/status/LaptopChip.tsx (from X-67)",
+   "stonix_ui/src/features/shell/StatusPills.tsx",
+   "stonix_ui/tests/e2e/laptop.spec.ts (new)",
+   "stonix_ui/tests/mock-bridge/"
+  ],
+  "depends_on": [
+   "X-67",
+   "X-85",
+   "X-99"
+  ],
+  "steps": [
+   "Devices popover Laptop row (chip-laptop) per spec v2 §6.4.2: the seven states with shapes (○ unknown until the first desktop_status, ● Full, ▲ Stale, ○ Offline, ▲ Locked, ◆ Panic, slate ● Read-only), mode, locked, voice active, busy tool, last seen; Stop desktop (desktop-stop-menu, danger) sends ui_command desktop_stop once and is visible whenever the laptop is online; the hint \"Stop switches the laptop to read-only. Only the laptop tray can switch back to Full.\"",
+   "LaptopCard: the same states plus brain, version + manifest ok, RTT; Stop desktop (desktop-stop) + the read-only/panic hint; a persisted stop or panic still shows after a laptop reboot (K-76).",
+   "The Devices pill counts the laptop from desktop_status.online and shows the icon marks (▲ stale or locked, ◆ panic, slate read-only).",
+   "laptop.spec.ts: each X-67 fixture state renders its shape and word in the popover and the card; desktop-stop-menu sends desktop_stop once and the row then shows Read-only."
+  ],
+  "acceptance": [
+   "The laptop and status specs are green, and the states match the X-67 fixtures.",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/laptop.spec.ts tests/e2e/status.spec.ts tests/e2e/location.spec.ts",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-80",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "App shell: the fluid reference grid (dk/tl/ph), slots, hash router with mounted pages, app-ready marker",
+  "why": "The reference is a three-column shell (sidebar, header, main column, persistent right panel) that must stay fluid from 1024 to 1920 px wide without transform scaling and become a phone shell below 1024 (spec v2 §5). Pages (Overview, Agents, Activity, Settings) stay mounted so the camera, voice and forms never restart. The e2e login marker 'System Flow' leaves the landing page, so the shell provides app-ready.",
+  "files": [
+   "stonix_ui/src/features/shell/AppShell.tsx (new)",
+   "stonix_ui/src/features/shell/router.ts (new)",
+   "stonix_ui/src/features/shell/useLayout.ts (new)",
+   "stonix_ui/src/features/command-center/Dashboard.tsx",
+   "stonix_ui/src/app/App.tsx",
+   "stonix_ui/src/assets/styles/neon/shell.css (new)",
+   "stonix_ui/src/assets/styles/index.css",
+   "stonix_ui/tests/e2e/helpers.ts",
+   "stonix_ui/tests/e2e/helpers/login.ts",
+   "stonix_ui/tests/e2e/auth.spec.ts",
+   "stonix_ui/tests/e2e/intelligence.spec.ts",
+   "stonix_ui/tests/e2e/trace.spec.ts",
+   "stonix_ui/tests/e2e/layout.spec.ts (new)"
+  ],
+  "depends_on": [
+   "X-69",
+   "X-73"
+  ],
+  "steps": [
+   "AppShell: the dk grid of spec v2 §5.3 (--sw, --pw, --hh, --gl, --gm, --gr, --gb), the tl rail grid and the ph grid (header / main / tab bar) by media queries at 1180 and 1024 px; --vu and --hu on :root; html and body never scroll; the page background recipes of §4.5. useLayout() returns 'dk' | 'tl' | 'ph' from one matchMedia listener.",
+   "Slots: side (four plain nav links nav-overview, nav-agents, nav-activity, nav-settings, with no title attributes yet, until X-103), head (today's TopBar until X-78), main (the router outlet), panel (today's ChatPanel until X-83), tabs (today's MobileTabBar until X-82). By the strangler rule (§1) today's center stage and OperationsRail render inside page-overview until their tasks move them.",
+   "router.ts: the hash routes of spec v2 §6.5 (#/overview default, #/agents[/anchor], #/activity[/tab], #/settings[/section], phones #/chat); page-overview, page-agents, page-activity and page-settings stay mounted (hidden + inert); a route change from a link moves focus to #page-title and a polite status says \"<Page> page\". Browser Back works.",
+   "app-ready: visually hidden \"Dashboard ready\" (1x1 px, so Playwright counts it as visible), present only while the authenticated shell shows.",
+   "Same commit: helpers.ts and helpers/login.ts use getByTestId('app-ready') as the post-login marker and get gotoPage(page, 'agents' | 'activity' | 'settings', sub?) (desktop clicks nav-*, phones mobile-tab-*, then activity-tab-<sub>); the marker lines in auth.spec (hidden after logout → toBeHidden), intelligence.spec and trace.spec switch to it.",
+   "layout.spec.ts (first part): no horizontal page scroll and no page-level vertical scroll at the sizes of spec v2 §5.8; the dk columns (sidebar / main / panel)."
+  ],
+  "acceptance": [
+   "The whole e2e suite is green at the default 1280x720 with the marker change.",
+   "layout.spec: no horizontal scroll from 320 to 1920 px; the dk columns measure 272/1078/512 at 1920, 272/830/512 at 1672, 250/762/470 at 1536, 222/678/418 at 1366, 220/623/392 at 1280 and 220/570/368 at 1200 (±1 px).",
+   "Switching #/overview → #/agents → Back keeps the camera running (the getUserMedia count does not change).",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-81",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Agents › System Flow card: five nodes, the 'unknown' state, packets only while data moves",
+  "why": "FlowMap's absolute Core card overlapped nodes on phones (D7), and missing data must read 'unknown', never a fake 'ready'. In v2 System Flow lives on the Agents page, so the e2e marker moved to app-ready (X-80).",
+  "files": [
+   "stonix_ui/src/features/agents/SystemFlowCard.tsx (new)",
+   "stonix_ui/src/features/command-center/components/FlowMap.tsx",
+   "stonix_ui/src/features/command-center/flowMapStatus.ts",
+   "stonix_ui/src/features/agents/AgentsPage.tsx",
+   "stonix_ui/tests/e2e/dashboard.spec.ts",
+   "stonix_ui/tests/e2e/responsive.spec.ts",
+   "stonix_ui/tests/e2e/trace.spec.ts"
+  ],
+  "depends_on": [
+   "X-73",
+   "X-107"
+  ],
+  "steps": [
+   "SystemFlowCard per spec v2 §11: the heading \"System Flow\" (once in the DOM) and its subtitle; Voice → Vision → Core assistant → Memory → Tools with StatusShape + value from flowMapStatus.ts (flow-voice-status, flow-vision-status, flow-core-status, flow-memory-status, flow-tools-status); unknown = dashed ring + italic \"unknown\"; phones: a 5-tile grid.",
+   "Link packets animate only while voice or tools move data; never on phones or under reduced motion.",
+   "Same commit: dashboard.spec and the three FlowMap tests of trace.spec check 'System Flow' after gotoPage('agents'); responsive.spec: the phone core tab expects voice-status only, and the tablet test checks 'System Flow' after the ops-drawer-toggle click instead of before it."
+  ],
+  "acceptance": [
+   "getByText(/System Flow/i) (strict) passes after gotoPage('agents') at 390, 1024 and 1280x720.",
+   "The dashboard, responsive and trace specs pass.",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/dashboard.spec.ts tests/e2e/responsive.spec.ts tests/e2e/trace.spec.ts",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-82",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Phone shell: compact header and pill row, five-tab bar, mounted zones, keyboard rule",
+  "why": "Phones need the reference look in one column (spec v2 §6.6, §7.9): the tab bar becomes Overview / Chat / Agents / Activity / Settings with the old ids kept, the camera keeps running across tabs, and the composer never leaves the screen.",
+  "files": [
+   "stonix_ui/src/features/shell/PhoneTabBar.tsx (new)",
+   "stonix_ui/src/features/command-center/components/MobileTabBar.tsx",
+   "stonix_ui/src/features/shell/AppShell.tsx",
+   "stonix_ui/src/features/shell/PageHeader.tsx",
+   "stonix_ui/src/assets/styles/neon/phone.css (new)",
+   "stonix_ui/tests/e2e/responsive.spec.ts",
+   "stonix_ui/tests/e2e/layout.spec.ts"
+  ],
+  "depends_on": [
+   "X-78",
+   "X-80"
+  ],
+  "steps": [
+   "Header: row 1 = ring logo 30 px, page title 21/28, avatar 38 px with the unread badge; row 2 = the three pills (height 38, radius 12, flex 1, compact labels; at ≤ 340 px the Devices pill shows only the number with the accessible name \"N connected devices\").",
+   "PhoneTabBar (mobile-tab-bar, from MobileTabBar.tsx): mobile-tab-core (Overview), mobile-tab-chat, mobile-tab-ops (Agents), mobile-tab-trace (Activity), mobile-tab-settings (new); icon over label, aria-current + data-active, the active top bar in --acc-line; marks Chat ◆ + count while approvals wait, Activity ▲ while unseen alerts exist; 64 px + env(safe-area-inset-bottom); hidden while the message field has focus (html.typing).",
+   "Zones stay mounted (visibility hidden + content-visibility hidden when inactive); toasts at the top; #/chat shows the right panel full screen.",
+   "responsive.spec: the five tabs with the kept ids; layout.spec at 412x915, 390x844, 375x667, 360x740, 360x640, 320x640: the composer is above the tab bar, and with the field focused the composer bottom is within the window."
+  ],
+  "acceptance": [
+   "The responsive spec (getUserMedia count unchanged across tab switches, chips visible at 390 and 800, no horizontal scroll) and the layout spec are green at all six phone sizes.",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/responsive.spec.ts tests/e2e/layout.spec.ts tests/e2e/camera.spec.ts",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-83",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Right panel: Chat / Approvals / Tools tabs, the reference chat, the Tools tab with the SIM opener",
+  "why": "The persistent right panel of the reference replaces today's five-tab chat column. Past replies must keep their persona, sent messages need a clear delivery state, and the Tools tab hosts jobs, the tool log and the SIM opener.",
+  "files": [
+   "stonix_ui/src/features/panel/RightPanel.tsx (new)",
+   "stonix_ui/src/features/panel/PanelTabs.tsx (new)",
+   "stonix_ui/src/features/panel/ChatList.tsx (new)",
+   "stonix_ui/src/features/panel/ToolsTab.tsx (new)",
+   "stonix_ui/src/features/command-center/components/ChatPanel.tsx",
+   "stonix_ui/src/features/chat/useChat.ts",
+   "stonix_ui/src/features/chat/liveCaptions.ts",
+   "stonix_ui/src/features/tools/JobsList.tsx",
+   "stonix_ui/src/features/tools/ToolLogList.tsx",
+   "stonix_ui/src/features/command-center/components/TopBar.tsx",
+   "stonix_ui/src/assets/styles/neon/panel.css (new)",
+   "stonix_ui/tests/e2e/sim.spec.ts"
+  ],
+  "depends_on": [
+   "X-72",
+   "X-73",
+   "X-80",
+   "X-96"
+  ],
+  "steps": [
+   "RightPanel (chat-panel): the flex column of spec v2 §10.1 (tabs, confirm slot, tab content that may shrink to 0, captions, composer slot that never shrinks). PanelTabs: three buttons \"Chat\", \"Approvals\" (+ approvals-count badge, hidden at 0) and \"Tools\" with aria-pressed and data-active, never role=tab; the active underline with --glow-underline; Approvals on the Chat/Tools baseline.",
+   "ChatList per §10.5: role log, polite, \"Conversation\"; chat-load-older and \"Start of conversation\"; user bubbles (avatar \"M\") with the delivery states (Sending, Delivered on ack 'sent', 'Queued (agent offline)', 'Not delivered' + chat-retry, 'Failed: reason'; chat-status-hint); assistant bubbles with the ring avatar and author in that message's persona (data-persona), grouping by turn_id, chat-feedback once per answer, the typing row, system lines, a slot for the media chip, chat-empty with three suggestions, the captions strip (chat-live-captions, chat-live-user, chat-live-assistant); source icons: typed none, voice mic, reminder bell, each with hidden text; bottom-anchored auto-scroll.",
+   "ToolsTab (tools-tab-panel) per §10.8: a Workspaces row with the SIM lookup button (title 'SIM lookup workspace', moved from the TopBar legacy strip), jobs (job-row with data-status and data-id) and the tool log (tool-log-filter, tool-row data-status, aria-expanded on the inner button).",
+   "Today's logs, notes and tasks tab buttons stay in a legacy strip under the tab band (same names) until X-108 and X-87 move them.",
+   "Same commit: sim.spec openSimDialog clicks getByRole('button', { name: 'tools' }) first."
+  ],
+  "acceptance": [
+   "The chat, controls-agent, memory, tools, tasks and sim specs are green; Delivered shows after the ack.",
+   "An ANNA reply keeps its lilac name and ring after switching to JARVIS.",
+   "At 1672x941 the tab band and the two reference bubbles sit on the reference boxes (±1 px; formal check V-1).",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/chat.spec.ts tests/e2e/controls-agent.spec.ts tests/e2e/memory.spec.ts tests/e2e/tools.spec.ts tests/e2e/tasks.spec.ts tests/e2e/sim.spec.ts",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-84",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Confirm Command card: the pinned head of the queue, meta line, long commands, hold to approve, keys, announcements",
+  "why": "The reference's \"Confirm Command\" card is the confirmation UI. Allow cannot be used from the keyboard today (D9), a long command must be seen before a high-risk approval, and the countdown is not clamped (D11). The meta line (tool, where, Queue: N, expiry) is an existing feature and stays on every real request.",
+  "files": [
+   "stonix_ui/src/features/confirm/ConfirmCard.tsx (new)",
+   "stonix_ui/src/features/confirm/ConfirmDialog.tsx",
+   "stonix_ui/src/features/confirm/useConfirmQueue.ts",
+   "stonix_ui/src/features/panel/RightPanel.tsx",
+   "stonix_ui/src/shared/time.ts (new)",
+   "stonix_ui/tests/e2e/confirm.spec.ts",
+   "stonix_ui/tests/e2e/layout.spec.ts"
+  ],
+  "depends_on": [
+   "X-83"
+  ],
+  "steps": [
+   "ConfirmCard (confirm-dialog, role alertdialog, aria-modal false inline) pinned between the tabs and the tab content while anything is pending (spec v2 §10.2): shield, \"Confirm Command\" (\"Confirm\" below 430 px), the pill (Requires approval / High risk / Expires in m:ss), the summary, the args_preview code block, confirm-deny and confirm-allow (Approve & Run / Hold to approve), the meta line (Tool, On, Queue: N, N lines, the voice hint, Expires in m:ss as one text node written only on change), confirm-cancel-notice.",
+   "Long commands (§10.3): token-aware wrapping, the scroll region named \"Command to run, N lines\", confirm-expand \"Show full command (N lines)\" / \"Show less\", the high-risk gate until the whole command was seen (scrolled to the end or fits; re-checked by ResizeObserver; expanding alone never unlocks), the toasts \"Read the whole command first\" and \"Keep holding for 1 second to approve\".",
+   "Keys: Esc in the card = Deny; Enter never allows; the 1 s hold by pointer, mouse, touch or Space with a scaleX fill (a guard ignores the duplicate start of one press).",
+   "Announcements (§10.4): no aria-live on the card; one status region says each new head once, \"Another approval is waiting: <label>. Queue N.\" and the countdown at 60 s and 10 s; toast \"Approval needed: <label>\" with Review (focuses Deny) and the 880 Hz chime; focus is never stolen on desktop.",
+   "shared/time.ts formats s, min, h and d; the countdown is corrected by server time and clamped to the TTL.",
+   "confirm.spec additions: Enter does not allow; a 400 ms Space press does not allow; a 1 s Space hold allows (high risk); a long high-risk command keeps confirm-allow aria-disabled until scrolled to the end; the strict getByText('Queue: 2'), 'run_shell' and 'First queued action' stay unique. layout.spec: with a long command pending the composer stays fully visible at every size of §5.8."
+  ],
+  "acceptance": [
+   "confirm.spec is green including the strict locators.",
+   "layout.spec: with a long high-risk command pending the composer is fully inside the panel and the window at every desktop and tablet size of spec v2 §5.8.",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/confirm.spec.ts tests/e2e/chat.spec.ts tests/e2e/layout.spec.ts",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-85",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Agents › Devices and Machines: Agent (VPS), Laptop card shell + location, This browser + camera, vitals, telemetry, map",
+  "why": "The operations rail clipped its panels (D4) and its tablet drawer toggle was dead (D5). In v2 its content becomes Agents cards in the reference card language; nothing is squeezed and the camera keeps running across pages.",
+  "files": [
+   "stonix_ui/src/features/agents/AgentVpsCard.tsx (new)",
+   "stonix_ui/src/features/agents/LaptopCard.tsx (new)",
+   "stonix_ui/src/features/agents/BrowserCard.tsx (new)",
+   "stonix_ui/src/features/agents/MachinesCards.tsx (new)",
+   "stonix_ui/src/features/agents/MapCard.tsx (new)",
+   "stonix_ui/src/features/agents/AgentsPage.tsx",
+   "stonix_ui/src/features/command-center/components/OperationsRail.tsx",
+   "stonix_ui/src/features/command-center/components/CameraPanel.tsx",
+   "stonix_ui/src/features/command-center/components/cameraState.ts",
+   "stonix_ui/src/features/command-center/components/AssistantCore.tsx",
+   "stonix_ui/src/features/location/MapFocus.tsx",
+   "stonix_ui/src/features/telemetry/TelemetryCard.tsx",
+   "stonix_ui/src/features/shell/Sidebar.tsx",
+   "stonix_ui/tests/testids.baseline.txt",
+   "stonix_ui/tests/e2e/camera.spec.ts",
+   "stonix_ui/tests/e2e/location.spec.ts",
+   "stonix_ui/tests/e2e/vitals.spec.ts",
+   "stonix_ui/tests/e2e/controls.spec.ts",
+   "stonix_ui/tests/e2e/voice-glue.spec.ts",
+   "stonix_ui/tests/e2e/responsive.spec.ts"
+  ],
+  "depends_on": [
+   "X-73",
+   "X-103",
+   "X-107"
+  ],
+  "steps": [
+   "AgentVpsCard (agent-card) per spec v2 §11: state, session, brain, mode, host, version, last seen, health from GET /vortex/status; Pause / Start-Wake mirrors; Restart session = terminate-session moved from the core footer (ghost, danger on hover or focus; disabled with the title \"Agent update pending: …\" when rejected, or the note terminate-unsupported); agent-session-restart-banner.",
+   "LaptopCard (laptop-card) shell: state \"unknown\" until X-79 brings desktop_status; the Location row (device-location-card, device-location-updated) moved from the rail.",
+   "BrowserCard (browser-card): bridge, Reconnect mirror, voice room, audio playback mirror, and the camera (CameraPanel inside: camera-toggle, the preview with the .camera-empty placeholders, camera-link-badge texts unchanged, camera-share-switch); frames are captured from an off-DOM video so a hidden page never stops them; the camera counts as on only once the stream runs.",
+   "MachinesCards: PC (laptop) and Agent (VPS) vitals (vitals-pc*, vitals-vps*; Bar fills; ▲ on high values; stale after 30 s), Telemetry (telemetry-*; source label by brain), Map (map-focus-*; empty \"No map focus yet. Ask <NAME> to show a place.\").",
+   "The Devices group keeps operations-rail; ops-drawer-toggle becomes a span alias filling the nav Agents link; ops-drawer-backdrop is retired (a `retired:` entry with the reason in tests/testids.baseline.txt). The rail's Alerts stay in a legacy strip on the Agents page until X-108.",
+   "Same commit: camera, location (before and after reload), vitals, controls (Terminate) and voice-glue (Terminate) call gotoPage('agents'); responsive.spec: the phone Ops tab shows operations-rail and camera-toggle on Agents."
+  ],
+  "acceptance": [
+   "The camera (getUserMedia count unchanged across pages), location, vitals, controls, voice-glue and responsive specs are green.",
+   "No card is shorter than its content at 1280x595, 1440x900 and 390x844.",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/camera.spec.ts tests/e2e/location.spec.ts tests/e2e/vitals.spec.ts tests/e2e/controls.spec.ts tests/e2e/voice-glue.spec.ts tests/e2e/responsive.spec.ts",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-86",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Activity › Media: featured item, media states, history, lightbox Esc, chat media chip",
+  "why": "Media (intelligence) moves from the hidden-until-first-item stage panel to its own tab; LAN-only and signed-media states need clear homes, and the lightbox Esc never fires today (D9).",
+  "files": [
+   "stonix_ui/src/features/intelligence/IntelligencePanel.tsx",
+   "stonix_ui/src/features/intelligence/useBridgeMediaUrl.ts",
+   "stonix_ui/src/features/activity/ActivityPage.tsx",
+   "stonix_ui/src/features/panel/ChatList.tsx",
+   "stonix_ui/tests/e2e/intelligence.spec.ts"
+  ],
+  "depends_on": [
+   "X-83",
+   "X-108"
+  ],
+  "steps": [
+   "Add the Media sub-tab (activity-tab-media) and move the media panel into it. Media tab (intelligence-panel) per spec v2 §12.5: the featured item (intelligence-json, intelligence-link, intelligence-audio → intelligence-media-audio, intelligence-image → intelligence-media-image), the LAN-only notice (intelligence-lan, intelligence-lan-audio, intelligence-copy-lan), \"Loading media…\" and \"Media unavailable\" + Retry as 16:9 placeholders, intelligence-toggle, the history chips (intelligence-history, intelligence-history-<id>; ellipsis at 150 px, the full label in the title, aria-current on the shown item); empty \"Nothing shared yet\".",
+   "Every intelligence_update also raises the toast \"<NAME> shared an image: View\", a feed row and the chat media chip (chat-media-chip → #/activity/media).",
+   "Lightbox (intelligence-lightbox): role dialog, focus moves to its close button, Esc closes.",
+   "Same commit: intelligence.spec calls gotoPage('activity', 'media')."
+  ],
+  "acceptance": [
+   "intelligence.spec is green with that edit; Esc closes the lightbox.",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/intelligence.spec.ts",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-87",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Activity › Logs: System Logs terminal and toolbar, All levels, system feed, Reasoning",
+  "why": "The trace is the evidence trail. Today the filter input has no focus ring and the scroll region is not keyboard reachable; in v2 the trace and the old chat 'logs' tab share Activity › Logs.",
+  "files": [
+   "stonix_ui/src/features/command-center/components/SystemTrace.tsx",
+   "stonix_ui/src/features/activity/ActivityPage.tsx",
+   "stonix_ui/src/features/command-center/components/ChatPanel.tsx",
+   "stonix_ui/src/assets/styles/neon/activity.css",
+   "stonix_ui/tests/e2e/trace.spec.ts",
+   "stonix_ui/tests/e2e/dashboard.spec.ts",
+   "stonix_ui/tests/e2e/responsive.spec.ts"
+  ],
+  "depends_on": [
+   "X-108"
+  ],
+  "steps": [
+   "Add the Logs sub-tab (activity-tab-logs) and move the trace into it. Logs tab per spec v2 §12.2 (system-trace-panel, layout-zone-trace): \"System Logs\" + ● Live / ◆ Offline (never the word \"connected\"); the toolbar (WARN+, trace-info-toggle, trace-log-filter with its own ring, trace-log-pause with the buffered count, trace-log-clear, trace-log-dropped); the terminal (trace-log-terminal, role log, tabindex 0; trace-log-line with data-level; the line layouts by width).",
+   "All levels pane (all-logs-list, today's chat 'logs' tab, which leaves the panel's legacy strip) and the system feed (trace-system-feed).",
+   "Reasoning card (trace-reasoning-card with its own error boundary and every trace-reasoning-*, trace-ambiguity-badge, trace-confidence-bars, trace-plan-progress id). Window ≥ 1180 px: terminal and Reasoning both visible (side by side when the page column is ≥ 900 px, else stacked; Reasoning is a named region); < 1180 px: the Logs / Reasoning tabs (system-trace-tabs, trace-tab-logs, trace-tab-reasoning; tablist/tab/tabpanel with arrow keys).",
+   "Same commit: trace.spec beforeEach calls gotoPage('activity', 'logs'); dashboard.spec checks 'System Logs' after it; responsive.spec's trace tab clicks activity-tab-logs."
+  ],
+  "acceptance": [
+   "trace.spec is green at the default 1280x720 ('object plan steps render three descriptions' and 'malformed reasoning payload only trips the reasoning error boundary' see the reasoning) and at 1100 px (tabs; the terminal hidden on the Reasoning tab).",
+   "The texts \"System Logs\" and \"System Flow\" each exist once in the DOM.",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/trace.spec.ts tests/e2e/dashboard.spec.ts tests/e2e/responsive.spec.ts tests/e2e/memory.spec.ts",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-88",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Settings page: eleven sections, the index, field status, commit on blur or release (D12)",
+  "why": "The drawer becomes the Settings page of the reference shell. Quiet hours and the threshold send settings_update on every keystroke or step today (D12), and opening settings must not wipe the trace (D3, with X-96).",
+  "files": [
+   "stonix_ui/src/features/settings/SettingsPage.tsx (new)",
+   "stonix_ui/src/features/command-center/components/SettingsPanel.tsx",
+   "stonix_ui/src/features/settings/useSettings.ts",
+   "stonix_ui/src/features/shell/Sidebar.tsx",
+   "stonix_ui/src/features/command-center/components/TopBar.tsx",
+   "stonix_ui/src/assets/styles/neon/settings.css (new)"
+  ],
+  "depends_on": [
+   "X-73",
+   "X-96",
+   "X-103"
+  ],
+  "steps": [
+   "SettingsPage (page-settings, also settings-drawer) per spec v2 §13: the index (a sticky 214 px list from 860 px of page width, else a strip with edge fades), the eleven sections as cards with every field and testid of today's drawer, plus Notifications, SIM lookup (Open workspace, no title) and About (version; the LiveKit identity with ?debug=1).",
+   "Per field: settings-status-<field>, settings-agent-pending-<field> after 10 s, the 5 s revert with the toast, disabled while the bridge is offline; segmented and switch controls carry data-active.",
+   "D12: quiet hours commit on blur or Enter; the threshold commits on slider release.",
+   "title=\"Settings\" moves to nav-settings (the only element with that title) and the legacy gear leaves the header; Settings › Connection keeps Reconnect (secondary, the store's reconnect).",
+   "#/settings/<section> scrolls to the section."
+  ],
+  "acceptance": [
+   "The settings, voice-settings and voiceid specs are green (getByTitle('Settings') now resolves to nav-settings).",
+   "Typing '23:00-07:00' sends one settings_update, on blur.",
+   "Opening the page emits no request_state and keeps the trace (X-96).",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/settings.spec.ts tests/e2e/voice-settings.spec.ts tests/e2e/voiceid.spec.ts",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-89",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Dialogs: SIM and enrollment in the neon dialog, semantics, focus trap, Esc, enrollment error and timeout",
+  "why": "The SIM dialog has no role, focus trap or Esc; the enrollment dialog lacks a trap and Esc, and its error state has no home.",
+  "files": [
+   "stonix_ui/src/shared/ui/Dialog.tsx (new)",
+   "stonix_ui/src/features/command-center/components/SimAccessDialog.tsx",
+   "stonix_ui/src/features/voice/VoiceEnrollDialog.tsx",
+   "stonix_ui/src/assets/styles/neon/dialogs.css (new)"
+  ],
+  "depends_on": [
+   "X-72",
+   "X-73"
+  ],
+  "steps": [
+   "Dialog primitive per spec v2 §14 (radius 16, a 20 px-top sheet on phones, scrim with blur 4 px, role dialog, aria-modal, focus trap, initial focus, Esc, focus returns to the opener, rendered only while open).",
+   "SIM per §14: keep the opener title 'SIM lookup workspace' (Tools tab), the close title 'Close SIM access', '.sim-search button', the provider banner, the status chip (data-status, + not-configured) and every sim-* id.",
+   "Enrollment per §14: prerequisites with shapes (\"Voice room joined\", never \"connected\"), the persona sentence, the mic level bar (scaleX) with dB, progress, success, the error result (voice-enroll-error) and the timeout (voice-enroll-timeout); every voice-enroll-* id kept."
+  ],
+  "acceptance": [
+   "The sim and voiceid specs are green, and Esc closes both dialogs with focus back on the opener.",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/sim.spec.ts tests/e2e/voiceid.spec.ts",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-90",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Login, session check and the Electron offline page in the neon look",
+  "why": "The first screen the owner sees must carry the brand and the reference's look.",
+  "files": [
+   "stonix_ui/src/features/auth/LoginScreen.tsx",
+   "stonix_ui/src/app/App.tsx",
+   "stonix_ui/electron/offline.html",
+   "stonix_ui/src/assets/styles/neon/screens.css (new)"
+  ],
+  "depends_on": [
+   "X-70",
+   "X-73"
+  ],
+  "steps": [
+   "Login per spec v2 §14: the page background with the reference blooms, the glass card (radius 16, blur 14), ring logo 58 px, \"JARVIS & ANNA\", \"Your AI Command Center\", \"Owner session: password and authenticator\", password with show/hide, the 6-digit code (mono, spaced), 'Recovery code use karein' + the recovery field, the error texts unchanged, the expired hint, Sign in / \"Signing in…\" (--acc-btn), the foot line; login-* ids kept.",
+   "Session check: the ring logo breathing (static under reduced motion) + \"Checking session…\" (\"Reconnecting…\" during the interim Reconnect reload).",
+   "offline.html: the same tokens inline (no external CSS), ring logo, \"JARVIS & ANNA: VPS unreachable\", the text and Retry."
+  ],
+  "acceptance": [
+   "The auth spec is green (including the recovery-code button by name) and the Electron offline test is green.",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/auth.spec.ts",
+   "npm --prefix stonix_ui run test:electron",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-91",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Per-card error boundary fallback (panel-error with Retry)",
+  "why": "One card crash must not blank the page; today .panel-error-fallback has no styles. Design-independent, aligned to the card language.",
+  "files": [
+   "stonix_ui/src/shared/ui/ErrorBoundary.tsx",
+   "stonix_ui/src/shared/ui/Card.tsx",
+   "stonix_ui/src/assets/styles/neon/base.css",
+   "stonix_ui/tests/e2e/panel-error.spec.ts (new)"
+  ],
+  "depends_on": [
+   "X-73"
+  ],
+  "steps": [
+   "The fallback fills the crashed card's body: ◆ \"<Card> stopped working\", \"The rest of the dashboard keeps running.\", Retry (panel-error, panel-error-retry); one boundary per card (spec v2 §14: every Agents, Activity and Settings card, the hero, Quick Stats, Recent Activity, the panel tabs, the confirm card, popovers, dialogs).",
+   "The test triggers a crash through an e2e-only hook guarded by __E2E_HOOKS__ (no debug path in production builds)."
+  ],
+  "acceptance": [
+   "The fallback renders inside the crashed card only, and Retry restores it.",
+   "The panel-error spec is green.",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/panel-error.spec.ts",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-92",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Account & reminders menu on the avatar, neon toasts, ack markers and DESKTOP_* toasts (X-67 data)",
+  "why": "The reference's avatar block is the account menu: today's bell (badge, recent alerts, spoken/screen-only markers, permission) and Log out move there. Toasts get the neon renderer, and the X-67 delivery markers and DESKTOP_* toasts need homes.",
+  "files": [
+   "stonix_ui/src/features/shell/AccountMenu.tsx (new)",
+   "stonix_ui/src/toast/provider.tsx",
+   "stonix_ui/src/features/shell/PageHeader.tsx",
+   "stonix_ui/src/features/command-center/components/TopBar.tsx",
+   "stonix_ui/src/features/notifications/BellMenu.tsx (from X-67)",
+   "stonix_ui/tests/e2e/auth.spec.ts"
+  ],
+  "depends_on": [
+   "X-67",
+   "X-73",
+   "X-78",
+   "X-99"
+  ],
+  "steps": [
+   "AccountMenu (task-bell-menu) on the account block (topbar-task-bell, badge task-bell-count capped at 99+) per spec v2 §6.4.4: \"Matloob (owner)\", session end, the last 20 reminders (task-notif-row with task-notif-spoken / task-notif-screen-only and ✓ Delivered / ▲ Not acknowledged yet), the desktop notification footer (on / off + Turn on / blocked), a Settings link without a title, Sign out (logout). Opening clears the unread count and sends notification_ack for the shown rows.",
+   "Toast renderer per §14: radius 12, StatusShape by kind, text + sub line + optional action + dismiss, at most 3, bottom centre of the main column on desktop and the top on phones, role status; every kept text unchanged.",
+   "DESKTOP_* toasts carry Play and Download through /vortex/media (X-67 data).",
+   "Remove the bell and logout from the legacy strip; the TopBar file is deleted when its strip is empty.",
+   "Same commit: auth.spec clicks topbar-task-bell before logout."
+  ],
+  "acceptance": [
+   "The tasks, voice-glue, memory and auth specs are green.",
+   "TopBar.tsx is gone and no control of it is unreachable (inventory check).",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/tasks.spec.ts tests/e2e/voice-glue.spec.ts tests/e2e/memory.spec.ts tests/e2e/auth.spec.ts",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-93",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Motion hygiene: MotionConfig reducedMotion=\"user\", no framer loops, human relative times (D11)",
+  "why": "The framer-motion loops ignore reduced motion; times show 'updated 63198499s ago'. Design-independent, aligned to v2.",
+  "files": [
+   "stonix_ui/src/app/App.tsx",
+   "stonix_ui/src/shared/time.ts",
+   "stonix_ui/src/features/panel/ChatList.tsx",
+   "stonix_ui/src/features/tasks/TasksPanel.tsx",
+   "stonix_ui/src/features/agents/MachinesCards.tsx",
+   "stonix_ui/src/features/agents/AgentVpsCard.tsx",
+   "stonix_ui/src/features/confirm/ConfirmCard.tsx"
+  ],
+  "depends_on": [
+   "X-83",
+   "X-84",
+   "X-85",
+   "X-98"
+  ],
+  "steps": [
+   "Wrap the app in <MotionConfig reducedMotion=\"user\">; framer-motion stays only for popovers, dialogs, the sheet, toasts and row entrances (spec v2 §4.7).",
+   "Remove every remaining infinite framer loop (the old orb rings and pulses are gone with AssistantCore).",
+   "shared/time.ts (s, min, h, d) everywhere a relative time is shown; the confirm countdown stays clamped to the TTL."
+  ],
+  "acceptance": [
+   "With reduced motion, document.getAnimations() has no infinite running animation.",
+   "No relative time over 59 s is shown in seconds.",
+   "The full e2e suite is green.",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-94",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Accessibility gate: axe on every page and state, the 12 px floor, focus rings, announcer",
+  "why": "Acceptance requires 0 axe violations, no text under 12 px and a visible focus ring on every focusable element, across the new pages, popovers, sheets and both personas (spec v2 §20, §21.6).",
+  "files": [
+   "stonix_ui/tests/e2e/a11y.spec.ts (new)",
+   "stonix_ui/package.json",
+   "stonix_ui/package-lock.json",
+   "stonix_ui/src/assets/styles/index.css",
+   "stonix_ui/src/assets/styles/neon/base.css"
+  ],
+  "depends_on": [
+   "X-78",
+   "X-79",
+   "X-80",
+   "X-82",
+   "X-83",
+   "X-84",
+   "X-85",
+   "X-86",
+   "X-87",
+   "X-88",
+   "X-89",
+   "X-90",
+   "X-91",
+   "X-92",
+   "X-97",
+   "X-99",
+   "X-100",
+   "X-101",
+   "X-102",
+   "X-103",
+   "X-104",
+   "X-105",
+   "X-106",
+   "X-107",
+   "X-108"
+  ],
+  "steps": [
+   "Add @axe-core/playwright (devDependency; log it in done_highlight.md) with the tags wcag2a, wcag2aa, wcag21a, wcag21aa and wcag22aa.",
+   "Run axe on the state list of spec v2 §21.6: every voice state through the hook for both personas and under reduced motion, every page and Activity sub-tab, each panel tab, the confirm card (medium, high, long, expanded), every popover, the dialogs (incl. the enrollment error), lightbox, toasts, login, session check, offline page, the tablet rail and Logs tabs, and every phone tab with the confirm sheet, the approvals bar and the popover sheets. Fail on violations and on aria-prohibited-attr among the incomplete results.",
+   "Text-size walk: no visible text node under 12 px except the aria-hidden tagline. Focus walk: 40 tab stops, each with an outline or box-shadow. Announcer: a scripted 20 s conversation produces no listening/thinking/speaking announcements.",
+   "Fix every finding in the owning component; never aria-label on role-less elements (named scroll containers get role region, tabindex 0 and the name)."
+  ],
+  "acceptance": [
+   "0 violations across all listed states, no text under 12 px (tagline excepted), every tab stop ringed.",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/a11y.spec.ts",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-95",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Product baselines, layout, Electron and performance gates; the nothing-removed audit",
+  "why": "These lock the redesign in: product screenshots, the viewport rules, the Electron title bar, the frame rate, and a feature-by-feature proof that nothing was removed. CI runs `npm run test:e2e` on ubuntu-latest with the default headless shell, where frame rates swing under CPU throttling and Windows baselines do not exist, so the gates stay in the local 'gates' project.",
+  "files": [
+   "stonix_ui/playwright.config.ts",
+   "stonix_ui/package.json",
+   "stonix_ui/tests/e2e/visual.spec.ts (new)",
+   "stonix_ui/tests/e2e/perf.spec.ts (new)",
+   "stonix_ui/tests/e2e/layout.spec.ts",
+   "stonix_ui/tests/e2e/header-layout.spec.ts",
+   "stonix_ui/tests/electron/electron.spec.ts",
+   "stonix_ui/tests/e2e/visual.spec.ts-snapshots/ (new)"
+  ],
+  "depends_on": [
+   "X-77",
+   "X-82",
+   "X-93",
+   "X-94",
+   "X-98",
+   "X-100",
+   "X-109"
+  ],
+  "steps": [
+   "package.json: test:perf (`playwright test --project=gates tests/e2e/perf.spec.ts`) and test:visual (`… tests/e2e/visual.spec.ts`) next to X-109's test:refdiff.",
+   "visual.spec.ts (@gate, Windows-local, skipped in CI) per spec v2 §21.2: reduced motion, clocks, times and the camera masked, maxDiffPixelRatio 0.01; 1672x941 (Overview reference fixture, Overview ANNA, Agents, Activity Timeline and Logs, Settings, confirm high risk, login), 1280x595 (Overview, Agents), 390x844 (Overview, Chat, Agents, Activity, Settings, confirm sheet); committed with the -gates-win32 suffix.",
+   "perf.spec.ts (@gate) per §21.4 and §8.8, speaking via setVoiceState('speaking') + feedAgent('speech'), medians of three runs: 1440x900 DPR 1 and DPR 2 ≥ 58 fps and ≤ 1.5 ms script per frame; DPR 2 at 4x CPU ≥ 50 fps; 390x844 DPR 3 isMobile at 4x CPU ≥ 50 fps; idle and mic off ≤ 16 draws a second; static states 0 draws; 144 Hz shim ≤ 75 draws a second.",
+   "layout.spec and header-layout.spec complete §21.3 (every size of §5.8, nominal, long command pending, typing; phones with the bar and the keyboard); electron.spec per §21.7.",
+   "The nothing-removed audit of §21.9: a table in the done_highlight.md entry with every F1–F113 row of mapping.md §3, its new home, testids and the spec or manual check that proves it reachable.",
+   "Do not edit .github/**. If the owner wants the gates in CI, write REQ-CI in plan.md section 11 for Claude.",
+   "Record the measured numbers and the browser mode (new headless via channel 'chromium') in the done_highlight.md entry."
+  ],
+  "acceptance": [
+   "`npm run test:e2e` (the CI command) runs no @gate test and stays green on Windows and in CI.",
+   "`npm run test:perf`, `npm run test:visual` and `npm run test:refdiff` pass locally three times in a row; the numbers and the browser mode are in done_highlight.md.",
+   "The layout, header-layout and Electron specs are green.",
+   "The audit table has a home and a proof for every F1–F113 row.",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/layout.spec.ts tests/e2e/header-layout.spec.ts",
+   "npm --prefix stonix_ui run test:perf",
+   "npm --prefix stonix_ui run test:visual",
+   "npm --prefix stonix_ui run test:refdiff",
+   "npm --prefix stonix_ui run test:electron",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "Optional: the owner looks once at the 1672x941 and 390x844 baselines before Claude's frontend deploy (C-108)."
+ },
+ {
+  "id": "X-96",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "One socket subscription store: Reconnect re-binds every listener, request_state once per connect, init_state merges (D1–D3)",
+  "why": "Verified defects the redesign must not ship (audit 6.8): after Reconnect, confirm_request no longer opens the confirmation and new chat messages and agent status stop updating until a reload (D1); useCommandCenter's socket.off('init_state') strips every hook's listener (D2); every useAgentStatus mount emits request_state and init_state replaces the live logs, so opening Settings wipes the trace (D3). A broken Reconnect that silently stops confirmations is a safety problem. Design-independent: the v2 stores (the activity feed X-105, the voice state X-97, the pills X-78) subscribe through the same registry.",
+  "files": [
+   "stonix_ui/src/shared/realtime/socket.ts",
+   "stonix_ui/src/shared/realtime/subscriptions.ts (new)",
+   "stonix_ui/src/features/command-center/hooks/useCommandCenter.ts",
+   "stonix_ui/src/features/chat/useChat.ts",
+   "stonix_ui/src/features/confirm/useConfirmQueue.ts",
+   "stonix_ui/src/features/status/useAgentStatus.ts",
+   "stonix_ui/src/features/settings/useSettings.ts",
+   "stonix_ui/src/features/tools/useToolLogs.ts",
+   "stonix_ui/src/features/jobs/useJobs.ts",
+   "stonix_ui/src/features/memory/useMemories.ts",
+   "stonix_ui/src/features/tasks/useTasks.ts",
+   "stonix_ui/src/features/status/AgentControls.tsx",
+   "stonix_ui/src/features/auth/AuthProvider.tsx",
+   "stonix_ui/src/features/voice/useVoiceRoom.ts",
+   "stonix_ui/src/features/command-center/components/CameraPanel.tsx",
+   "stonix_ui/src/features/voice/VoiceEnrollDialog.tsx",
+   "stonix_ui/src/features/command-center/components/TopBar.tsx",
+   "stonix_ui/src/features/shell/popovers/DevicesPopover.tsx (when X-99 has landed)",
+   "stonix_ui/tests/e2e/reconnect.spec.ts (new)"
+  ],
+  "depends_on": [
+   "X-69"
+  ],
+  "steps": [
+   "subscriptions.ts: one registry of {event, handler} pairs. useSocketEvent(event, handler) registers through it; the registry binds every pair to the current socket, re-binds them all when the socket is replaced (socketVersion), and on unmount removes exactly its own handler (never socket.off(event) without a handler).",
+   "Move every listener to it: useChat, useConfirmQueue, useAgentStatus (one instance in a store), SettingsProvider, useToolLogs, useJobs, useMemories, useTasks, useAgentListeningMuted (one store flag for agent listening), AuthProvider (session expiry), the confirm/agent_status effect in useCommandCenter, and the events useCommandCenter never unsubscribed (vortex_log_batch, log_batch, new_logs, plan_progress(_update), turn_rejected, diagnostics_update, audit_update).",
+   "The store emits request_state once per socket 'connect'; no component emits it on mount.",
+   "init_state merges instead of replacing: bridge logs are de-duplicated by id or (ts, text), and UI-only lines (confirm decisions, turn_rejected, reconnect notes) are kept.",
+   "Reconnect re-binds in place (no reload) wherever it lives (the TopBar legacy strip, the Devices popover of X-99, Settings › Connection) and keeps the 'Reconnected' toast; the voice room rejoins with the mic off (toast \"Voice rejoined with the mic off.\"). Remove X-78's interim reload and the Settings note.",
+   "reconnect.spec.ts: after topbar-reconnect, confirm_request opens confirm-dialog, new_message renders and agent_status offline flips chip-agent; opening Settings emits no request_state and keeps a WARNING line in the terminal; the mock's ui_commands show one request_state per connect."
+  ],
+  "acceptance": [
+   "reconnect.spec and status.spec ('Reconnect shows success toast') are green; the confirm, chat, settings and trace specs stay green.",
+   "No call of socket.off with an event name and no handler remains (grep is empty).",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/reconnect.spec.ts tests/e2e/status.spec.ts tests/e2e/confirm.spec.ts tests/e2e/chat.spec.ts tests/e2e/settings.spec.ts tests/e2e/trace.spec.ts",
+   "grep -rnE \"\\.off\\('[a-z_]+'\\)\" stonix_ui/src (no hits)",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-97",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Voice state machine: ten states, the hero status line and inline actions, helper slot, buttons and mic mirrors, Voice pill, announcer",
+  "why": "Part 2 of the voice presence after the orb (X-75). The first version only knew six states, so after login (mic off), after a reload (audio blocked) or without the agent it showed 'Ready'; the voice banners pushed the layout (D8); voice.spec expects voice-toggle disabled while voice is unavailable. State 10 is the reference picture.",
+  "files": [
+   "stonix_ui/src/features/voice/voiceState.ts (new)",
+   "stonix_ui/src/features/overview/HeroCard.tsx",
+   "stonix_ui/src/features/voice/LiveKitProvider.tsx",
+   "stonix_ui/src/features/voice/useVoiceRoom.ts",
+   "stonix_ui/src/features/voice/e2eHooks.ts",
+   "stonix_ui/src/features/status/AgentControls.tsx",
+   "stonix_ui/src/features/shell/StatusPills.tsx",
+   "stonix_ui/src/features/voice/orb/OrbCanvas.tsx",
+   "stonix_ui/tests/e2e/presence.spec.ts (new)"
+  ],
+  "depends_on": [
+   "X-72",
+   "X-73",
+   "X-75",
+   "X-76",
+   "X-78",
+   "X-104"
+  ],
+  "steps": [
+   "voiceState.ts: the derivation of spec v2 §9.1 (first match wins) that consumes getE2EVoiceOverrides() in e2e builds (both spellings of the state names); status_change no longer drives the orb; the room joins with the mic off, so the default after sign-in and Reconnect is mic off.",
+   "The hero status line (voice-status, §7.4) with its tone, StatusShape and one inline action per attention state: voice-take-over, voice-wake-agent, enable-audio (also audioEngine.resumeAll()), hero-stop while speaking; user-speaking-label swaps in while you speak. The banners leave LiveKitProvider's page flow (same inputs; nothing pushes the layout).",
+   "The helper slot (hero-helper) per §9.2 and §16.3 with lang ur-Latn and the voice error; button rules of §9.2/§9.3: voice-toggle (Start Listening; unmute when muted; \"Joining…\"; disabled while offline or joining), hero-mic-off, the aria-pressed rules; one store flag for agent listening.",
+   "The Voice pill label, icon and ping per state (§6.3, §9.2); the orb state and glyphs (§8.5).",
+   "The hidden announcer of §9.5: only meaningful changes, debounced 1.2 s, never repeated.",
+   "presence.spec.ts (states part): through setVoiceState and setVoiceInputs each of the ten states shows its status line, helper, pill label and button states for JARVIS and ANNA."
+  ],
+  "acceptance": [
+   "Each of the ten states matches spec v2 §9.2 for both personas; voice-toggle is disabled in offline and joining, and voice.spec still passes.",
+   "After login against the mock the hero reads 'Voice unavailable' with the error in the helper slot; with setVoiceState('mic off') it reads 'Mic is off' and 'Mic band hai. Start Listening dabayein ya type karein.'",
+   "With audio blocked, agent absent and the other-device variant in turn, no hero rect moves and the composer stays fully visible at 1366x768.",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/presence.spec.ts tests/e2e/voice.spec.ts tests/e2e/controls-agent.spec.ts tests/e2e/persona-copy.spec.ts",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-98",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Reduced motion and presence.spec motion part: motion follows the level, the loop stops, nothing shifts",
+  "why": "Part 3 of the voice presence: the motion gate must be testable in e2e, motion must follow the voice level rather than the state, the loop must stop when nothing moves, and no voice state may move any hero part.",
+  "files": [
+   "stonix_ui/src/features/voice/orb/OrbCanvas.tsx",
+   "stonix_ui/src/features/voice/orb/orbRenderer.ts",
+   "stonix_ui/tests/e2e/presence.spec.ts"
+  ],
+  "depends_on": [
+   "X-97"
+  ],
+  "steps": [
+   "Reduced motion: no loop; one exact frame per state, persona or size change; no View Transition; CSS animations cut (spec v2 §4.7, §8.9).",
+   "presence.spec (motion part, default project, through the hook): sample the orb canvas at 96x96 every 100 ms; speaking with feedAgent('speech') ≥ 5x the idle difference; speaking with feedAgent(0) ≤ 2x idle; reduced motion 0 and no running infinite animation.",
+   "Loop part: stats() shows 'stop' and no new draws over 1 s in muted, offline, joining, agent absent and audio blocked; ≤ 16 draws a second in idle and mic off; more than 30 while speaking.",
+   "No layout shift: the rects of the orb canvas, the status line box, the button row and the quote slot are identical in all ten states, and in mic off before and during a spoken reply, at 1672x941, 1440x900, 1366x768, 1200x800 and 390x844."
+  ],
+  "acceptance": [
+   "presence.spec is green in the default project three runs in a row.",
+   "Reduced motion gives zero frame difference and no running infinite animation.",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/presence.spec.ts",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-99",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Popover primitive; Agent, Voice and Devices popovers (mic, listening, stop, wake, pause/wake and Reconnect move out of the header)",
+  "why": "The reference header has three pills and no icon buttons, and there is no \"More\" menu: the controls that lived in the TopBar move into popovers on the pills (spec v2 §6.4).",
+  "files": [
+   "stonix_ui/src/features/shell/popovers/Popover.tsx (new)",
+   "stonix_ui/src/features/shell/popovers/AgentPopover.tsx (new)",
+   "stonix_ui/src/features/shell/popovers/VoicePopover.tsx (new)",
+   "stonix_ui/src/features/shell/popovers/DevicesPopover.tsx (new)",
+   "stonix_ui/src/features/shell/StatusPills.tsx",
+   "stonix_ui/src/features/status/AgentControls.tsx",
+   "stonix_ui/src/features/command-center/components/TopBar.tsx",
+   "stonix_ui/src/assets/styles/neon/overlays.css (new)",
+   "stonix_ui/tests/e2e/controls-agent.spec.ts",
+   "stonix_ui/tests/e2e/settings.spec.ts",
+   "stonix_ui/tests/e2e/voiceid.spec.ts",
+   "stonix_ui/tests/e2e/status.spec.ts"
+  ],
+  "depends_on": [
+   "X-78"
+  ],
+  "steps": [
+   "Popover: role=\"dialog\" with a label, anchored under its pill (z 72, radius 14, --card + edge, --shadow-pop), Esc and outside click close, focus moves in and returns to the pill, it stays open while its switches toggle, it is rendered only while open; below 1024 px it is a bottom sheet with a scrim.",
+   "AgentPopover (chip-agent-menu): \"Agent (VPS)\" + state, session, brain, mode, host, version, last seen, health from GET /vortex/status (polled on open), agent-pause or agent-wake + agent-wake-spinner (toast 'Agent abhi tak online nahi…' after 90 s), link \"Open Agents ›\".",
+   "VoicePopover (voice-menu): state sentence + voice name; topbar-mic-toggle (disabled while offline or joining), topbar-agent-listening (data-muted, persona title), chip-wake (data-active mirrors aria-checked) + chip-wake-spinner, topbar-stop (\"<NAME> ko chup karao\"), the Voice-ID mini, mirrors of Enable audio / Take over / Wake (no testids), link \"Voice settings ›\".",
+   "DevicesPopover (devices-menu): This browser (bridge, base /vortex, topbar-reconnect, voice room, camera) and Agent (VPS); the Laptop row arrives with X-79. Remove the moved controls from the legacy strip.",
+   "Same commit: controls-agent.spec clicks chip-voice before topbar-stop and topbar-agent-listening, settings.spec before chip-wake, voiceid.spec before topbar-agent-listening, status.spec clicks chip-bridge before topbar-reconnect."
+  ],
+  "acceptance": [
+   "The controls, controls-agent, settings, voiceid, status and responsive specs are green.",
+   "Esc closes each popover and focus returns to its pill; at 390x844 each opens as a bottom sheet.",
+   "Nothing in the header overflows at 1024, 1179, 1180 and 1280 px.",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/controls.spec.ts tests/e2e/controls-agent.spec.ts tests/e2e/settings.spec.ts tests/e2e/voiceid.spec.ts tests/e2e/status.spec.ts tests/e2e/responsive.spec.ts",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-100",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Electron: header reserve, window buttons at the window edge, drag region, header-layout.spec",
+  "why": "Electron window buttons covered Listening, Settings and Logout (D6). The reference header keeps its right edge for the avatar, so Electron reserves room for the window buttons.",
+  "files": [
+   "stonix_ui/src/shared/ui/WindowControls.tsx",
+   "stonix_ui/src/app/App.tsx",
+   "stonix_ui/src/features/shell/PageHeader.tsx",
+   "stonix_ui/src/assets/styles/neon/shell.css",
+   "stonix_ui/tests/e2e/header-layout.spec.ts (new)"
+  ],
+  "depends_on": [
+   "X-99"
+  ],
+  "steps": [
+   ".is-electron on <html> when window.electronAPI?.isElectron; the header reserves 140 px + 12 px at the right in dk, 150 px in tl, and the phone avatar gets a 132 px right margin (spec v2 §5.7).",
+   "WindowControls (window-minimize, window-maximize, window-close) are position fixed at the window's top-right, z 500, inside the reserve; the header is the drag region and every control in it is no-drag.",
+   "header-layout.spec.ts: no header overflow or overlap at 1024, 1179, 1180, 1200, 1280, 1366, 1440, 1672 and 1920; with electronAPI injected at 1200x800, 1280, 1366, 1440 and 1024 no control intersects window-* and at least 140 px stay free."
+  ],
+  "acceptance": [
+   "The header-layout spec and the Electron spec are green.",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/header-layout.spec.ts",
+   "npm --prefix stonix_ui run test:electron",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-101",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Approvals tab, and the phone confirm sheet with \"Decide later\" and the approvals bar",
+  "why": "Part 2 of approvals: the queue beyond the head and the last 20 decisions get the reference's Approvals tab; on phones the card becomes a bottom sheet that can be deferred to a 48 px bar in Chat without hiding the composer.",
+  "files": [
+   "stonix_ui/src/features/panel/ApprovalsTab.tsx (new)",
+   "stonix_ui/src/features/confirm/ConfirmCard.tsx",
+   "stonix_ui/src/features/confirm/useConfirmQueue.ts",
+   "stonix_ui/src/features/shell/PhoneTabBar.tsx",
+   "stonix_ui/src/features/panel/RightPanel.tsx",
+   "stonix_ui/tests/e2e/confirm.spec.ts",
+   "stonix_ui/tests/e2e/layout.spec.ts"
+  ],
+  "depends_on": [
+   "X-82",
+   "X-84"
+  ],
+  "steps": [
+   "ApprovalsTab (approvals-panel) per spec v2 §10.7, rendered only while active: \"Waiting\" rows 2..N (approvals-queue-row: \"Request 2 of 3\", risk pill, summary, tool, expires in) or \"Only the request above\"; \"Decisions\" (approvals-history-row: Allowed / Denied / Expired, nothing ran / Cancelled by voice, tool, the first command line, time; the last 20); the empty state with the link \"See guarded tools ›\" (a link, never a button).",
+   "Phone sheet per §10.9: on every tab a pending request opens the card as a bottom sheet above the tab bar (scrim, focus trap, Deny focused first, Approve & Run first and full width, the touch hint for high risk); confirm-later \"Decide later\" collapses it to confirm-bar in Chat (\"1 approval waiting · <label>\", tap = Review); on other tabs the toast \"Approval is waiting in Chat\"; the choice resets when the queue empties or a new request arrives; vibration [120, 60, 120] on a new request.",
+   "Chat tab mark ◆ + count with the hidden text \", N confirmations waiting\".",
+   "confirm.spec: the Approvals tab shows the queue rows and a history row after a decision; layout.spec at the six phone sizes: with the bar shown the composer bottom is at or above the tab bar top."
+  ],
+  "acceptance": [
+   "confirm.spec is green including the strict locators (the tab renders only while active).",
+   "At 390x844 a new request opens the sheet with Deny focused; Decide later shows confirm-bar and the composer stays on screen at all six phone sizes.",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/confirm.spec.ts tests/e2e/layout.spec.ts tests/e2e/responsive.spec.ts",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-102",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Hidden-tab confirm alert: title flash, one chime, browser notification, phone vibration",
+  "why": "Part 3 of approvals: a pending confirmation must reach the owner when the tab or the window is in the background.",
+  "files": [
+   "stonix_ui/src/features/confirm/useHiddenTabAlert.ts (new)",
+   "stonix_ui/src/features/confirm/ConfirmCard.tsx",
+   "stonix_ui/src/app/App.tsx",
+   "stonix_ui/tests/e2e/confirm-hidden.spec.ts (new)"
+  ],
+  "depends_on": [
+   "X-84"
+  ],
+  "steps": [
+   "While the tab is hidden and a confirmation is pending: the title flashes \"⚠ Confirm: <tool>\" every second, one 880 Hz chime plays per request (gain .12, 380 ms), and a browser Notification('Confirm: <tool>', {body: summary, tag: id}) is sent when permission is granted (spec v2 §10.4).",
+   "Stop on visibility or resolution; the title returns to the page title (\"JARVIS & ANNA\" on the Overview).",
+   "confirm-hidden.spec.ts: emulate document.hidden (defineProperty + visibilitychange) and stub Notification; check the flash, exactly one chime and one notification per request, and the title after resolution."
+  ],
+  "acceptance": [
+   "confirm-hidden.spec is green; after resolution the title is exactly \"JARVIS & ANNA\" on the Overview.",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/confirm-hidden.spec.ts tests/e2e/confirm.spec.ts",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-103",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Sidebar: ring logo, wordmark, navigation with the reference active state, silk wave, tagline; tl icon rail; nav marks",
+  "why": "The left column of the reference: the ring logo, \"JARVIS & ANNA\", \"Your AI Command Center\", the four pages with the glass active item, the silk wave and \"A SMARTER TOMORROW TOGETHER\". Tablets get a 76 px icon rail.",
+  "files": [
+   "stonix_ui/src/features/shell/Sidebar.tsx (new)",
+   "stonix_ui/src/features/shell/SilkWave.tsx (new)",
+   "stonix_ui/src/features/shell/AppShell.tsx",
+   "stonix_ui/src/features/command-center/components/TopBar.tsx",
+   "stonix_ui/src/assets/styles/neon/shell.css"
+  ],
+  "depends_on": [
+   "X-70",
+   "X-80"
+  ],
+  "steps": [
+   "Sidebar per spec v2 §6.1: LogoRing (brand-mark) max(44px, 64vu), the wordmark and subtitle at their fluid sizes, the nav with nav-overview, nav-agents, nav-activity and nav-settings (61vu items at a 64vu pitch, icons 24 at x 42, labels at x 93; active: --nav-active fill and edge, the 2 px --acc-line bar inset 3 px, the filled house or the outline icon in --acc-icon with its glow, aria-current=\"page\").",
+   "SilkWave: port the prototype's .side-wave SVG (the fitted crest curves) pinned to the bottom; the two tagline lines (11.5 px, uppercase, tracking clamp(2.6px, .2392vw, 4px), --t-tagline, aria-hidden) at bottom 70vu and 48vu.",
+   "tl rail: 76 px, logo 64, nav buttons 56x56 at y 104/168/232/296 with tooltips and accessible names; wordmark, wave and tagline hidden.",
+   "Nav marks (off-nominal only): Activity count while unseen WARN+/critical alerts exist, Agents red dot on laptop panic or agent offline.",
+   "Remove the brand from the TopBar legacy strip."
+  ],
+  "acceptance": [
+   "At 1672x941 the sidebar is indistinguishable from the bundle's shots/d_01_overview.png in a side-by-side (the formal pixel check is V-1, X-109: sidebar region MAE ≤ 5.0).",
+   "Exactly one element carries data-testid=\"brand-mark\"; the active item has aria-current=\"page\"; the rail shows tooltips at 1024x768.",
+   "No nav mark shows in the nominal state.",
+   "The responsive and layout specs pass.",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/responsive.spec.ts tests/e2e/layout.spec.ts",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-104",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Overview hero card: the reference composition, eyebrow persona switch, name sheen, buttons, quote and helper slot",
+  "why": "The hero is the centre of the reference: the orb, \"JARVIS & ANNA\", the big name, \"AI Assistant\", the waveform, \"Listening for your command\", Start Listening / Run Task / Mic Off and the quote. It must scale as one composition with real text (spec v2 §7.1). The eyebrow is the persona switch (chip-persona).",
+  "files": [
+   "stonix_ui/src/features/overview/OverviewPage.tsx (new)",
+   "stonix_ui/src/features/overview/HeroCard.tsx (new)",
+   "stonix_ui/src/features/overview/usePersonaSwitch.ts (new)",
+   "stonix_ui/src/features/command-center/components/AssistantCore.tsx",
+   "stonix_ui/src/features/command-center/components/TopBar.tsx",
+   "stonix_ui/src/features/command-center/components/ChatPanel.tsx",
+   "stonix_ui/src/features/settings/useSettings.ts",
+   "stonix_ui/src/assets/styles/neon/overview.css (new)",
+   "stonix_ui/tests/e2e/dashboard.spec.ts"
+  ],
+  "depends_on": [
+   "X-72",
+   "X-73",
+   "X-80"
+  ],
+  "steps": [
+   "OverviewPage: the main-column grid of spec v2 §5.3 (columns 411fr / 404fr, the hero spanning both, the lower row filled by X-105), scrolling inside itself on short windows.",
+   "HeroCard: container-type size, height min(clamp(240px, 58vh − 71.5px, 474px), 57.12cqw), --u / --ox / --oy and every position of §7.1; the six hero light layers, the flare SVG and the lit edge (§4.3, §4.5); layout-zone-core on the hero.",
+   "Eyebrow (§7.2): radiogroup \"Who answers\" with data-testid chip-persona, two role=radio buttons \"Jarvis\" and \"Anna\" (uppercase by CSS) with roving tabindex, arrow keys and Space/Enter, the underline affordance and the ≥ 24 px hit areas, chip-persona-spinner + aria-busy while pending. usePersonaSwitch: optimistic settings_update {persona}, spinner until settings_sync (never a timer), after sync the chat line \"Switched to <NAME>\", the toast \"<NAME> is answering. Voice <voice>.\" and a feed row; no sync within 5 s → instant revert + the toast 'Setting sync timeout — value revert ho gaya'. Remove the persona chip from the legacy strip.",
+   "Name (hero-persona-name) with the sheen of §7.3, \"AI Assistant\", the accent rule; slots for the orb, waveform and status line (X-75, X-76, X-97); buttons voice-toggle (Start Listening), swarm-mode-toggle (Run Task, moved from the composer; data-active and aria-pressed) and hero-mic-off with the looks of §7.5; the quote slot hero-helper with QUOTE.",
+   "AssistantCore's other controls (Listening, the Voice-ID meter, Terminate) stay in a legacy strip under the hero until X-107 and X-85 move them.",
+   "Same commit: dashboard.spec asserts getByRole('radiogroup', { name: 'Who answers' }) visible."
+  ],
+  "acceptance": [
+   "The dashboard, controls (swarm toggle) and settings specs are green.",
+   "Clicking \"Anna\" or pressing ArrowRight on the radiogroup sends one settings_update {persona:'anna'} and the radios update aria-checked; with settings_sync withheld the persona reverts after 5 s with the timeout toast and no chat line.",
+   "At 1672x941 the eyebrow, name, role, rule, buttons and quote land on the reference ink boxes of forensics.md §7.3 within 2 px (formal check: V-1, X-109).",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/dashboard.spec.ts tests/e2e/controls.spec.ts tests/e2e/settings.spec.ts",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-105",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Quick Stats and Recent Activity cards, and the client-side activity feed store",
+  "why": "The two cards under the hero are part of the reference: four vitals tiles with coloured bars, and the four newest events on a timeline. The feed store also powers Activity › Timeline and never duplicates strings the e2e suite asserts strictly.",
+  "files": [
+   "stonix_ui/src/features/overview/QuickStatsCard.tsx (new)",
+   "stonix_ui/src/features/overview/RecentActivityCard.tsx (new)",
+   "stonix_ui/src/features/activity/feedStore.ts (new)",
+   "stonix_ui/src/features/overview/OverviewPage.tsx",
+   "stonix_ui/src/assets/styles/neon/overview.css",
+   "stonix_ui/tests/e2e/overview.spec.ts (new)"
+  ],
+  "depends_on": [
+   "X-73",
+   "X-96",
+   "X-104"
+  ],
+  "steps": [
+   "QuickStatsCard (qs-card) per spec v2 §7.7: header with qs-open → #/agents/machines; tiles qs-cpu, qs-memory, qs-disk, qs-devices with the measured sizes, icons, colours and Bar fills (scaleX); vitals_pc while the laptop is online, else vitals_vps with \"Disk (VPS)\" and the subtitle \"Laptop offline: showing Agent (VPS)\"; the devices bar min(1, N / 11); ▲ at CPU ≥ 85 % and memory or disk ≥ 90 %; \"stale\" after 30 s; the short labels by container width.",
+   "RecentActivityCard (activity-card) per §7.8: header with activity-open → #/activity/timeline; the four newest feed rows (activity-row with data-kind and data-level), dots by kind, the connector line, local times; \"No activity yet\" when empty.",
+   "feedStore.ts per §12.1: kinds and triggers of the table, newest first, repeats within 60 s fold into ×N, keep 200; never chat text, pending confirmation summaries or tools, reasoning steps, task descriptions from task_sync, telemetry ticks or INFO logs. It subscribes through the X-96 registry.",
+   "overview.spec.ts: the mock's vitals fill the tiles and the bars scale to them; laptop offline switches the source and the subtitle; stale after 30 s; the listed events create feed rows and the excluded ones do not."
+  ],
+  "acceptance": [
+   "The overview spec is green; tasks.spec and confirm.spec stay green (no duplicate strict texts).",
+   "At 1672x941 with the reference values the tiles and rows sit on the reference boxes (±1 px; formal check V-1).",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/overview.spec.ts tests/e2e/tasks.spec.ts tests/e2e/confirm.spec.ts",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-106",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Composer: field, send square, task-mode chip, paperclip, hints, push-to-talk mic",
+  "why": "The reference composer: \"Message JARVIS...\", the send square, the paperclip, \"Shift + Enter for new line\" and \"Use microphone\". The paperclip has no feature behind it yet; the mic becomes push-to-talk on the same voice-room mic.",
+  "files": [
+   "stonix_ui/src/features/panel/Composer.tsx (new)",
+   "stonix_ui/src/features/panel/RightPanel.tsx",
+   "stonix_ui/src/features/command-center/components/ChatPanel.tsx",
+   "stonix_ui/src/features/voice/useVoiceRoom.ts",
+   "stonix_ui/src/features/voice/voiceState.ts",
+   "stonix_ui/tests/e2e/composer.spec.ts (new)"
+  ],
+  "depends_on": [
+   "X-83",
+   "X-97"
+  ],
+  "steps": [
+   "Composer per spec v2 §10.6: the field (placeholder \"Message JARVIS...\" / \"Message ANNA...\", Enter sends, Shift+Enter new line, grows to 140 px, its own focus ring on the box), the send square inside the field (title 'Send command'), the hints row; task mode shows the chip \"⚡ Task mode ×\" and the placeholder \"Describe a task for <NAME>...\"; sending from Approvals or Tools switches to Chat.",
+   "Paperclip composer-attach: aria-disabled=\"true\", name \"Attach (coming soon)\", click → toast \"Attachments are not available yet\". \"Shift + Enter for new line\" is plain text (\"Shift+Enter: new line\" below 390 px of panel width, hidden below 366 px and on touch).",
+   "composer-mic push-to-talk per §9.4: press (pointer, Space or Enter) → publish + agent listening, label \"Listening…\", aria-pressed true; release → the previous mic and listening state, the turn is sent; a tap under 350 ms → toast \"Hold to talk\"; offline / joining / agent absent / audio blocked → a toast with the state sentence.",
+   "composer.spec.ts covers the keys, the attach toast, push-to-talk through the hook and the disabled states."
+  ],
+  "acceptance": [
+   "The chat and controls specs are green (placeholder /Message JARVIS|Message ANNA/, title 'Send command').",
+   "composer.spec: Enter sends and Shift+Enter adds a line; the attach button is aria-disabled and shows the toast; press-and-release goes listening → previous state; a 200 ms tap shows \"Hold to talk\".",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/composer.spec.ts tests/e2e/chat.spec.ts tests/e2e/controls.spec.ts",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-107",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Agents page: the three groups, Who answers (mini orbs), Voice & wake, Voice-ID",
+  "why": "Agents is a new page in the reference's navigation. It gives the personas, the voice controls and Voice-ID a home in the reference card language (spec v2 §11) and takes Listening and the Voice-ID meter out of the old core footer.",
+  "files": [
+   "stonix_ui/src/features/agents/AgentsPage.tsx (new)",
+   "stonix_ui/src/features/agents/PersonasCard.tsx (new)",
+   "stonix_ui/src/features/agents/MiniOrb.tsx (new)",
+   "stonix_ui/src/features/agents/VoiceWakeCard.tsx (new)",
+   "stonix_ui/src/features/agents/VoiceIdCard.tsx (new)",
+   "stonix_ui/src/features/command-center/components/AssistantCore.tsx",
+   "stonix_ui/src/features/voice/voiceMeter.ts",
+   "stonix_ui/src/assets/styles/neon/agents.css (new)",
+   "stonix_ui/tests/e2e/voiceid.spec.ts"
+  ],
+  "depends_on": [
+   "X-73",
+   "X-80",
+   "X-104"
+  ],
+  "steps": [
+   "AgentsPage (page-agents): the groups \"JARVIS & ANNA\", \"Devices\" (container with operations-rail, filled by X-85) and \"Machines and place\", with the group labels, one column below 720 px of page width and two from 720 px; anchors personas, voice, vid, flow, agent, laptop, browser, machines, map.",
+   "PersonasCard: two cards (persona-card-jarvis, persona-card-anna) with MiniOrb (92 px canvas from MINI, drawn once per persona and size), name, voice, trait, \"● Answering now\" or the button \"⇄ Make <NAME> answer\" (usePersonaSwitch).",
+   "VoiceWakeCard: voice room (Joined / Joining / Offline + identity), <NAME> listening switch assistant-agent-listening (data-muted; moved from the core footer), Wake word switch agents-wake-toggle (enforced), the follow-up window (read-only), Stop speaking, link \"Voice settings ›\".",
+   "VoiceIdCard: voice-id-meter (data-state), voice-id-meter-label, the threshold tick, unknown-voice mode, samples, voice-id-enroll-link (Enroll / Re-enroll → the enrollment dialog); moved from the core footer.",
+   "Same commit: voiceid.spec calls gotoPage('agents') before the meter and Enroll."
+  ],
+  "acceptance": [
+   "The voiceid, controls-agent and settings specs are green.",
+   "\"Make ANNA answer\" switches the persona exactly like the eyebrow (one settings_update, spinner, revert on timeout).",
+   "The mini orbs are drawn once per persona and size (no animation loop).",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/voiceid.spec.ts tests/e2e/controls-agent.spec.ts tests/e2e/settings.spec.ts",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-108",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "Activity page: sub-tabs, Timeline with the Alerts card, Tasks & reminders, Notes",
+  "why": "Activity is a new page in the reference's navigation: everything JARVIS & ANNA did (events, alerts, tasks, notes). It takes the rail's Alerts (clipped to 1 px today, D4) and the old chat tabs notes and tasks.",
+  "files": [
+   "stonix_ui/src/features/activity/ActivityPage.tsx (new)",
+   "stonix_ui/src/features/activity/TimelineTab.tsx (new)",
+   "stonix_ui/src/features/activity/AlertsCard.tsx (new)",
+   "stonix_ui/src/features/tasks/TasksPanel.tsx",
+   "stonix_ui/src/features/memory/MemoryList.tsx",
+   "stonix_ui/src/features/command-center/components/ChatPanel.tsx",
+   "stonix_ui/src/features/command-center/components/OperationsRail.tsx",
+   "stonix_ui/src/assets/styles/neon/activity.css (new)",
+   "stonix_ui/tests/e2e/memory.spec.ts",
+   "stonix_ui/tests/e2e/tasks.spec.ts",
+   "stonix_ui/tests/e2e/voice-glue.spec.ts",
+   "stonix_ui/tests/e2e/vitals.spec.ts"
+  ],
+  "depends_on": [
+   "X-73",
+   "X-80",
+   "X-96",
+   "X-105"
+  ],
+  "steps": [
+   "ActivityPage (page-activity) per spec v2 §12: sub-tab buttons with aria-pressed (activity-tab-timeline, activity-tab-tasks, activity-tab-notes now; X-87 adds activity-tab-logs and X-86 activity-tab-media; names \"Timeline\", \"Logs\", \"Tasks & reminders\", \"Notes\", \"Media\", unique among visible buttons); bodies render only while active, their state lives in the stores; the strip scrolls sideways with an edge fade on narrow screens; #/activity/<tab> selects the tab.",
+   "Timeline: AlertsCard (alerts-card: system-alert-row and log-alert-row with data-level, ≤ 10 each, \"Normal. No alerts.\"), the filter chips All · System · Voice · Devices · Approvals · Tool runs · Reminders · Media, and the full feed (timeline-row) from feedStore.",
+   "Tasks & reminders (tasks-tab-panel and every task-* id kept) with the human countdown, plus reminder-history-row; Notes (memory-tab-panel and every memory-* id kept) with lang ur-Latn on the Roman Urdu note. The trace and the media panel stay where they are (the Overview legacy strip) until X-87 and X-86 move them, together with their spec edits.",
+   "Remove the notes and tasks buttons from the panel's legacy strip and the Alerts block from OperationsRail (wherever it renders by then).",
+   "Same commit: memory.spec, tasks.spec and voice-glue.spec call gotoPage('activity') before 'notes' / 'tasks'; tasks.spec uses getByText(/Call home now/).first(); vitals.spec calls gotoPage('activity', 'timeline') before log-alert-row."
+  ],
+  "acceptance": [
+   "The memory, tasks, voice-glue and vitals specs are green with those edits.",
+   "getByRole('button', { name: 'notes' }) and { name: 'tasks' } each match exactly one visible button on Activity.",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:e2e -- tests/e2e/memory.spec.ts tests/e2e/tasks.spec.ts tests/e2e/voice-glue.spec.ts tests/e2e/vitals.spec.ts",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "—"
+ },
+ {
+  "id": "X-109",
+  "agent": "cursor",
+  "phase": "P3",
+  "title": "V-1: the visual-diff gate against the owner's reference image",
+  "why": "The owner asked for exactly the reference. V-1 measures the product's Overview against the reference PNG at 1672x941 with the metrics that tuned the prototype (fluid layout: MAE 5.75, SSIM .897, 85 of 96 ink boxes within 2 px), so \"exact\" has a number and regressions show up (spec v2 §21.1).",
+  "files": [
+   "stonix_ui/tests/visual/reference/neon-command-center.png (new)",
+   "stonix_ui/tests/visual/regions.json (new)",
+   "stonix_ui/tests/visual/reference_fixture.json (new)",
+   "stonix_ui/tests/visual/refdiff.ts (new)",
+   "stonix_ui/tests/e2e/refdiff.spec.ts (new)",
+   "stonix_ui/tests/mock-bridge/server.mjs",
+   "stonix_ui/src/features/voice/e2eHooks.ts",
+   "stonix_ui/src/features/activity/feedStore.ts",
+   "stonix_ui/src/features/confirm/ConfirmCard.tsx",
+   "stonix_ui/playwright.config.ts",
+   "stonix_ui/package.json",
+   "stonix_ui/package-lock.json"
+  ],
+  "depends_on": [
+   "X-75",
+   "X-76",
+   "X-78",
+   "X-83",
+   "X-84",
+   "X-97",
+   "X-103",
+   "X-104",
+   "X-105",
+   "X-106"
+  ],
+  "steps": [
+   "Copy the repo-root \"JARVIS & ANNA Neon Command Center.png\" byte for byte to tests/visual/reference/neon-command-center.png, and the bundle's visual_gate/regions.json and reference_fixture.json to tests/visual/.",
+   "refdiff.ts: a TypeScript port of the bundle's replica_work/diff.py with pngjs (devDependency; log it in done_highlight.md): MAE, luminance SSIM (Gaussian sigma 1.5, truncated at 3.5 sigma), CIE76 mean and share under 10, region stats with the CIEDE2000 of mean colours, the page_bg_gaps mask, 96 ink boxes, 104 container edges, the heat map (|diff| x 4, inferno) and a side-by-side PNG.",
+   "Validate the port on the bundle's visual_gate/validation/ frames: proto_fluid_1672x941.png and proto_artboard_1672x941.png must reproduce their .metrics.json within ±0.05 MAE and ±0.002 SSIM, with the same ink and container counts.",
+   "playwright.config.ts: keep the 'chromium' project (Desktop Chrome, default headless shell) with grepInvert /@gate/ and add a 'gates' project (devices['Desktop Chrome'], channel 'chromium', grep /@gate/). package.json: test:e2e becomes `playwright test --project=chromium` (CI keeps running it unchanged) and test:refdiff runs tests/e2e/refdiff.spec.ts in the gates project.",
+   "Reference data (reference_fixture.json): emit agent_status, desktop_status (laptop online), vitals_pc 21/63/82, the two chat messages at 21:42 PKT and the PowerShell confirm request (run_cmd_command, medium, 10 min TTL) through /__mock/emit (or a /__mock/scenario/reference shortcut in server.mjs); GET /vortex/status reports ui_clients 1; the mock's server_time equals the fixed page clock, so the pill reads \"Requires approval\" and never a countdown.",
+   "e2eHooks: referenceFrame(on) seeds the four reference activity rows through feedStore (9:41, 9:40, 9:38, 9:37 PM), hides the head request's meta line (spec §22 D-6) and hides toasts; frameReady() resolves when fonts are ready and the orb's static frame is drawn.",
+   "refdiff.spec.ts (@gate; skipped unless process.platform is win32 and not CI): viewport 1672x941, DPR 1, timezoneId Asia/Karachi, locale en-US, reducedMotion reduce, launch arg --force-color-profile=srgb, page.clock.setFixedTime(2026-10-02T21:42:10+05:00); voice inputs idle with the mic on; referenceFrame(true); screenshot; compare with the thresholds of regions.json; attach the JSON report, heat map and side-by-side to test-results/refdiff/."
+  ],
+  "acceptance": [
+   "The port reproduces the prototype metrics (step 3).",
+   "The captured frame shows \"Good evening,\" / \"Matloob\", \"3 Connected Devices\", \"Listening for your command\", \"Requires approval\" without a meta line, and the four reference activity rows (reference_fixture.json expected_text).",
+   "`npm run test:refdiff` passes three times in a row on the owner's laptop; the frame MAE and SSIM, the worst three regions, the ink and edge counts and the side-by-side path are in the done_highlight.md entry.",
+   "A plain `npm run build` contains neither __jarvisTest nor referenceFrame code.",
+   "`npm run test:e2e` runs no @gate test and stays green.",
+   "No feature, control, testid or text anchor removed: the testid inventory check passes and every moved control is reachable"
+  ],
+  "verify": [
+   "npm --prefix stonix_ui run build",
+   "npm --prefix stonix_ui run test:refdiff",
+   "npm --prefix stonix_ui run test:e2e",
+   "grep -rl \"referenceFrame\\|__jarvisTest\" stonix_ui/dist (after the plain build: no hits)",
+   "node stonix_ui/scripts/testid-inventory.mjs --check"
+  ],
+  "user_needed": "Optional: the owner looks once at the side-by-side PNG (product next to the reference) that the passing run writes."
+ }
+]

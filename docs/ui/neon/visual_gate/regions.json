@@ -1,0 +1,1940 @@
+{
+ "frame": {
+  "width": 1672,
+  "height": 941,
+  "deviceScaleFactor": 1
+ },
+ "reference": "JARVIS & ANNA Neon Command Center.png (repo root, 1672x941 RGB); copy byte for byte",
+ "regions": {
+  "sidebar": [
+   0,
+   0,
+   272,
+   941
+  ],
+  "header": [
+   272,
+   0,
+   1400,
+   114
+  ],
+  "hero": [
+   295,
+   116,
+   830,
+   474
+  ],
+  "orb": [
+   304,
+   116,
+   438,
+   352
+  ],
+  "hero_text": [
+   735,
+   180,
+   280,
+   250
+  ],
+  "hero_buttons": [
+   395,
+   470,
+   636,
+   70
+  ],
+  "quickstats": [
+   295,
+   606,
+   411,
+   306
+  ],
+  "activity": [
+   721,
+   607,
+   404,
+   305
+  ],
+  "panel": [
+   1143,
+   114,
+   512,
+   800
+  ],
+  "panel_tabs": [
+   1144,
+   115,
+   510,
+   66
+  ],
+  "confirm": [
+   1162,
+   202,
+   476,
+   268
+  ],
+  "chat": [
+   1160,
+   495,
+   482,
+   240
+  ],
+  "composer": [
+   1158,
+   770,
+   481,
+   129
+  ]
+ },
+ "page_bg_gaps": {
+  "note": "mask = x >= 272, minus every card box grown by 2 px (hero, quickstats, activity, panel), minus the header content band x 300..1660, y 25..90",
+  "cards": [
+   "hero",
+   "quickstats",
+   "activity",
+   "panel"
+  ],
+  "grow": 2,
+  "header_band": [
+   300,
+   25,
+   1360,
+   65
+  ]
+ },
+ "containers": {
+  "hero": [
+   295,
+   116,
+   830,
+   474
+  ],
+  "quickstats": [
+   295,
+   606,
+   411,
+   306
+  ],
+  "activity": [
+   721,
+   607,
+   404,
+   305
+  ],
+  "panel": [
+   1143,
+   114,
+   512,
+   800
+  ],
+  "nav_active": [
+   16,
+   185,
+   241,
+   61
+  ],
+  "pill_system": [
+   764,
+   29,
+   163,
+   54
+  ],
+  "pill_devices": [
+   943,
+   29,
+   205,
+   54
+  ],
+  "pill_voice": [
+   1163,
+   29,
+   153,
+   54
+  ],
+  "btn_start": [
+   403,
+   476,
+   217,
+   56
+  ],
+  "btn_run": [
+   635,
+   476,
+   193,
+   56
+  ],
+  "btn_micoff": [
+   843,
+   476,
+   180,
+   56
+  ],
+  "tile_cpu": [
+   315,
+   682,
+   180,
+   91
+  ],
+  "tile_mem": [
+   510,
+   682,
+   180,
+   91
+  ],
+  "tile_disk": [
+   315,
+   787,
+   180,
+   95
+  ],
+  "tile_dev": [
+   510,
+   787,
+   180,
+   95
+  ],
+  "confirm": [
+   1162,
+   202,
+   476,
+   268
+  ],
+  "req_pill": [
+   1471,
+   223,
+   146,
+   30
+  ],
+  "code": [
+   1184,
+   308,
+   433,
+   80
+  ],
+  "deny": [
+   1184,
+   400,
+   209,
+   49
+  ],
+  "approve": [
+   1408,
+   400,
+   209,
+   49
+  ],
+  "bubble_user": [
+   1229,
+   499,
+   409,
+   79
+  ],
+  "bubble_ai": [
+   1229,
+   601,
+   409,
+   130
+  ],
+  "composer": [
+   1158,
+   770,
+   481,
+   129
+  ],
+  "input": [
+   1173,
+   785,
+   450,
+   58
+  ],
+  "send": [
+   1570,
+   787,
+   54,
+   54
+  ],
+  "avatar": [
+   1417,
+   27,
+   59,
+   59
+  ]
+ },
+ "container_search_px": 7,
+ "ink_targets": [
+  {
+   "id": "sidebar.brand_title:text",
+   "box": [
+    54,
+    103,
+    165,
+    15
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "sidebar.brand_subtitle:text",
+   "box": [
+    53,
+    131,
+    168,
+    10
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "sidebar.nav.overview:text",
+   "box": [
+    93,
+    210,
+    74,
+    13
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "sidebar.nav.overview:icon",
+   "box": [
+    42,
+    204,
+    24,
+    24
+   ],
+   "mode": "full",
+   "pad": [
+    4,
+    4
+   ],
+   "thr": 0.4
+  },
+  {
+   "id": "sidebar.nav.agents:text",
+   "box": [
+    93,
+    275,
+    55,
+    17
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "sidebar.nav.agents:icon",
+   "box": [
+    41,
+    272,
+    25,
+    20
+   ],
+   "mode": "full",
+   "pad": [
+    4,
+    4
+   ],
+   "thr": 0.4
+  },
+  {
+   "id": "sidebar.nav.activity:text",
+   "box": [
+    93,
+    338,
+    59,
+    18
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "sidebar.nav.activity:icon",
+   "box": [
+    42,
+    336,
+    24,
+    19
+   ],
+   "mode": "full",
+   "pad": [
+    4,
+    4
+   ],
+   "thr": 0.4
+  },
+  {
+   "id": "sidebar.nav.settings:text",
+   "box": [
+    93,
+    401,
+    64,
+    22
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "sidebar.nav.settings:icon",
+   "box": [
+    42,
+    398,
+    24,
+    23
+   ],
+   "mode": "full",
+   "pad": [
+    4,
+    4
+   ],
+   "thr": 0.4
+  },
+  {
+   "id": "sidebar.footer.line1:text",
+   "box": [
+    36,
+    858,
+    94,
+    8
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "sidebar.footer.line2:text",
+   "box": [
+    36,
+    880,
+    192,
+    9
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "header.title:text",
+   "box": [
+    315,
+    29,
+    140,
+    23
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "header.subtitle:text",
+   "box": [
+    314,
+    67,
+    416,
+    14
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "header.pill.system:text",
+   "box": [
+    813,
+    50,
+    95,
+    11
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "header.pill.devices:text",
+   "box": [
+    997,
+    50,
+    131,
+    11
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "header.pill.devices:icon",
+   "box": [
+    960,
+    47,
+    23,
+    18
+   ],
+   "mode": "full",
+   "pad": [
+    4,
+    4
+   ],
+   "thr": 0.4
+  },
+  {
+   "id": "header.pill.voice:text",
+   "box": [
+    1216,
+    50,
+    80,
+    15
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "header.pill.voice:icon",
+   "box": [
+    1183,
+    44,
+    18,
+    24
+   ],
+   "mode": "full",
+   "pad": [
+    4,
+    4
+   ],
+   "thr": 0.4
+  },
+  {
+   "id": "header.avatar:text",
+   "box": [
+    1431,
+    49,
+    30,
+    14
+   ],
+   "mode": "center",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "header.greeting.line1:text",
+   "box": [
+    1495,
+    36,
+    100,
+    16
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "header.greeting.name:text",
+   "box": [
+    1495,
+    62,
+    34,
+    13
+   ],
+   "mode": "left",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "header.chevron:icon",
+   "box": [
+    1618,
+    53,
+    13,
+    7
+   ],
+   "mode": "full",
+   "pad": [
+    4,
+    4
+   ],
+   "thr": 0.4
+  },
+  {
+   "id": "hero.eyebrow:text",
+   "box": [
+    742,
+    188,
+    154,
+    10
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "hero.title:text",
+   "box": [
+    742,
+    225,
+    241,
+    46
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "hero.role:text",
+   "box": [
+    743,
+    290,
+    134,
+    18
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "hero.status:text",
+   "box": [
+    743,
+    404,
+    258,
+    19
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "hero.btn.start:text",
+   "box": [
+    479,
+    498,
+    103,
+    12
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "hero.btn.start:icon",
+   "box": [
+    445,
+    492,
+    18,
+    24
+   ],
+   "mode": "full",
+   "pad": [
+    4,
+    4
+   ],
+   "thr": 0.4
+  },
+  {
+   "id": "hero.btn.run:text",
+   "box": [
+    714,
+    498,
+    63,
+    12
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "hero.btn.run:icon",
+   "box": [
+    680,
+    493,
+    15,
+    22
+   ],
+   "mode": "full",
+   "pad": [
+    4,
+    4
+   ],
+   "thr": 0.4
+  },
+  {
+   "id": "hero.btn.micoff:text",
+   "box": [
+    924,
+    498,
+    54,
+    12
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "hero.btn.micoff:icon",
+   "box": [
+    889,
+    492,
+    20,
+    24
+   ],
+   "mode": "full",
+   "pad": [
+    4,
+    4
+   ],
+   "thr": 0.4
+  },
+  {
+   "id": "hero.quote:text",
+   "box": [
+    578,
+    558,
+    232,
+    10
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "quickstats.icon:icon",
+   "box": [
+    318,
+    631,
+    22,
+    23
+   ],
+   "mode": "full",
+   "pad": [
+    4,
+    4
+   ],
+   "thr": 0.4
+  },
+  {
+   "id": "quickstats.title:text",
+   "box": [
+    362,
+    627,
+    92,
+    12
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "quickstats.subtitle:text",
+   "box": [
+    362,
+    651,
+    116,
+    11
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "quickstats.chevron:icon",
+   "box": [
+    675,
+    638,
+    7,
+    11
+   ],
+   "mode": "full",
+   "pad": [
+    4,
+    4
+   ],
+   "thr": 0.4
+  },
+  {
+   "id": "quickstats.tile.cpu:icon",
+   "box": [
+    333,
+    704,
+    28,
+    26
+   ],
+   "mode": "full",
+   "pad": [
+    4,
+    4
+   ],
+   "thr": 0.4
+  },
+  {
+   "id": "quickstats.tile.cpu:value",
+   "box": [
+    387,
+    706,
+    32,
+    13
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "quickstats.tile.cpu:label",
+   "box": [
+    387,
+    728,
+    61,
+    9
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "quickstats.tile.memory:icon",
+   "box": [
+    528,
+    707,
+    28,
+    22
+   ],
+   "mode": "full",
+   "pad": [
+    4,
+    4
+   ],
+   "thr": 0.4
+  },
+  {
+   "id": "quickstats.tile.memory:value",
+   "box": [
+    582,
+    706,
+    35,
+    13
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "quickstats.tile.memory:label",
+   "box": [
+    582,
+    728,
+    45,
+    9
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "quickstats.tile.disk:icon",
+   "box": [
+    334,
+    812,
+    26,
+    23
+   ],
+   "mode": "full",
+   "pad": [
+    4,
+    4
+   ],
+   "thr": 0.4
+  },
+  {
+   "id": "quickstats.tile.disk:value",
+   "box": [
+    387,
+    812,
+    36,
+    12
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "quickstats.tile.disk:label",
+   "box": [
+    387,
+    834,
+    50,
+    10
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "quickstats.tile.devices:icon",
+   "box": [
+    529,
+    813,
+    27,
+    21
+   ],
+   "mode": "full",
+   "pad": [
+    4,
+    4
+   ],
+   "thr": 0.4
+  },
+  {
+   "id": "quickstats.tile.devices:value",
+   "box": [
+    582,
+    812,
+    8,
+    12
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "quickstats.tile.devices:label",
+   "box": [
+    581,
+    834,
+    99,
+    10
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "activity.icon:icon",
+   "box": [
+    743,
+    632,
+    23,
+    24
+   ],
+   "mode": "full",
+   "pad": [
+    4,
+    4
+   ],
+   "thr": 0.4
+  },
+  {
+   "id": "activity.title:text",
+   "box": [
+    787,
+    629,
+    123,
+    16
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "activity.subtitle:text",
+   "box": [
+    787,
+    653,
+    222,
+    10
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "activity.chevron:icon",
+   "box": [
+    1094,
+    639,
+    7,
+    11
+   ],
+   "mode": "full",
+   "pad": [
+    4,
+    4
+   ],
+   "thr": 0.4
+  },
+  {
+   "id": "activity.item1:title",
+   "box": [
+    784,
+    691,
+    94,
+    14
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "activity.item1:subtitle",
+   "box": [
+    784,
+    713,
+    147,
+    10
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "activity.item1:time",
+   "box": [
+    1055,
+    694,
+    49,
+    10
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "activity.item2:title",
+   "box": [
+    784,
+    744,
+    128,
+    15
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "activity.item2:subtitle",
+   "box": [
+    785,
+    766,
+    136,
+    10
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "activity.item2:time",
+   "box": [
+    1055,
+    747,
+    49,
+    11
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "activity.item3:title",
+   "box": [
+    785,
+    798,
+    121,
+    14
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "activity.item3:subtitle",
+   "box": [
+    784,
+    819,
+    192,
+    11
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "activity.item3:time",
+   "box": [
+    1055,
+    800,
+    49,
+    11
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "activity.item4:title",
+   "box": [
+    784,
+    852,
+    142,
+    15
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "activity.item4:subtitle",
+   "box": [
+    784,
+    874,
+    138,
+    11
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "activity.item4:time",
+   "box": [
+    1055,
+    855,
+    49,
+    11
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "panel.tab.chat:text",
+   "box": [
+    1209,
+    142,
+    35,
+    12
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "panel.tab.chat:icon",
+   "box": [
+    1173,
+    138,
+    20,
+    20
+   ],
+   "mode": "full",
+   "pad": [
+    4,
+    4
+   ],
+   "thr": 0.4
+  },
+  {
+   "id": "panel.tab.approvals:text",
+   "box": [
+    1346,
+    145,
+    75,
+    16
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "panel.tab.approvals:icon",
+   "box": [
+    1312,
+    139,
+    18,
+    19
+   ],
+   "mode": "full",
+   "pad": [
+    4,
+    4
+   ],
+   "thr": 0.4
+  },
+  {
+   "id": "panel.tab.tools:text",
+   "box": [
+    1573,
+    141,
+    38,
+    13
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "panel.tab.tools:icon",
+   "box": [
+    1539,
+    138,
+    19,
+    21
+   ],
+   "mode": "full",
+   "pad": [
+    4,
+    4
+   ],
+   "thr": 0.4
+  },
+  {
+   "id": "panel.confirm.icon:icon",
+   "box": [
+    1186,
+    225,
+    21,
+    25
+   ],
+   "mode": "full",
+   "pad": [
+    4,
+    4
+   ],
+   "thr": 0.4
+  },
+  {
+   "id": "panel.confirm.title:text",
+   "box": [
+    1226,
+    231,
+    146,
+    12
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "panel.confirm.badge:text",
+   "box": [
+    1506,
+    233,
+    98,
+    12
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "panel.confirm.badge:icon",
+   "box": [
+    1483,
+    233,
+    11,
+    10
+   ],
+   "mode": "full",
+   "pad": [
+    4,
+    4
+   ],
+   "thr": 0.4
+  },
+  {
+   "id": "panel.confirm.question:text",
+   "box": [
+    1186,
+    274,
+    336,
+    16
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "panel.confirm.code:line1",
+   "box": [
+    1205,
+    331,
+    380,
+    12
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "panel.confirm.code:line2",
+   "box": [
+    1205,
+    355,
+    184,
+    11
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "panel.confirm.deny:text",
+   "box": [
+    1270,
+    419,
+    37,
+    11
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "panel.confirm.approve:text",
+   "box": [
+    1458,
+    419,
+    108,
+    11
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "panel.chat.user.avatar:text",
+   "box": [
+    1187,
+    525,
+    12,
+    14
+   ],
+   "mode": "center",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "panel.chat.user.bubble:time",
+   "box": [
+    1571,
+    549,
+    47,
+    9
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "panel.chat.user.bubble:line1",
+   "box": [
+    1250,
+    519,
+    266,
+    12
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "panel.chat.user.bubble:line2",
+   "box": [
+    1250,
+    543,
+    144,
+    16
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "panel.chat.jarvis.bubble:label",
+   "box": [
+    1249,
+    622,
+    48,
+    10
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "panel.chat.jarvis.bubble:time",
+   "box": [
+    1571,
+    622,
+    48,
+    10
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "panel.chat.jarvis.bubble:line1",
+   "box": [
+    1250,
+    650,
+    311,
+    12
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "panel.chat.jarvis.bubble:line2",
+   "box": [
+    1249,
+    674,
+    300,
+    12
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "panel.chat.jarvis.bubble:line3",
+   "box": [
+    1250,
+    698,
+    265,
+    13
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "panel.composer.input:text",
+   "box": [
+    1191,
+    804,
+    122,
+    12
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "panel.composer.send:icon",
+   "box": [
+    1586,
+    803,
+    22,
+    22
+   ],
+   "mode": "full",
+   "pad": [
+    4,
+    4
+   ],
+   "thr": 0.4
+  },
+  {
+   "id": "panel.composer.hint.attach:text",
+   "box": [
+    1211,
+    867,
+    142,
+    10
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "panel.composer.hint.attach:icon",
+   "box": [
+    1178,
+    863,
+    16,
+    18
+   ],
+   "mode": "full",
+   "pad": [
+    4,
+    4
+   ],
+   "thr": 0.4
+  },
+  {
+   "id": "panel.composer.hint.mic:text",
+   "box": [
+    1524,
+    867,
+    94,
+    10
+   ],
+   "mode": "full",
+   "pad": [
+    6,
+    5
+   ],
+   "thr": 0.45
+  },
+  {
+   "id": "panel.composer.hint.mic:icon",
+   "box": [
+    1493,
+    863,
+    15,
+    19
+   ],
+   "mode": "full",
+   "pad": [
+    4,
+    4
+   ],
+   "thr": 0.4
+  }
+ ],
+ "metrics": {
+  "mae": "mean over pixels of the mean absolute RGB difference (0..255)",
+  "ssim": "luminance (0.299R + 0.587G + 0.114B) SSIM, Gaussian window sigma 1.5 truncated at 3.5 sigma, K1 .01, K2 .03, L 255, mean of the map",
+  "dE76_mean": "mean per-pixel CIE76 in CIELAB (sRGB D65)",
+  "pct_px_dE_lt_10": "share of pixels with CIE76 < 10",
+  "region dE2000_of_means": "CIEDE2000 between the mean Lab colours of a region in both images",
+  "ink": "per target: tight ink box in a window (box grown by pad); background = median of the window border; threshold = bg + thr * (p99 - bg); connected components >= 2 px; error = worst edge displacement (mode full), centre displacement (mode center), left/top/height (mode left)",
+  "containers": "per box and side: position of the max luminance gradient on the mean profile across the middle 40 % of the edge, searched +-7 px; error = product - reference"
+ },
+ "thresholds": {
+  "frame": {
+   "mae_max": 7.0,
+   "ssim_min": 0.875,
+   "dE76_mean_max": 5.0,
+   "pct_px_dE_lt_10_min": 92.0
+  },
+  "regions": {
+   "sidebar": {
+    "mae_max": 5.0,
+    "ssim_min": 0.905,
+    "dE2000_of_means_max": 1.5,
+    "prototype": {
+     "mae": 3.67,
+     "ssim": 0.945,
+     "mean_ref": "#0f162e",
+     "mean_rep": "#0f172f"
+    }
+   },
+   "header": {
+    "mae_max": 10.5,
+    "ssim_min": 0.798,
+    "dE2000_of_means_max": 1.5,
+    "prototype": {
+     "mae": 8.03,
+     "ssim": 0.838,
+     "mean_ref": "#121b37",
+     "mean_rep": "#121c38"
+    }
+   },
+   "hero": {
+    "mae_max": 7.5,
+    "ssim_min": 0.874,
+    "dE2000_of_means_max": 1.5,
+    "prototype": {
+     "mae": 5.64,
+     "ssim": 0.914,
+     "mean_ref": "#172450",
+     "mean_rep": "#162350"
+    }
+   },
+   "orb": {
+    "mae_max": 6.5,
+    "ssim_min": 0.884,
+    "dE2000_of_means_max": 1.5,
+    "prototype": {
+     "mae": 5.19,
+     "ssim": 0.924,
+     "mean_ref": "#172660",
+     "mean_rep": "#172560"
+    }
+   },
+   "hero_text": {
+    "mae_max": 14.0,
+    "ssim_min": 0.784,
+    "dE2000_of_means_max": 1.5,
+    "prototype": {
+     "mae": 10.89,
+     "ssim": 0.824,
+     "mean_ref": "#202841",
+     "mean_rep": "#212940"
+    }
+   },
+   "hero_buttons": {
+    "mae_max": 9.5,
+    "ssim_min": 0.839,
+    "dE2000_of_means_max": 1.5,
+    "prototype": {
+     "mae": 7.3,
+     "ssim": 0.879,
+     "mean_ref": "#1f346f",
+     "mean_rep": "#203570"
+    }
+   },
+   "quickstats": {
+    "mae_max": 7.0,
+    "ssim_min": 0.866,
+    "dE2000_of_means_max": 1.5,
+    "prototype": {
+     "mae": 5.58,
+     "ssim": 0.906,
+     "mean_ref": "#182236",
+     "mean_rep": "#192237"
+    }
+   },
+   "activity": {
+    "mae_max": 11.5,
+    "ssim_min": 0.793,
+    "dE2000_of_means_max": 1.5,
+    "prototype": {
+     "mae": 8.88,
+     "ssim": 0.833,
+     "mean_ref": "#151d31",
+     "mean_rep": "#151e32"
+    }
+   },
+   "panel": {
+    "mae_max": 8.0,
+    "ssim_min": 0.833,
+    "dE2000_of_means_max": 1.5,
+    "prototype": {
+     "mae": 6.38,
+     "ssim": 0.873,
+     "mean_ref": "#171f36",
+     "mean_rep": "#161f36"
+    }
+   },
+   "panel_tabs": {
+    "mae_max": 10.0,
+    "ssim_min": 0.808,
+    "dE2000_of_means_max": 1.5,
+    "prototype": {
+     "mae": 8.0,
+     "ssim": 0.848,
+     "mean_ref": "#151d36",
+     "mean_rep": "#151e37"
+    }
+   },
+   "confirm": {
+    "mae_max": 11.0,
+    "ssim_min": 0.808,
+    "dE2000_of_means_max": 1.5,
+    "prototype": {
+     "mae": 8.63,
+     "ssim": 0.848,
+     "mean_ref": "#1b233b",
+     "mean_rep": "#1b233b"
+    }
+   },
+   "chat": {
+    "mae_max": 8.0,
+    "ssim_min": 0.868,
+    "dE2000_of_means_max": 1.5,
+    "prototype": {
+     "mae": 6.32,
+     "ssim": 0.908,
+     "mean_ref": "#192239",
+     "mean_rep": "#192239"
+    }
+   },
+   "composer": {
+    "mae_max": 8.0,
+    "ssim_min": 0.756,
+    "dE2000_of_means_max": 1.5,
+    "prototype": {
+     "mae": 6.06,
+     "ssim": 0.796,
+     "mean_ref": "#15203b",
+     "mean_rep": "#15203b"
+    }
+   },
+   "page_bg_gaps": {
+    "mae_max": 2.0,
+    "ssim_min": 0.941,
+    "dE2000_of_means_max": 1.5,
+    "prototype": {
+     "mae": 1.21,
+     "ssim": 0.981,
+     "mean_ref": "#091127",
+     "mean_rep": "#081026"
+    }
+   }
+  },
+  "ink": {
+   "within2_min": 80,
+   "within3_min": 88,
+   "max_px": 6,
+   "of": 96
+  },
+  "containers": {
+   "within1_min": 90,
+   "max_px": 3,
+   "of": 104
+  }
+ },
+ "baseline_prototype_fluid_dk": {
+  "mae": 5.7528462409973145,
+  "ssim": 0.8968529373848848,
+  "dE76_mean": 4.184379577636719,
+  "pct_px_dE_lt_5": 86.36662361632997,
+  "pct_px_dE_lt_10": 93.24963517381997,
+  "ink": {
+   "n": 96,
+   "measured": 96,
+   "within1": 60,
+   "within2": 85,
+   "within3": 90,
+   "max": 6,
+   "mean": 1.4895833333333333
+  },
+  "containers": {
+   "max": 3.0,
+   "mean": 0.5673076923076923,
+   "within1": 93,
+   "n": 104
+  }
+ },
+ "baseline_prototype_artboard": {
+  "mae": 4.831192493438721,
+  "ssim": 0.9264444951923183,
+  "dE76_mean": 3.4708845615386963,
+  "pct_px_dE_lt_5": 87.26267230727771,
+  "pct_px_dE_lt_10": 94.37252439377838,
+  "ink": {
+   "n": 96,
+   "measured": 96,
+   "within1": 88,
+   "within2": 94,
+   "within3": 95,
+   "max": 4,
+   "mean": 0.7395833333333334
+  },
+  "containers": {
+   "max": 3.0,
+   "mean": 0.3076923076923077,
+   "within1": 101,
+   "n": 104
+  }
+ },
+ "known_differences": [
+  "Alex / AM / A are Matloob / M / M (same boxes and styles)",
+  "The Approvals tab label sits on the Chat/Tools baseline (the reference draws it 3-4 px low): ink error 4 px",
+  "Progress fills are bound to the values (CPU 21 %, Disk 82 %); the reference draws ~26 % and ~79 %",
+  "No 1 px dark sharpening halos",
+  "The sidebar tagline is #727fa8 (reference #5c6a94, 3.5:1) and the bubble times #7b8fb9 / #7387ae (AA)"
+ ]
+}

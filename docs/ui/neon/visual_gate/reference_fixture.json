@@ -1,0 +1,198 @@
+{
+ "purpose": "The data and state that reproduce the reference picture in the product (V-1 gate, spec_v2 21.1).",
+ "browser": {
+  "viewport": [
+   1672,
+   941
+  ],
+  "deviceScaleFactor": 1,
+  "timezoneId": "Asia/Karachi",
+  "locale": "en-US",
+  "reducedMotion": "reduce",
+  "colorScheme": "dark",
+  "clock": "page.clock.setFixedTime(new Date(\"2026-10-02T21:42:10+05:00\"))",
+  "launch_args": [
+   "--force-color-profile=srgb"
+  ],
+  "channel": "chromium (new headless; Windows only, like every @gate)",
+  "wait": [
+   "document.fonts.ready",
+   "window.__jarvisTest.frameReady() === true"
+  ]
+ },
+ "owner": {
+  "name": "Matloob",
+  "initial": "M",
+  "greeting": "Good evening,"
+ },
+ "route": "#/overview",
+ "persona": "jarvis",
+ "panel_tab": "chat",
+ "voice": {
+  "hook": "window.__jarvisTest.setVoiceInputs({room:'connected', agentAbsent:false, audioBlocked:false, activity:null, micOn:true, listening:true})",
+  "expected_state": "idle",
+  "status_line": "Listening for your command",
+  "orb": "static frame t = 0, L = 0 (reduced motion), JARVIS palette"
+ },
+ "socket_events_from_mock": {
+  "agent_status": {
+   "online": true,
+   "voice_ready": true,
+   "paused": false,
+   "last_heartbeat": "2026-10-02T21:42:08+05:00"
+  },
+  "desktop_status": {
+   "online": true,
+   "state": "online",
+   "mode": "full",
+   "locked": false,
+   "voice_active": true,
+   "brain": "vps",
+   "last_seen": "2026-10-02T21:42:05+05:00"
+  },
+  "vortex_status": {
+   "ui_clients": 1,
+   "note": "GET /vortex/status; with agent + laptop online the Devices pill reads 3"
+  },
+  "vitals_pc": {
+   "cpu": 21,
+   "ram": 63,
+   "disk": 82,
+   "disk_label": "Disk (C:)",
+   "host": "MATLOOB-PC"
+  },
+  "messages": [
+   {
+    "id": "ref-u1",
+    "role": "user",
+    "source": "text",
+    "text": "Show me the top 5 processes by CPU usage on my laptop.",
+    "ts": "2026-10-02T21:42:00+05:00"
+   },
+   {
+    "id": "ref-a1",
+    "role": "assistant",
+    "source": "text",
+    "persona": "jarvis",
+    "turn_id": "ref-u1",
+    "text": "I’ll run that command for you after approval. This will show the top 5 processes by CPU usage, sorted from highest to lowest.",
+    "ts": "2026-10-02T21:42:03+05:00"
+   }
+  ],
+  "confirm_request": {
+   "id": "ref-confirm-1",
+   "tool": "run_cmd_command",
+   "risk": "medium",
+   "voice_allowed": false,
+   "summary": "Run this PowerShell command on your laptop?",
+   "args_preview": "Get-Process | Sort-Object CPU -Descending |\nSelect-Object -First 5",
+   "ttl_ms": 600000,
+   "expires_at": "server_time + 600 s, and server_time = the fixed page clock (2026-10-02T21:42:10+05:00), so the pill reads \"Requires approval\", never a countdown"
+  }
+ },
+ "hook_reference_frame": {
+  "call": "window.__jarvisTest.referenceFrame(true)",
+  "does": [
+   "seeds the four Recent Activity rows below (exact titles, subtitles and times)",
+   "hides the confirm meta line of the head request (the reference shows a moment without it; product rule in spec 10.2)",
+   "hides toasts",
+   "nothing else: every other pixel comes from the product and the mock data"
+  ],
+  "activity_rows": [
+   {
+    "kind": "system",
+    "dot": "ok",
+    "title": "System online",
+    "sub": "All systems operational",
+    "ts": "2026-10-02T21:41:00+05:00"
+   },
+   {
+    "kind": "voice",
+    "dot": "info",
+    "title": "Voice service ready",
+    "sub": "Microphone initialized",
+    "ts": "2026-10-02T21:40:00+05:00"
+   },
+   {
+    "kind": "device",
+    "dot": "dev",
+    "title": "Laptop connected",
+    "sub": "Windows 11 • 3 devices online",
+    "ts": "2026-10-02T21:38:00+05:00"
+   },
+   {
+    "kind": "sync",
+    "dot": "neutral",
+    "title": "Agent sync complete",
+    "sub": "JARVIS & ANNA ready",
+    "ts": "2026-10-02T21:37:00+05:00"
+   }
+  ]
+ },
+ "expected_text": {
+  "header": [
+   "Overview",
+   "Control, collaborate, and automate with JARVIS & ANNA.",
+   "System Online",
+   "3 Connected Devices",
+   "Voice Ready",
+   "M",
+   "Good evening,",
+   "Matloob"
+  ],
+  "hero": [
+   "JARVIS & ANNA",
+   "JARVIS",
+   "AI Assistant",
+   "Listening for your command",
+   "Start Listening",
+   "Run Task",
+   "Mic Off",
+   "“Ideas become reality, faster.”"
+  ],
+  "quick_stats": [
+   "Quick Stats",
+   "Live system status",
+   "21%",
+   "CPU Usage",
+   "63%",
+   "Memory",
+   "82%",
+   "Disk (C:)",
+   "3",
+   "Connected Devices"
+  ],
+  "recent_activity": [
+   "Recent Activity",
+   "Latest events from JARVIS & ANNA",
+   "9:41 PM",
+   "9:40 PM",
+   "9:38 PM",
+   "9:37 PM"
+  ],
+  "panel": [
+   "Chat",
+   "Approvals",
+   "1",
+   "Tools",
+   "Confirm Command",
+   "Requires approval",
+   "Deny",
+   "Approve & Run",
+   "9:42 PM",
+   "Message JARVIS...",
+   "Shift + Enter for new line",
+   "Use microphone"
+  ],
+  "sidebar": [
+   "JARVIS & ANNA",
+   "Your AI Command Center",
+   "Overview",
+   "Agents",
+   "Activity",
+   "Settings",
+   "A SMARTER",
+   "TOMORROW TOGETHER"
+  ]
+ }
+}

@@ -1,0 +1,84 @@
+
+  <!-- ================= PHONE TAB BAR (fluid phone layout only) ================= -->
+  <nav class="tabbar" id="tabbar" data-testid="mobile-tab-bar" aria-label="Sections">
+    <button type="button" data-tab="overview" data-testid="mobile-tab-core"><svg class="n-ic fill" aria-hidden="true"><use href="#i-house"/></svg>Overview</button>
+    <button type="button" data-tab="chat" data-testid="mobile-tab-chat"><svg class="n-ic" aria-hidden="true"><use href="#i-msg"/></svg>Chat<span class="tb-mark" id="tb-chat-mark" hidden></span></button>
+    <button type="button" data-tab="agents" data-testid="mobile-tab-ops"><svg class="n-ic" aria-hidden="true"><use href="#i-users"/></svg>Agents<span class="tb-mark" id="tb-agents-mark" hidden>!</span></button>
+    <button type="button" data-tab="activity" data-testid="mobile-tab-trace"><svg class="n-ic" aria-hidden="true"><use href="#i-activity"/></svg>Activity<span class="tb-mark" data-s="warn" id="tb-act-mark" hidden></span></button>
+    <button type="button" data-tab="settings" data-testid="mobile-tab-settings"><svg class="n-ic" aria-hidden="true"><use href="#i-settings"/></svg>Settings</button>
+  </nav>
+
+  <!-- ================= SCRIMS ================= -->
+  <div class="sheet-scrim" id="sheet-scrim" hidden></div>
+  <div class="pop-scrim" id="pop-scrim" hidden></div>
+
+  <!-- ================= DIALOG: SIM lookup ================= -->
+  <div class="layer anim" id="dlg-sim" hidden>
+    <div class="n-dlg edge" role="dialog" aria-modal="true" aria-labelledby="sim-title" aria-describedby="sim-desc" data-testid="sim-dialog">
+      <div class="n-dlg-hd">
+        <span class="mh"><svg class="n-ic" aria-hidden="true"><use href="#i-sim"/></svg></span>
+        <div><h2 id="sim-title">SIM Access</h2><p id="sim-desc">Authorized lookup workspace</p></div>
+        <button class="n-btn icon" type="button" data-close title="Close SIM access" aria-label="Close SIM access"><svg class="n-ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="n-dlg-bd">
+        <div class="prov" id="sim-prov" data-testid="sim-provider-banner" data-configured="true"></div>
+        <label class="n-lab">Purpose <small>At least 5 characters. Saved with the lookup in the audit log.</small>
+          <input class="n-in" id="sim-purpose" data-testid="sim-purpose-input" data-autofocus placeholder="Why you need this lookup" autocomplete="off"></label>
+        <div class="n-lab"><label for="sim-query">Number or CNIC</label>
+          <div class="sim-search"><input class="n-in" id="sim-query" data-testid="sim-query-input" placeholder="03xx-xxxxxxx" inputmode="tel" autocomplete="off"><button class="n-btn primary" type="button" id="sim-go"><svg class="n-ic" aria-hidden="true"><use href="#i-search"/></svg>Search</button></div></div>
+        <p class="n-note warn" id="sim-offline" data-testid="sim-agent-offline-hint" hidden>Agent offline hai. Lookup agent ke online hone par chalega.</p>
+        <div class="result bad" id="sim-err" role="alert" hidden><span class="n-sh" data-s="err"></span><span id="sim-err-t"></span></div>
+        <div class="sim-res" id="sim-res" hidden>
+          <h4 data-testid="sim-identity-title"><span class="n-sh" data-s="ok"></span>Registered owner found</h4>
+          <dl class="n-kv"><dt>CNIC</dt><dd data-testid="sim-cnic-masked">42101-•••••••-3</dd><dt>Phone</dt><dd data-testid="sim-phone-masked">0300-•••••67</dd><dt>Network</dt><dd>Jazz</dd><dt>Registered</dt><dd>2019</dd></dl>
+          <p class="n-note" data-testid="sim-result-message">Masked by policy. The full record stays with the provider.</p>
+        </div>
+      </div>
+      <div class="n-dlg-ft"><button class="n-btn" type="button" data-close>Close</button></div>
+    </div>
+  </div>
+
+  <!-- ================= DIALOG: Voice-ID enrollment ================= -->
+  <div class="layer anim" id="dlg-enroll" hidden>
+    <div class="n-dlg edge" role="dialog" aria-modal="true" aria-labelledby="en-title" aria-describedby="en-desc" data-testid="voice-enroll-dialog">
+      <div class="n-dlg-hd">
+        <span class="mh"><svg class="n-ic" aria-hidden="true"><use href="#i-vprint"/></svg></span>
+        <div><h2 id="en-title">Voice-ID enrollment</h2><p id="en-desc">Read the three lines in your normal voice. 20 seconds in total.</p></div>
+        <button class="n-btn icon" type="button" data-close title="Close enrollment" aria-label="Close enrollment"><svg class="n-ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="n-dlg-bd">
+        <ul class="prereq" id="en-pre">
+          <li data-testid="voice-enroll-connect" data-ok="true"><span class="n-sh" data-s="ok"></span><span>Voice room joined</span></li>
+          <li data-testid="voice-enroll-mic-hint" data-ok="true"><span class="n-sh" data-s="ok"></span><span>Mic on</span></li>
+          <li data-testid="voice-enroll-agent-muted" data-ok="true"><span class="n-sh" data-s="ok"></span><span>Agent listening</span></li>
+        </ul>
+        <ol class="sentences">
+          <li id="en-s1">JARVIS sun raha hai? Aaj ka kaam shuru karte hain.</li>
+          <li>Mera naam Matloob hai aur yeh meri awaaz hai.</li>
+          <li>Kal subah nau baje mujhe meeting yaad dilana.</li>
+        </ol>
+        <div class="lvl"><span>Mic level</span><div class="n-bar" data-testid="voice-enroll-mic-level"><i id="en-level" style="--c:#35b992"></i></div><b id="en-db">−60 dB</b></div>
+        <div class="lvl"><span>Recorded</span><div class="n-bar"><i id="en-prog-bar"></i></div><b id="en-prog" data-testid="voice-enroll-progress">0s / 20s</b></div>
+        <p class="n-note" id="en-quality" style="margin:0">Quality shows while you record.</p>
+        <div class="result ok" id="en-success" data-testid="voice-enroll-success" hidden><span class="n-sh" data-s="ok"></span><span>Enrolled. Match score 0.91 across 6 samples.</span></div>
+        <div class="result bad" id="en-error" data-testid="voice-enroll-error" hidden><span class="n-sh" data-s="err"></span><span>Enrollment failed: too much background noise (SNR 6 dB). Move somewhere quieter and start again.</span></div>
+        <div class="result warn" id="en-timeout" data-testid="voice-enroll-timeout" hidden><span class="n-sh" data-s="warn"></span><span>No progress for 3 minutes, so enrollment stopped. Start again when you are ready.</span></div>
+      </div>
+      <div class="n-dlg-ft">
+        <button class="n-btn" type="button" data-close>Cancel</button>
+        <button class="n-btn" type="button" id="en-start" data-testid="voice-enroll-start" data-autofocus><svg class="n-ic" aria-hidden="true"><use href="#i-mic-fill"/></svg>Start</button>
+        <button class="n-btn primary" type="button" id="en-commit" data-testid="voice-enroll-commit" disabled>Save voice</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= LIGHTBOX ================= -->
+  <div class="layer lightbox anim" id="dlg-lightbox" hidden data-testid="intelligence-lightbox" role="dialog" aria-modal="true" aria-labelledby="lb-cap">
+    <figure>
+      <img id="lb-img" alt="">
+      <figcaption><span id="lb-cap">Desktop screenshot</span><button class="n-btn sm" type="button" data-close><svg class="n-ic" aria-hidden="true"><use href="#i-x"/></svg>Close</button></figcaption>
+    </figure>
+  </div>
+
+  <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+  <span class="vh" id="app-ready" data-testid="app-ready">Dashboard ready</span>

@@ -1,0 +1,237 @@
+{
+ "destination": "docs/ui/neon/ (Claude lane: docs/**), same relative paths",
+ "reference_image": "JARVIS & ANNA Neon Command Center.png stays at the repo root; X-109 copies it into stonix_ui/tests/visual/reference/",
+ "not_copied": "crops/, work/, _map_crops/, replica_work/ (except diff.py), review_qa/, fix_r1/ (except two reports), _backup_r1/, bundle_work/, the other shots/ (every state is reproducible from final_neon.html with Alt+P), final_work/src/fluid_old.css",
+ "checked": "all text files pass the pre-commit private-term and mojibake rules (same regexes as scripts/coord/precommit.py)",
+ "total_bytes": 4979936,
+ "files": [
+  {
+   "path": "spec_v2.md",
+   "bytes": 152798,
+   "sha256": "283c183335ec63bea1b6fb06fe8bd549bd024b23b06fc9e501d75b92f5c8b1b4",
+   "what": "The implementation spec v2 (Cursor reads this first)"
+  },
+  {
+   "path": "tasks_v2.json",
+   "bytes": 120145,
+   "sha256": "f3021aba7a1d5605e8dc56aeaf7b527f10530bfd7f78b0a5c3763a25a5de9d65",
+   "what": "Cursor tasks X-69..X-109 in the plan.md block fields"
+  },
+  {
+   "path": "final_neon.html",
+   "bytes": 537319,
+   "sha256": "d6d12e8585548bac8a0f3a2b0959bcd0bf865761071ec667a01bc097450eac36",
+   "what": "The product prototype: every page, state, size and persona (offline, one file)"
+  },
+  {
+   "path": "final_work/src/fluid.css",
+   "bytes": 44424,
+   "sha256": "4179f9022e92662044d979a0bdc2484f4c97ed96c140dfe5d194c0fb0c6ccc1a",
+   "what": "Prototype source: the product layout (geometry)"
+  },
+  {
+   "path": "final_work/src/neon.css",
+   "bytes": 60225,
+   "sha256": "218036daa0537c2c7545a92f6d22f757910045e3954b0e2cd12857fc7e20a042",
+   "what": "Prototype source: primitives, pages, overlays (look)"
+  },
+  {
+   "path": "final_work/src/neon_base.css",
+   "bytes": 55136,
+   "sha256": "50b558b03e9834c699cea0211b05dc4455cb886159da02b55a84f3c56a7b47c7",
+   "what": "Prototype source: the reference base layer (look)"
+  },
+  {
+   "path": "final_work/src/icons.svg.html",
+   "bytes": 8966,
+   "sha256": "2fc3acd7bc6d4510cca6e70703bff95b5e6776a1a20e80d2b656028ff35a8ea0",
+   "what": "Prototype source: extra icon symbols"
+  },
+  {
+   "path": "final_work/src/overlays_body.html",
+   "bytes": 11738,
+   "sha256": "2ef4e06a33b3652f0f41ff60a16d9f585ba94325e669b579d0d572587ee72b7c",
+   "what": "Prototype source: overlay markup"
+  },
+  {
+   "path": "final_work/src/overlays_stage.html",
+   "bytes": 7559,
+   "sha256": "8a780818a5a494130be43f3e7cb6d46ce641f60ef8cd805187692a112cf30507",
+   "what": "Prototype source: stage overlay markup"
+  },
+  {
+   "path": "final_work/src/js/00_core.js",
+   "bytes": 20378,
+   "sha256": "213a08a2d9b5d7c2759a2c160c485c85e2ef81e4cffc0ccfcc8f2fd11b665ddf",
+   "what": "Prototype source: state, copy, data"
+  },
+  {
+   "path": "final_work/src/js/10_draw.js",
+   "bytes": 40342,
+   "sha256": "d71acc23d10fe7c8e9f43a30e48b26427d05a44706396380e504af6abd1af7bd",
+   "what": "Prototype source: logo, waveform, orb (exact and fast path), mini orbs"
+  },
+  {
+   "path": "final_work/src/js/15_sidewave.js",
+   "bytes": 15,
+   "sha256": "61abe2c5a624677a832852b0a8d468ecb390329df23744a92b4eefbbe0fea573",
+   "what": "Prototype source: placeholder"
+  },
+  {
+   "path": "final_work/src/js/20_voice.js",
+   "bytes": 18632,
+   "sha256": "9d352ccd3e1d7db480b40402a33c151af468700727e821ecbf6b1ce86d91788b",
+   "what": "Prototype source: ten voice states, loop policy"
+  },
+  {
+   "path": "final_work/src/js/30_shell.js",
+   "bytes": 25547,
+   "sha256": "a73b351fdb05911605db4c66e71c2ae86544577b1789fd3e3616454b96bf2939",
+   "what": "Prototype source: layout, header, routing, popovers"
+  },
+  {
+   "path": "final_work/src/js/40_panel.js",
+   "bytes": 45023,
+   "sha256": "386801bb6ddc907e6ec6da4c592cf20bb54b8dfc25c6bac41119d09cac26b509",
+   "what": "Prototype source: chat, approvals, tools, composer, persona, Quick Stats"
+  },
+  {
+   "path": "final_work/src/js/50_pages.js",
+   "bytes": 53521,
+   "sha256": "6d2b63c035e7102a48290e9942973a427e75023b4246f88aa8fc2765b9d41523",
+   "what": "Prototype source: Agents, Activity, Settings"
+  },
+  {
+   "path": "final_work/src/js/60_overlays.js",
+   "bytes": 22951,
+   "sha256": "2d789c111294c24083a29c576fdab4277df4caa5e5bd88ec4c795c46a7964c9d",
+   "what": "Prototype source: dialogs, screens, actions"
+  },
+  {
+   "path": "final_work/src/js/70_proto_boot.js",
+   "bytes": 16725,
+   "sha256": "163fb7c55581d89155974c9b60f30c7f8bae297bc61ffd2ef59c95095db04317",
+   "what": "Prototype source: prototype controls and boot (not ported)"
+  },
+  {
+   "path": "orb_data.json",
+   "bytes": 19178,
+   "sha256": "9c9ea846f50a901527b7db5d22cb803fe7b174608401cd46a546ded6c010d4d2",
+   "what": "Fitted data: orb, logo ring, waveform, mini orbs"
+  },
+  {
+   "path": "icons.svg",
+   "bytes": 14656,
+   "sha256": "3f368906c6b892d5c836a039eb2dd21211fb5df72f0cd9a594296b5c8f6d72fa",
+   "what": "All 75 icon symbols in one sprite"
+  },
+  {
+   "path": "visual_gate/regions.json",
+   "bytes": 25617,
+   "sha256": "7ddf7dd54218e03bfe6d9beff0f4611f928bc12cba6879e3b036a2404aa87018",
+   "what": "V-1 regions, containers, ink targets, thresholds, baselines"
+  },
+  {
+   "path": "visual_gate/reference_fixture.json",
+   "bytes": 5066,
+   "sha256": "a1825371890eabffb9dc5eac99b085d3638fc4040766c202ca268aa2c7da1dc5",
+   "what": "V-1 reference data and state"
+  },
+  {
+   "path": "visual_gate/validation/proto_fluid_1672x941.png",
+   "bytes": 644798,
+   "sha256": "343c4509ab484a0ba7b31e5e60a7b76588e7338b6a3da5e78a95860bd557c1b9",
+   "what": "V-1 port validation frame (fluid layout)"
+  },
+  {
+   "path": "visual_gate/validation/proto_fluid_1672x941.metrics.json",
+   "bytes": 26885,
+   "sha256": "2db8f6feaf971cf0c1f54c2ec273406be7051fd60af1ae5fea4d2674cb8c8190",
+   "what": "Its metrics from diff.py"
+  },
+  {
+   "path": "visual_gate/validation/proto_artboard_1672x941.png",
+   "bytes": 655958,
+   "sha256": "6274f5969b810f6ef841525c5a45f01d5433fe32d3cfd8ac4c16661f2ae38747",
+   "what": "V-1 port validation frame (artboard)"
+  },
+  {
+   "path": "visual_gate/validation/proto_artboard_1672x941.metrics.json",
+   "bytes": 26831,
+   "sha256": "19203212034f0f90b79dd40996fdef00061f91b064fece137aa23227b31d9236",
+   "what": "Its metrics from diff.py"
+  },
+  {
+   "path": "overview_replica.html",
+   "bytes": 174918,
+   "sha256": "d1ec9f710fd55fd2c8170c30805b9d3d08b04cf6574f8dcbbc74dbfd5e92d709",
+   "what": "The calibrated 1672x941 artboard (visual reference only)"
+  },
+  {
+   "path": "replica_log.md",
+   "bytes": 14976,
+   "sha256": "3579876ef0f85644e7291dd5aeb03adc19fc441f857f0ee1ca853672a5cadbc9",
+   "what": "The 29 diff iterations of the artboard"
+  },
+  {
+   "path": "forensics.md",
+   "bytes": 50182,
+   "sha256": "713cf59aa0d94f8aa341e5a3c2aad2aeefbc185710fa922bf9a9bd0e69906ab3",
+   "what": "Pixel measurements of the reference"
+  },
+  {
+   "path": "forensics.json",
+   "bytes": 119262,
+   "sha256": "6addf2eef57afe7d97e99c6f0ea77c9bd7a1f24c9cf0272e28b08a96058a4d78",
+   "what": "Machine-readable measurements"
+  },
+  {
+   "path": "mapping.md",
+   "bytes": 105011,
+   "sha256": "8b331f180f516c3cefa2f431588b0abe90558e5c2b3eac6bcece90850f81dc35",
+   "what": "Every current feature, event and testid with its new home"
+  },
+  {
+   "path": "replica_work/diff.py",
+   "bytes": 14962,
+   "sha256": "8720faf452b4c2c2a6de7989addebb96c4896f7cc2789c4365103c6f39c0d3b2",
+   "what": "Reference implementation of the visual diff"
+  },
+  {
+   "path": "fix_r1/gates_ABC.json",
+   "bytes": 22917,
+   "sha256": "633e097f7088b5c9205ec1ec2350ccdc97ed6c25315bced273e69ec0477e80c8",
+   "what": "Prototype viewport-gate results"
+  },
+  {
+   "path": "fix_r1/perf2_gpu.json",
+   "bytes": 5085,
+   "sha256": "de4817d1fa85d72be05279b617bb58778b74a060084bc22a84aece24407f9337",
+   "what": "Prototype performance results"
+  },
+  {
+   "path": "shots/d_01_overview.png",
+   "bytes": 644798,
+   "sha256": "343c4509ab484a0ba7b31e5e60a7b76588e7338b6a3da5e78a95860bd557c1b9",
+   "what": "Prototype at 1672x941, Overview"
+  },
+  {
+   "path": "shots/d_22_anna_overview.png",
+   "bytes": 654726,
+   "sha256": "8edbcfafea5e64af33e2bb9cd57a6253870c3abaecdaedf5fc986bd2ced9032a",
+   "what": "Prototype at 1672x941, Overview in ANNA"
+  },
+  {
+   "path": "shots/k_01_overview.png",
+   "bytes": 383732,
+   "sha256": "678e924cb175be6a5c8f7a669b056503dd4156a4977d9a1aea330e55dc5eca78",
+   "what": "Prototype at 1280x595 (the owner's laptop window)"
+  },
+  {
+   "path": "shots/m_01_overview.png",
+   "bytes": 128934,
+   "sha256": "fb09d9c7816f7f645dceb17cf69497a0ab2c8f2e227ae8d47031212ee32e904d",
+   "what": "Prototype at 390x844 with the confirm sheet"
+  }
+ ]
+}

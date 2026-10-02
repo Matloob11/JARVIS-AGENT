@@ -1,0 +1,82 @@
+
+<!-- ================= FULL SCREENS (session check, login, Electron offline page) ================= -->
+<div class="screen" id="scr-check" hidden>
+  <div class="check" role="status"><canvas class="brand-ring" width="64" height="64" aria-hidden="true"></canvas><span id="check-t">Checking session…</span><div class="trk" aria-hidden="true"><i></i></div></div>
+</div>
+<div class="screen" id="scr-login" hidden>
+  <div class="glass edge">
+    <div class="brand"><canvas class="brand-ring" width="64" height="64" aria-hidden="true"></canvas><b>JARVIS &amp; ANNA</b><span>Your AI Command Center</span></div>
+    <form id="login-form" autocomplete="on" novalidate>
+      <p class="login-exp" id="login-exp" hidden>Session expire ho gaya. Dobara sign in karein.</p>
+      <p class="n-sm" style="margin:0 0 2px">Owner session: password and authenticator</p>
+      <label class="n-lab">Password
+        <span class="pw"><input class="n-in" type="password" id="lg-pw" data-testid="login-password" autocomplete="current-password"><button class="eye" type="button" id="lg-eye" aria-label="Show password" title="Show password"><svg class="n-ic" aria-hidden="true"><use href="#i-eye"/></svg></button></span></label>
+      <label class="n-lab" id="lg-totp-wrap">Authenticator code
+        <input class="n-in otp" id="lg-totp" data-testid="login-totp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000"></label>
+      <label class="n-lab" id="lg-rec-wrap" hidden>Recovery code
+        <input class="n-in" id="lg-rec" data-testid="login-recovery" placeholder="xxxx-xxxx-xxxx" autocomplete="off"></label>
+      <button class="n-btn quiet" type="button" id="lg-rec-toggle" style="justify-self:start;padding:0 4px;height:30px">Recovery code use karein</button>
+      <p class="login-err" id="lg-err" data-testid="login-error" role="alert" hidden><span class="n-sh" data-s="err"></span><span id="lg-err-t">Password ya code ghalat hai</span></p>
+      <button class="n-btn primary go" type="submit" id="lg-submit" data-testid="login-submit">Sign in</button>
+    </form>
+    <p class="foot">Socket, voice and camera start only after you sign in.</p>
+  </div>
+</div>
+<div class="screen" id="scr-offline" hidden>
+  <div class="glass edge off-card">
+    <div class="brand"><canvas class="brand-ring" width="64" height="64" aria-hidden="true"></canvas></div>
+    <h1>JARVIS &amp; ANNA: VPS unreachable</h1>
+    <p>Dashboard abhi load nahi ho saka. Internet ya VPS check karein, phir Retry dabayein. The laptop keeps its last control mode meanwhile.</p>
+    <button class="n-btn primary" type="button" id="off-retry"><svg class="n-ic" aria-hidden="true"><use href="#i-refresh"/></svg>Retry</button>
+  </div>
+</div>
+<div class="vh" id="sr" aria-live="polite"></div>
+<div class="vh" id="cf-announce" role="status" aria-live="assertive" aria-atomic="true"></div>
+  <!-- ================= ELECTRON WINDOW CONTROLS (desktop app only, html.is-electron; fixed to the window edge) ================= -->
+<div class="winctl" id="winctl" aria-label="Window">
+  <button type="button" data-testid="window-minimize" aria-label="Minimize" title="Minimize"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 5h8"/></svg></button>
+  <button type="button" data-testid="window-maximize" aria-label="Maximize" title="Maximize"><svg viewBox="0 0 10 10" aria-hidden="true"><rect x="1.5" y="1.5" width="7" height="7"/></svg></button>
+  <button type="button" data-testid="window-close" class="close" aria-label="Close" title="Close"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7"/></svg></button>
+</div>
+
+<!-- ================= PROTOTYPE CONTROLS (mockup only, not part of the product) ================= -->
+<div class="proto" id="proto" hidden>
+  <div class="proto-panel" id="proto-panel" role="region" aria-label="Prototype controls" hidden>
+    <header><b>Prototype controls</b><span>Not part of the product</span></header>
+    <div class="pg"><span class="pk">Screen</span><div class="pb" data-pc="screen">
+      <button type="button" data-v="app">Dashboard</button><button type="button" data-v="check">Session check</button><button type="button" data-v="login">Login</button><button type="button" data-v="login-error">Login error</button><button type="button" data-v="login-rate">Login rate limited</button><button type="button" data-v="login-503">Login not set up (503)</button><button type="button" data-v="login-net">Login, network down</button><button type="button" data-v="expired">Session expired</button><button type="button" data-v="offline">VPS unreachable</button></div></div>
+    <div class="pg"><span class="pk">Page</span><div class="pb" data-pc="page">
+      <button type="button" data-v="overview">Overview</button><button type="button" data-v="agents">Agents</button><button type="button" data-v="activity">Activity</button><button type="button" data-v="settings">Settings</button><button type="button" data-v="chat">Chat (phone)</button></div></div>
+    <div class="pg"><span class="pk">Persona</span><div class="pb" data-pc="persona">
+      <button type="button" data-v="jarvis">JARVIS</button><button type="button" data-v="anna">ANNA</button><button type="button" data-v="fail">Switch that times out</button></div></div>
+    <div class="pg"><span class="pk">Voice state (first match wins in the product)</span><div class="pb" data-pc="voice">
+      <button type="button" data-v="idle">Ready (reference)</button><button type="button" data-v="mic-off">Mic off</button><button type="button" data-v="listening">Listening</button><button type="button" data-v="thinking">Thinking</button><button type="button" data-v="speaking">Speaking</button><button type="button" data-v="muted">Muted</button><button type="button" data-v="agent-absent">No agent</button><button type="button" data-v="restarting">Restarting</button><button type="button" data-v="audio-blocked">Audio blocked</button><button type="button" data-v="joining">Joining</button><button type="button" data-v="offline">Offline</button><button type="button" data-v="dup">Other device</button></div></div>
+    <div class="pg"><span class="pk">What drives the orb</span><div class="pb">
+      <button type="button" id="pc-speak">Play voice (simulated)</button><button type="button" id="pc-mic" aria-pressed="false">Use my microphone</button></div>
+      <div class="lvlbar" aria-hidden="true"><i id="pc-lvl"></i></div></div>
+    <div class="pg"><span class="pk">Agent (VPS)</span><div class="pb" data-pc="agent">
+      <button type="button" data-v="online">Online</button><button type="button" data-v="paused">Paused</button><button type="button" data-v="restarting">Restarting</button><button type="button" data-v="offline">Offline</button><button type="button" data-v="unknown">Unknown</button></div></div>
+    <div class="pg"><span class="pk">Bridge (socket)</span><div class="pb" data-pc="bridge">
+      <button type="button" data-v="on">Live</button><button type="button" data-v="off">Offline</button></div></div>
+    <div class="pg"><span class="pk">Laptop (Desktop Node)</span><div class="pb" data-pc="laptop">
+      <button type="button" data-v="full">Full</button><button type="button" data-v="stale">Stale</button><button type="button" data-v="offline">Offline</button><button type="button" data-v="locked">Locked</button><button type="button" data-v="panic">Panic</button><button type="button" data-v="read">Read-only</button><button type="button" data-v="unknown">Unknown</button></div></div>
+    <div class="pg"><span class="pk">Approvals</span><div class="pb">
+      <button type="button" id="pc-cf-med">+ Medium risk</button><button type="button" id="pc-cf-high">+ High risk</button><button type="button" id="pc-cf-voice">+ Voice may approve</button><button type="button" id="pc-cf-long">+ Long script (high risk)</button><button type="button" id="pc-cf-exp">Expire head</button><button type="button" id="pc-cf-cancel">Cancel by voice</button><button type="button" id="pc-cf-clear">Clear queue</button></div></div>
+    <div class="pg"><span class="pk">Data</span><div class="pb" data-pc="data">
+      <button type="button" data-v="normal">Normal</button><button type="button" data-v="empty">Empty</button><button type="button" data-v="long">Long chat</button></div>
+      <div class="pb" style="margin-top:6px"><button type="button" id="pc-crash" aria-pressed="false">Card error</button><button type="button" id="pc-stale" aria-pressed="false">Stale vitals</button><button type="button" id="pc-media" aria-pressed="false">Media unavailable</button><button type="button" id="pc-stale-vps" aria-pressed="false">Stale VPS vitals</button></div>
+      <div class="pb" style="margin-top:6px"><button type="button" id="pc-chat-states">Chat delivery states</button><button type="button" id="pc-vid-none" aria-pressed="false">Voice-ID not enrolled</button><button type="button" id="pc-rs-unsup" aria-pressed="false">Restart not supported</button></div></div>
+    <div class="pg"><span class="pk">Camera (Agents › This browser)</span><div class="pb" data-pc="cam">
+      <button type="button" data-v="off">Off</button><button type="button" data-v="starting">Starting…</button><button type="button" data-v="live">Live</button><button type="button" data-v="error">Error</button></div></div>
+    <div class="pg"><span class="pk">Events</span><div class="pb">
+      <button type="button" id="pc-ev-reminder">Reminder due</button><button type="button" id="pc-ev-reject">Voice rejected</button><button type="button" id="pc-ev-image">Image shared</button><button type="button" id="pc-ev-alert">System alert</button><button type="button" id="pc-ev-tool">Tool error</button><button type="button" id="pc-ev-desktop">Desktop file ready</button><button type="button" id="pc-ev-notallowed">Command not allowed</button><button type="button" id="pc-ev-waketimeout">Wake times out</button><button type="button" id="pc-ev-backend">Electron backend exit</button></div></div>
+    <div class="pg"><span class="pk">Layout</span><div class="pb" data-pc="layout">
+      <button type="button" data-v="auto">Product (fluid)</button><button type="button" data-v="art">Reference artboard 1672×941</button></div>
+      <p style="margin:6px 0 0;font-size:11.5px;color:#4b4840">The reference frame is the mic-on state; after a sign-in the product starts with the mic off.</p></div>
+    <div class="pg"><span class="pk">Open</span><div class="pb">
+      <button type="button" id="pc-open-sim">SIM lookup</button><button type="button" id="pc-open-enroll">Enrollment</button><button type="button" id="pc-open-enroll-err">Enrollment error</button><button type="button" id="pc-open-lb">Image</button><button type="button" id="pc-open-voice">Voice popover</button><button type="button" id="pc-open-account">Account menu</button></div></div>
+    <div class="pg"><span class="pk">Motion and shell</span><label><input type="checkbox" id="pc-rm"> Reduce motion (also follows the OS setting)</label><br><label style="margin-top:6px"><input type="checkbox" id="pc-electron"> Electron window (title bar controls)</label></div>
+    <div class="pg"><button type="button" id="pc-reset">Reset to the reference state</button></div>
+  </div>
+  <button class="proto-handle" type="button" id="proto-handle" aria-expanded="false" aria-controls="proto-panel" title="Prototype controls (Alt+P). Not part of the product."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6M10 3v6.4L4.6 18.4A2 2 0 0 0 6.3 21.4h11.4a2 2 0 0 0 1.7-3L14 9.4V3"/><path d="M7.4 15h9.2"/></svg>Prototype</button>
+</div>

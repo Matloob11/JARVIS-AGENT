@@ -1,3 +1,5 @@
+> **Superseded (2 Oct 2026, C-135):** the owner chose the Neon Command Center design from their reference image. Build from `docs/ui/neon/spec_v2.md` and `docs/ui/neon/final_neon.html`. This file stays for history.
+
 # JARVIS & ANNA UI redesign: implementation spec (stonix_ui, Cursor lane)
 
 - **Status:** final design, 2026-10-02, revised after the design review (voice states, short windows, test hook, gates, Reconnect).

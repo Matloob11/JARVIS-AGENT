@@ -696,3 +696,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `.venv_312/Scripts/python.exe -m pytest tests/tools/test_vps_safety.py tests/automation/test_keyboard_close_combo.py tests/automation/test_youtube_downloader.py -q` → 21 passed in 7.42s
 - **Commit:** abhi nahi · **Deploy:** no
 - **Doosre agent ke liye:** desktop_manifest STALE (open_app meta) — Claude regenerate export_manifest.py.
+
+### ✅ [claude] C-135 · UI spec v2: user ki reference image jaisa "Neon Command Center" (replica, ANNA, sab pages, phone) + 41 Cursor tasks · 2026-10-02 12:00–21:40 PKT
+- **Kya kiya:** User ki image ko pixel se naapa (73 hisse, rang, font, orb ki layers), phir Overview ka hubahu replica banaya (29 diff rounds: SSIM 0.926, 87% pixels ΔE<5). Usi design me poora product prototype: Overview, Agents, Activity, Settings, Chat/Approvals/Tools, login, dialogs, khali/error states, 10 voice states (orb awaaz ke saath vibrate), ANNA (magenta/violet), desktop/tablet/phone (user ke laptop 1280x720 par bhi poora). Review ke 15 masle (1 blocker, 6 major) theek; 60 fps. Spec v2, Cursor ke tasks X-69..X-109 (7 naye), aur pixel gate (X-109).
+- **Files:** `docs/ui/neon/**` (39 files: spec_v2.md, final_neon.html, mapping.md, fluid/neon css + js source, orb_data.json, icons.svg, visual_gate/, shots), `plan.md` (X-69..X-109), `docs/ui/UI_REDESIGN_SPEC.md` (superseded note)
+- **Verify:** Overview diff vs reference MAE 4.83, SSIM 0.926; 42 desktop/tablet + 6 phone viewport gates pass; perf 60 fps (phone DPR 3, 4x CPU bhi); bundle sha256 check
+- **Commit:** isi entry wala commit · **Deploy:** no (frontend deploy C-21 ke baad)
+- **Doosre agent ke liye:** Cursor: X-69 se shuru, spec section 23 ki tarteeb (section 11).
