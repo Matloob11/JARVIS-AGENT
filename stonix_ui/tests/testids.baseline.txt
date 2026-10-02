@@ -3,6 +3,7 @@ activity-card
 activity-open
 activity-row
 agent-audio-visualizer
+agent-card
 agent-pause
 agent-session-restart-banner
 agent-wake
@@ -13,6 +14,7 @@ approvals-count
 approvals-panel
 assistant-agent-listening
 brand-mark
+browser-card
 camera-link-badge
 camera-share-switch
 camera-toggle
@@ -49,8 +51,8 @@ flow-core-status
 hero-card
 hero-helper
 hero-mic-off
-hero-stop
 hero-persona-name
+hero-stop
 intelligence-audio
 intelligence-copy-lan
 intelligence-history
@@ -69,6 +71,7 @@ job-progress-fill
 job-row
 jobs-empty
 jobs-list
+laptop-card
 layout-zone-core
 layout-zone-trace
 log-alert-row
@@ -78,6 +81,7 @@ login-recovery
 login-submit
 login-totp
 logout
+map-card
 map-focus-empty
 map-focus-iframe
 map-focus-open-link
@@ -97,17 +101,16 @@ nav-agents
 nav-overview
 nav-settings
 operations-rail
-ops-drawer-backdrop
 ops-drawer-toggle
 page-activity
 page-agents
-persona-card-anna
-persona-card-jarvis
 page-overview
 page-settings
 page-title
 panel-error
 panel-error-retry
+persona-card-anna
+persona-card-jarvis
 qs-card
 qs-cpu
 qs-devices
@@ -116,10 +119,10 @@ qs-memory
 qs-open
 qs-stale
 settings-drawer
-settings-muted
 settings-guarded-tools-list
 settings-language-select
 settings-logout
+settings-muted
 settings-persona
 settings-quiet-hours
 settings-speak-typed-replies
@@ -175,6 +178,7 @@ telemetry-source
 telemetry-status
 telemetry-success
 terminate-session
+terminate-unsupported
 tool-log-empty
 tool-log-filter
 tool-log-list

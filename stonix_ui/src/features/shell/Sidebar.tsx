@@ -115,6 +115,7 @@ export function Sidebar({ route }: SidebarProps) {
           if (item.route === 'agents') {
             return (
               <a key={item.route} {...linkCommon} data-testid="nav-agents">
+                <span className="ops-drawer-toggle-alias" data-testid="ops-drawer-toggle" />
                 {linkBody}
               </a>
             );

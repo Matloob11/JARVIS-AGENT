@@ -19,7 +19,9 @@ function latencySeconds(avgLatency: number): number {
   return avgLatency > 20 ? avgLatency / 1000 : avgLatency;
 }
 
-function sourceLabel(source?: string): 'Agent (PC)' | 'Bridge' {
+function sourceLabel(source?: string, brain?: string | null): 'Agent (PC)' | 'Agent (VPS)' | 'Bridge' {
+  const b = (brain ?? '').toLowerCase();
+  if (b === 'vps') return 'Agent (VPS)';
   const normalized = (source ?? '').toLowerCase();
   if (normalized === 'agent' || normalized === 'pc' || normalized.includes('agent')) {
     return 'Agent (PC)';
@@ -34,7 +36,15 @@ function statusTone(status: string): 'accent' | 'blue' | 'danger' {
   return 'accent';
 }
 
-const TelemetryCard = ({ telemetry }: { telemetry: TelemetrySnapshot }) => {
+const TelemetryCard = ({
+  telemetry,
+  brain,
+  embedded = false,
+}: {
+  telemetry: TelemetrySnapshot;
+  brain?: string | null;
+  embedded?: boolean;
+}) => {
   const successPct = finiteOr(telemetry.success_rate, 0) * (telemetry.success_rate <= 1 ? 100 : 1);
   const latencyS = latencySeconds(finiteOr(telemetry.avg_latency, 0));
   const confusionPct =
@@ -43,16 +53,27 @@ const TelemetryCard = ({ telemetry }: { telemetry: TelemetrySnapshot }) => {
   const tone = statusTone(telemetry.status || 'ok');
 
   return (
-    <div className="telemetry-card border-t border-white/5 pt-4" data-testid="telemetry-card">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-xs font-semibold text-command-text">
-          <Activity size={13} className="text-command-muted" />
-          Telemetry
+    <div
+      className={embedded ? 'telemetry-card telemetry-card--embedded' : 'telemetry-card border-t border-white/5 pt-4'}
+      data-testid={embedded ? undefined : 'telemetry-card'}
+    >
+      {embedded ? (
+        <div className="mb-3 flex justify-end">
+          <span className="text-[10px] uppercase tracking-wide text-command-muted" data-testid="telemetry-source">
+            {sourceLabel(telemetry.source, brain)}
+          </span>
         </div>
-        <span className="text-[10px] uppercase tracking-wide text-command-muted" data-testid="telemetry-source">
-          {sourceLabel(telemetry.source)}
-        </span>
-      </div>
+      ) : (
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-xs font-semibold text-command-text">
+            <Activity size={13} className="text-command-muted" />
+            Telemetry
+          </div>
+          <span className="text-[10px] uppercase tracking-wide text-command-muted" data-testid="telemetry-source">
+            {sourceLabel(telemetry.source, brain)}
+          </span>
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
         <div>
           <p className="text-command-muted">Success</p>

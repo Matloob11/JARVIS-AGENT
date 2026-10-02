@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { loginViaRecovery } from './helpers/login';
+import { gotoPage, loginViaRecovery } from './helpers';
 
 const MOCK = 'http://127.0.0.1:5199';
 
@@ -80,6 +80,7 @@ test('memory_cleared toast shows scope and backup path', async ({ page }) => {
 });
 
 test('Terminate emits shutdown_agent once after confirm allow', async ({ page }) => {
+  await gotoPage(page, 'agents');
   const stopBefore = await countType(page, 'stop');
   const shutdownBefore = await countType(page, 'shutdown_agent');
 

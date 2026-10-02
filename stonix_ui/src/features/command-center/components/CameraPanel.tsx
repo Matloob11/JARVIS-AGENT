@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Camera, CameraOff } from 'lucide-react';
 import { getSocket } from '@/shared/realtime/socket';
 import { useLiveKit } from '@/features/voice/LiveKitProvider';
 import { Panel, StatusDot } from '@/shared/ui/Panel';
+import { Switch } from '@/shared/ui/Switch';
 import {
   cameraBadgeLabel,
   defaultCameraState,
@@ -11,6 +13,7 @@ import {
 } from './cameraState';
 
 interface CameraPanelProps {
+  embedded?: boolean;
   onCameraStateChange?: (state: CameraState) => void;
 }
 
@@ -20,9 +23,22 @@ const FALLBACK_VIDEO: MediaTrackConstraints = {
   frameRate: { ideal: 10 },
 };
 
-const CameraPanel = ({ onCameraStateChange }: CameraPanelProps) => {
+function attachStream(video: HTMLVideoElement | null, stream: MediaStream | null) {
+  if (!video) return;
+  video.srcObject = stream;
+  if (stream) {
+    const onReady = () => {
+      void video.play().catch(() => undefined);
+    };
+    video.onloadedmetadata = onReady;
+    if (video.readyState >= 1) onReady();
+  }
+}
+
+const CameraPanel = ({ embedded = false, onCameraStateChange }: CameraPanelProps) => {
   const voice = useLiveKit();
   const videoRef = useRef<HTMLVideoElement>(null);
+  const captureVideoRef = useRef<HTMLVideoElement>(null);
   const fallbackStreamRef = useRef<MediaStream | null>(null);
 
   const [isCameraOn, setIsCameraOn] = useState(false);
@@ -32,13 +48,14 @@ const CameraPanel = ({ onCameraStateChange }: CameraPanelProps) => {
 
   const liveKitReady = voice.roomState === 'connected' && !voice.voiceUnavailable;
 
+  const primaryVideo = () => captureVideoRef.current ?? videoRef.current;
+
   const stopFallbackStream = useCallback(() => {
     fallbackStreamRef.current?.getTracks().forEach(track => track.stop());
     fallbackStreamRef.current = null;
     setFallbackActive(false);
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
+    attachStream(videoRef.current, null);
+    attachStream(captureVideoRef.current, null);
   }, []);
 
   const startFallbackStream = useCallback(async () => {
@@ -49,26 +66,17 @@ const CameraPanel = ({ onCameraStateChange }: CameraPanelProps) => {
       fallbackStreamRef.current = mediaStream;
       setFallbackActive(true);
       setError(null);
+      attachStream(captureVideoRef.current, mediaStream);
+      attachStream(videoRef.current, mediaStream);
     } catch (err) {
       setError(err instanceof Error ? err.name : 'Camera unavailable');
       setFallbackActive(false);
+      setShareWithAgent(false);
     }
   }, []);
 
-  useEffect(() => {
-    const stream = fallbackStreamRef.current;
-    const video = videoRef.current;
-    if (!isCameraOn || !fallbackActive || !stream || !video) return;
-    video.srcObject = stream;
-    const onReady = () => {
-      void video.play().catch(() => undefined);
-    };
-    video.onloadedmetadata = onReady;
-    if (video.readyState >= 1) onReady();
-  }, [fallbackActive, isCameraOn]);
-
   const stopCamera = useCallback(async () => {
-    await voice.publishCamera(false, videoRef.current);
+    await voice.publishCamera(false, primaryVideo());
     stopFallbackStream();
     setIsCameraOn(false);
     setShareWithAgent(false);
@@ -83,13 +91,13 @@ const CameraPanel = ({ onCameraStateChange }: CameraPanelProps) => {
       if (liveKitReady) {
         stopFallbackStream();
         if (cancelled) return;
-        const published = await voice.publishCamera(true, videoRef.current);
+        const published = await voice.publishCamera(true, primaryVideo());
         if (!published && !cancelled) {
           await startFallbackStream();
         }
         return;
       }
-      await voice.publishCamera(false, videoRef.current);
+      await voice.publishCamera(false, primaryVideo());
       if (!cancelled && !fallbackStreamRef.current) {
         await startFallbackStream();
       }
@@ -116,7 +124,7 @@ const CameraPanel = ({ onCameraStateChange }: CameraPanelProps) => {
     const context = canvas.getContext('2d');
 
     const emitFrame = () => {
-      const video = videoRef.current;
+      const video = captureVideoRef.current ?? videoRef.current;
       if (!video || !context || video.videoWidth <= 0 || video.videoHeight <= 0) return;
       canvas.width = 640;
       canvas.height = 480;
@@ -168,9 +176,8 @@ const CameraPanel = ({ onCameraStateChange }: CameraPanelProps) => {
   }, [cameraState, onCameraStateChange]);
 
   useEffect(() => {
-    const videoEl = videoRef.current;
     return () => {
-      void voice.publishCamera(false, videoEl);
+      void voice.publishCamera(false, primaryVideo());
       stopFallbackStream();
       onCameraStateChange?.(defaultCameraState);
     };
@@ -178,61 +185,79 @@ const CameraPanel = ({ onCameraStateChange }: CameraPanelProps) => {
 
   const previewReady = isCameraOn && (liveKitReady || fallbackActive);
 
-  return (
-    <Panel
-      className="camera-panel"
-      title="Camera"
-      action={
-        <button
-          type="button"
-          className="icon-button h-7 w-7"
-          data-testid="camera-toggle"
-          onClick={() => {
-            if (isCameraOn) {
-              void stopCamera();
-            } else {
-              setIsCameraOn(true);
-              setError(null);
-            }
-          }}
-          title={isCameraOn ? 'Turn camera off' : 'Turn camera on'}
-        >
-          {isCameraOn ? <CameraOff size={14} /> : <Camera size={14} />}
-        </button>
-      }
-    >
-      <div className="camera-frame">
-        {!isCameraOn ? (
-          <div className="camera-empty">
-            <CameraOff size={22} />
-            <span>Camera off</span>
-          </div>
-        ) : (
-          <>
-            <video
-              ref={videoRef}
-              autoPlay
-              muted
-              playsInline
-              className={`video-mirror h-full w-full object-cover ${previewReady ? '' : 'opacity-0'}`}
-            />
-            {!previewReady ? (
-              <div className="camera-empty absolute inset-0">
-                <CameraOff size={22} />
-                <span>{error || 'Starting camera…'}</span>
-              </div>
-            ) : null}
-          </>
-        )}
-        <div className="camera-status">
-          <StatusDot
-            active={cameraState.enabled}
-            tone={cameraState.sharing ? 'danger' : cameraState.enabled ? 'accent' : 'muted'}
-          />
-          <span data-testid="camera-link-badge">{cameraBadgeLabel(badge)}</span>
+  const toggleCamera = () => {
+    if (isCameraOn) {
+      void stopCamera();
+    } else {
+      setIsCameraOn(true);
+      setError(null);
+    }
+  };
+
+  const captureSink = createPortal(
+    <video
+      ref={captureVideoRef}
+      autoPlay
+      muted
+      playsInline
+      className="camera-capture-sink"
+      aria-hidden
+      tabIndex={-1}
+    />,
+    document.body,
+  );
+
+  const previewBlock = (
+    <div className="camera-frame">
+      {!isCameraOn ? (
+        <div className="camera-empty">
+          <CameraOff size={22} />
+          <span>Camera off</span>
         </div>
+      ) : (
+        <>
+          <video
+            ref={videoRef}
+            autoPlay
+            muted
+            playsInline
+            className={`video-mirror h-full w-full object-cover ${previewReady ? '' : 'opacity-0'}`}
+          />
+          {!previewReady ? (
+            <div className="camera-empty absolute inset-0">
+              <CameraOff size={22} />
+              <span>{error || 'Starting camera…'}</span>
+            </div>
+          ) : null}
+        </>
+      )}
+      <div className="camera-status">
+        <StatusDot
+          active={cameraState.enabled}
+          tone={cameraState.sharing ? 'danger' : cameraState.enabled ? 'accent' : 'muted'}
+        />
+        <span data-testid="camera-link-badge">{cameraBadgeLabel(badge)}</span>
       </div>
-      {isCameraOn && !liveKitReady ? (
+    </div>
+  );
+
+  const shareRow =
+    isCameraOn && !liveKitReady ? (
+      embedded ? (
+        <div className="agents-row">
+          <div className="agents-row__label">
+            <b>Share with agent</b>
+            <small>Vision uses the frames</small>
+          </div>
+          <Switch
+            checked={shareWithAgent}
+            onCheckedChange={setShareWithAgent}
+            aria-label="Share with agent"
+            data-testid="camera-share-switch"
+            disabled={!previewReady}
+          />
+        </div>
+      ) : (
         <label className="flex cursor-pointer items-center justify-between gap-3 border-t border-command-border px-4 py-2 text-[11px] text-command-muted">
           <span>Share with agent</span>
           <input
@@ -242,8 +267,60 @@ const CameraPanel = ({ onCameraStateChange }: CameraPanelProps) => {
             onChange={event => setShareWithAgent(event.target.checked)}
           />
         </label>
-      ) : null}
-    </Panel>
+      )
+    ) : null;
+
+  if (embedded) {
+    return (
+      <>
+        {captureSink}
+        {previewBlock}
+        <div className="agents-row">
+          <div className="agents-row__label">
+            <b>Camera</b>
+            <small>{isCameraOn ? 'Sends 640×480 at 10 fps while shared' : 'Off'}</small>
+          </div>
+          <Switch
+            checked={isCameraOn}
+            onCheckedChange={checked => {
+              if (checked) {
+                setIsCameraOn(true);
+                setError(null);
+              } else {
+                void stopCamera();
+              }
+            }}
+            aria-label="Camera"
+            data-testid="camera-toggle"
+          />
+        </div>
+        {shareRow}
+      </>
+    );
+  }
+
+  return (
+    <>
+      {captureSink}
+      <Panel
+        className="camera-panel"
+        title="Camera"
+        action={
+          <button
+            type="button"
+            className="icon-button h-7 w-7"
+            data-testid="camera-toggle"
+            onClick={toggleCamera}
+            title={isCameraOn ? 'Turn camera off' : 'Turn camera on'}
+          >
+            {isCameraOn ? <CameraOff size={14} /> : <Camera size={14} />}
+          </button>
+        }
+      >
+        {previewBlock}
+        {shareRow}
+      </Panel>
+    </>
   );
 };
 

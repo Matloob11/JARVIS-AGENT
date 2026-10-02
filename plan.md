@@ -1306,11 +1306,11 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-78 | cursor | P3 | Page header: title and subtitle, the three status pills, divider, account block; interim Reconnect | X-73, X-80 | DONE (cursor, 02 Oct 2026 PKT) |
 | X-79 | cursor | P3 | Laptop states and Stop desktop: the Devices popover Laptop row and the Agents › Laptop card (X-67 data) | X-67, X-85, X-99 | TODO |
 | X-80 | cursor | P3 | App shell: the fluid reference grid (dk/tl/ph), slots, hash router with mounted pages, app-ready marker | X-69, X-73 | DONE (cursor, 02 Oct 23:10 PKT) |
-| X-81 | cursor | P3 | Agents › System Flow card: five nodes, the 'unknown' state, packets only while data moves | X-73, X-107 | TODO |
+| X-81 | cursor | P3 | Agents › System Flow card: five nodes, the 'unknown' state, packets only while data moves | X-73, X-107 | DOING (cursor, 03 Oct 02:04 PKT) |
 | X-82 | cursor | P3 | Phone shell: compact header and pill row, five-tab bar, mounted zones, keyboard rule | X-78, X-80 | DONE (cursor, 02 Oct 23:55 PKT) |
 | X-83 | cursor | P3 | Right panel: Chat / Approvals / Tools tabs, the reference chat, the Tools tab with the SIM opener | X-72, X-73, X-80, X-96 | DONE (cursor, 02 Oct 23:45 PKT) |
 | X-84 | cursor | P3 | Confirm Command card: the pinned head of the queue, meta line, long commands, hold to approve, keys, announcements | X-83 | DONE (cursor, 03 Oct 00:10 PKT) |
-| X-85 | cursor | P3 | Agents › Devices and Machines: Agent (VPS), Laptop card shell + location, This browser + camera, vitals, telemetry, map | X-73, X-103, X-107 | TODO |
+| X-85 | cursor | P3 | Agents › Devices and Machines: Agent (VPS), Laptop card shell + location, This browser + camera, vitals, telemetry, map | X-73, X-103, X-107 | DONE (cursor, 03 Oct 02:12 PKT) |
 | X-86 | cursor | P3 | Activity › Media: featured item, media states, history, lightbox Esc, chat media chip | X-83, X-108 | TODO |
 | X-87 | cursor | P3 | Activity › Logs: System Logs terminal and toolbar, All levels, system feed, Reasoning | X-108 | TODO |
 | X-88 | cursor | P3 | Settings page: eleven sections, the index, field status, commit on blur or release (D12) | X-73, X-96, X-103 | DONE (cursor, 03 Oct 01:45 PKT) |

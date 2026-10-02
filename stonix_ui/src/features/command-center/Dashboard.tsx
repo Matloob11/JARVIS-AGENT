@@ -15,8 +15,11 @@ import {
 } from '@/features/overview/personaSwitchBridge';
 import { SwarmModeProvider } from '@/features/panel/useSwarmMode';
 import ChatPanel from './components/ChatPanel';
-import FlowMap from './components/FlowMap';
 import OperationsRail from './components/OperationsRail';
+import AgentsMountPortal from '@/features/agents/AgentsMountPortal';
+import MachinesCards from '@/features/agents/MachinesCards';
+import MapCard from '@/features/agents/MapCard';
+import AgentsAlertsStrip from '@/features/agents/AgentsAlertsStrip';
 import { defaultCameraState, type CameraState } from './components/cameraState';
 import SettingsPage from '@/features/settings/SettingsPage';
 import SimAccessDialog from './components/SimAccessDialog';
@@ -58,7 +61,6 @@ const DashboardInner = () => {
   const [voiceEnrollOpen, setVoiceEnrollOpen] = useState(false);
   const [cameraState, setCameraState] = useState<CameraState>(defaultCameraState);
   const [mobileTab, setMobileTab] = useState<MobileTab>('core');
-  const [opsDrawerOpen, setOpsDrawerOpen] = useState(false);
   const navMarks = useSidebarNavMarks(route);
   const vortex = useVortexStatusPoll(command.isConnected);
   const laptopOnline = useLaptopOnline();
@@ -74,7 +76,15 @@ const DashboardInner = () => {
   }, []);
 
   const shellMobileTab: MobileTab =
-    route.page === 'chat' ? 'chat' : route.page === 'settings' ? 'settings' : mobileTab;
+    route.page === 'chat'
+      ? 'chat'
+      : route.page === 'settings'
+        ? 'settings'
+        : route.page === 'agents'
+          ? 'ops'
+          : route.page === 'activity'
+            ? 'trace'
+            : mobileTab;
 
   const overviewOrbActive = layout !== 'ph' || shellMobileTab === 'core';
 
@@ -85,6 +95,14 @@ const DashboardInner = () => {
     }
     if (tab === 'settings') {
       window.location.hash = '/settings';
+      return;
+    }
+    if (tab === 'ops') {
+      window.location.hash = '/agents';
+      return;
+    }
+    if (tab === 'trace') {
+      window.location.hash = '/activity';
       return;
     }
     if (window.location.hash.replace(/^#/, '').split('/')[0] !== 'overview') {
@@ -103,14 +121,6 @@ const DashboardInner = () => {
       setMobileTab(prev => (prev === 'chat' || prev === 'settings' ? 'core' : prev));
     }
   }, [layout, route.page]);
-
-  const toggleOpsDrawer = useCallback(() => {
-    setOpsDrawerOpen(prev => !prev);
-  }, []);
-
-  const closeOpsDrawer = useCallback(() => {
-    setOpsDrawerOpen(false);
-  }, []);
 
   const openVoiceEnroll = () => {
     setVoiceEnrollOpen(true);
@@ -138,35 +148,7 @@ const DashboardInner = () => {
 
   const overviewMain = (
     <>
-      {opsDrawerOpen ? (
-        <button
-          type="button"
-          className="ops-drawer-backdrop"
-          aria-label="Close operations panel"
-          data-testid="ops-drawer-backdrop"
-          onClick={closeOpsDrawer}
-        />
-      ) : null}
-
-      <main
-        className="command-layout"
-        data-mobile-tab={shellMobileTab}
-        data-ops-drawer={opsDrawerOpen ? 'open' : 'closed'}
-      >
-        <ErrorBoundary name="OperationsRail">
-          <OperationsRail
-            persona={command.activePersona}
-            location={command.location}
-            onCameraStateChange={setCameraState}
-            mapFocus={command.mapFocus}
-            vitalsPc={command.vitalsPc}
-            vitalsVps={command.vitalsVps}
-            telemetry={command.telemetry}
-            systemAlerts={command.systemAlerts}
-            logs={command.vortexLogs}
-          />
-        </ErrorBoundary>
-
+      <main className="command-layout" data-mobile-tab={shellMobileTab}>
         <section className="command-center-stage">
           <OverviewPage
             persona={command.activePersona}
@@ -211,8 +193,6 @@ const DashboardInner = () => {
                   persona={command.activePersona}
                   isConnected={command.isConnected}
                   isThinking={command.isThinking}
-                  sessionRestartBanner={command.sessionRestartBanner}
-                  onSessionRestartBannerChange={command.setSessionRestartBanner}
                 />
               </ErrorBoundary>
             }
@@ -232,31 +212,12 @@ const DashboardInner = () => {
               </ErrorBoundary>
             }
             belowHero={
-              <>
-                <ErrorBoundary name="FlowMap">
-                  <FlowMap
-                    persona={command.activePersona}
-                    roomState={liveKit.roomState}
-                    micEnabled={liveKit.micEnabled}
-                    agentState={liveKit.agentState}
-                    isMuted={command.isMuted}
-                    cameraState={cameraState}
-                    moduleHealth={command.moduleHealth}
-                    lastMemorySyncMs={command.lastMemorySyncMs}
-                    toolRunningCount={command.toolRunningCount}
-                    toolLastError={command.toolLastError}
-                    agentOnline={agentStatus.online}
-                    agentPaused={agentStatus.paused}
-                    agentSession={agentStatus.session}
-                  />
-                </ErrorBoundary>
-                <ErrorBoundary name="IntelligencePanel">
-                  <IntelligencePanel
-                    latest={command.intelligence}
-                    history={command.intelligenceHistory}
-                  />
-                </ErrorBoundary>
-              </>
+              <ErrorBoundary name="IntelligencePanel">
+                <IntelligencePanel
+                  latest={command.intelligence}
+                  history={command.intelligenceHistory}
+                />
+              </ErrorBoundary>
             }
           />
           <div className="layout-zone layout-zone--trace" data-testid="layout-zone-trace">
@@ -303,8 +264,6 @@ const DashboardInner = () => {
             </ErrorBoundary>
             <ErrorBoundary name="TopBar">
               <TopBar
-                onToggleOpsDrawer={toggleOpsDrawer}
-                opsDrawerOpen={opsDrawerOpen}
                 onLogout={() => {
                   void liveKit.disconnectRoom();
                   void logout();
@@ -324,6 +283,27 @@ const DashboardInner = () => {
                   anchor={route.anchor}
                   voiceMatchLive={command.voiceMatchLive}
                   onOpenVoiceEnroll={openVoiceEnroll}
+                  systemFlow={{
+                    roomState: liveKit.roomState,
+                    micEnabled: liveKit.micEnabled,
+                    agentState: liveKit.agentState,
+                    isMuted: command.isMuted,
+                    isUserSpeaking: command.isUserSpeaking,
+                    cameraState,
+                    moduleHealth: command.moduleHealth,
+                    lastMemorySyncMs: command.lastMemorySyncMs,
+                    toolRunningCount: command.toolRunningCount,
+                    toolLastError: command.toolLastError,
+                    agentOnline: agentStatus.online,
+                    agentPaused: agentStatus.paused,
+                    agentSession: agentStatus.session,
+                  }}
+                  alertsStrip={
+                    <AgentsAlertsStrip
+                      systemAlerts={command.systemAlerts}
+                      logs={command.vortexLogs}
+                    />
+                  }
                 />
               </ErrorBoundary>
             </ShellPage>
@@ -402,6 +382,35 @@ const DashboardInner = () => {
 
       <ErrorBoundary name="VoiceEnrollDialog">
         <VoiceEnrollDialog open={voiceEnrollOpen} onClose={() => setVoiceEnrollOpen(false)} />
+      </ErrorBoundary>
+
+      <ErrorBoundary name="OperationsRail">
+        <AgentsMountPortal selector=".agents-devices-mount">
+          <OperationsRail
+            persona={command.activePersona}
+            bridgeConnected={command.isConnected}
+            location={command.location}
+            onCameraStateChange={setCameraState}
+            onReconnect={handleReconnect}
+            vortex={vortex}
+            sessionRestartBanner={command.sessionRestartBanner}
+            onSessionRestartBannerChange={command.setSessionRestartBanner}
+          />
+        </AgentsMountPortal>
+      </ErrorBoundary>
+
+      <ErrorBoundary name="MachinesCards">
+        <AgentsMountPortal selector=".agents-machines-mount">
+          <>
+            <MachinesCards
+              vitalsPc={command.vitalsPc}
+              vitalsVps={command.vitalsVps}
+              telemetry={command.telemetry}
+              brain={vortex.brain}
+            />
+            <MapCard persona={command.activePersona} focus={command.mapFocus} />
+          </>
+        </AgentsMountPortal>
       </ErrorBoundary>
 
       <ErrorBoundary name="SimAccessDialog">

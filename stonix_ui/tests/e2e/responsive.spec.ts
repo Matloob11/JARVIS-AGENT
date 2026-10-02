@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { loginViaRecovery } from './helpers/login';
+import { gotoPage, loginViaRecovery } from './helpers';
 
 test.use({
   launchOptions: {
@@ -25,16 +25,16 @@ async function expectMobileTabPanel(
   await expect(page.getByTestId(`mobile-tab-${tab}`)).toHaveAttribute('data-active', 'true');
 
   if (tab === 'core') {
-    await expect(page.getByText(/System Flow/i)).toBeVisible();
     await expect(page.getByTestId('voice-status')).toBeVisible();
   } else if (tab === 'chat') {
     await expect(page.getByTestId('chat-panel')).toBeVisible();
     await expect(page.getByPlaceholder(/Message JARVIS|Message ANNA/i)).toBeVisible();
   } else if (tab === 'ops') {
+    await expect(page.getByTestId('page-agents')).toBeVisible();
     await expect(page.getByTestId('operations-rail')).toBeVisible();
     await expect(page.getByTestId('camera-toggle')).toBeVisible();
   } else if (tab === 'trace') {
-    await expect(page.getByTestId('system-trace-panel')).toBeVisible();
+    await expect(page.getByTestId('page-activity')).toBeVisible();
   } else {
     await expect(page.getByTestId('page-settings')).toBeVisible();
   }
@@ -115,12 +115,14 @@ test.describe('tablet 1024x768', () => {
   test('two-column layout with ops drawer and no horizontal scroll', async ({ page }) => {
     await assertNoHorizontalScroll(page);
     await expect(page.getByTestId('mobile-tab-bar')).toBeHidden();
-    await expect(page.getByText(/System Flow/i)).toBeVisible();
     await expect(page.getByPlaceholder(/Message JARVIS|Message ANNA/i)).toBeVisible();
 
     await page.getByTestId('ops-drawer-toggle').click();
     await expect(page.getByTestId('operations-rail')).toBeVisible();
     await expect(page.getByTestId('camera-toggle')).toBeVisible();
+    await page.getByTestId('ops-drawer-toggle').click();
+    await gotoPage(page, 'agents');
+    await expect(page.getByText(/System Flow/i)).toBeVisible();
     await assertNoHorizontalScroll(page);
   });
 });

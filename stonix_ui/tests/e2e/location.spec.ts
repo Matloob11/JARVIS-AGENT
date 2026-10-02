@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { loginViaRecovery } from './helpers/login';
+import { gotoPage, loginViaRecovery } from './helpers';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -16,12 +16,13 @@ async function mockEmit(
 
 test.beforeEach(async ({ page }) => {
   await loginViaRecovery(page);
+  await gotoPage(page, 'agents');
 });
 
 test('map focus shows OSM iframe while device location stays on PC city; reload restores both', async ({
   page,
 }) => {
-  await expect(page.getByText(/CONNECTED|Secure link|JARVIS Ready/i).first()).toBeVisible();
+  await expect(page.getByTestId('chip-bridge')).toBeVisible({ timeout: 15_000 });
   await page.waitForTimeout(400);
 
   const deviceCard = page.getByTestId('device-location-card');
@@ -61,9 +62,8 @@ test('map focus shows OSM iframe while device location stays on PC city; reload 
   await expect(deviceCard).toContainText('Karachi');
 
   await page.reload();
-  await expect(page.getByText(/CONNECTED|Secure link|JARVIS Ready/i).first()).toBeVisible({
-    timeout: 20_000,
-  });
+  await expect(page.getByTestId('chip-bridge')).toBeVisible({ timeout: 20_000 });
+  await gotoPage(page, 'agents');
   await page.waitForTimeout(400);
 
   await expect(deviceCard).toContainText('Karachi', { timeout: 15_000 });

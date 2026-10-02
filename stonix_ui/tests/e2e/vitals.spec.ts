@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { loginViaRecovery } from './helpers/login';
+import { gotoPage, loginViaRecovery } from './helpers';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -16,13 +16,14 @@ async function mockEmit(
 
 test.beforeEach(async ({ page }) => {
   await loginViaRecovery(page);
+  await gotoPage(page, 'agents');
 });
 
 test('PC and VPS vitals, telemetry, stale badge, and critical log alerts', async ({ page }) => {
   const baseSec = Math.floor(Date.now() / 1000);
 
   // Wait until the socket is live so __mock/emit reaches the UI
-  await expect(page.getByText(/CONNECTED|Secure link|JARVIS Ready/i).first()).toBeVisible();
+  await expect(page.getByTestId('chip-bridge')).toBeVisible({ timeout: 15_000 });
   await page.waitForTimeout(400);
 
   await mockEmit(page, 'vitals_pc', { cpu: 12, ram: 1, disk: 1, ts: baseSec });

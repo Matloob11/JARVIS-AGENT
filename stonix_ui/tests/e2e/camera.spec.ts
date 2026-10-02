@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { loginViaRecovery } from './helpers/login';
+import { gotoPage, loginViaRecovery } from './helpers';
 
 test.use({
   launchOptions: {
@@ -31,6 +31,7 @@ test.beforeEach(async ({ page }) => {
   });
   await resetVisionFrames(page);
   await loginViaRecovery(page);
+  await gotoPage(page, 'agents');
 });
 
 test('does not open camera until the user turns it on', async ({ page }) => {
@@ -60,14 +61,14 @@ test('emits vision_frame about every 2s only while sharing (LiveKit unavailable)
   await page.waitForTimeout(4500);
   expect(await readVisionFrameCount(page)).toBe(0);
 
-  await page.getByTestId('camera-share-switch').check();
+  await page.getByTestId('camera-share-switch').click();
   await expect(page.getByTestId('camera-link-badge')).toContainText(/Fallback \(bridge\)/i);
 
   await page.waitForTimeout(5500);
   const sharedCount = await readVisionFrameCount(page);
   expect(sharedCount).toBeGreaterThanOrEqual(2);
 
-  await page.getByTestId('camera-share-switch').uncheck();
+  await page.getByTestId('camera-share-switch').click();
   await expect(page.getByTestId('camera-link-badge')).toContainText(/Local preview only/i);
   const midCount = await readVisionFrameCount(page);
 

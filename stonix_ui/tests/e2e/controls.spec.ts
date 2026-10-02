@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { loginViaRecovery } from './helpers/login';
+import { gotoPage, loginViaRecovery } from './helpers';
 
 const MOCK = 'http://127.0.0.1:5199';
 
@@ -85,6 +85,7 @@ test('Assistant feedback thumb sends feedback once', async ({ page }) => {
 test('Terminate sends shutdown_agent once and shows restart banner until online', async ({
   page,
 }) => {
+  await gotoPage(page, 'agents');
   const before = await countType(page, 'shutdown_agent');
   await page.getByTestId('terminate-session').click();
   await expect.poll(async () => countType(page, 'shutdown_agent')).toBe(before + 1);

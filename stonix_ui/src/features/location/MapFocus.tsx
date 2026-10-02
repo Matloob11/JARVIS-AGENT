@@ -35,9 +35,10 @@ export function buildOsmExternalUrl(lat: number, lng: number, zoom?: number): st
 
 interface MapFocusProps {
   focus: MapFocusData | null;
+  emptyHint?: string;
 }
 
-const MapFocus = ({ focus }: MapFocusProps) => {
+const MapFocus = ({ focus, emptyHint = 'No map focus' }: MapFocusProps) => {
   const embedUrl = useMemo(() => {
     if (!focus) return null;
     return buildOsmEmbedUrl(focus.lat, focus.lng);
@@ -52,7 +53,7 @@ const MapFocus = ({ focus }: MapFocusProps) => {
     return (
       <div className="empty-compact" data-testid="map-focus-empty">
         <Map size={14} className="text-command-muted" />
-        No map focus
+        {emptyHint}
       </div>
     );
   }
