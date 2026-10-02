@@ -20,7 +20,9 @@ except ImportError:
 
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
 from services.system.jarvis_desktop_common import tool_result
+from services.utils import jarvis_delivery
 from services.utils.jarvis_config import config
+from services.utils.jarvis_delivery import DeliveryError
 from services.utils.jarvis_logger import setup_logger
 
 # Setup logging
@@ -137,16 +139,16 @@ class YouTubeAutomation:
                 )
                 return True
 
-            logger.info("No browser path found. Falling back to webbrowser module.")
-            await asyncio.to_thread(webbrowser.open, url)
+            logger.info("No browser path found. Falling back to delivery open_url.")
+            await asyncio.to_thread(jarvis_delivery.open_url, url)
             return True
 
         except (subprocess.SubprocessError, OSError, Exception) as e:
-            logger.error("Browser App Mode failed: %s. Trying webbrowser fallback.", e)
+            logger.error("Browser App Mode failed: %s. Trying open_url fallback.", e)
             try:
-                await asyncio.to_thread(webbrowser.open, url)
+                await asyncio.to_thread(jarvis_delivery.open_url, url)
                 return True
-            except Exception as fallback_err:
+            except (DeliveryError, Exception) as fallback_err:
                 logger.error("All browser open methods failed: %s", fallback_err)
                 return False
 

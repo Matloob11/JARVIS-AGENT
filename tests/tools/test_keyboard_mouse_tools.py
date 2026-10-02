@@ -69,9 +69,11 @@ async def test_endpoint_volume_path_used() -> None:
     controller = km.SafeController()
     mock_devices = MagicMock()
     mock_devices.EndpointVolume = "endpoint_iface"
-    with patch.object(km, "pythoncom"), patch.object(
-        km.AudioUtilities, "GetSpeakers", return_value=mock_devices
-    ):
+    mock_audio = MagicMock()
+    mock_audio.GetSpeakers.return_value = mock_devices
+    with patch.object(km, "_load_volume_stack"), patch.object(km, "pythoncom", MagicMock()), patch.object(
+        km, "pywintypes", MagicMock()
+    ), patch.object(km, "AudioUtilities", mock_audio):
         iface = await controller._get_volume_interface()
     assert iface == "endpoint_iface"
 

@@ -15,13 +15,14 @@ import shlex
 import subprocess
 import sys
 
-import pyautogui as pg
-import pygetwindow as gw
+from typing import Any
 
 # Third-party imports
 from fuzzywuzzy import process
 
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
+from services.system.jarvis_desktop_common import EXEC_EXTS
+from services.utils import jarvis_delivery
 from services.automation.jarvis_whatsapp_automation import whatsapp_bot
 from services.automation.keyboard_mouse_ctrl import type_text_tool
 from services.utils.jarvis_config import APP_MAPPINGS, FOCUS_TITLES, config
@@ -39,7 +40,44 @@ if hasattr(sys.stdout, 'reconfigure'):
         pass
 logger = setup_logger("JARVIS-WINDOW")
 
-get_windows = gw.getWindowsWithTitle
+pg = None
+gw = None
+
+
+def _load_pg():
+    global pg
+    if pg is None:
+        try:
+            import pyautogui as _pg  # pylint: disable=import-outside-toplevel
+
+            pg = _pg
+        except Exception as exc:  # pragma: no cover
+            raise RuntimeError("pyautogui unavailable") from exc
+    return pg
+
+
+def _load_gw():
+    global gw
+    if gw is None:
+        try:
+            import pygetwindow as _gw  # pylint: disable=import-outside-toplevel
+
+            gw = _gw
+        except Exception:  # pragma: no cover
+            gw = False  # type: ignore[assignment]
+    return gw if gw is not False else None
+
+
+def get_windows(title: str):
+    mod = _load_gw()
+    return mod.getWindowsWithTitle(title) if mod else []
+
+
+async def _launch_target(app: str) -> None:
+    if app.startswith("http"):
+        await asyncio.to_thread(jarvis_delivery.open_url, app)
+    else:
+        await asyncio.to_thread(jarvis_delivery.open_artifact, app)
 
 
 # ===================== UTIL ===================== #
@@ -70,14 +108,15 @@ async def focus_window(target_title: str):
     Activates and restores a window by its title.
     Uses Win32 API for more aggressive focus if needed.
     """
-    if not gw:
+    mod = _load_gw()
+    if not mod:
         return False
 
     # Wait for app to settle
     await asyncio.sleep(1.2)
 
     target_lower = target_title.lower()
-    for w in gw.getAllWindows():
+    for w in mod.getAllWindows():
         title_lower = w.title.lower()
         # Specific check for Notepad to be more accurate
         if target_lower == "notepad":
@@ -119,10 +158,25 @@ def fuzzy_match_app(app_name: str) -> str:
         return match
     return app_name
 
+
+def _open_app_risk(arguments: dict[str, Any]) -> str:
+    cmd = str(arguments.get("full_command") or "")
+    clean = normalize_command(cmd)
+    matched_key = fuzzy_match_app(clean)
+    if matched_key not in APP_MAPPINGS:
+        return "high"
+    app = str(APP_MAPPINGS.get(matched_key, matched_key))
+    probe = f"{app} {clean}".lower()
+    for ext in EXEC_EXTS:
+        if probe.endswith(ext) or ext in clean.lower():
+            return "high"
+    return "low"
+
+
 # ===================== OPEN APP ===================== #
 
 
-@jarvis_tool
+@jarvis_tool(risk=_open_app_risk)
 async def open_app(full_command: str) -> dict:  # pylint: disable=too-many-branches
     """
     Opens a desktop application or URL based on the user's voice command.
@@ -141,19 +195,17 @@ async def open_app(full_command: str) -> dict:  # pylint: disable=too-many-branc
             await whatsapp_bot.open_whatsapp()
             await whatsapp_bot.ensure_whatsapp_focus()
         elif matched_key == "youtube":
-            # For now YouTube bot might just be startfile + focus
-            os.startfile(app)
+            await _launch_target(app)
             await asyncio.sleep(3)
             await focus_window("YouTube")
         # 🌐 URL → browser or desktop app
         elif app.startswith("http"):
-            # Use os.startfile for better handling of browser launches
-            os.startfile(app)  # nosec B606
+            await _launch_target(app)
             await asyncio.sleep(3)  # Wait for browser to open
         else:
             # 🖥️ Generic Desktop App launch
             try:
-                os.startfile(app)  # nosec B606
+                await _launch_target(app)
             except OSError as e:
                 # Fallback to subprocess if startfile fails
                 cmd_list = shlex.split(app)
@@ -241,19 +293,20 @@ async def save_notepad(filename: str = "jarvis_notes.txt") -> dict:
         await asyncio.sleep(1)
 
         # Ctrl+S to trigger Save As
-        pg.hotkey('ctrl', 's')
+        pyg = _load_pg()
+        pyg.hotkey('ctrl', 's')
         await asyncio.sleep(1.5)
 
         # Type absolute path directly for reliability
-        pg.write(file_path)
+        pyg.write(file_path)
         await asyncio.sleep(0.5)
-        pg.press('enter')
+        pyg.press('enter')
 
         # Handle Overwrite
         await asyncio.sleep(1.0)
         confirm_wins = get_windows('Confirm Save As')
         if confirm_wins:
-            pg.press('y')
+            pyg.press('y')
 
         return {
             "status": "success",

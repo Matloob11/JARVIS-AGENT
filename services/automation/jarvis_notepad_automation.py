@@ -14,8 +14,6 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-import pyautogui
-
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
 from services.system.jarvis_desktop_common import (
     WindowInfo,
@@ -45,7 +43,20 @@ NOTEPAD_ALLOWED_EXTS: frozenset[str] = frozenset({
 
 AUTO_RUN_MEDIUM_EXTS: frozenset[str] = frozenset({".py", ".bat", ".cmd", ".ps1", ".js"})
 
-pyautogui.FAILSAFE = True
+_pyautogui = None
+
+
+def _pyautogui_mod():
+    global _pyautogui
+    if _pyautogui is None:
+        try:
+            import pyautogui as pg  # pylint: disable=import-outside-toplevel
+
+            pg.FAILSAFE = True
+            _pyautogui = pg
+        except Exception as exc:  # pragma: no cover
+            raise RuntimeError("pyautogui is not available on this host") from exc
+    return _pyautogui
 
 
 def _outputs_dir() -> str:
@@ -68,6 +79,12 @@ def _resolve_output_file(filename: str) -> tuple[Optional[Path], Optional[dict[s
             "Filename is required.",
             error_code="PATH_NOT_ALLOWED",
         )
+    if os.path.basename(name) != name or name in (".", ".."):
+        return None, tool_result(
+            "error",
+            "Sirf basename allowed hai; sub-folder path accept nahi hoti.",
+            error_code="PATH_NOT_ALLOWED",
+        )
     ext = os.path.splitext(name)[1].lower()
     if ext not in NOTEPAD_ALLOWED_EXTS:
         return None, tool_result(
@@ -87,6 +104,7 @@ def _resolve_output_file(filename: str) -> tuple[Optional[Path], Optional[dict[s
 
 def _type_text(cancel_event: Any, text: str, visible_limit: int = 1500) -> None:
     """Blocking typing worker (run via run_cancellable)."""
+    pyautogui = _pyautogui_mod()
     old_pause = pyautogui.PAUSE
     pyautogui.PAUSE = 0.02
     try:
@@ -217,7 +235,7 @@ class NotepadAutomation:
         try:
             await run_cancellable(_type_text, text)
             return True
-        except (pyautogui.FailSafeException, RuntimeError, AttributeError, asyncio.CancelledError) as e:
+        except (RuntimeError, AttributeError, asyncio.CancelledError) as e:
             logger.exception("Typing simulation failed: %s", e)
             return False
 
@@ -411,7 +429,7 @@ async def _process_notepad_automation(content: str, filename: str, auto_run: boo
                 raise RuntimeError("Typing failed")
 
             await _safe_notify(notify_thinking, "Sir, code save karke Notepad close kar raha hoon...")
-            pyautogui.hotkey("ctrl", "s")
+            _pyautogui_mod().hotkey("ctrl", "s")
             await asyncio.sleep(0.5)
             ok, save_mode = await notepad_automation.verify_saved_content(full_path, content)
             if not ok:
@@ -575,9 +593,10 @@ async def edit_notepad_file_tool(filename: str, new_content: str) -> dict[str, A
     if not focused:
         return tool_result("error", "Notepad focus nahi ho saka.")
 
-    pyautogui.hotkey("ctrl", "a")
+    pg = _pyautogui_mod()
+    pg.hotkey("ctrl", "a")
     _clipboard_paste_text_sync(new_content)
-    pyautogui.hotkey("ctrl", "s")
+    pg.hotkey("ctrl", "s")
     mgr = get_notepad_mgr()
     await mgr.verify_saved_content(full_path, new_content)
     await mgr.close_active_notepad(pid=pid, force_kill_pid=True)
@@ -607,10 +626,11 @@ async def append_notepad_file_tool(filename: str, append_text: str) -> dict[str,
     if not focused:
         return tool_result("error", "Notepad focus nahi ho saka.")
 
-    pyautogui.hotkey("ctrl", "end")
-    pyautogui.press("enter")
+    pg = _pyautogui_mod()
+    pg.hotkey("ctrl", "end")
+    pg.press("enter")
     await mgr.simulate_typing(append_text)
-    pyautogui.hotkey("ctrl", "s")
+    pg.hotkey("ctrl", "s")
 
     try:
         with open(full_path, encoding="utf-8") as f:

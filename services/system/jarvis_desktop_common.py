@@ -46,8 +46,9 @@ except ImportError:  # pragma: no cover
 # ---------------------------------------------------------------------------
 
 EXEC_EXTS: frozenset[str] = frozenset({
-    ".exe", ".bat", ".cmd", ".com", ".msi", ".ps1", ".vbs", ".vbe",
-    ".js", ".jse", ".wsf", ".wsh", ".scr", ".lnk", ".msix", ".appx",
+    ".exe", ".bat", ".cmd", ".com", ".msi", ".ps1", ".psm1", ".vbs", ".vbe",
+    ".js", ".jse", ".wsf", ".wsh", ".scr", ".lnk", ".url", ".hta", ".cpl",
+    ".jar", ".reg", ".msix", ".appx",
 })
 
 MEDIA_AUDIO_EXTS: frozenset[str] = frozenset({
@@ -79,6 +80,18 @@ _PROTECTED_PROCESSES: frozenset[str] = frozenset({
     "powershell.exe",
     "pwsh.exe",
     "cmd.exe",
+    "conhost.exe",
+    "explorer.exe",
+    "taskmgr.exe",
+    "regedit.exe",
+    "mmc.exe",
+    "mintty.exe",
+    "bash.exe",
+    "wsl.exe",
+    "wslhost.exe",
+    "python.exe",
+    "pythonw.exe",
+    "node.exe",
 })
 
 _BROWSER_PROCESSES: frozenset[str] = frozenset({
@@ -330,8 +343,9 @@ async def close_windows_gracefully(
 
 def is_protected_window(info: WindowInfo) -> bool:
     title = (info.title or "").strip()
-    if title in _PROTECTED_TITLES:
-        return True
+    for prefix in _PROTECTED_TITLES:
+        if title.startswith(prefix):
+            return True
     try:
         own = os.getpid()
         parent = os.getppid()

@@ -4,14 +4,17 @@ from typing import Any
 import requests
 
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
+from services.utils.jarvis_config import config
 from services.utils.jarvis_logger import setup_logger
 
 # Setup Logger
 logger = setup_logger("JARVIS-CHROME-BROWSER")
 
-# Config
 # Note: PinchTab server hamesha Chrome engine use karta hai Sir Matloob ke liye.
-PINCHTAB_BASE_URL = "http://localhost:9867"
+
+
+def _pinchtab_base_url() -> str:
+    return (getattr(config, "pinchtab_url", None) or "http://localhost:9867").rstrip("/")
 
 class PinchTabSession:
     """Manages the current persistent Chrome browser session state."""
@@ -23,7 +26,7 @@ _session = PinchTabSession()
 
 async def _api_call(method: str, path: str, payload: dict | None = None) -> dict[str, Any]:
     """Helper for Chrome/PinchTab HTTP communication."""
-    url = f"{PINCHTAB_BASE_URL}{path}"
+    url = f"{_pinchtab_base_url()}{path}"
 
     def _do_request():
         try:

@@ -32,11 +32,11 @@ async def test_download_success(mock_subprocess):
         stdout="/path/to/video.mp3", check=True)
 
     with patch("os.path.exists", return_value=True):
-        with patch("os.startfile") as mock_start:
+        with patch("services.multimedia.jarvis_youtube_downloader.jarvis_delivery.open_artifact") as mock_open:
             res = await dl.download("https://youtube.com/watch?v=123", "audio")
             assert res['status'] == "success"
             assert "/path/to/video.mp3" in res['file_path']
-            mock_start.assert_called_with("/path/to/video.mp3")
+            mock_open.assert_called()
 
 
 @pytest.mark.asyncio
@@ -47,7 +47,7 @@ async def test_download_query(mock_yt_bot, mock_subprocess):
     mock_subprocess.return_value = MagicMock(stdout="file.mp3", check=True)
 
     with patch("os.path.exists", return_value=True):
-        with patch("os.startfile"):
+        with patch("services.multimedia.jarvis_youtube_downloader.jarvis_delivery.open_artifact"):
             res = await dl.download("some song")
             assert res['status'] == "success"
             mock_yt_bot.get_video_url.assert_awaited_with("some song")
@@ -67,6 +67,20 @@ async def test_download_error_fallback(mock_subprocess, mock_yt_bot):
     res = await dl.download("https://youtube.com/watch?v=123")
     assert "Browser mein play" in res['message']
     mock_yt_bot.open_url_in_app.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_download_error_fallback_fails_when_browser_unavailable(mock_subprocess, mock_yt_bot):
+    dl = YouTubeDownloader()
+    import subprocess
+
+    mock_subprocess.side_effect = subprocess.CalledProcessError(1, "cmd", stderr="some error")
+    mock_yt_bot.open_url_in_app.return_value = False
+    mock_yt_bot.get_video_url.return_value = "https://youtube.com/watch?v=12345678901"
+
+    res = await dl.download("https://youtube.com/watch?v=123")
+    assert res["status"] == "error"
+    assert "Browser fallback" in res["message"]
 
 
 @pytest.mark.asyncio

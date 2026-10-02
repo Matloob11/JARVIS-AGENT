@@ -9,6 +9,7 @@ import subprocess
 
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
 from services.automation.jarvis_youtube_automation import yt_bot
+from services.utils import jarvis_delivery
 from services.utils.jarvis_config import config
 from services.utils.jarvis_logger import setup_logger
 
@@ -112,10 +113,8 @@ class YouTubeDownloader:
 
             final_path = await self._execute_download(cmd)
 
-            if os.path.exists(final_path):
-                os.startfile(final_path)  # nosec B606
-            else:
-                os.startfile(self.base_dir)  # nosec B606
+            open_target = final_path if os.path.exists(final_path) else self.base_dir
+            await asyncio.to_thread(jarvis_delivery.open_artifact, open_target)
 
             type_str = "Video" if download_type == "video" else "Audio (MP3)"
             return {
@@ -149,7 +148,7 @@ class YouTubeDownloader:
                 "--no-playlist", "--js-runtimes", "node", url,
             ]
             await asyncio.to_thread(lambda: subprocess.run(cmd, check=True))
-            os.startfile(self.base_dir)  # nosec B606
+            await asyncio.to_thread(jarvis_delivery.open_artifact, self.base_dir)
             return {
                 "status": "success",
                 "message": "✅ Audio (Original) download ho gaya (ffmpeg missing tha).",
@@ -160,7 +159,13 @@ class YouTubeDownloader:
     async def _fallback_to_browser(self, url: str, reason: str) -> dict:
         """Opens YouTube URL in browser as final fallback."""
         logger.info("%s. Opening browser fallback...", reason)
-        await yt_bot.open_url_in_app(url)
+        opened = await yt_bot.open_url_in_app(url)
+        if not opened:
+            return {
+                "status": "error",
+                "message": f"{reason} Browser fallback bhi fail ho gaya.",
+                "error": "browser_fallback_failed",
+            }
         return {
             "status": "success",
             "message": f"{reason} ✅ Browser mein play kar diya gaya hai.",

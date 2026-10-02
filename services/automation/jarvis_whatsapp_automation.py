@@ -6,10 +6,8 @@ import asyncio
 import os
 import time
 
-import pyautogui as pg
-import pygetwindow as gw
-
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
+from services.utils import jarvis_delivery
 from services.automation.keyboard_mouse_ctrl import type_text_tool
 from services.utils.jarvis_logger import setup_logger
 from services.utils.jarvis_win32 import pywintypes, win32con, win32gui
@@ -19,6 +17,33 @@ logger = setup_logger("JARVIS-WHATSAPP")
 
 # WhatsApp App URI (Store App)
 WHATSAPP_URI = r"shell:AppsFolder\5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App"
+
+_pg = None
+_gw = None
+
+
+def _pg_mod():
+    global _pg
+    if _pg is None:
+        try:
+            import pyautogui as pg  # pylint: disable=import-outside-toplevel
+
+            _pg = pg
+        except Exception as exc:  # pragma: no cover
+            raise RuntimeError("pyautogui unavailable") from exc
+    return _pg
+
+
+def _gw_mod():
+    global _gw
+    if _gw is None:
+        try:
+            import pygetwindow as gw  # pylint: disable=import-outside-toplevel
+
+            _gw = gw
+        except Exception:  # pragma: no cover
+            _gw = False  # type: ignore[assignment]
+    return _gw if _gw is not False else None
 
 
 class WhatsAppAutomation:
@@ -34,7 +59,7 @@ class WhatsAppAutomation:
         Waits for WhatsApp to verify it is the active window.
         Returns True if WhatsApp is focused, False otherwise.
         """
-        if gw is None:
+        if _gw_mod() is None:
             await asyncio.sleep(3)  # Fallback wait
             return True
 
@@ -77,7 +102,10 @@ class WhatsAppAutomation:
 
     def _get_whatsapp_window(self):
         """Helper to find WhatsApp window."""
-        windows = gw.getWindowsWithTitle('WhatsApp')
+        mod = _gw_mod()
+        if mod is None:
+            return None
+        windows = mod.getWindowsWithTitle('WhatsApp')
         valid_windows = [w for w in windows if "WhatsApp" in w.title]
         return valid_windows[0] if valid_windows else None
 
@@ -117,7 +145,7 @@ class WhatsAppAutomation:
             # Check if WhatsApp Store App exists (rudimentary check via path possibility)
             # This is a bit tricky for 'shell:AppsFolder', so we try-except the startfile
             logger.info("Opening WhatsApp via URI: %s", WHATSAPP_URI)
-            os.startfile(WHATSAPP_URI)  # nosec B606
+            await asyncio.to_thread(jarvis_delivery.open_artifact, WHATSAPP_URI)
             await asyncio.sleep(3.0)  # Initial wait for launch
             return True
         except (OSError, ValueError) as e:
@@ -130,6 +158,7 @@ class WhatsAppAutomation:
             logger.info("Searching for contact: %s", contact_name)
 
             # Open search bar once, clear it, then type
+            pg = _pg_mod()
             pg.hotkey('ctrl', 'f')
             await asyncio.sleep(1.0)
             pg.hotkey('ctrl', 'a')
@@ -149,7 +178,7 @@ class WhatsAppAutomation:
             pg.press('enter')
             await asyncio.sleep(1.5)
             return True
-        except (pg.FailSafeException, AttributeError, OSError) as e:
+        except (AttributeError, OSError) as e:
             logger.error("Error searching contact: %s", e)
             return False
 
@@ -163,10 +192,10 @@ class WhatsAppAutomation:
 
             await type_text_tool(message)
             await asyncio.sleep(0.8)
-            pg.press('enter')
+            _pg_mod().press('enter')
             logger.info("Message sent.")
             return True
-        except (pg.FailSafeException, AttributeError, OSError, ImportError) as e:
+        except (AttributeError, OSError, ImportError) as e:
             logger.error("Error sending message: %s", e)
             return False
 
@@ -174,7 +203,7 @@ class WhatsAppAutomation:
         """Closes the active WhatsApp window"""
         try:
             logger.info("Closing WhatsApp...")
-            pg.hotkey('alt', 'f4')
+            _pg_mod().hotkey('alt', 'f4')
             await asyncio.sleep(0.5)
             return True
         except (OSError, AttributeError) as e:

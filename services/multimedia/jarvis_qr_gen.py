@@ -17,6 +17,7 @@ from qrcode.image.styles.colormasks import SolidFillColorMask
 from qrcode.image.styles.moduledrawers import CircleModuleDrawer
 
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
+from services.utils import jarvis_delivery
 from services.utils.jarvis_bridge import notify_event
 from services.utils.jarvis_config import config
 from services.utils.jarvis_logger import setup_logger
@@ -158,7 +159,7 @@ async def generate_qr_code(
             )
             img.save(file_path)
             if open_file:
-                os.startfile(file_path)  # nosec B606
+                jarvis_delivery.open_artifact(file_path)
             return file_path
 
         saved_path = await asyncio.to_thread(make_qr)

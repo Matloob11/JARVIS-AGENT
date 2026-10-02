@@ -6,6 +6,7 @@ Handles image downloading, file compression, and mock email simulation.
 
 import asyncio
 import os
+import re
 import shutil
 import smtplib
 from email import encoders
@@ -25,6 +26,23 @@ from services.utils.jarvis_logger import setup_logger
 # Setup logging
 logger = setup_logger("JARVIS-ADVANCED")
 
+_UNSAFE_NAME_CHARS = re.compile(r"[^a-zA-Z0-9._-]+")
+
+
+def _safe_folder_basename(name: str, default: str) -> str:
+    base = os.path.basename((name or default).strip() or default)
+    cleaned = _UNSAFE_NAME_CHARS.sub("_", base).strip("._") or default
+    return cleaned[:120]
+
+
+def _safe_zip_basename(name: str) -> str:
+    base = os.path.basename((name or "Archive.zip").strip() or "Archive.zip")
+    stem, ext = os.path.splitext(base)
+    if ext.lower() != ".zip":
+        stem = stem or base
+    stem = _UNSAFE_NAME_CHARS.sub("_", stem).strip("._") or "Archive"
+    return f"{stem[:120]}.zip"
+
 
 @jarvis_tool
 async def download_images(query: str, count: int = 5,
@@ -34,8 +52,9 @@ async def download_images(query: str, count: int = 5,
     Cascades through: DuckDuckGo -> Google Custom Search.
     """
     try:
+        safe_folder = _safe_folder_basename(folder_name, "Downloaded_Images")
         base_path = os.path.join(os.getcwd(), "Jarvis_Outputs", "Downloads")
-        target_dir = os.path.abspath(os.path.join(base_path, folder_name))
+        target_dir = os.path.abspath(os.path.join(base_path, safe_folder))
         os.makedirs(target_dir, exist_ok=True)
 
         logger.info("Searching for %d images for query: '%s'...", count, query)
@@ -145,7 +164,6 @@ async def zip_files(folder_path: str, zip_name: str = "Archive.zip") -> dict:
     Compresses a folder or directory into a .zip archive.
     Use this when the user wants to zip or compress files.
     """
-    _ = zip_name  # Suppress unused argument warning
     try:
         # Resolve path - if folder_path is just a name, look in common locations
         if not os.path.isabs(folder_path):
@@ -159,9 +177,11 @@ async def zip_files(folder_path: str, zip_name: str = "Archive.zip") -> dict:
                 }
             folder_path = actual_path
 
-        await asyncio.to_thread(shutil.make_archive, folder_path, 'zip', folder_path)
+        safe_zip = _safe_zip_basename(zip_name)
+        archive_base = os.path.join(os.path.dirname(folder_path), os.path.splitext(safe_zip)[0])
+        await asyncio.to_thread(shutil.make_archive, archive_base, "zip", folder_path)
         logger.info("Folder '%s' zipped successfully.", folder_path)
-        zip_path = f"{folder_path}.zip"
+        zip_path = f"{archive_base}.zip"
         return {
             "status": "success",
             "zip_path": zip_path,
@@ -200,16 +220,31 @@ async def send_email(recipient: str, subject: str, body: str,
         email_msg['Subject'] = subject
         email_msg.attach(MIMEText(body, 'plain'))
 
-        # Handle attachment
-        if attachment_path and os.path.exists(attachment_path):
+        attachment_path = (attachment_path or "").strip()
+        if attachment_path:
+            if not os.path.isfile(attachment_path):
+                return {
+                    "status": "error",
+                    "recipient": recipient,
+                    "message": f"❌ Attachment nahi mili ya readable nahi: {os.path.basename(attachment_path)}",
+                    "error_code": "ATTACHMENT_MISSING",
+                }
             filename = os.path.basename(attachment_path)
-            with open(attachment_path, "rb") as attachment:
-                part = MIMEBase("application", "octet-stream")
-                part.set_payload(attachment.read())
-                encoders.encode_base64(part)
-                part.add_header("Content-Disposition",
-                                f"attachment; filename= {filename}")
-                email_msg.attach(part)
+            try:
+                with open(attachment_path, "rb") as attachment:
+                    payload = attachment.read()
+            except OSError as read_err:
+                return {
+                    "status": "error",
+                    "recipient": recipient,
+                    "message": f"❌ Attachment read nahi ho saki: {read_err}",
+                    "error_code": "ATTACHMENT_MISSING",
+                }
+            part = MIMEBase("application", "octet-stream")
+            part.set_payload(payload)
+            encoders.encode_base64(part)
+            part.add_header("Content-Disposition", f"attachment; filename= {filename}")
+            email_msg.attach(part)
 
         # Connect and send in a separate thread
         def do_send():

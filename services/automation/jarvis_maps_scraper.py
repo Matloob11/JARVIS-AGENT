@@ -9,6 +9,7 @@ from typing import Any, Optional, List
 from dataclasses import dataclass, asdict
 from playwright.async_api import async_playwright, Page
 
+from services.utils import jarvis_delivery
 from services.utils.jarvis_logger import setup_logger
 from services.utils.jarvis_bridge import notify_thinking, notify_tool_action
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
@@ -181,7 +182,7 @@ async def scrape_google_maps_leads(category: str, location: str = "", count: int
         
         # Open the file automatically for the user
         if os.path.exists(file_path):
-            os.startfile(file_path)
+            await asyncio.to_thread(jarvis_delivery.open_artifact, file_path)
             
         msg = f"✅ Success! {len(leads)} leads scrape ho gayi hain aur '{os.path.basename(file_path)}' mein save kar di gayi hain."
         await notify_tool_action("google_maps_scraper", f"Scraped {len(leads)} leads for {category}")
@@ -217,7 +218,7 @@ async def open_leads_file(name: str) -> dict[str, Any]:
     files.sort(key=os.path.getmtime, reverse=True)
     target = files[0]
     
-    os.startfile(target)
+    await asyncio.to_thread(jarvis_delivery.open_artifact, target)
     return {
         "status": "success",
         "opened_file": os.path.basename(target),

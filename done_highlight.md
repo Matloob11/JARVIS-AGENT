@@ -689,3 +689,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `.venv_312/Scripts/python.exe -m pytest tests/tools/test_location_hook.py -q` → 4 passed in 4.22s
 - **Commit:** abhi nahi · **Deploy:** no
 - **Doosre agent ke liye:** Claude compat location shim hata sakta hai jab self-test pass ho.
+
+### ✅ [cursor] X-65 · VPS-safe desktop modules · 2026-10-02 20:56 PKT
+- **Kya kiya:** Linux par shutdown/restart/sleep ab DESKTOP_ONLY; delivery helpers startfile ki jagah; email attachment missing par error; Notepad basename-only; open_app dynamic risk; close-combo subset guard; YouTube browser fallback jab open fail ho to error.
+- **Files:** services/system/jarvis_system_ctrl.py, jarvis_window_ctrl.py, jarvis_desktop_common.py, services/automation/* (keyboard, youtube, whatsapp, maps, notepad, pinchtab), services/multimedia/*, tests/tools/test_vps_safety.py, tests/automation/test_keyboard_close_combo.py, tests/automation/test_youtube_downloader.py, tests/tools/test_keyboard_mouse_tools.py, plan.md
+- **Verify:** `.venv_312/Scripts/python.exe -m pytest tests/tools/test_vps_safety.py tests/automation/test_keyboard_close_combo.py tests/automation/test_youtube_downloader.py -q` → 21 passed in 7.42s
+- **Commit:** abhi nahi · **Deploy:** no
+- **Doosre agent ke liye:** desktop_manifest STALE (open_app meta) — Claude regenerate export_manifest.py.

@@ -16,16 +16,6 @@ from ctypes import POINTER, cast
 from datetime import datetime
 from typing import Any, Callable, Optional
 
-import pyautogui
-import pythoncom
-import pywintypes
-from comtypes import CLSCTX_ALL
-from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
-from pynput.keyboard import Controller as KeyboardController
-from pynput.keyboard import Key
-from pynput.mouse import Button
-from pynput.mouse import Controller as MouseController
-
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
 from services.system.jarvis_desktop_common import (
     WindowInfo,
@@ -46,14 +36,71 @@ _TOKEN_WARNING_EMITTED = False
 
 _WINDOWS_PATH_RE = re.compile(r"(?:[A-Za-z]:\\|\\\\)")
 
-_CLOSE_COMBOS = frozenset(
-    {
-        frozenset({"alt", "f4"}),
-        frozenset({"ctrl", "w"}),
-        frozenset({"ctrl", "q"}),
-        frozenset({"ctrl", "shift", "w"}),
-    }
+_CLOSE_COMBO_CORES = (
+    frozenset({"alt", "f4"}),
+    frozenset({"ctrl", "w"}),
+    frozenset({"ctrl", "q"}),
+    frozenset({"ctrl", "shift", "w"}),
 )
+
+pyautogui = None
+pythoncom = None
+pywintypes = None
+CLSCTX_ALL = None
+AudioUtilities = None
+IAudioEndpointVolume = None
+KeyboardController = None
+MouseController = None
+Key = None
+Button = None
+
+
+def _load_pyautogui():
+    global pyautogui
+    if pyautogui is None:
+        try:
+            import pyautogui as pg  # pylint: disable=import-outside-toplevel
+
+            pyautogui = pg
+        except Exception as exc:  # pragma: no cover
+            raise RuntimeError("pyautogui unavailable") from exc
+    return pyautogui
+
+
+def _load_input_controllers():
+    global KeyboardController, MouseController, Key, Button
+    if KeyboardController is None:
+        try:
+            from pynput.keyboard import Controller as _Kb  # pylint: disable=import-outside-toplevel
+            from pynput.keyboard import Key as _Key
+            from pynput.mouse import Button as _Button
+            from pynput.mouse import Controller as _Mb
+
+            KeyboardController = _Kb
+            MouseController = _Mb
+            Key = _Key
+            Button = _Button
+        except Exception as exc:  # pragma: no cover
+            raise RuntimeError("pynput unavailable") from exc
+
+
+def _load_volume_stack():
+    global pythoncom, pywintypes, CLSCTX_ALL, AudioUtilities, IAudioEndpointVolume
+    if AudioUtilities is None:
+        try:
+            import pythoncom as _pythoncom  # pylint: disable=import-outside-toplevel
+            import pywintypes as _pywintypes
+            from comtypes import CLSCTX_ALL as _CLS
+            from pycaw.pycaw import AudioUtilities as _AU
+            from pycaw.pycaw import IAudioEndpointVolume as _IA
+
+            pythoncom = _pythoncom
+            pywintypes = _pywintypes
+            CLSCTX_ALL = _CLS
+            AudioUtilities = _AU
+            IAudioEndpointVolume = _IA
+        except Exception as exc:  # pragma: no cover
+            raise RuntimeError("volume stack unavailable") from exc
 
 _KEY_ALIASES = {
     "control": "ctrl",
@@ -94,7 +141,7 @@ def _is_valid_key_token(key: str) -> bool:
 
 def _is_close_combo(keys: list[str]) -> bool:
     norm = frozenset(_normalize_key_name(k) for k in keys)
-    return norm in _CLOSE_COMBOS
+    return any(core <= norm for core in _CLOSE_COMBO_CORES)
 
 
 def _maybe_unescape_literals(text: str) -> str:
@@ -235,6 +282,16 @@ class SafeController:
     def __init__(self):
         self.active = False
         self.activation_time = None
+        self.keyboard = None
+        self.mouse = None
+        self.special_keys: dict[str, Any] = {}
+        self._input_ready = False
+
+    def _ensure_input(self) -> None:
+        if self._input_ready:
+            return
+        _load_input_controllers()
+        assert KeyboardController is not None and MouseController is not None and Key is not None
         self.keyboard = KeyboardController()
         self.mouse = MouseController()
         self.special_keys = {
@@ -282,6 +339,7 @@ class SafeController:
             name = f"f{i}"
             self.special_keys[name] = getattr(Key, name)
             self.BASE_SPECIAL_KEYS.add(name)
+        self._input_ready = True
 
     async def _get_volume_interface(self):
         """
@@ -289,9 +347,13 @@ class SafeController:
         Ensures COM is initialized properly.
         """
         try:
+            if AudioUtilities is None:
+                _load_volume_stack()
+            if pythoncom is None or AudioUtilities is None:
+                return None
             try:
                 pythoncom.CoInitialize()
-            except pywintypes.error:
+            except Exception:
                 pass
 
             devices = AudioUtilities.GetSpeakers()
@@ -304,14 +366,14 @@ class SafeController:
 
             interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
             return cast(interface, POINTER(IAudioEndpointVolume))
-        except (pywintypes.error, AttributeError, OSError) as e:
+        except (AttributeError, OSError, Exception) as e:
             logger.warning("Volume interface error: %s", e)
             try:
                 device_enumerator = AudioUtilities.GetDeviceEnumerator()
                 default_device = device_enumerator.GetDefaultAudioEndpoint(0, 1)
                 interface = default_device.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
                 return cast(interface, POINTER(IAudioEndpointVolume))
-            except (pywintypes.error, AttributeError, OSError, Exception) as final_e:
+            except (AttributeError, OSError, Exception) as final_e:
                 logger.warning("Volume interface fallback error: %s", final_e)
                 return None
 
@@ -359,8 +421,11 @@ class SafeController:
     async def move_cursor(self, direction: str, distance: int = 100):
         if not self.is_active():
             return "🛑 Controller is inactive."
+        self._ensure_input()
+        assert self.mouse is not None
+        pg = _load_pyautogui()
         x, y = self.mouse.position
-        screen_width, screen_height = pyautogui.size()
+        screen_width, screen_height = pg.size()
         target_x, target_y = x, y
 
         if direction == "left":
@@ -380,6 +445,8 @@ class SafeController:
     async def mouse_click(self, button: str = "left"):
         if not self.is_active():
             return "🛑 Controller is inactive."
+        self._ensure_input()
+        assert self.mouse is not None and Button is not None
         if button == "left":
             self.mouse.click(Button.left, 1)
         elif button == "right":
@@ -393,6 +460,9 @@ class SafeController:
     async def scroll_cursor(self, direction: str, amount: int = 10):
         if not self.is_active():
             return "🛑 Controller is inactive."
+        self._ensure_input()
+        assert self.mouse is not None
+        pg = _load_pyautogui()
         try:
             if direction == "up":
                 self.mouse.scroll(0, amount)
@@ -400,7 +470,7 @@ class SafeController:
                 self.mouse.scroll(0, -amount)
         except (AttributeError, OSError, RuntimeError) as e:
             logger.debug("pynput scroll failed, trying pyautogui: %s", e)
-            pyautogui.scroll(amount * 100)
+            pg.scroll(amount * 100)
         await asyncio.sleep(0.2)
         self.log(f"Mouse scrolled {direction}")
         return f"Scroll {direction} ho gaya."
@@ -420,6 +490,8 @@ class SafeController:
                 return f"Text paste ho gaya ({len(text)} characters)."
             logger.warning("Clipboard paste failed; falling back to per-char typing")
 
+        self._ensure_input()
+        assert self.keyboard is not None and Key is not None
         actual_interval = interval if interval > 0 else 0.02
         for char in text:
             try:
@@ -455,6 +527,8 @@ class SafeController:
     async def press_key(self, key: str):
         if not self.is_active():
             return "🛑 Controller is inactive."
+        self._ensure_input()
+        assert self.keyboard is not None
         if not _is_valid_key_token(key):
             return f"❌ Invalid key: {key}"
         k = self.resolve_key(key)
@@ -470,6 +544,8 @@ class SafeController:
     async def press_hotkey(self, keys: list[str]):
         if not self.is_active():
             return "🛑 Controller is inactive."
+        self._ensure_input()
+        assert self.keyboard is not None
         resolved = []
         for k in keys:
             if not _is_valid_key_token(k):
@@ -512,15 +588,19 @@ class SafeController:
                     data["percent"] = pct
                     self.log(f"Volume {action} to {pct}%")
                     return f"Volume ab {pct} percent hai.", data
-            except (pywintypes.error, AttributeError) as e:
-                logger.debug("Volume scalar path failed: %s", e)
+            except Exception as e:
+                if pywintypes is not None and isinstance(e, pywintypes.error):
+                    logger.debug("Volume scalar path failed: %s", e)
+                else:
+                    logger.debug("Volume scalar path failed: %s", e)
 
+        pg = _load_pyautogui()
         if action == "up":
-            pyautogui.press("volumeup")
+            pg.press("volumeup")
         elif action == "down":
-            pyautogui.press("volumedown")
+            pg.press("volumedown")
         elif action == "mute":
-            pyautogui.press("volumemute")
+            pg.press("volumemute")
         else:
             return f"❌ Unknown volume action: {action}", data
 
@@ -533,8 +613,10 @@ class SafeController:
             return "🛑 Controller is inactive."
 
         try:
+            _load_volume_stack()
+            assert pythoncom is not None
             pythoncom.CoInitialize()
-        except pywintypes.error:
+        except Exception:
             pass
 
         try:
@@ -546,29 +628,30 @@ class SafeController:
             volume.SetMasterVolumeLevelScalar(percentage / 100, None)
             self.log(f"Volume set to {percentage}%")
             return f"Volume {percentage} percent par set ho gaya.", {"percent": percentage}
-        except (pywintypes.error, AttributeError, ValueError, OSError) as set_e:
+        except (AttributeError, ValueError, OSError) as set_e:
             self.log(f"Volume set error: {set_e!s}")
             return f"❌ Volume set nahi ho paaya: {set_e}", {}
 
     async def swipe_gesture(self, direction: str):
         if not self.is_active():
             return "🛑 Controller is inactive."
-        screen_width, screen_height = pyautogui.size()
+        pg = _load_pyautogui()
+        screen_width, screen_height = pg.size()
         x, y = screen_width // 2, screen_height // 2
         try:
             if direction == "up":
-                pyautogui.moveTo(x, y + 200)
-                pyautogui.dragTo(x, y - 200, duration=0.5)
+                pg.moveTo(x, y + 200)
+                pg.dragTo(x, y - 200, duration=0.5)
             elif direction == "down":
-                pyautogui.moveTo(x, y - 200)
-                pyautogui.dragTo(x, y + 200, duration=0.5)
+                pg.moveTo(x, y - 200)
+                pg.dragTo(x, y + 200, duration=0.5)
             elif direction == "left":
-                pyautogui.moveTo(x + 200, y)
-                pyautogui.dragTo(x - 200, y, duration=0.5)
+                pg.moveTo(x + 200, y)
+                pg.dragTo(x - 200, y, duration=0.5)
             elif direction == "right":
-                pyautogui.moveTo(x - 200, y)
-                pyautogui.dragTo(x + 200, y, duration=0.5)
-        except (pyautogui.FailSafeException, AttributeError, OSError) as e:
+                pg.moveTo(x - 200, y)
+                pg.dragTo(x + 200, y, duration=0.5)
+        except (AttributeError, OSError) as e:
             logger.warning("Swipe gesture failed or aborted: %s", e)
         await asyncio.sleep(0.5)
         self.log(f"Swipe gesture: {direction}")
