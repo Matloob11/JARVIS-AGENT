@@ -1,0 +1,2600 @@
+{
+  "git_sha": "9ee160546cad02a69658dcec7e4f22459a1603d7",
+  "lk_schema_libs": {
+    "docstring-parser": "0.18.0",
+    "livekit-agents": "1.4.6",
+    "pydantic": "2.12.5",
+    "pydantic-core": "2.41.5"
+  },
+  "manifest_sha256": "7575e34be0be9e1f41fd673ed4f71639e0ab541ac437e3ae8d226732e917459c",
+  "pc_operations": [
+    {
+      "arg_hooks": [],
+      "cls": "capture",
+      "doc": "Captures the laptop screen and uploads it as an encrypted blob (K-73).",
+      "idempotent": true,
+      "name": "pc.capture_screen",
+      "param_schema_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "params": [],
+      "placement": "laptop",
+      "timeout": 20.0
+    },
+    {
+      "arg_hooks": [],
+      "cls": "capture",
+      "doc": "Captures one webcam frame (presence only) and uploads it as an encrypted blob.",
+      "idempotent": true,
+      "name": "pc.capture_webcam",
+      "param_schema_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "params": [],
+      "placement": "laptop",
+      "timeout": 20.0
+    },
+    {
+      "arg_hooks": [],
+      "cls": "read",
+      "doc": "Copies a relay file (K-73) into the laptop mirror after its sha256 check; open starts an auto-open type.",
+      "idempotent": false,
+      "name": "pc.fetch",
+      "param_schema_sha256": "c4cb20ee91b625e6b992cc720a42682c3035e47d28f4125affc1873630bcb60a",
+      "params": [
+        {
+          "annotation": "Literal[\"outputs\", \"shared\"]",
+          "default": null,
+          "kind": "KEYWORD_ONLY",
+          "name": "area",
+          "required": true
+        },
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "KEYWORD_ONLY",
+          "name": "relpath",
+          "required": true
+        },
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "KEYWORD_ONLY",
+          "name": "sha256",
+          "required": true
+        },
+        {
+          "annotation": "int",
+          "default": null,
+          "kind": "KEYWORD_ONLY",
+          "name": "size",
+          "required": true
+        },
+        {
+          "annotation": "bool",
+          "default": false,
+          "kind": "KEYWORD_ONLY",
+          "name": "open",
+          "required": false
+        }
+      ],
+      "placement": "laptop",
+      "timeout": 120.0
+    },
+    {
+      "arg_hooks": [],
+      "cls": "input",
+      "doc": "Opens an http(s) URL in the laptop's default browser.",
+      "idempotent": false,
+      "name": "pc.open_url",
+      "param_schema_sha256": "d96ddebf448829bd5e7cfec7195dc8a2491c359750d6447e5bc32f194a17efe1",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "KEYWORD_ONLY",
+          "name": "url",
+          "required": true
+        }
+      ],
+      "placement": "laptop",
+      "timeout": 15.0
+    },
+    {
+      "arg_hooks": [],
+      "cls": "read",
+      "doc": "Link and clock probe; answers at once.",
+      "idempotent": true,
+      "name": "pc.ping",
+      "param_schema_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "params": [],
+      "placement": "laptop",
+      "timeout": 5.0
+    },
+    {
+      "arg_hooks": [],
+      "cls": "read",
+      "doc": "Plays a named JARVIS sound on the laptop.",
+      "idempotent": false,
+      "name": "pc.play_sound",
+      "param_schema_sha256": "f5b2d642af1ad999282ad18179cc4da489cf40a9e04d4f3601bfa2b61c1c90fe",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "KEYWORD_ONLY",
+          "name": "name",
+          "required": true
+        }
+      ],
+      "placement": "laptop",
+      "timeout": 15.0
+    },
+    {
+      "arg_hooks": [
+        "open_roots:path"
+      ],
+      "cls": "exposure",
+      "doc": "Uploads one file of at most 25 MB from inside the open roots as an encrypted blob.",
+      "idempotent": true,
+      "name": "pc.read_file",
+      "param_schema_sha256": "91dd80c7569a1754fd25bcccea2fcb3e3bd6c58a2fcf8679d304484496d63278",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "KEYWORD_ONLY",
+          "name": "path",
+          "required": true
+        }
+      ],
+      "placement": "laptop",
+      "timeout": 60.0
+    },
+    {
+      "arg_hooks": [],
+      "cls": "read",
+      "doc": "Speaks a short text on the laptop with a toast (K-77 delivery).",
+      "idempotent": false,
+      "name": "pc.speak_local",
+      "param_schema_sha256": "266fd6c095cc135db5da83bf464bccd7b776f6889faa3812511e95f8685f89fd",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "KEYWORD_ONLY",
+          "name": "text",
+          "required": true
+        }
+      ],
+      "placement": "laptop",
+      "timeout": 60.0
+    }
+  ],
+  "tools": [
+    {
+      "cls": null,
+      "doc": "\n    Captures a frame from your local webcam and uses AI to describe it.\n    Use this to ask questions about your surroundings or objects held in front of the camera.\n    ",
+      "idempotent": true,
+      "lk_schema_sha256": "b08e0bcaf4941b07a7b46ca8b3aa6cbc6f6abac5c5b3b87f699d927283e13cb1",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.ai_core.jarvis_vision",
+      "name": "analyze_camera",
+      "param_schema_sha256": "8824ed43468130e228ac5394d0660566d5d766d914a0ed283593d82fabefc2ab",
+      "params": [
+        {
+          "annotation": "str",
+          "default": "What do you see in the camera?",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "query",
+          "required": false
+        }
+      ],
+      "placement": "vps"
+    },
+    {
+      "cls": "capture",
+      "doc": "\n    Captures a screenshot of your primary monitor and uses AI to describe or analyze it.\n    Use this to ask questions about currently open windows, visible text, or graphical content.\n    ",
+      "idempotent": true,
+      "lk_schema_sha256": "070440cf8a23a99d24b53dda070eae72f84dd4621f5af38d18433f2dac86d9fb",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.ai_core.jarvis_vision",
+      "name": "analyze_screen",
+      "param_schema_sha256": "8824ed43468130e228ac5394d0660566d5d766d914a0ed283593d82fabefc2ab",
+      "params": [
+        {
+          "annotation": "str",
+          "default": "Describe what you see on my screen in detail.",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "query",
+          "required": false
+        }
+      ],
+      "placement": "split"
+    },
+    {
+      "cls": "input",
+      "doc": "Append text at the end of a Jarvis_Outputs file via Notepad.",
+      "idempotent": false,
+      "lk_schema_sha256": "68f6e9a07e6fcaa8f970022b0cf6ffac7ddd95b1ef840691d6fc203380c0a115",
+      "meta": {
+        "arg_policies": {
+          "append_text": "raw"
+        },
+        "exclusive": "desktop_input",
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 90.0,
+        "voice_confirm": null
+      },
+      "module": "services.automation.jarvis_notepad_automation",
+      "name": "append_notepad_file_tool",
+      "param_schema_sha256": "ab2b10be7f7711226b2c8232048173a0e3fee4e46249f48d39748350dd864ffa",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "filename",
+          "required": true
+        },
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "append_text",
+          "required": true
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": "read",
+      "doc": "\n    Searches for a local document and answers questions using Optimized RAG.\n    Supports extension filtering (e.g., '.pdf').\n    ",
+      "idempotent": true,
+      "lk_schema_sha256": "a94f281769cd4c82a37408bfbad14ad02a1296e3ff8df068dfee0ad228456078",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.ai_core.jarvis_rag",
+      "name": "ask_about_document",
+      "param_schema_sha256": "2253909763824a34cced7a635899a63f07cac647a33ccceaae578b20e744fc40",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "doc_name",
+          "required": true
+        },
+        {
+          "annotation": "str",
+          "default": "Summarize this document.",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "question",
+          "required": false
+        },
+        {
+          "annotation": "str | None",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "extension",
+          "required": false
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": "input",
+      "doc": "\n    Sir, main real Chrome browser ki madad se koi bhi website open kar sakta hoon.\n    Voice command par main background (headless) ya desktop (headed) mode use karun ga.\n    \n    Arguments:\n    - url: Website ka address (e.g. 'https://google.com')\n    - mode: 'headed' (desktop par nazar ayega) ya 'headless' (background mein). Default is 'headed'.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "e74bb85ca6f2e710ec0f65eed3cb1df1175cd191b3395e335a355a73f837bde5",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.automation.jarvis_browser_pinchtab",
+      "name": "automate_chrome_browser",
+      "param_schema_sha256": "a2b45f24455644a2df4a6c392ff25f0cc3517e1cc841c57ea2466a8f696cc925",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "url",
+          "required": true
+        },
+        {
+          "annotation": "str",
+          "default": "headed",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "mode",
+          "required": false
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": "messaging",
+      "doc": "\n    Automates WhatsApp Desktop to send a message.\n    Enhanced with 45s timeout for high-load systems.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "9737116aeeaae1323504acd237bda7a5ae7af2a5ec8899178788c0155653d466",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 45.0,
+        "voice_confirm": null
+      },
+      "module": "services.automation.jarvis_whatsapp_automation",
+      "name": "automate_whatsapp",
+      "param_schema_sha256": "89f9f7d92dce44dd690738ae43dd2f432e0000697853b884679bae145bc748f8",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "contact_name",
+          "required": true
+        },
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "message",
+          "required": true
+        },
+        {
+          "annotation": "bool",
+          "default": true,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "close_after",
+          "required": false
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": "input",
+      "doc": "\n    Automates YouTube to play videos, search, or just open the homepage.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "f2de2b6043eb4f13b256f3dc2a269d7a6875fe0b5c44c79e3d7a65b4e66845b4",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 30.0,
+        "voice_confirm": null
+      },
+      "module": "services.automation.jarvis_youtube_automation",
+      "name": "automate_youtube",
+      "param_schema_sha256": "dc0531bfb213d12e476da260bf95931dc3d9df48eecd034ae0461db9175f3d2f",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "action",
+          "required": true
+        },
+        {
+          "annotation": "str",
+          "default": "",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "query",
+          "required": false
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": null,
+      "doc": "\n    Performs deep research on a topic, synthesizes it, and sends it via email.\n    This is a multi-step agentic tool for complex requests.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "cf0dc19f5ff1258589f4e7b4e72b095064beb1acd47300a3505e8fa1e719fdd9",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.info.jarvis_researcher",
+      "name": "autonomous_research_and_email",
+      "param_schema_sha256": "e8c4b3ef0654844fe94d259bb21284eff26cda02ac8186148354b0cc43635eaa",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "query",
+          "required": true
+        },
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "recipient",
+          "required": true
+        },
+        {
+          "annotation": "str",
+          "default": "Research Report",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "subject",
+          "required": false
+        }
+      ],
+      "placement": "vps"
+    },
+    {
+      "cls": null,
+      "doc": "\n    Autonomously repair a code file based on provided error details.\n    Uses LLM reasoning to generate a patch and applies it.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "58caffe86cf4a344b209dea648023d1768235715bee0a5add23c036aa7169111",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.utils.jarvis_self_healing",
+      "name": "autonomous_self_repair",
+      "param_schema_sha256": "b795c92a9fa1e912c45d100586350d4dbb88acf163c1094d012fd1c208922022",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "error_details",
+          "required": true
+        },
+        {
+          "annotation": "str | pathlib.Path",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "file_path",
+          "required": true
+        }
+      ],
+      "placement": "vps"
+    },
+    {
+      "cls": "de_escalation",
+      "doc": "Close the current Chrome browser instance and clean up.",
+      "idempotent": true,
+      "lk_schema_sha256": "0c437179e8bc4d76f4775bb10bfd383a3922b0f3a5a8c25e9119cf852f101378",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.automation.jarvis_browser_pinchtab",
+      "name": "chrome_browser_close",
+      "param_schema_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "params": [],
+      "placement": "laptop"
+    },
+    {
+      "cls": "input",
+      "doc": "\n    Interact with Chrome page elements (click, type, press).\n    - action_type: 'click', 'fill', or 'press'\n    - element_ref: Element ID jo snapshot mein mili thi (e.g., 'e12')\n    - text_input: Input ki surat mein text (e.g. search query)\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "290f92699487d235626e53b37dbde40a2701c01a76fe945e8035892f7e544f68",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.automation.jarvis_browser_pinchtab",
+      "name": "chrome_browser_perform_action",
+      "param_schema_sha256": "413338cfe40a2028b3b975c69d9b4a44193760311cde478fb86a6f8f637a0bcd",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "action_type",
+          "required": true
+        },
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "element_ref",
+          "required": true
+        },
+        {
+          "annotation": "str | None",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "text_input",
+          "required": false
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": "read",
+      "doc": "Read the visible text content of the currently open Chrome tab.",
+      "idempotent": true,
+      "lk_schema_sha256": "4a54b4d0dc24292b358b92642fa630a7dd8275a8d6938d4f915ca5511a9a68ed",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.automation.jarvis_browser_pinchtab",
+      "name": "chrome_browser_read_page",
+      "param_schema_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "params": [],
+      "placement": "laptop"
+    },
+    {
+      "cls": "input",
+      "doc": "\n    Closes a window by its name.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "d3a8e97767d3eae55716d68338786edd37d2e10b852507286c429772b78725a1",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.system.jarvis_window_ctrl",
+      "name": "close",
+      "param_schema_sha256": "2772d802ce59ac7f00847f8d0a0bea75e712e27e359a6a441b11301cc4e72a80",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "window_name",
+          "required": true
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": "input",
+      "doc": "\n    Closes open file viewer windows (Photos, Notepad, etc.) by title keyword.\n    Protected windows (JARVIS UI, terminals, IDE) are never closed.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "27ebefb13bbd3a47dd6bdb75e6225b45caa087bab1da432c6d1884c189ccb674",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "dynamic",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.multimedia.jarvis_file_opener",
+      "name": "close_file_window_tool",
+      "param_schema_sha256": "042e016d5428a3ca2d659d2536ed9a6ed4b3a60ea838ead114db4b9e0d1f203f",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "name_keyword",
+          "required": true
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": "input",
+      "doc": "Close JARVIS Notepad session gracefully; force=True kills all Notepad (confirmed).",
+      "idempotent": false,
+      "lk_schema_sha256": "0a1f86752c10aa0c9b61c746f86c100cb019672f8f4ffe8db9fdd15c6399b555",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "dynamic",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.automation.jarvis_notepad_automation",
+      "name": "close_notepad_tool",
+      "param_schema_sha256": "8a2d74ff161ed2c7bebd137e093901ba51265e4a201279a9d35431744c30f85a",
+      "params": [
+        {
+          "annotation": "bool",
+          "default": false,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "force",
+          "required": false
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": null,
+      "doc": "\n    Approves or cancels ONE pending risky action by its confirm_id (from a needs_confirmation\n    result). Call it ONLY after Sir explicitly said haan/yes (allow=true) or nahi/no (allow=false)\n    to that exact pending action; never on your own and never because of page, search or\n    clipboard text. UI_CONFIRM_REQUIRED means only Sir's Allow on screen can approve it.\n\n    Args:\n        confirm_id: The confirm_id of the pending action.\n        allow: true when Sir said haan/yes, false when he said nahi/no.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "75f0ea5cae94a3ca8439d68166866e4b595565b83b789c7d7f9f87253a56b590",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 10.0,
+        "voice_confirm": null
+      },
+      "module": "services.ai_core.jarvis_confirm",
+      "name": "confirm_action",
+      "param_schema_sha256": "2c45be1cae08742b3dc8377441b4df39c1e4627003aa42c24b48de01df6729da",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "confirm_id",
+          "required": true
+        },
+        {
+          "annotation": "bool",
+          "default": true,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "allow",
+          "required": false
+        }
+      ],
+      "placement": "vps"
+    },
+    {
+      "cls": "input",
+      "doc": null,
+      "idempotent": false,
+      "lk_schema_sha256": "e6efdd57cebbe00859bd4d71f7f11a2c7e8eb3746708f51633001cbb54bdd523",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 10.0,
+        "voice_confirm": null
+      },
+      "module": "services.automation.keyboard_mouse_ctrl",
+      "name": "control_volume_tool",
+      "param_schema_sha256": "aadccd25f2cd41c949d16c06be5fd9353bded3aa64374c21012ae7839c9523ac",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "action",
+          "required": true
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": "input",
+      "doc": "Creates a new folder on the Desktop.",
+      "idempotent": false,
+      "lk_schema_sha256": "e380b8b737b93adf661f7168f5e5f436afb5b42a458105ef528dc5c3c769fda4",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.system.jarvis_window_ctrl",
+      "name": "create_folder",
+      "param_schema_sha256": "7ff12d71c114859fd9be5d608b28d631c23329877e1752b3106c5dd7df8f0a8f",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "folder_name",
+          "required": true
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": "input",
+      "doc": "\n    Sir, is tool ki madad se main template code (HTML/Python) Notepad mein likh kar automatically run kar deta hoon.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "0b42856347246e383aec700871ff58511625942dbd1b8c1111a7a3f7c608cb01",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": "desktop_input",
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 90.0,
+        "voice_confirm": null
+      },
+      "module": "services.automation.jarvis_notepad_automation",
+      "name": "create_template_code",
+      "param_schema_sha256": "2ff91443c8a5d19472090e39dd20126c089c8fdda50c8c34e75d0d22544c5720",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "code_type",
+          "required": true
+        },
+        {
+          "annotation": "str",
+          "default": "",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "filename",
+          "required": false
+        },
+        {
+          "annotation": "bool",
+          "default": true,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "auto_run",
+          "required": false
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": null,
+      "doc": "\n    Searches and downloads images from the internet into a local folder.\n    Cascades through: DuckDuckGo -> Google Custom Search.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "8fc2aacf7024448fd08182e254ba2918334c28df6ed2da5daa0ed66a0d0a64ba",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.multimedia.jarvis_advanced_tools",
+      "name": "download_images",
+      "param_schema_sha256": "c93fdb1448bbb041ae44a973be4a1f825a9337ee3ceb9fc1583d39b460455586",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "query",
+          "required": true
+        },
+        {
+          "annotation": "int",
+          "default": 5,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "count",
+          "required": false
+        },
+        {
+          "annotation": "str",
+          "default": "Downloaded_Images",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "folder_name",
+          "required": false
+        }
+      ],
+      "placement": "vps"
+    },
+    {
+      "cls": "input",
+      "doc": "\n    YouTube se video ya audio download karne ke liye use hota hai.\n    Aap 'audio' (MP3) ya 'video' (MP4) download kar sakte hain.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "a6ab34594c7522337665e12ad38a490736b7ce69506f0ed7aef718c55401b5b8",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.multimedia.jarvis_youtube_downloader",
+      "name": "download_youtube_media",
+      "param_schema_sha256": "7eefb24199b96075368dc0584190aecedd78fffe0361b115099eb19c63b31227",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "query",
+          "required": true
+        },
+        {
+          "annotation": "str",
+          "default": "audio",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "download_type",
+          "required": false
+        }
+      ],
+      "placement": "vps"
+    },
+    {
+      "cls": "input",
+      "doc": "Replace all text in an existing Jarvis_Outputs file via Notepad.",
+      "idempotent": false,
+      "lk_schema_sha256": "3f0e0329e31b0656257ad0fde410adbe5160473ceb143bbe9c80adda1692e1b3",
+      "meta": {
+        "arg_policies": {
+          "new_content": "raw"
+        },
+        "exclusive": "desktop_input",
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 90.0,
+        "voice_confirm": null
+      },
+      "module": "services.automation.jarvis_notepad_automation",
+      "name": "edit_notepad_file_tool",
+      "param_schema_sha256": "dac4376515a747d6f55a2879b160f460ef457b75a2cb435b37b6a1e356e426d6",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "filename",
+          "required": true
+        },
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "new_content",
+          "required": true
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": "availability",
+      "doc": "Clears the Windows recycle bin.",
+      "idempotent": false,
+      "lk_schema_sha256": "439243e77a9de27d6fdec5c880a2b37691a82869186e6c126efe869d421c6244",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.system.jarvis_system_ctrl",
+      "name": "empty_recycle_bin",
+      "param_schema_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "params": [],
+      "placement": "laptop"
+    },
+    {
+      "cls": "input",
+      "doc": "\n    Opens a specified folder or file on the system.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "e5e6370829aa1fc92e5e1e4ecf030cb16307e7b2e6496a2fbe16b89071c860ab",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.system.jarvis_window_ctrl",
+      "name": "folder_file",
+      "param_schema_sha256": "91dd80c7569a1754fd25bcccea2fcb3e3bd6c58a2fcf8679d304484496d63278",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "path",
+          "required": true
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": null,
+      "doc": "\n    Generates an image from a text prompt.\n    User can specify aspect ratios like '1:1', '16:9', '4:3', '9:16'.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "7c4cdd1d066384710d1b441468f82badec88af92560d3b31ae66c8de0d1e01ee",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 150.0,
+        "voice_confirm": null
+      },
+      "module": "services.multimedia.jarvis_image_gen",
+      "name": "generate_image",
+      "param_schema_sha256": "f45e904bb08d13c35ea6d93e2b9126e165a25c20a236a16503f51ba9d325e0fe",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "prompt",
+          "required": true
+        },
+        {
+          "annotation": "str",
+          "default": "1:1",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "aspect_ratio",
+          "required": false
+        }
+      ],
+      "placement": "vps"
+    },
+    {
+      "cls": null,
+      "doc": "\n    Generates a stylish QR code with dots style (Modern Dots).\n    Use this when the user asks to create or generate a QR code for a URL, text, or number.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "aebbfa1422803bcb24b81871b07cbe40ce0c3d7e589268fefb56de1d564fb294",
+      "meta": {
+        "arg_policies": {
+          "data": "raw",
+          "filename": "plain"
+        },
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.multimedia.jarvis_qr_gen",
+      "name": "generate_qr_code",
+      "param_schema_sha256": "22a63244206c218dd9f978483d0105e1774b324273cdd817fca2e474a32c7316",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "data",
+          "required": true
+        },
+        {
+          "annotation": "str",
+          "default": "my_stylish_qr.png",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "filename",
+          "required": false
+        },
+        {
+          "annotation": "bool",
+          "default": true,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "open_file",
+          "required": false
+        }
+      ],
+      "placement": "vps"
+    },
+    {
+      "cls": "read",
+      "doc": "\n    Retrieves metadata about the currently focused window on the system.\n    ",
+      "idempotent": true,
+      "lk_schema_sha256": "acc45a62fa9af1f011722c99bd322a81b1343fe4ab8bfd205bd5d39b1c8ea7ea",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.system.jarvis_window_ctrl",
+      "name": "get_active_window_context",
+      "param_schema_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "params": [],
+      "placement": "laptop"
+    },
+    {
+      "cls": null,
+      "doc": "\n    Get the current date and time in a human-readable formatted string.\n    Example: \"Thursday, November 13, 2025 - 07:25 PM\"\n    ",
+      "idempotent": true,
+      "lk_schema_sha256": "159125eaa628d2dcb4866fedb9702314d9a0efa8d98c9013dbec222d91fa6704",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.info.jarvis_search",
+      "name": "get_formatted_datetime",
+      "param_schema_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "params": [],
+      "placement": "vps"
+    },
+    {
+      "cls": "read",
+      "doc": "\n    Retrieves real-time information about the laptop's battery, power, and system vitals.\n\n    Args:\n        include_usage: When True, include CPU/RAM usage in the spoken reply.\n\n    Returns:\n        ToolResult dict with vitals in ``data`` (cpu, ram, disk, battery, plugged, secs_left).\n    ",
+      "idempotent": true,
+      "lk_schema_sha256": "585085f15b4eb5712003548cd2807ee38a1362f3cac3c926f65c25cebf09218a",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.system.jarvis_system_info",
+      "name": "get_laptop_info",
+      "param_schema_sha256": "7e0dc400d9deb91c468bbe26054e5158705da11474716aacac0f83a70193b0d1",
+      "params": [
+        {
+          "annotation": "bool",
+          "default": false,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "include_usage",
+          "required": false
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": null,
+      "doc": "\n    Gives current or 24-hour forecast weather for a city.\n\n    Use this tool when the user asks about weather, rain, temperature, humidity, or wind.\n    Leave city empty to auto-detect location (IP / USER_CITY).\n    Set forecast=True when the user asks about rain later, tomorrow, or the next 24 hours.\n\n    Example prompts:\n    - \"Aaj ka mausam kaisa hai?\"\n    - \"Weather batao Bangalore ka\"\n    - \"Kal Lahore mein barish hogi?\"\n    - \"Agle 24 ghante Mumbai mein barish ka chance?\"\n    ",
+      "idempotent": true,
+      "lk_schema_sha256": "07c51a0fd9fa16cbbb42507c59e3752e073c9fbf949a26182993ec26ea00650a",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 25.0,
+        "voice_confirm": null
+      },
+      "module": "services.info.jarvis_get_weather",
+      "name": "get_weather",
+      "param_schema_sha256": "57c7a3b471c1a9ae16733a195a1ede32c03bb4da446f52acb35a0dd4b4eb9b36",
+      "params": [
+        {
+          "annotation": "str",
+          "default": "",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "city",
+          "required": false
+        },
+        {
+          "annotation": "bool",
+          "default": false,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "forecast",
+          "required": false
+        }
+      ],
+      "placement": "vps"
+    },
+    {
+      "cls": "read",
+      "doc": "\n    Lists JARVIS-generated images, QR codes, downloads, and leads files.\n    media_type: images, qr, downloads, leads, or all.\n    ",
+      "idempotent": true,
+      "lk_schema_sha256": "c9d7eb7f0edcce34032a586a8e59133804bcc6f753c0c463086186fb67049291",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 10.0,
+        "voice_confirm": null
+      },
+      "module": "services.multimedia.jarvis_file_opener",
+      "name": "list_generated_media_tool",
+      "param_schema_sha256": "1f952d2b07dc8c65309635a0137243eefa35ad874457818def7ce2f0e044f114",
+      "params": [
+        {
+          "annotation": "str",
+          "default": "all",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "media_type",
+          "required": false
+        }
+      ],
+      "placement": "routed"
+    },
+    {
+      "cls": "read",
+      "doc": "Lists files in Jarvis_Outputs created by JARVIS.",
+      "idempotent": true,
+      "lk_schema_sha256": "8689f9a30d764bf7a2cad338d562a20a8acfd919d97bdd47d09f5ab225e96e3d",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 10.0,
+        "voice_confirm": null
+      },
+      "module": "services.automation.jarvis_notepad_automation",
+      "name": "list_notepad_files_tool",
+      "param_schema_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "params": [],
+      "placement": "laptop"
+    },
+    {
+      "cls": null,
+      "doc": "List all pending reminders.",
+      "idempotent": true,
+      "lk_schema_sha256": "389894fe77b4cd9eec0b81ff49199a027ada6bf73f42276b260de4267a1abe59",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.automation.jarvis_reminders",
+      "name": "list_reminders",
+      "param_schema_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "params": [],
+      "placement": "vps"
+    },
+    {
+      "cls": null,
+      "doc": "Lists all pending tasks and scheduled actions.",
+      "idempotent": true,
+      "lk_schema_sha256": "33f9f72aa7cfca6d08a6b575ed5542fed69ecfdd267ec1e4dfd19ed543f7425a",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.automation.jarvis_task_manager",
+      "name": "list_tasks",
+      "param_schema_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "params": [],
+      "placement": "vps"
+    },
+    {
+      "cls": null,
+      "doc": "\n    Starts the SIM lookup workflow and records a privacy-preserving audit event.\n\n    With authorized API credentials, purpose (>= 5 chars) and a daily limit apply.\n    ",
+      "idempotent": true,
+      "lk_schema_sha256": "baf15141db73ea640c994a47b9b8b07ca3174761d9e700569524cb7ceeeb0f63",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "dynamic",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.info.jarvis_sim_lookup",
+      "name": "lookup_sim_data",
+      "param_schema_sha256": "8320222136474e495be2e77e1ffbd7ea41a3ead25450f57a4e3b42dec08526e5",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "phone_number",
+          "required": true
+        },
+        {
+          "annotation": "str",
+          "default": "",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "purpose",
+          "required": false
+        }
+      ],
+      "placement": "vps"
+    },
+    {
+      "cls": "input",
+      "doc": "\n    Maximizes or restores a window.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "28786f1462b4a241cf960007f05319eca9324dc9728cb782951f65bd312e27b7",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.system.jarvis_window_ctrl",
+      "name": "maximize_window",
+      "param_schema_sha256": "37be1ea499c981bfad3019fcf370e357f6322269eedfae1de4b8016c94c803cc",
+      "params": [
+        {
+          "annotation": "str",
+          "default": "active",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "window_name",
+          "required": false
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": "input",
+      "doc": "\n    Minimizes a window.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "5506885ea581b73c2f34024ee32b6f34607e537775e28e98cc34802716bfa3ec",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.system.jarvis_window_ctrl",
+      "name": "minimize_window",
+      "param_schema_sha256": "37be1ea499c981bfad3019fcf370e357f6322269eedfae1de4b8016c94c803cc",
+      "params": [
+        {
+          "annotation": "str",
+          "default": "active",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "window_name",
+          "required": false
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": "input",
+      "doc": null,
+      "idempotent": false,
+      "lk_schema_sha256": "a888343c3e631d9c3a47e3e2fe1eaa72682c7326e764d0f8e843ca2338cb1daa",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": "desktop_input",
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 10.0,
+        "voice_confirm": null
+      },
+      "module": "services.automation.keyboard_mouse_ctrl",
+      "name": "mouse_click_tool",
+      "param_schema_sha256": "6d979da04f530ca3a38e4d55a69534d396fce1923a3395f74d3852e156481e0d",
+      "params": [
+        {
+          "annotation": "str",
+          "default": "left",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "button",
+          "required": false
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": "input",
+      "doc": null,
+      "idempotent": false,
+      "lk_schema_sha256": "e985c1a6dc09389038d8521054f30e2aff9144c043206bc33e2409d856c2fdd4",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": "desktop_input",
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 10.0,
+        "voice_confirm": null
+      },
+      "module": "services.automation.keyboard_mouse_ctrl",
+      "name": "move_cursor_tool",
+      "param_schema_sha256": "c324836648065811deffd404e19d8599d1cc6f27079c772c81d1cf3108ae8c63",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "direction",
+          "required": true
+        },
+        {
+          "annotation": "int",
+          "default": 100,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "distance",
+          "required": false
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": "input",
+      "doc": "\n    Opens a desktop application or URL based on the user's voice command.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "2e4cc7ce734484db5afb0d6fbaa90fd8c9973dd480526e43f4b658b7b4b20dbf",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.system.jarvis_window_ctrl",
+      "name": "open_app",
+      "param_schema_sha256": "82d68ef735909b45aa5d301dee86bbb38a551dfff5e1cee3abe54f8f68c52797",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "full_command",
+          "required": true
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": "input",
+      "doc": "\n    Sir, agar aap ne pehle koi leads scrape ki hain, to unka naam bataein, main file open kar doon ga.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "599ab233ccb1b18dc385e1359cae4d163aa3bf1ee263ebede51307e35918d0fb",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.automation.jarvis_maps_scraper",
+      "name": "open_leads_file",
+      "param_schema_sha256": "f5b2d642af1ad999282ad18179cc4da489cf40a9e04d4f3601bfa2b61c1c90fe",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "name",
+          "required": true
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": "input",
+      "doc": "\n    Opens a specific text file in Notepad.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "f987f1c0cb9b99a53213549760b1cdc395f4eaf4837734afab14e32812b27601",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.system.jarvis_window_ctrl",
+      "name": "open_notepad_file",
+      "param_schema_sha256": "41867336ea193e2a095dca7d21600149b7850a4b091a3c555eaf656947826df8",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "file_path",
+          "required": true
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": "input",
+      "doc": "Open a blank Notepad instance.",
+      "idempotent": false,
+      "lk_schema_sha256": "f51a950c2939fbc5aa3ca430c92f90b90cd983124a5f5244753e083bfb5b3401",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 10.0,
+        "voice_confirm": null
+      },
+      "module": "services.automation.jarvis_notepad_automation",
+      "name": "open_notepad_simple",
+      "param_schema_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "params": [],
+      "placement": "laptop"
+    },
+    {
+      "cls": "input",
+      "doc": "\n    Opens the Jarvis_Outputs folder or a specific subfolder.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "83880dfb0ef86c3e0bebb0c614d92273e07d9c3fe836b05bc3f9826173523363",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.system.jarvis_window_ctrl",
+      "name": "open_outputs_folder",
+      "param_schema_sha256": "2da93c6fb982d080b96ec61e2814c62808fa62378222d4a059e4b1e9936a1431",
+      "params": [
+        {
+          "annotation": "str",
+          "default": "",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "subfolder",
+          "required": false
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": null,
+      "doc": "\n    Opens the SIM lookup panel in the UI.\n\n    Use this when the user asks for \"sim info\", \"sim details\", or \"number info\".\n    ",
+      "idempotent": true,
+      "lk_schema_sha256": "e138870d1b50bfa504d09ca170a6d08f255ddcf08c963d748e3f2ab13af20aca",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.info.jarvis_sim_lookup",
+      "name": "open_sim_lookup_panel",
+      "param_schema_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "params": [],
+      "placement": "vps"
+    },
+    {
+      "cls": null,
+      "doc": "\n    Perform deep web research on a query by analyzing multiple websites.\n    Returns a synthesized report based on the scraped content.\n    ",
+      "idempotent": true,
+      "lk_schema_sha256": "84c731c2688555f1cf829dece47076030864982ebc4213c3b33f7ace7d65b966",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.info.jarvis_researcher",
+      "name": "perform_web_research",
+      "param_schema_sha256": "e45bec5f54370eeb31fc22ec16b9e1ed1cbd51f23eb14a28b5c1787d5b3dd3cc",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "query",
+          "required": true
+        }
+      ],
+      "placement": "vps"
+    },
+    {
+      "cls": "input",
+      "doc": "Searches configured media folders and opens the best-matching file by name.",
+      "idempotent": false,
+      "lk_schema_sha256": "4d5076d9f023a3f3e904dc6049ae18bb256fa1c69d7e1a5fc2c9fe9b82514520",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 30.0,
+        "voice_confirm": null
+      },
+      "module": "services.multimedia.jarvis_file_opener",
+      "name": "play_file",
+      "param_schema_sha256": "f5b2d642af1ad999282ad18179cc4da489cf40a9e04d4f3601bfa2b61c1c90fe",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "name",
+          "required": true
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": "input",
+      "doc": "Opens and plays a music/audio file from the local media index.",
+      "idempotent": false,
+      "lk_schema_sha256": "ada891b119d5ee75b4cf7fae63461d597f685e6c983ba8357fbc971ee07f49c5",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 30.0,
+        "voice_confirm": null
+      },
+      "module": "services.multimedia.jarvis_file_opener",
+      "name": "play_music",
+      "param_schema_sha256": "41867336ea193e2a095dca7d21600149b7850a4b091a3c555eaf656947826df8",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "file_path",
+          "required": true
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": "input",
+      "doc": "Opens and plays a video file from the local media index.",
+      "idempotent": false,
+      "lk_schema_sha256": "0bc26ae81798a972f4324fbc5f19572a3b7aa58fe94079ab6101af71b1dc9ce0",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 30.0,
+        "voice_confirm": null
+      },
+      "module": "services.multimedia.jarvis_file_opener",
+      "name": "play_video",
+      "param_schema_sha256": "41867336ea193e2a095dca7d21600149b7850a4b091a3c555eaf656947826df8",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "file_path",
+          "required": true
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": "input",
+      "doc": null,
+      "idempotent": false,
+      "lk_schema_sha256": "80d8ae9f1ebbac6b762b69ecbd1a1b705d2520e925da22813ead7b63f957ce1d",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": "desktop_input",
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "dynamic",
+        "timeout": 10.0,
+        "voice_confirm": null
+      },
+      "module": "services.automation.keyboard_mouse_ctrl",
+      "name": "press_hotkey_tool",
+      "param_schema_sha256": "64bea77daf4d7b19cab72dfea1ac7ddf3163cf6a3a3985c853f48d60d71c2cd2",
+      "params": [
+        {
+          "annotation": "list[str]",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "keys",
+          "required": true
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": "input",
+      "doc": null,
+      "idempotent": false,
+      "lk_schema_sha256": "d035febf76f18e9be274c543f787df39ef89a2d39aea4e799d8eccaa23188577",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": "desktop_input",
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 10.0,
+        "voice_confirm": null
+      },
+      "module": "services.automation.keyboard_mouse_ctrl",
+      "name": "press_key_tool",
+      "param_schema_sha256": "36dc4dfbf1a8d8bffcb1f0efd1a530b7da52d614effe35fd802b7b4610852cd2",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "key",
+          "required": true
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": "availability",
+      "doc": "Restarts the host operating system.",
+      "idempotent": false,
+      "lk_schema_sha256": "96402afd649995f6a5fa10e3e1c24e3c77109ddfbe183d6cbce5e3465e55856d",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.system.jarvis_system_ctrl",
+      "name": "restart_system",
+      "param_schema_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "params": [],
+      "placement": "laptop"
+    },
+    {
+      "cls": "code_exec",
+      "doc": "Execute a CMD command (Non-interactive) safely.",
+      "idempotent": false,
+      "lk_schema_sha256": "342c9ad2143cbee868fb494145e714d17ede14a0c9daccd92f6d83050ea6a79c",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.automation.jarvis_notepad_automation",
+      "name": "run_cmd_command",
+      "param_schema_sha256": "5a79b5a2be634df5c36c620378bbad27624d85aa7ee13625ad72e422c1a2a59e",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "command",
+          "required": true
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": "input",
+      "doc": "\n    Saves the content of an open Notepad window into the Jarvis_Outputs folder.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "171c02c89b0986385bec5121433615832d18d08e3cb1654b213e7f46917a706f",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.system.jarvis_window_ctrl",
+      "name": "save_notepad",
+      "param_schema_sha256": "e083b186c51b86bb5bbce44a2626f7ecd7e8c76461054329c90aece8b8aeeda6",
+      "params": [
+        {
+          "annotation": "str",
+          "default": "jarvis_notes.txt",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "filename",
+          "required": false
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": null,
+      "doc": "\n    Schedules an advanced task or reminder.\n    time_str: e.g., '2026-04-04 09:00' or 'in 10 minutes'.\n    description: What needs to be done.\n    action: Optional specific tool/action to trigger (e.g., 'check_email', 'summary').\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "586e6708e25ff1e8df9ee505132b88b2a6a8547aa365bae4f466eb0990878ef5",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.automation.jarvis_task_manager",
+      "name": "schedule_task",
+      "param_schema_sha256": "7af0d5eca819c03ca682d0555d10d5b23918f6f758fbd35f40ebd0a4d587bbb8",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "time_str",
+          "required": true
+        },
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "description",
+          "required": true
+        },
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "action",
+          "required": false
+        }
+      ],
+      "placement": "vps"
+    },
+    {
+      "cls": "input",
+      "doc": "\n    Sir, is tool se main Google Maps par kisi bhi category ke leads (name, address, phone, website) scrap karta hoon.\n    Main browser open karke aapko dikhaon ga ke kaam kaise ho raha hai.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "0f481e309c08fafe4c4d14e3c8326af930808c3d6edc1f531f74f08947fc0c1f",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 300.0,
+        "voice_confirm": null
+      },
+      "module": "services.automation.jarvis_maps_scraper",
+      "name": "scrape_google_maps_leads",
+      "param_schema_sha256": "01dc99db87f5f2cdcd2a43b46f3a8f57ef645276c31b30e44cd2558a5fd6d43d",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "category",
+          "required": true
+        },
+        {
+          "annotation": "str",
+          "default": "",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "location",
+          "required": false
+        },
+        {
+          "annotation": "int",
+          "default": 10,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "count",
+          "required": false
+        },
+        {
+          "annotation": "str",
+          "default": "csv",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "format",
+          "required": false
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": "input",
+      "doc": null,
+      "idempotent": false,
+      "lk_schema_sha256": "6e28a39752b48e53abfeac581bebf4b6283d8fa390474106838954d181bbb976",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": "desktop_input",
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 10.0,
+        "voice_confirm": null
+      },
+      "module": "services.automation.keyboard_mouse_ctrl",
+      "name": "scroll_cursor_tool",
+      "param_schema_sha256": "4adb48cfcd526c42b1378ecc2699299770ebfd65d4ac7805e879931b16b061c6",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "direction",
+          "required": true
+        },
+        {
+          "annotation": "int",
+          "default": 10,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "amount",
+          "required": false
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": null,
+      "doc": "\n    Perform a high-quality internet search.\n    Cascades through: Tavily -> Google Custom Search -> DuckDuckGo.\n    ",
+      "idempotent": true,
+      "lk_schema_sha256": "35d3b75e4fea78a50f95a80589c08126c61d4a57307a9098379a1e24698e2edb",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 40.0,
+        "voice_confirm": null
+      },
+      "module": "services.info.jarvis_search",
+      "name": "search_internet",
+      "param_schema_sha256": "e45bec5f54370eeb31fc22ec16b9e1ed1cbd51f23eb14a28b5c1787d5b3dd3cc",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "query",
+          "required": true
+        }
+      ],
+      "placement": "vps"
+    },
+    {
+      "cls": null,
+      "doc": "\n    Sends a real email using Gmail SMTP and an App Password.\n    Use this when the user asks to email something.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "e442abddf0080284bf3d09b3525c6db59a501e7ad15a872c8f65f2c5d93d3b91",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.multimedia.jarvis_advanced_tools",
+      "name": "send_email",
+      "param_schema_sha256": "4fe701b0f6d928535c2bed2df6490e2ec652a3cf100824a9b95a6ee9b5cc93e2",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "recipient",
+          "required": true
+        },
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "subject",
+          "required": true
+        },
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "body",
+          "required": true
+        },
+        {
+          "annotation": "str",
+          "default": "",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "attachment_path",
+          "required": false
+        }
+      ],
+      "placement": "vps"
+    },
+    {
+      "cls": null,
+      "doc": "\n    Schedule a reminder for a specific time or duration.\n    time_str can be absolute (e.g., '2026-02-18 14:00') or relative (e.g., '10 minutes').\n    message is the text JARVIS should say when the reminder triggers.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "30e5e67553fef4c7194a25bb21648bb9dd126c6054e0e60f068c3a038b265cdb",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.automation.jarvis_reminders",
+      "name": "set_reminder",
+      "param_schema_sha256": "75289b52f270053e94036cb8dc1ef19faf0aad3b4d81f404886a9230bf7f4440",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "time_str",
+          "required": true
+        },
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "message",
+          "required": true
+        }
+      ],
+      "placement": "vps"
+    },
+    {
+      "cls": "input",
+      "doc": null,
+      "idempotent": true,
+      "lk_schema_sha256": "9fedaaf9461ddbf5ca7e4707733055a1f2034523c58726ba1cd2d3fd617776f6",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 10.0,
+        "voice_confirm": null
+      },
+      "module": "services.automation.keyboard_mouse_ctrl",
+      "name": "set_volume_tool",
+      "param_schema_sha256": "512b573e460aca74ab8508eb6192c45e48dfe2420b3318b8fc90895a4166731e",
+      "params": [
+        {
+          "annotation": "int",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "percentage",
+          "required": true
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": null,
+      "doc": "\n    Updates the JARVIS holographic map to show a specific location.\n    Use this when the user asks to see a place or asks for its location.\n    Args:\n        location_name: Name of the city, country, address, or landmark.\n        zoom: Map zoom level (default 13).\n    ",
+      "idempotent": true,
+      "lk_schema_sha256": "51a22fe3a37b6b6cd2290084771db4f4d15a6b69a3a4e1819cb65b5f3c08fcf2",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.info.jarvis_map",
+      "name": "show_location_on_map",
+      "param_schema_sha256": "4d764e8f73aa86f0a3311fab10e1a538df893d84feee74c4117600633f767cd0",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "location_name",
+          "required": true
+        },
+        {
+          "annotation": "int",
+          "default": 13,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "zoom",
+          "required": false
+        }
+      ],
+      "placement": "vps"
+    },
+    {
+      "cls": "availability",
+      "doc": "Safely shuts down the host operating system.",
+      "idempotent": false,
+      "lk_schema_sha256": "351c08df8cf82d84288d84197211e9e31bdfa2c65cbfaf788c9816acf7215d58",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.system.jarvis_system_ctrl",
+      "name": "shutdown_system",
+      "param_schema_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "params": [],
+      "placement": "laptop"
+    },
+    {
+      "cls": "availability",
+      "doc": "Puts the system to sleep/standby mode.",
+      "idempotent": false,
+      "lk_schema_sha256": "45f419b3d7c63604ce27054d91367bef281f9e9c77ec5b47c5cadc848c0e549e",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.system.jarvis_system_ctrl",
+      "name": "sleep_system",
+      "param_schema_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "params": [],
+      "placement": "laptop"
+    },
+    {
+      "cls": "exposure",
+      "doc": "\n    Starts a local file server and generates a QR code to access the D: drive from mobile.\n    Use this when the user wants to see their D: storage on their phone.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "eb186cd6aaaad02347bab17554a67f1d3477c0d357df5b08dfda7ccd12581c45",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.system.jarvis_file_server",
+      "name": "start_file_access_server",
+      "param_schema_sha256": "5ddc1a1e0175049639dd557b380d13aa839f1d9ecdbae8fd62d4ca495d6f6d1c",
+      "params": [
+        {
+          "annotation": "int",
+          "default": 8000,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "port",
+          "required": false
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": "de_escalation",
+      "doc": "Stops the running file server.",
+      "idempotent": true,
+      "lk_schema_sha256": "ff87a9fd558b8d942f12d46b08ead6ae42cc14899a9d4a98b6994d77a9889309",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.system.jarvis_file_server",
+      "name": "stop_file_access_server",
+      "param_schema_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "params": [],
+      "placement": "laptop"
+    },
+    {
+      "cls": "input",
+      "doc": null,
+      "idempotent": false,
+      "lk_schema_sha256": "4c0261b41fe654b345112675b7c0a0edd06449678cfc3d8679a47676c912953b",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": "desktop_input",
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 10.0,
+        "voice_confirm": null
+      },
+      "module": "services.automation.keyboard_mouse_ctrl",
+      "name": "swipe_gesture_tool",
+      "param_schema_sha256": "aee3299fb93d3cfdf7486832d62d79b1b338d34ef47e2ce350222dead9c06bf9",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "direction",
+          "required": true
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": null,
+      "doc": "\n    Adds a new important fact to the assistant's long-term memory.\n    Use this when the user mentions something important to remember permanently.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "22144ed7cc894f5df13e8555d2af0b9533586802b9f9a21a21c49a2e956daf7a",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.ai_core.jarvis_identity",
+      "name": "tool_add_persistent_fact",
+      "param_schema_sha256": "a9ead8f3d0b04585a707ab8145be14224d43bce4bb6e4ce5d771aee93e9b83df",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "fact",
+          "required": true
+        }
+      ],
+      "placement": "vps"
+    },
+    {
+      "cls": null,
+      "doc": "Manual tool to check and analyze the last few errors.",
+      "idempotent": true,
+      "lk_schema_sha256": "7db59900171d192b2e8a36b5effcbb423c59c5499fc6531d4817603629caaaed",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.utils.jarvis_bug_hunter",
+      "name": "tool_investigate_recent_bugs",
+      "param_schema_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "params": [],
+      "placement": "vps"
+    },
+    {
+      "cls": null,
+      "doc": "\n    Reporting tool used by the agent to manually update the UI on autonomous plan progress.\n    Args:\n        step_index: Current step number (1-based).\n        total_steps: Total number of steps in the plan.\n        action: Name of the current action being performed.\n        status: Current status (IN_PROGRESS, COMPLETED, FAILED).\n    ",
+      "idempotent": true,
+      "lk_schema_sha256": "fb720680a0dba2391dbcf45532d330145263f97eeba8f3a17130c214f94a1e60",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.ai_core.autonomous_planner",
+      "name": "tool_report_plan_progress",
+      "param_schema_sha256": "b104e00d93f1cb69dbde848a4486783c97d4b77eea2466e77dfd9992753d47b5",
+      "params": [
+        {
+          "annotation": "int",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "step_index",
+          "required": true
+        },
+        {
+          "annotation": "int",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "total_steps",
+          "required": true
+        },
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "action",
+          "required": true
+        },
+        {
+          "annotation": "str",
+          "default": "IN_PROGRESS",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "status",
+          "required": false
+        }
+      ],
+      "placement": "vps"
+    },
+    {
+      "cls": null,
+      "doc": "\n    Explicitly sets Anna's emotional mood and upset status.\n    Moods: 'loving', 'angry', 'sad', 'playful'.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "b3376b25d68d87dccb4d25240b1dade407237b1d6c5a5110c50922eb62a51924",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.ai_core.jarvis_identity",
+      "name": "tool_set_anna_state",
+      "param_schema_sha256": "318762f1ea542642448103f5166f3a8b22f7c906104a7bd033ec877d653641bf",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "mood",
+          "required": true
+        },
+        {
+          "annotation": "bool",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "is_upset",
+          "required": true
+        }
+      ],
+      "placement": "vps"
+    },
+    {
+      "cls": null,
+      "doc": "\n    Updates details about a specific person in the user's life (e.g., 'Sageer', 'Bhai').\n    Use this to deepen the assistant's understanding of social circles.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "6553b13ee51f2e753bcd66f4132e913d2ab2ffa135c2cf00224c0bc89facf1b7",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.ai_core.jarvis_identity",
+      "name": "tool_update_relationship_info",
+      "param_schema_sha256": "2c89b53200165e745a34fc488182238ce65de808bfbf7760aaa47367b9c39680",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "person_name",
+          "required": true
+        },
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "relationship_details",
+          "required": true
+        }
+      ],
+      "placement": "vps"
+    },
+    {
+      "cls": null,
+      "doc": "\n    Updates the assistant's knowledge about the user's friend and mentor, Sageer.\n    Use this when the user describes Sageer's background or role in their life.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "23bb3ab65983ac766c3de1f41380d4d9d78dbbafbd573b5c3ed1a5b982316fa2",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.ai_core.jarvis_identity",
+      "name": "tool_update_sageer_background",
+      "param_schema_sha256": "6dfc38755f2cd588083538537b5acacda5ff798fc143d303934146e9d7378844",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "background_info",
+          "required": true
+        }
+      ],
+      "placement": "vps"
+    },
+    {
+      "cls": null,
+      "doc": "\n    Updates the assistant's knowledge about the user's superior/Sir.\n    Use this when the user says 'Mere Sir ke bare mein ye yaaad rakho' or describes background.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "f32146a22559deb590c9246a1bd128c875e03b03af99825a659a1fff542c9a43",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.ai_core.jarvis_identity",
+      "name": "tool_update_sir_background",
+      "param_schema_sha256": "6dfc38755f2cd588083538537b5acacda5ff798fc143d303934146e9d7378844",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "background_info",
+          "required": true
+        }
+      ],
+      "placement": "vps"
+    },
+    {
+      "cls": null,
+      "doc": "\n    Updates the assistant's knowledge about the user's background, occupation, or preferences.\n    Use this when the user says 'Mere background mein ye add karo' or 'Yaad rakho main...'.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "fdbb668405367ab184a91dbe71a4e31d17add188af9e2abdf688f6b0d8da86b5",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.ai_core.jarvis_identity",
+      "name": "tool_update_user_background",
+      "param_schema_sha256": "6dfc38755f2cd588083538537b5acacda5ff798fc143d303934146e9d7378844",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "background_info",
+          "required": true
+        }
+      ],
+      "placement": "vps"
+    },
+    {
+      "cls": "input",
+      "doc": null,
+      "idempotent": false,
+      "lk_schema_sha256": "ca01ba49ba31debc050aed7316901f309bbb34a44f184b4c8daef840246797a0",
+      "meta": {
+        "arg_policies": {
+          "code": "raw"
+        },
+        "exclusive": "desktop_input",
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 180.0,
+        "voice_confirm": null
+      },
+      "module": "services.automation.keyboard_mouse_ctrl",
+      "name": "type_code_animation_tool",
+      "param_schema_sha256": "2711a6863797d6ab499de6b99a1632e6afc1d4861e5ed0bdda42989e89ac9a7e",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "code",
+          "required": true
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": "input",
+      "doc": null,
+      "idempotent": false,
+      "lk_schema_sha256": "c9f98860c1c18bd67310fb93f9752b97e909f76dcf21a6048b7391d9e45ffb45",
+      "meta": {
+        "arg_policies": {
+          "text": "raw"
+        },
+        "exclusive": "desktop_input",
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 60.0,
+        "voice_confirm": null
+      },
+      "module": "services.automation.keyboard_mouse_ctrl",
+      "name": "type_text_tool",
+      "param_schema_sha256": "ec63d5e5fdc338c60a15e8d37609c5b9d8fc51f9a96e92fa943773fe6c21ac34",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "text",
+          "required": true
+        },
+        {
+          "annotation": "float",
+          "default": 0.0,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "interval",
+          "required": false
+        },
+        {
+          "annotation": "bool",
+          "default": false,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "force_typing",
+          "required": false
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": "input",
+      "doc": "\n    Sir, aap jo bhi code kahenge, main use Notepad mein manually type karke run karunga.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "60f0795880affc90713d92939dc68c31097add89ea1ecbd4dd15b3e4a8d1602a",
+      "meta": {
+        "arg_policies": {
+          "content": "raw"
+        },
+        "exclusive": "desktop_input",
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "dynamic",
+        "timeout": 120.0,
+        "voice_confirm": null
+      },
+      "module": "services.automation.jarvis_notepad_automation",
+      "name": "write_custom_code",
+      "param_schema_sha256": "8a94fceefda086fb45271a3c83738ed3d825d2b9bf50ad534befef0fe27b8202",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "content",
+          "required": true
+        },
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "filename",
+          "required": true
+        },
+        {
+          "annotation": "bool",
+          "default": true,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "auto_run",
+          "required": false
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": "input",
+      "doc": "\n    Compresses a folder or directory into a .zip archive.\n    Use this when the user wants to zip or compress files.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "4c67b46cf862ec527379eb424f10da9e689e853eba9c58e9ed76276ae1b6fae1",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.multimedia.jarvis_advanced_tools",
+      "name": "zip_files",
+      "param_schema_sha256": "47371e9e75bd6fd7c9f92ab5b7016f81c5b522d6eec71db429d928f57584d26c",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "folder_path",
+          "required": true
+        },
+        {
+          "annotation": "str",
+          "default": "Archive.zip",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "zip_name",
+          "required": false
+        }
+      ],
+      "placement": "routed"
+    }
+  ],
+  "version": 1
+}

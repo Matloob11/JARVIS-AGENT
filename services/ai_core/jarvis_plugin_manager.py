@@ -25,7 +25,13 @@ from typing import Any, Optional, TypeVar, cast
 from livekit.agents import llm
 
 from services.utils import jarvis_audit, jarvis_security
-from services.utils.jarvis_config import config
+from services.utils.jarvis_config import (
+    DESKTOP_MODE_REMOTE,
+    ROLE_DESKTOP,
+    config,
+    desktop_mode,
+    runtime_role,
+)
 from services.utils.jarvis_logger import setup_logger
 from services.utils.jarvis_resilience import resilience_manager
 from services.utils.jarvis_security import (
@@ -472,6 +478,12 @@ def _desktop_control_enabled() -> bool:
     return bool(getattr(config, "desktop_control_enabled", True))
 
 
+def _remote_discovery() -> bool:
+    """K-71 VPS discovery: JARVIS_DESKTOP_MODE=remote in every role but the Desktop Node's, which
+    runs the real laptop tools."""
+    return desktop_mode() == DESKTOP_MODE_REMOTE and runtime_role() != ROLE_DESKTOP
+
+
 def _refusal(tool_name: str, error_code: str, message: str) -> dict[str, Any]:
     return {"status": "error", "tool": tool_name, "error_code": error_code, "message": message}
 
@@ -552,6 +564,7 @@ class JarvisPluginManager:
     _lock = threading.Lock()
     _tools_lock = threading.RLock()
     _initialized: bool = False
+    remote_plan: Any = None  # tool_placement.RemotePlan after a remote-mode discovery (K-71)
 
     def __new__(cls) -> 'JarvisPluginManager':
         with cls._lock:
@@ -889,14 +902,23 @@ class JarvisPluginManager:
 
 
     def discover_plugins(self, package_path: str) -> None:
-        """Recursively discovers and imports plugins synchronously."""
+        """Recursively discovers and imports plugins synchronously. In remote mode (the VPS brain,
+        K-71) laptop-only modules are not imported and remote_plan records what runs where."""
         with self._tools_lock:
             if self.discovered:
                 return
             self.discovered = True
+        remote = None
+        if _remote_discovery():  # local mode (the PC brain) ignores the placement table
+            remote = importlib.import_module(
+                "services.ai_core.tool_placement").RemoteDiscovery.start(logger)
+        skip = remote.skip_modules if remote is not None else frozenset()
 
         def _scan() -> None:
             for _, module_name, _ in pkgutil.walk_packages([package_path], "services."):
+                if module_name in skip:
+                    logger.info("Remote discovery skips the laptop-only module %s", module_name)
+                    continue
                 try:
                     importlib.import_module(module_name)
                     logger.debug("Discovered module: %s", module_name)
@@ -905,7 +927,21 @@ class JarvisPluginManager:
                     logger.warning("Failed to load module %s: %s", module_name, e)
 
         _scan()
+        if remote is not None:
+            with self._tools_lock:
+                found = {getattr(tool, "__name__", ""): getattr(tool, "__module__", "")
+                         for tool in self.tools}
+            self.remote_plan = remote.finish(found, sys.modules, logger)
         logger.info("Plugin discovery complete. Total tools: %d", len(self.tools))
+
+    def discovery_health(self) -> dict[str, Any]:
+        """K-06 module_health.tools fields from discovery: ok is False after a remote-mode mismatch
+        (K-71: expected names = discovery union manifest)."""
+        with self._tools_lock:
+            count = len(getattr(self, "tools", []))
+        plan = self.remote_plan
+        return {"ok": plan is None or bool(plan.ok), "count": count,
+                "detail": "" if plan is None else plan.detail()}
 
 
 plugin_manager = JarvisPluginManager()
