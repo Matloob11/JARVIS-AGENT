@@ -7,6 +7,7 @@ export function useBridgeMediaUrl(rawUrl: string | undefined, enabled: boolean):
   loading: boolean;
   error: string | null;
   retryFromImageError: () => void;
+  retryLoad: () => void;
 } {
   const [displayUrl, setDisplayUrl] = useState<string | undefined>();
   const [loading, setLoading] = useState(false);
@@ -53,11 +54,10 @@ export function useBridgeMediaUrl(rawUrl: string | undefined, enabled: boolean):
     };
   }, [enabled, rawUrl, lanOnly]);
 
-  const retryFromImageError = () => {
-    if (!rawUrl || lanOnly || signedOnceRef.current) return;
-    signedOnceRef.current = true;
-    const generation = ++generationRef.current;
+  const runFetch = (generation: number) => {
+    if (!rawUrl || lanOnly) return;
     setLoading(true);
+    setError(null);
     void (async () => {
       try {
         const url = await fetchSignedMediaUrl(rawUrl);
@@ -73,5 +73,18 @@ export function useBridgeMediaUrl(rawUrl: string | undefined, enabled: boolean):
     })();
   };
 
-  return { displayUrl, lanOnly, loading, error, retryFromImageError };
+  const retryFromImageError = () => {
+    if (!rawUrl || lanOnly || signedOnceRef.current) return;
+    signedOnceRef.current = true;
+    runFetch(++generationRef.current);
+  };
+
+  const retryLoad = () => {
+    if (!rawUrl || lanOnly) return;
+    signedOnceRef.current = false;
+    setDisplayUrl(undefined);
+    runFetch(++generationRef.current);
+  };
+
+  return { displayUrl, lanOnly, loading, error, retryFromImageError, retryLoad };
 }

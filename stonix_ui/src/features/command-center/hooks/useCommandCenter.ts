@@ -18,6 +18,8 @@ import {
   prependIntelligenceHistory,
   seedIntelligenceHistory,
 } from '@/features/intelligence/types';
+import { notifyIntelligenceImageView } from '@/features/intelligence/intelligenceNotify';
+import { getPersona } from '@/shared/persona';
 import type { TelemetrySnapshot } from '@/features/telemetry/TelemetryCard';
 import { useConfirmQueue } from '@/features/confirm/useConfirmQueue';
 import { useJobs } from '@/features/jobs/useJobs';
@@ -405,9 +407,11 @@ export const useCommandCenter = () => {
   const [systemFeed, setSystemFeed] = useState<SystemFeedEntry[]>([]);
   const traceLogPauseRef = useRef(false);
   const traceLogBufferRef = useRef<VortexLog[]>([]);
+  const [traceLogBufferCount, setTraceLogBufferCount] = useState(0);
   const [voiceMatchLive, setVoiceMatchLive] = useState<VoiceMatchLive>({ confidence: 0 });
   const [intelligence, setIntelligence] = useState<IntelligenceItem | null>(null);
   const [intelligenceHistory, setIntelligenceHistory] = useState<IntelligenceItem[]>([]);
+  const [chatMediaChip, setChatMediaChip] = useState<{ label: string } | null>(null);
   const [transcription, setTranscription] = useState('');
   const [location, setLocation] = useState<LocationData>({ city: 'Detecting...', lat: 0, lng: 0 });
   const [mapFocus, setMapFocus] = useState<MapFocusData | null>(null);
@@ -462,6 +466,7 @@ export const useCommandCenter = () => {
   const ingestVortexLogs = useCallback((entries: VortexLog[]) => {
     if (traceLogPauseRef.current) {
       traceLogBufferRef.current = appendVortexLogs(traceLogBufferRef.current, entries);
+      setTraceLogBufferCount(traceLogBufferRef.current.length);
       return;
     }
     setVortexLogs(prev => appendVortexLogs(prev, entries));
@@ -472,7 +477,10 @@ export const useCommandCenter = () => {
     if (!paused && traceLogBufferRef.current.length) {
       const buffered = traceLogBufferRef.current;
       traceLogBufferRef.current = [];
+      setTraceLogBufferCount(0);
       setVortexLogs(prev => appendVortexLogs(prev, buffered));
+    } else if (paused) {
+      setTraceLogBufferCount(traceLogBufferRef.current.length);
     }
   }, []);
 
@@ -650,6 +658,10 @@ export const useCommandCenter = () => {
     if (!item) return;
     setIntelligence(item);
     setIntelligenceHistory(prev => prependIntelligenceHistory(prev, item));
+    if (item.type === 'image') {
+      notifyIntelligenceImageView(getPersona(settings.persona).name);
+      setChatMediaChip({ label: item.label ?? 'Image' });
+    }
   });
 
   useSocketEvent('transcription_update', (data: unknown) => {
@@ -1060,6 +1072,7 @@ export const useCommandCenter = () => {
     systemAlerts,
     intelligence,
     intelligenceHistory,
+    chatMediaChip,
     activePersona: settings.persona,
     memories,
     clearShortTermMemory,
@@ -1091,6 +1104,7 @@ export const useCommandCenter = () => {
     systemFeed,
     logDroppedCount,
     setTraceLogsPaused,
+    traceLogBufferCount,
     vortexLogs,
     voiceMatchLive,
     simRecords,

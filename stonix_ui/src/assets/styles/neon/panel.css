@@ -673,6 +673,25 @@
   color: #fff;
 }
 
+.media-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 4px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--acc-edge-medium, rgba(120, 150, 225, 0.35));
+  background: rgba(120, 150, 225, 0.08);
+  color: var(--t1, #f4f6f9);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.media-chip:hover {
+  background: rgba(120, 150, 225, 0.14);
+}
+
 .chat-typing-row .chat-msg-avatar {
   width: 24px;
   height: 24px;

@@ -29,7 +29,6 @@ import ConfirmBar from '@/features/confirm/ConfirmBar';
 import ConfirmPhoneLayer from '@/features/confirm/ConfirmPhoneLayer';
 import { useConfirmPhoneSheet } from '@/features/confirm/useConfirmPhoneSheet';
 import { toast } from '@/toast';
-import SystemTrace from './components/SystemTrace';
 import TopBar from './components/TopBar';
 import PageHeader from '@/features/shell/PageHeader';
 import MobileTabBar, { type MobileTab } from './components/MobileTabBar';
@@ -39,7 +38,6 @@ import { ErrorBoundary } from '@/shared/ui/ErrorBoundary';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { useLiveKit } from '@/features/voice/LiveKitProvider';
 import { useAgentStatus } from '@/features/status/useAgentStatus';
-import IntelligencePanel from '@/features/intelligence/IntelligencePanel';
 import AppShell from '@/features/shell/AppShell';
 import { ShellPage } from '@/features/shell/ShellPage';
 import { useLayout } from '@/features/shell/useLayout';
@@ -246,29 +244,7 @@ const DashboardInner = () => {
                 <RecentActivityCard />
               </ErrorBoundary>
             }
-            belowHero={
-              <ErrorBoundary name="IntelligencePanel">
-                <IntelligencePanel
-                  latest={command.intelligence}
-                  history={command.intelligenceHistory}
-                />
-              </ErrorBoundary>
-            }
           />
-          <div className="layout-zone layout-zone--trace" data-testid="layout-zone-trace">
-            <ErrorBoundary name="SystemTrace">
-              <SystemTrace
-                logs={command.vortexLogs}
-                reasoning={command.reasoning}
-                reasoningHistory={command.reasoningHistory}
-                planProgress={command.planProgress}
-                systemFeed={command.systemFeed}
-                logDroppedCount={command.logDroppedCount}
-                isConnected={command.isConnected}
-                onLogsPausedChange={command.setTraceLogsPaused}
-              />
-            </ErrorBoundary>
-          </div>
         </section>
       </main>
     </>
@@ -345,12 +321,22 @@ const DashboardInner = () => {
                   }
                   systemAlerts={command.systemAlerts}
                   logs={command.vortexLogs}
+                  reasoning={command.reasoning}
+                  reasoningHistory={command.reasoningHistory}
+                  planProgress={command.planProgress}
+                  systemFeed={command.systemFeed}
+                  logDroppedCount={command.logDroppedCount}
+                  traceLogBufferCount={command.traceLogBufferCount}
+                  isConnected={command.isConnected}
+                  onLogsPausedChange={command.setTraceLogsPaused}
                   tasks={command.tasks}
                   taskNotifications={command.taskNotifications}
                   onCancelTask={command.cancelTask}
                   onRefreshTasks={command.refreshTasks}
                   memories={command.memories}
                   onClearMemory={command.clearShortTermMemory}
+                  intelligenceLatest={command.intelligence}
+                  intelligenceHistory={command.intelligenceHistory}
                 />
               </ErrorBoundary>
             </ShellPage>
@@ -377,7 +363,6 @@ const DashboardInner = () => {
             <ChatPanel
               persona={command.activePersona}
               messages={command.messages}
-              logs={command.vortexLogs}
               memories={command.memories}
               onClearMemory={command.clearShortTermMemory}
               toolLogs={command.toolLogs}
@@ -397,6 +382,7 @@ const DashboardInner = () => {
               onLoadOlder={command.loadOlderChatMessages}
               onRetry={command.retryChatMessage}
               isThinking={command.isThinking}
+              chatMediaChip={command.chatMediaChip}
               approvalsWaiting={command.confirmQueueCount}
               onOpenSim={command.openSimPanel}
               confirmQueue={command.confirmQueue}

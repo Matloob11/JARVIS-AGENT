@@ -1,7 +1,7 @@
 import RightPanel from '@/features/panel/RightPanel';
 import type { ConfirmDecision, QueuedConfirm } from '@/features/confirm/useConfirmQueue';
 import type { ReactNode } from 'react';
-import { Message, VortexLog } from '../hooks/useCommandCenter';
+import { Message } from '../hooks/useCommandCenter';
 import type { ChatMessage, LiveCaption } from '@/features/chat/types';
 import type { MemoryItem } from '@/features/memory/useMemories';
 import type { JobEntry } from '@/features/jobs/useJobs';
@@ -11,7 +11,6 @@ import type { TaskItem, TaskSource } from '@/features/tasks/useTasks';
 interface ChatPanelProps {
   persona: 'jarvis' | 'anna';
   messages: Message[];
-  logs: VortexLog[];
   memories: MemoryItem[];
   onClearMemory: () => void;
   toolLogs: ToolLogEntry[];
@@ -31,6 +30,7 @@ interface ChatPanelProps {
   onLoadOlder?: () => void;
   onRetry?: (id: string) => void;
   isThinking?: boolean;
+  chatMediaChip?: { label: string } | null;
   approvalsWaiting?: number;
   onOpenSim: () => void;
   confirmSlot?: ReactNode;

@@ -87,6 +87,7 @@ interface ChatListProps {
   onFeedback: (messageId: string, score: 1 | -1) => void;
   onSuggest: (text: string) => void;
   isThinking?: boolean;
+  chatMediaChip?: { label: string } | null;
 }
 
 const ChatList = ({
@@ -98,6 +99,7 @@ const ChatList = ({
   onFeedback,
   onSuggest,
   isThinking = false,
+  chatMediaChip = null,
 }: ChatListProps) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);
@@ -203,6 +205,19 @@ const ChatList = ({
             );
           })
         )}
+
+        {chatMediaChip ? (
+          <button
+            type="button"
+            className="media-chip"
+            data-testid="chat-media-chip"
+            onClick={() => {
+              window.location.hash = '/activity/media';
+            }}
+          >
+            🖼 {chatMediaChip.label}: View
+          </button>
+        ) : null}
 
         {isThinking ? <TypingRow persona={activePersona} /> : null}
       </div>

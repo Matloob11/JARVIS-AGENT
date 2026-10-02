@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronUp, Copy, FileJson, ImageIcon, Link2, Music2 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { ChevronDown, ChevronUp, Copy, FileJson, ImageIcon, Link2, Music2, X } from 'lucide-react';
 import clsx from 'clsx';
 import { Panel } from '@/shared/ui/Panel';
 import type { IntelligenceItem } from './types';
@@ -29,6 +29,7 @@ const IntelligencePanel = ({ latest, history }: IntelligencePanelProps) => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [copyHint, setCopyHint] = useState('');
+  const lightboxCloseRef = useRef<HTMLButtonElement>(null);
 
   const active =
     (selectedId && history.find(item => item.id === selectedId)) || latest || history[0] || null;
@@ -36,6 +37,16 @@ const IntelligencePanel = ({ latest, history }: IntelligencePanelProps) => {
   useEffect(() => {
     if (latest?.id) setSelectedId(latest.id);
   }, [latest?.id]);
+
+  useEffect(() => {
+    if (!lightboxOpen) return;
+    lightboxCloseRef.current?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setLightboxOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [lightboxOpen]);
 
   const strip = useMemo(() => history.slice(0, 20), [history]);
 
@@ -49,9 +60,7 @@ const IntelligencePanel = ({ latest, history }: IntelligencePanelProps) => {
     }
   }, []);
 
-  if (!active && strip.length === 0) {
-    return null;
-  }
+  const hasItems = Boolean(active) || strip.length > 0;
 
   return (
     <>
@@ -79,14 +88,16 @@ const IntelligencePanel = ({ latest, history }: IntelligencePanelProps) => {
                 onCopyLan={copyLanUrl}
                 copyHint={copyHint}
               />
-            ) : (
-              <p className="px-4 py-3 text-xs text-command-muted">No intelligence items yet.</p>
+            ) : hasItems ? null : (
+              <p className="px-4 py-3 text-xs text-command-muted">Nothing shared yet</p>
             )}
 
             {strip.length > 0 && (
               <div className="intelligence-history custom-scrollbar" data-testid="intelligence-history">
                 {strip.map(item => {
                   const Icon = typeIcon(item.type);
+                  const chipLabel = item.label || item.type;
+                  const isCurrent = active?.id === item.id;
                   return (
                     <button
                       key={item.id}
@@ -94,13 +105,14 @@ const IntelligencePanel = ({ latest, history }: IntelligencePanelProps) => {
                       data-testid={`intelligence-history-${item.id}`}
                       className={clsx(
                         'intelligence-history__chip',
-                        active?.id === item.id && 'intelligence-history__chip--active',
+                        isCurrent && 'intelligence-history__chip--active',
                       )}
-                      title={item.label || item.type}
+                      title={chipLabel}
+                      aria-current={isCurrent ? 'true' : undefined}
                       onClick={() => setSelectedId(item.id)}
                     >
                       <Icon size={12} />
-                      <span>{item.label || item.type}</span>
+                      <span className="intelligence-history__chip-label">{chipLabel}</span>
                     </button>
                   );
                 })}
@@ -114,14 +126,24 @@ const IntelligencePanel = ({ latest, history }: IntelligencePanelProps) => {
         <div
           className="intelligence-lightbox"
           role="dialog"
-          aria-modal
+          aria-modal="true"
+          aria-label="Image preview"
           data-testid="intelligence-lightbox"
           onClick={() => setLightboxOpen(false)}
-          onKeyDown={event => {
-            if (event.key === 'Escape') setLightboxOpen(false);
-          }}
         >
-          <MediaImage item={active} className="intelligence-lightbox__img" />
+          <button
+            ref={lightboxCloseRef}
+            type="button"
+            className="intelligence-lightbox__close"
+            aria-label="Close"
+            onClick={event => {
+              event.stopPropagation();
+              setLightboxOpen(false);
+            }}
+          >
+            <X size={20} />
+          </button>
+          <MediaImage item={active} className="intelligence-lightbox__img" onClick={event => event.stopPropagation()} />
         </div>
       )}
     </>
@@ -251,8 +273,35 @@ function LanOnlyNotice({
   );
 }
 
-function MediaImage({ item, className }: { item: IntelligenceItem; className?: string }) {
-  const { displayUrl, lanOnly, loading, error, retryFromImageError } = useBridgeMediaUrl(
+function MediaPlaceholder({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry?: () => void;
+}) {
+  return (
+    <div className="intelligence-media-placeholder">
+      <p className="text-xs text-command-muted">{message}</p>
+      {onRetry ? (
+        <button type="button" className="intelligence-media-placeholder__retry" onClick={onRetry}>
+          Retry
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function MediaImage({
+  item,
+  className,
+  onClick,
+}: {
+  item: IntelligenceItem;
+  className?: string;
+  onClick?: (event: MouseEvent) => void;
+}) {
+  const { displayUrl, lanOnly, loading, error, retryFromImageError, retryLoad } = useBridgeMediaUrl(
     item.url,
     item.type === 'image' && Boolean(item.url),
   );
@@ -260,11 +309,16 @@ function MediaImage({ item, className }: { item: IntelligenceItem; className?: s
   if (lanOnly) return null;
 
   if (loading && !displayUrl) {
-    return <div className="text-xs text-command-muted">Loading media…</div>;
+    return <MediaPlaceholder message="Loading media…" />;
   }
 
   if (!displayUrl) {
-    return <div className="text-xs text-command-muted">{error || 'Media unavailable'}</div>;
+    return (
+      <MediaPlaceholder
+        message={error ? 'Media unavailable' : 'Media unavailable'}
+        onRetry={() => retryLoad()}
+      />
+    );
   }
 
   return (
@@ -273,6 +327,7 @@ function MediaImage({ item, className }: { item: IntelligenceItem; className?: s
       alt={item.label || 'Generated media'}
       className={className}
       data-testid="intelligence-media-image"
+      onClick={onClick}
       onError={() => retryFromImageError()}
     />
   );
@@ -287,7 +342,7 @@ function MediaAudio({
   onCopyLan: (url: string) => void;
   copyHint: string;
 }) {
-  const { displayUrl, lanOnly, loading, retryFromImageError } = useBridgeMediaUrl(
+  const { displayUrl, lanOnly, loading, retryFromImageError, retryLoad } = useBridgeMediaUrl(
     item.url,
     Boolean(item.url),
   );
@@ -305,11 +360,16 @@ function MediaAudio({
   }
 
   if (loading && !displayUrl) {
-    return <div className="text-xs text-command-muted">Loading audio…</div>;
+    return <MediaPlaceholder message="Loading media…" />;
   }
 
   if (!displayUrl) {
-    return <div className="text-xs text-command-muted">Audio unavailable</div>;
+    return (
+      <MediaPlaceholder
+        message="Media unavailable"
+        onRetry={() => retryLoad()}
+      />
+    );
   }
 
   return (

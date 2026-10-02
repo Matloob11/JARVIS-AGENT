@@ -2,9 +2,12 @@
 activity-card
 activity-open
 activity-row
+activity-tab-media
+activity-tab-logs
 activity-tab-notes
 activity-tab-tasks
 activity-tab-timeline
+all-logs-list
 alerts-card
 agent-audio-visualizer
 agent-card
@@ -35,6 +38,7 @@ chat-live-assistant
 chat-live-captions
 chat-live-user
 chat-load-older
+chat-media-chip
 chat-msg
 chat-panel
 chat-retry

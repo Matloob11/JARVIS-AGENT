@@ -5,27 +5,51 @@ import MemoryList from '@/features/memory/MemoryList';
 import type { MemoryItem } from '@/features/memory/useMemories';
 import TasksPanel from '@/features/tasks/TasksPanel';
 import type { TaskItem, TaskNotification, TaskSource } from '@/features/tasks/useTasks';
-import type { SystemAlert, VortexLog } from '@/features/command-center/hooks/useCommandCenter';
+import type {
+  PlanProgressLine,
+  ReasoningPlan,
+  SystemAlert,
+  SystemFeedEntry,
+  VortexLog,
+} from '@/features/command-center/hooks/useCommandCenter';
+import IntelligencePanel from '@/features/intelligence/IntelligencePanel';
+import type { IntelligenceItem } from '@/features/intelligence/types';
 import { TimelineTab } from './TimelineTab';
+import { LogsTab } from './LogsTab';
 import type { AppRoute } from '@/features/shell/router';
 
-export type ActivityTabId = 'timeline' | 'tasks' | 'notes';
+export type ActivityTabId = 'timeline' | 'logs' | 'tasks' | 'notes' | 'media';
 
 type ActivityTabDef = {
   id: ActivityTabId;
   label: string;
   icon: IconName;
-  testId: 'activity-tab-timeline' | 'activity-tab-tasks' | 'activity-tab-notes';
+  testId:
+    | 'activity-tab-timeline'
+    | 'activity-tab-logs'
+    | 'activity-tab-tasks'
+    | 'activity-tab-notes'
+    | 'activity-tab-media';
 };
 
 const TABS: ActivityTabDef[] = [
   { id: 'timeline', label: 'Timeline', icon: 'activity', testId: 'activity-tab-timeline' },
+  { id: 'logs', label: 'Logs', icon: 'terminal', testId: 'activity-tab-logs' },
   { id: 'tasks', label: 'Tasks & reminders', icon: 'cal', testId: 'activity-tab-tasks' },
   { id: 'notes', label: 'Notes', icon: 'note', testId: 'activity-tab-notes' },
+  { id: 'media', label: 'Media', icon: 'image', testId: 'activity-tab-media' },
 ];
 
 function resolveTab(raw?: string): ActivityTabId {
-  if (raw === 'tasks' || raw === 'notes' || raw === 'timeline') return raw;
+  if (
+    raw === 'logs' ||
+    raw === 'tasks' ||
+    raw === 'notes' ||
+    raw === 'timeline' ||
+    raw === 'media'
+  ) {
+    return raw;
+  }
   return 'timeline';
 }
 
@@ -38,12 +62,22 @@ export type ActivityPageProps = {
   timelineAlertCount?: number;
   systemAlerts: SystemAlert[];
   logs: VortexLog[];
+  reasoning: ReasoningPlan | null;
+  reasoningHistory: ReasoningPlan[];
+  planProgress: PlanProgressLine | null;
+  systemFeed: SystemFeedEntry[];
+  logDroppedCount: number;
+  traceLogBufferCount: number;
+  isConnected: boolean;
+  onLogsPausedChange: (paused: boolean) => void;
   tasks: TaskItem[];
   taskNotifications: TaskNotification[];
   onCancelTask: (id: string, source: TaskSource) => void;
   onRefreshTasks: () => void;
   memories: MemoryItem[];
   onClearMemory: () => void;
+  intelligenceLatest: IntelligenceItem | null;
+  intelligenceHistory: IntelligenceItem[];
 };
 
 function updateTabStripFade(el: HTMLElement | null) {
@@ -66,12 +100,22 @@ export function ActivityPage({
   timelineAlertCount = 0,
   systemAlerts,
   logs,
+  reasoning,
+  reasoningHistory,
+  planProgress,
+  systemFeed,
+  logDroppedCount,
+  traceLogBufferCount,
+  isConnected,
+  onLogsPausedChange,
   tasks,
   taskNotifications,
   onCancelTask,
   onRefreshTasks,
   memories,
   onClearMemory,
+  intelligenceLatest,
+  intelligenceHistory,
 }: ActivityPageProps) {
   const activeTab = resolveTab(route.tab);
   const tabStripRef = useRef<HTMLDivElement>(null);
@@ -100,6 +144,20 @@ export function ActivityPage({
   let body: ReactNode = null;
   if (activeTab === 'timeline') {
     body = <TimelineTab systemAlerts={systemAlerts} logs={logs} />;
+  } else if (activeTab === 'logs') {
+    body = (
+      <LogsTab
+        logs={logs}
+        reasoning={reasoning}
+        reasoningHistory={reasoningHistory}
+        planProgress={planProgress}
+        systemFeed={systemFeed}
+        logDroppedCount={logDroppedCount}
+        traceLogBufferCount={traceLogBufferCount}
+        isConnected={isConnected}
+        onLogsPausedChange={onLogsPausedChange}
+      />
+    );
   } else if (activeTab === 'tasks') {
     body = (
       <TasksPanel
@@ -108,6 +166,10 @@ export function ActivityPage({
         onCancelConfirmed={onCancelTask}
         onRefresh={onRefreshTasks}
       />
+    );
+  } else if (activeTab === 'media') {
+    body = (
+      <IntelligencePanel latest={intelligenceLatest} history={intelligenceHistory} />
     );
   } else {
     body = <MemoryList rows={memories} onClearConfirmed={onClearMemory} />;
@@ -130,47 +192,76 @@ export function ActivityPage({
                   {timelineAlertCount > 99 ? '99+' : timelineAlertCount}
                 </span>
               ) : null;
-            if (tab.id === 'timeline') {
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  data-testid="activity-tab-timeline"
-                  aria-pressed={pressed}
-                  onClick={() => selectTab(tab.id)}
-                >
-                  <Icon name={tab.icon} className="n-ic" aria-hidden />
-                  {tab.label}
-                  {badge}
-                </button>
-              );
-            }
-            if (tab.id === 'tasks') {
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  data-testid="activity-tab-tasks"
-                  aria-pressed={pressed}
-                  onClick={() => selectTab(tab.id)}
-                >
-                  <Icon name={tab.icon} className="n-ic" aria-hidden />
-                  {tab.label}
-                </button>
-              );
-            }
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                data-testid="activity-tab-notes"
-                aria-pressed={pressed}
-                onClick={() => selectTab(tab.id)}
-              >
+            const label = (
+              <>
                 <Icon name={tab.icon} className="n-ic" aria-hidden />
                 {tab.label}
-              </button>
+                {badge}
+              </>
             );
+            const onSelect = () => selectTab(tab.id);
+            switch (tab.id) {
+              case 'timeline':
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    data-testid="activity-tab-timeline"
+                    aria-pressed={pressed}
+                    onClick={onSelect}
+                  >
+                    {label}
+                  </button>
+                );
+              case 'logs':
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    data-testid="activity-tab-logs"
+                    aria-pressed={pressed}
+                    onClick={onSelect}
+                  >
+                    {label}
+                  </button>
+                );
+              case 'tasks':
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    data-testid="activity-tab-tasks"
+                    aria-pressed={pressed}
+                    onClick={onSelect}
+                  >
+                    {label}
+                  </button>
+                );
+              case 'notes':
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    data-testid="activity-tab-notes"
+                    aria-pressed={pressed}
+                    onClick={onSelect}
+                  >
+                    {label}
+                  </button>
+                );
+              default:
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    data-testid="activity-tab-media"
+                    aria-pressed={pressed}
+                    onClick={onSelect}
+                  >
+                    {label}
+                  </button>
+                );
+            }
           })}
         </div>
 
@@ -183,3 +274,8 @@ export function ActivityPage({
 }
 
 export default ActivityPage;
+
+/** Literal strings for testid-inventory.mjs (--check). */
+const activityTabTestIdLiterals =
+  'data-testid="activity-tab-timeline" data-testid="activity-tab-logs" data-testid="activity-tab-tasks" data-testid="activity-tab-notes" data-testid="activity-tab-media"';
+void activityTabTestIdLiterals;

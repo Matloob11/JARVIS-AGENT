@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { loginViaRecovery } from './helpers/login';
+import { gotoPage, loginViaRecovery } from './helpers';
 
 const MOCK = 'http://127.0.0.1:5199';
 
@@ -49,6 +49,7 @@ async function ensureDashboard(page: import('@playwright/test').Page) {
 
 test.beforeEach(async ({ page }) => {
   await ensureDashboard(page);
+  await gotoPage(page, 'activity', 'media');
 });
 
 test('mock image item renders in intelligence panel', async ({ page }) => {

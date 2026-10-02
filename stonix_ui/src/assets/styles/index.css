@@ -439,8 +439,24 @@ button {
     @apply border-acc-edge-medium bg-acc-tint text-command-text;
   }
 
+  .intelligence-history__chip-label {
+    @apply max-w-[150px] overflow-hidden text-ellipsis whitespace-nowrap;
+  }
+
+  .intelligence-media-placeholder {
+    @apply flex aspect-video w-full flex-col items-center justify-center gap-2 rounded-md border border-command-border bg-black/25 px-3 text-center;
+  }
+
+  .intelligence-media-placeholder__retry {
+    @apply rounded-md border border-command-border px-3 py-1 text-xs text-command-text transition hover:bg-white/[0.06];
+  }
+
   .intelligence-lightbox {
     @apply fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm;
+  }
+
+  .intelligence-lightbox__close {
+    @apply absolute right-4 top-4 rounded-md border border-white/20 bg-black/50 p-2 text-white transition hover:bg-black/70;
   }
 
   .intelligence-lightbox__img {
