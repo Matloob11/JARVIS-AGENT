@@ -53,10 +53,12 @@ root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
-# Single worker (K-53): lock before the heavy imports so a second start exits 3 within seconds.
+# Single worker (K-53): lock before the heavy imports so a second start exits 3 within seconds. The PC brain
+# also takes the shared desktop actor lock (K-53 v4), so it never runs beside the Desktop Node (exit 3).
 if __name__ == "__main__":
-    from src.core.agent_lock import acquire_or_exit
+    from src.core.agent_lock import HOLDER_PC_BRAIN, acquire_actor_or_exit, acquire_or_exit
     acquire_or_exit()
+    acquire_actor_or_exit(HOLDER_PC_BRAIN)
 
 from livekit import agents
 

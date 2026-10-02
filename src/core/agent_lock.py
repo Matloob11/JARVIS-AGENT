@@ -5,6 +5,9 @@ Single agent worker guarantee (K-53 COORD-3).
 The worker holds an OS lock on byte 0 of run/agent.lock for its whole lifetime and describes
 itself in run/agent.pid.json. The OS drops the lock when the process exits, so a stale pid.json
 never blocks a new start: the lock is the source of truth, pid.json is only information.
+The same folder holds the shared desktop actor lock (run/desktop_actor.lock, K-53 v4): the PC brain
+worker, the Desktop Node supervisor, vortex.py and Electron local each take it, so only one of them
+drives the desktop; and the Desktop Node's own run/desktop_node.lock (hold()).
 Stdlib only, because src/core/agent.py imports it before any heavy dependency.
 """
 
@@ -207,4 +210,144 @@ def _exit_already_running() -> NoReturn:
         file=sys.stderr,
         flush=True,
     )
+    sys.exit(EXIT_ALREADY_RUNNING)
+
+
+# --- the shared desktop actor lock (K-53 v4, C-120) ----------------------------------------------
+# Only one process may drive this PC's desktop: the PC brain worker (src/core/agent.py), the Desktop
+# Node supervisor, vortex.py or the Electron local backend. Each holds an OS lock on byte 0 of
+# run/desktop_actor.lock for its whole life and names itself in run/desktop_actor.json (information
+# only, like agent.pid.json). Other lock files of this folder (run/desktop_node.lock) use hold().
+
+ACTOR_LOCK_FILE = "desktop_actor.lock"
+ACTOR_INFO_FILE = "desktop_actor.json"
+NODE_LOCK_FILE = "desktop_node.lock"
+HOLDER_PC_BRAIN = "pc-brain"
+HOLDER_DESKTOP_NODE = "desktop-node"
+
+_held_fds: dict[str, int] = {}  # file name under run_dir() -> fd this process holds the lock on
+
+
+def actor_lock_path() -> Path:
+    return run_dir() / ACTOR_LOCK_FILE
+
+
+def actor_info_path() -> Path:
+    return run_dir() / ACTOR_INFO_FILE
+
+
+def holds(name: str) -> bool:
+    """True when this process holds the lock file run_dir()/name (taken with hold())."""
+    return name in _held_fds
+
+
+def probe(name: str) -> bool:
+    """True when some process holds the lock file run_dir()/name. Probes without keeping it."""
+    if name in _held_fds:
+        return True
+    path = run_dir() / name
+    if not path.is_file():
+        return False
+    try:
+        fd = os.open(path, os.O_RDWR)
+    except OSError:
+        return False
+    try:
+        try:
+            _try_lock(fd)
+        except OSError:
+            return True
+        _unlock(fd)
+        return False
+    finally:
+        os.close(fd)
+
+
+def hold(name: str) -> bool:
+    """Locks run_dir()/name until this process exits (or release_held(name)); False when another
+    process holds it. Retries for a second, so a probe() that races this call never makes it fail."""
+    if name in _held_fds:
+        return True
+    directory = run_dir()
+    directory.mkdir(parents=True, exist_ok=True)
+    fd = os.open(directory / name, os.O_RDWR | os.O_CREAT, 0o644)
+    deadline = time.monotonic() + _ACQUIRE_RETRY_S
+    while True:
+        try:
+            _try_lock(fd)
+            break
+        except OSError:
+            if time.monotonic() >= deadline:
+                os.close(fd)
+                return False
+            time.sleep(0.1)
+    _held_fds[name] = fd
+    return True
+
+
+def release_held(name: str) -> None:
+    """Drops a lock taken with hold() (tests, a graceful exit); the OS drops it at exit anyway."""
+    fd = _held_fds.pop(name, None)
+    if fd is None:
+        return
+    try:
+        _unlock(fd)
+    except OSError:
+        pass
+    os.close(fd)
+
+
+def actor_is_locked() -> bool:
+    """True when some process (the PC brain, the Desktop Node, vortex.py, Electron local) holds the
+    desktop actor lock."""
+    return probe(ACTOR_LOCK_FILE)
+
+
+def read_actor_info() -> dict[str, Any] | None:
+    """run/desktop_actor.json of the last holder, or None. It may be stale: check actor_is_locked()."""
+    try:
+        data = json.loads(actor_info_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def hold_actor(holder: str) -> bool:
+    """Takes the desktop actor lock for this process and records the holder; False when it is held."""
+    if not hold(ACTOR_LOCK_FILE):
+        return False
+    info = {"pid": os.getpid(), "holder": holder,
+            "started_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+            "argv": redact_argv(sys.argv)}
+    try:  # in place, as _write_pid_info does
+        actor_info_path().write_text(json.dumps(info, indent=2), encoding="utf-8")
+    except OSError as exc:
+        print(f"[JARVIS] Warning: could not write {actor_info_path()}: {exc}", file=sys.stderr)
+    return True
+
+
+def acquire_actor_or_exit(holder: str, *, force: bool = False) -> bool:
+    """Holds the desktop actor lock until this process exits, or prints who holds it and exits 3.
+
+    Returns True when the lock is held and False when locking is disabled (pytest or
+    JARVIS_NO_LOCK=1). force=True locks even then; tests use it in a subprocess.
+    """
+    if holds(ACTOR_LOCK_FILE):
+        return True
+    if lock_disabled() and not force:
+        return False
+    if not hold_actor(holder):
+        exit_actor_held()
+    return True
+
+
+def actor_held_message() -> str:
+    info = read_actor_info() or {}
+    return (f"[JARVIS] The desktop is already driven by {info.get('holder', '?')} (pid {info.get('pid', '?')}, "
+            f"since {info.get('started_at', '?')}): only one of the PC brain, the Desktop Node, vortex.py and "
+            "Electron local may run. Stop that one first (python scripts/agent_ctl.py status).")
+
+
+def exit_actor_held() -> NoReturn:
+    print(actor_held_message(), file=sys.stderr, flush=True)
     sys.exit(EXIT_ALREADY_RUNNING)
