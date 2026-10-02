@@ -6,12 +6,23 @@ import { useLayout } from '@/features/shell/useLayout';
 import { useHashRouter } from '@/features/shell/useHashRouter';
 import { OrbRenderer, type VoiceState } from './orbRenderer';
 import { deriveOrbVoiceState } from './deriveOrbVoiceState';
+import {
+  getPersonaSwitchBridge,
+  setPersonaSwitchBridge,
+} from '@/features/overview/personaSwitchBridge';
 
 type OrbCanvasProps = {
   persona: PersonaKey;
   statusLine: string;
   voiceUnavailable: boolean;
   roomState: import('../useVoiceRoom').VoiceRoomState;
+  duplicateBlocked: boolean;
+  linkedElsewhere: boolean;
+  agentPresent: boolean;
+  agentMissing: boolean;
+  agentRestarting: boolean;
+  agentOnline: boolean;
+  playbackBlocked: boolean;
   agentState: import('../useVoiceRoom').AgentState;
   agentListeningMuted: boolean;
   micEnabled: boolean;
@@ -36,6 +47,13 @@ const OrbCanvas = ({
   statusLine,
   voiceUnavailable,
   roomState,
+  duplicateBlocked,
+  linkedElsewhere,
+  agentPresent,
+  agentMissing,
+  agentRestarting,
+  agentOnline,
+  playbackBlocked,
   agentState,
   agentListeningMuted,
   micEnabled,
@@ -57,6 +75,13 @@ const OrbCanvas = ({
       deriveOrbVoiceState({
         voiceUnavailable,
         roomState,
+        duplicateBlocked,
+        linkedElsewhere,
+        agentPresent,
+        agentMissing,
+        agentRestarting,
+        agentOnline,
+        playbackBlocked,
         agentState,
         agentListeningMuted,
         micEnabled,
@@ -67,6 +92,13 @@ const OrbCanvas = ({
     [
       voiceUnavailable,
       roomState,
+      duplicateBlocked,
+      linkedElsewhere,
+      agentPresent,
+      agentMissing,
+      agentRestarting,
+      agentOnline,
+      playbackBlocked,
       agentState,
       agentListeningMuted,
       micEnabled,
@@ -79,6 +111,17 @@ const OrbCanvas = ({
   const copy = getPersona(persona);
   const orbLabel = `${copy.name} voice orb: ${statusLine}`;
   const glyph = GLYPH[voiceState];
+
+  useEffect(() => {
+    setPersonaSwitchBridge({
+      ...getPersonaSwitchBridge(),
+      snapOrbPalette: () => rendererRef.current?.snapPalette(),
+    });
+    return () => {
+      const { snapOrbPalette: _drop, ...rest } = getPersonaSwitchBridge();
+      setPersonaSwitchBridge(rest);
+    };
+  }, []);
 
   useEffect(() => {
     const orb = orbRef.current;

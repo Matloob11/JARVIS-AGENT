@@ -1,10 +1,18 @@
 import type { LiveKitContextValue } from '@/features/voice/LiveKitProvider';
 import type { AgentStatusSnapshot } from '@/features/status/agentStatusStore';
+import {
+  buildVoiceStateInputs,
+  buildVoiceUiSnapshot,
+  voicePillFromState,
+} from '@/features/voice/voiceState';
+import type { PersonaKey } from '@/shared/persona';
 
 export type VoicePillVisual =
   | 'offline'
+  | 'offline-other-device'
   | 'joining'
   | 'agent-absent'
+  | 'agent-restarting'
   | 'audio-blocked'
   | 'speaking'
   | 'thinking'
@@ -38,125 +46,34 @@ export function deriveVoicePillCopy(
   agent: Pick<AgentStatusSnapshot, 'online' | 'restarting'>,
   agentListeningMuted: boolean,
   isUserSpeaking: boolean,
+  persona: PersonaKey,
+  activity?: { isSpeaking: boolean; isThinking: boolean },
 ): VoicePillCopy {
-  const { roomState } = liveKit;
-
-  if (liveKit.voiceUnavailable || roomState === 'error') {
-    const variant = liveKit.linkedElsewhere || liveKit.duplicateBlocked;
-    return {
-      visual: 'offline',
-      full: variant ? 'Voice on another device' : 'Voice Offline',
-      compact: 'Offline',
-      dataActive: false,
-      ping: false,
-      spinner: false,
-    };
-  }
-
-  if (roomState === 'connecting' || roomState === 'reconnecting') {
-    return {
-      visual: 'joining',
-      full: 'Joining Voice',
-      compact: 'Joining',
-      dataActive: false,
-      ping: false,
-      spinner: true,
-    };
-  }
-
-  if (roomState === 'connected' && liveKit.playbackBlocked) {
-    return {
-      visual: 'audio-blocked',
-      full: 'Audio Blocked',
-      compact: 'Blocked',
-      dataActive: false,
-      ping: false,
-      spinner: false,
-    };
-  }
-
-  if (roomState === 'connected' && (liveKit.agentMissing || !liveKit.agentPresent) && !agent.online) {
-    if (agent.restarting) {
-      return {
-        visual: 'agent-absent',
-        full: 'Agent Restarting',
-        compact: 'Restarting',
-        dataActive: false,
-        ping: false,
-        spinner: true,
-      };
-    }
-    return {
-      visual: 'agent-absent',
-      full: 'No Agent in Room',
-      compact: 'No agent',
-      dataActive: false,
-      ping: false,
-      spinner: false,
-    };
-  }
-
-  if (liveKit.agentState === 'speaking') {
-    return {
-      visual: 'speaking',
-      full: 'Speaking',
-      compact: 'Speaking',
-      dataActive: true,
-      ping: true,
-      spinner: false,
-    };
-  }
-
-  if (liveKit.agentState === 'thinking') {
-    return {
-      visual: 'thinking',
-      full: 'Thinking',
-      compact: 'Thinking',
-      dataActive: true,
-      ping: false,
-      spinner: false,
-    };
-  }
-
-  if (roomState === 'connected' && agentListeningMuted) {
-    return {
-      visual: 'muted',
-      full: 'Not Listening',
-      compact: 'Muted',
-      dataActive: true,
-      ping: false,
-      spinner: false,
-    };
-  }
-
-  if (roomState === 'connected' && isUserSpeaking && liveKit.micEnabled) {
-    return {
-      visual: 'listening',
-      full: 'Listening',
-      compact: 'Listening',
-      dataActive: true,
-      ping: true,
-      spinner: false,
-    };
-  }
-
-  if (roomState === 'connected' && !liveKit.micEnabled) {
-    return {
-      visual: 'mic-off',
-      full: 'Voice Ready',
-      compact: 'Ready',
-      dataActive: true,
-      ping: false,
-      spinner: false,
-    };
-  }
+  const inputs = buildVoiceStateInputs(
+    liveKit as LiveKitContextValue,
+    agent,
+    agentListeningMuted,
+    {
+      isSpeaking: activity?.isSpeaking ?? liveKit.agentState === 'speaking',
+      isThinking: activity?.isThinking ?? liveKit.agentState === 'thinking',
+      isUserSpeaking,
+    },
+  );
+  const snap = buildVoiceUiSnapshot(persona, inputs, false);
+  const flags = voicePillFromState(snap.state);
+  const visual =
+    snap.state === 'offline-other-device'
+      ? 'offline'
+      : snap.state === 'agent-restarting'
+        ? 'agent-absent'
+        : snap.state;
 
   return {
-    visual: 'idle',
-    full: 'Voice Ready',
-    compact: 'Ready',
-    dataActive: true,
-    ping: false,
-    spinner: false,
+    visual: visual as VoicePillVisual,
+    full: snap.pillFull,
+    compact: snap.pillCompact,
+    dataActive: flags.dataActive,
+    ping: flags.ping,
+    spinner: flags.spinner,
   };
 }

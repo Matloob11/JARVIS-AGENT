@@ -41,15 +41,18 @@ export function emitUiCommandWithAck(
 
 export { useAgentListeningMuted } from '@/features/status/agentListeningStore';
 
-export function TopBarStopButton() {
+function useStopSpeaking() {
   const handleAck = useUiCommandAck();
-  const { persona } = useSettings();
-
-  const onStop = () => {
+  return () => {
     getSocket().emit('ui_command', { type: 'stop', payload: {} }, (ack: UiCommandAck) => {
       handleAck(ack);
     });
   };
+}
+
+export function TopBarStopButton() {
+  const { persona } = useSettings();
+  const onStop = useStopSpeaking();
 
   return (
     <button
@@ -60,6 +63,23 @@ export function TopBarStopButton() {
       onClick={onStop}
     >
       <Square size={14} fill="currentColor" strokeWidth={0} />
+    </button>
+  );
+}
+
+export function HeroStopButton({ className }: { className?: string }) {
+  const { persona } = useSettings();
+  const onStop = useStopSpeaking();
+
+  return (
+    <button
+      type="button"
+      className={className ?? 'overview-hero__status-act'}
+      data-testid="hero-stop"
+      title={stopTitle(persona)}
+      onClick={onStop}
+    >
+      Stop
     </button>
   );
 }

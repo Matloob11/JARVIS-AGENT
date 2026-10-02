@@ -12,6 +12,7 @@ import { getPersona } from '@/shared/persona';
 import type { LayoutMode } from './useLayout';
 import { connectedDeviceCount, useVortexStatusPoll } from './useVortexStatusPoll';
 import { deriveVoicePillCopy } from './voicePillState';
+import { useE2EVoiceTick } from '@/features/voice/voiceState';
 import { AgentPopover } from './popovers/AgentPopover';
 import { DevicesPopover } from './popovers/DevicesPopover';
 import { VoicePopover } from './popovers/VoicePopover';
@@ -255,10 +256,11 @@ const VoiceStatusPill = forwardRef<
   const { status } = useAgentStatusStore();
   const settings = useSettings();
   const voiceName = getPersona(settings.persona).voice;
+  const e2eTick = useE2EVoiceTick();
 
   const copy = useMemo(
-    () => deriveVoicePillCopy(liveKit, status, agentMuted, isUserSpeaking),
-    [liveKit, status, agentMuted, isUserSpeaking],
+    () => deriveVoicePillCopy(liveKit, status, agentMuted, isUserSpeaking, settings.persona),
+    [liveKit, status, agentMuted, isUserSpeaking, settings.persona, e2eTick],
   );
 
   const Icon =

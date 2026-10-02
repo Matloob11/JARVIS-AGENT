@@ -512,6 +512,7 @@
 }
 
 .overview-hero__name {
+  will-change: transform, opacity;
   left: calc(var(--ox) + 447 * var(--u));
   top: calc(var(--oy) + 96 * var(--u));
   font-family: var(--font-brand);
@@ -593,6 +594,68 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.overview-hero__status-row {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(8 * var(--u));
+  max-width: calc(100cqw - var(--ox) - 447 * var(--u) - 12px);
+}
+
+.overview-hero__status[data-tone='mute'] {
+  color: var(--t3, #9fa9c7);
+}
+
+.overview-hero__status[data-tone='warn'] {
+  color: var(--warn-t, #e9ab4a);
+}
+
+.overview-hero__status[data-tone='err'] {
+  color: var(--err-t, #f07178);
+}
+
+.overview-hero__status-spin {
+  flex: none;
+  animation: spin 1s linear infinite;
+}
+
+.overview-hero__status-shape {
+  flex: none;
+}
+
+.overview-hero__status-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-hero__status-act {
+  flex: none;
+  font-family: var(--font-med);
+  font-weight: 600;
+  font-size: max(12px, calc(14 * var(--u)));
+  line-height: 1;
+  color: #fff;
+  margin-left: calc(4 * var(--u));
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.overview-hero__status-act:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.overview-hero__status-act-wrap {
+  display: inline-flex;
+}
+
+.overview-hero__helper-err {
+  color: var(--err-t, #f07178);
 }
 
 .overview-hero__status--hidden {

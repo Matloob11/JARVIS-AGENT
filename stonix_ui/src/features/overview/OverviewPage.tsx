@@ -4,8 +4,9 @@ import type { PersonaKey } from '@/shared/persona';
 
 type OverviewPageProps = {
   persona: PersonaKey;
+  isSpeaking: boolean;
+  isThinking: boolean;
   isUserSpeaking: boolean;
-  stateLabel: string;
   legacyStrip: ReactNode;
   belowHero?: ReactNode;
   quickStats?: ReactNode;
@@ -16,8 +17,9 @@ type OverviewPageProps = {
 
 const OverviewPage = ({
   persona,
+  isSpeaking,
+  isThinking,
   isUserSpeaking,
-  stateLabel,
   legacyStrip,
   belowHero,
   quickStats,
@@ -28,8 +30,9 @@ const OverviewPage = ({
   <div className="overview-page layout-zone layout-zone--core" data-testid="layout-zone-core">
     <HeroCard
       persona={persona}
+      isSpeaking={isSpeaking}
+      isThinking={isThinking}
       isUserSpeaking={isUserSpeaking}
-      stateLabel={stateLabel}
       orbSlot={orbSlot}
       waveformSlot={waveformSlot}
     />

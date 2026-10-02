@@ -29,50 +29,10 @@ export type LiveKitContextValue = {
 
 const LiveKitContext = createContext<LiveKitContextValue | null>(null);
 
-function VoiceBanners({ voice }: { voice: LiveKitContextValue }) {
-  return (
-    <>
-      {voice.playbackBlocked && voice.roomState === 'connected' && (
-        <div className="voice-banner no-drag" role="status">
-          <span>Agent audio blocked — browser allow karein.</span>
-          <button type="button" data-testid="enable-audio" onClick={() => void voice.enablePlayback()}>
-            Enable audio
-          </button>
-        </div>
-      )}
-      {(voice.duplicateBlocked || voice.linkedElsewhere) && (
-        <div className="voice-banner voice-banner--warn no-drag" role="alert">
-          <span>
-            {voice.duplicateBlocked
-              ? 'Voice doosre tab me active hai — Take over'
-              : 'Voice doosre device se linked hai'}
-          </span>
-          <button type="button" data-testid="voice-take-over" onClick={() => void voice.takeOver()}>
-            Take over
-          </button>
-        </div>
-      )}
-      {voice.agentMissing && voice.roomState === 'connected' && !voice.voiceUnavailable && (
-        <div className="voice-banner voice-banner--warn no-drag" role="status">
-          <span>Agent room me nahi</span>
-          <button type="button" data-testid="voice-wake-agent" onClick={voice.wakeAgent}>
-            Wake
-          </button>
-        </div>
-      )}
-    </>
-  );
-}
-
 export function LiveKitProvider({ children }: { children: ReactNode }) {
   const voice = useVoiceRoom();
 
-  return (
-    <LiveKitContext.Provider value={voice}>
-      <VoiceBanners voice={voice} />
-      {children}
-    </LiveKitContext.Provider>
-  );
+  return <LiveKitContext.Provider value={voice}>{children}</LiveKitContext.Provider>;
 }
 
 export function useLiveKit(): LiveKitContextValue {

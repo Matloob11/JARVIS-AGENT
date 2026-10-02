@@ -9,7 +9,10 @@ import {
   connectedDeviceCount,
   useVortexStatusPoll,
 } from '@/features/shell/useVortexStatusPoll';
-import { setPersonaSwitchBridge } from '@/features/overview/personaSwitchBridge';
+import {
+  getPersonaSwitchBridge,
+  setPersonaSwitchBridge,
+} from '@/features/overview/personaSwitchBridge';
 import { SwarmModeProvider } from '@/features/panel/useSwarmMode';
 import ChatPanel from './components/ChatPanel';
 import FlowMap from './components/FlowMap';
@@ -35,7 +38,9 @@ import { ShellPage } from '@/features/shell/ShellPage';
 import { useLayout } from '@/features/shell/useLayout';
 import { useHashRouter } from '@/features/shell/useHashRouter';
 import OrbCanvas from '@/features/voice/orb/OrbCanvas';
+import VoiceAnnouncer from '@/features/voice/VoiceAnnouncer';
 import { useAgentListeningMuted } from '@/features/status/AgentControls';
+import { useVoiceUi } from '@/features/voice/voiceState';
 import AgentsPage from '@/features/agents/AgentsPage';
 
 const DashboardInner = () => {
@@ -116,38 +121,20 @@ const DashboardInner = () => {
 
   useEffect(() => {
     setPersonaSwitchBridge({
+      ...getPersonaSwitchBridge(),
       appendChatSystemLine: command.appendChatSystemLine,
     });
-    return () => setPersonaSwitchBridge({});
+    return () => {
+      const { appendChatSystemLine: _drop, ...rest } = getPersonaSwitchBridge();
+      setPersonaSwitchBridge(rest);
+    };
   }, [command.appendChatSystemLine]);
 
-  const heroStateLabel = useMemo(() => {
-    const voiceConnecting =
-      liveKit.roomState === 'connecting' || liveKit.roomState === 'reconnecting';
-    const voiceLive = liveKit.roomState === 'connected';
-    const agentLabel = liveKit.agentState
-      ? liveKit.agentState
-      : voiceLive
-        ? 'linked'
-        : 'offline';
-    if (voiceConnecting) return 'Joining voice…';
-    if (liveKit.voiceUnavailable) return 'Voice unavailable';
-    if (voiceLive) {
-      return `Voice (${liveKit.roomName || 'jarvis-hybrid'}) · ${agentLabel}`;
-    }
-    if (command.isThinking) return 'Processing';
-    if (command.isSpeaking) return 'Speaking';
-    if (command.isConnected) return 'System active';
-    return 'Offline';
-  }, [
-    liveKit.roomState,
-    liveKit.agentState,
-    liveKit.voiceUnavailable,
-    liveKit.roomName,
-    command.isThinking,
-    command.isSpeaking,
-    command.isConnected,
-  ]);
+  const voiceUi = useVoiceUi(command.activePersona, {
+    isSpeaking: command.isSpeaking,
+    isThinking: command.isThinking,
+    isUserSpeaking: command.isUserSpeaking,
+  });
 
   const overviewMain = (
     <>
@@ -183,8 +170,9 @@ const DashboardInner = () => {
         <section className="command-center-stage">
           <OverviewPage
             persona={command.activePersona}
+            isSpeaking={command.isSpeaking}
+            isThinking={command.isThinking}
             isUserSpeaking={command.isUserSpeaking}
-            stateLabel={heroStateLabel}
             waveformSlot={
               <canvas
                 ref={heroWaveCanvasRef}
@@ -197,9 +185,16 @@ const DashboardInner = () => {
             orbSlot={
               <OrbCanvas
                 persona={command.activePersona}
-                statusLine={heroStateLabel}
+                statusLine={voiceUi.statusLine}
                 voiceUnavailable={liveKit.voiceUnavailable}
                 roomState={liveKit.roomState}
+                duplicateBlocked={liveKit.duplicateBlocked}
+                linkedElsewhere={liveKit.linkedElsewhere}
+                agentPresent={liveKit.agentPresent}
+                agentMissing={liveKit.agentMissing}
+                agentRestarting={agentStatus.restarting}
+                agentOnline={agentStatus.online}
+                playbackBlocked={liveKit.playbackBlocked}
                 agentState={liveKit.agentState}
                 agentListeningMuted={agentListeningMuted}
                 micEnabled={liveKit.micEnabled}
@@ -285,6 +280,7 @@ const DashboardInner = () => {
 
   return (
     <SwarmModeProvider>
+      <VoiceAnnouncer persona={command.activePersona} state={voiceUi.state} />
       <AppShell
         route={route}
         mobileTab={shellMobileTab}

@@ -1,41 +1,90 @@
-import type { ReactNode } from 'react';
-import { Mic, MicOff, Zap } from 'lucide-react';
-import { QUOTE } from '@/shared/owner';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { Loader2, Mic, MicOff, Zap } from 'lucide-react';
 import { getPersona, type PersonaKey } from '@/shared/persona';
+import { StatusShape } from '@/shared/ui/StatusShape';
 import { useLiveKit } from '@/features/voice/LiveKitProvider';
-import { useAgentListeningMuted, emitUiCommandWithAck } from '@/features/status/AgentControls';
+import { useVoiceUi } from '@/features/voice/voiceState';
+import { emitUiCommandWithAck, HeroStopButton } from '@/features/status/AgentControls';
+import { useAgentListeningMuted } from '@/features/status/AgentControls';
 import { useSwarmMode } from '@/features/panel/useSwarmMode';
 import { usePersonaSwitch } from './usePersonaSwitch';
+import { prefersReducedMotion } from './personaSwitchMotion';
 
 type HeroCardProps = {
   persona: PersonaKey;
+  isSpeaking: boolean;
+  isThinking: boolean;
+  isUserSpeaking: boolean;
   orbSlot?: ReactNode;
   waveformSlot?: ReactNode;
-  statusSlot?: ReactNode;
-  isUserSpeaking?: boolean;
-  stateLabel?: string;
 };
 
 const HeroCard = ({
   persona,
+  isSpeaking,
+  isThinking,
+  isUserSpeaking,
   orbSlot,
   waveformSlot,
-  statusSlot,
-  isUserSpeaking = false,
-  stateLabel = 'Listening for your command',
 }: HeroCardProps) => {
   const copy = getPersona(persona);
+  const [displayName, setDisplayName] = useState(copy.name);
+  const nameRef = useRef<HTMLHeadingElement>(null);
   const personaSwitch = usePersonaSwitch();
+
+  useLayoutEffect(() => {
+    if (prefersReducedMotion()) {
+      setDisplayName(copy.name);
+    }
+  }, [copy.name]);
+
+  useEffect(() => {
+    const nextName = copy.name;
+    if (nextName === displayName) return undefined;
+
+    const nm = nameRef.current;
+    if (!nm || prefersReducedMotion()) {
+      setDisplayName(nextName);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const out = nm.animate(
+      [
+        { transform: 'translateY(0)', opacity: 1 },
+        { transform: 'translateY(-14px)', opacity: 0 },
+      ],
+      { duration: 220, easing: 'ease-in' },
+    );
+    out.onfinish = () => {
+      if (cancelled) return;
+      setDisplayName(nextName);
+      requestAnimationFrame(() => {
+        if (cancelled || !nameRef.current) return;
+        nameRef.current.animate(
+          [
+            { transform: 'translateY(14px)', opacity: 0 },
+            { transform: 'translateY(0)', opacity: 1 },
+          ],
+          { duration: 320, easing: 'cubic-bezier(.2,.8,.2,1)' },
+        );
+      });
+    };
+
+    return () => {
+      cancelled = true;
+      out.cancel();
+    };
+  }, [copy.name, displayName]);
   const voice = useLiveKit();
   const agentMuted = useAgentListeningMuted();
   const { swarmMode, toggleSwarmMode } = useSwarmMode();
 
-  const voiceConnecting =
-    voice.roomState === 'connecting' || voice.roomState === 'reconnecting';
-  const micPressed = voice.micEnabled && !agentMuted;
+  const ui = useVoiceUi(persona, { isSpeaking, isThinking, isUserSpeaking });
+  const { status, buttons, helper, isHelper, showUserSpeaking } = ui;
 
   const onStartListening = () => {
-    if (voiceConnecting || voice.voiceUnavailable) return;
+    if (buttons.listenDisabled) return;
     if (!voice.micEnabled) {
       void voice.toggleMic();
     }
@@ -45,17 +94,60 @@ const HeroCard = ({
   };
 
   const onMicOff = () => {
-    if (voiceConnecting || voice.voiceUnavailable) return;
+    if (buttons.micOffDisabled) return;
     if (voice.micEnabled) {
       void voice.toggleMic();
     }
   };
 
-  const listenLabel = voiceConnecting ? 'Joining…' : 'Start Listening';
-  const listenDisabled = voiceConnecting || voice.voiceUnavailable;
+  const inlineAction = (() => {
+    switch (status.inlineAction) {
+      case 'take-over':
+        return (
+          <button
+            type="button"
+            className="overview-hero__status-act"
+            data-testid="voice-take-over"
+            onClick={() => void voice.takeOver()}
+          >
+            Take over
+          </button>
+        );
+      case 'wake':
+        return (
+          <button
+            type="button"
+            className="overview-hero__status-act"
+            data-testid="voice-wake-agent"
+            onClick={voice.wakeAgent}
+          >
+            Wake
+          </button>
+        );
+      case 'enable-audio':
+        return (
+          <button
+            type="button"
+            className="overview-hero__status-act"
+            data-testid="enable-audio"
+            onClick={() => void voice.enablePlayback()}
+          >
+            Enable audio
+          </button>
+        );
+      case 'stop':
+        return (
+          <span className="overview-hero__status-act-wrap">
+            <HeroStopButton className="overview-hero__status-act" />
+          </span>
+        );
+      default:
+        return null;
+    }
+  })();
 
   return (
-    <article className="overview-hero edge" data-testid="hero-card">
+    <article className="overview-hero edge" data-testid="hero-card" data-voice={ui.state}>
       <div className="overview-hero__lights" aria-hidden />
       <svg className="overview-hero__flare" viewBox="0 0 830 474" aria-hidden>
         <defs>
@@ -90,7 +182,7 @@ const HeroCard = ({
         {orbSlot ?? <div className="overview-hero__orb-placeholder" aria-hidden />}
       </div>
 
-      {isUserSpeaking ? (
+      {showUserSpeaking ? (
         <div
           className="overview-hero__user-ring"
           data-testid="user-speaking-indicator"
@@ -143,8 +235,12 @@ const HeroCard = ({
         ) : null}
       </div>
 
-      <h2 className="overview-hero__name t" data-testid="hero-persona-name">
-        {copy.name}
+      <h2
+        ref={nameRef}
+        className="overview-hero__name t"
+        data-testid="hero-persona-name"
+      >
+        {displayName}
       </h2>
       <p className="overview-hero__role t">AI Assistant</p>
       <div className="overview-hero__rule t" aria-hidden />
@@ -154,16 +250,28 @@ const HeroCard = ({
       </div>
 
       <p
-        className={`overview-hero__status t${isUserSpeaking ? ' overview-hero__status--hidden' : ''}`}
+        className={`overview-hero__status t overview-hero__status-row${showUserSpeaking ? ' overview-hero__status--hidden' : ''}`}
         data-testid="voice-status"
+        data-tone={status.tone}
       >
-        {statusSlot ?? stateLabel}
+        {status.showSpinner ? (
+          <Loader2 className="overview-hero__status-spin" size={16} aria-hidden />
+        ) : status.shape ? (
+          <StatusShape
+            s={status.shape}
+            label={status.line}
+            hideLabel
+            className="overview-hero__status-shape"
+          />
+        ) : null}
+        <span className="overview-hero__status-text">{status.line}</span>
+        {inlineAction}
       </p>
-      {isUserSpeaking ? (
+      {showUserSpeaking ? (
         <p
           className="overview-hero__status-user t"
           data-testid="user-speaking-label"
-          aria-hidden={!isUserSpeaking}
+          aria-hidden={!showUserSpeaking}
         >
           ● You are speaking
         </p>
@@ -172,15 +280,15 @@ const HeroCard = ({
       <div className="overview-hero__btns t" role="group" aria-label="Microphone">
         <button
           type="button"
-          className={`overview-hero__btn overview-hero__btn--listen edge${micPressed ? ' is-pressed' : ''}`}
+          className={`overview-hero__btn overview-hero__btn--listen edge${buttons.listenPressed ? ' is-pressed' : ''}`}
           data-testid="voice-toggle"
-          aria-pressed={micPressed}
-          disabled={listenDisabled}
+          aria-pressed={buttons.listenPressed}
+          disabled={buttons.listenDisabled}
           title={voice.micEnabled ? 'Mic off (browser publish)' : 'Mic on (browser publish)'}
           onClick={onStartListening}
         >
           <Mic className="overview-hero__btn-ic" size={17} aria-hidden />
-          <span className="overview-hero__btn-lbl">{listenLabel}</span>
+          <span className="overview-hero__btn-lbl">{buttons.listenLabel}</span>
         </button>
         <button
           type="button"
@@ -196,10 +304,10 @@ const HeroCard = ({
         </button>
         <button
           type="button"
-          className={`overview-hero__btn overview-hero__btn--mic-off edge${!voice.micEnabled ? ' is-pressed' : ''}`}
+          className={`overview-hero__btn overview-hero__btn--mic-off edge${buttons.micOffPressed ? ' is-pressed' : ''}`}
           data-testid="hero-mic-off"
-          aria-pressed={!voice.micEnabled}
-          disabled={listenDisabled}
+          aria-pressed={buttons.micOffPressed}
+          disabled={buttons.micOffDisabled}
           title="Mic off (stop publishing)"
           onClick={onMicOff}
         >
@@ -208,8 +316,16 @@ const HeroCard = ({
         </button>
       </div>
 
-      <p className="overview-hero__quote t" data-testid="hero-helper">
-        {QUOTE}
+      <p
+        className="overview-hero__quote t"
+        data-testid="hero-helper"
+        lang={isHelper ? 'ur-Latn' : undefined}
+        data-helper={isHelper ? 'true' : undefined}
+      >
+        {helper}
+        {isHelper && voice.error && ui.state === 'offline' ? (
+          <span className="overview-hero__helper-err"> Voice: {voice.error}</span>
+        ) : null}
       </p>
     </article>
   );

@@ -5,6 +5,7 @@ import { useLiveKit } from '@/features/voice/LiveKitProvider';
 import { useSettings } from '@/features/settings/useSettings';
 import { getPersona, stopTitle } from '@/shared/persona';
 import { deriveVoicePillCopy } from '../voicePillState';
+import { useE2EVoiceTick } from '@/features/voice/voiceState';
 import { useAgentStatusStore } from '@/features/status/agentStatusStore';
 import { useAgentListeningMuted } from '@/features/status/agentListeningStore';
 import {
@@ -44,10 +45,11 @@ export function VoicePopover({
   const agentMuted = useAgentListeningMuted();
   const { status } = useAgentStatusStore();
   const persona = getPersona(settings.persona);
+  const e2eTick = useE2EVoiceTick();
 
   const copy = useMemo(
-    () => deriveVoicePillCopy(liveKit, status, agentMuted, isUserSpeaking),
-    [liveKit, status, agentMuted, isUserSpeaking],
+    () => deriveVoicePillCopy(liveKit, status, agentMuted, isUserSpeaking, settings.persona),
+    [liveKit, status, agentMuted, isUserSpeaking, settings.persona, e2eTick],
   );
 
   const meter = deriveVoiceMeterView(

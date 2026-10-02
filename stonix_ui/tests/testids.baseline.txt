@@ -49,6 +49,7 @@ flow-core-status
 hero-card
 hero-helper
 hero-mic-off
+hero-stop
 hero-persona-name
 intelligence-audio
 intelligence-copy-lan

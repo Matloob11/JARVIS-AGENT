@@ -899,3 +899,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `npm --prefix stonix_ui run build` pass; voiceid + controls-agent + settings e2e 17/17 pass; testid inventory 225 pass
 - **Commit:** (pending) · **Deploy:** no
 - **Doosre agent ke liye:** X-85 Devices/Machines anchors + `operations-rail` yahan mount karega; X-81 System Flow card `flow` anchor par.
+
+### ✅ [cursor] X-97 · Ten-state voice machine + hero presence · 2026-10-03 02:30 PKT
+- **Kya kiya:** Spec §9 voice derivation (`voiceState.ts`), hero status + inline actions (Take over / Wake / Enable audio / Stop), helper slot ur-Latn, mic button rules, Voice pill sync, `#sr` announcer; layout banners hata kar hero me; e2e override ab React re-render trigger karta hai; `presence.spec` 10 states × 2 personas.
+- **Files:** `stonix_ui/src/features/voice/voiceState.ts`, `VoiceAnnouncer.tsx`, `HeroCard.tsx`, `LiveKitProvider.tsx`, `voicePillState.ts`, `OrbCanvas.tsx`, `e2eVoiceOverride.ts`, `tests/e2e/presence.spec.ts`, `testids.baseline.txt` (+ Dashboard, AgentControls, StatusPills, persona-copy nav fix)
+- **Verify:** `npm --prefix stonix_ui run build` pass; presence + voice + controls-agent + persona-copy e2e 30/30 pass; testid inventory 226 pass
+- **Commit:** (pending) · **Deploy:** no
+- **Doosre agent ke liye:** X-98 motion/layout presence.spec part isi file par continue karega.

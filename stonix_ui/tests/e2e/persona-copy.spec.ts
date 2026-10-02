@@ -35,8 +35,8 @@ test.describe('persona-aware UI copy', () => {
     await expect(page.getByTestId('settings-status-persona')).toHaveAttribute('data-state', 'applied', {
       timeout: 10_000,
     });
-    await page.getByTitle('Close settings').click();
-    await expect(page.getByTestId('settings-drawer')).toHaveCount(0, { timeout: 5_000 });
+    await page.getByTestId('nav-overview').click();
+    await expect(page.getByTestId('hero-card')).toBeVisible({ timeout: 5_000 });
   }
 
   test('ANNA typing hint, stop title and listening title', async ({ page }) => {

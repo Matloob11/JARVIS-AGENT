@@ -1302,7 +1302,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-74 | cursor | P3 | AudioReactiveEngine outside React, plus an e2e-only test hook | — | DONE (cursor, 02 Oct 13:45 PKT) |
 | X-75 | cursor | P3 | Orb renderer: the reference orb with its fitted data, state looks, loop policy, reduced motion | X-70, X-74, X-104 | DONE (cursor, 03 Oct 2026 PKT) |
 | X-76 | cursor | P3 | Waveform: the 30 measured bars and their reactive modes (agent-audio-visualizer) | X-75 | DONE (cursor, 03 Oct 2026 PKT) |
-| X-77 | cursor | P3 | Persona switch motion: View Transition circle from the orb, name roll, palette ease, reduced motion | X-70, X-75, X-104 | TODO |
+| X-77 | cursor | P3 | Persona switch motion: View Transition circle from the orb, name roll, palette ease, reduced motion | X-70, X-75, X-104 | DOING (cursor, 03 Oct 01:45 PKT) |
 | X-78 | cursor | P3 | Page header: title and subtitle, the three status pills, divider, account block; interim Reconnect | X-73, X-80 | DONE (cursor, 02 Oct 2026 PKT) |
 | X-79 | cursor | P3 | Laptop states and Stop desktop: the Devices popover Laptop row and the Agents › Laptop card (X-67 data) | X-67, X-85, X-99 | TODO |
 | X-80 | cursor | P3 | App shell: the fluid reference grid (dk/tl/ph), slots, hash router with mounted pages, app-ready marker | X-69, X-73 | DONE (cursor, 02 Oct 23:10 PKT) |
@@ -1322,7 +1322,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-94 | cursor | P3 | Accessibility gate: axe on every page and state, the 12 px floor, focus rings, announcer | X-78, X-79, X-80, X-82, X-83, X-84, X-85, X-86, X-87, X-88, X-89, X-90, X-91, X-92, X-97, X-99, X-100, X-101, X-102, X-103, X-104, X-105, X-106, X-107, X-108 | TODO |
 | X-95 | cursor | P3 | Product baselines, layout, Electron and performance gates; the nothing-removed audit | X-77, X-82, X-93, X-94, X-98, X-100, X-109 | TODO |
 | X-96 | cursor | P3 | One socket subscription store: Reconnect re-binds every listener, request_state once per connect, init_state merges (D1–D3) | X-69 | DONE (cursor, 02 Oct 22:10 PKT) |
-| X-97 | cursor | P3 | Voice state machine: ten states, the hero status line and inline actions, helper slot, buttons and mic mirrors, Voice pill, announcer | X-72, X-73, X-75, X-76, X-78, X-104 | TODO |
+| X-97 | cursor | P3 | Voice state machine: ten states, the hero status line and inline actions, helper slot, buttons and mic mirrors, Voice pill, announcer | X-72, X-73, X-75, X-76, X-78, X-104 | DONE (cursor, 03 Oct 02:15 PKT) |
 | X-98 | cursor | P3 | Reduced motion and presence.spec motion part: motion follows the level, the loop stops, nothing shifts | X-97 | TODO |
 | X-99 | cursor | P3 | Popover primitive; Agent, Voice and Devices popovers (mic, listening, stop, wake, pause/wake and Reconnect move out of the header) | X-78 | DONE |
 | X-100 | cursor | P3 | Electron: header reserve, window buttons at the window edge, drag region, header-layout.spec | X-99 | TODO |
