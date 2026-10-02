@@ -878,3 +878,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `npm --prefix stonix_ui run build` pass; overview + tasks + confirm e2e 16/16 pass; testid inventory 221 static pass
 - **Commit:** (pending) · **Deploy:** no
 - **Doosre agent ke liye:** X-108 Timeline tab feed store reuse karega; `seedReferenceActivityRows` refdiff ke liye ready.
+
+### ✅ [cursor] X-75 · Neon speaker orb (hero) · 2026-10-03 01:45 PKT
+- **Kya kiya:** Reference glass orb prototype (`10_draw.js`) hero `speaker-orb` slot me — `OrbRenderer` loop (full/breath/stop), reduced motion, palette ease, ripples; `audioEngine` frame vs 30 Hz coarse sampling; e2e `stats()` orb + engine ticks; user ring `user-speaking-indicator`.
+- **Files:** `stonix_ui/src/features/voice/orb/{palette,orbDraw,orbRenderer,OrbCanvas,deriveOrbVoiceState}.ts(x)`, `audioEngine.ts`, `e2eHooks.ts`, `e2eVoiceOverride.ts`, `Dashboard.tsx`, `HeroCard.tsx`, `assets/styles/neon/orb.css`, `tests/testids.baseline.txt`
+- **Verify:** `npm --prefix stonix_ui run build` pass; `voice.spec.ts` + `audio-engine.spec.ts` 4/4 pass; testid inventory 222 pass
+- **Commit:** (pending) · **Deploy:** no
+- **Doosre agent ke liye:** X-76 waveform isi loop me draw karega; X-97 voice state derivation abhi coarse (`deriveOrbVoiceState`).

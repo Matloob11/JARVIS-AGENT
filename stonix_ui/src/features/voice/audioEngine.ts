@@ -1,4 +1,4 @@
-import {
+﻿import {
   LocalAudioTrack,
   createAudioAnalyser,
   type LocalAudioTrack as LocalAudioTrackType,
@@ -139,11 +139,12 @@ class AudioReactiveEngine {
 
   private bandRing: BandRingEntry[] = [];
   private listeners = new Set<() => void>();
-  private rafId: number | null = null;
   private lastTick = 0;
   private prevAgentSmoothed = 0;
-  private drawCount = 0;
-  private loopMode: 'full' | 'breath' | 'stop' = 'stop';
+  private sampleRate: 'frame' | 'coarse' = 'coarse';
+  private coarseTimer: ReturnType<typeof setInterval> | null = null;
+  private engineTicks = 0;
+  private engineLoop: 'full' | 'breath' | 'stop' = 'stop';
   private documentHidden = typeof document !== 'undefined' ? document.hidden : false;
   private lastAgentContextState: AudioContextState | 'none' = 'none';
 
@@ -151,11 +152,7 @@ class AudioReactiveEngine {
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', () => {
         this.documentHidden = document.hidden;
-        if (document.hidden) {
-          this.stopLoop();
-        } else {
-          this.ensureLoop();
-        }
+        this.syncEngineLoop();
       });
     }
   }
@@ -165,10 +162,24 @@ class AudioReactiveEngine {
     this.ensureLoop();
     return () => {
       this.listeners.delete(listener);
-      if (this.listeners.size === 0 && !this.agentBinding && !this.userBinding) {
-        this.stopLoop();
+      if (this.listeners.size === 0 && !this.hasActiveSource()) {
+        this.syncEngineLoop();
       }
     };
+  }
+
+  setRate(rate: 'frame' | 'coarse') {
+    if (this.sampleRate === rate) return;
+    this.sampleRate = rate;
+    this.syncEngineLoop();
+  }
+
+  tickFrame(dt?: number) {
+    if (this.documentHidden || this.sampleRate !== 'frame') return;
+    const now = performance.now();
+    const step = dt ?? Math.max(0.001, (now - this.lastTick) / 1000);
+    this.lastTick = now;
+    this.runProcess(step);
   }
 
   readAgent(): AudioReadout {
@@ -206,14 +217,9 @@ class AudioReactiveEngine {
 
   getStats() {
     return {
-      loop: this.loopMode,
-      draws: this.drawCount,
-      roomWrites: 0,
+      engineLoop: this.engineLoop,
+      engineTicks: this.engineTicks,
     };
-  }
-
-  resetDrawCount() {
-    this.drawCount = 0;
   }
 
   async resumeAll(): Promise<void> {
@@ -379,43 +385,57 @@ class AudioReactiveEngine {
     this.userBands.fill(0);
   }
 
-  private ensureLoop() {
-    if (this.documentHidden) return;
-    if (this.rafId != null) return;
+  private hasActiveSource() {
+    return !!(this.agentBinding || this.userBinding || this.agentOverride || this.userOverride);
+  }
+
+  private stopEngineTimers() {
+    if (this.coarseTimer != null) {
+      clearInterval(this.coarseTimer);
+      this.coarseTimer = null;
+    }
+  }
+
+  private startCoarseTimer() {
+    if (this.coarseTimer != null) return;
     this.lastTick = performance.now();
-    this.rafId = requestAnimationFrame(this.tick);
+    this.coarseTimer = setInterval(() => {
+      if (this.documentHidden || this.sampleRate !== 'coarse') return;
+      const now = performance.now();
+      const dt = Math.max(0.001, (now - this.lastTick) / 1000);
+      this.lastTick = now;
+      this.runProcess(dt);
+    }, 1000 / 30);
   }
 
-  private stopLoop() {
-    if (this.rafId != null) {
-      cancelAnimationFrame(this.rafId);
-      this.rafId = null;
-    }
-    this.loopMode = 'stop';
-  }
-
-  private tick = (now: number) => {
-    this.rafId = requestAnimationFrame(this.tick);
-    if (this.documentHidden) {
-      this.stopLoop();
-      return;
-    }
-
-    const dt = Math.max(0.001, (now - this.lastTick) / 1000);
-    this.lastTick = now;
-    this.loopMode =
-      this.agentBinding || this.userBinding || this.agentOverride || this.userOverride
-        ? 'full'
-        : 'breath';
-
-    this.processAgentSide(now / 1000, dt);
-    this.processUserSide(now / 1000, dt);
-
-    this.drawCount++;
+  private runProcess(dt: number) {
+    const tSec = performance.now() / 1000;
+    this.engineTicks += 1;
+    this.processAgentSide(tSec, dt);
+    this.processUserSide(tSec, dt);
     for (const listener of this.listeners) {
       listener();
     }
-  };
+  }
+
+  private syncEngineLoop() {
+    if (this.documentHidden || !this.hasActiveSource()) {
+      this.stopEngineTimers();
+      this.engineLoop = 'stop';
+      return;
+    }
+    if (this.sampleRate === 'frame') {
+      this.stopEngineTimers();
+      this.engineLoop = 'full';
+      return;
+    }
+    this.engineLoop = 'breath';
+    this.startCoarseTimer();
+  }
+
+  private ensureLoop() {
+    this.syncEngineLoop();
+  }
 
   private processAgentSide(tSec: number, dt: number) {
     const rawBands = new Float32Array(BAND_COUNT);

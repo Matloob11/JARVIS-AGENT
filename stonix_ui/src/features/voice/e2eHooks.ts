@@ -1,30 +1,16 @@
-import {
+﻿import {
   clearE2EPanelCrash,
   setE2EPanelCrashTarget,
 } from '@/shared/e2e/panelCrash';
 import { audioEngine } from './audioEngine';
-import type { VoiceRoomState } from './useVoiceRoom';
-
-export type E2EVoiceState =
-  | 'offline'
-  | 'joining'
-  | 'agent absent'
-  | 'audio blocked'
-  | 'speaking'
-  | 'thinking'
-  | 'muted'
-  | 'listening'
-  | 'idle'
-  | 'mic off';
-
-export type E2EVoiceInputs = {
-  room?: VoiceRoomState;
-  agentAbsent?: boolean;
-  audioBlocked?: boolean;
-  activity?: string;
-  micOn?: boolean;
-  listening?: boolean;
-};
+import { getActiveOrbRenderer } from './orb/orbRenderer';
+export type { E2EVoiceInputs, E2EVoiceState } from './e2eVoiceOverride';
+import type { E2EVoiceInputs, E2EVoiceState } from './e2eVoiceOverride';
+import {
+  getE2EVoiceOverrides,
+  setE2EVoiceInputsOverride,
+  setE2EVoiceStateOverride,
+} from './e2eVoiceOverride';
 
 type JarvisTestApi = {
   crashPanel: (boundaryName: string) => void;
@@ -43,7 +29,14 @@ type JarvisTestApi = {
   ) => void;
   bindAgentStream: (stream: MediaStream) => Promise<void>;
   unbindAgentStream: () => Promise<void>;
-  stats: () => { loop: string; draws: number; roomWrites: number; commits: number };
+  stats: () => {
+    loop: string;
+    draws: number;
+    roomWrites: number;
+    engineLoop: string;
+    engineTicks: number;
+    commits: number;
+  };
   readAgentDbfs: () => number;
   readAgentBands: () => number[];
   agentContextState: () => string;
@@ -56,15 +49,11 @@ declare global {
 }
 
 let dashboardCommits = 0;
-let voiceStateOverride: E2EVoiceState | null = null;
-let voiceInputsOverride: E2EVoiceInputs = {};
+
+export { getE2EVoiceOverrides };
 
 export function recordDashboardCommit() {
   dashboardCommits += 1;
-}
-
-export function getE2EVoiceOverrides() {
-  return { voiceStateOverride, voiceInputsOverride };
 }
 
 export function install() {
@@ -76,7 +65,7 @@ export function install() {
       clearE2EPanelCrash();
     },
     setVoiceState(state) {
-      voiceStateOverride = state;
+      setE2EVoiceStateOverride(state);
       if (state === 'speaking') {
         audioEngine.setAgentFeed('speech');
       } else if (state === 'listening') {
@@ -87,7 +76,7 @@ export function install() {
       }
     },
     setVoiceInputs(inputs) {
-      voiceInputsOverride = { ...voiceInputsOverride, ...inputs };
+      setE2EVoiceInputsOverride(inputs);
     },
     feedAgent(level, bands, opts) {
       if (level === null) {
@@ -118,9 +107,18 @@ export function install() {
       await audioEngine.unbindAgent();
     },
     stats() {
-      const base = audioEngine.getStats();
+      const engine = audioEngine.getStats();
+      const orb = getActiveOrbRenderer()?.stats() ?? {
+        loop: 'stop' as const,
+        draws: 0,
+        glowWrites: 0,
+      };
       return {
-        ...base,
+        loop: orb.loop,
+        draws: orb.draws,
+        roomWrites: orb.glowWrites,
+        engineLoop: engine.engineLoop,
+        engineTicks: engine.engineTicks,
         commits: dashboardCommits,
       };
     },

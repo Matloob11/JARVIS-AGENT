@@ -112,6 +112,7 @@ qs-memory
 qs-open
 qs-stale
 settings-drawer
+settings-muted
 settings-guarded-tools-list
 settings-language-select
 settings-logout

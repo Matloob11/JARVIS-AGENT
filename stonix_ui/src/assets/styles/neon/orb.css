@@ -1,0 +1,48 @@
+.neon-orb-host {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.neon-orb-host canvas[data-testid='speaker-orb'] {
+  width: 100%;
+  height: 100%;
+  display: block;
+  mix-blend-mode: plus-lighter;
+}
+
+.neon-orb-glyph {
+  position: absolute;
+  left: calc(213.6 / 520 * 100%);
+  top: calc(177.7 / 520 * 100%);
+  width: max(40px, calc(52 / 520 * 100%));
+  height: max(40px, calc(52 / 520 * 100%));
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  z-index: 2;
+  pointer-events: none;
+  transform: translate(
+    min(0px, calc(26 / 520 * 100% - 20px)),
+    min(0px, calc(26 / 520 * 100% - 20px))
+  );
+}
+
+.neon-orb-glyph[data-tone='warn'] {
+  color: var(--warn);
+}
+
+.neon-orb-glyph[data-tone='err'] {
+  color: var(--err-t);
+}
+
+.neon-orb-glyph[hidden],
+.neon-orb-host .overview-hero__user-ring[hidden] {
+  display: none;
+}
+
+.neon-orb-glyph .n-ic {
+  width: 24px;
+  height: 24px;
+}

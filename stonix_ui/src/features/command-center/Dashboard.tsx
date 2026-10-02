@@ -34,12 +34,14 @@ import AppShell from '@/features/shell/AppShell';
 import { ShellPage } from '@/features/shell/ShellPage';
 import { useLayout } from '@/features/shell/useLayout';
 import { useHashRouter } from '@/features/shell/useHashRouter';
+import OrbCanvas from '@/features/voice/orb/OrbCanvas';
+import { useAgentListeningMuted } from '@/features/status/AgentControls';
 
 const DashboardInner = () => {
   useEffect(() => {
     if (!__E2E_HOOKS__) return;
     void import('@/features/voice/e2eHooks').then(m => m.recordDashboardCommit());
-  });
+  }, []);
 
   const layout = useLayout();
   const route = useHashRouter(layout);
@@ -54,6 +56,7 @@ const DashboardInner = () => {
   const navMarks = useSidebarNavMarks(route);
   const vortex = useVortexStatusPoll(command.isConnected);
   const laptopOnline = useLaptopOnline();
+  const agentListeningMuted = useAgentListeningMuted();
   const deviceCount = useMemo(
     () => connectedDeviceCount(vortex.uiClients, agentStatus.online, vortex.laptopOnline),
     [vortex.uiClients, vortex.laptopOnline, agentStatus.online],
@@ -65,6 +68,8 @@ const DashboardInner = () => {
 
   const shellMobileTab: MobileTab =
     route.page === 'chat' ? 'chat' : route.page === 'settings' ? 'settings' : mobileTab;
+
+  const overviewOrbActive = layout !== 'ph' || shellMobileTab === 'core';
 
   const handleMobileTabChange = useCallback((tab: MobileTab) => {
     if (tab === 'chat') {
@@ -178,6 +183,21 @@ const DashboardInner = () => {
             persona={command.activePersona}
             isUserSpeaking={command.isUserSpeaking}
             stateLabel={heroStateLabel}
+            orbSlot={
+              <OrbCanvas
+                persona={command.activePersona}
+                statusLine={heroStateLabel}
+                voiceUnavailable={liveKit.voiceUnavailable}
+                roomState={liveKit.roomState}
+                agentState={liveKit.agentState}
+                agentListeningMuted={agentListeningMuted}
+                micEnabled={liveKit.micEnabled}
+                isSpeaking={command.isSpeaking}
+                isThinking={command.isThinking}
+                isUserSpeaking={command.isUserSpeaking}
+                pageActive={overviewOrbActive}
+              />
+            }
             legacyStrip={
               <ErrorBoundary name="AssistantCore">
                 <AssistantCore
