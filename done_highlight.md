@@ -857,3 +857,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `npm --prefix stonix_ui run build` pass; sim + voiceid e2e 9/9 pass; `node stonix_ui/scripts/testid-inventory.mjs --check` pass
 - **Commit:** (pending) · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-91 · Per-card panel-error + Retry · 2026-10-03 01:15 PKT
+- **Kya kiya:** Card/Panel ab har card ke body ko ErrorBoundary se wrap karte hain — neon `panel-error` fallback (◆ "<Card> stopped working", dashboard copy, Retry + refresh icon); E2E-only `crashPanel` hook se crash trigger; `panel-error` / `panel-error-retry` testids same.
+- **Files:** `stonix_ui/src/shared/ui/ErrorBoundary.tsx`, `Card.tsx`, `Panel.tsx`, `E2eCrashProbe.tsx`, `shared/e2e/panelCrash.ts`, `features/voice/e2eHooks.ts`, `assets/styles/neon/base.css`, `tests/e2e/panel-error.spec.ts`
+- **Verify:** `npm --prefix stonix_ui run build` pass; `panel-error.spec` 1/1 pass; testid inventory check pass
+- **Commit:** (pending) · **Deploy:** no
+- **Doosre agent ke liye:** —

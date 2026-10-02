@@ -1,4 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { clearE2EPanelCrash } from '@/shared/e2e/panelCrash';
+import { Icon } from '@/shared/ui/icons/Icon';
+import { StatusShape } from '@/shared/ui/StatusShape';
 
 interface ErrorBoundaryProps {
   name?: string;
@@ -7,6 +10,28 @@ interface ErrorBoundaryProps {
 
 interface ErrorBoundaryState {
   hasError: boolean;
+}
+
+export function PanelErrorFallback({
+  label,
+  onRetry,
+}: {
+  label: string;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="panel-error" role="alert" data-testid="panel-error">
+      <b>
+        <StatusShape s="err" label="Error" hideLabel />
+        {label} stopped working
+      </b>
+      <span>The rest of the dashboard keeps running.</span>
+      <button type="button" className="n-btn sm" onClick={onRetry} data-testid="panel-error-retry">
+        <Icon name="refresh" />
+        Retry
+      </button>
+    </div>
+  );
 }
 
 /**
@@ -24,19 +49,16 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 
   private retry = () => {
+    if (__E2E_HOOKS__) {
+      clearE2EPanelCrash();
+    }
     this.setState({ hasError: false });
   };
 
   render(): ReactNode {
     if (this.state.hasError) {
-      return (
-        <div className="panel-error-fallback" role="alert" data-testid="panel-error">
-          <p>Panel failed - Reload panel</p>
-          <button type="button" onClick={this.retry} data-testid="panel-error-retry">
-            Reload panel
-          </button>
-        </div>
-      );
+      const label = this.props.name?.trim() || 'Panel';
+      return <PanelErrorFallback label={label} onRetry={this.retry} />;
     }
     return this.props.children;
   }

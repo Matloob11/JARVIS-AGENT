@@ -153,6 +153,38 @@
   box-shadow: var(--hairline-card);
 }
 
+.panel-error {
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 8px;
+  padding: 20px 22px;
+  border-radius: 13px;
+  background: rgba(242, 85, 90, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(242, 85, 90, 0.3);
+  color: var(--t3);
+  font: 400 14px/20px var(--font-ui);
+}
+
+.panel-error b {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font: 600 15.5px/21px var(--font-ui);
+  color: #fff;
+}
+
+.panel-error[hidden] {
+  display: none;
+}
+
+.n-card > .panel-error {
+  position: absolute;
+  inset: 66px 18px 18px;
+  z-index: 3;
+  background: #0d1428;
+}
+
 .n-hd {
   display: grid;
   grid-template-columns: 26px minmax(0, 1fr) auto;

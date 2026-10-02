@@ -7,10 +7,25 @@ interface PanelProps {
   className?: string;
   title?: string;
   action?: ReactNode;
+  boundaryName?: string;
+  boundary?: boolean;
 }
 
-export const Panel = ({ children, className, title, action }: PanelProps) => (
-  <Card className={className} title={title} action={action}>
+export const Panel = ({
+  children,
+  className,
+  title,
+  action,
+  boundaryName,
+  boundary,
+}: PanelProps) => (
+  <Card
+    className={className}
+    title={title}
+    action={action}
+    boundaryName={boundaryName}
+    boundary={boundary}
+  >
     {children}
   </Card>
 );

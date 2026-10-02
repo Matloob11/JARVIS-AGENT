@@ -1,3 +1,7 @@
+import {
+  clearE2EPanelCrash,
+  setE2EPanelCrashTarget,
+} from '@/shared/e2e/panelCrash';
 import { audioEngine } from './audioEngine';
 import type { VoiceRoomState } from './useVoiceRoom';
 
@@ -23,6 +27,8 @@ export type E2EVoiceInputs = {
 };
 
 type JarvisTestApi = {
+  crashPanel: (boundaryName: string) => void;
+  clearPanelCrash: () => void;
   setVoiceState: (state: E2EVoiceState | null) => void;
   setVoiceInputs: (inputs: E2EVoiceInputs) => void;
   feedAgent: (
@@ -63,6 +69,12 @@ export function getE2EVoiceOverrides() {
 
 export function install() {
   const api: JarvisTestApi = {
+    crashPanel(boundaryName) {
+      setE2EPanelCrashTarget(boundaryName);
+    },
+    clearPanelCrash() {
+      clearE2EPanelCrash();
+    },
     setVoiceState(state) {
       voiceStateOverride = state;
       if (state === 'speaking') {
