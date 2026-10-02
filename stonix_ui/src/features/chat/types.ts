@@ -1,3 +1,5 @@
+import type { PersonaKey } from '@/shared/persona';
+
 export type ChatMessageStatus = 'pending' | 'queued' | 'delivered' | 'failed';
 
 export interface ChatMessage {
@@ -10,6 +12,8 @@ export interface ChatMessage {
   turn_id?: string;
   final?: boolean;
   status?: ChatMessageStatus;
+  /** Persona that spoke (assistant rows keep their original persona). */
+  persona?: PersonaKey;
   /** Pending delivery, waiting for reply, or failure hint. */
   statusHint?: string;
 }

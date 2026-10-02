@@ -47,6 +47,7 @@ async function simLookups(page: import('@playwright/test').Page) {
 }
 
 async function openSimDialog(page: import('@playwright/test').Page) {
+  await page.getByRole('button', { name: 'tools' }).click();
   await page.getByTitle('SIM lookup workspace').click();
   await expect(page.getByTestId('sim-dialog')).toBeVisible();
 }

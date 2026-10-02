@@ -5,11 +5,14 @@ agent-session-restart-banner
 agent-wake
 agent-wake-spinner
 app-ready
+approvals-count
+approvals-panel
 assistant-agent-listening
 brand-mark
 camera-link-badge
 camera-share-switch
 camera-toggle
+chat-empty
 chat-feedback
 chat-feedback-down
 chat-feedback-up

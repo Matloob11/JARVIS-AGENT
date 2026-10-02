@@ -5,7 +5,7 @@ import { getSocket } from '@/shared/realtime/socket';
 import { useSocketEvent } from '@/shared/realtime/subscriptions';
 import { useSettings } from '@/features/settings/useSettings';
 import { useLiveKit } from '@/features/voice/LiveKitProvider';
-import { replyStatusHint } from '@/shared/persona';
+import { asPersonaKey, replyStatusHint } from '@/shared/persona';
 import { registerLiveCaptions } from './liveCaptions';
 import type { ChatMessage, LiveCaption } from './types';
 
@@ -21,6 +21,9 @@ type UiCommandAck = {
 function rawToChatMessage(raw: unknown, existing?: ChatMessage): ChatMessage {
   const n = normalizeMessage(raw);
   const id = n.id || existing?.id || crypto.randomUUID();
+  const data = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const personaRaw = data.persona ?? existing?.persona;
+
   return {
     id,
     role: n.role,
@@ -31,6 +34,7 @@ function rawToChatMessage(raw: unknown, existing?: ChatMessage): ChatMessage {
     final: n.final ?? existing?.final,
     status: existing?.status,
     statusHint: existing?.statusHint,
+    persona: personaRaw != null ? asPersonaKey(personaRaw) : existing?.persona,
   };
 }
 
@@ -105,6 +109,18 @@ export function useChat() {
       if (!n.id) return;
       const existing = mapRef.current.get(n.id);
       let next = rawToChatMessage(raw, existing);
+
+      if (next.role === 'assistant' && !next.persona) {
+        next = { ...next, persona: personaRef.current };
+      }
+
+      if (next.role === 'user' && awaitingReplyRef.current.has(next.id)) {
+        next = {
+          ...next,
+          status: 'delivered',
+          statusHint: replyStatusHint(personaRef.current),
+        };
+      }
 
       if (next.role === 'user' && pendingDeliveryRef.current.has(next.id)) {
         window.clearTimeout(pendingDeliveryRef.current.get(next.id));
@@ -224,6 +240,7 @@ export function useChat() {
         ts,
         source: 'text',
         status: 'pending',
+        statusHint: 'Sending',
       });
       syncFromMap();
 
@@ -241,6 +258,19 @@ export function useChat() {
         (ack: UiCommandAck) => {
           const row = mapRef.current.get(id);
           if (!row) return;
+
+          if (ack?.status === 'sent') {
+            pendingDeliveryRef.current.delete(id);
+            window.clearTimeout(timer);
+            mapRef.current.set(id, {
+              ...row,
+              status: 'delivered',
+              statusHint: 'Delivered ✓',
+            });
+            awaitingReplyRef.current.add(id);
+            syncFromMap();
+            return;
+          }
 
           if (ack?.status === 'queued') {
             pendingDeliveryRef.current.delete(id);

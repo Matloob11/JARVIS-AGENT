@@ -13,6 +13,7 @@ import SystemTrace from './components/SystemTrace';
 import TopBar from './components/TopBar';
 import PageHeader from '@/features/shell/PageHeader';
 import MobileTabBar, { type MobileTab } from './components/MobileTabBar';
+import { useSidebarNavMarks } from '@/features/shell/useSidebarNavMarks';
 import { useCommandCenter } from './hooks/useCommandCenter';
 import { ErrorBoundary } from '@/shared/ui/ErrorBoundary';
 import { useAuth } from '@/features/auth/AuthProvider';
@@ -41,6 +42,36 @@ const DashboardInner = () => {
   const [cameraState, setCameraState] = useState<CameraState>(defaultCameraState);
   const [mobileTab, setMobileTab] = useState<MobileTab>('core');
   const [opsDrawerOpen, setOpsDrawerOpen] = useState(false);
+  const navMarks = useSidebarNavMarks(route);
+
+  const shellMobileTab: MobileTab =
+    route.page === 'chat' ? 'chat' : route.page === 'settings' ? 'settings' : mobileTab;
+
+  const handleMobileTabChange = useCallback((tab: MobileTab) => {
+    if (tab === 'chat') {
+      window.location.hash = '/chat';
+      return;
+    }
+    if (tab === 'settings') {
+      window.location.hash = '/settings';
+      return;
+    }
+    if (window.location.hash.replace(/^#/, '').split('/')[0] !== 'overview') {
+      window.location.hash = '/overview';
+    }
+    setMobileTab(tab);
+  }, []);
+
+  useEffect(() => {
+    if (layout !== 'ph') return;
+    if (route.page === 'chat') {
+      setMobileTab('chat');
+    } else if (route.page === 'settings') {
+      setMobileTab('settings');
+    } else if (route.page === 'overview') {
+      setMobileTab(prev => (prev === 'chat' || prev === 'settings' ? 'core' : prev));
+    }
+  }, [layout, route.page]);
 
   const toggleOpsDrawer = useCallback(() => {
     setOpsDrawerOpen(prev => !prev);
@@ -72,7 +103,7 @@ const DashboardInner = () => {
 
       <main
         className="command-layout"
-        data-mobile-tab={mobileTab}
+        data-mobile-tab={shellMobileTab}
         data-ops-drawer={opsDrawerOpen ? 'open' : 'closed'}
       >
         <ErrorBoundary name="OperationsRail">
@@ -150,19 +181,9 @@ const DashboardInner = () => {
 
   return (
     <>
-      <ErrorBoundary name="ConfirmDialog">
-        <ConfirmDialog
-          current={command.confirmCurrent}
-          queueCount={command.confirmQueueCount}
-          cancelNotice={command.confirmCancelNotice}
-          onAllow={command.respondConfirmAllow}
-          onDeny={command.respondConfirmDeny}
-        />
-      </ErrorBoundary>
-
       <AppShell
         route={route}
-        mobileTab={mobileTab}
+        mobileTab={shellMobileTab}
         head={
           <>
             <ErrorBoundary name="PageHeader">
@@ -181,7 +202,6 @@ const DashboardInner = () => {
                 isConnected={command.isConnected}
                 onReconnect={handleReconnect}
                 onOpenSettings={() => setSettingsOpen(true)}
-                onOpenSim={command.openSimPanel}
                 onToggleOpsDrawer={toggleOpsDrawer}
                 opsDrawerOpen={opsDrawerOpen}
                 onLogout={() => {
@@ -238,10 +258,29 @@ const DashboardInner = () => {
               hasMore={command.chatHasMore}
               onLoadOlder={command.loadOlderChatMessages}
               onRetry={command.retryChatMessage}
+              isThinking={command.isThinking}
+              approvalsWaiting={command.confirmQueueCount}
+              onOpenSim={command.openSimPanel}
+              confirmSlot={
+                <ConfirmDialog
+                  current={command.confirmCurrent}
+                  queueCount={command.confirmQueueCount}
+                  cancelNotice={command.confirmCancelNotice}
+                  onAllow={command.respondConfirmAllow}
+                  onDeny={command.respondConfirmDeny}
+                />
+              }
             />
           </ErrorBoundary>
         }
-        tabs={<MobileTabBar active={mobileTab} onChange={setMobileTab} />}
+        tabs={
+          <MobileTabBar
+            active={shellMobileTab}
+            onChange={handleMobileTabChange}
+            approvalCount={command.confirmQueueCount}
+            activityAlert={navMarks.showActivityBadge}
+          />
+        }
       />
 
       <AnimatePresence>

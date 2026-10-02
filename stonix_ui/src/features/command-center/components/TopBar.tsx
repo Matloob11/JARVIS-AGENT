@@ -4,7 +4,6 @@ import {
   PanelLeft,
   Radar,
   Settings,
-  ShieldCheck,
   Wifi,
   Zap,
 } from 'lucide-react';
@@ -21,7 +20,6 @@ interface TopBarProps {
   isConnected: boolean;
   onReconnect: () => void;
   onOpenSettings: () => void;
-  onOpenSim: () => void;
   onToggleOpsDrawer?: () => void;
   opsDrawerOpen?: boolean;
   onLogout: () => void;
@@ -70,7 +68,6 @@ const TopBar = ({
   isConnected,
   onReconnect,
   onOpenSettings,
-  onOpenSim,
   onToggleOpsDrawer,
   opsDrawerOpen = false,
   onLogout,
@@ -125,9 +122,6 @@ const TopBar = ({
         >
           <Wifi size={15} className={isConnected ? accent.text : 'text-command-danger'} />
           <span>Reconnect</span>
-        </button>
-        <button className="icon-button" onClick={onOpenSim} title="SIM lookup workspace">
-          <ShieldCheck size={15} />
         </button>
         <MicToggleButton />
         <AgentListeningToggle />
