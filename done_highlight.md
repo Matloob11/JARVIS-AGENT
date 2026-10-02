@@ -766,3 +766,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `npm --prefix stonix_ui run build` pass · e2e status/confirm/settings/controls/responsive 23/23 pass · testid-inventory --check pass (195)
 - **Commit:** (next) · **Deploy:** no
 - **Doosre agent ke liye:** X-99 popovers; X-79 laptop row on Devices pill.
+
+### ✅ [cursor] X-83 · Neon right panel (Chat/Approvals/Tools) · 2026-10-02 23:45 PKT
+- **Kya kiya:** Right panel v2: PanelTabs (Chat/Approvals/Tools + badge), ChatList (persona bubbles, delivery hints, empty state, captions above composer), Tools tab with SIM opener; legacy logs/notes/tasks strip; ChatPanel strangler → RightPanel; SIM removed from TopBar; ack `sent` → Delivered.
+- **Files:** stonix_ui/src/features/panel/*, ChatPanel.tsx, Dashboard.tsx, TopBar.tsx, useChat.ts, types.ts, neon/panel.css, sim.spec.ts, testids.baseline.txt, plan.md
+- **Verify:** `npm --prefix stonix_ui run build` pass · e2e chat/controls-agent/memory/tools/tasks/sim 25/25 pass (per-spec runs) · testid-inventory --check pass (198)
+- **Commit:** (next) · **Deploy:** no
+- **Doosre agent ke liye:** X-84 ConfirmCard inline in confirm slot; X-87/X-108 retire panel legacy strip.
