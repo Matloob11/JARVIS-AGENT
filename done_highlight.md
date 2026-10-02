@@ -941,3 +941,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** confirm+layout+responsive e2e 57/57 pass
 - **Commit:** 17b220d · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-100 · Electron header reserve + window controls · 2026-10-03 02:35 PKT
+- **Kya kiya:** Electron par `html.is-electron`, header right reserve (dk/tl/ph), window buttons window ke top-right fixed (z 500), header drag region; `header-layout.spec` viewport + emulated electron gates.
+- **Files:** `App.tsx`, `WindowControls.tsx`, `neon/shell.css`, `tests/e2e/header-layout.spec.ts`
+- **Verify:** `npm --prefix stonix_ui run build` pass; header-layout e2e 16/16; test:electron 3/3; smoke:electron pass; testid inventory 235 pass
+- **Commit:** (pending) · **Deploy:** no
+- **Doosre agent ke liye:** —

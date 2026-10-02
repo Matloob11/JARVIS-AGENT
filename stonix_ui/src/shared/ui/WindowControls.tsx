@@ -32,7 +32,7 @@ const WindowControls = () => {
   }
 
   return (
-    <div className="no-drag z-[100] flex items-center gap-1">
+    <div className="window-controls-shell no-drag" data-testid="window-controls-shell">
       <button
         type="button"
         data-testid="window-minimize"

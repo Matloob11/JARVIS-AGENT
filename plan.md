@@ -1325,7 +1325,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-97 | cursor | P3 | Voice state machine: ten states, the hero status line and inline actions, helper slot, buttons and mic mirrors, Voice pill, announcer | X-72, X-73, X-75, X-76, X-78, X-104 | DONE (cursor, 03 Oct 02:15 PKT) |
 | X-98 | cursor | P3 | Reduced motion and presence.spec motion part: motion follows the level, the loop stops, nothing shifts | X-97 | TODO |
 | X-99 | cursor | P3 | Popover primitive; Agent, Voice and Devices popovers (mic, listening, stop, wake, pause/wake and Reconnect move out of the header) | X-78 | DONE |
-| X-100 | cursor | P3 | Electron: header reserve, window buttons at the window edge, drag region, header-layout.spec | X-99 | DOING (cursor, 03 Oct 02:20 PKT) |
+| X-100 | cursor | P3 | Electron: header reserve, window buttons at the window edge, drag region, header-layout.spec | X-99 | DONE (cursor, 03 Oct 02:35 PKT) |
 | X-101 | cursor | P3 | Approvals tab, and the phone confirm sheet with "Decide later" and the approvals bar | X-82, X-84 | DONE (cursor, 03 Oct 02:26 PKT) |
 | X-102 | cursor | P3 | Hidden-tab confirm alert: title flash, one chime, browser notification, phone vibration | X-84 | TODO |
 | X-103 | cursor | P3 | Sidebar: ring logo, wordmark, navigation with the reference active state, silk wave, tagline; tl icon rail; nav marks | X-70, X-80 | DONE (cursor, 02 Oct 23:13 PKT) |

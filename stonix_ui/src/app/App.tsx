@@ -33,6 +33,22 @@ const HtmlPersona = () => {
   return null;
 };
 
+const HtmlElectron = () => {
+  useEffect(() => {
+    const sync = () => {
+      const isElectron = Boolean(
+        (window as Window & { electronAPI?: { isElectron?: boolean } }).electronAPI?.isElectron,
+      );
+      document.documentElement.classList.toggle('is-electron', isElectron);
+    };
+    sync();
+    window.addEventListener('focus', sync);
+    return () => window.removeEventListener('focus', sync);
+  }, []);
+
+  return null;
+};
+
 const AuthenticatedApp = () => {
   const { status } = useAuth();
   const [checkMessage] = useState(sessionCheckMessage);
@@ -80,10 +96,9 @@ export const App = () => (
     />
     <Sprite />
     <AuthProvider>
+      <HtmlElectron />
       <div className="relative min-h-screen">
-        <div className="pointer-events-none fixed right-3 top-2 z-[500] [&_.window-button]:pointer-events-auto">
-          <WindowControls />
-        </div>
+        <WindowControls />
         <AuthenticatedApp />
       </div>
     </AuthProvider>
