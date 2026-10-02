@@ -8,7 +8,11 @@ from livekit.agents import StopResponse
 
 @pytest.fixture
 def mock_agent_deps():
-    with patch("livekit.agents.Agent.update_instructions", new_callable=AsyncMock):
+    # C-61: BrainAssistant starts its task monitor inside a running loop; keep that monitor off
+    # the real conversations/tasks.db, where it would mark the live agent's due tasks completed.
+    with patch("livekit.agents.Agent.update_instructions", new_callable=AsyncMock), \
+            patch("src.core.agent_core.task_manager",
+                  MagicMock(get_due_tasks=MagicMock(return_value=[]))):
         with patch("livekit.agents.Agent.__init__", return_value=None):
             with patch("src.core.agent_core.jarvis_id.get_context", return_value="Test Context"):
                 with patch("src.core.agent_core.JarvisPluginManager") as mock_plugins:
