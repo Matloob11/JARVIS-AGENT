@@ -97,3 +97,58 @@ for (const row of dkExpectations) {
     expect(widths.panel).toBeLessThanOrEqual(row.panel + 1);
   });
 }
+
+const phoneSizes: { width: number; height: number }[] = [
+  { width: 412, height: 915 },
+  { width: 390, height: 844 },
+  { width: 375, height: 667 },
+  { width: 360, height: 740 },
+  { width: 360, height: 640 },
+  { width: 320, height: 640 },
+];
+
+async function composerAndTabBar(page: Page) {
+  return page.evaluate(() => {
+    const composer = document.querySelector('.command-input') as HTMLElement | null;
+    const tabBar = document.querySelector('[data-testid="mobile-tab-bar"]') as HTMLElement | null;
+    const composerBox = composer?.getBoundingClientRect();
+    const tabBox = tabBar?.getBoundingClientRect();
+    return {
+      composerBottom: composerBox ? Math.round(composerBox.bottom) : null,
+      tabBarTop: tabBox ? Math.round(tabBox.top) : null,
+      tabBarVisible: tabBar ? getComputedStyle(tabBar).display !== 'none' : false,
+      windowHeight: window.innerHeight,
+    };
+  });
+}
+
+for (const size of phoneSizes) {
+  test(`phone ${size.width}x${size.height}: composer above tab bar`, async ({ page }) => {
+    await page.setViewportSize(size);
+    await page.getByTestId('mobile-tab-chat').click();
+    await expect(page.getByTestId('chat-panel')).toBeVisible();
+
+    const layout = await composerAndTabBar(page);
+    expect(layout.composerBottom).not.toBeNull();
+    expect(layout.tabBarTop).not.toBeNull();
+    expect(layout.composerBottom!).toBeLessThanOrEqual(layout.tabBarTop! + 1);
+  });
+
+  test(`phone ${size.width}x${size.height}: typing hides tab bar, composer in window`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(size);
+    await page.getByTestId('mobile-tab-chat').click();
+    await expect(page.getByTestId('chat-panel')).toBeVisible();
+
+    const field = page.getByPlaceholder(/Message JARVIS|Message ANNA/i);
+    await field.click();
+
+    await expect.poll(async () => page.evaluate(() => document.documentElement.classList.contains('typing'))).toBe(true);
+    await expect(page.getByTestId('mobile-tab-bar')).toBeHidden();
+
+    const layout = await composerAndTabBar(page);
+    expect(layout.composerBottom).not.toBeNull();
+    expect(layout.composerBottom!).toBeLessThanOrEqual(layout.windowHeight + 1);
+  });
+}

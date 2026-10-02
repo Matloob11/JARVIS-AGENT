@@ -3,6 +3,7 @@ import { ChevronDown, Volume2, VolumeX } from 'lucide-react';
 import type { TaskNotification } from '@/features/tasks/useTasks';
 import type { LayoutMode } from './useLayout';
 import { routePageTitle, type AppRoute } from './router';
+import { LogoRing } from '@/shared/ui/LogoRing';
 import { StatusPills } from './StatusPills';
 
 const PAGE_SUBTITLES: Record<AppRoute['page'], string> = {
@@ -53,6 +54,7 @@ export function PageHeader({
   const bellWrapRef = useRef<HTMLDivElement>(null);
   const [greetOff, setGreetOff] = useState(false);
   const [compact, setCompact] = useState(false);
+  const [narrow, setNarrow] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
   const [greeting, setGreeting] = useState(() => greetingLine(new Date()));
 
@@ -72,6 +74,7 @@ export function PageHeader({
       setGreetOff(width < 1120);
       const compactAt = layout === 'tl' ? 760 : 1000;
       setCompact(width < compactAt);
+      setNarrow(layout === 'ph' && width <= 340);
     });
     ro.observe(node);
     return () => ro.disconnect();
@@ -99,7 +102,13 @@ export function PageHeader({
       className={`page-header topbar layout-${layout}`}
       data-greet={greetOff ? 'off' : undefined}
       data-compact={compact ? 'true' : undefined}
+      data-narrow={narrow ? 'true' : undefined}
     >
+      {layout === 'ph' ? (
+        <div className="page-header-logo" aria-hidden>
+          <LogoRing size={30} />
+        </div>
+      ) : null}
       <h1 id="page-title" tabIndex={-1} data-testid="page-title" className="page-header-title">
         {pageTitle}
       </h1>
@@ -107,7 +116,8 @@ export function PageHeader({
 
       <StatusPills
         bridgeConnected={bridgeConnected}
-        compact={compact}
+        compact={compact || layout === 'ph'}
+        narrow={narrow}
         isUserSpeaking={isUserSpeaking}
       />
 

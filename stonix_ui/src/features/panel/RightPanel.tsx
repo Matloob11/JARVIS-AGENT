@@ -242,7 +242,16 @@ const RightPanel = ({
         />
       ) : null}
 
-      <form onSubmit={submit} className="command-input panel-composer">
+      <form
+        onSubmit={submit}
+        className="command-input panel-composer"
+        onFocusCapture={() => document.documentElement.classList.add('typing')}
+        onBlurCapture={event => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+            document.documentElement.classList.remove('typing');
+          }
+        }}
+      >
         <button
           type="button"
           className={

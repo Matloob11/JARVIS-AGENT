@@ -17,7 +17,10 @@ async function assertNoHorizontalScroll(page: Page): Promise<void> {
   expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.clientWidth + 1);
 }
 
-async function expectMobileTabPanel(page: Page, tab: 'core' | 'chat' | 'ops' | 'trace'): Promise<void> {
+async function expectMobileTabPanel(
+  page: Page,
+  tab: 'core' | 'chat' | 'ops' | 'trace' | 'settings',
+): Promise<void> {
   await page.getByTestId(`mobile-tab-${tab}`).click();
   await expect(page.getByTestId(`mobile-tab-${tab}`)).toHaveAttribute('data-active', 'true');
 
@@ -30,8 +33,10 @@ async function expectMobileTabPanel(page: Page, tab: 'core' | 'chat' | 'ops' | '
   } else if (tab === 'ops') {
     await expect(page.getByTestId('operations-rail')).toBeVisible();
     await expect(page.getByTestId('camera-toggle')).toBeVisible();
-  } else {
+  } else if (tab === 'trace') {
     await expect(page.getByTestId('system-trace-panel')).toBeVisible();
+  } else {
+    await expect(page.getByTestId('page-settings')).toBeVisible();
   }
 }
 
@@ -65,7 +70,20 @@ test.describe('phone 390x844', () => {
     await expectMobileTabPanel(page, 'chat');
     await expectMobileTabPanel(page, 'ops');
     await expectMobileTabPanel(page, 'trace');
+    await expectMobileTabPanel(page, 'settings');
     await assertNoHorizontalScroll(page);
+  });
+
+  test('five tab buttons keep spec test ids', async ({ page }) => {
+    for (const id of [
+      'mobile-tab-core',
+      'mobile-tab-chat',
+      'mobile-tab-ops',
+      'mobile-tab-trace',
+      'mobile-tab-settings',
+    ]) {
+      await expect(page.getByTestId(id)).toHaveCount(1);
+    }
   });
 
   test('camera preview stays active across mobile tab switches', async ({ page }) => {

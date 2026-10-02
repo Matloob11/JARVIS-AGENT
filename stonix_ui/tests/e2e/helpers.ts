@@ -40,8 +40,8 @@ export async function gotoPage(page: Page, name: GotoPageName, sub?: string): Pr
       }
       return;
     }
-    await page.getByTitle('Settings').click();
-    await expect(page.getByTestId('settings-drawer')).toBeVisible();
+    await page.getByTestId('mobile-tab-settings').click();
+    await expect(page.getByTestId('page-settings')).toBeVisible();
     return;
   }
 

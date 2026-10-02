@@ -12,31 +12,37 @@ import { deriveVoicePillCopy } from './voicePillState';
 type StatusPillsProps = {
   bridgeConnected: boolean;
   compact: boolean;
+  narrow?: boolean;
   isUserSpeaking: boolean;
 };
 
 function BridgeDevicesPill({
   bridgeConnected,
   compact,
+  narrow,
   deviceCount,
 }: {
   bridgeConnected: boolean;
   compact: boolean;
+  narrow: boolean;
   deviceCount: number;
 }) {
   const label = useMemo(() => {
     if (!bridgeConnected) {
       return compact ? 'Offline' : 'Bridge Offline';
     }
+    if (narrow && bridgeConnected) {
+      return String(deviceCount);
+    }
     if (compact) {
       return deviceCount === 1 ? '1 Device' : `${deviceCount} Devices`;
     }
     if (deviceCount === 1) return '1 Connected Device';
     return `${deviceCount} Connected Devices`;
-  }, [bridgeConnected, compact, deviceCount]);
+  }, [bridgeConnected, compact, deviceCount, narrow]);
 
   const ariaLabel =
-    bridgeConnected && compact ? `${deviceCount} connected devices` : undefined;
+    bridgeConnected && (narrow || compact) ? `${deviceCount} connected devices` : undefined;
 
   return (
     <button
@@ -110,7 +116,12 @@ function useNowMsMinute(): number {
   return nowMs;
 }
 
-export function StatusPills({ bridgeConnected, compact, isUserSpeaking }: StatusPillsProps) {
+export function StatusPills({
+  bridgeConnected,
+  compact,
+  narrow = false,
+  isUserSpeaking,
+}: StatusPillsProps) {
   const { status, agentStatusSeen } = useAgentStatusStore();
   const vortex = useVortexStatusPoll(true);
   const nowMs = useNowMsMinute();
@@ -136,6 +147,7 @@ export function StatusPills({ bridgeConnected, compact, isUserSpeaking }: Status
       <BridgeDevicesPill
         bridgeConnected={bridgeConnected}
         compact={compact}
+        narrow={narrow}
         deviceCount={deviceCount}
       />
       <VoiceStatusPill compact={compact} isUserSpeaking={isUserSpeaking} />

@@ -773,3 +773,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `npm --prefix stonix_ui run build` pass · e2e chat/controls-agent/memory/tools/tasks/sim 25/25 pass (per-spec runs) · testid-inventory --check pass (198)
 - **Commit:** (next) · **Deploy:** no
 - **Doosre agent ke liye:** X-84 ConfirmCard inline in confirm slot; X-87/X-108 retire panel legacy strip.
+
+### ✅ [cursor] X-82 · Phone shell: five-tab bar + keyboard · 2026-10-02 23:55 PKT
+- **Kya kiya:** PhoneTabBar (Overview/Chat/Agents/Activity/Settings, approval + activity marks), compact ph header (30px logo, pills, ≤340px device count), `phone.css` (tab bar, `html.typing`, mounted zones), hash sync for chat/settings, composer focus hides tab bar via RightPanel.
+- **Files:** stonix_ui/src/features/shell/PhoneTabBar.tsx, neon/phone.css, PageHeader.tsx, StatusPills.tsx, Dashboard.tsx, MobileTabBar.tsx, panel/RightPanel.tsx, index.css, e2e responsive/layout/helpers, plan.md
+- **Verify:** `npm --prefix stonix_ui run build` pass · e2e responsive+layout+camera 36/36 pass · testid-inventory --check pass (198)
+- **Commit:** (next) · **Deploy:** no
+- **Doosre agent ke liye:** X-101 phone confirm sheet builds on `html.typing` + tab bar hide.
