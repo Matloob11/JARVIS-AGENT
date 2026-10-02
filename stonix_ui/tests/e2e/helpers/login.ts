@@ -17,8 +17,8 @@ async function resetLoginRate(page: Page): Promise<void> {
 }
 
 async function isDashboard(page: Page): Promise<boolean> {
+  if (await page.getByTestId('app-ready').isVisible().catch(() => false)) return true;
   if (await page.getByTestId('chip-bridge').isVisible().catch(() => false)) return true;
-  if (await page.getByText(/System Flow/i).isVisible().catch(() => false)) return true;
   return false;
 }
 
@@ -34,7 +34,7 @@ export async function loginViaRecovery(page: Page): Promise<void> {
   await page.getByRole('button', { name: /Recovery code use karein/i }).click();
   await page.getByTestId('login-recovery').fill(TEST_RECOVERY);
   await page.getByTestId('login-submit').click();
-  await expect(page.getByText(/System Flow/i)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('app-ready')).toBeVisible({ timeout: 30_000 });
 }
 
 /** Log in through the UI with password + current TOTP. */
@@ -44,5 +44,5 @@ export async function loginViaTotp(page: Page): Promise<void> {
   await page.getByTestId('login-password').fill(TEST_PASSWORD);
   await page.getByTestId('login-totp').fill(currentTotp());
   await page.getByTestId('login-submit').click();
-  await expect(page.getByText(/System Flow/i)).toBeVisible();
+  await expect(page.getByTestId('app-ready')).toBeVisible();
 }

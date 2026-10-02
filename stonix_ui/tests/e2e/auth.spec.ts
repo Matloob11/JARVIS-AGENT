@@ -17,7 +17,7 @@ test('shows login only and never calls getUserMedia before auth', async ({ page 
 
   await page.goto('/');
   await expect(page.getByTestId('login-password')).toBeVisible();
-  await expect(page.getByText(/System Flow/i)).toBeHidden();
+  await expect(page.getByTestId('app-ready')).toBeHidden();
 
   const calls = await page.evaluate(() => (window as unknown as { __gumCalls?: number }).__gumCalls ?? 0);
   expect(calls).toBe(0);
@@ -40,7 +40,7 @@ test('recovery code login opens dashboard', async ({ page }) => {
 test('reload keeps session after login', async ({ page }) => {
   await loginViaRecovery(page);
   await page.reload();
-  await expect(page.getByText(/System Flow/i)).toBeVisible();
+  await expect(page.getByTestId('app-ready')).toBeVisible();
   await expect(page.getByTestId('login-password')).toBeHidden();
 });
 

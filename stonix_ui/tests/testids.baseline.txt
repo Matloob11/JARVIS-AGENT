@@ -71,11 +71,19 @@ memory-row
 memory-search
 memory-tab-panel
 mobile-tab-bar
+nav-activity
+nav-agents
+nav-overview
+nav-settings
 operations-rail
 ops-drawer-backdrop
 ops-drawer-toggle
 panel-error
 panel-error-retry
+page-activity
+page-agents
+page-overview
+page-settings
 page-title
 settings-drawer
 settings-guarded-tools-list
@@ -96,6 +104,7 @@ settings-voice-id-reject
 settings-voice-id-threshold
 settings-voice-select
 settings-wake-followup-select
+shell-main
 shell-sidebar
 sim-agent-offline-hint
 sim-cnic-masked

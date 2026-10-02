@@ -745,3 +745,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** render-favicons pass · smoke:electron pass · test:electron 3/3 · testid-inventory --check pass (183)
 - **Commit:** (next) · **Deploy:** no
 - **Doosre agent ke liye:** PNGs dubara chahiye ho to `node stonix_ui/scripts/render-favicons.mjs`.
+
+### ✅ [cursor] X-80 · Neon app shell + hash router + app-ready · 2026-10-02 23:10 PKT
+- **Kya kiya:** Fluid dk/tl/ph grid (`shell.css`), AppShell slots (sidebar nav, TopBar, mounted pages, ChatPanel, MobileTabBar), hash router + `app-ready` login marker; e2e `gotoPage` + `layout.spec.ts`; legacy overview content strangler me rehta hai.
+- **Files:** stonix_ui/src/features/shell/*, Dashboard.tsx, neon/shell.css, e2e helpers + layout/auth/trace/intelligence specs, testids.baseline.txt
+- **Verify:** `npm --prefix stonix_ui run build` pass · `npm --prefix stonix_ui run test:e2e` 117/117 pass · testid-inventory --check pass (192)
+- **Commit:** (next) · **Deploy:** no
+- **Doosre agent ke liye:** X-78 header, X-103 sidebar art, X-81 System Flow → Agents page.

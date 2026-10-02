@@ -35,7 +35,7 @@ test.describe.configure({ mode: 'serial' });
 
 async function ensureDashboard(page: import('@playwright/test').Page) {
   await page.request.post(`${MOCK}/__mock/reset-login-rate`);
-  if (await page.getByText(/System Flow/i).isVisible({ timeout: 1500 }).catch(() => false)) {
+  if (await page.getByTestId('app-ready').isVisible({ timeout: 1500 }).catch(() => false)) {
     return;
   }
   await page.goto('/');
@@ -44,7 +44,7 @@ async function ensureDashboard(page: import('@playwright/test').Page) {
     await loginViaRecovery(page);
     return;
   }
-  await expect(page.getByText(/System Flow/i)).toBeVisible();
+  await expect(page.getByTestId('app-ready')).toBeVisible();
 }
 
 test.beforeEach(async ({ page }) => {

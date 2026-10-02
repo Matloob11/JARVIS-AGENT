@@ -30,7 +30,7 @@ async function mockEmit(
 
 async function ensureDashboard(page: import('@playwright/test').Page) {
   await page.request.post(`${MOCK}/__mock/reset-login-rate`);
-  if (await page.getByText(/System Flow/i).isVisible({ timeout: 1500 }).catch(() => false)) {
+  if (await page.getByTestId('app-ready').isVisible({ timeout: 1500 }).catch(() => false)) {
     return;
   }
   await loginViaRecovery(page);
@@ -69,7 +69,7 @@ test('malformed reasoning payload only trips the reasoning error boundary', asyn
 
   const panel = page.getByTestId('system-trace-panel');
   await expect(panel.getByTestId('panel-error')).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByText(/System Flow/i)).toBeVisible();
+  await expect(page.getByTestId('app-ready')).toBeVisible();
 });
 
 test('1000 log entries stay capped and UI stays responsive', async ({ page }) => {

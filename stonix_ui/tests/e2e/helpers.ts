@@ -18,7 +18,38 @@ export async function login(page: Page): Promise<void> {
   await page.getByTestId('login-password').fill(TEST_PASSWORD);
   await page.getByTestId('login-totp').fill(currentTotp());
   await page.getByTestId('login-submit').click();
-  await expect(page.getByText(/System Flow/i)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('app-ready')).toBeVisible({ timeout: 30_000 });
+}
+
+export type GotoPageName = 'agents' | 'activity' | 'settings';
+
+/** Navigate to a shell page (desktop sidebar or phone tab bar). */
+export async function gotoPage(page: Page, name: GotoPageName, sub?: string): Promise<void> {
+  const viewport = page.viewportSize();
+  const isPhone = viewport ? viewport.width < 1024 : false;
+
+  if (isPhone) {
+    if (name === 'agents') {
+      await page.getByTestId('mobile-tab-ops').click();
+      return;
+    }
+    if (name === 'activity') {
+      await page.getByTestId('mobile-tab-trace').click();
+      if (sub) {
+        await page.getByTestId(`activity-tab-${sub}`).click();
+      }
+      return;
+    }
+    await page.getByTitle('Settings').click();
+    await expect(page.getByTestId('settings-drawer')).toBeVisible();
+    return;
+  }
+
+  await page.getByTestId(`nav-${name}`).click();
+  await expect(page).toHaveURL(new RegExp(`#/${name}`));
+  if (sub && name === 'activity') {
+    await page.getByTestId(`activity-tab-${sub}`).click();
+  }
 }
 
 export async function emit(

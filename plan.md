@@ -1305,7 +1305,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-77 | cursor | P3 | Persona switch motion: View Transition circle from the orb, name roll, palette ease, reduced motion | X-70, X-75, X-104 | TODO |
 | X-78 | cursor | P3 | Page header: title and subtitle, the three status pills, divider, account block; interim Reconnect | X-73, X-80 | TODO |
 | X-79 | cursor | P3 | Laptop states and Stop desktop: the Devices popover Laptop row and the Agents › Laptop card (X-67 data) | X-67, X-85, X-99 | TODO |
-| X-80 | cursor | P3 | App shell: the fluid reference grid (dk/tl/ph), slots, hash router with mounted pages, app-ready marker | X-69, X-73 | DOING (cursor, 02 Oct 22:23 PKT) |
+| X-80 | cursor | P3 | App shell: the fluid reference grid (dk/tl/ph), slots, hash router with mounted pages, app-ready marker | X-69, X-73 | DONE (cursor, 02 Oct 23:10 PKT) |
 | X-81 | cursor | P3 | Agents › System Flow card: five nodes, the 'unknown' state, packets only while data moves | X-73, X-107 | TODO |
 | X-82 | cursor | P3 | Phone shell: compact header and pill row, five-tab bar, mounted zones, keyboard rule | X-78, X-80 | TODO |
 | X-83 | cursor | P3 | Right panel: Chat / Approvals / Tools tabs, the reference chat, the Tools tab with the SIM opener | X-72, X-73, X-80, X-96 | TODO |

@@ -37,7 +37,9 @@ const AuthenticatedApp = () => {
     <LiveKitProvider>
       <SettingsProvider>
         <HtmlPersona />
-        <Dashboard />
+        <div className="h-full min-h-0 w-full overflow-hidden">
+          <Dashboard />
+        </div>
       </SettingsProvider>
     </LiveKitProvider>
   );

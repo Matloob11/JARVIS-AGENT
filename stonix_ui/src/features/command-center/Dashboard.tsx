@@ -18,6 +18,10 @@ import { useAuth } from '@/features/auth/AuthProvider';
 import { useLiveKit } from '@/features/voice/LiveKitProvider';
 import { useAgentStatus } from '@/features/status/useAgentStatus';
 import IntelligencePanel from '@/features/intelligence/IntelligencePanel';
+import AppShell from '@/features/shell/AppShell';
+import { ShellPage } from '@/features/shell/ShellPage';
+import { useLayout } from '@/features/shell/useLayout';
+import { useHashRouter } from '@/features/shell/useHashRouter';
 
 const DashboardInner = () => {
   useEffect(() => {
@@ -25,6 +29,8 @@ const DashboardInner = () => {
     void import('@/features/voice/e2eHooks').then(m => m.recordDashboardCommit());
   });
 
+  const layout = useLayout();
+  const route = useHashRouter(layout);
   const { logout } = useAuth();
   const liveKit = useLiveKit();
   const agentStatus = useAgentStatus();
@@ -51,36 +57,8 @@ const DashboardInner = () => {
   const handleReconnect = () =>
     command.reconnectBridge(liveKit, agentStatus.online);
 
-  return (
-    <div className="command-root">
-      <ErrorBoundary name="ConfirmDialog">
-        <ConfirmDialog
-          current={command.confirmCurrent}
-          queueCount={command.confirmQueueCount}
-          cancelNotice={command.confirmCancelNotice}
-          onAllow={command.respondConfirmAllow}
-          onDeny={command.respondConfirmDeny}
-        />
-      </ErrorBoundary>
-      <div className="command-background" />
-      <ErrorBoundary name="TopBar">
-        <TopBar
-          isConnected={command.isConnected}
-          onReconnect={handleReconnect}
-          onOpenSettings={() => setSettingsOpen(true)}
-          onOpenSim={command.openSimPanel}
-          onToggleOpsDrawer={toggleOpsDrawer}
-          opsDrawerOpen={opsDrawerOpen}
-          onLogout={() => {
-            void liveKit.disconnectRoom();
-            void logout();
-          }}
-          taskUnreadCount={command.taskUnreadCount}
-          taskNotifications={command.taskNotifications}
-          onOpenTaskBell={command.openTaskBell}
-        />
-      </ErrorBoundary>
-
+  const overviewMain = (
+    <>
       {opsDrawerOpen ? (
         <button
           type="button"
@@ -113,35 +91,35 @@ const DashboardInner = () => {
         <section className="command-center-stage">
           <div className="layout-zone layout-zone--core" data-testid="layout-zone-core">
             <ErrorBoundary name="FlowMap">
-            <FlowMap
-              persona={command.activePersona}
-              roomState={liveKit.roomState}
-              micEnabled={liveKit.micEnabled}
-              agentState={liveKit.agentState}
-              isMuted={command.isMuted}
-              cameraState={cameraState}
-              moduleHealth={command.moduleHealth}
-              lastMemorySyncMs={command.lastMemorySyncMs}
-              toolRunningCount={command.toolRunningCount}
-              toolLastError={command.toolLastError}
-              agentOnline={agentStatus.online}
-              agentPaused={agentStatus.paused}
-              agentSession={agentStatus.session}
-            />
+              <FlowMap
+                persona={command.activePersona}
+                roomState={liveKit.roomState}
+                micEnabled={liveKit.micEnabled}
+                agentState={liveKit.agentState}
+                isMuted={command.isMuted}
+                cameraState={cameraState}
+                moduleHealth={command.moduleHealth}
+                lastMemorySyncMs={command.lastMemorySyncMs}
+                toolRunningCount={command.toolRunningCount}
+                toolLastError={command.toolLastError}
+                agentOnline={agentStatus.online}
+                agentPaused={agentStatus.paused}
+                agentSession={agentStatus.session}
+              />
             </ErrorBoundary>
             <ErrorBoundary name="AssistantCore">
-            <AssistantCore
-              persona={command.activePersona}
-              isConnected={command.isConnected}
-              isSpeaking={command.isSpeaking}
-              isThinking={command.isThinking}
-              isUserSpeaking={command.isUserSpeaking}
-              agentAudioActive={command.agentAudioActive}
-              voiceMatchLive={command.voiceMatchLive}
-              onOpenVoiceEnroll={openVoiceEnroll}
-              sessionRestartBanner={command.sessionRestartBanner}
-              onSessionRestartBannerChange={command.setSessionRestartBanner}
-            />
+              <AssistantCore
+                persona={command.activePersona}
+                isConnected={command.isConnected}
+                isSpeaking={command.isSpeaking}
+                isThinking={command.isThinking}
+                isUserSpeaking={command.isUserSpeaking}
+                agentAudioActive={command.agentAudioActive}
+                voiceMatchLive={command.voiceMatchLive}
+                onOpenVoiceEnroll={openVoiceEnroll}
+                sessionRestartBanner={command.sessionRestartBanner}
+                onSessionRestartBannerChange={command.setSessionRestartBanner}
+              />
             </ErrorBoundary>
             <ErrorBoundary name="IntelligencePanel">
               <IntelligencePanel
@@ -165,35 +143,95 @@ const DashboardInner = () => {
             </ErrorBoundary>
           </div>
         </section>
-
-        <ErrorBoundary name="ChatPanel">
-          <ChatPanel
-            persona={command.activePersona}
-            messages={command.messages}
-            logs={command.vortexLogs}
-            memories={command.memories}
-            onClearMemory={command.clearShortTermMemory}
-            toolLogs={command.toolLogs}
-            jobs={command.jobs}
-            onCancelJob={command.cancelJob}
-            onOpenJobArtifact={command.openJobArtifact}
-            tasks={command.tasks}
-            onCancelTask={command.cancelTask}
-            onRefreshTasks={command.refreshTasks}
-            onSend={command.sendMessage}
-            onSendSwarm={command.sendSwarmTask}
-            onFeedback={command.sendAnswerFeedback}
-            liveCaptions={command.chatLiveCaptions}
-            fallbackTranscription={command.transcription}
-            voiceConnected={liveKit.roomState === 'connected'}
-            hasMore={command.chatHasMore}
-            onLoadOlder={command.loadOlderChatMessages}
-            onRetry={command.retryChatMessage}
-          />
-        </ErrorBoundary>
       </main>
+    </>
+  );
 
-      <MobileTabBar active={mobileTab} onChange={setMobileTab} />
+  return (
+    <>
+      <ErrorBoundary name="ConfirmDialog">
+        <ConfirmDialog
+          current={command.confirmCurrent}
+          queueCount={command.confirmQueueCount}
+          cancelNotice={command.confirmCancelNotice}
+          onAllow={command.respondConfirmAllow}
+          onDeny={command.respondConfirmDeny}
+        />
+      </ErrorBoundary>
+
+      <AppShell
+        route={route}
+        mobileTab={mobileTab}
+        head={
+          <ErrorBoundary name="TopBar">
+            <TopBar
+              isConnected={command.isConnected}
+              onReconnect={handleReconnect}
+              onOpenSettings={() => setSettingsOpen(true)}
+              onOpenSim={command.openSimPanel}
+              onToggleOpsDrawer={toggleOpsDrawer}
+              opsDrawerOpen={opsDrawerOpen}
+              onLogout={() => {
+                void liveKit.disconnectRoom();
+                void logout();
+              }}
+              taskUnreadCount={command.taskUnreadCount}
+              taskNotifications={command.taskNotifications}
+              onOpenTaskBell={command.openTaskBell}
+            />
+          </ErrorBoundary>
+        }
+        main={
+          <>
+            <ShellPage page="overview" active={route.page === 'overview'}>
+              {overviewMain}
+            </ShellPage>
+            <ShellPage page="agents" active={route.page === 'agents'}>
+              <div className="command-panel p-4" data-legacy>
+                <p className="text-sm text-command-muted">Agents page (legacy content remains on Overview).</p>
+              </div>
+            </ShellPage>
+            <ShellPage page="activity" active={route.page === 'activity'}>
+              <div className="command-panel p-4" data-legacy>
+                <p className="text-sm text-command-muted">Activity page (legacy trace remains on Overview).</p>
+              </div>
+            </ShellPage>
+            <ShellPage page="settings" active={route.page === 'settings'} className="settings-drawer-host">
+              <div className="command-panel p-4" data-legacy>
+                <p className="text-sm text-command-muted">Settings page (open Settings from the header).</p>
+              </div>
+            </ShellPage>
+          </>
+        }
+        panel={
+          <ErrorBoundary name="ChatPanel">
+            <ChatPanel
+              persona={command.activePersona}
+              messages={command.messages}
+              logs={command.vortexLogs}
+              memories={command.memories}
+              onClearMemory={command.clearShortTermMemory}
+              toolLogs={command.toolLogs}
+              jobs={command.jobs}
+              onCancelJob={command.cancelJob}
+              onOpenJobArtifact={command.openJobArtifact}
+              tasks={command.tasks}
+              onCancelTask={command.cancelTask}
+              onRefreshTasks={command.refreshTasks}
+              onSend={command.sendMessage}
+              onSendSwarm={command.sendSwarmTask}
+              onFeedback={command.sendAnswerFeedback}
+              liveCaptions={command.chatLiveCaptions}
+              fallbackTranscription={command.transcription}
+              voiceConnected={liveKit.roomState === 'connected'}
+              hasMore={command.chatHasMore}
+              onLoadOlder={command.loadOlderChatMessages}
+              onRetry={command.retryChatMessage}
+            />
+          </ErrorBoundary>
+        }
+        tabs={<MobileTabBar active={mobileTab} onChange={setMobileTab} />}
+      />
 
       <AnimatePresence>
         {settingsOpen && (
@@ -232,7 +270,7 @@ const DashboardInner = () => {
           onSearch={command.requestSimLookup}
         />
       </ErrorBoundary>
-    </div>
+    </>
   );
 };
 

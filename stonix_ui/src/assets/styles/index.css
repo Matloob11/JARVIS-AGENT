@@ -1,5 +1,6 @@
 @import './tokens.css';
 @import './neon/base.css';
+@import './neon/shell.css';
 
 @tailwind base;
 @tailwind components;
@@ -480,6 +481,7 @@ button {
 
   .system-trace {
     @apply flex h-[280px] shrink-0 flex-col overflow-hidden;
+    container-type: inline-size;
   }
 
   .system-trace__tabs {
@@ -1401,6 +1403,12 @@ button {
 
   .system-trace__grid .is-hidden-narrow {
     display: none !important;
+  }
+}
+
+@container (max-width: 900px) {
+  .system-trace__grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
