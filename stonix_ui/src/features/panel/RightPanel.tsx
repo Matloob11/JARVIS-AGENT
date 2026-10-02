@@ -1,5 +1,5 @@
 import { FormEvent, ReactNode, useState } from 'react';
-import { Hexagon, Send } from 'lucide-react';
+import { Send } from 'lucide-react';
 import type { ChatMessage, LiveCaption } from '@/features/chat/types';
 import type { JobEntry } from '@/features/jobs/useJobs';
 import MemoryList from '@/features/memory/MemoryList';
@@ -17,6 +17,7 @@ type VortexLog = {
 import ChatList, { ChatCaptionsStrip } from './ChatList';
 import PanelTabs, { type PanelMainTab } from './PanelTabs';
 import ToolsTab from './ToolsTab';
+import { useSwarmMode } from './useSwarmMode';
 
 type LegacyTab = 'logs' | 'notes' | 'tasks';
 
@@ -124,7 +125,7 @@ const RightPanel = ({
   const [mainTab, setMainTab] = useState<PanelMainTab>('chat');
   const [legacyTab, setLegacyTab] = useState<LegacyTab | null>(null);
   const [text, setText] = useState('');
-  const [swarmMode, setSwarmMode] = useState(false);
+  const { swarmMode } = useSwarmMode();
   const accent = personaAccent(persona);
 
   const liveUser =
@@ -252,19 +253,6 @@ const RightPanel = ({
           }
         }}
       >
-        <button
-          type="button"
-          className={
-            swarmMode ? 'command-input__swarm command-input__swarm--on' : 'command-input__swarm'
-          }
-          data-testid="swarm-mode-toggle"
-          data-active={swarmMode ? 'true' : 'false'}
-          title={swarmMode ? 'Swarm on — Send runs swarm task' : 'Swarm off — normal chat'}
-          onClick={() => setSwarmMode(prev => !prev)}
-        >
-          <Hexagon size={14} />
-          <span>Swarm</span>
-        </button>
         <input
           value={text}
           onChange={event => setText(event.target.value)}

@@ -794,3 +794,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `npm --prefix stonix_ui run build` pass · e2e confirm+chat+layout 50/50 pass · testid-inventory --check pass (199)
 - **Commit:** (next) · **Deploy:** no
 - **Doosre agent ke liye:** X-101 phone confirm sheet; X-102 hidden-tab alerts build on chime/title flash here.
+
+### ✅ [cursor] X-104 · Overview hero + persona eyebrow · 2026-10-03 00:42 PKT
+- **Kya kiya:** Neon Overview hero (OverviewPage/HeroCard/overview.css): chip-persona radiogroup, name sheen, voice-toggle / Run Task / hero-mic-off, quote slot; persona switch hook with chat+feed side effects; legacy AssistantCore strip; swarm shared via useSwarmMode.
+- **Files:** stonix_ui/src/features/overview/*, stonix_ui/src/assets/styles/neon/overview.css, Dashboard.tsx, AssistantCore.tsx, TopBar.tsx, RightPanel.tsx, useChat.ts, feedStore.ts, tests/e2e/dashboard.spec.ts, controls.spec.ts
+- **Verify:** `npm --prefix stonix_ui run build` pass · e2e dashboard+controls+settings green (isolated runs) · testid-inventory --check pass (210)
+- **Commit:** (next) · **Deploy:** no
+- **Doosre agent ke liye:** X-105 fills Quick Stats/Activity; X-75/76/97 replace orb/waveform/status placeholders.

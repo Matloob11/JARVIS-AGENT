@@ -369,6 +369,21 @@ export function useChat() {
     await fetchPage();
   }, [fetchPage]);
 
+  const appendSystemLine = useCallback(
+    (text: string) => {
+      const id = `system-local-${crypto.randomUUID()}`;
+      mapRef.current.set(id, {
+        id,
+        role: 'system',
+        text,
+        ts: Date.now(),
+        source: 'system',
+      });
+      syncFromMap();
+    },
+    [syncFromMap],
+  );
+
   return {
     messages,
     hasMore,
@@ -378,6 +393,7 @@ export function useChat() {
     retrySend,
     liveCaptions,
     clearLiveCaption,
+    appendSystemLine,
   };
 }
 

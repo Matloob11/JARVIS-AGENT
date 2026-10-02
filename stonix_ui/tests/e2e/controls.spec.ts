@@ -20,7 +20,9 @@ async function holdConfirmAllow(page: import('@playwright/test').Page) {
   const btn = page.getByTestId('confirm-allow');
   await btn.dispatchEvent('mousedown');
   await page.waitForTimeout(1100);
-  await btn.dispatchEvent('mouseup');
+  if (await btn.count()) {
+    await btn.dispatchEvent('mouseup');
+  }
 }
 
 test.describe.configure({ mode: 'serial', timeout: 90_000 });
@@ -35,7 +37,9 @@ test('Swarm toggle sends swarm command once per send', async ({ page }) => {
   const task = `e2e-swarm-${Date.now()}`;
   const before = await countType(page, 'swarm');
 
-  await page.getByTestId('swarm-mode-toggle').click();
+  const swarmToggle = page.getByTestId('swarm-mode-toggle');
+  await swarmToggle.scrollIntoViewIfNeeded();
+  await swarmToggle.click();
   await expect(page.getByTestId('swarm-mode-toggle')).toHaveAttribute('data-active', 'true');
 
   await page.getByPlaceholder(/Message JARVIS|Message ANNA/i).fill(task);

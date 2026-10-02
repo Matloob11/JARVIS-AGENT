@@ -1122,6 +1122,7 @@ export const useCommandCenter = () => {
     closeSimPanel,
     requestSimLookup,
     refetchMessages: chat.refetchMessages,
+    appendChatSystemLine: chat.appendSystemLine,
     reconnectBridge,
   };
 };

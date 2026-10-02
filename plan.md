@@ -1324,12 +1324,12 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-96 | cursor | P3 | One socket subscription store: Reconnect re-binds every listener, request_state once per connect, init_state merges (D1–D3) | X-69 | DONE (cursor, 02 Oct 22:10 PKT) |
 | X-97 | cursor | P3 | Voice state machine: ten states, the hero status line and inline actions, helper slot, buttons and mic mirrors, Voice pill, announcer | X-72, X-73, X-75, X-76, X-78, X-104 | TODO |
 | X-98 | cursor | P3 | Reduced motion and presence.spec motion part: motion follows the level, the loop stops, nothing shifts | X-97 | TODO |
-| X-99 | cursor | P3 | Popover primitive; Agent, Voice and Devices popovers (mic, listening, stop, wake, pause/wake and Reconnect move out of the header) | X-78 | TODO |
+| X-99 | cursor | P3 | Popover primitive; Agent, Voice and Devices popovers (mic, listening, stop, wake, pause/wake and Reconnect move out of the header) | X-78 | DOING (cursor, 03 Oct 00:10 PKT) |
 | X-100 | cursor | P3 | Electron: header reserve, window buttons at the window edge, drag region, header-layout.spec | X-99 | TODO |
 | X-101 | cursor | P3 | Approvals tab, and the phone confirm sheet with "Decide later" and the approvals bar | X-82, X-84 | TODO |
 | X-102 | cursor | P3 | Hidden-tab confirm alert: title flash, one chime, browser notification, phone vibration | X-84 | TODO |
 | X-103 | cursor | P3 | Sidebar: ring logo, wordmark, navigation with the reference active state, silk wave, tagline; tl icon rail; nav marks | X-70, X-80 | DONE (cursor, 02 Oct 23:13 PKT) |
-| X-104 | cursor | P3 | Overview hero card: the reference composition, eyebrow persona switch, name sheen, buttons, quote and helper slot | X-72, X-73, X-80 | TODO |
+| X-104 | cursor | P3 | Overview hero card: the reference composition, eyebrow persona switch, name sheen, buttons, quote and helper slot | X-72, X-73, X-80 | DONE (cursor, 03 Oct 00:42 PKT) |
 | X-105 | cursor | P3 | Quick Stats and Recent Activity cards, and the client-side activity feed store | X-73, X-96, X-104 | TODO |
 | X-106 | cursor | P3 | Composer: field, send square, task-mode chip, paperclip, hints, push-to-talk mic | X-83, X-97 | TODO |
 | X-107 | cursor | P3 | Agents page: the three groups, Who answers (mini orbs), Voice & wake, Voice-ID | X-73, X-80, X-104 | TODO |

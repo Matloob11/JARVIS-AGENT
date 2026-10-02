@@ -9,6 +9,7 @@ test.beforeEach(async ({ page }) => {
 
 test('production dashboard renders and accepts a command', async ({ page }) => {
   await expect(page).toHaveTitle(/JARVIS & ANNA/);
+  await expect(page.getByRole('radiogroup', { name: 'Who answers' })).toBeVisible();
   await expect(page.getByText(/System Flow/i)).toBeVisible();
   await expect(page.getByText(/System Logs/i)).toBeVisible();
 

@@ -27,7 +27,11 @@ chat-status-hint
 chip-agent
 chip-agent-menu
 chip-bridge
+chip-persona
+chip-persona-spinner
 chip-voice
+chip-wake
+chip-wake-spinner
 confirm-allow
 confirm-cancel-notice
 confirm-deny
@@ -35,8 +39,13 @@ confirm-dialog
 confirm-expand
 device-location-card
 device-location-updated
+devices-menu
 enable-audio
 flow-core-status
+hero-card
+hero-helper
+hero-mic-off
+hero-persona-name
 intelligence-audio
 intelligence-copy-lan
 intelligence-history
@@ -85,13 +94,13 @@ nav-settings
 operations-rail
 ops-drawer-backdrop
 ops-drawer-toggle
-panel-error
-panel-error-retry
 page-activity
 page-agents
 page-overview
 page-settings
 page-title
+panel-error
+panel-error-retry
 settings-drawer
 settings-guarded-tools-list
 settings-language-select
@@ -123,6 +132,7 @@ sim-purpose-input
 sim-query-input
 sim-result-message
 sim-status-chip
+speaker-orb
 swarm-mode-toggle
 system-alert-row
 system-trace-panel
@@ -191,6 +201,7 @@ voice-enroll-timeout
 voice-id-enroll-link
 voice-id-meter
 voice-id-meter-label
+voice-menu
 voice-status
 voice-take-over
 voice-toggle

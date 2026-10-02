@@ -155,7 +155,7 @@ const ConfirmCard = ({
       ? 'High risk'
       : 'Requires approval';
 
-  const gated = isHighRisk && !seenAll;
+  const gated = isHighRisk && Boolean(argsText.trim()) && !seenAll;
   const showExpandRow = Boolean(argsText) && (codeOver || expanded);
 
   const metaExpiryRef = useRef<HTMLSpanElement>(null);

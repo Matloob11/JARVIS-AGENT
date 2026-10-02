@@ -1,6 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import AssistantCore from './components/AssistantCore';
+import OverviewPage from '@/features/overview/OverviewPage';
+import { setPersonaSwitchBridge } from '@/features/overview/personaSwitchBridge';
+import { SwarmModeProvider } from '@/features/panel/useSwarmMode';
 import ChatPanel from './components/ChatPanel';
 import FlowMap from './components/FlowMap';
 import OperationsRail from './components/OperationsRail';
@@ -89,6 +92,41 @@ const DashboardInner = () => {
   const handleReconnect = () =>
     command.reconnectBridge(liveKit, agentStatus.online);
 
+  useEffect(() => {
+    setPersonaSwitchBridge({
+      appendChatSystemLine: command.appendChatSystemLine,
+    });
+    return () => setPersonaSwitchBridge({});
+  }, [command.appendChatSystemLine]);
+
+  const heroStateLabel = useMemo(() => {
+    const voiceConnecting =
+      liveKit.roomState === 'connecting' || liveKit.roomState === 'reconnecting';
+    const voiceLive = liveKit.roomState === 'connected';
+    const agentLabel = liveKit.agentState
+      ? liveKit.agentState
+      : voiceLive
+        ? 'linked'
+        : 'offline';
+    if (voiceConnecting) return 'Joining voice…';
+    if (liveKit.voiceUnavailable) return 'Voice unavailable';
+    if (voiceLive) {
+      return `Voice (${liveKit.roomName || 'jarvis-hybrid'}) · ${agentLabel}`;
+    }
+    if (command.isThinking) return 'Processing';
+    if (command.isSpeaking) return 'Speaking';
+    if (command.isConnected) return 'System active';
+    return 'Offline';
+  }, [
+    liveKit.roomState,
+    liveKit.agentState,
+    liveKit.voiceUnavailable,
+    liveKit.roomName,
+    command.isThinking,
+    command.isSpeaking,
+    command.isConnected,
+  ]);
+
   const overviewMain = (
     <>
       {opsDrawerOpen ? (
@@ -121,45 +159,51 @@ const DashboardInner = () => {
         </ErrorBoundary>
 
         <section className="command-center-stage">
-          <div className="layout-zone layout-zone--core" data-testid="layout-zone-core">
-            <ErrorBoundary name="FlowMap">
-              <FlowMap
-                persona={command.activePersona}
-                roomState={liveKit.roomState}
-                micEnabled={liveKit.micEnabled}
-                agentState={liveKit.agentState}
-                isMuted={command.isMuted}
-                cameraState={cameraState}
-                moduleHealth={command.moduleHealth}
-                lastMemorySyncMs={command.lastMemorySyncMs}
-                toolRunningCount={command.toolRunningCount}
-                toolLastError={command.toolLastError}
-                agentOnline={agentStatus.online}
-                agentPaused={agentStatus.paused}
-                agentSession={agentStatus.session}
-              />
-            </ErrorBoundary>
-            <ErrorBoundary name="AssistantCore">
-              <AssistantCore
-                persona={command.activePersona}
-                isConnected={command.isConnected}
-                isSpeaking={command.isSpeaking}
-                isThinking={command.isThinking}
-                isUserSpeaking={command.isUserSpeaking}
-                agentAudioActive={command.agentAudioActive}
-                voiceMatchLive={command.voiceMatchLive}
-                onOpenVoiceEnroll={openVoiceEnroll}
-                sessionRestartBanner={command.sessionRestartBanner}
-                onSessionRestartBannerChange={command.setSessionRestartBanner}
-              />
-            </ErrorBoundary>
-            <ErrorBoundary name="IntelligencePanel">
-              <IntelligencePanel
-                latest={command.intelligence}
-                history={command.intelligenceHistory}
-              />
-            </ErrorBoundary>
-          </div>
+          <OverviewPage
+            persona={command.activePersona}
+            isUserSpeaking={command.isUserSpeaking}
+            stateLabel={heroStateLabel}
+            legacyStrip={
+              <ErrorBoundary name="AssistantCore">
+                <AssistantCore
+                  persona={command.activePersona}
+                  isConnected={command.isConnected}
+                  isThinking={command.isThinking}
+                  voiceMatchLive={command.voiceMatchLive}
+                  onOpenVoiceEnroll={openVoiceEnroll}
+                  sessionRestartBanner={command.sessionRestartBanner}
+                  onSessionRestartBannerChange={command.setSessionRestartBanner}
+                />
+              </ErrorBoundary>
+            }
+            belowHero={
+              <>
+                <ErrorBoundary name="FlowMap">
+                  <FlowMap
+                    persona={command.activePersona}
+                    roomState={liveKit.roomState}
+                    micEnabled={liveKit.micEnabled}
+                    agentState={liveKit.agentState}
+                    isMuted={command.isMuted}
+                    cameraState={cameraState}
+                    moduleHealth={command.moduleHealth}
+                    lastMemorySyncMs={command.lastMemorySyncMs}
+                    toolRunningCount={command.toolRunningCount}
+                    toolLastError={command.toolLastError}
+                    agentOnline={agentStatus.online}
+                    agentPaused={agentStatus.paused}
+                    agentSession={agentStatus.session}
+                  />
+                </ErrorBoundary>
+                <ErrorBoundary name="IntelligencePanel">
+                  <IntelligencePanel
+                    latest={command.intelligence}
+                    history={command.intelligenceHistory}
+                  />
+                </ErrorBoundary>
+              </>
+            }
+          />
           <div className="layout-zone layout-zone--trace" data-testid="layout-zone-trace">
             <ErrorBoundary name="SystemTrace">
               <SystemTrace
@@ -180,7 +224,7 @@ const DashboardInner = () => {
   );
 
   return (
-    <>
+    <SwarmModeProvider>
       <AppShell
         route={route}
         mobileTab={shellMobileTab}
@@ -195,12 +239,14 @@ const DashboardInner = () => {
                 taskUnreadCount={command.taskUnreadCount}
                 taskNotifications={command.taskNotifications}
                 onOpenTaskBell={command.openTaskBell}
+                onReconnect={handleReconnect}
+                cameraState={cameraState}
+                voiceMatchLive={command.voiceMatchLive}
+                onOpenVoiceEnroll={openVoiceEnroll}
               />
             </ErrorBoundary>
             <ErrorBoundary name="TopBar">
               <TopBar
-                isConnected={command.isConnected}
-                onReconnect={handleReconnect}
                 onOpenSettings={() => setSettingsOpen(true)}
                 onToggleOpsDrawer={toggleOpsDrawer}
                 opsDrawerOpen={opsDrawerOpen}
@@ -321,7 +367,7 @@ const DashboardInner = () => {
           onSearch={command.requestSimLookup}
         />
       </ErrorBoundary>
-    </>
+    </SwarmModeProvider>
   );
 };
 

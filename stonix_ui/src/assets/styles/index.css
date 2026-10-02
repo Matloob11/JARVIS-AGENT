@@ -3,6 +3,8 @@
 @import './neon/shell.css';
 @import './neon/panel.css';
 @import './neon/phone.css';
+@import './neon/overview.css';
+@import './neon/overlays.css';
 
 @tailwind base;
 @tailwind components;
