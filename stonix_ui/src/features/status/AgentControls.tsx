@@ -12,20 +12,13 @@ import { toast } from '@/toast';
 import { getSocket } from '@/shared/realtime/socket';
 import { useLiveKit } from '@/features/voice/LiveKitProvider';
 import { useAgentStatus } from '@/features/status/useAgentStatus';
+import { useAgentListeningMuted } from '@/features/status/agentListeningStore';
 import { StatusDot } from '@/shared/ui/Panel';
 
 type UiCommandAck = {
   status: 'sent' | 'queued' | 'agent_offline' | 'no_agent' | 'rejected';
   reason?: string;
 };
-
-function parseMuted(payload: unknown): boolean | null {
-  if (typeof payload === 'boolean') return payload;
-  if (payload && typeof payload === 'object' && 'muted' in payload) {
-    return (payload as { muted?: boolean }).muted === true;
-  }
-  return null;
-}
 
 export function handleUiCommandAck(ack: UiCommandAck | undefined) {
   if (!ack) return;
@@ -53,41 +46,7 @@ export function emitUiCommandWithAck(
   });
 }
 
-export function useAgentListeningMuted() {
-  const [agentMuted, setAgentMuted] = useState(false);
-
-  useEffect(() => {
-    const socket = getSocket();
-
-    const onMuteUpdate = (payload: unknown) => {
-      const muted = parseMuted(payload);
-      if (muted != null) setAgentMuted(muted);
-    };
-
-    const onInitState = (state: { muted?: boolean; settings?: { muted?: boolean } }) => {
-      if (typeof state.muted === 'boolean') setAgentMuted(state.muted);
-      else if (typeof state.settings?.muted === 'boolean') setAgentMuted(state.settings.muted);
-    };
-
-    const onSettingsSync = (payload: { settings?: { muted?: boolean } }) => {
-      if (typeof payload?.settings?.muted === 'boolean') {
-        setAgentMuted(payload.settings.muted);
-      }
-    };
-
-    socket.on('mute_update', onMuteUpdate);
-    socket.on('init_state', onInitState);
-    socket.on('settings_sync', onSettingsSync);
-
-    return () => {
-      socket.off('mute_update', onMuteUpdate);
-      socket.off('init_state', onInitState);
-      socket.off('settings_sync', onSettingsSync);
-    };
-  }, []);
-
-  return agentMuted;
-}
+export { useAgentListeningMuted } from '@/features/status/agentListeningStore';
 
 export function TopBarStopButton() {
   const handleAck = useUiCommandAck();

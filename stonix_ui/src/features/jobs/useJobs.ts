@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { toEpochMs } from '@/shared/contracts/events';
-import { getSocket } from '@/shared/realtime/socket';
+import { useSocketEvent } from '@/shared/realtime/subscriptions';
 import { normalizeToolLog } from '@/features/tools/useToolLogs';
 
 export type JobStatus = 'queued' | 'running' | 'done' | 'error' | 'cancelled';
@@ -108,20 +108,11 @@ export function useJobs(emitCommand: (type: string, payload?: unknown) => void) 
     });
   }, []);
 
-  useEffect(() => {
-    const socket = getSocket();
-    const onProgress = (payload: unknown) => upsert(payload);
-    const onToolUpdate = (payload: unknown) => {
-      const fromTool = jobFromToolUpdate(payload);
-      if (fromTool) upsert(fromTool);
-    };
-    socket.on('tool_progress', onProgress);
-    socket.on('tool_update', onToolUpdate);
-    return () => {
-      socket.off('tool_progress', onProgress);
-      socket.off('tool_update', onToolUpdate);
-    };
-  }, [upsert]);
+  useSocketEvent('tool_progress', (payload: unknown) => upsert(payload));
+  useSocketEvent('tool_update', (payload: unknown) => {
+    const fromTool = jobFromToolUpdate(payload);
+    if (fromTool) upsert(fromTool);
+  });
 
   const cancelJob = useCallback(
     (jobId: string) => {

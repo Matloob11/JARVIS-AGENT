@@ -717,3 +717,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `npm --prefix stonix_ui run build` pass · whole-word stonix grep (src/tests/index/README) empty · e2e auth+dashboard+voice 10/10 · testid-inventory --check pass
 - **Commit:** abhi nahi · **Deploy:** no
 - **Doosre agent ke liye:** X-71 favicons/tray; sidebar `brand-mark` testid jab X-103 aaye.
+
+### ✅ [cursor] X-96 · Socket subscription store + reconnect re-bind (D1–D3) · 2026-10-02 22:10 PKT
+- **Kya kiya:** `subscriptions.ts` + `useSocketEvent` registry (re-bind on new socket, `request_state` once per connect); saari socket listeners migrate; `init_state` ab trace merge karti hai (UI-only lines rehti hain); Reconnect bina reload, mic off + toast; `agentStatusStore` / `agentListeningStore`; `reconnect.spec.ts`.
+- **Files:** stonix_ui/src/shared/realtime/{socket,subscriptions}.ts, stonix_ui/src/features/**/use*.ts, agentStatusStore.ts, agentListeningStore.ts, useCommandCenter.ts, tests/e2e/reconnect.spec.ts, tests/mock-bridge/server.mjs, tests/e2e/chat.spec.ts
+- **Verify:** `npm --prefix stonix_ui run build` pass · e2e reconnect/status/confirm/chat/settings/trace 31/31 (CI=1) · grep `.off('event')` empty · testid-inventory --check pass
+- **Commit:** (next) · **Deploy:** no
+- **Doosre agent ke liye:** X-78 interim reload hata sakte ho; X-97+ isi registry se subscribe karein.

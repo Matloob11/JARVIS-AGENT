@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { login as loginApi, logout as logoutApi, me, type LoginPayload, AuthApiError } from './api';
 import { disconnectSocket, getSocket, onConnectError } from '@/shared/realtime/socket';
+import { useSocketEvent } from '@/shared/realtime/subscriptions';
 
 export type AuthStatus = 'checking' | 'anonymous' | 'authenticated' | 'expired';
 
@@ -121,17 +122,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       void refreshSession();
     });
 
-    const socket = getSocket();
-    const onSessionExpired = () => {
-      void refreshSession();
-    };
-    socket.on('session_expired', onSessionExpired);
-
     return () => {
       offConnectError();
-      socket.off('session_expired', onSessionExpired);
     };
   }, [status, refreshSession]);
+
+  const statusRef = useRef(status);
+  statusRef.current = status;
+
+  useSocketEvent('session_expired', () => {
+    if (statusRef.current === 'authenticated') {
+      void refreshSession();
+    }
+  });
 
   const login = useCallback(
     async (payload: LoginPayload) => {

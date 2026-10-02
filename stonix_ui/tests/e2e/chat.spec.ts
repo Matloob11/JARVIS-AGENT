@@ -27,6 +27,7 @@ test.describe('chat panel', () => {
   test.describe.configure({ mode: 'serial' });
 
   test.beforeEach(async ({ page }) => {
+    await page.request.post('http://127.0.0.1:5199/__mock/chat/reset');
     await loginViaRecovery(page);
   });
 

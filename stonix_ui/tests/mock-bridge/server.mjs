@@ -442,6 +442,12 @@ async function handleMockControl(req, res, pathname, method) {
     return true;
   }
 
+  if (pathname === '/__mock/chat/reset' && method === 'POST') {
+    persistedChatMessages.length = 0;
+    json(res, 200, { ok: true });
+    return true;
+  }
+
   if (pathname === '/__mock/expire' && method === 'POST') {
     ownerSessionActive = false;
     const body = await readBody(req);

@@ -1,5 +1,6 @@
 import { io, type Socket } from 'socket.io-client';
 import { SOCKET_ORIGIN, SOCKET_PATH } from '@/shared/config/runtime';
+import { attachSocketRegistry, detachSocketRegistry } from '@/shared/realtime/subscriptions';
 
 let sharedSocket: Socket | null = null;
 
@@ -17,12 +18,14 @@ export function getSocket(): Socket {
       reconnectionAttempts: Infinity,
       reconnectionDelayMax: 10000,
     });
+    attachSocketRegistry(sharedSocket);
   }
   return sharedSocket;
 }
 
 export function disconnectSocket(): void {
   if (sharedSocket) {
+    detachSocketRegistry();
     sharedSocket.disconnect();
     sharedSocket = null;
   }

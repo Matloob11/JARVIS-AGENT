@@ -26,6 +26,7 @@ import { useTasks } from '@/features/tasks/useTasks';
 import { useSettings } from '@/features/settings/useSettings';
 import { useToolLogs, type ToolLogEntry } from '@/features/tools/useToolLogs';
 import { disconnectSocket, getSocket } from '@/shared/realtime/socket';
+import { useSocketEvent } from '@/shared/realtime/subscriptions';
 import { parseVoiceMatchPayload, type VoiceMatchLive } from '@/features/voice/voiceMeter';
 import {
   mergeModuleHealth,
@@ -144,6 +145,41 @@ function appendVortexLogs(prev: VortexLog[], entries: VortexLog[]): VortexLog[] 
     }
   }
   return next;
+}
+
+function isUiOnlyVortexLog(entry: VortexLog): boolean {
+  if (entry.category === 'confirm' || entry.category === 'turn_rejected') return true;
+  if (/reconnect/i.test(entry.text)) return true;
+  return false;
+}
+
+function vortexLogDedupeKey(entry: VortexLog, raw?: Record<string, unknown>): string {
+  const id = raw?.id ?? raw?.log_id ?? raw?.entry_id;
+  if (id != null && String(id).length > 0) return `id:${String(id)}`;
+  return `${entry.timestamp}|${entry.text}`;
+}
+
+function mergeVortexLogsFromInit(prev: VortexLog[], rawSeed: unknown[]): VortexLog[] {
+  const seedNewestFirst: VortexLog[] = [];
+  const seedKeys = new Set<string>();
+  for (const raw of rawSeed) {
+    const rawObj = typeof raw === 'object' && raw ? (raw as Record<string, unknown>) : undefined;
+    const entry = rawObj ? normalizeVortexLog(rawObj) : normalizeVortexLog({});
+    const key = vortexLogDedupeKey(entry, rawObj);
+    if (seedKeys.has(key)) continue;
+    seedKeys.add(key);
+    seedNewestFirst.unshift(entry);
+  }
+
+  const merged: VortexLog[] = [];
+  const seen = new Set<string>();
+  for (const entry of [...prev.filter(isUiOnlyVortexLog), ...seedNewestFirst]) {
+    const key = vortexLogDedupeKey(entry);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(entry);
+  }
+  return merged.slice(0, VORTEX_LOG_CAP);
 }
 
 function normalizePlanProgress(raw: Record<string, unknown>): PlanProgressLine | null {
@@ -389,7 +425,6 @@ export const useCommandCenter = () => {
   const [isSimPanelOpen, setIsSimPanelOpen] = useState(false);
   const [moduleHealth, setModuleHealth] = useState<ModuleHealthSnapshot | null>(null);
   const simLookupTimerRef = useRef<number | null>(null);
-  const [socketVersion, setSocketVersion] = useState(0);
   const confirmQueue = useConfirmQueue();
   const loggedConfirmDecisions = useRef(new Set<string>());
   const confirmApiRef = useRef(confirmQueue);
@@ -482,89 +517,178 @@ export const useCommandCenter = () => {
   }, [confirmQueue.decisions, pushConfirmLog]);
 
   useEffect(() => {
-    const socket = getSocket();
+    setIsConnected(getSocket().connected);
+  }, []);
 
-    const requestState = () => {
-      socket.emit('ui_command', { type: 'request_state', payload: {} });
-    };
-    const onConnect = () => {
-      setIsConnected(true);
-      // Re-pull init_state if AuthProvider connected the socket before listeners existed
-      requestState();
-    };
-    const onDisconnect = () => setIsConnected(false);
-    if (socket.connected) {
-      setIsConnected(true);
-      requestState();
-    }
-    const onStatusUpdate = (data: Record<string, unknown>) => {
-      if (typeof data.status === 'string') setStatus(data.status);
-      setIsSpeaking(data.speaking === true);
-      setIsThinking(data.thinking === true);
-    };
-    const onStatusChange = (data: { speaking: boolean; thinking: boolean }) => {
-      setIsSpeaking(data.speaking);
-      setIsThinking(data.thinking);
-    };
-    const onVitalsPc = (data: Record<string, unknown>) => {
-      setVitalsPc(normalizeVitalsPayload(data));
-    };
-    const onVitalsVps = (data: Record<string, unknown>) => {
-      sawVitalsVpsRef.current = true;
-      setVitalsVps(normalizeVitalsPayload(data));
-    };
-    const onVitalsLegacy = (data: Record<string, unknown>) => {
-      const source = data.source != null ? String(data.source).toLowerCase() : '';
-      if (source === 'vps' || !sawVitalsVpsRef.current) {
-        setVitalsVps(normalizeVitalsPayload(data));
+  const applyBridgeInitState = useCallback(
+    (state: Record<string, unknown>) => {
+      if (state.server_time != null) {
+        confirmApiRef.current.setServerTime(state.server_time);
       }
-    };
-    const onTelemetryUpdate = (data: Record<string, unknown>) => {
-      setTelemetry(normalizeTelemetryPayload(data));
-      pushSystemFeed({
-        kind: 'telemetry',
-        summary: summarizeTelemetryFeed(data),
-        ts: toEpochMs(data.ts) ?? Date.now(),
-      });
-    };
-    const onSystemAlert = (data: Record<string, unknown>) => {
-      setSystemAlerts(prev => [normalizeSystemAlert(data), ...prev].slice(0, 30));
-    };
-    const onIntelligenceUpdate = (data: unknown) => {
-      const item = normalizeIntelligenceItem(data);
-      if (!item) return;
-      setIntelligence(item);
-      setIntelligenceHistory(prev => prependIntelligenceHistory(prev, item));
-    };
-    const onTranscriptionUpdate = (data: { text: string }) => setTranscription(data.text);
-    const onLocationUpdate = (data: Record<string, unknown>) => {
-      if (locationKind(data) === 'map') {
-        const focus = parseMapFocusPayload(data);
+      confirmApiRef.current.seedFromInit(state);
+      seedToolLogsFromInit(state);
+      seedJobsFromInit(state);
+      seedMemoriesFromInit(state);
+      seedTasksFromInit(state);
+      if (state.map_focus) {
+        const focus = parseMapFocusPayload(state.map_focus);
         if (focus) setMapFocus(focus);
-        return;
       }
-      const device = parseDeviceLocationPayload(data);
-      if (device) setLocation(device);
-    };
-    const onMapFocusUpdate = (data: Record<string, unknown>) => {
-      const focus = parseMapFocusPayload(data);
+      if (state.location && typeof state.location === 'object') {
+        const loc = state.location as Record<string, unknown>;
+        if (locationKind(loc) === 'map') {
+          const focus = parseMapFocusPayload(loc);
+          if (focus) setMapFocus(focus);
+        } else {
+          const device = parseDeviceLocationPayload(loc);
+          if (device) setLocation(device);
+        }
+      }
+      const seedLogs = state.vortex_logs ?? state.logs;
+      if (Array.isArray(seedLogs)) {
+        setVortexLogs(prev => mergeVortexLogsFromInit(prev, seedLogs));
+      }
+      if (state.vitals_pc && typeof state.vitals_pc === 'object') {
+        const next = normalizeVitalsPayload(state.vitals_pc as Record<string, unknown>);
+        setVitalsPc(prev => (prev.updatedAtMs > next.updatedAtMs ? prev : next));
+      }
+      if (state.vitals_vps && typeof state.vitals_vps === 'object') {
+        sawVitalsVpsRef.current = true;
+        const next = normalizeVitalsPayload(state.vitals_vps as Record<string, unknown>);
+        setVitalsVps(prev => (prev.updatedAtMs > next.updatedAtMs ? prev : next));
+      }
+      if (state.telemetry && typeof state.telemetry === 'object') {
+        setTelemetry(prev =>
+          prev.source || prev.total_samples
+            ? prev
+            : normalizeTelemetryPayload(state.telemetry as Record<string, unknown>),
+        );
+      }
+      if (state.voice_match !== undefined) {
+        setVoiceMatchLive(parseVoiceMatchPayload(state.voice_match));
+      }
+      if (state.sim_records) setSimRecords(state.sim_records as SimRecord[]);
+      if (state.sim_loading !== undefined) setSimLoading(state.sim_loading === true);
+      if (state.sim_query_masked) setSimQueryMasked(String(state.sim_query_masked));
+      if (state.sim_status) setSimStatus(String(state.sim_status));
+      if (state.sim_message) setSimMessage(String(state.sim_message));
+      if (state.sim_panel_open !== undefined) setIsSimPanelOpen(state.sim_panel_open === true);
+      if (state.intelligence !== undefined) {
+        const seeded = seedIntelligenceHistory(state.intelligence);
+        setIntelligenceHistory(seeded);
+        if (seeded[0]) setIntelligence(seeded[0]);
+      }
+      if (state.module_health !== undefined) {
+        const seeded = normalizeModuleHealth(state.module_health);
+        if (seeded) setModuleHealth(prev => mergeModuleHealth(prev, seeded) ?? seeded);
+      }
+    },
+    [
+      seedToolLogsFromInit,
+      seedJobsFromInit,
+      seedMemoriesFromInit,
+      seedTasksFromInit,
+    ],
+  );
+
+  useSocketEvent('connect', () => setIsConnected(true));
+  useSocketEvent('disconnect', () => setIsConnected(false));
+
+  useSocketEvent('status_update', (data: unknown) => {
+    if (!data || typeof data !== 'object') return;
+    const row = data as Record<string, unknown>;
+    if (typeof row.status === 'string') setStatus(row.status);
+    setIsSpeaking(row.speaking === true);
+    setIsThinking(row.thinking === true);
+  });
+
+  useSocketEvent('status_change', (data: unknown) => {
+    if (!data || typeof data !== 'object') return;
+    const row = data as { speaking?: boolean; thinking?: boolean };
+    if (typeof row.speaking === 'boolean') setIsSpeaking(row.speaking);
+    if (typeof row.thinking === 'boolean') setIsThinking(row.thinking);
+  });
+
+  useSocketEvent('vitals_pc', (data: unknown) => {
+    if (!data || typeof data !== 'object') return;
+    setVitalsPc(normalizeVitalsPayload(data as Record<string, unknown>));
+  });
+
+  useSocketEvent('vitals_vps', (data: unknown) => {
+    if (!data || typeof data !== 'object') return;
+    sawVitalsVpsRef.current = true;
+    setVitalsVps(normalizeVitalsPayload(data as Record<string, unknown>));
+  });
+
+  useSocketEvent('vitals_update', (data: unknown) => {
+    if (!data || typeof data !== 'object') return;
+    const row = data as Record<string, unknown>;
+    const source = row.source != null ? String(row.source).toLowerCase() : '';
+    if (source === 'vps' || !sawVitalsVpsRef.current) {
+      setVitalsVps(normalizeVitalsPayload(row));
+    }
+  });
+
+  useSocketEvent('telemetry_update', (data: unknown) => {
+    if (!data || typeof data !== 'object') return;
+    const row = data as Record<string, unknown>;
+    setTelemetry(normalizeTelemetryPayload(row));
+    pushSystemFeed({
+      kind: 'telemetry',
+      summary: summarizeTelemetryFeed(row),
+      ts: toEpochMs(row.ts) ?? Date.now(),
+    });
+  });
+
+  useSocketEvent('system_alert', (data: unknown) => {
+    if (!data || typeof data !== 'object') return;
+    setSystemAlerts(prev => [normalizeSystemAlert(data as Record<string, unknown>), ...prev].slice(0, 30));
+  });
+
+  useSocketEvent('intelligence_update', (data: unknown) => {
+    const item = normalizeIntelligenceItem(data);
+    if (!item) return;
+    setIntelligence(item);
+    setIntelligenceHistory(prev => prependIntelligenceHistory(prev, item));
+  });
+
+  useSocketEvent('transcription_update', (data: unknown) => {
+    if (!data || typeof data !== 'object') return;
+    setTranscription(String((data as { text?: string }).text ?? ''));
+  });
+
+  useSocketEvent('location_update', (data: unknown) => {
+    if (!data || typeof data !== 'object') return;
+    const row = data as Record<string, unknown>;
+    if (locationKind(row) === 'map') {
+      const focus = parseMapFocusPayload(row);
       if (focus) setMapFocus(focus);
-    };
-    const onReasoningUpdate = (raw: unknown) => {
-      const normalized = normalizePlan(raw);
-      setReasoning(normalized);
-      setReasoningHistory(prev => {
-        const key = normalized.msg_id ?? normalized.turn_id ?? normalized.intent ?? '';
-        const withoutDup = key
-          ? prev.filter(item => (item.msg_id ?? item.turn_id ?? item.intent) !== key)
-          : prev;
-        return [normalized, ...withoutDup].slice(0, REASONING_HISTORY_CAP);
-      });
-    };
-    const onNewLog = (data: Record<string, unknown>) => {
-      ingestVortexLogs([normalizeVortexLog(data)]);
-    };
-    const onLogBatch = (data: Record<string, unknown>) => {
+      return;
+    }
+    const device = parseDeviceLocationPayload(row);
+    if (device) setLocation(device);
+  });
+
+  useSocketEvent('map_focus_update', (data: unknown) => {
+    if (!data || typeof data !== 'object') return;
+    const focus = parseMapFocusPayload(data);
+    if (focus) setMapFocus(focus);
+  });
+
+  useSocketEvent('reasoning_update', (raw: unknown) => {
+    const normalized = normalizePlan(raw);
+    setReasoning(normalized);
+    setReasoningHistory(prev => {
+      const key = normalized.msg_id ?? normalized.turn_id ?? normalized.intent ?? '';
+      const withoutDup = key
+        ? prev.filter(item => (item.msg_id ?? item.turn_id ?? item.intent) !== key)
+        : prev;
+      return [normalized, ...withoutDup].slice(0, REASONING_HISTORY_CAP);
+    });
+  });
+
+  const ingestLogBatch = useCallback(
+    (data: Record<string, unknown>) => {
       const dropped =
         typeof data.dropped === 'number'
           ? data.dropped
@@ -583,254 +707,176 @@ export const useCommandCenter = () => {
             : normalizeVortexLog({ text: String(item) }),
         ),
       );
-    };
-    const onPlanProgress = (data: Record<string, unknown>) => {
-      const payload =
-        data.payload && typeof data.payload === 'object'
-          ? (data.payload as Record<string, unknown>)
-          : data;
-      const line = normalizePlanProgress(payload);
-      if (line) setPlanProgress(line);
-    };
-    const onTurnRejected = (data: Record<string, unknown>) => {
-      const message = turnRejectedToast(data);
-      toast(message, { icon: '🎙️' });
-      ingestVortexLogs([
-        {
-          text: message,
-          category: 'turn_rejected',
-          timestamp: Math.floor((toEpochMs(data.ts) ?? Date.now()) / 1000),
-          level: 'WARN',
-        },
-      ]);
-    };
-    const onDiagnosticsUpdate = (data: Record<string, unknown>) => {
-      pushSystemFeed({
-        kind: 'diagnostics',
-        summary: summarizeDiagnosticsFeed(data),
-        ts: toEpochMs(data.ts) ?? Date.now(),
-      });
-    };
-    const onAuditUpdate = (data: Record<string, unknown>) => {
-      pushSystemFeed({
-        kind: 'audit',
-        summary: summarizeAuditFeed(data),
-        ts: toEpochMs(data.ts) ?? Date.now(),
-      });
-    };
-    const onVoiceMatchUpdate = (data: Record<string, unknown>) => {
-      setVoiceMatchLive(prev => ({ ...prev, ...parseVoiceMatchPayload(data) }));
-    };
-    const onModuleHealth = (payload: unknown) => {
-      const next = normalizeModuleHealth(payload);
-      if (next) {
-        setModuleHealth(prev => mergeModuleHealth(prev, next) ?? next);
-      }
-    };
-    const applySimProvider = (provider?: string, configured?: boolean) => {
-      if (provider !== undefined) setSimProvider(provider);
-      if (configured !== undefined) {
-        setSimProviderConfigured(configured);
-      } else if (provider !== undefined) {
-        setSimProviderConfigured(isSimProviderConfigured(provider));
-      }
-    };
+    },
+    [ingestVortexLogs],
+  );
 
-    const onSimDataResult = (data: {
-      records: SimRecord[];
+  useSocketEvent('new_log', (data: unknown) => {
+    if (!data || typeof data !== 'object') return;
+    ingestVortexLogs([normalizeVortexLog(data as Record<string, unknown>)]);
+  });
+
+  useSocketEvent('vortex_log_batch', (data: unknown) => {
+    if (!data || typeof data !== 'object') return;
+    ingestLogBatch(data as Record<string, unknown>);
+  });
+
+  useSocketEvent('log_batch', (data: unknown) => {
+    if (!data || typeof data !== 'object') return;
+    ingestLogBatch(data as Record<string, unknown>);
+  });
+
+  useSocketEvent('new_logs', (data: unknown) => {
+    if (!data || typeof data !== 'object') return;
+    ingestLogBatch(data as Record<string, unknown>);
+  });
+
+  useSocketEvent('plan_progress', (data: unknown) => {
+    if (!data || typeof data !== 'object') return;
+    const row = data as Record<string, unknown>;
+    const payload =
+      row.payload && typeof row.payload === 'object'
+        ? (row.payload as Record<string, unknown>)
+        : row;
+    const line = normalizePlanProgress(payload);
+    if (line) setPlanProgress(line);
+  });
+
+  useSocketEvent('plan_progress_update', (data: unknown) => {
+    if (!data || typeof data !== 'object') return;
+    const row = data as Record<string, unknown>;
+    const payload =
+      row.payload && typeof row.payload === 'object'
+        ? (row.payload as Record<string, unknown>)
+        : row;
+    const line = normalizePlanProgress(payload);
+    if (line) setPlanProgress(line);
+  });
+
+  useSocketEvent('turn_rejected', (data: unknown) => {
+    if (!data || typeof data !== 'object') return;
+    const row = data as Record<string, unknown>;
+    const message = turnRejectedToast(row);
+    toast(message, { icon: '🎙️' });
+    ingestVortexLogs([
+      {
+        text: message,
+        category: 'turn_rejected',
+        timestamp: Math.floor((toEpochMs(row.ts) ?? Date.now()) / 1000),
+        level: 'WARN',
+      },
+    ]);
+  });
+
+  useSocketEvent('diagnostics_update', (data: unknown) => {
+    if (!data || typeof data !== 'object') return;
+    const row = data as Record<string, unknown>;
+    pushSystemFeed({
+      kind: 'diagnostics',
+      summary: summarizeDiagnosticsFeed(row),
+      ts: toEpochMs(row.ts) ?? Date.now(),
+    });
+  });
+
+  useSocketEvent('audit_update', (data: unknown) => {
+    if (!data || typeof data !== 'object') return;
+    const row = data as Record<string, unknown>;
+    pushSystemFeed({
+      kind: 'audit',
+      summary: summarizeAuditFeed(row),
+      ts: toEpochMs(row.ts) ?? Date.now(),
+    });
+  });
+
+  useSocketEvent('voice_match_update', (data: unknown) => {
+    if (!data || typeof data !== 'object') return;
+    setVoiceMatchLive(prev => ({ ...prev, ...parseVoiceMatchPayload(data as Record<string, unknown>) }));
+  });
+
+  useSocketEvent('module_health', (payload: unknown) => {
+    const next = normalizeModuleHealth(payload);
+    if (next) {
+      setModuleHealth(prev => mergeModuleHealth(prev, next) ?? next);
+    }
+  });
+
+  useSocketEvent('sim_data_result', (data: unknown) => {
+    if (!data || typeof data !== 'object') return;
+    const row = data as {
+      records?: SimRecord[];
       phone?: string;
       status?: string;
       message?: string;
       provider?: string;
       configured?: boolean;
-    }) => {
-      clearSimLookupTimer();
-      setSimRecords(data.records || []);
-      setSimLoading(false);
-      setSimQueryMasked(data.phone || '');
-      setSimStatus(data.status || 'success');
-      setSimMessage(data.message || '');
-      applySimProvider(data.provider, data.configured);
-      setIsSimPanelOpen(true);
     };
-    const onSimDataLoading = (data: { query_masked?: string } = {}) => {
-      setSimLoading(true);
-      setSimStatus('loading');
-      setSimQueryMasked(data.query_masked || '');
-      setSimRecords([]);
-      startSimLookupTimer();
-    };
-    const onSimPanelOpen = (data: {
+    clearSimLookupTimer();
+    setSimRecords(row.records || []);
+    setSimLoading(false);
+    setSimQueryMasked(row.phone || '');
+    setSimStatus(row.status || 'success');
+    setSimMessage(row.message || '');
+    if (row.provider !== undefined) setSimProvider(row.provider);
+    if (row.configured !== undefined) {
+      setSimProviderConfigured(row.configured);
+    } else if (row.provider !== undefined) {
+      setSimProviderConfigured(isSimProviderConfigured(row.provider));
+    }
+    setIsSimPanelOpen(true);
+  });
+
+  useSocketEvent('sim_data_loading', (data: unknown) => {
+    const row = (data && typeof data === 'object' ? data : {}) as { query_masked?: string };
+    setSimLoading(true);
+    setSimStatus('loading');
+    setSimQueryMasked(row.query_masked || '');
+    setSimRecords([]);
+    startSimLookupTimer();
+  });
+
+  useSocketEvent('sim_panel_open', (data: unknown) => {
+    if (!data || typeof data !== 'object') return;
+    const row = data as {
       message?: string;
       provider?: string;
       configured?: boolean;
       requires_purpose?: boolean;
-    }) => {
-      setIsSimPanelOpen(true);
-      if (data?.message) setSimMessage(data.message);
-      applySimProvider(data.provider, data.configured);
-      if (data?.requires_purpose !== undefined) {
-        setSimRequiresPurpose(data.requires_purpose === true);
-      }
     };
-    socket.on('connect', onConnect);
-    socket.on('disconnect', onDisconnect);
-    socket.on('status_update', onStatusUpdate);
-    socket.on('status_change', onStatusChange);
-    socket.on('vitals_pc', onVitalsPc);
-    socket.on('vitals_vps', onVitalsVps);
-    socket.on('vitals_update', onVitalsLegacy);
-    socket.on('telemetry_update', onTelemetryUpdate);
-    socket.on('system_alert', onSystemAlert);
-    socket.on('intelligence_update', onIntelligenceUpdate);
-    socket.on('transcription_update', onTranscriptionUpdate);
-    socket.on('location_update', onLocationUpdate);
-    socket.on('map_focus_update', onMapFocusUpdate);
-    socket.on('reasoning_update', onReasoningUpdate);
-    socket.on('new_log', onNewLog);
-    socket.on('vortex_log_batch', onLogBatch);
-    socket.on('log_batch', onLogBatch);
-    socket.on('new_logs', onLogBatch);
-    socket.on('plan_progress', onPlanProgress);
-    socket.on('plan_progress_update', onPlanProgress);
-    socket.on('turn_rejected', onTurnRejected);
-    socket.on('diagnostics_update', onDiagnosticsUpdate);
-    socket.on('audit_update', onAuditUpdate);
-    socket.on('voice_match_update', onVoiceMatchUpdate);
-    socket.on('sim_data_result', onSimDataResult);
-    socket.on('sim_data_loading', onSimDataLoading);
-    socket.on('sim_panel_open', onSimPanelOpen);
-    socket.on('module_health', onModuleHealth);
-    socket.on('init_state', (state: {
-      messages?: unknown[];
-      persona?: 'jarvis' | 'anna';
-      muted?: boolean;
-      wake_word_active?: boolean;
-      location?: Record<string, unknown>;
-      map_focus?: Record<string, unknown>;
-      vortex_logs?: unknown[];
-      logs?: unknown[];
-      vitals_pc?: Record<string, unknown>;
-      vitals_vps?: Record<string, unknown>;
-      telemetry?: Record<string, unknown>;
-      voice_match?: number;
-      sim_records?: SimRecord[];
-      sim_loading?: boolean;
-      sim_query_masked?: string;
-      sim_status?: string;
-      sim_message?: string;
-      sim_panel_open?: boolean;
-      server_time?: number;
-      confirmations?: unknown[];
-      pending_confirmations?: unknown[];
-      pending_confirms?: unknown[];
-      intelligence?: unknown;
-      module_health?: unknown;
-    }) => {
-      if (state.server_time != null) {
-        confirmApiRef.current.setServerTime(state.server_time);
-      }
-      confirmApiRef.current.seedFromInit(state as Record<string, unknown>);
-      seedToolLogsFromInit(state as Record<string, unknown>);
-      seedJobsFromInit(state as Record<string, unknown>);
-      seedMemoriesFromInit(state as Record<string, unknown>);
-      seedTasksFromInit(state as Record<string, unknown>);
-      if (state.map_focus) {
-        const focus = parseMapFocusPayload(state.map_focus);
-        if (focus) setMapFocus(focus);
-      }
-      if (state.location) {
-        if (locationKind(state.location) === 'map') {
-          const focus = parseMapFocusPayload(state.location);
-          if (focus) setMapFocus(focus);
-        } else {
-          const device = parseDeviceLocationPayload(state.location);
-          if (device) setLocation(device);
-        }
-      }
-      const seedLogs = state.vortex_logs ?? state.logs;
-      if (Array.isArray(seedLogs)) {
-        setVortexLogs(
-          [...seedLogs]
-            .reverse()
-            .map(entry =>
-              typeof entry === 'object' && entry
-                ? normalizeVortexLog(entry as Record<string, unknown>)
-                : normalizeVortexLog({}),
-            ),
-        );
-      }
-      if (state.vitals_pc && typeof state.vitals_pc === 'object') {
-        const next = normalizeVitalsPayload(state.vitals_pc as Record<string, unknown>);
-        setVitalsPc(prev => (prev.updatedAtMs > next.updatedAtMs ? prev : next));
-      }
-      if (state.vitals_vps && typeof state.vitals_vps === 'object') {
-        sawVitalsVpsRef.current = true;
-        const next = normalizeVitalsPayload(state.vitals_vps as Record<string, unknown>);
-        setVitalsVps(prev => (prev.updatedAtMs > next.updatedAtMs ? prev : next));
-      }
-      if (state.telemetry && typeof state.telemetry === 'object') {
-        // Keep live telemetry_update over a late init_state seed
-        setTelemetry(prev =>
-          prev.source || prev.total_samples
-            ? prev
-            : normalizeTelemetryPayload(state.telemetry as Record<string, unknown>),
-        );
-      }
-      if (state.voice_match !== undefined) {
-        setVoiceMatchLive(parseVoiceMatchPayload(state.voice_match));
-      }
-      if (state.sim_records) setSimRecords(state.sim_records);
-      if (state.sim_loading !== undefined) setSimLoading(state.sim_loading);
-      if (state.sim_query_masked) setSimQueryMasked(state.sim_query_masked);
-      if (state.sim_status) setSimStatus(state.sim_status);
-      if (state.sim_message) setSimMessage(state.sim_message);
-      if (state.sim_panel_open !== undefined) setIsSimPanelOpen(state.sim_panel_open);
-      if (state.intelligence !== undefined) {
-        const seeded = seedIntelligenceHistory(state.intelligence);
-        setIntelligenceHistory(seeded);
-        if (seeded[0]) setIntelligence(seeded[0]);
-      }
-      if (state.module_health !== undefined) {
-        const seeded = normalizeModuleHealth(state.module_health);
-        if (seeded) setModuleHealth(prev => mergeModuleHealth(prev, seeded) ?? seeded);
-      }
-    });
+    setIsSimPanelOpen(true);
+    if (row.message) setSimMessage(row.message);
+    if (row.provider !== undefined) setSimProvider(row.provider);
+    if (row.configured !== undefined) {
+      setSimProviderConfigured(row.configured);
+    } else if (row.provider !== undefined) {
+      setSimProviderConfigured(isSimProviderConfigured(row.provider));
+    }
+    if (row.requires_purpose !== undefined) {
+      setSimRequiresPurpose(row.requires_purpose === true);
+    }
+  });
 
-    return () => {
-      socket.off('connect', onConnect);
-      socket.off('disconnect', onDisconnect);
-      socket.off('status_update', onStatusUpdate);
-      socket.off('status_change', onStatusChange);
-      socket.off('vitals_pc', onVitalsPc);
-      socket.off('vitals_vps', onVitalsVps);
-      socket.off('vitals_update', onVitalsLegacy);
-      socket.off('telemetry_update', onTelemetryUpdate);
-      socket.off('system_alert', onSystemAlert);
-      socket.off('intelligence_update', onIntelligenceUpdate);
-      socket.off('transcription_update', onTranscriptionUpdate);
-      socket.off('location_update', onLocationUpdate);
-      socket.off('map_focus_update', onMapFocusUpdate);
-      socket.off('reasoning_update', onReasoningUpdate);
-      socket.off('new_log', onNewLog);
-      socket.off('voice_match_update', onVoiceMatchUpdate);
-      socket.off('sim_data_result', onSimDataResult);
-      socket.off('sim_data_loading', onSimDataLoading);
-      socket.off('sim_panel_open', onSimPanelOpen);
-      socket.off('module_health', onModuleHealth);
-      socket.off('init_state');
-    };
-  }, [
-    socketVersion,
-    clearSimLookupTimer,
-    startSimLookupTimer,
-    seedToolLogsFromInit,
-    seedJobsFromInit,
-    seedMemoriesFromInit,
-    seedTasksFromInit,
-    ingestVortexLogs,
-    pushSystemFeed,
-  ]);
+  useSocketEvent('init_state', (state: unknown) => {
+    if (!state || typeof state !== 'object') return;
+    applyBridgeInitState(state as Record<string, unknown>);
+  });
+
+  useSocketEvent('confirm_request', (raw: unknown) => {
+    const item = normalizeConfirm(raw);
+    if (item.tool === 'shutdown_agent' && item.id) {
+      pendingShutdownConfirmIdRef.current = item.id;
+    }
+  });
+
+  useSocketEvent('agent_status', (payload: unknown) => {
+    if (!payload || typeof payload !== 'object') return;
+    const data = payload as Record<string, unknown>;
+    if (data.restarting === true) {
+      setSessionRestartBanner(true);
+    }
+    if (data.online === true && data.restarting !== true) {
+      setSessionRestartBanner(prev => (prev ? false : prev));
+    }
+  });
 
   const respondConfirm = (id: string, allow: boolean) => {
     if (!confirmQueue.markResponded(id)) return;
@@ -840,32 +886,6 @@ export const useCommandCenter = () => {
     }
     emitCommand('confirm_response', { id, allow });
   };
-
-  useEffect(() => {
-    const socket = getSocket();
-    const onConfirmRequest = (raw: unknown) => {
-      const item = normalizeConfirm(raw);
-      if (item.tool === 'shutdown_agent' && item.id) {
-        pendingShutdownConfirmIdRef.current = item.id;
-      }
-    };
-    const onAgentStatus = (payload: unknown) => {
-      if (!payload || typeof payload !== 'object') return;
-      const data = payload as Record<string, unknown>;
-      if (data.restarting === true) {
-        setSessionRestartBanner(true);
-      }
-      if (data.online === true && data.restarting !== true) {
-        setSessionRestartBanner(prev => (prev ? false : prev));
-      }
-    };
-    socket.on('confirm_request', onConfirmRequest);
-    socket.on('agent_status', onAgentStatus);
-    return () => {
-      socket.off('confirm_request', onConfirmRequest);
-      socket.off('agent_status', onAgentStatus);
-    };
-  }, []);
 
   const changePersona = settings.changePersona;
   const updateSettings = settings.updateSettings;
@@ -954,18 +974,28 @@ export const useCommandCenter = () => {
   }, []);
 
   const reconnectBridge = useCallback(
-    async (liveKit: Pick<LiveKitContextValue, 'roomState' | 'connectRoom'>, agentOnline: boolean) => {
+    async (
+      liveKit: Pick<LiveKitContextValue, 'roomState' | 'connectRoom' | 'setMicOff'>,
+      agentOnline: boolean,
+    ) => {
       try {
+        const lkStateBefore = liveKit.roomState;
         disconnectSocket();
         setIsConnected(false);
-        setSocketVersion(v => v + 1);
         await waitForSocketConnect();
         setIsConnected(true);
-        getSocket().emit('ui_command', { type: 'request_state', payload: {} });
-        await chat.refetchMessages();
-        const lkState = liveKit.roomState;
-        if (lkState === 'idle' || lkState === 'error') {
+        if (lkStateBefore === 'idle' || lkStateBefore === 'error') {
           await liveKit.connectRoom();
+        }
+        await liveKit.setMicOff();
+        if (
+          lkStateBefore === 'connected' ||
+          lkStateBefore === 'connecting' ||
+          lkStateBefore === 'reconnecting' ||
+          lkStateBefore === 'idle' ||
+          lkStateBefore === 'error'
+        ) {
+          toast.success('Voice rejoined with the mic off.');
         }
         if (!agentOnline) {
           getSocket().emit('ui_command', { type: 'start', payload: {} });
@@ -975,8 +1005,7 @@ export const useCommandCenter = () => {
         toast.error('Reconnect failed');
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- chat refetch only; `chat` object is unstable
-    [chat.refetchMessages, waitForSocketConnect],
+    [waitForSocketConnect],
   );
 
   useEffect(() => {

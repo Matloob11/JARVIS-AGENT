@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { normalizeConfirm, toEpochMs, type NormalizedConfirm } from '@/shared/contracts/events';
-import { getSocket } from '@/shared/realtime/socket';
+import { useSocketEvent } from '@/shared/realtime/subscriptions';
 
 export interface QueuedConfirm extends NormalizedConfirm {
   receivedAt: number;
@@ -150,17 +150,8 @@ export function useConfirmQueue() {
   enqueueRef.current = enqueue;
   resolveRef.current = resolve;
 
-  useEffect(() => {
-    const socket = getSocket();
-    const onRequest = (payload: unknown) => enqueueRef.current(payload);
-    const onResolved = (payload: unknown) => resolveRef.current(payload);
-    socket.on('confirm_request', onRequest);
-    socket.on('confirm_resolved', onResolved);
-    return () => {
-      socket.off('confirm_request', onRequest);
-      socket.off('confirm_resolved', onResolved);
-    };
-  }, []);
+  useSocketEvent('confirm_request', (payload: unknown) => enqueueRef.current(payload));
+  useSocketEvent('confirm_resolved', (payload: unknown) => resolveRef.current(payload));
 
   const purgeExpired = useCallback(() => {
     const now = Date.now();

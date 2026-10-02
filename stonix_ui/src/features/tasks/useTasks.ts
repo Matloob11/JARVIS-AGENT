@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { toast } from '@/toast';
 import { normalizeTasks, toEpochMs } from '@/shared/contracts/events';
-import { getSocket } from '@/shared/realtime/socket';
+import { useSocketEvent } from '@/shared/realtime/subscriptions';
 
 export type TaskSource = 'task' | 'reminder';
 
@@ -175,17 +175,8 @@ export function useTasks(emitCommand: (type: string, payload?: unknown) => void)
     clearUnread();
   }, [clearUnread]);
 
-  useEffect(() => {
-    const socket = getSocket();
-    const onSync = (payload: unknown) => applyTaskSync(payload);
-    const onNotification = (payload: unknown) => applyNotification(payload);
-    socket.on('task_sync', onSync);
-    socket.on('task_notification', onNotification);
-    return () => {
-      socket.off('task_sync', onSync);
-      socket.off('task_notification', onNotification);
-    };
-  }, [applyTaskSync, applyNotification]);
+  useSocketEvent('task_sync', (payload: unknown) => applyTaskSync(payload));
+  useSocketEvent('task_notification', (payload: unknown) => applyNotification(payload));
 
   return {
     tasks,

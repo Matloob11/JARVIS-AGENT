@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Mic, MicOff, Volume2, X } from 'lucide-react';
-import { getSocket } from '@/shared/realtime/socket';
+import { useSocketEvent } from '@/shared/realtime/subscriptions';
 import { emitUiCommandWithAck, useAgentListeningMuted } from '@/features/status/AgentControls';
 import { useLiveKit } from '@/features/voice/LiveKitProvider';
 import { useLocalMicLevel } from '@/features/voice/useLocalMicLevel';
@@ -112,44 +112,35 @@ const VoiceEnrollDialog = ({ open, onClose }: VoiceEnrollDialogProps) => {
     }
   }, [open, resetState]);
 
-  useEffect(() => {
-    if (!open) return undefined;
-    const socket = getSocket();
+  const openRef = useRef(open);
+  openRef.current = open;
 
-    const onProgress = (payload: unknown) => {
-      const parsed = parseProgress(payload);
-      if (!parsed) return;
-      setProgress(parsed);
-      setPhase('capturing');
-    };
+  useSocketEvent('voice_enroll_progress', (payload: unknown) => {
+    if (!openRef.current) return;
+    const parsed = parseProgress(payload);
+    if (!parsed) return;
+    setProgress(parsed);
+    setPhase('capturing');
+  });
 
-    const onVoiceIdStatus = (payload: unknown) => {
-      if (!payload || typeof payload !== 'object') return;
-      const data = payload as Record<string, unknown>;
-      if (data.enrolling !== true) return;
-      const parsed = parseProgress(data);
-      if (!parsed) return;
-      setProgress(parsed);
-      setPhase('capturing');
-    };
+  useSocketEvent('voice_id_status', (payload: unknown) => {
+    if (!openRef.current) return;
+    if (!payload || typeof payload !== 'object') return;
+    const data = payload as Record<string, unknown>;
+    if (data.enrolling !== true) return;
+    const parsed = parseProgress(data);
+    if (!parsed) return;
+    setProgress(parsed);
+    setPhase('capturing');
+  });
 
-    const onResult = (payload: unknown) => {
-      clearTimeoutTimer();
-      const parsed = parseResult(payload);
-      setResult(parsed);
-      setPhase(parsed.ok ? 'done' : 'error');
-    };
-
-    socket.on('voice_enroll_progress', onProgress);
-    socket.on('voice_id_status', onVoiceIdStatus);
-    socket.on('voice_enroll_result', onResult);
-
-    return () => {
-      socket.off('voice_enroll_progress', onProgress);
-      socket.off('voice_id_status', onVoiceIdStatus);
-      socket.off('voice_enroll_result', onResult);
-    };
-  }, [open, clearTimeoutTimer]);
+  useSocketEvent('voice_enroll_result', (payload: unknown) => {
+    if (!openRef.current) return;
+    clearTimeoutTimer();
+    const parsed = parseResult(payload);
+    setResult(parsed);
+    setPhase(parsed.ok ? 'done' : 'error');
+  });
 
   const voiceConnected = voice.roomState === 'connected';
   const voiceConnecting =

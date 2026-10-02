@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { toast } from '@/toast';
 import { toEpochMs } from '@/shared/contracts/events';
-import { getSocket } from '@/shared/realtime/socket';
+import { useSocketEvent } from '@/shared/realtime/subscriptions';
 
 export type ToolLogStatus =
   | 'running'
@@ -154,14 +154,7 @@ export function useToolLogs() {
     });
   }, []);
 
-  useEffect(() => {
-    const socket = getSocket();
-    const onToolUpdate = (payload: unknown) => upsert(payload);
-    socket.on('tool_update', onToolUpdate);
-    return () => {
-      socket.off('tool_update', onToolUpdate);
-    };
-  }, [upsert]);
+  useSocketEvent('tool_update', (payload: unknown) => upsert(payload));
 
   const runningCount = useMemo(
     () => rows.filter(row => row.status === 'running').length,

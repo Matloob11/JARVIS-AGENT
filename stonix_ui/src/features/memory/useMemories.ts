@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { toast } from '@/toast';
 import { toEpochMs } from '@/shared/contracts/events';
-import { getSocket } from '@/shared/realtime/socket';
+import { useSocketEvent } from '@/shared/realtime/subscriptions';
 
 export type MemoryRole = 'user' | 'assistant';
 export type MemorySource = 'extractor' | 'fact' | 'vector';
@@ -119,17 +119,8 @@ export function useMemories(emitCommand: (type: string, payload?: unknown) => vo
     emitCommand('clear_memory', {});
   }, [emitCommand]);
 
-  useEffect(() => {
-    const socket = getSocket();
-    const onSync = (payload: unknown) => applySync(payload);
-    const onCleared = (payload: unknown) => applyCleared(payload);
-    socket.on('memory_sync', onSync);
-    socket.on('memory_cleared', onCleared);
-    return () => {
-      socket.off('memory_sync', onSync);
-      socket.off('memory_cleared', onCleared);
-    };
-  }, [applySync, applyCleared]);
+  useSocketEvent('memory_sync', (payload: unknown) => applySync(payload));
+  useSocketEvent('memory_cleared', (payload: unknown) => applyCleared(payload));
 
   return {
     memories: rows,

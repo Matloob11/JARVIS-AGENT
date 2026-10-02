@@ -12,6 +12,7 @@ import {
 import { toast } from '@/toast';
 import { normalizeSettings } from '@/shared/contracts/events';
 import { getSocket } from '@/shared/realtime/socket';
+import { useSocketEvent } from '@/shared/realtime/subscriptions';
 import {
   defaultVoiceForPersona,
   DEFAULT_VOICE_ANNA,
@@ -516,61 +517,54 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     [clearRevertTimer],
   );
 
-  useEffect(() => {
-    const socket = getSocket();
+  useSocketEvent('init_state', (state: unknown) => {
+    if (!state || typeof state !== 'object') return;
+    applySettingsObject(extractSettingsBlock(state as Record<string, unknown>));
+  });
 
-    const onInitState = (state: Record<string, unknown>) => {
-      applySettingsObject(extractSettingsBlock(state));
-    };
+  useSocketEvent('settings_sync', (payload: unknown) => {
+    const normalized = normalizeSettings(payload);
+    applySettingsObject(normalized.settings, normalized);
+    resolvePendingFields(normalized.settings);
+  });
 
-    const onSettingsSync = (payload: unknown) => {
-      const normalized = normalizeSettings(payload);
-      applySettingsObject(normalized.settings, normalized);
-      resolvePendingFields(normalized.settings);
-    };
+  useSocketEvent('persona_update', (data: unknown) => {
+    const row = data as { persona?: Persona };
+    if (row?.persona) {
+      setValues(prev => ({ ...prev, persona: asPersona(row.persona) }));
+    }
+  });
 
-    const onPersonaUpdate = (data: { persona?: Persona }) => {
-      if (data?.persona) {
-        setValues(prev => ({ ...prev, persona: asPersona(data.persona) }));
-      }
-    };
-
-    const onWakeWordUpdate = (active: boolean) => {
+  useSocketEvent('wake_word_update', (active: unknown) => {
+    if (typeof active === 'boolean') {
       setValues(prev => ({ ...prev, wakeWord: active }));
-    };
+    }
+  });
 
-    const onMuteUpdate = (payload: boolean | { muted?: boolean }) => {
-      const muted =
-        typeof payload === 'boolean' ? payload : payload?.muted === true;
-      setValues(prev => ({ ...prev, muted }));
-      clearRevertTimer('muted');
-      setLocalPending(prev => {
-        if (!prev.has('muted')) return prev;
-        const next = new Set(prev);
-        next.delete('muted');
-        return next;
-      });
-    };
+  useSocketEvent('mute_update', (payload: unknown) => {
+    const muted =
+      typeof payload === 'boolean'
+        ? payload
+        : (payload as { muted?: boolean })?.muted === true;
+    setValues(prev => ({ ...prev, muted }));
+    clearRevertTimer('muted');
+    setLocalPending(prev => {
+      if (!prev.has('muted')) return prev;
+      const next = new Set(prev);
+      next.delete('muted');
+      return next;
+    });
+  });
 
-    socket.on('init_state', onInitState);
-    socket.on('settings_sync', onSettingsSync);
-    socket.on('persona_update', onPersonaUpdate);
-    socket.on('wake_word_update', onWakeWordUpdate);
-    socket.on('mute_update', onMuteUpdate);
-
-    return () => {
-      socket.off('init_state', onInitState);
-      socket.off('settings_sync', onSettingsSync);
-      socket.off('persona_update', onPersonaUpdate);
-      socket.off('wake_word_update', onWakeWordUpdate);
-      socket.off('mute_update', onMuteUpdate);
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- flush latest revert timers on unmount
+  useEffect(
+    () => () => {
       for (const entry of revertRef.current.values()) {
         window.clearTimeout(entry.timer);
       }
       revertRef.current.clear();
-    };
-  }, [applySettingsObject, clearRevertTimer, resolvePendingFields]);
+    },
+    [],
+  );
 
   const emitSettingsUpdate = useCallback(
     (partial: SettingsUpdatePayload, pendingFields: string[]) => {

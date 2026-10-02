@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { normalizeMessage } from '@/shared/contracts/events';
 import { bridgeUrl } from '@/shared/config/runtime';
 import { getSocket } from '@/shared/realtime/socket';
+import { useSocketEvent } from '@/shared/realtime/subscriptions';
 import { useLiveKit } from '@/features/voice/LiveKitProvider';
 import { registerLiveCaptions } from './liveCaptions';
 import type { ChatMessage, LiveCaption } from './types';
@@ -174,28 +175,17 @@ export function useChat() {
     void fetchPage();
   }, [fetchPage]);
 
-  useEffect(() => {
-    const socket = getSocket();
+  useSocketEvent('init_state', (state: unknown) => {
+    if (!state || typeof state !== 'object') return;
+    const row = state as { messages?: unknown[]; agent_status?: { online?: boolean } };
+    if (Array.isArray(row.messages)) mergeHistory(row.messages);
+    if (row.agent_status && typeof row.agent_status.online === 'boolean') {
+      agentOnlineRef.current = row.agent_status.online;
+    }
+  });
 
-    const onInit = (state: { messages?: unknown[]; agent_status?: { online?: boolean } }) => {
-      if (Array.isArray(state.messages)) mergeHistory(state.messages);
-      if (state.agent_status && typeof state.agent_status.online === 'boolean') {
-        agentOnlineRef.current = state.agent_status.online;
-      }
-    };
-    const onNew = (msg: unknown) => upsertRaw(msg);
-    const onUpdate = (msg: unknown) => upsertRaw(msg);
-
-    socket.on('init_state', onInit);
-    socket.on('new_message', onNew);
-    socket.on('update_message', onUpdate);
-
-    return () => {
-      socket.off('init_state', onInit);
-      socket.off('new_message', onNew);
-      socket.off('update_message', onUpdate);
-    };
-  }, [mergeHistory, upsertRaw]);
+  useSocketEvent('new_message', (msg: unknown) => upsertRaw(msg));
+  useSocketEvent('update_message', (msg: unknown) => upsertRaw(msg));
 
   useEffect(() => {
     if (voice.roomState !== 'connected') return undefined;
@@ -302,23 +292,15 @@ export function useChat() {
     }
   }, [sendInternal]);
 
-  useEffect(() => {
-    const socket = getSocket();
-
-    const onAgentStatus = (payload: { online?: boolean }) => {
-      const wasOnline = agentOnlineRef.current;
-      const nextOnline = payload?.online === true;
-      agentOnlineRef.current = nextOnline;
-      if (!wasOnline && nextOnline) {
-        flushResendQueue();
-      }
-    };
-
-    socket.on('agent_status', onAgentStatus);
-    return () => {
-      socket.off('agent_status', onAgentStatus);
-    };
-  }, [flushResendQueue]);
+  useSocketEvent('agent_status', (payload: unknown) => {
+    const row = payload as { online?: boolean };
+    const wasOnline = agentOnlineRef.current;
+    const nextOnline = row?.online === true;
+    agentOnlineRef.current = nextOnline;
+    if (!wasOnline && nextOnline) {
+      flushResendQueue();
+    }
+  });
 
   const send = useCallback(
     (text: string) => {
