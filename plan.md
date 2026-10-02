@@ -857,7 +857,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | C-11 | claude | P0 | Reusable backup/restore tooling (PC + VPS), restore drill, PC mirror of the emergency VPS snapshot | C-01, C-04, K-54 (COORD-4) | DONE (01 Oct 14:20) |
 | C-12 | claude | P0 | Deploy tooling: deploy_from_pc.sh (committed HEAD only), deploy.sh v2 (lock, backup, nginx -t, health gate, other-apps smoke), rollback.sh, smoke_other_apps.sh + first full sync deploy | C-04, C-09, C-11, K-54 (COORD-4) | DONE (02 Oct 03:00; first sync deploy OK) |
 | C-13 | claude | P0 | Bridge SQLite store on a volume + message normalization + init_state/history from the DB | C-12, K-41 (C-MSG-1), K-42 (C-STATE-1) | DONE (claude, 02 Oct 13:58) |
-| C-14 | claude | P0 | Agent link v2, bridge side: AGENT_TOKEN + HMAC v2 notify with replay protection, Socket.IO roles/rooms with a legacy transition, env-only origins, secrets tooling | C-13, C-09, K-38 (C-SOCK-1), K-39 (C-NOTIFY-1), K-40 (C-EVT-1), K-47 (C-ENV-1) | TODO |
+| C-14 | claude | P0 | Agent link v2, bridge side: AGENT_TOKEN + HMAC v2 notify with replay protection, Socket.IO roles/rooms with a legacy transition, env-only origins, secrets tooling | C-13, C-09, K-38 (C-SOCK-1), K-39 (C-NOTIFY-1), K-40 (C-EVT-1), K-47 (C-ENV-1) | DOING (claude, 02 Oct 14:10) |
 | C-15 | claude | P0 | Agent link v2, agent side: signed raw-body notify with retry queue, AGENT_TOKEN socket with reconnect-forever loop, chat id echo | C-14, C-09, K-39 (C-NOTIFY-1), K-38 (C-SOCK-1), K-41 (C-MSG-1) | TODO |
 | C-16 | claude | P0 | Network lockdown: nginx /agent + /twirp, PC agent on wss/https via the domain, 5101/7880 bound to 127.0.0.1, compose memory/log limits | C-12, C-09, C-15, K-48 (C-NET-1) | TODO |
 | C-17 | claude | P0 | Rotate the LiveKit API key/secret (they sat in world-readable files); values live only in env files | C-16, C-14 | TODO |
@@ -899,7 +899,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | C-42 | claude | P1 | ConversationRouter: typed chat (Socket.IO + lk.chat) goes into the Gemini session exactly once | C-34, C-41, K-59 (CT-VC-CHAT-INPUT), K-58 (CT-VC-MESSAGE) | TODO |
 | C-43 | claude | P1 | Router extras: reasoning_update for every typed and voice turn, '/swarm' through the swarm command | C-42, K-67 (CT-VC-REASONING) | TODO |
 | C-44 | claude | P1 | Bridge: voice event passthroughs, field-merging message upsert, voice command allow-list | C-12, C-13, C-14, C-19, K-58 (CT-VC-MESSAGE), K-62 (CT-VC-TURN-GATE), K-60 (CT-VC-CONTROL), K-63 (CT-VC-VOICE-ENROLL) | TODO |
-| C-45 | claude | P1 | llm_text helper: Gemini 3.x -> Groq -> OpenRouter with header auth | C-25, K-30 (llm_text) | TODO |
+| C-45 | claude | P1 | llm_text helper: Gemini 3.x -> Groq -> OpenRouter with header auth | C-25, K-30 (llm_text) | DOING (claude, 02 Oct 14:10) |
 | C-46 | claude | P1 | Tools-info env keys via one append-only script | C-26, K-35 (tools_info_env) | TODO |
 | C-48 | claude | P1 | Vision tools on current models + fallbacks + fresh frames only | C-45, K-30 (llm_text) | TODO |
 | C-49 | claude | P1 | Instructions reach Gemini; compose_instructions per persona and turn mode (no rule deleted) | C-43 | TODO |
@@ -1015,7 +1015,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | C-115 | claude | P0 | Desktop Link protocol library (Ed25519, X25519/AEAD, replay, clock, resend) + key tooling | C-111 | DOING (claude, 02 Oct 02:55) |
 | C-116 | claude | P0 | Bridge: internal listener :5002, '/desktop' relay, presence and desktop_status, persisted link switch, minimal public health | C-13, C-115 | TODO |
 | C-117 | claude | P0 | Media relay (single media path) + node file, blob and backup endpoints + nginx locations | C-116 | TODO |
-| C-118 | claude | P0 | Placement table, manifest exporter and placement-aware VPS discovery | C-112, C-111 | TODO |
+| C-118 | claude | P0 | Placement table, manifest exporter and placement-aware VPS discovery | C-112, C-111 | DOING (claude, 02 Oct 14:10) |
 | C-119 | claude | P0 | Agent DesktopLink client and laptop-tool proxies (honest outcomes, repeat guard, ordering, stop, fallback) | C-115, C-118, C-32, C-28 | TODO |
 | C-120 | claude | P0 | Desktop Node runtime: supervisor, link, tool executor, WAL, dead-man switch, health, power events | C-115, C-111, C-31 | TODO |
 | C-121 | claude | P0 | Node policy: modes, Windows-lock pause and presence, class floors, launch surfaces, path policy, ConfirmFlow approval check, stops | C-120 | TODO |
@@ -1033,7 +1033,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | C-133 | claude | P4 | (optional, deferred by user decision D3) Owner approval key: phone and UI approvals the laptop can verify (V9) | C-131, C-22, C-29, C-30, C-73 | NOT NEEDED (deferred by user decision D3; reopen only if local approvals return) |
 | C-134 | claude | P4 | Monitoring, alerts, incident runbook and VPS-brain documentation | C-131 | TODO |
 | C-135 | claude | P3 | UI spec v2: exact 'Neon Command Center' design from the user's reference image (replica mockup, ANNA variant, all pages and states, phone), tasks X-69..X-102 updated | — | DOING (claude, 02 Oct 13:00) |
-| C-136 | claude | P1 | PC worker: visible LiveKit link state and recovery after laptop sleep or network loss | C-09, C-112 | TODO |
+| C-136 | claude | P1 | PC worker: visible LiveKit link state and recovery after laptop sleep or network loss | C-09, C-112 | DOING (claude, 02 Oct 14:10) |
 | C-97 | claude | P4 | Voice and conversation regression suite + runbook | C-56, C-74, C-76, C-77, C-87, C-89, C-90, C-91, C-09 | TODO |
 | C-98 | claude | P4 | Internal-tool regression checks after the voice/dashboard fixes (change_voice, wake word, persona, identity, analyze_surroundings) | C-48, C-50, C-54, C-69, C-87 | TODO |
 | C-99 | claude | P4 | Live desktop-tools smoke run on the PC with Sir | C-31, C-75, C-55, C-84, C-85, X-63, C-96 | TODO |
