@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { gotoPage } from './helpers';
 import { loginViaRecovery } from './helpers/login';
 
 const MOCK = 'http://127.0.0.1:5199';
@@ -21,6 +22,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('not enrolled shows Not enrolled on the meter', async ({ page }) => {
+  await gotoPage(page, 'agents');
   await page.request.post(`${MOCK}/__mock/emit`, {
     data: {
       event: 'init_state',
@@ -36,6 +38,7 @@ test('not enrolled shows Not enrolled on the meter', async ({ page }) => {
 });
 
 test('enrollment wizard emits start and commit and shows success', async ({ page }) => {
+  await gotoPage(page, 'agents');
   await page.request.post(`${MOCK}/__mock/emit`, {
     data: {
       event: 'init_state',
@@ -75,6 +78,7 @@ test('enrollment wizard emits start and commit and shows success', async ({ page
 });
 
 test('agent muted blocks Start in enrollment wizard', async ({ page }) => {
+  await gotoPage(page, 'agents');
   await page.getByTestId('chip-voice').click();
   await page.getByTestId('topbar-agent-listening').click();
   await expect(page.getByTestId('topbar-agent-listening')).toHaveAttribute('data-muted', 'true');

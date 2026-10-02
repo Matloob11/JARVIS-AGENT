@@ -7,6 +7,7 @@ agent-pause
 agent-session-restart-banner
 agent-wake
 agent-wake-spinner
+agents-wake-toggle
 app-ready
 approvals-count
 approvals-panel
@@ -99,6 +100,8 @@ ops-drawer-backdrop
 ops-drawer-toggle
 page-activity
 page-agents
+persona-card-anna
+persona-card-jarvis
 page-overview
 page-settings
 page-title

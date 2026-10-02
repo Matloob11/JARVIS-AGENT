@@ -892,3 +892,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `npm --prefix stonix_ui run build` pass; `audio-engine.spec.ts` + `voice.spec.ts` + `voice-glue.spec.ts` 8/8 pass; `agent-audio-visualizer` testid retained
 - **Commit:** (pending) · **Deploy:** no
 - **Doosre agent ke liye:** X-97 status line + voice machine ab orb/wave modes align karega.
+
+### ✅ [cursor] X-107 · Agents page personas, voice, Voice-ID · 2026-10-03 02:15 PKT
+- **Kya kiya:** `#/agents` par teen groups (JARVIS & ANNA, Devices, Machines and place) ke saath Who answers mini orbs, Voice & wake, Voice-ID cards; listening + Voice-ID meter Overview legacy strip se Agents par move; `voiceid.spec` ab pehle Agents navigate karta hai.
+- **Files:** `stonix_ui/src/features/agents/*`, `AssistantCore.tsx`, `Dashboard.tsx`, `voiceMeter.ts`, `neon/agents.css`, `voiceid.spec.ts`, `testids.baseline.txt`
+- **Verify:** `npm --prefix stonix_ui run build` pass; voiceid + controls-agent + settings e2e 17/17 pass; testid inventory 225 pass
+- **Commit:** (pending) · **Deploy:** no
+- **Doosre agent ke liye:** X-85 Devices/Machines anchors + `operations-rail` yahan mount karega; X-81 System Flow card `flow` anchor par.

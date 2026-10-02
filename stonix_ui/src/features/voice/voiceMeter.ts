@@ -1,15 +1,20 @@
 export type VoiceMeterDisplayMode = 'not_enrolled' | 'monitor' | 'enforcing';
 
+export type VoiceMeterStateAttr = 'not_enrolled' | 'monitor' | 'enforcing' | 'below';
+
 export interface VoiceMatchLive {
   confidence: number;
   accepted?: boolean;
   threshold?: number;
   enrolled?: boolean;
   mode?: string;
+  samples?: number;
 }
 
 export interface VoiceMeterView {
   displayMode: VoiceMeterDisplayMode;
+  /** Value for voice-id-meter `data-state`. */
+  stateAttr: VoiceMeterStateAttr;
   label: string;
   scorePercent: number;
   tone: 'muted' | 'monitor' | 'pass' | 'fail';
@@ -35,12 +40,16 @@ export function parseVoiceMatchPayload(raw: unknown): VoiceMatchLive {
     finite01(data.last_score) ??
     finite01(data.score) ??
     0;
+  const samplesRaw = data.samples;
+  const samples =
+    typeof samplesRaw === 'number' && Number.isFinite(samplesRaw) ? samplesRaw : undefined;
   return {
     confidence,
     accepted: typeof data.accepted === 'boolean' ? data.accepted : undefined,
     threshold: finite01(data.threshold),
     enrolled: typeof data.enrolled === 'boolean' ? data.enrolled : undefined,
     mode: data.mode != null ? String(data.mode) : undefined,
+    samples,
   };
 }
 
@@ -60,6 +69,7 @@ export function deriveVoiceMeterView(
   if (!enrolled) {
     return {
       displayMode: 'not_enrolled',
+      stateAttr: 'not_enrolled',
       label: 'Not enrolled',
       scorePercent,
       tone: 'muted',
@@ -76,6 +86,7 @@ export function deriveVoiceMeterView(
   if (!enforcing) {
     return {
       displayMode: 'monitor',
+      stateAttr: 'monitor',
       label: 'Monitor',
       scorePercent,
       tone: 'monitor',
@@ -87,7 +98,8 @@ export function deriveVoiceMeterView(
   const pass = live.confidence >= threshold;
   return {
     displayMode: 'enforcing',
-    label: 'Enforcing',
+    stateAttr: pass ? 'enforcing' : 'below',
+    label: pass ? 'Enforcing' : 'Below threshold',
     scorePercent,
     tone: pass ? 'pass' : 'fail',
     showEnrollLink: false,

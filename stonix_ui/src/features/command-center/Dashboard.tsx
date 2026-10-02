@@ -36,6 +36,7 @@ import { useLayout } from '@/features/shell/useLayout';
 import { useHashRouter } from '@/features/shell/useHashRouter';
 import OrbCanvas from '@/features/voice/orb/OrbCanvas';
 import { useAgentListeningMuted } from '@/features/status/AgentControls';
+import AgentsPage from '@/features/agents/AgentsPage';
 
 const DashboardInner = () => {
   useEffect(() => {
@@ -215,8 +216,6 @@ const DashboardInner = () => {
                   persona={command.activePersona}
                   isConnected={command.isConnected}
                   isThinking={command.isThinking}
-                  voiceMatchLive={command.voiceMatchLive}
-                  onOpenVoiceEnroll={openVoiceEnroll}
                   sessionRestartBanner={command.sessionRestartBanner}
                   onSessionRestartBannerChange={command.setSessionRestartBanner}
                 />
@@ -324,9 +323,13 @@ const DashboardInner = () => {
               {overviewMain}
             </ShellPage>
             <ShellPage page="agents" active={route.page === 'agents'}>
-              <div className="command-panel p-4" data-legacy>
-                <p className="text-sm text-command-muted">Agents page (legacy content remains on Overview).</p>
-              </div>
+              <ErrorBoundary name="AgentsPage">
+                <AgentsPage
+                  anchor={route.anchor}
+                  voiceMatchLive={command.voiceMatchLive}
+                  onOpenVoiceEnroll={openVoiceEnroll}
+                />
+              </ErrorBoundary>
             </ShellPage>
             <ShellPage page="activity" active={route.page === 'activity'}>
               <div className="command-panel p-4" data-legacy>
