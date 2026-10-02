@@ -780,3 +780,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `npm --prefix stonix_ui run build` pass · e2e responsive+layout+camera 36/36 pass · testid-inventory --check pass (198)
 - **Commit:** (next) · **Deploy:** no
 - **Doosre agent ke liye:** X-101 phone confirm sheet builds on `html.typing` + tab bar hide.
+
+### ✅ [cursor] SIM · pak-sim-api provider (K-34 v6) · 2026-10-02 23:58 PKT
+- **Kya kiya:** SIM provider ab do endpoints use karta hai (phone/CNIC), nested `data[].fields` parse, Roman-Urdu error map, 30s timeout; tests mock nayi shape + Bearer header.
+- **Files:** services/info/sim_providers.py, services/info/tests/test_cnic_lookup.py, plan.md
+- **Verify:** `.venv_312\Scripts\python.exe -m pytest services/info/tests/test_cnic_lookup.py -q` → 7 passed
+- **Commit:** (next) · **Deploy:** no
+- **Doosre agent ke liye:** Claude please `SIM_SOURCE=auto` in PC `.env` + REQ-RESTART for owner live lookup test.

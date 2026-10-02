@@ -1,32 +1,186 @@
-"""
-Standalone smoke test for CNIC-shaped input in privacy-safe SIM lookup mode.
-"""
+"""Unit tests for pak-sim-api shaped SIM lookup (K-34 v6)."""
 
-import asyncio
-import os
-import sys
+from __future__ import annotations
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
+from unittest.mock import AsyncMock
 
-from services.info.jarvis_sim_lookup import lookup_sim_data
+import httpx
+import pytest
 
+from services.info.sim_providers import (
+    CNIC_PATH,
+    PHONE_PATH,
+    AuthorizedApiSource,
+    NotConfiguredSource,
+    sim_source_types,
+)
 
-async def test_cnic_lookup() -> None:
-    print("--- JARVIS Safe CNIC Input Smoke Test ---")
-
-    sample_cnic = "3310012345678"
-    result = await lookup_sim_data(sample_cnic)
-
-    print(f"Status: {result.get('status')}")
-    print(f"Records: {len(result.get('records', []))}")
-    print(f"Message:\n{result.get('message')}")
-
-    if result.get("status") == "blocked":
-        print("\nSafe mode confirmed: authorized source is required before records are displayed.")
+_FAKE_BASE = "https://sim.test.example"
+_FAKE_KEY = "test-secret-key-not-real"
+_PHONE = "03001234567"
+_CNIC = "1234567890123"
 
 
-if __name__ == "__main__":
-    try:
-        asyncio.run(test_cnic_lookup())
-    except Exception as exc:  # pylint: disable=broad-exception-caught
-        print(f"\nTest failed: {exc}")
+@pytest.fixture(autouse=True)
+def _clear_sim_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("SIM_LOOKUP_SHOW_ADDRESS", raising=False)
+
+
+def test_sim_source_types_returns_exactly_two() -> None:
+    assert sim_source_types() == (NotConfiguredSource, AuthorizedApiSource)
+
+
+@pytest.mark.asyncio
+async def test_phone_lookup_posts_correct_path_and_body() -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_post(
+        url: str,
+        *,
+        json: dict[str, str],
+        headers: dict[str, str],
+        timeout: float,
+    ) -> httpx.Response:
+        captured["url"] = url
+        captured["json"] = json
+        captured["headers"] = headers
+        captured["timeout"] = timeout
+        return httpx.Response(
+            200,
+            json={
+                "success": True,
+                "query_type": "phone",
+                "hits": 1,
+                "data": [
+                    {
+                        "source": "Test Registry",
+                        "fields": {
+                            "full_name": "Test User",
+                            "cnic": "3310012345678",
+                            "phone": _PHONE,
+                            "address": "Secret Street",
+                            "operator": "ExampleTel",
+                        },
+                    }
+                ],
+            },
+        )
+
+    mock_client = AsyncMock()
+    mock_client.post = fake_post
+    source = AuthorizedApiSource(_FAKE_BASE, _FAKE_KEY, client=mock_client)
+
+    records, error = await source.lookup(_PHONE)
+
+    assert error is None
+    assert captured["url"] == f"{_FAKE_BASE}{PHONE_PATH}"
+    assert captured["json"] == {"phone": _PHONE}
+    headers = captured["headers"]
+    assert isinstance(headers, dict)
+    assert headers["Authorization"] == f"Bearer {_FAKE_KEY}"
+    assert headers["Content-Type"] == "application/json"
+    assert captured["timeout"] == 30.0
+
+    assert len(records) == 1
+    record = records[0]
+    assert record["full_name"] == "Test User"
+    assert record["source"] == "Test Registry"
+    assert record["cnic_masked"].endswith("5678")
+    assert "3310012345678" not in record["cnic_masked"]
+    assert _PHONE not in record["phone_masked"]
+    assert "address" not in record
+    assert record["details"] == {"operator": "ExampleTel"}
+
+
+@pytest.mark.asyncio
+async def test_cnic_lookup_posts_correct_path_and_body() -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_post(
+        url: str,
+        *,
+        json: dict[str, str],
+        headers: dict[str, str],
+        timeout: float,
+    ) -> httpx.Response:
+        del headers, timeout
+        captured["url"] = url
+        captured["json"] = json
+        return httpx.Response(
+            200,
+            json={
+                "success": True,
+                "query_type": "cnic",
+                "hits": 1,
+                "data": [
+                    {
+                        "source": "CNIC Records",
+                        "fields": {
+                            "full_name": "CNIC Holder",
+                            "cnic": _CNIC,
+                            "phone": "03009998877",
+                        },
+                    }
+                ],
+            },
+        )
+
+    mock_client = AsyncMock()
+    mock_client.post = fake_post
+    source = AuthorizedApiSource(_FAKE_BASE, _FAKE_KEY, client=mock_client)
+
+    records, error = await source.lookup(_CNIC)
+
+    assert error is None
+    assert captured["url"] == f"{_FAKE_BASE}{CNIC_PATH}"
+    assert captured["json"] == {"cnic": _CNIC}
+    assert len(records) == 1
+    assert records[0]["full_name"] == "CNIC Holder"
+    assert records[0]["cnic_masked"].endswith("0123")
+
+
+@pytest.mark.asyncio
+async def test_invalid_length_skips_http() -> None:
+    mock_client = AsyncMock()
+    source = AuthorizedApiSource(_FAKE_BASE, _FAKE_KEY, client=mock_client)
+
+    records, error = await source.lookup("12345")
+
+    assert records == []
+    assert error is not None
+    assert "11-digit" in error
+    mock_client.post.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    ("status_code", "error_code", "expected_message"),
+    [
+        (401, "unauthorized", "provider ne key reject ki"),
+        (429, "rate_limited", "Provider rate-limited hai. Thodi der baad try karein."),
+        (502, "upstream_unavailable", "SIM provider abhi unavailable hai."),
+    ],
+)
+@pytest.mark.asyncio
+async def test_api_error_codes_map_to_user_messages(
+    status_code: int,
+    error_code: str,
+    expected_message: str,
+) -> None:
+    async def fake_post(
+        url: str,
+        *,
+        json: dict[str, str],
+        headers: dict[str, str],
+        timeout: float,
+    ) -> httpx.Response:
+        del url, json, headers, timeout
+        return httpx.Response(status_code, json={"success": False, "error": error_code})
+
+    mock_client = AsyncMock()
+    mock_client.post = fake_post
+    source = AuthorizedApiSource(_FAKE_BASE, _FAKE_KEY, client=mock_client)
+
+    records, error = await source.lookup(_PHONE)
+
+    assert records == []
+    assert error == expected_message

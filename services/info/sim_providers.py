@@ -1,5 +1,5 @@
 """
-Authorized SIM lookup sources for JARVIS (contract K-34).
+Authorized SIM lookup sources for JARVIS (contract K-34 v6).
 
 Only NotConfiguredSource and AuthorizedApiSource are permitted. Leaked, scraped,
 or unofficial 'SIM database' integrations must not be added here.
@@ -14,7 +14,7 @@ import httpx
 
 from services.utils.jarvis_security import redact_secrets
 
-# Confirm against the provider API doc when SIM_LOOKUP_API_KEY is available.
+# Known person fields inside each data[].fields object (pass the rest through, masked).
 FIELD_MAP: dict[str, str] = {
     "full_name": "full_name",
     "cnic": "cnic",
@@ -27,7 +27,20 @@ PROVIDER_AUTHORIZED_API = "authorized_api"
 
 NOT_CONFIGURED_HINT = "provider not configured"
 
-_LOOKUP_TIMEOUT_S = 10.0
+_LOOKUP_TIMEOUT_S = 30.0  # v6: the provider doc asks for ~30 s
+
+PHONE_PATH = "/api/v1/lookup/phone"
+CNIC_PATH = "/api/v1/lookup/cnic"
+
+# {"success": false, "error": <code>} -> user-facing (Roman Urdu); records stay empty.
+_ERROR_MESSAGES: dict[str, str] = {
+    "unauthorized": "provider ne key reject ki",
+    "invalid_input": "Number/CNIC format sahi nahi lag raha.",
+    "rate_limited": "Provider rate-limited hai. Thodi der baad try karein.",
+    "upstream_unavailable": "SIM provider abhi unavailable hai.",
+}
+
+_PATTERN_HINT = "Number 11-digit (03xxxxxxxxx) ya CNIC 13-digit hona chahiye."
 
 
 @runtime_checkable
@@ -60,34 +73,46 @@ def _mask_phone_digits(digits: str) -> str:
     return f"{clean[:2]}{'*' * (len(clean) - 3)}{clean[-1:]}"
 
 
-def _record_from_payload(item: dict[str, Any], *, show_address: bool) -> dict[str, Any]:
-    name_key = FIELD_MAP["full_name"]
-    cnic_key = FIELD_MAP["cnic"]
-    phone_key = FIELD_MAP["phone"]
-    address_key = FIELD_MAP["address"]
+def _route(digits: str) -> tuple[str, dict[str, str]] | tuple[None, None]:
+    """Pick the endpoint + body by pattern: phone = 11 digits starting 0; CNIC = 13 digits."""
+    if len(digits) == 11 and digits.startswith("0"):
+        return PHONE_PATH, {"phone": digits}
+    if len(digits) == 13:
+        return CNIC_PATH, {"cnic": digits}
+    return None, None
 
+
+def _looks_like_phone_or_cnic(key: str) -> bool:
+    k = key.lower()
+    return any(tok in k for tok in ("cnic", "nic", "phone", "mobile", "msisdn", "number"))
+
+
+def _record_from_fields(fields: dict[str, Any], *, source: str, show_address: bool) -> dict[str, Any]:
+    """One UI record from a data[].fields object; sensitive values masked, the rest kept."""
     record: dict[str, Any] = {
-        "full_name": str(item.get(name_key) or item.get("name") or "").strip(),
-        "cnic_masked": _mask_cnic_digits(str(item.get(cnic_key) or "")),
-        "phone_masked": _mask_phone_digits(str(item.get(phone_key) or "")),
+        "source": source,
+        "full_name": str(fields.get(FIELD_MAP["full_name"]) or fields.get("name") or "").strip(),
+        "cnic_masked": _mask_cnic_digits(str(fields.get(FIELD_MAP["cnic"]) or "")),
+        "phone_masked": _mask_phone_digits(str(fields.get(FIELD_MAP["phone"]) or "")),
     }
     if show_address:
-        address = str(item.get(address_key) or "").strip()
+        address = str(fields.get(FIELD_MAP["address"]) or "").strip()
         if address:
             record["address"] = address
+    # keep every other provider field, masking anything that looks like a CNIC/phone number
+    extra: dict[str, Any] = {}
+    known = set(FIELD_MAP.values()) | {"name"}
+    for key, value in fields.items():
+        if key in known:
+            continue
+        text = str(value)
+        if _looks_like_phone_or_cnic(key) and any(ch.isdigit() for ch in text):
+            digits = "".join(ch for ch in text if ch.isdigit())
+            text = _mask_cnic_digits(digits) if len(digits) >= 13 else _mask_phone_digits(digits)
+        extra[key] = text
+    if extra:
+        record["details"] = extra
     return record
-
-
-def _extract_items(payload: Any) -> list[dict[str, Any]]:
-    if isinstance(payload, list):
-        return [row for row in payload if isinstance(row, dict)]
-    if not isinstance(payload, dict):
-        return []
-    for key in ("records", "data", "results", "items"):
-        nested = payload.get(key)
-        if isinstance(nested, list):
-            return [row for row in nested if isinstance(row, dict)]
-    return [payload]
 
 
 class NotConfiguredSource:
@@ -103,56 +128,51 @@ class NotConfiguredSource:
 
 
 class AuthorizedApiSource:
-    """POST msisdn to SIM_LOOKUP_API_URL with Bearer SIM_LOOKUP_API_KEY."""
+    """POST to {SIM_LOOKUP_API_URL}/api/v1/lookup/{phone|cnic} with Bearer SIM_LOOKUP_API_KEY."""
 
     provider = PROVIDER_AUTHORIZED_API
     configured = True
     requires_purpose = True
 
-    def __init__(
-        self,
-        api_url: str,
-        api_key: str,
-        *,
-        client: httpx.AsyncClient | None = None,
-    ) -> None:
-        self._api_url = api_url
+    def __init__(self, api_url: str, api_key: str, *, client: httpx.AsyncClient | None = None) -> None:
+        self._base = api_url.rstrip("/")
         self._api_key = api_key
         self._client = client
 
     async def lookup(self, digits: str) -> tuple[list[dict[str, Any]], str | None]:
+        path, body = _route(digits)
+        if path is None:
+            return [], _PATTERN_HINT
         show_address = _env_str("SIM_LOOKUP_SHOW_ADDRESS") in {"1", "true", "yes", "on"}
-        headers = {"Authorization": f"Bearer {self._api_key}"}
-        body = {"msisdn": digits}
+        headers = {"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"}
+        url = self._base + path
         try:
             if self._client is not None:
-                response = await self._client.post(
-                    self._api_url,
-                    json=body,
-                    headers=headers,
-                    timeout=_LOOKUP_TIMEOUT_S,
-                )
+                response = await self._client.post(url, json=body, headers=headers, timeout=_LOOKUP_TIMEOUT_S)
             else:
                 async with httpx.AsyncClient(timeout=_LOOKUP_TIMEOUT_S) as client:
-                    response = await client.post(self._api_url, json=body, headers=headers)
+                    response = await client.post(url, json=body, headers=headers)
         except httpx.HTTPError as exc:
             return [], redact_secrets(f"SIM provider request failed: {exc}")
-
-        if response.status_code in {401, 403}:
-            return [], "provider ne key reject ki"
-
-        if response.status_code >= 400:
-            detail = response.text[:200] if response.text else f"HTTP {response.status_code}"
-            return [], redact_secrets(f"SIM provider error: {detail}")
 
         try:
             payload = response.json()
         except ValueError:
-            return [], "SIM provider ne invalid JSON bheja."
+            return [], f"SIM provider ne invalid JSON bheja (HTTP {response.status_code})."
 
+        if response.status_code >= 400 or not (isinstance(payload, dict) and payload.get("success")):
+            code = payload.get("error") if isinstance(payload, dict) else None
+            return [], _ERROR_MESSAGES.get(code, f"SIM provider error (HTTP {response.status_code}).")
+
+        data = payload.get("data")
         records = [
-            _record_from_payload(item, show_address=show_address)
-            for item in _extract_items(payload)
+            _record_from_fields(
+                item.get("fields") if isinstance(item.get("fields"), dict) else {},
+                source=str(item.get("source") or "SIM / CNIC Records"),
+                show_address=show_address,
+            )
+            for item in (data or [])
+            if isinstance(item, dict)
         ]
         return records, None
 
