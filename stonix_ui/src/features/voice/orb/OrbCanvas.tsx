@@ -26,6 +26,7 @@ type OrbCanvasProps = {
   agentState: import('../useVoiceRoom').AgentState;
   agentListeningMuted: boolean;
   micEnabled: boolean;
+  pushToTalkActive?: boolean;
   isSpeaking: boolean;
   isThinking: boolean;
   isUserSpeaking: boolean;
@@ -57,6 +58,7 @@ const OrbCanvas = ({
   agentState,
   agentListeningMuted,
   micEnabled,
+  pushToTalkActive = false,
   isSpeaking,
   isThinking,
   isUserSpeaking,
@@ -85,6 +87,7 @@ const OrbCanvas = ({
         agentState,
         agentListeningMuted,
         micEnabled,
+        pushToTalkActive,
         isSpeaking,
         isThinking,
         isUserSpeaking,
@@ -102,6 +105,7 @@ const OrbCanvas = ({
       agentState,
       agentListeningMuted,
       micEnabled,
+      pushToTalkActive,
       isSpeaking,
       isThinking,
       isUserSpeaking,

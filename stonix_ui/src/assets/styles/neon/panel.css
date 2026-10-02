@@ -868,3 +868,209 @@
 .panel-composer {
   flex: none;
 }
+
+.neon-composer {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'input input input'
+    'attach kbd mic';
+  align-items: center;
+  margin: max(8px, calc(12 * var(--vu, 1px))) 16px max(12px, calc(15 * var(--vu, 1px))) 15px;
+  padding: max(10px, calc(15 * var(--vu, 1px))) 15px max(8px, calc(16 * var(--vu, 1px)));
+  column-gap: 12px;
+  row-gap: max(8px, calc(16 * var(--vu, 1px)));
+  border-radius: var(--r-composer, 14px);
+  border: none;
+  background: var(--composer);
+  box-shadow: var(--hairline-composer);
+}
+
+.neon-composer::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--composer-edge);
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.neon-composer__task-chip {
+  position: absolute;
+  left: 12px;
+  top: -30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(var(--acc-glow-rgb, 46, 130, 255), 0.16);
+  color: var(--chip-task-t, #bcd6ff);
+  font: 600 12.5px/1 var(--font-ui, system-ui);
+  box-shadow: inset 0 0 0 1px rgba(var(--acc-edge-rgb, 46, 130, 255), 0.35);
+}
+
+.neon-composer--task .neon-composer__task-chip {
+  display: inline-flex;
+}
+
+.neon-composer__task-chip-x {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: none;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.neon-composer__field {
+  grid-area: input;
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  min-height: clamp(46px, 6.16vh, 58px);
+  border-radius: 12px;
+  background: var(--field, #15203d);
+  box-shadow: inset 0 0 0 1px #1b2744;
+}
+
+.neon-composer__field:focus-within {
+  box-shadow:
+    inset 0 0 0 1px #1b2744,
+    0 0 0 2px var(--acc-line, #3d7cff),
+    0 0 0 6px rgba(var(--acc-glow-rgb, 46, 130, 255), 0.35);
+}
+
+.neon-composer__textarea {
+  flex: 1;
+  min-width: 0;
+  min-height: clamp(46px, 6.16vh, 58px);
+  max-height: 140px;
+  resize: none;
+  overflow-y: auto;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  padding: max(9px, calc(11 * var(--vu, 1px))) 12px max(9px, calc(11 * var(--vu, 1px))) 17px;
+  font: 400 clamp(15px, 1.727vh, 16.25px) / 24px var(--font-ui, system-ui);
+  color: #e8edf8;
+}
+
+.neon-composer__textarea::placeholder {
+  color: var(--t-placeholder, #8d9bc1);
+  opacity: 1;
+}
+
+.neon-composer__send {
+  flex: none;
+  align-self: center;
+  width: clamp(42px, 5.74vh, 54px);
+  height: clamp(42px, 5.74vh, 54px);
+  margin: 2px 2px 2px 0;
+  border: none;
+  border-radius: 12px;
+  background: var(--acc-deep, #163b80);
+  color: #eef3fd;
+  box-shadow: inset 0 0 0 1px rgba(40, 80, 160, 0.35);
+  cursor: pointer;
+}
+
+.neon-composer__send:hover {
+  filter: brightness(1.12);
+}
+
+.neon-composer__attach {
+  grid-area: attach;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #b4bfdc;
+  cursor: not-allowed;
+}
+
+.neon-composer__kbd-hint {
+  grid-area: kbd;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
+  color: #8e9bb6;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.neon-composer__kbd-hint .lab-s {
+  display: none;
+}
+
+@container (max-width: 389px) {
+  .neon-composer__kbd-hint .lab-l {
+    display: none;
+  }
+  .neon-composer__kbd-hint .lab-s {
+    display: inline;
+  }
+}
+
+@container (max-width: 365px) {
+  .neon-composer__kbd-hint {
+    visibility: hidden;
+  }
+}
+
+.neon-composer__mic {
+  grid-area: mic;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 26px;
+  padding: 0 calc(7 * var(--hu, 1px)) 0 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #8a97b2;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.neon-composer__mic:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.neon-composer__mic[aria-pressed='true'] {
+  color: #fff;
+}
+
+.neon-composer__mic[aria-pressed='true'] svg {
+  color: #22c086;
+}
+
+.neon-composer__mic-label {
+  font-weight: 400;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .neon-composer__kbd-hint {
+    visibility: hidden;
+  }
+}

@@ -10,6 +10,7 @@ import {
   type RemoteTrack,
   type RemoteTrackPublication,
 } from 'livekit-client';
+import { readAgentListeningMuted } from '@/features/status/agentListeningStore';
 import { getSocket } from '@/shared/realtime/socket';
 import { fetchLiveKitToken, LiveKitUnavailableError } from './livekitToken';
 import { requestMicrophonePermission } from './requestMicrophonePermission';
@@ -66,8 +67,12 @@ export function useVoiceRoom() {
   const [agentMissing, setAgentMissing] = useState(false);
   const [playbackBlocked, setPlaybackBlocked] = useState(false);
   const [voiceUnavailable, setVoiceUnavailable] = useState(false);
+  const [pushToTalkActive, setPushToTalkActive] = useState(false);
+  const pttSnapshotRef = useRef({ micWasEnabled: false, agentWasMuted: false, startedAt: 0 });
+  const micEnabledRef = useRef(micEnabled);
 
   duplicateBlockedRef.current = duplicateBlocked;
+  micEnabledRef.current = micEnabled;
   voiceUnavailableRef.current = voiceUnavailable;
 
   const clearReconnectTimer = useCallback(() => {
@@ -373,6 +378,73 @@ export function useVoiceRoom() {
     setMicEnabled(false);
   }, []);
 
+  const enableMicPublish = useCallback(async (): Promise<boolean> => {
+    const room = roomRef.current;
+    if (!room || room.state !== ConnectionState.Connected) {
+      if (voiceUnavailable) {
+        setError('Voice unavailable');
+        return false;
+      }
+      await connectInternal(true);
+      const connected = roomRef.current;
+      if (!connected || connected.state !== ConnectionState.Connected) return false;
+    }
+    const activeRoom = roomRef.current;
+    if (!activeRoom || micEnabledRef.current) return true;
+    try {
+      const stream = await requestMicrophonePermission();
+      preloadMicRef.current = stream;
+      await activeRoom.localParticipant.setMicrophoneEnabled(true, {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      });
+      stopPreloadMic();
+      setMicEnabled(true);
+      setError(null);
+      await audioEngine.resumeAll();
+      return true;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
+      return false;
+    }
+  }, [connectInternal, stopPreloadMic, voiceUnavailable]);
+
+  const emitUiCommand = useCallback((type: string, payload: Record<string, unknown> = {}) => {
+    getSocket().emit('ui_command', { type, payload });
+  }, []);
+
+  const beginPushToTalk = useCallback(async () => {
+    if (pushToTalkActive) return;
+    pttSnapshotRef.current = {
+      micWasEnabled: micEnabledRef.current,
+      agentWasMuted: readAgentListeningMuted(),
+      startedAt: performance.now(),
+    };
+    setPushToTalkActive(true);
+    if (pttSnapshotRef.current.agentWasMuted) {
+      emitUiCommand('unmute', {});
+    }
+    if (!micEnabledRef.current) {
+      await enableMicPublish();
+    }
+  }, [emitUiCommand, enableMicPublish, pushToTalkActive]);
+
+  const endPushToTalk = useCallback(async (): Promise<number> => {
+    if (!pushToTalkActive) return 0;
+    const held = performance.now() - pttSnapshotRef.current.startedAt;
+    const { micWasEnabled, agentWasMuted } = pttSnapshotRef.current;
+    setPushToTalkActive(false);
+    if (!micWasEnabled) {
+      await setMicOff();
+    }
+    if (agentWasMuted) {
+      emitUiCommand('mute', {});
+    }
+    return held;
+  }, [emitUiCommand, pushToTalkActive, setMicOff]);
+
   const publishCamera = useCallback(
     async (enabled: boolean, videoEl?: HTMLVideoElement | null): Promise<boolean> => {
       const room = roomRef.current;
@@ -402,10 +474,6 @@ export function useVoiceRoom() {
     },
     [],
   );
-
-  const emitUiCommand = useCallback((type: string, payload: Record<string, unknown> = {}) => {
-    getSocket().emit('ui_command', { type, payload });
-  }, []);
 
   const takeOver = useCallback(async () => {
     const targetIdentity = linkedIdentity || identity;
@@ -467,10 +535,13 @@ export function useVoiceRoom() {
       agentMissing,
       playbackBlocked,
       voiceUnavailable,
+      pushToTalkActive,
       connectRoom,
       disconnectRoom,
       toggleMic,
       setMicOff,
+      beginPushToTalk,
+      endPushToTalk,
       publishCamera,
       getRoom,
       takeOver,
@@ -491,10 +562,13 @@ export function useVoiceRoom() {
       agentMissing,
       playbackBlocked,
       voiceUnavailable,
+      pushToTalkActive,
       connectRoom,
       disconnectRoom,
       toggleMic,
       setMicOff,
+      beginPushToTalk,
+      endPushToTalk,
       publishCamera,
       getRoom,
       takeOver,

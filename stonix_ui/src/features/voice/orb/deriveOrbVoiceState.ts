@@ -22,6 +22,7 @@ export function deriveOrbVoiceState(input: {
   isSpeaking: boolean;
   isThinking: boolean;
   isUserSpeaking: boolean;
+  pushToTalkActive?: boolean;
 }): VoiceState {
   const full: VoiceStateInputs = {
     voiceUnavailable: input.voiceUnavailable,
@@ -39,6 +40,7 @@ export function deriveOrbVoiceState(input: {
     agentListeningMuted: input.agentListeningMuted,
     isUserSpeaking: input.isUserSpeaking,
     micEnabled: input.micEnabled,
+    pushToTalkActive: input.pushToTalkActive ?? false,
     voiceError: null,
   };
   return voiceUiToOrbState(deriveVoiceUiState(full));

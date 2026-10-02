@@ -42,7 +42,7 @@ test('Swarm toggle sends swarm command once per send', async ({ page }) => {
   await swarmToggle.click();
   await expect(page.getByTestId('swarm-mode-toggle')).toHaveAttribute('data-active', 'true');
 
-  await page.getByPlaceholder(/Message JARVIS|Message ANNA/i).fill(task);
+  await page.getByTestId('chat-composer-input').fill(task);
   await page.getByTitle('Send command').click();
 
   await expect.poll(async () => countType(page, 'swarm')).toBe(before + 1);

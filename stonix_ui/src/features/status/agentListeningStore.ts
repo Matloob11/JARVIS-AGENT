@@ -63,6 +63,11 @@ function getSnapshot(): boolean {
   return agentMuted;
 }
 
+/** Sync read for voice-room push-to-talk snapshots (not a React hook). */
+export function readAgentListeningMuted(): boolean {
+  return getSnapshot();
+}
+
 export function useAgentListeningMuted(): boolean {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }

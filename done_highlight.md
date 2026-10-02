@@ -969,3 +969,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** memory/tasks/voice-glue/vitals e2e 12/12
 - **Commit:** 7065f83 · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-106 · Neon composer + push-to-talk mic · 2026-10-03 02:40 PKT
+- **Kya kiya:** Chat panel composer (textarea, send square, task-mode chip, paperclip hint, push-to-talk mic); voice room PTT restores mic/listening; chat-composer testids kept.
+- **Files:** `Composer.tsx`, `RightPanel.tsx`, `useVoiceRoom.ts`, `voiceState.ts`, `neon/panel.css`, `composer.spec.ts`, `controls.spec.ts`, `testids.baseline.txt`
+- **Verify:** `npm --prefix stonix_ui run build` pass; composer+chat+controls e2e 13/13; testid inventory 246 pass
+- **Commit:** (pending) · **Deploy:** no
+- **Doosre agent ke liye:** —

@@ -16,10 +16,13 @@ export type LiveKitContextValue = {
   agentMissing: boolean;
   playbackBlocked: boolean;
   voiceUnavailable: boolean;
+  pushToTalkActive: boolean;
   connectRoom: () => Promise<void>;
   disconnectRoom: () => Promise<void>;
   toggleMic: () => Promise<void>;
   setMicOff: () => Promise<void>;
+  beginPushToTalk: () => Promise<void>;
+  endPushToTalk: () => Promise<number>;
   publishCamera: (enabled: boolean, videoEl?: HTMLVideoElement | null) => Promise<boolean>;
   getRoom: () => Room | null;
   takeOver: () => Promise<void>;

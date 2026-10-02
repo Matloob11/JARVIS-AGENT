@@ -33,6 +33,7 @@ export type VoiceStateInputs = {
   agentListeningMuted: boolean;
   isUserSpeaking: boolean;
   micEnabled: boolean;
+  pushToTalkActive: boolean;
   voiceError: string | null;
 };
 
@@ -157,11 +158,11 @@ export function deriveVoiceUiState(raw: VoiceStateInputs): VoiceUiState {
     return 'thinking';
   }
 
-  if (input.agentListeningMuted) {
+  if (input.agentListeningMuted && !input.pushToTalkActive) {
     return 'muted';
   }
 
-  if (input.isUserSpeaking && input.micEnabled) {
+  if ((input.isUserSpeaking || input.pushToTalkActive) && input.micEnabled) {
     return 'listening';
   }
 
@@ -258,8 +259,28 @@ export function buildVoiceStateInputs(
     agentListeningMuted,
     isUserSpeaking: activity.isUserSpeaking,
     micEnabled: liveKit.micEnabled,
+    pushToTalkActive: liveKit.pushToTalkActive,
     voiceError: liveKit.error,
   };
+}
+
+const COMPOSER_PTT_TOAST_STATES: ReadonlySet<VoiceUiState> = new Set([
+  'offline',
+  'offline-other-device',
+  'joining',
+  'agent-absent',
+  'agent-restarting',
+  'audio-blocked',
+]);
+
+/** §9.3 — composer mic disabled only while offline or joining. */
+export function composerMicControlDisabled(state: VoiceUiState): boolean {
+  return state === 'offline' || state === 'offline-other-device' || state === 'joining';
+}
+
+/** §9.4 — press shows a toast with the status line instead of talking. */
+export function composerPushToTalkBlocked(state: VoiceUiState): boolean {
+  return COMPOSER_PTT_TOAST_STATES.has(state);
 }
 
 export type VoiceUiSnapshot = {

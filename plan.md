@@ -1331,7 +1331,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-103 | cursor | P3 | Sidebar: ring logo, wordmark, navigation with the reference active state, silk wave, tagline; tl icon rail; nav marks | X-70, X-80 | DONE (cursor, 02 Oct 23:13 PKT) |
 | X-104 | cursor | P3 | Overview hero card: the reference composition, eyebrow persona switch, name sheen, buttons, quote and helper slot | X-72, X-73, X-80 | DONE (cursor, 03 Oct 00:42 PKT) |
 | X-105 | cursor | P3 | Quick Stats and Recent Activity cards, and the client-side activity feed store | X-73, X-96, X-104 | DONE (cursor, 03 Oct 01:06 PKT) |
-| X-106 | cursor | P3 | Composer: field, send square, task-mode chip, paperclip, hints, push-to-talk mic | X-83, X-97 | DOING (cursor, 03 Oct 02:30 PKT) |
+| X-106 | cursor | P3 | Composer: field, send square, task-mode chip, paperclip, hints, push-to-talk mic | X-83, X-97 | DONE (cursor, 03 Oct 02:40 PKT) |
 | X-107 | cursor | P3 | Agents page: the three groups, Who answers (mini orbs), Voice & wake, Voice-ID | X-73, X-80, X-104 | DONE (cursor, 03 Oct 02:15 PKT) |
 | X-108 | cursor | P3 | Activity page: sub-tabs, Timeline with the Alerts card, Tasks & reminders, Notes | X-73, X-80, X-96, X-105 | DONE (cursor, 03 Oct 02:35 PKT) |
 | X-109 | cursor | P3 | V-1: the visual-diff gate against the owner's reference image | X-75, X-76, X-78, X-83, X-84, X-97, X-103, X-104, X-105, X-106 | TODO |

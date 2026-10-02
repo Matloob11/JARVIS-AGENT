@@ -71,6 +71,10 @@ export function composerPlaceholder(key: PersonaKey): string {
   return `Message ${getPersona(key).name}...`;
 }
 
+export function composerTaskPlaceholder(key: PersonaKey): string {
+  return `Describe a task for ${getPersona(key).name}...`;
+}
+
 export function chatEmptyBody(key: PersonaKey): string {
   return `${getPersona(key).name} se kuch bhi poochein, bol kar ya likh kar.`;
 }
