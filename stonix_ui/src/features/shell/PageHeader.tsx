@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronDown, Volume2, VolumeX } from 'lucide-react';
 import type { TaskNotification } from '@/features/tasks/useTasks';
+import type { CameraState } from '@/features/command-center/components/cameraState';
+import type { VoiceMatchLive } from '@/features/voice/voiceMeter';
 import type { LayoutMode } from './useLayout';
 import { routePageTitle, type AppRoute } from './router';
 import { LogoRing } from '@/shared/ui/LogoRing';
@@ -39,6 +41,10 @@ export type PageHeaderProps = {
   taskUnreadCount: number;
   taskNotifications: TaskNotification[];
   onOpenTaskBell: () => void;
+  onReconnect: () => void | Promise<void>;
+  cameraState: CameraState;
+  voiceMatchLive: VoiceMatchLive;
+  onOpenVoiceEnroll: () => void;
 };
 
 export function PageHeader({
@@ -49,6 +55,10 @@ export function PageHeader({
   taskUnreadCount,
   taskNotifications,
   onOpenTaskBell,
+  onReconnect,
+  cameraState,
+  voiceMatchLive,
+  onOpenVoiceEnroll,
 }: PageHeaderProps) {
   const headerRef = useRef<HTMLElement>(null);
   const bellWrapRef = useRef<HTMLDivElement>(null);
@@ -119,6 +129,11 @@ export function PageHeader({
         compact={compact || layout === 'ph'}
         narrow={narrow}
         isUserSpeaking={isUserSpeaking}
+        layout={layout}
+        onReconnect={onReconnect}
+        cameraState={cameraState}
+        voiceMatchLive={voiceMatchLive}
+        onOpenVoiceEnroll={onOpenVoiceEnroll}
       />
 
       <div className="page-header-div hdr-div" aria-hidden />

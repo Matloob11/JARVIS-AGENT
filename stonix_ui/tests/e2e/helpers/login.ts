@@ -25,9 +25,15 @@ async function isDashboard(page: Page): Promise<boolean> {
 /** Log in through the UI using recovery code (stable for e2e). */
 export async function loginViaRecovery(page: Page): Promise<void> {
   await resetLoginRate(page);
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
-  if (await isDashboard(page)) {
-    return;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    if (await isDashboard(page)) {
+      return;
+    }
+    if (await page.getByTestId('login-password').isVisible().catch(() => false)) {
+      break;
+    }
+    await page.waitForTimeout(800);
   }
   await expect(page.getByTestId('login-password')).toBeVisible({ timeout: 30_000 });
   await page.getByTestId('login-password').fill(TEST_PASSWORD);

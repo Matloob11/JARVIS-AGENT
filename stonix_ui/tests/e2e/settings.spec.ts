@@ -56,6 +56,7 @@ test('voice Puck emits settings_update and shows applied after settings_sync', a
 });
 
 test('wake chip toggles and reflects server state', async ({ page }) => {
+  await page.getByTestId('chip-voice').click();
   await expect(page.getByTestId('chip-wake')).toHaveAttribute('data-active', 'true');
 
   await page.getByTestId('chip-wake').click();

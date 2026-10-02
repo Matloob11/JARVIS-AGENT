@@ -801,3 +801,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `npm --prefix stonix_ui run build` pass · e2e dashboard+controls+settings green (isolated runs) · testid-inventory --check pass (210)
 - **Commit:** (next) · **Deploy:** no
 - **Doosre agent ke liye:** X-105 fills Quick Stats/Activity; X-75/76/97 replace orb/waveform/status placeholders.
+
+### ✅ [cursor] X-99 · Header popovers (Agent/Voice/Devices) · 2026-10-03 00:55 PKT
+- **Kya kiya:** Popover primitive (dialog, Esc/outside close, phone bottom sheet); Agent/Voice/Devices popovers on status pills with health from GET /vortex/status; mic, listening, stop, wake and Reconnect moved out of the legacy TopBar strip; e2e open pill before moved testids.
+- **Files:** stonix_ui/src/features/shell/popovers/*, overlays.css, StatusPills.tsx, PageHeader.tsx, AgentControls.tsx, useVortexStatusPoll.ts, stonix_ui/tests/e2e/* (controls-agent, settings, voiceid, status, reconnect, persona-copy, helpers/login), plan.md
+- **Verify:** `npm --prefix stonix_ui run build` pass · e2e controls+controls-agent+settings+voiceid+status+responsive 27/27 (CI=1) · testid-inventory --check pass (210)
+- **Commit:** (next) · **Deploy:** no
+- **Doosre agent ke liye:** X-100 Electron header reserve; X-79 Laptop row in Devices popover.

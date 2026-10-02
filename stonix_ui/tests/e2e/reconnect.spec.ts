@@ -44,6 +44,7 @@ test('reconnect keeps live subscriptions and request_state once per connect', as
 
   const requestStatesBefore = (await uiCommands(page)).filter(cmd => cmd.type === 'request_state').length;
 
+  await page.getByTestId('chip-bridge').click();
   await page.getByTestId('topbar-reconnect').click();
   await expect(page.getByText('Reconnected', { exact: true })).toBeVisible({ timeout: 20_000 });
 

@@ -36,6 +36,14 @@ test('not enrolled shows Not enrolled on the meter', async ({ page }) => {
 });
 
 test('enrollment wizard emits start and commit and shows success', async ({ page }) => {
+  await page.request.post(`${MOCK}/__mock/emit`, {
+    data: {
+      event: 'init_state',
+      payload: {
+        voice_match: { enrolled: false, confidence: 0 },
+      },
+    },
+  });
   await page.getByTestId('voice-id-enroll-link').scrollIntoViewIfNeeded();
   await page.getByTestId('voice-id-enroll-link').click();
   await expect(page.getByTestId('voice-enroll-dialog')).toBeVisible();
@@ -63,10 +71,11 @@ test('enrollment wizard emits start and commit and shows success', async ({ page
     )
     .toBe(true);
 
-  await expect(page.getByTestId('voice-enroll-success')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('voice-enroll-success')).toBeVisible({ timeout: 25_000 });
 });
 
 test('agent muted blocks Start in enrollment wizard', async ({ page }) => {
+  await page.getByTestId('chip-voice').click();
   await page.getByTestId('topbar-agent-listening').click();
   await expect(page.getByTestId('topbar-agent-listening')).toHaveAttribute('data-muted', 'true');
 

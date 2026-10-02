@@ -26,6 +26,7 @@ test.beforeEach(async ({ page }) => {
 
 test('Stop emits ui_command stop once', async ({ page }) => {
   const before = await countType(page, 'stop');
+  await page.getByTestId('chip-voice').click();
   await page.getByTestId('topbar-stop').click();
   await expect.poll(async () => countType(page, 'stop')).toBe(before + 1);
 });
@@ -38,6 +39,7 @@ test('Pause agent emits pause_agent once', async ({ page }) => {
 });
 
 test('Agent listening toggle emits mute then unmute once each', async ({ page }) => {
+  await page.getByTestId('chip-voice').click();
   await expect(page.getByTestId('topbar-agent-listening')).toHaveAttribute('data-muted', 'false');
 
   const muteBefore = await countType(page, 'mute');

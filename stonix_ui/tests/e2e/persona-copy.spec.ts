@@ -46,6 +46,7 @@ test.describe('persona-aware UI copy', () => {
     expect(stopTitle('anna')).toBe('ANNA ko chup karao');
     expect(listeningMutedTitle('anna')).toContain('sunegi');
 
+    await page.getByTestId('chip-voice').click();
     await expect(page.getByTestId('topbar-stop')).toHaveAttribute('title', stopTitle('anna'));
     await expect(page.getByTestId('topbar-agent-listening')).toHaveAttribute(
       'title',

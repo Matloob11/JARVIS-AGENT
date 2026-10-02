@@ -73,6 +73,7 @@ test('agent_status chips stay visible at 800px width', async ({ page }) => {
 });
 
 test('Reconnect shows success toast', async ({ page }) => {
+  await page.getByTestId('chip-bridge').click();
   await page.getByTestId('topbar-reconnect').click();
   await expect(page.getByText('Reconnected', { exact: true })).toBeVisible({ timeout: 20_000 });
 });

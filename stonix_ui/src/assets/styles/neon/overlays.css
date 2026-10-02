@@ -1,0 +1,164 @@
+/* Header popovers (spec v2 §6.4, z 72 / scrim 80) */
+
+.neon-pop {
+  border-radius: 14px;
+  padding: 16px 18px 18px;
+  color: var(--t2, var(--command-muted));
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 20px;
+  background: var(--card, linear-gradient(180deg, #131c36 0%, #0f172e 40%, #0d1529 100%));
+  --edge: linear-gradient(180deg, #2e3b60, #1d2843 50%, #18223a);
+  box-shadow: var(--shadow-pop, 0 24px 60px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(10, 16, 34, 0.6));
+  outline: 0;
+  max-height: min(82vh, 640px);
+  overflow-y: auto;
+}
+
+.neon-pop--anchored {
+  position: fixed;
+  z-index: 72;
+}
+
+.neon-pop-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: default;
+  background: rgba(2, 5, 14, 0.5);
+}
+
+.neon-pop-sheet-wrap {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 82;
+  max-height: 82vh;
+  pointer-events: none;
+}
+
+.neon-pop-sheet-wrap .neon-pop {
+  pointer-events: auto;
+  width: 100%;
+  max-height: 82vh;
+  border-radius: 20px 20px 0 0;
+  margin: 0;
+}
+
+.neon-pop-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.neon-pop-hd b {
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 22px;
+  color: var(--t1, #fff);
+}
+
+.neon-pop-sec {
+  padding: 12px 0;
+  border-top: 1px solid var(--n-div, rgba(53, 67, 105, 0.45));
+}
+
+.neon-pop-sec:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.neon-pop-sec > b {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 13.5px;
+  line-height: 19px;
+  color: #e6ebf7;
+  margin-bottom: 8px;
+}
+
+.neon-pop-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  align-items: center;
+}
+
+.neon-pop-kv {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 14px;
+  font-size: 13.5px;
+  margin: 0;
+}
+
+.neon-pop-kv dt {
+  margin: 0;
+  color: var(--t4, var(--command-muted));
+}
+
+.neon-pop-kv dd {
+  margin: 0;
+  color: var(--t2, var(--command-text));
+  font-weight: 500;
+}
+
+.neon-pop-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+}
+
+.neon-pop-row .neon-pop-row-label b {
+  display: block;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: #e6ebf7;
+}
+
+.neon-pop-row .neon-pop-row-label small {
+  display: block;
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--t4, var(--command-muted));
+}
+
+.neon-pop-health {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.neon-pop-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--acc-text, var(--command-accent));
+  text-decoration: none;
+}
+
+.neon-pop-link:hover {
+  text-decoration: underline;
+}
+
+.neon-pop-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--t4, var(--command-muted));
+}
