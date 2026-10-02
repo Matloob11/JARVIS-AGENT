@@ -619,6 +619,25 @@ def run_ensure_room(env: dict[str, str]) -> int:
     return result.returncode
 
 
+def _raise_worker_priority(pids: list[int]) -> None:
+    """Windows: lift the worker tree to above normal. The venv python.exe is a launcher that starts the real
+    interpreter as a child, and Windows does not pass ABOVE_NORMAL to children, so the creation flag alone
+    leaves the worker at normal. Only processes running src.core.agent (and their children) are touched."""
+    if sys.platform != "win32":
+        return
+    for pid in pids:
+        try:
+            root = psutil.Process(pid)
+            if not any(marker in " ".join(root.cmdline()) for marker in AGENT_MARKERS):
+                continue
+            for proc in (root, *root.children(recursive=True)):
+                if proc.nice() in (psutil.IDLE_PRIORITY_CLASS, psutil.BELOW_NORMAL_PRIORITY_CLASS,
+                                   psutil.NORMAL_PRIORITY_CLASS):
+                    proc.nice(psutil.ABOVE_NORMAL_PRIORITY_CLASS)
+        except (psutil.Error, OSError):
+            continue
+
+
 def _start_background(cmd: list[str], env: dict[str, str], timeout: float,
                       args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -649,6 +668,7 @@ def _start_background(cmd: list[str], env: dict[str, str], timeout: float,
     linked = " and connected to LiveKit" if link else ""
     print(f"[agent_ctl] Worker pid {details['new_pid']} healthy (200){linked} after {details['start_s']} s.",
           flush=True)
+    _raise_worker_priority([pid for pid in (proc.pid, info.get("pid")) if isinstance(pid, int)])
     room = run_ensure_room(env)
     details["ensure_room"] = room
     if room != 0:

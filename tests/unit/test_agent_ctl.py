@@ -945,3 +945,48 @@ def test_no_launcher_prints_the_dead_5100_url():
         text = _text(path)
         assert "5100" not in text
         assert "https://jarvis.srv1802669.hstgr.cloud" in text
+
+
+def test_worker_priority_is_raised_only_for_the_agent_tree(monkeypatch):
+    """The venv launcher hides the real interpreter behind a child process, so agent_ctl lifts the tree."""
+    normal, below, above = 32, 16384, 32768  # Windows priority class values, as psutil exposes them
+    changed: list[tuple[int, int]] = []
+
+    class Proc:
+        def __init__(self, pid, cmd, nice_value, children=()):
+            self.pid, self._cmd, self._nice, self._children = pid, cmd, nice_value, list(children)
+
+        def cmdline(self):
+            return self._cmd
+
+        def children(self, recursive=False):
+            return self._children
+
+        def nice(self, value=None):
+            if value is None:
+                return self._nice
+            changed.append((self.pid, value))
+            self._nice = value
+            return None
+
+    console = Proc(3, ["conhost.exe"], normal)
+    already = Proc(4, ["python", "child"], above)
+    worker = Proc(1, ["python.exe", "-m", "src.core.agent", "start"], below, children=[console, already])
+    other = Proc(2, ["python.exe", "-m", "pytest"], normal)
+
+    class Fake:
+        class Error(Exception):
+            pass
+
+        IDLE_PRIORITY_CLASS, BELOW_NORMAL_PRIORITY_CLASS, NORMAL_PRIORITY_CLASS = 64, below, normal
+        ABOVE_NORMAL_PRIORITY_CLASS = above
+
+        def Process(self, pid):  # noqa: N802  (psutil's name)
+            if pid not in (1, 2):
+                raise self.Error(pid)
+            return worker if pid == 1 else other
+
+    monkeypatch.setattr(agent_ctl, "psutil", Fake())
+    monkeypatch.setattr(agent_ctl.sys, "platform", "win32")
+    agent_ctl._raise_worker_priority([1, 2, 99])
+    assert changed == [(1, above), (3, above)]  # the agent and its console; never pytest, never a gone pid
