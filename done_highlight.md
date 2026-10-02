@@ -808,3 +808,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `npm --prefix stonix_ui run build` pass · e2e controls+controls-agent+settings+voiceid+status+responsive 27/27 (CI=1) · testid-inventory --check pass (210)
 - **Commit:** (next) · **Deploy:** no
 - **Doosre agent ke liye:** X-100 Electron header reserve; X-79 Laptop row in Devices popover.
+
+### ✅ [cursor] SIM · test_sim_providers K-34 v6 paths · 2026-10-03 00:56 PKT
+- **Kya kiya:** `tests/tools/test_sim_providers.py` ko naye `/api/v1/lookup/phone` + nested `data[].fields` shape se milaya (purana `msisdn` assert hataya).
+- **Files:** tests/tools/test_sim_providers.py
+- **Verify:** `.venv_312\Scripts\python.exe -m pytest tests/tools/test_sim_providers.py -q` → 6 passed
+- **Commit:** (next) · **Deploy:** no
+- **Doosre agent ke liye:** —

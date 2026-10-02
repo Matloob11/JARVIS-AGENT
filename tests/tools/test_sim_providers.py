@@ -70,21 +70,27 @@ async def test_configured_lookup_masks_record(
         headers: dict[str, str],
         timeout: float,
     ) -> httpx.Response:
-        assert url == "https://sim.example/lookup"
+        assert url == "https://sim.example/lookup/api/v1/lookup/phone"
         assert headers["Authorization"] == "Bearer test-secret-key-12345"
-        assert json == {"msisdn": "03336678955"}
-        del timeout
+        assert json == {"phone": "03336678955"}
+        assert timeout == 30.0
         return httpx.Response(
             200,
             json={
-                "records": [
+                "success": True,
+                "query_type": "phone",
+                "hits": 1,
+                "data": [
                     {
-                        "full_name": "Test User",
-                        "cnic": "3310012345678",
-                        "phone": "03336678955",
-                        "address": "Secret Street",
+                        "source": "pak-sim-api",
+                        "fields": {
+                            "full_name": "Test User",
+                            "cnic": "3310012345678",
+                            "phone": "03336678955",
+                            "address": "Secret Street",
+                        },
                     }
-                ]
+                ],
             },
         )
 
