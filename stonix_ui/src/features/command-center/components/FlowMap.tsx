@@ -91,7 +91,7 @@ const FlowMap = ({
                 <div>
                   <p className="text-[11px] font-medium text-command-text">{module.label}</p>
                   <p
-                    className={`text-[10px] ${unknown ? 'text-command-muted/80 italic' : 'text-command-muted'}`}
+                    className={`text-[10px] ${unknown ? 'text-ink-muted-80 italic' : 'text-command-muted'}`}
                     data-testid={module.testId}
                   >
                     {subtitle}
@@ -109,7 +109,7 @@ const FlowMap = ({
               <StatusDot active={coreLinked} tone={coreLinked ? 'accent' : 'danger'} />
               <span
                 data-testid="flow-core-status"
-                className={isFlowStatusUnknown(coreLabel) ? 'italic text-command-muted/80' : undefined}
+                className={isFlowStatusUnknown(coreLabel) ? 'italic text-ink-muted-80' : undefined}
               >
                 {coreLabel}
               </span>

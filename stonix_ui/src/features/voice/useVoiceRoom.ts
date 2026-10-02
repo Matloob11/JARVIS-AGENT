@@ -49,7 +49,7 @@ export function useVoiceRoom() {
   const reconnectTimerRef = useRef<number | null>(null);
   const agentTimerRef = useRef<number | null>(null);
   const connectGenRef = useRef(0);
-  const connectInternalRef = useRef<(userInitiated: boolean) => Promise<void>>(async () => {});
+  const connectInternalRef = useRef<(userInitiated: boolean) => Promise<void>>(() => Promise.resolve());
   const duplicateBlockedRef = useRef(false);
   const voiceUnavailableRef = useRef(false);
 
@@ -337,7 +337,8 @@ export function useVoiceRoom() {
       if (!connected || connected.state !== ConnectionState.Connected) return;
     }
 
-    const activeRoom = roomRef.current!;
+    const activeRoom = roomRef.current;
+    if (!activeRoom) return;
     const next = !micEnabled;
     if (next) {
       try {

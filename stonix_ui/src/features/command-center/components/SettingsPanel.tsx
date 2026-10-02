@@ -243,7 +243,7 @@ const SettingsPanel = ({
             <span className="text-[11px] text-command-muted">Turn mode</span>
             {settings.restartRequired.includes('turn_mode') ? (
               <span
-                className="rounded bg-command-muted/20 px-1.5 py-0.5 text-[10px] text-command-muted"
+                className="rounded bg-ink-muted-20 px-1.5 py-0.5 text-[10px] text-command-muted"
                 data-testid="settings-turn-mode-restart-badge"
               >
                 restart required
@@ -448,7 +448,7 @@ const SettingsPanel = ({
           >
             {settings.guardedTools.length ? (
               settings.guardedTools.map(tool => (
-                <li key={tool} className="rounded bg-command-muted/10 px-2 py-1 font-mono text-[11px]">
+                <li key={tool} className="rounded bg-ink-muted-10 px-2 py-1 font-mono text-[11px]">
                   {tool}
                 </li>
               ))

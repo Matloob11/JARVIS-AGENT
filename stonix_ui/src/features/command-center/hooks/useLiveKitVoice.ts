@@ -21,10 +21,12 @@ export function useLiveKitVoice() {
     if (!lk.micEnabled) {
       await lk.toggleMic();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- LiveKit hook slices; `lk` identity is stable enough
   }, [lk.connectRoom, lk.micEnabled, lk.roomState, lk.toggleMic]);
 
   const disconnect = useCallback(async () => {
     await lk.setMicOff();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see connect()
   }, [lk.setMicOff]);
 
   return {

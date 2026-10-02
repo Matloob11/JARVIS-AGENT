@@ -168,8 +168,9 @@ const CameraPanel = ({ onCameraStateChange }: CameraPanelProps) => {
   }, [cameraState, onCameraStateChange]);
 
   useEffect(() => {
+    const videoEl = videoRef.current;
     return () => {
-      void voice.publishCamera(false, videoRef.current);
+      void voice.publishCamera(false, videoEl);
       stopFallbackStream();
       onCameraStateChange?.(defaultCameraState);
     };

@@ -1,3 +1,7 @@
+import '@fontsource-variable/noto-sans';
+import '@fontsource-variable/montserrat';
+import '@fontsource-variable/jetbrains-mono';
+import './assets/styles/index.css';
 import { createRoot } from 'react-dom/client';
 import { App } from './app/App';
 

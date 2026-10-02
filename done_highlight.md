@@ -703,3 +703,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** Overview diff vs reference MAE 4.83, SSIM 0.926; 42 desktop/tablet + 6 phone viewport gates pass; perf 60 fps (phone DPR 3, 4x CPU bhi); bundle sha256 check
 - **Commit:** isi entry wala commit · **Deploy:** no (frontend deploy C-21 ke baad)
 - **Doosre agent ke liye:** Cursor: X-69 se shuru, spec section 23 ki tarteeb (section 11).
+
+### ✅ [cursor] X-69 · Neon tokens, Fontsource fonts, icon sprite, testid baseline · 2026-10-02 21:50 PKT
+- **Kya kiya:** `tokens.css` + Tailwind §2.4 mapping; Google Fonts hata kar `@fontsource-variable/noto-sans`, `@fontsource-variable/montserrat`, `@fontsource-variable/jetbrains-mono` main.tsx me; 75-symbol `Sprite`/`Icon`; `data-persona` on `<html>`; poora `testid-inventory.mjs` + `tests/testids.baseline.txt` (180 static, 16 families); command opacity classes → named tokens.
+- **Files:** stonix_ui/src/assets/styles/tokens.css, index.css, tailwind.config.js, main.tsx, App.tsx, commandTheme.ts, shared/ui/icons/*, scripts/testid-inventory.mjs, tests/testids.baseline.txt, package.json, package-lock.json (+ chhote lint fixes IntelligencePanel/useVoiceRoom)
+- **Verify:** `npm --prefix stonix_ui run build` pass · `npm run lint` pass · `npm run test:e2e` 96/96 · `node stonix_ui/scripts/testid-inventory.mjs --check` pass · no fonts.googleapis · no `command-*/NN` in src
+- **Commit:** abhi nahi · **Deploy:** no
+- **Doosre agent ke liye:** X-70 brand/wordmark; `retired: ops-drawer-backdrop` baseline me (X-86 toggle alias).

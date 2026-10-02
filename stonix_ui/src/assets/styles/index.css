@@ -1,21 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import './tokens.css';
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-:root {
-  --command-bg: #05070a;
-  --command-panel: #0b1116;
-  --command-panel-soft: #101820;
-  --command-border: rgba(255, 255, 255, 0.07);
-  --command-text: #e6edf3;
-  --command-muted: #7d8896;
-  --command-accent: #24e0a4;
-  --command-blue: #38bdf8;
-  --command-danger: #ef4444;
-  --command-warning: #f59e0b;
-}
 
 * {
   box-sizing: border-box;
@@ -30,16 +17,29 @@ body,
 body {
   margin: 0;
   overflow: hidden;
-  background: var(--command-bg);
-  color: var(--command-text);
-  font-family: Inter, system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--t1);
+  font-family: var(--font-ui);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 code,
 .font-mono {
-  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
+}
+
+.n-ic {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.n-ic.fill {
+  fill: currentColor;
+  stroke: none;
 }
 
 button,
@@ -81,7 +81,7 @@ button {
   }
 
   .login-card {
-    @apply w-full max-w-md rounded-xl border border-command-border bg-command-panel/[0.92] p-8 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl;
+    @apply w-full max-w-md rounded-xl border border-command-border bg-panel-scrim-login p-8 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl;
   }
 
   .login-brand {
@@ -97,7 +97,7 @@ button {
   }
 
   .login-input {
-    @apply w-full rounded-md border border-command-border bg-white/[0.03] px-3 py-2.5 text-sm text-command-text outline-none transition placeholder:text-command-muted/60 focus:border-command-accent/50 focus:ring-1 focus:ring-command-accent/30;
+    @apply w-full rounded-md border border-command-border bg-white/[0.03] px-3 py-2.5 text-sm text-command-text outline-none transition placeholder:text-ink-muted-60 focus:border-acc-edge-focus focus:ring-1 focus:ring-acc-ring-soft;
   }
 
   .login-password-row {
@@ -121,11 +121,11 @@ button {
   }
 
   .login-error {
-    @apply rounded-md border border-command-danger/30 bg-command-danger/10 px-3 py-2 text-xs text-command-danger;
+    @apply rounded-md border border-err-border bg-err-surface px-3 py-2 text-xs text-command-danger;
   }
 
   .login-hint {
-    @apply mb-4 rounded-md border border-command-warning/25 bg-command-warning/10 px-3 py-2 text-xs text-command-text/80;
+    @apply mb-4 rounded-md border border-warn-border-soft bg-warn-surface px-3 py-2 text-xs text-ink-body-80;
   }
 
   .login-submit {
@@ -154,11 +154,11 @@ button {
   }
 
   .command-topbar {
-    @apply relative z-40 flex h-14 shrink-0 items-center justify-between border-b border-command-border bg-command-bg/90 px-5 backdrop-blur-xl;
+    @apply relative z-40 flex h-14 shrink-0 items-center justify-between border-b border-command-border bg-canvas-scrim px-5 backdrop-blur-xl;
   }
 
   .voice-banner {
-    @apply relative z-50 flex flex-wrap items-center justify-center gap-3 border-b border-command-border bg-command-panel/95 px-4 py-2 text-[11px] text-command-text;
+    @apply relative z-50 flex flex-wrap items-center justify-center gap-3 border-b border-command-border bg-panel-scrim px-4 py-2 text-[11px] text-command-text;
   }
 
   .voice-banner--warn {
@@ -235,7 +235,7 @@ button {
   }
 
   .command-panel {
-    @apply min-h-0 rounded-lg border border-command-border bg-command-panel/[0.86] shadow-[0_18px_60px_rgba(0,0,0,0.26)] backdrop-blur-xl;
+    @apply min-h-0 rounded-lg border border-command-border bg-panel-scrim-card shadow-[0_18px_60px_rgba(0,0,0,0.26)] backdrop-blur-xl;
   }
 
   .panel-header {
@@ -279,7 +279,7 @@ button {
   }
 
   .alert-row {
-    @apply flex gap-2 rounded-md border border-command-warning/20 bg-command-warning/5 p-2 text-xs leading-5 text-command-text/75;
+    @apply flex gap-2 rounded-md border border-warn-border-medium bg-warn-surface-soft p-2 text-xs leading-5 text-ink-body-75;
   }
 
   .flow-map {
@@ -307,11 +307,11 @@ button {
   }
 
   .flow-core {
-    @apply absolute right-5 top-1/2 flex -translate-y-1/2 items-center gap-3 rounded-lg border border-command-accent/25 bg-command-accent/[0.08] px-4 py-3;
+    @apply absolute right-5 top-1/2 flex -translate-y-1/2 items-center gap-3 rounded-lg border border-acc-banner bg-acc-banner-bg px-4 py-3;
   }
 
   .assistant-core {
-    @apply relative flex min-h-[320px] flex-1 flex-col items-center justify-center overflow-hidden rounded-lg border border-command-border bg-command-panel/[0.88];
+    @apply relative flex min-h-[320px] flex-1 flex-col items-center justify-center overflow-hidden rounded-lg border border-command-border bg-panel-scrim-hero;
   }
 
   .assistant-core__grid {
@@ -334,7 +334,7 @@ button {
   }
 
   .assistant-core__spectral-bar {
-    @apply w-[5px] min-h-[2px] rounded-sm bg-command-accent/70 transition-[height] duration-75 ease-out;
+    @apply w-[5px] min-h-[2px] rounded-sm bg-acc-bar transition-[height] duration-75 ease-out;
   }
 
   .assistant-core__orb-wrap {
@@ -382,11 +382,11 @@ button {
   }
 
   .assistant-core__terminate {
-    @apply absolute right-5 top-5 flex items-center gap-2 rounded-md border border-command-danger/30 bg-command-danger/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-command-danger transition hover:bg-command-danger/15 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-command-danger/10;
+    @apply absolute right-5 top-5 flex items-center gap-2 rounded-md border border-err-border bg-err-surface px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-command-danger transition hover:bg-err-surface-strong disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-err-surface;
   }
 
   .assistant-core__restart-banner {
-    @apply absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-md border border-command-accent/40 bg-command-accent/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-command-accent;
+    @apply absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-md border border-acc-edge-medium bg-acc-tint px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-command-accent;
   }
 
   .command-input__swarm {
@@ -394,7 +394,7 @@ button {
   }
 
   .command-input__swarm--on {
-    @apply border-command-accent/40 bg-command-accent/10 text-command-accent;
+    @apply border-acc-edge-medium bg-acc-tint text-command-accent;
   }
 
   .chat-feedback {
@@ -402,11 +402,11 @@ button {
   }
 
   .chat-feedback__btn {
-    @apply rounded-md border border-white/10 p-1.5 text-command-muted transition hover:border-command-accent/40 hover:text-command-accent disabled:cursor-default disabled:opacity-80;
+    @apply rounded-md border border-white/10 p-1.5 text-command-muted transition hover:border-acc-edge-medium hover:text-command-accent disabled:cursor-default disabled:opacity-80;
   }
 
   .chat-feedback__btn[data-selected='true'] {
-    @apply border-command-accent/50 bg-command-accent/15 text-command-accent;
+    @apply border-acc-edge-focus bg-acc-tint-strong text-command-accent;
   }
 
   .task-bell-row__spoken {
@@ -434,11 +434,11 @@ button {
   }
 
   .intelligence-kv__row dd {
-    @apply break-all font-mono text-command-text/85;
+    @apply break-all font-mono text-ink-body-85;
   }
 
   .intelligence-link {
-    @apply break-all text-sm text-command-accent underline decoration-command-accent/40 underline-offset-2;
+    @apply break-all text-sm text-command-accent underline decoration-acc-edge-medium underline-offset-2;
   }
 
   .intelligence-image-btn {
@@ -450,7 +450,7 @@ button {
   }
 
   .intelligence-lan-url {
-    @apply block break-all rounded-md border border-command-border bg-black/30 px-2 py-1 font-mono text-[11px] text-command-text/80;
+    @apply block break-all rounded-md border border-command-border bg-black/30 px-2 py-1 font-mono text-[11px] text-ink-body-80;
   }
 
   .intelligence-copy {
@@ -466,7 +466,7 @@ button {
   }
 
   .intelligence-history__chip--active {
-    @apply border-command-accent/40 bg-command-accent/10 text-command-text;
+    @apply border-acc-edge-medium bg-acc-tint text-command-text;
   }
 
   .intelligence-lightbox {
@@ -514,7 +514,7 @@ button {
   }
 
   .trace-chip--active {
-    @apply border-command-accent/40 bg-command-accent/10 text-command-accent;
+    @apply border-acc-edge-medium bg-acc-tint text-command-accent;
   }
 
   .trace-chip--toggle {
@@ -522,11 +522,11 @@ button {
   }
 
   .trace-chip--toggle.is-active {
-    @apply border-command-blue/40 bg-command-blue/10 text-command-blue;
+    @apply border-acc-edge-medium bg-acc-tint text-command-blue;
   }
 
   .trace-filter {
-    @apply min-w-[120px] flex-1 rounded-md border border-command-border bg-black/20 px-2 py-1 text-[11px] text-command-text outline-none focus:border-command-accent/50;
+    @apply min-w-[120px] flex-1 rounded-md border border-command-border bg-black/20 px-2 py-1 text-[11px] text-command-text outline-none focus:border-acc-edge-focus;
   }
 
   .trace-toolbar__btn {
@@ -534,7 +534,7 @@ button {
   }
 
   .trace-dropped {
-    @apply px-1 text-[10px] text-command-danger/90;
+    @apply px-1 text-[10px] text-err-soft;
   }
 
   .trace-terminal {
@@ -542,7 +542,7 @@ button {
   }
 
   .trace-system-feed {
-    @apply shrink-0 rounded-md border border-command-border/70 bg-white/[0.02] p-2;
+    @apply shrink-0 rounded-md border border-divider-strong bg-white/[0.02] p-2;
   }
 
   .trace-system-feed ul {
@@ -554,11 +554,11 @@ button {
   }
 
   .trace-system-feed__kind {
-    @apply shrink-0 uppercase text-command-accent/80;
+    @apply shrink-0 uppercase text-acc-soft;
   }
 
   .trace-system-feed__text {
-    @apply truncate text-command-text/70;
+    @apply truncate text-ink-body-70;
   }
 
   .trace-empty {
@@ -570,19 +570,19 @@ button {
   }
 
   .trace-line__level {
-    @apply truncate text-[10px] uppercase text-command-blue/80;
+    @apply truncate text-[10px] uppercase text-acc-line-soft;
   }
 
   .trace-line__time {
-    @apply text-command-muted/60;
+    @apply text-ink-muted-60;
   }
 
   .trace-line__category {
-    @apply truncate uppercase text-command-accent/80;
+    @apply truncate uppercase text-acc-soft;
   }
 
   .trace-line__text {
-    @apply truncate text-command-text/70;
+    @apply truncate text-ink-body-70;
   }
 
   .reasoning-card {
@@ -610,7 +610,7 @@ button {
   }
 
   .reasoning-badge--warn {
-    @apply bg-command-danger/15 text-command-danger;
+    @apply bg-err-surface-strong text-command-danger;
   }
 
   .reasoning-badge--source {
@@ -630,15 +630,15 @@ button {
   }
 
   .reasoning-confidence__fill {
-    @apply h-full rounded-full bg-command-accent/80;
+    @apply h-full rounded-full bg-acc-bar-strong;
   }
 
   .reasoning-plan-progress {
-    @apply mt-3 rounded-md border border-command-accent/25 bg-command-accent/5 px-2 py-1 text-[11px] text-command-accent;
+    @apply mt-3 rounded-md border border-acc-banner bg-acc-tint-soft px-2 py-1 text-[11px] text-command-accent;
   }
 
   .reasoning-step {
-    @apply flex gap-3 text-xs leading-5 text-command-text/[0.78];
+    @apply flex gap-3 text-xs leading-5 text-ink-body-78;
   }
 
   .reasoning-step span {
@@ -658,7 +658,7 @@ button {
   }
 
   .chat-tab--active {
-    @apply bg-command-accent/10 text-command-accent;
+    @apply bg-acc-tint text-command-accent;
   }
 
   .chat-panel__content {
@@ -678,7 +678,7 @@ button {
   }
 
   .message-bubble--user {
-    @apply rounded-tl-lg rounded-tr-sm bg-command-blue/[0.08];
+    @apply rounded-tl-lg rounded-tr-sm bg-acc-banner-bg;
   }
 
   .message-row--system {
@@ -694,7 +694,7 @@ button {
   }
 
   .chat-live-strip {
-    @apply sticky bottom-0 rounded-md border border-command-border/60 bg-black/40 px-3 py-2 italic text-command-text/80;
+    @apply sticky bottom-0 rounded-md border border-divider-soft bg-black/40 px-3 py-2 italic text-ink-body-80;
   }
 
   .chat-live-line {
@@ -714,7 +714,7 @@ button {
   }
 
   .tool-panel-empty {
-    @apply flex min-h-[120px] flex-col items-center justify-center rounded-md border border-dashed border-command-border/70 px-4 py-6 text-center;
+    @apply flex min-h-[120px] flex-col items-center justify-center rounded-md border border-dashed border-divider-strong px-4 py-6 text-center;
   }
 
   .tool-panel-empty--compact {
@@ -746,7 +746,7 @@ button {
   }
 
   .tool-row__meta {
-    @apply font-mono text-[10px] text-command-muted/70;
+    @apply font-mono text-[10px] text-ink-muted-70;
   }
 
   .tool-row__summary {
@@ -762,11 +762,11 @@ button {
   }
 
   .tool-row__preview {
-    @apply mt-2 truncate text-xs text-command-text/75;
+    @apply mt-2 truncate text-xs text-ink-body-75;
   }
 
   .tool-row__body {
-    @apply mt-3 space-y-2 border-t border-command-border/60 pt-3;
+    @apply mt-3 space-y-2 border-t border-divider-soft pt-3;
   }
 
   .tool-row__label {
@@ -774,7 +774,7 @@ button {
   }
 
   .tool-row__text {
-    @apply text-xs leading-5 text-command-text/85;
+    @apply text-xs leading-5 text-ink-body-85;
   }
 
   .tool-pill {
@@ -782,7 +782,7 @@ button {
   }
 
   .tool-pill--running {
-    @apply bg-command-accent/15 text-command-accent;
+    @apply bg-acc-tint-strong text-command-accent;
   }
 
   .tool-pill--success {
@@ -806,7 +806,7 @@ button {
   }
 
   .memory-search {
-    @apply w-full rounded-md border border-command-border bg-black/20 px-3 py-2 text-xs text-command-text outline-none placeholder:text-command-muted/70;
+    @apply w-full rounded-md border border-command-border bg-black/20 px-3 py-2 text-xs text-command-text outline-none placeholder:text-ink-muted-70;
   }
 
   .memory-row {
@@ -818,11 +818,11 @@ button {
   }
 
   .memory-row__meta {
-    @apply ml-auto font-mono text-[10px] text-command-muted/70;
+    @apply ml-auto font-mono text-[10px] text-ink-muted-70;
   }
 
   .memory-row__content {
-    @apply whitespace-pre-wrap text-xs leading-5 text-command-text/85;
+    @apply whitespace-pre-wrap text-xs leading-5 text-ink-body-85;
   }
 
   .memory-pill {
@@ -838,7 +838,7 @@ button {
   }
 
   .memory-pill--extractor {
-    @apply bg-command-accent/15 text-command-accent;
+    @apply bg-acc-tint-strong text-command-accent;
   }
 
   .memory-pill--fact {
@@ -854,7 +854,7 @@ button {
   }
 
   .memory-panel__footer {
-    @apply mt-auto space-y-2 border-t border-command-border/60 pt-3;
+    @apply mt-auto space-y-2 border-t border-divider-soft pt-3;
   }
 
   .memory-panel__note {
@@ -910,11 +910,11 @@ button {
   }
 
   .task-row__due {
-    @apply ml-auto font-mono text-[10px] text-command-muted/70;
+    @apply ml-auto font-mono text-[10px] text-ink-muted-70;
   }
 
   .task-row__description {
-    @apply text-xs leading-5 text-command-text/85;
+    @apply text-xs leading-5 text-ink-body-85;
   }
 
   .task-row__cancel {
@@ -934,7 +934,7 @@ button {
   }
 
   .task-pill--pending {
-    @apply bg-command-accent/15 text-command-accent;
+    @apply bg-acc-tint-strong text-command-accent;
   }
 
   .task-pill--running {
@@ -975,7 +975,7 @@ button {
   }
 
   .task-bell-row {
-    @apply rounded-md border border-command-border/60 bg-white/[0.03] p-2;
+    @apply rounded-md border border-divider-soft bg-white/[0.03] p-2;
   }
 
   .task-bell-row__text {
@@ -987,15 +987,15 @@ button {
   }
 
   .memory-clear-btn--danger {
-    @apply border-command-danger/40 bg-command-danger/15 text-command-danger hover:bg-command-danger/25;
+    @apply border-err-border-strong bg-err-surface-strong text-command-danger hover:bg-err-surface-hover;
   }
 
   .memory-clear-confirm {
-    @apply rounded-md border border-command-danger/30 bg-command-danger/10 p-3;
+    @apply rounded-md border border-err-border bg-err-surface p-3;
   }
 
   .memory-clear-confirm__text {
-    @apply text-xs leading-5 text-command-text/90;
+    @apply text-xs leading-5 text-ink-body-90;
   }
 
   .memory-clear-confirm__actions {
@@ -1039,7 +1039,7 @@ button {
   }
 
   .job-row__message {
-    @apply mt-2 text-xs text-command-text/80;
+    @apply mt-2 text-xs text-ink-body-80;
   }
 
   .job-row__actions {
@@ -1059,7 +1059,7 @@ button {
   }
 
   .command-input__field {
-    @apply h-10 min-w-0 flex-1 bg-transparent px-3 text-sm text-command-text outline-none placeholder:text-command-muted/50;
+    @apply h-10 min-w-0 flex-1 bg-transparent px-3 text-sm text-command-text outline-none placeholder:text-ink-muted-50;
   }
 
   .command-input__button {
@@ -1067,7 +1067,7 @@ button {
   }
 
   .settings-drawer {
-    @apply no-drag absolute bottom-3 right-3 top-[4.25rem] z-50 flex w-[360px] flex-col rounded-lg border border-command-border bg-command-panel/95 shadow-[0_24px_90px_rgba(0,0,0,0.45)] backdrop-blur-xl;
+    @apply no-drag absolute bottom-3 right-3 top-[4.25rem] z-50 flex w-[360px] flex-col rounded-lg border border-command-border bg-panel-scrim shadow-[0_24px_90px_rgba(0,0,0,0.45)] backdrop-blur-xl;
   }
 
   .settings-drawer__header,
@@ -1092,7 +1092,7 @@ button {
   }
 
   .setting-value {
-    @apply truncate rounded-md border border-command-border bg-black/20 px-3 py-2 font-mono text-xs text-command-text/80;
+    @apply truncate rounded-md border border-command-border bg-black/20 px-3 py-2 font-mono text-xs text-ink-body-80;
   }
 
   .setting-select {
@@ -1100,7 +1100,7 @@ button {
   }
 
   .setting-row {
-    @apply flex items-start justify-between gap-3 border-t border-command-border/60 pt-3 first:border-t-0 first:pt-0;
+    @apply flex items-start justify-between gap-3 border-t border-divider-soft pt-3 first:border-t-0 first:pt-0;
   }
 
   .settings-segmented {
@@ -1112,7 +1112,7 @@ button {
   }
 
   .settings-segmented__btn--active {
-    @apply bg-command-accent/15 text-command-accent;
+    @apply bg-acc-tint-strong text-command-accent;
   }
 
   .settings-field-status {
@@ -1148,11 +1148,11 @@ button {
   }
 
   .connection-card--ok {
-    @apply border-command-accent/25 bg-command-accent/[0.06] text-command-accent;
+    @apply border-acc-banner bg-acc-banner-bg-soft text-command-accent;
   }
 
   .connection-card--down {
-    @apply border-command-danger/25 bg-command-danger/[0.08] text-command-danger;
+    @apply border-err-border-soft bg-err-surface-alt text-command-danger;
   }
 
   .modal-backdrop {
@@ -1160,7 +1160,7 @@ button {
   }
 
   .sim-dialog {
-    @apply w-full max-w-[560px] rounded-lg border border-command-border bg-command-panel/95 p-5 shadow-[0_24px_90px_rgba(0,0,0,0.50)];
+    @apply w-full max-w-[560px] rounded-lg border border-command-border bg-panel-scrim p-5 shadow-[0_24px_90px_rgba(0,0,0,0.50)];
   }
 
   .sim-dialog__header {
@@ -1176,7 +1176,7 @@ button {
   }
 
   .sim-dialog__icon {
-    @apply flex h-9 w-9 items-center justify-center rounded-md border border-command-accent/25 bg-command-accent/10 text-command-accent;
+    @apply flex h-9 w-9 items-center justify-center rounded-md border border-acc-banner bg-acc-tint text-command-accent;
   }
 
   .sim-provider-banner {
@@ -1192,7 +1192,7 @@ button {
   }
 
   .sim-status-chip[data-status='loading'] {
-    @apply border-command-accent/35 text-command-accent;
+    @apply border-acc-edge-soft text-command-accent;
   }
 
   .sim-status-chip[data-status='success'] {
@@ -1211,7 +1211,7 @@ button {
   }
 
   .sim-purpose input {
-    @apply h-10 rounded-md border border-command-border bg-black/25 px-3 text-sm text-command-text outline-none placeholder:text-command-muted/50;
+    @apply h-10 rounded-md border border-command-border bg-black/25 px-3 text-sm text-command-text outline-none placeholder:text-ink-muted-50;
   }
 
   .sim-offline-hint {
@@ -1223,11 +1223,11 @@ button {
   }
 
   .sim-search input {
-    @apply h-10 min-w-0 flex-1 bg-transparent px-3 text-sm text-command-text outline-none placeholder:text-command-muted/50;
+    @apply h-10 min-w-0 flex-1 bg-transparent px-3 text-sm text-command-text outline-none placeholder:text-ink-muted-50;
   }
 
   .sim-search button {
-    @apply flex h-10 w-10 items-center justify-center rounded-md text-command-accent transition hover:bg-white/[0.05] disabled:text-command-muted/35;
+    @apply flex h-10 w-10 items-center justify-center rounded-md text-command-accent transition hover:bg-white/[0.05] disabled:text-ink-muted-35;
   }
 
   .sim-result {
@@ -1247,7 +1247,7 @@ button {
   }
 
   .sim-meta {
-    @apply mt-3 grid grid-cols-2 gap-2 font-mono text-xs text-command-text/70;
+    @apply mt-3 grid grid-cols-2 gap-2 font-mono text-xs text-ink-body-70;
   }
 
   .sim-meta span {
@@ -1259,7 +1259,7 @@ button {
   }
 
   .confirm-dialog {
-    @apply w-full max-w-[560px] rounded-lg border border-command-border bg-command-panel/95 p-5 shadow-[0_24px_90px_rgba(0,0,0,0.50)];
+    @apply w-full max-w-[560px] rounded-lg border border-command-border bg-panel-scrim p-5 shadow-[0_24px_90px_rgba(0,0,0,0.50)];
   }
 
   .confirm-dialog__header {
@@ -1283,19 +1283,19 @@ button {
   }
 
   .confirm-dialog__risk--high {
-    @apply border-command-danger/40 bg-command-danger/10 text-command-danger;
+    @apply border-err-border-strong bg-err-surface text-command-danger;
   }
 
   .confirm-dialog__risk--medium {
-    @apply border-command-warning/35 bg-command-warning/10 text-command-warning;
+    @apply border-warn-border-strong bg-warn-surface text-command-warning;
   }
 
   .confirm-dialog__notice {
-    @apply mb-3 rounded-md border border-command-warning/30 bg-command-warning/10 px-3 py-2 text-xs text-command-text/90;
+    @apply mb-3 rounded-md border border-warn-border bg-warn-surface px-3 py-2 text-xs text-ink-body-90;
   }
 
   .confirm-dialog__body {
-    @apply space-y-3 text-sm text-command-text/90;
+    @apply space-y-3 text-sm text-ink-body-90;
   }
 
   .confirm-dialog__row strong {
@@ -1311,7 +1311,7 @@ button {
   }
 
   .confirm-dialog__voice {
-    @apply flex items-center gap-2 rounded-md border border-command-accent/25 bg-command-accent/5 px-3 py-2 text-xs text-command-accent;
+    @apply flex items-center gap-2 rounded-md border border-acc-banner bg-acc-tint-soft px-3 py-2 text-xs text-command-accent;
   }
 
   .confirm-dialog__actions {
@@ -1323,7 +1323,7 @@ button {
   }
 
   .confirm-dialog__allow {
-    @apply relative min-w-[140px] overflow-hidden rounded-md border border-command-danger/35 bg-command-danger/15 px-4 py-2 text-sm font-semibold text-command-danger transition hover:bg-command-danger/20;
+    @apply relative min-w-[140px] overflow-hidden rounded-md border border-err-border-strong bg-err-surface-strong px-4 py-2 text-sm font-semibold text-command-danger transition hover:bg-err-surface-hover;
   }
 
   .confirm-dialog__hold {
@@ -1459,7 +1459,7 @@ button {
   }
 
   .mobile-tab-bar {
-    @apply fixed bottom-0 left-0 right-0 z-50 flex items-stretch justify-around border-t border-command-border bg-command-bg/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl;
+    @apply fixed bottom-0 left-0 right-0 z-50 flex items-stretch justify-around border-t border-command-border bg-canvas-scrim-bar px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl;
     display: flex;
   }
 

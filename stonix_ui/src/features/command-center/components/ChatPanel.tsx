@@ -286,7 +286,7 @@ const ChatPanel = ({
         <button
           type="submit"
           disabled={!text.trim()}
-          className={`command-input__button ${text.trim() ? accent.text : 'text-command-muted/40'}`}
+          className={`command-input__button ${text.trim() ? accent.text : 'text-ink-muted-40'}`}
           title="Send command"
         >
           <Send size={16} />
@@ -360,13 +360,13 @@ const MessageGroup = ({
         <div className="mb-2 flex items-center justify-between gap-3">
           <span className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-command-muted">
             {persona}
-            <BadgeIcon size={12} aria-label={badge.label} className="text-command-accent/80" />
+            <BadgeIcon size={12} aria-label={badge.label} className="text-acc-soft" />
           </span>
-          <span className="font-mono text-[10px] text-command-muted/70">{formatMessageTime(head.ts)}</span>
+          <span className="font-mono text-[10px] text-ink-muted-70">{formatMessageTime(head.ts)}</span>
         </div>
         <div className="space-y-3">
           {messages.map(msg => (
-            <p key={msg.id} className="whitespace-pre-wrap text-[13px] leading-6 text-command-text/90">
+            <p key={msg.id} className="whitespace-pre-wrap text-[13px] leading-6 text-ink-body-90">
               {msg.text}
             </p>
           ))}
@@ -423,11 +423,11 @@ const MessageBubble = ({
         <div className="mb-2 flex items-center justify-between gap-3">
           <span className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-command-muted">
             {isUser ? 'You' : isSystem ? 'System' : persona}
-            {!isSystem && <BadgeIcon size={12} aria-label={badge.label} className="text-command-accent/80" />}
+            {!isSystem && <BadgeIcon size={12} aria-label={badge.label} className="text-acc-soft" />}
           </span>
-          <span className="font-mono text-[10px] text-command-muted/70">{formatMessageTime(message.ts)}</span>
+          <span className="font-mono text-[10px] text-ink-muted-70">{formatMessageTime(message.ts)}</span>
         </div>
-        <p className="whitespace-pre-wrap text-[13px] leading-6 text-command-text/90">{message.text}</p>
+        <p className="whitespace-pre-wrap text-[13px] leading-6 text-ink-body-90">{message.text}</p>
         {message.statusHint && (
           <p className="mt-2 text-[11px] text-command-muted" data-testid="chat-status-hint">
             {message.statusHint}
@@ -482,9 +482,9 @@ const DataList = ({
             <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-command-accent">
               {row.title}
             </span>
-            <span className="font-mono text-[10px] text-command-muted/70">{row.meta}</span>
+            <span className="font-mono text-[10px] text-ink-muted-70">{row.meta}</span>
           </div>
-          <p className="mt-2 text-xs leading-5 text-command-text/80">{row.detail}</p>
+          <p className="mt-2 text-xs leading-5 text-ink-body-80">{row.detail}</p>
         </div>
       ))}
     </div>

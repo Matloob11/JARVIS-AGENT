@@ -18,7 +18,6 @@ import { useAuth } from '@/features/auth/AuthProvider';
 import { useLiveKit } from '@/features/voice/LiveKitProvider';
 import { useAgentStatus } from '@/features/status/useAgentStatus';
 import IntelligencePanel from '@/features/intelligence/IntelligencePanel';
-import { SettingsProvider } from '@/features/settings/useSettings';
 
 const DashboardInner = () => {
   useEffect(() => {
@@ -237,10 +236,6 @@ const DashboardInner = () => {
   );
 };
 
-const Dashboard = () => (
-  <SettingsProvider>
-    <DashboardInner />
-  </SettingsProvider>
-);
+const Dashboard = () => <DashboardInner />;
 
 export default Dashboard;

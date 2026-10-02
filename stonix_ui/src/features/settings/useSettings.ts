@@ -564,6 +564,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       socket.off('persona_update', onPersonaUpdate);
       socket.off('wake_word_update', onWakeWordUpdate);
       socket.off('mute_update', onMuteUpdate);
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- flush latest revert timers on unmount
       for (const entry of revertRef.current.values()) {
         window.clearTimeout(entry.timer);
       }

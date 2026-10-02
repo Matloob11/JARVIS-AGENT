@@ -206,6 +206,7 @@ export function useChat() {
       if (caps.user?.final) scheduleCaptionClear('user');
       if (caps.assistant?.final) scheduleCaptionClear('assistant');
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stable voice hook slices; full `voice` retriggers every render
   }, [voice.roomState, voice.identity, voice.getRoom, scheduleCaptionClear]);
 
   const markFailed = useCallback(

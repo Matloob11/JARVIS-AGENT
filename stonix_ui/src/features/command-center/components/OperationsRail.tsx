@@ -240,7 +240,7 @@ const VitalsBlock = ({
           <span data-testid={`${testId}-updated`}>updated {formatAgo(agoSec)}</span>
           {stale ? (
             <span
-              className="rounded border border-command-warning/40 bg-command-warning/10 px-1.5 py-0.5 uppercase tracking-wide text-command-warning"
+              className="rounded border border-warn-border-strong bg-warn-surface px-1.5 py-0.5 uppercase tracking-wide text-command-warning"
               data-testid={`${testId}-stale`}
             >
               stale

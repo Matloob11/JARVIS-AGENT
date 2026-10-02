@@ -975,6 +975,7 @@ export const useCommandCenter = () => {
         toast.error('Reconnect failed');
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chat refetch only; `chat` object is unstable
     [chat.refetchMessages, waitForSocketConnect],
   );
 
@@ -999,6 +1000,7 @@ export const useCommandCenter = () => {
     return () => {
       room.off(RoomEvent.ActiveSpeakersChanged, syncActiveSpeakers);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- liveKit slices; full object retriggers on every tick
   }, [liveKit.roomState, liveKit.micEnabled, liveKit.getRoom, setActiveSpeakerUser]);
 
   useEffect(() => {

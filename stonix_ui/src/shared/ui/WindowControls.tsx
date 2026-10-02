@@ -55,7 +55,7 @@ const WindowControls = () => {
         type="button"
         data-testid="window-close"
         onClick={() => electronAPI.close()}
-        className="window-button hover:border-command-danger/30 hover:bg-command-danger/10 hover:text-command-danger"
+        className="window-button hover:border-err-border hover:bg-err-surface hover:text-command-danger"
         title="Close"
       >
         <X size={16} strokeWidth={2.2} />

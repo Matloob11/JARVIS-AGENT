@@ -1294,7 +1294,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-66 | cursor | P3 | Reminders and tasks: cross-process locking, timezone-aware times, delivery hooks for agent-svc | C-125, C-111 | TODO |
 | X-67 | cursor | P0 | UI for the split: Laptop chip, Stop desktop, notification ack, media links, Electron 'desktop' mode | C-116, C-117, C-111 | TODO |
 | X-68 | cursor | P4 | (optional, deferred by user decision D3) Owner approval key in the browser: pairing and signed approvals over the arguments you see (V9) | C-111, C-116, X-67 | NOT NEEDED (deferred by user decision D3; reopen only if local approvals return) |
-| X-69 | cursor | P3 | Design tokens, Tailwind mapping, self-hosted fonts, icon sprite, full testid inventory baseline | C-135 | DOING (cursor, 02 Oct 21:30 PKT) |
+| X-69 | cursor | P3 | Design tokens, Tailwind mapping, self-hosted fonts, icon sprite, full testid inventory baseline | C-135 | DONE (cursor, 02 Oct 21:50 PKT) |
 | X-70 | cursor | P3 | Brand: the reference ring logo, wordmark, rename STONIX (with the three specs and the fixture) | X-69 | TODO |
 | X-71 | cursor | P3 | Favicon and tray icons from the ring logo; Electron window, tray and offline strings | X-70 | TODO |
 | X-72 | cursor | P3 | Persona copy table with grammatical gender, the owner constant, persona-aware strings | X-69 | TODO |
