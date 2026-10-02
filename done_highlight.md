@@ -815,3 +815,31 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `.venv_312\Scripts\python.exe -m pytest tests/tools/test_sim_providers.py -q` → 6 passed
 - **Commit:** (next) · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [claude] C-116 · Bridge desktop relay (internal :5002, '/desktop'), desktop_status from signed notices · 2026-10-02 20:50–2026-10-03 00:15 PKT
+- **Kya kiya:** Bridge par Receiver('bridge') apni SeenStore ke saath node→agent Desktop Link messages relay karta hai (internal listener :5002 + '/desktop'); signed unencrypted notices se desktop_status banta hai (sirf kv, alert par audit); bridge sealed bodies parh nahi sakta. Node/VPS agents aane tak dormant; purana UI aur legacy/agent-token raaste bilkul waise. docker-compose par teeno services ki json-file log rotation bhi (C-16 step 6).
+- **Files:** `src/core/bridge_desktop.py` (naya), `src/core/ui_bridge.py`, `src/core/bridge_store.py`, `deploy/hostinger/Dockerfile.bridge`, `deploy/hostinger/docker-compose.yml`, `tests/infrastructure/test_bridge_desktop.py` (naya)
+- **Verify:** review approve; task tests pass; poora suite wave G run me 1490 passed (sirf X-64/X-65 regressions, ab theek)
+- **Commit:** `3ec2270` · **Deploy:** no (coordinator: deploy_from_pc.sh --services ui-bridge jab V2a window ho)
+- **Doosre agent ke liye:** K-70/K-74 rate+notice tafseel aur dead-man timing contract me record hona hai (section 11).
+
+### ✅ [claude] C-120 · Desktop Node runtime (supervisor, link, executor, WAL, dead-man, health, power) · 2026-10-02 20:50–2026-10-03 00:15 PKT
+- **Kya kiya:** Laptop node ka runtime (C-115 library par): ek Receiver + ClockEstimator per process, actuation se pehle check_actuation/start_deadline/start_window, WAL (call_id dedupe), dead-man switch, 10 s heartbeat notice, power events, health. agent.py/agent_lock.py me single-actor lock (HOLDER_PC_BRAIN). Is PC par node abhi start nahi hota (C-123 agent_ctl node); local PC-brain behaviour same.
+- **Files:** `src/core/agent.py`, `src/core/agent_lock.py`, `src/core/desktop/**` (naye), `tests/core/test_desktop_node.py`, `tests/unit/test_desktop_executor.py`, `tests/unit/test_desktop_settings.py`, `tests/unit/test_desktop_wal.py`
+- **Verify:** review changes_needed → fix → recheck approve (4 minor baqi, F7 dead-man timing = K-70 REQ-CONTRACT); task tests pass
+- **Commit:** `6d579c5` · **Deploy:** no (node koi restart/deploy nahi mangta)
+- **Doosre agent ke liye:** —
+
+### 🟡 [claude] C-16 · Network lockdown (code): nginx /agent + /twirp/, agent_ctl VPS check, log rotation · 2026-10-02 20:50–2026-10-03 00:15 PKT
+- **Kya kiya (code):** nginx jarvis.conf me `location = /agent` (LiveKit worker ws), `location /twirp/` aur `/vortex/livekit/webhook` → 404 (Basic-auth-strip map ke saath). start-agent.bat/start_hybrid_agent.py/agent_ctl ab domain check karte hain (/vortex/health 200, /rtc/validate <500; probe ws→http, wss→https, LIVEKIT_URL ka path rakhta hai) par local start block nahi karte. test_chat_once vortex/socket.io. docker-compose log rotation. Ports/mem_limit nahi chhede.
+- **Files:** `deploy/hostinger/jarvis.conf`, `deploy/windows-local/start-agent.bat`, `deploy/windows-local/start_hybrid_agent.py`, `deploy/windows-local/test_chat_once.py`, `scripts/agent_ctl.py`, `src/core/livekit_link.py`, `tests/unit/test_agent_ctl.py`, `tests/unit/test_agent_link_state.py`
+- **Verify:** review changes_needed → recheck approve (2 minor); test_agent_ctl + test_agent_link_state 136 passed
+- **Commit:** `95b8ae4` · **Deploy:** nahi (live baqi: nginx deploy, /twirp+/agent proof, LIVEKIT_URL switch, worker restart → C-131 me 127.0.0.1 binds). C-16 is liye abhi bhi DOING.
+- **Doosre agent ke liye:** LIVEKIT_URL abhi ws://<ip>:7880; switch nginx deploy ke baad.
+
+### ✅ [claude] fix · remote_compat (C-113) + tool_placement (C-118) tests ko Cursor X-64/X-65 ke saath align kiya · 2026-10-03 00:10 PKT
+- **Kya kiya:** X-64 ne jarvis_get_weather ko jarvis_search.get_current_city() inline call banaya (by-value binding gaya) → remote_compat ka woh consumer hata diya (ab jarvis_search shim par chalta hai); X-65 ne webbrowser.open ko _local_browser_open me daala → tool_placement test ab opener chain follow karta hai (to_thread arg samait). Live/remote behaviour same.
+- **Files:** `services/ai_core/remote_compat.py`, `tests/unit/test_remote_compat.py`, `tests/unit/test_tool_placement.py`
+- **Verify:** test_remote_compat 84 passed, test_tool_placement 44 passed, pylint 10/10
+- **Commit:** `a3c7e16` · **Deploy:** no
+- **Doosre agent ke liye:** —
