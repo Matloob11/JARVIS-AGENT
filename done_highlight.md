@@ -573,3 +573,25 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `npm --prefix stonix_ui run build` pass · dist me `__jarvisTest` nahi · e2e audio-engine + voice + voice-glue 8/8 pass · `node stonix_ui/scripts/testid-inventory.mjs --check` pass (X-69 se pehle minimal guard)
 - **Commit:** abhi commit · **Deploy:** no
 - **Doosre agent ke liye:** X-75 SpeakerCanvas engine `subscribe`/`readBandsAtAgeMs` use kare; X-97 voice machine `e2eHooks` overrides wire kare.
+
+### ✅ [claude] C-13 · Bridge SQLite store (volume par) + message normalization + DB se init_state/history · 2026-10-02 03:10–13:58 PKT
+- **Kya kiya:** Bridge ki chat history, logs, memories, tool logs, persona/mute/wake word/location/voice match aur SIM results ab RAM ke bajaye SQLite (`/app/data/bridge.db`, WAL, volume `jarvis_bridge_data`) me save hote hain, is liye bridge restart ya deploy ke baad bhi wapas aate hain. `new_message`/`update_message` naye; purane events aur init_state keys wahi. GET /messages `before=` ya opaque `cursor` (`<ts>:<seq>`, barabar ts wale messages kabhi skip nahi hote). Kharab DB rename hoti hai, delete kabhi nahi. Atka hua SIM "loading" 30 s baad idle. VPS brain ke kv keys aur tables bhi tayyar.
+- **Files:** `src/core/bridge_store.py` (naya), `src/core/ui_bridge.py`, `deploy/hostinger/docker-compose.yml`, `deploy/hostinger/Dockerfile.bridge`, `tests/infrastructure/test_bridge_store.py` (naya)
+- **Verify:** review approve + 3 minor theek; test_bridge_store 76 passed; poora suite (core+unit+integration+infrastructure) 870 passed, 0 failed; discovery TOOLS 79, PROBLEMS 0; deploy gate ok, doosri apps bilkul waisi; live: `bridge_store stats` me schema v1, WAL; bridge restart se pehle events 108 / kv 1, baad me events 111 / kv 1 (data salamat), agent 1.6 s me dobara connected
+- **Commit:** `c375754` · **Deploy:** yes 🚀 `968e9c9` ui-bridge (backup `2026-10-02_0854Z-pre-deploy-968e9c9`)
+- **Doosre agent ke liye:** Cursor: `next_cursor` opaque rakho (section 11). Contract K-41 v5 me.
+
+### ✅ [claude] C-112 · Agent headless Linux par import, role/brain/mode gating, UI listener reconnect loop · 2026-10-02 03:10–13:58 PKT
+- **Kya kiya:** JARVIS_ROLE / JARVIS_BRAIN / JARVIS_DESKTOP_MODE parhe jate hain. Remote mode (VPS) me clipboard, window poller, startup voice, ipinfo, reminders aur task monitor nahi chalte aur koi GUI module import nahi hota; local mode (PC brain) wahi loops chalata hai jo pehle. `config.validate()` wahi; `validate(role, mode)` naya. UI listener kabhi band nahi hota (1-10 s backoff, har connect par nayi auth). Container me ya JARVIS_BRAIN=vps ke saath local mode start nahi hota. Bug hunter asli log parhta hai aur har error zyada se zyada 10 min me ek dafa (6 fi ghanta) chat me dikhata hai. huggingface_hub 1.16 ka TypeError theek.
+- **Files:** `services/utils/jarvis_config.py`, `services/utils/jarvis_adaptive.py`, `services/utils/jarvis_bug_hunter.py`, `services/ai_core/agent_loops.py`, `services/ai_core/jarvis_vision.py`, `services/ai_core/voice_fingerprint.py`, `src/core/agent.py`, `src/core/agent_core.py`, `src/core/agent_runner.py`, `src/core/vision_handler.py`, `scripts/models/download_voice_model.py`, 3 nayi test files
+- **Verify:** review approve + 2 minor theek; 122 task tests pass; poora suite 870 passed, 0 failed; discovery TOOLS 79, PROBLEMS 0; live restart 13:55: `RUNTIME role=agent brain=pc mode=local`, 83 tools, `EVENT_LOOP_WATCHDOG started` (C-31), UI Bridge Connected, agent room `jarvis-hybrid` me; bridge restart ke baad listener 1.6 s me khud dobara connected
+- **Commit:** `968e9c9` · **Deploy:** PC agent restart 13:55 PKT (agent_ctl)
+- **Note:** Purane worker ke log me ~05:44 par network jane ke baad "failed to connect to livekit, retrying in 2s" ke baad kuch nahi; /health 200 deta raha. Naya task C-136 is ko dikhayega aur khud theek karega.
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] C-112 · Agent worker restart (agent_ctl) · 2026-10-02 13:55 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 14400) band, naya pid 29500; health 200 (15.1 s me), ensure_room.py OK.
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 13:55 PKT
+- **Doosre agent ke liye:** —

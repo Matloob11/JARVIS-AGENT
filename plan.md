@@ -856,7 +856,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | C-10 | claude | P0 | Leftover: remove the dead 'Debug UI http://187.127.123.235:5100' hint from the PC launchers | C-02, C-09 | DONE (01 Oct 21:00; with C-09) |
 | C-11 | claude | P0 | Reusable backup/restore tooling (PC + VPS), restore drill, PC mirror of the emergency VPS snapshot | C-01, C-04, K-54 (COORD-4) | DONE (01 Oct 14:20) |
 | C-12 | claude | P0 | Deploy tooling: deploy_from_pc.sh (committed HEAD only), deploy.sh v2 (lock, backup, nginx -t, health gate, other-apps smoke), rollback.sh, smoke_other_apps.sh + first full sync deploy | C-04, C-09, C-11, K-54 (COORD-4) | DONE (02 Oct 03:00; first sync deploy OK) |
-| C-13 | claude | P0 | Bridge SQLite store on a volume + message normalization + init_state/history from the DB | C-12, K-41 (C-MSG-1), K-42 (C-STATE-1) | DOING (claude, 02 Oct 03:10) |
+| C-13 | claude | P0 | Bridge SQLite store on a volume + message normalization + init_state/history from the DB | C-12, K-41 (C-MSG-1), K-42 (C-STATE-1) | DONE (claude, 02 Oct 13:58) |
 | C-14 | claude | P0 | Agent link v2, bridge side: AGENT_TOKEN + HMAC v2 notify with replay protection, Socket.IO roles/rooms with a legacy transition, env-only origins, secrets tooling | C-13, C-09, K-38 (C-SOCK-1), K-39 (C-NOTIFY-1), K-40 (C-EVT-1), K-47 (C-ENV-1) | TODO |
 | C-15 | claude | P0 | Agent link v2, agent side: signed raw-body notify with retry queue, AGENT_TOKEN socket with reconnect-forever loop, chat id echo | C-14, C-09, K-39 (C-NOTIFY-1), K-38 (C-SOCK-1), K-41 (C-MSG-1) | TODO |
 | C-16 | claude | P0 | Network lockdown: nginx /agent + /twirp, PC agent on wss/https via the domain, 5101/7880 bound to 127.0.0.1, compose memory/log limits | C-12, C-09, C-15, K-48 (C-NET-1) | TODO |
@@ -1009,7 +1009,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | C-109 | claude | P4 | Final ops acceptance run + README, RUNBOOK, CONTRACTS changelog and SECURITY docs; CSP enforcing | C-22, C-23, C-63, C-64, C-60, C-92, C-101, C-102, C-103, C-104, C-105, C-106, C-29, X-15, X-10, C-108, C-97, C-99, C-98, C-100, C-05, X-12, C-61, C-82, C-10, C-36 | TODO |
 | C-110 | claude | P4 | Enable self-repair apply mode after the two-agent build-out | C-46, C-83, C-109 | TODO |
 | C-111 | claude | P0 | Contracts v4 (K-70..K-77) + plan, CLAUDE.md and Cursor rules for the VPS brain | — | DONE (02 Oct 01:25) |
-| C-112 | claude | P0 | Linux-importable agent with role/brain/mode gating, validate by (role, mode), stable user id, reconnecting UI listener | C-111 | DOING (claude, 02 Oct 03:10) |
+| C-112 | claude | P0 | Linux-importable agent with role/brain/mode gating, validate by (role, mode), stable user id, reconnecting UI listener | C-111 | DONE (claude, 02 Oct 13:58) |
 | C-113 | claude | P0 | Compat layer: location provider, delivery helper, startfile/webbrowser shims with a startup self-test | C-112 | TODO |
 | C-114 | claude | P0 | 24/7 voice session safety: compression, real truncation, re-seed, liveness attribute, idle close and recycle | C-33, C-35, C-111 | TODO |
 | C-115 | claude | P0 | Desktop Link protocol library (Ed25519, X25519/AEAD, replay, clock, resend) + key tooling | C-111 | DOING (claude, 02 Oct 02:55) |
@@ -1033,6 +1033,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | C-133 | claude | P4 | (optional, deferred by user decision D3) Owner approval key: phone and UI approvals the laptop can verify (V9) | C-131, C-22, C-29, C-30, C-73 | NOT NEEDED (deferred by user decision D3; reopen only if local approvals return) |
 | C-134 | claude | P4 | Monitoring, alerts, incident runbook and VPS-brain documentation | C-131 | TODO |
 | C-135 | claude | P3 | UI spec v2: exact 'Neon Command Center' design from the user's reference image (replica mockup, ANNA variant, all pages and states, phone), tasks X-69..X-102 updated | — | DOING (claude, 02 Oct 13:00) |
+| C-136 | claude | P1 | PC worker: visible LiveKit link state and recovery after laptop sleep or network loss | C-09, C-112 | TODO |
 | C-97 | claude | P4 | Voice and conversation regression suite + runbook | C-56, C-74, C-76, C-77, C-87, C-89, C-90, C-91, C-09 | TODO |
 | C-98 | claude | P4 | Internal-tool regression checks after the voice/dashboard fixes (change_voice, wake word, persona, identity, analyze_surroundings) | C-48, C-50, C-54, C-69, C-87 | TODO |
 | C-99 | claude | P4 | Live desktop-tools smoke run on the PC with Sir | C-31, C-75, C-55, C-84, C-85, X-63, C-96 | TODO |
@@ -1084,7 +1085,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 
 ---
 
-## 6. Claude tasks (134)
+## 6. Claude tasks (135)
 
 ### P0 · Security aur buniyad
 _Darwaza band, git, backup, keys, room delete ka bug. Claude pehle; Cursor isi dauran apne tools lane me kaam karta hai._
@@ -4195,6 +4196,7 @@ Verify:
 **Files:** `services/utils/jarvis_location.py`, `services/utils/jarvis_delivery.py`, `services/ai_core/remote_compat.py`, `src/core/agent_runner.py`, `tests/unit/test_remote_compat.py`, `tests/unit/test_location_provider.py`
 **Depends on:** C-112
 **User se chahiye:** —
+**As built (2 Oct):** C-112 gates only the 60 s location loop in remote mode; the first get_current_city() call at session start still uses jarvis_search (ipinfo), so the compat shim must patch agent_runner.get_current_city.
 
 Steps:
 1. jarvis_location.py: get_current_city() and get_current_city_data() return the persisted device location (conversations/location.json, at most 30 min old) or USER_CITY with fixed coordinates. They never call ipinfo in remote mode.
@@ -4273,6 +4275,7 @@ Verify:
 **Files:** `src/core/ui_bridge.py`, `src/core/bridge_desktop.py`, `src/core/bridge_store.py`, `deploy/hostinger/docker-compose.yml`, `deploy/hostinger/Dockerfile.bridge`, `tests/infrastructure/test_bridge_desktop.py`
 **Depends on:** C-13, C-115
 **User se chahiye:** After the deploy, ask one voice question and send one typed message.
+**As built (2 Oct):** C-13 is live: bridge.db on the volume jarvis_bridge_data with the kv keys desktop_link, active_job, paused, last_activity_ts and the seen_ids and notifications tables (store API + tests): use them. Whether the bridge may read vitals_pc, desktop_state, power and audit events (K-70 encrypts every event body) is decided in contracts v5 (K-70/K-74) before this task starts.
 
 Steps:
 1. Serve the same ASGI app on a second uvicorn listener :5002 (exposed only on jarvis-net). The agent role, /internal/* and /internal/livekit/ensure are accepted only when the request's server port is 5002.
@@ -4361,6 +4364,7 @@ Verify:
 **Files:** `services/ai_core/desktop_link.py`, `services/ai_core/desktop_proxy.py`, `services/ai_core/jarvis_plugin_manager.py`, `services/ai_core/jarvis_confirm.py`, `src/core/agent_runner.py`, `tests/core/test_desktop_proxy.py`, `tests/integration/test_desktop_roundtrip.py`
 **Depends on:** C-115, C-118, C-32, C-28
 **User se chahiye:** —
+**As built (2 Oct):** Feed Desktop Node window_context events into assistant.vision_handler.on_window_context(event) with {title, ts} (C-112). C-115 library: one Receiver per endpoint with its own SeenStore (agent: conversations/desktop_seen.db, a namespace per peer), a ClockEstimator on the Receiver and ClockEstimator.ping_sent() for every ping.
 
 Steps:
 1. DesktopLink per process (job or svc): - '/desktop' client on http://jarvis-bridge:5002 with reconnection=False, its own loop and a fresh signed agent_hello on every connect; - a pending map call_id → Future (never sio.call); - sync_request after start; - SeenStore in conversations/desktop_seen.db.
@@ -4391,6 +4395,7 @@ Verify:
 **Files:** `src/core/desktop/__init__.py`, `src/core/desktop/__main__.py`, `src/core/desktop/supervisor.py`, `src/core/desktop/node.py`, `src/core/desktop/link.py`, `src/core/desktop/executor.py`, `src/core/desktop/wal.py`, `src/core/desktop/health.py`, `src/core/desktop/settings.py`, `src/core/agent_lock.py`, `src/core/agent.py`, `tests/unit/test_desktop_executor.py`, `tests/unit/test_desktop_wal.py`, `tests/core/test_desktop_node.py`, `tests/unit/test_desktop_settings.py`
 **Depends on:** C-115, C-111, C-31
 **User se chahiye:** —
+**As built (2 Oct):** C-115 library: the node's SeenStore is the table desktop_seen in run/desktop_link.db; call check_actuation(), start_deadline() and check_start_window() before actuation; load the key with load_pc_key_file(); check the call_id in the WAL before signing a refusal and keep WAL call_ids at least as long as the refusal horizon (contracts v5).
 
 Steps:
 1. supervisor.py (pythonw): - starts the node as a child and restarts it with backoff; - exits 0 on a token-protected POST 127.0.0.1:8082/stop (token in run/desktop_node.token, user-only ACL); - refuses an elevated token; - holds run/desktop_node.lock (a second instance exits 3) and the shared run/desktop_actor.lock (shared with the PC brain, vortex.py and Electron local), both under JARVIS_RUN_DIR; - restarts the node after an event-loop stall of 60 s or more, measured with the C-31 watchdog.
@@ -4530,6 +4535,7 @@ Verify:
 **Files:** `src/core/agent_services.py`, `services/utils/jarvis_filelock.py`, `services/utils/backup_crypto.py`, `services/ai_core/jarvis_identity.py`, `services/utils/jarvis_adaptive.py`, `tests/core/test_agent_services.py`, `tests/unit/test_filelock.py`
 **Depends on:** C-112, C-119, C-13
 **User se chahiye:** —
+**As built (2 Oct):** C-112: in remote mode the agent no longer runs reminders or the task monitor, so agent-svc must own both before cutover.
 
 Steps:
 1. jarvis_filelock.locked(path) (fcntl on Linux, msvcrt on Windows) for identity.json, learning_state.json, delivery_ledger.json, desktop_outbox.json and location.json. IdentityManager and the adaptive engine reload when mtime/inode changes.
@@ -4584,6 +4590,7 @@ Verify:
 **Files:** `scripts/ops/push_agent_env.py`, `scripts/ops/split_bridge_env.py`, `scripts/ops/env_set.py`, `scripts/ops/fallback_env.py`, `deploy/hostinger/docker-compose.yml`, `deploy/hostinger/rollback.sh`, `.env.example`
 **Depends on:** C-12, C-116, C-112
 **User se chahiye:** After V2b, ask one voice question and send one typed message.
+**As built (2 Oct):** C-112: ui_bridge.py still calls the legacy config.validate() (needs GOOGLE_API_KEY); switch it to config.validate('bridge') before V2b removes the AI keys from bridge.env, or the bridge stops at start. C-115 keys: run gen_desktop_keys.py --role agent in a one-off container that can read .env.agent (root 600, never mounted for the services), move .env.agent.tmp over .env.agent, put DESKTOP_AGENT_PUBLIC_KEY into bridge.env and the node config; run --role pc on the laptop as the node's user (or pass --pc-public).
 
 Steps:
 1. V2a: a bridge deploy with the role-aware validate() (C-112) while the env files are unchanged. Drill rollback.sh to the previous bridge tag and back; both must come up healthy.
@@ -4638,6 +4645,7 @@ Verify:
 **Files:** `scripts/ops/migrate_agent_data.py`, `tests/unit/test_migrate_agent_data.py`
 **Depends on:** C-112, C-124, C-126
 **User se chahiye:** —
+**As built (2 Oct):** C-112: after the memory merge set JARVIS_USER_ID on the PC (stage V3); this removes the per-session 'JARVIS_USER_ID is not set' warning.
 
 Steps:
 1. --merge-local (stage V3): - decrypt every conversations/*_memory.json; - merge, sort and dedupe into <JARVIS_USER_ID>_memory.json; rename the originals .pre-<ts>; - refuse when a file fails to decrypt or two files hold the same id with different text; - print counts only.
@@ -4762,6 +4770,7 @@ Verify:
 **Files:** `src/core/ui_bridge.py`, `src/core/agent_services.py`, `scripts/ops/vps_daily_check.py`, `docs/SECURITY.md`, `docs/ARCHITECTURE-VPS.md`, `deploy/hostinger/RUNBOOK.md`, `README.md`
 **Depends on:** C-131
 **User se chahiye:** —
+**As built (2 Oct):** C-112: adaptive_engine.last_cgroup (memory_mb, memory_percent, cpu_percent) is ready for the heartbeat.
 
 Steps:
 1. Heartbeat fields (agent and svc): session state, link online, RTT p50/p95, pending calls, unknowns per hour, cgroup memory.current and CPU, free disk, downloads size, restarts, brain, git sha.
@@ -4778,6 +4787,28 @@ Done tab jab (acceptance):
 Verify:
 - $PY scripts/ops/vps_daily_check.py
 - grep -n 'Desktop Node' README.md docs/ARCHITECTURE-VPS.md
+
+#### C-136 · PC worker: visible LiveKit link state and recovery after laptop sleep or network loss
+**Phase:** P1 · **Size:** S · **Feature:** runtime reliability (PC brain)
+**Source:** log review 2 Oct 13:55: after a network drop at about 05:44 the old worker logged "failed to connect to livekit, retrying in 2s" and then nothing until the restart; livekit-agents 1.4.6 /health stays 200 while it retries and its "registered worker" INFO lines are not in the log, so nobody could tell whether JARVIS was reachable.
+**Kyun:** `agent_ctl status` must say whether the worker is really connected to LiveKit, and a worker that stays disconnected after the network is back must recover by itself.
+**Files:** `src/core/agent_runner.py`, `scripts/agent_ctl.py`, `tests/unit/test_agent_link_state.py`
+**Depends on:** C-09, C-112
+**User se chahiye:** —
+
+Steps:
+1. Log the livekit.agents worker connection lines (registered, disconnected, retrying, failed) at INFO into logs/agent_stderr.log, nothing else from that logger.
+2. The worker writes run/agent_link.json ({state: connected|retrying|failed, since, worker_id}) on every change (atomic write, no secrets).
+3. `agent_ctl status` prints the link state and its age; `agent_ctl wait` is ready only when the state is connected; a 200 from /health alone no longer counts.
+4. Recovery: when the state has been retrying for more than 10 minutes while a TCP probe to the LiveKit host succeeds, the worker exits with a distinct code and agent_ctl (its existing restart path, same lock) starts a fresh worker; log one line with the reason. No change while connected.
+
+Done tab jab (acceptance):
+- A simulated disconnect (LiveKit host unreachable) shows retrying in `agent_ctl status`; when it is reachable again the state returns to connected or the worker is replaced within 11 minutes.
+- Local behaviour, tools (83 names) and loops are unchanged; the K-53 single-worker lock still holds during a replacement.
+
+Verify:
+- $PY -m pytest tests/unit/test_agent_link_state.py -q -p no:cacheprovider
+- $PY scripts/agent_ctl.py status
 
 ---
 
@@ -7759,6 +7790,7 @@ Format: `- [YYYY-MM-DD HH:MM] from → to: message (task id)`. Jawab isi line ke
 - [2026-10-02 04:45] claude → cursor: Live voice fix: basic auth ke Basic header ki wajah se LiveKit `/rtc` 401 deta tha; nginx ab `/rtc` par Basic hata deta hai (commit `9e48b28`, deployed). UI me koi tabdeeli zaroori nahi.
 - [2026-10-02 12:30] claude → cursor: **Naya kaam: UI redesign JARVIS & ANNA (X-69..X-102, user ka hukm).** Spec `docs/ui/UI_REDESIGN_SPEC.md`, mockup `docs/ui/jarvis_anna_mockup.html`, audit `docs/ui/UI_AUDIT.md` (us me 6 bugs bhi hain, jaise Reconnect ke baad live updates ruk jana: X-96). Abhi shuru ho sakte hain: X-69 (tokens), X-74 (audio engine), X-96 (socket store); phir chain. X-78/X-79/X-85/X-92 X-67 ka intezar karte hain. STONIX naam har jagah 'JARVIS & ANNA' (folder `stonix_ui` wahi rahega). Testids/e2e mat todna; har task ke saath specs update. Frontend deploy C-21 (cookie login) ke baad hoga, is liye kaam commit karte raho. User design par feedback de sakta hai; rang/tokens X-69 me ek jagah rakho taake badalna aasan ho.
 - [2026-10-02 13:00] claude → cursor: **UI design badla (user ka faisla):** user ne apna reference image diya: `JARVIS & ANNA Neon Command Center.png` (repo root). UI bilkul usi jaisa banana hai. Isliye X-69 ab C-135 (Claude ka naya spec v2) ka intezar karega; Mission Control wale rang/layout par kaam mat karo. X-74 (audio engine) design se alag hai, woh jari rakho. C-135 ke saath X-69..X-102 update ho kar aayenge.
+- [2026-10-02 13:58] claude → cursor: C-13 aur C-112 live (bridge `968e9c9` deployed, PC agent restart 13:55). Bridge ki chat history ab SQLite me hai aur restart ke baad wapas aati hai. GET /messages `before=` ke saath `cursor=` bhi leta hai aur `next_cursor` deta hai; `next_cursor` ab `'<ts>:<seq>'` hai: isay opaque rakho, parse mat karo (K-41 ka text contracts v5 me aa raha hai). Agent remote mode me clipboard/window modules import nahi karta; `get_active_window_context` ke K-21 keys `status`/`title` stable rakho. Vision tools ka naya status `unavailable` tool_sync me `error` dikhta hai. Tumhare liye koi naya kaam nahi.
 
 ---
 
