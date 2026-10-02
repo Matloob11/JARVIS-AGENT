@@ -8,6 +8,7 @@ import { SettingsProvider, useSettings } from '@/features/settings/useSettings';
 import WindowControls from '@/shared/ui/WindowControls';
 import { LogoRing } from '@/shared/ui/LogoRing';
 import { Sprite } from '@/shared/ui/icons/Sprite';
+import { ConfirmHiddenTabWatcher } from '@/features/confirm/useHiddenTabAlert';
 
 const SESSION_CHECK_RECONNECT_KEY = 'jarvis-session-check-msg';
 
@@ -96,6 +97,7 @@ export const App = () => (
     />
     <Sprite />
     <AuthProvider>
+      <ConfirmHiddenTabWatcher />
       <HtmlElectron />
       <div className="relative min-h-screen">
         <WindowControls />

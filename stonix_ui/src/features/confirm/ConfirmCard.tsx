@@ -25,29 +25,7 @@ export interface ConfirmCardProps {
   focusDenyOnOpen?: boolean;
 }
 
-const TITLE_FLASH_PREFIX = '⚠ Confirm: ';
-const BASE_TITLE = 'JARVIS & ANNA';
 const HOLD_MS = 1000;
-
-function playConfirmChime() {
-  try {
-    const ctx = new AudioContext();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.value = 880;
-    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.38);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.4);
-    osc.onended = () => void ctx.close();
-  } catch {
-    /* optional */
-  }
-}
 
 function cfSay(message: string) {
   const el = document.getElementById('cf-announce');
@@ -142,7 +120,6 @@ const ConfirmCard = ({
   const gateId = useId();
   const holdTimerRef = useRef<number | null>(null);
   const holdingRef = useRef(false);
-  const chimePlayedRef = useRef(false);
   const announcedHeadRef = useRef<string | null>(null);
   const announcedTailRef = useRef<string | null>(null);
   const toastIdsRef = useRef(new Set<string>());
@@ -389,16 +366,6 @@ const ConfirmCard = ({
     }
 
     cfSay(announceHead(current));
-    if ('Notification' in window && Notification.permission === 'granted') {
-      try {
-        new Notification(`Confirm: ${current.tool ?? 'tool'}`, {
-          body: confirmLabel(current),
-          tag: current.id,
-        });
-      } catch {
-        /* optional */
-      }
-    }
   }, [current, layout, open, phoneSheet]);
 
   useEffect(() => {
@@ -473,7 +440,6 @@ const ConfirmCard = ({
         ),
         { duration: 8000, id: 'confirm-approval-active' },
       );
-      playConfirmChime();
     }
   }, [layout, queue]);
 
@@ -488,40 +454,11 @@ const ConfirmCard = ({
 
   useEffect(() => {
     if (!open || !current) {
-      document.title = BASE_TITLE;
-      chimePlayedRef.current = false;
       announcedHeadRef.current = null;
       announcedTailRef.current = null;
       toastIdsRef.current.clear();
-      return undefined;
     }
-
-    let flashOn = false;
-    const flashTimer = window.setInterval(() => {
-      if (document.hidden) {
-        document.title = flashOn
-          ? BASE_TITLE
-          : `${TITLE_FLASH_PREFIX}${current.tool ?? 'tool'}`;
-        flashOn = !flashOn;
-        if (!chimePlayedRef.current) {
-          chimePlayedRef.current = true;
-        }
-      } else {
-        document.title = BASE_TITLE;
-      }
-    }, 1000);
-
-    const onVisibility = () => {
-      if (!document.hidden) document.title = BASE_TITLE;
-    };
-
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => {
-      window.clearInterval(flashTimer);
-      document.removeEventListener('visibilitychange', onVisibility);
-      document.title = BASE_TITLE;
-    };
-  }, [current, layout, open, queueCount]);
+  }, [current, open]);
 
   const allowLabel = isHighRisk ? 'Hold to approve' : 'Approve & Run';
   const allowAriaLabel = isHighRisk

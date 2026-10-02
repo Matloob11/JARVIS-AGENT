@@ -1011,3 +1011,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** trace+dashboard+responsive+memory e2e 16/16
 - **Commit:** 36a1170 · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-102 · Hidden-tab confirm alerts · 2026-10-03 03:05 PKT
+- **Kya kiya:** Background tab par pending approval: title flash, ek 880 Hz chime har request par, browser Notification (permission ho to); phone vibration ConfirmCard me pehle se; App-level watcher + e2e confirm-hidden.spec.
+- **Files:** `useHiddenTabAlert.ts`, `ConfirmCard.tsx`, `App.tsx`, `Dashboard.tsx`, `confirm-hidden.spec.ts`, `plan.md`
+- **Verify:** `npm --prefix stonix_ui run build` pass; confirm-hidden + confirm e2e 11/11; testid inventory 250 pass
+- **Commit:** (pending) · **Deploy:** no
+- **Doosre agent ke liye:** —

@@ -42,6 +42,8 @@ import AppShell from '@/features/shell/AppShell';
 import { ShellPage } from '@/features/shell/ShellPage';
 import { useLayout } from '@/features/shell/useLayout';
 import { useHashRouter } from '@/features/shell/useHashRouter';
+import { documentTitleForRoute } from '@/features/shell/router';
+import { useSyncHiddenTabAlert } from '@/features/confirm/useHiddenTabAlert';
 import OrbCanvas from '@/features/voice/orb/OrbCanvas';
 import VoiceAnnouncer from '@/features/voice/VoiceAnnouncer';
 import { useAgentListeningMuted } from '@/features/status/AgentControls';
@@ -56,10 +58,12 @@ const DashboardInner = () => {
 
   const layout = useLayout();
   const route = useHashRouter(layout);
+  const pageTitle = useMemo(() => documentTitleForRoute(route), [route]);
   const { logout } = useAuth();
   const liveKit = useLiveKit();
   const agentStatus = useAgentStatus();
   const command = useCommandCenter();
+  useSyncHiddenTabAlert(command.confirmCurrent ?? null, command.confirmQueue, pageTitle);
   const [voiceEnrollOpen, setVoiceEnrollOpen] = useState(false);
   const [cameraState, setCameraState] = useState<CameraState>(defaultCameraState);
   const [mobileTab, setMobileTab] = useState<MobileTab>('core');
