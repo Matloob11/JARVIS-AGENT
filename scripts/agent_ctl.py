@@ -104,6 +104,9 @@ PKT = timezone(timedelta(hours=5), "PKT")
 CREATE_NEW_PROCESS_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 CREATE_BREAKAWAY_FROM_JOB = getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0)
+# The worker is the live voice loop. It runs above normal so builds and test runs on the same PC never
+# starve it, also when agent_ctl itself runs in a below-normal shell (Windows passes that class to children).
+ABOVE_NORMAL_PRIORITY_CLASS = getattr(subprocess, "ABOVE_NORMAL_PRIORITY_CLASS", 0)
 
 # Ctrl+Break only reaches processes on the sender's console, so this helper attaches to the worker's
 # console (hidden in background mode) and signals every process there. Its own handler must be set after
@@ -594,7 +597,7 @@ def _spawn_background(cmd: list[str], env: dict[str, str], out: Any, err: Any) -
                               "stdout": out, "stderr": err, "close_fds": True}
     if sys.platform != "win32":
         return _popen(cmd, start_new_session=True, **kwargs)
-    flags = CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW
+    flags = CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW | ABOVE_NORMAL_PRIORITY_CLASS
     try:
         # Out of a launcher's kill-on-close job (a terminal or IDE), so the worker outlives it.
         return _popen(cmd, creationflags=flags | CREATE_BREAKAWAY_FROM_JOB, **kwargs)

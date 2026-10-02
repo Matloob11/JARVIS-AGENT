@@ -588,6 +588,7 @@ def test_start_runs_a_hidden_worker_waits_for_health_then_ensures_the_room(ctl, 
     if sys.platform == "win32":
         flags = spawned["creationflags"]
         assert flags & subprocess.CREATE_NEW_PROCESS_GROUP and flags & subprocess.CREATE_NO_WINDOW
+        assert flags & subprocess.ABOVE_NORMAL_PRIORITY_CLASS
     for name in ("agent_stdout.log", "agent_stderr.log"):
         assert "===== agent_ctl start " in (ctl.logs / name).read_text(encoding="utf-8")
     assert [cmd[-1] for cmd, _kwargs in runs] == [str(agent_ctl.ENSURE_ROOM)]  # once, after health 200
