@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
-import { Mic, MicOff, Volume2, X } from 'lucide-react';
+import { Mic, X } from 'lucide-react';
+import { Dialog } from '@/shared/ui/Dialog';
+import { Bar } from '@/shared/ui/Bar';
+import { StatusShape } from '@/shared/ui/StatusShape';
 import { useSocketEvent } from '@/shared/realtime/subscriptions';
 import { emitUiCommandWithAck, useAgentListeningMuted } from '@/features/status/AgentControls';
 import { useSettings } from '@/features/settings/useSettings';
@@ -77,6 +79,14 @@ function parseResult(raw: unknown): EnrollResult {
   };
 }
 
+function micLevelToDb(level: number): string {
+  if (level <= 0.0001) return '−60 dB';
+  const db = 20 * Math.log10(level);
+  const clamped = Math.max(-60, Math.min(0, db));
+  const rounded = Math.round(clamped);
+  return `${rounded < 0 ? '−' : ''}${Math.abs(rounded)} dB`;
+}
+
 interface VoiceEnrollDialogProps {
   open: boolean;
   onClose: () => void;
@@ -151,6 +161,7 @@ const VoiceEnrollDialog = ({ open, onClose }: VoiceEnrollDialogProps) => {
   const voiceConnected = voice.roomState === 'connected';
   const voiceConnecting =
     voice.roomState === 'connecting' || voice.roomState === 'reconnecting';
+  const mockEnrollmentPath = voice.voiceUnavailable;
 
   const progressRatio = useMemo(() => {
     if (!progress || progress.targetS <= 0) return 0;
@@ -187,177 +198,169 @@ const VoiceEnrollDialog = ({ open, onClose }: VoiceEnrollDialogProps) => {
     sendEnroll('commit');
   };
 
-  const mockEnrollmentPath = voice.voiceUnavailable;
   const canStart =
     !agentMuted &&
     !voiceConnecting &&
     phase !== 'capturing' &&
     (mockEnrollmentPath || (voiceConnected && voice.micEnabled));
 
+  const showMicLevel = mockEnrollmentPath || (voiceConnected && voice.micEnabled);
+  const errorDetail = result?.error || result?.message || 'unknown error';
+
   return (
-    <AnimatePresence>
-      {open ? (
-        <motion.div
-          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          role="presentation"
-          onClick={handleClose}
-        >
-          <motion.div
-            className="w-full max-w-lg rounded-lg border border-command-border bg-command-panel p-5 shadow-xl"
-            data-testid="voice-enroll-dialog"
-            initial={{ scale: 0.96, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.96, opacity: 0 }}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="voice-enroll-title"
-            onClick={event => event.stopPropagation()}
-          >
-            <div className="mb-4 flex items-start justify-between gap-3">
-              <div>
-                <h2 id="voice-enroll-title" className="text-sm font-semibold text-command-text">
-                  Voice enrollment
-                </h2>
-                <p className="mt-1 text-[11px] text-command-muted">
-                  Teeno jumle saaf awaaz me parhein. Mic on hona zaroori hai.
-                </p>
-              </div>
-              <button type="button" className="icon-button" aria-label="Close" onClick={handleClose}>
-                <X size={16} />
-              </button>
-            </div>
+    <Dialog
+      open={open}
+      onClose={handleClose}
+      data-testid="voice-enroll-dialog"
+      ariaLabelledBy="voice-enroll-title"
+    >
+      <div className="n-dlg-hd">
+        <div className="mh" aria-hidden="true">
+          <Mic size={22} />
+        </div>
+        <div>
+          <h2 id="voice-enroll-title">Voice enrollment</h2>
+          <p>Teeno jumle saaf awaaz me parhein. Mic on hona zaroori hai.</p>
+        </div>
+        <button type="button" className="icon-button" aria-label="Close" onClick={handleClose}>
+          <X size={16} />
+        </button>
+      </div>
 
-            {!voiceConnected && !voice.voiceUnavailable ? (
-              <div className="mb-4 rounded-md border border-white/10 bg-white/[0.03] p-3 text-[11px] text-command-text">
-                <p>Voice room se connect karein, phir enrollment shuru karein.</p>
-                <button
-                  type="button"
-                  className="primary-button mt-2"
-                  data-testid="voice-enroll-connect"
-                  disabled={voiceConnecting}
-                  onClick={() => void voice.connectRoom()}
-                >
-                  {voiceConnecting ? 'Connecting…' : 'Connect voice'}
-                </button>
-              </div>
-            ) : null}
-
-            {voiceConnected && !voice.micEnabled ? (
-              <p className="mb-3 text-[11px] text-amber-300" data-testid="voice-enroll-mic-hint">
-                Mic off hai — pehle mic on karein.
-              </p>
-            ) : null}
-
+      <div className="n-dlg-bd">
+        {!voiceConnected && !voice.voiceUnavailable ? (
+          <div className="voice-enroll-connect-box">
+            <p>Voice room se connect karein, phir enrollment shuru karein.</p>
+            <button
+              type="button"
+              className="primary-button mt-2"
+              data-testid="voice-enroll-connect"
+              data-dialog-autofocus
+              disabled={voiceConnecting}
+              onClick={() => void voice.connectRoom()}
+            >
+              {voiceConnecting ? 'Connecting…' : 'Connect voice'}
+            </button>
+          </div>
+        ) : (
+          <ul className="voice-enroll-prereq">
+            <li data-ok={voiceConnected || mockEnrollmentPath ? 'true' : 'false'}>
+              <StatusShape s={voiceConnected || mockEnrollmentPath ? 'ok' : 'warn'} label="Voice room joined" hideLabel />
+              <span>Voice room joined</span>
+            </li>
+            {!voice.micEnabled && !mockEnrollmentPath ? (
+              <li data-ok="false" data-testid="voice-enroll-mic-hint">
+                <StatusShape s="warn" label="Mic off" hideLabel />
+                <span>Mic off hai — pehle mic on karein.</span>
+              </li>
+            ) : (
+              <li data-ok="true">
+                <StatusShape s="ok" label="Mic on" hideLabel />
+                <span>Mic on</span>
+              </li>
+            )}
             {agentMuted ? (
-              <p className="mb-3 text-[11px] text-command-danger" data-testid="voice-enroll-agent-muted">
-                Agent mute hai — pehle unmute karein.
-              </p>
-            ) : null}
+              <li data-ok="false" data-testid="voice-enroll-agent-muted">
+                <StatusShape s="err" label="Agent muted" hideLabel />
+                <span>Agent mute hai — pehle unmute karein.</span>
+              </li>
+            ) : (
+              <li data-ok="true">
+                <StatusShape s="ok" label="Agent listening" hideLabel />
+                <span>Agent listening</span>
+              </li>
+            )}
+          </ul>
+        )}
 
-            <ol className="mb-4 space-y-2 text-[11px] text-command-text">
-              {enrollSentences.map((line, index) => (
-                <li key={line} className="rounded border border-white/10 bg-white/[0.02] px-3 py-2">
-                  <span className="mr-2 font-mono text-command-muted">{index + 1}.</span>
-                  {line}
-                </li>
-              ))}
-            </ol>
+        <ol className="voice-enroll-sentences">
+          {enrollSentences.map((line, index) => (
+            <li key={line}>
+              <span className="font-mono text-command-muted">{index + 1}.</span> {line}
+            </li>
+          ))}
+        </ol>
 
-            {voiceConnected && voice.micEnabled ? (
-              <div className="mb-4">
-                <div className="mb-1 flex items-center gap-2 text-[10px] uppercase tracking-wide text-command-muted">
-                  {voice.micEnabled ? <Mic size={12} /> : <MicOff size={12} />}
-                  Live mic level
-                </div>
-                <div className="h-2 overflow-hidden rounded bg-white/10">
-                  <div
-                    className="h-full bg-command-accent transition-[width] duration-75"
-                    data-testid="voice-enroll-mic-level"
-                    style={{ width: `${Math.round(micLevel * 100)}%` }}
-                  />
-                </div>
-              </div>
-            ) : null}
-
-            {phase === 'capturing' || progress ? (
-              <div className="mb-4 space-y-2">
-                <div className="flex items-center justify-between text-[11px] text-command-muted">
-                  <span>Recording progress</span>
-                  <span>
-                    {Math.round(progress?.collectedS ?? 0)}s / {Math.round(progress?.targetS ?? TARGET_SECONDS)}s
-                  </span>
-                </div>
-                <div className="h-2 overflow-hidden rounded bg-white/10">
-                  <div
-                    className="h-full bg-sky-400 transition-[width]"
-                    data-testid="voice-enroll-progress"
-                    style={{ width: `${Math.round(progressRatio * 100)}%` }}
-                  />
-                </div>
-                {progress?.lastQuality ? (
-                  <p className="text-[10px] text-command-muted">Quality: {progress.lastQuality}</p>
-                ) : null}
-              </div>
-            ) : null}
-
-            {phase === 'done' && result?.ok ? (
-              <div
-                className="mb-4 rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-[11px] text-emerald-200"
-                data-testid="voice-enroll-success"
-              >
-                <Volume2 size={14} className="mb-1 inline" /> Enrollment successful
-                {result.selfScore != null ? (
-                  <span className="ml-2 font-mono">score {(result.selfScore * 100).toFixed(0)}%</span>
-                ) : null}
-                {result.samples != null ? (
-                  <span className="ml-2 font-mono">samples {result.samples}</span>
-                ) : null}
-                {result.message ? <p className="mt-1">{result.message}</p> : null}
-              </div>
-            ) : null}
-
-            {phase === 'error' && result && !result.ok ? (
-              <p className="mb-4 text-[11px] text-red-400" role="alert">
-                {result.error || result.message || 'Enrollment failed'}
-              </p>
-            ) : null}
-
-            {phase === 'timeout' ? (
-              <p className="mb-4 text-[11px] text-amber-300" data-testid="voice-enroll-timeout">
-                3 minute ka timeout — dubara Start dabayein.
-              </p>
-            ) : null}
-
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className="primary-button"
-                data-testid="voice-enroll-start"
-                disabled={!canStart}
-                onClick={handleStart}
-              >
-                Start
-              </button>
-              <button
-                type="button"
-                className="icon-button"
-                data-testid="voice-enroll-commit"
-                disabled={phase !== 'capturing'}
-                onClick={handleCommit}
-              >
-                Commit
-              </button>
-              <button type="button" className="icon-button" onClick={handleClose}>
-                {phase === 'capturing' ? 'Cancel' : 'Close'}
-              </button>
+        {showMicLevel ? (
+          <div className="voice-enroll-lvl">
+            <span>Mic level</span>
+            <div data-testid="voice-enroll-mic-level">
+              <Bar value={micLevel} color="#35b992" />
             </div>
-          </motion.div>
-        </motion.div>
-      ) : null}
-    </AnimatePresence>
+            <b>{micLevelToDb(micLevel)}</b>
+          </div>
+        ) : null}
+
+        {phase === 'capturing' || progress ? (
+          <div className="voice-enroll-lvl">
+            <span>Recorded</span>
+            <Bar value={progressRatio} color="#3891fc" />
+            <b data-testid="voice-enroll-progress">
+              {Math.round(progress?.collectedS ?? 0)}s / {Math.round(progress?.targetS ?? TARGET_SECONDS)}s
+            </b>
+          </div>
+        ) : null}
+
+        {progress?.lastQuality ? (
+          <p className="text-[12px] text-command-muted">Quality: {progress.lastQuality}</p>
+        ) : null}
+
+        {phase === 'done' && result?.ok ? (
+          <div className="voice-enroll-result ok" data-testid="voice-enroll-success">
+            <StatusShape s="ok" label="Enrollment successful" hideLabel />
+            <span>
+              Enrollment successful
+              {result.selfScore != null ? (
+                <span className="ml-2 font-mono">score {(result.selfScore * 100).toFixed(0)}%</span>
+              ) : null}
+              {result.samples != null ? (
+                <span className="ml-2 font-mono">samples {result.samples}</span>
+              ) : null}
+              {result.message ? <span className="mt-1 block">{result.message}</span> : null}
+            </span>
+          </div>
+        ) : null}
+
+        {phase === 'error' && result && !result.ok ? (
+          <div className="voice-enroll-result bad" data-testid="voice-enroll-error" role="alert">
+            <StatusShape s="err" label="Enrollment failed" hideLabel />
+            <span>{`Enrollment failed: ${errorDetail}`}</span>
+          </div>
+        ) : null}
+
+        {phase === 'timeout' ? (
+          <div className="voice-enroll-result warn" data-testid="voice-enroll-timeout">
+            <StatusShape s="warn" label="Enrollment timeout" hideLabel />
+            <span>3 minute ka timeout — dubara Start dabayein.</span>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="n-dlg-ft">
+        <button
+          type="button"
+          className="primary-button"
+          data-testid="voice-enroll-start"
+          data-dialog-autofocus={canStart ? true : undefined}
+          disabled={!canStart}
+          onClick={handleStart}
+        >
+          Start
+        </button>
+        <button
+          type="button"
+          className="icon-button"
+          data-testid="voice-enroll-commit"
+          disabled={phase !== 'capturing'}
+          onClick={handleCommit}
+        >
+          Commit
+        </button>
+        <button type="button" className="icon-button" onClick={handleClose}>
+          {phase === 'capturing' ? 'Cancel' : 'Close'}
+        </button>
+      </div>
+    </Dialog>
   );
 };
 

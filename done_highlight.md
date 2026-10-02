@@ -850,3 +850,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `npm --prefix stonix_ui run build` pass; auth e2e 7/7 pass; electron 3/3 pass; testid inventory — X-90 ne koi naya testid nahi add kiya (pehle se `voice-enroll-error` baseline gap)
 - **Commit:** (pending) · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-89 · Neon SIM + voice enrollment dialogs · 2026-10-03 01:10 PKT
+- **Kya kiya:** Shared `Dialog` primitive (role dialog, aria-modal, focus trap, Esc, focus return, neon scrim blur); SIM aur voice enrollment dialogs ko n-dlg layout + `dialogs.css` me migrate; enrollment me prerequisites (StatusShape), mic/progress bars (Bar + dB), `voice-enroll-error` result. Saare sim-* aur voice-enroll-* testids rakhe.
+- **Files:** `stonix_ui/src/shared/ui/Dialog.tsx`, `stonix_ui/src/features/command-center/components/SimAccessDialog.tsx`, `stonix_ui/src/features/voice/VoiceEnrollDialog.tsx`, `stonix_ui/src/assets/styles/neon/dialogs.css`, `stonix_ui/src/assets/styles/index.css`, `stonix_ui/tests/testids.baseline.txt`
+- **Verify:** `npm --prefix stonix_ui run build` pass; sim + voiceid e2e 9/9 pass; `node stonix_ui/scripts/testid-inventory.mjs --check` pass
+- **Commit:** (pending) · **Deploy:** no
+- **Doosre agent ke liye:** —

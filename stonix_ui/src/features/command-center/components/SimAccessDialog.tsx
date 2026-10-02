@@ -1,6 +1,6 @@
 import { FormEvent, useMemo, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
 import { Search, ShieldCheck, User, X } from 'lucide-react';
+import { Dialog } from '@/shared/ui/Dialog';
 import {
   SimRecord,
   isSimProviderConfigured,
@@ -92,111 +92,101 @@ const SimAccessDialog = ({
   };
 
   return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          className="modal-backdrop no-drag"
-          data-testid="sim-dialog"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
+    <Dialog
+      open={open}
+      onClose={onClose}
+      data-testid="sim-dialog"
+      ariaLabelledBy="sim-dialog-title"
+      ariaDescribedBy="sim-dialog-desc"
+    >
+      <div className="n-dlg-hd">
+        <div className="mh" aria-hidden="true">
+          <ShieldCheck size={22} />
+        </div>
+        <div>
+          <h2 id="sim-dialog-title">SIM Access</h2>
+          <p id="sim-dialog-desc">Authorized lookup workspace</p>
+        </div>
+        <button
+          type="button"
+          className="icon-button"
+          title="Close SIM access"
+          aria-label="Close SIM access"
+          onClick={onClose}
         >
-          <motion.div
-            className="sim-dialog"
-            initial={{ opacity: 0, y: 16, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 16, scale: 0.98 }}
+          <X size={15} />
+        </button>
+      </div>
+
+      <div className="n-dlg-bd">
+        <div
+          className="sim-provider-banner"
+          data-testid="sim-provider-banner"
+          data-configured={
+            isSimProviderConfigured(provider, providerConfigured) ? 'true' : 'false'
+          }
+        >
+          {providerBanner}
+        </div>
+
+        <div className="sim-status-chip" data-testid="sim-status-chip" data-status={status}>
+          {statusChipLabel(status)}
+        </div>
+
+        {requiresPurpose && (
+          <label className="sim-purpose">
+            <span>Purpose (authorized audit)</span>
+            <input
+              data-testid="sim-purpose-input"
+              value={purpose}
+              onChange={event => setPurpose(event.target.value)}
+              placeholder="Why is this lookup needed?"
+              minLength={5}
+            />
+          </label>
+        )}
+
+        <form onSubmit={submit} className="sim-search">
+          <input
+            data-testid="sim-query-input"
+            value={query}
+            onChange={event => setQuery(event.target.value)}
+            placeholder="Enter authorized number..."
+            disabled={!agentOnline}
+          />
+          <button
+            type="submit"
+            disabled={!canSubmit}
+            title={agentOnline ? 'Start lookup' : 'Agent offline — lookup disabled'}
           >
-            <div className="sim-dialog__header">
-              <div className="flex items-center gap-3">
-                <div className="sim-dialog__icon">
-                  <ShieldCheck size={16} />
-                </div>
-                <div>
-                  <h2>SIM Access</h2>
-                  <p>Authorized lookup workspace</p>
-                </div>
-              </div>
-              <button onClick={onClose} className="icon-button" title="Close SIM access">
-                <X size={15} />
-              </button>
+            <Search size={15} />
+          </button>
+        </form>
+
+        {!agentOnline && (
+          <p className="sim-offline-hint" data-testid="sim-agent-offline-hint">
+            Agent offline — lookup disabled until the agent is online again.
+          </p>
+        )}
+
+        <div className="sim-result">
+          <div className="sim-avatar">
+            <User size={18} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <span className="panel-kicker">Identity</span>
+            <h3 data-testid="sim-identity-title">{identityTitle}</h3>
+            <div className="sim-meta">
+              <span data-testid="sim-cnic-masked">{maskedCnic(record)}</span>
+              <span data-testid="sim-phone-masked">{maskedPhone(record, queryMasked)}</span>
             </div>
-
-            <div
-              className="sim-provider-banner"
-              data-testid="sim-provider-banner"
-              data-configured={
-                isSimProviderConfigured(provider, providerConfigured) ? 'true' : 'false'
-              }
-            >
-              {providerBanner}
-            </div>
-
-            <div
-              className="sim-status-chip"
-              data-testid="sim-status-chip"
-              data-status={status}
-            >
-              {statusChipLabel(status)}
-            </div>
-
-            {requiresPurpose && (
-              <label className="sim-purpose">
-                <span>Purpose (authorized audit)</span>
-                <input
-                  data-testid="sim-purpose-input"
-                  value={purpose}
-                  onChange={event => setPurpose(event.target.value)}
-                  placeholder="Why is this lookup needed?"
-                  minLength={5}
-                />
-              </label>
-            )}
-
-            <form onSubmit={submit} className="sim-search">
-              <input
-                data-testid="sim-query-input"
-                value={query}
-                onChange={event => setQuery(event.target.value)}
-                placeholder="Enter authorized number..."
-                disabled={!agentOnline}
-              />
-              <button
-                type="submit"
-                disabled={!canSubmit}
-                title={agentOnline ? 'Start lookup' : 'Agent offline — lookup disabled'}
-              >
-                <Search size={15} />
-              </button>
-            </form>
-
-            {!agentOnline && (
-              <p className="sim-offline-hint" data-testid="sim-agent-offline-hint">
-                Agent offline — lookup disabled until the agent is online again.
-              </p>
-            )}
-
-            <div className="sim-result">
-              <div className="sim-avatar">
-                <User size={18} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <span className="panel-kicker">Identity</span>
-                <h3 data-testid="sim-identity-title">{identityTitle}</h3>
-                <div className="sim-meta">
-                  <span data-testid="sim-cnic-masked">{maskedCnic(record)}</span>
-                  <span data-testid="sim-phone-masked">{maskedPhone(record, queryMasked)}</span>
-                </div>
-                <p data-testid="sim-result-message">
-                  {message ||
-                    'No personal records are shown without authorized backend data.'}
-                </p>
-              </div>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+            <p data-testid="sim-result-message">
+              {message || 'No personal records are shown without authorized backend data.'}
+            </p>
+          </div>
+        </div>
+      </div>
+    </Dialog>
   );
 };
 

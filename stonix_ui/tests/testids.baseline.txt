@@ -192,6 +192,7 @@ voice-enroll-agent-muted
 voice-enroll-commit
 voice-enroll-connect
 voice-enroll-dialog
+voice-enroll-error
 voice-enroll-mic-hint
 voice-enroll-mic-level
 voice-enroll-progress
