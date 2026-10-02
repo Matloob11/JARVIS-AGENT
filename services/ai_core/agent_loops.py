@@ -4,7 +4,9 @@ Background loops for reminders, bug hunting, and UI communication.
 """
 
 import asyncio
+import functools
 import os
+import socket
 import uuid
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit, urlunsplit
@@ -17,7 +19,7 @@ from services.ai_core.jarvis_vector_memory import jarvis_vector_db
 from services.info.jarvis_sim_lookup import lookup_sim_data, open_sim_lookup_panel
 from services.utils.jarvis_adaptive import adaptive_engine
 from services.utils.jarvis_autonomous import autonomous_protector
-from services.utils.jarvis_bridge import notify_transcription, notify_ui
+from services.utils.jarvis_bridge import agent_link_v2, notify_transcription, wake_retry_queue
 from services.utils.jarvis_bug_hunter import monitor_logs
 from services.utils.jarvis_config import config
 from services.utils.jarvis_logger import setup_logger
@@ -102,6 +104,7 @@ async def start_reminder_loop(session: "AgentSession") -> None:
             await notify_transcription(
                 "assistant",
                 f"Reminder: {item['message']}",
+                source="system",
             )
         await asyncio.sleep(30)
 
@@ -115,6 +118,7 @@ async def start_bug_hunter_loop(session: "AgentSession") -> None:
                 await notify_transcription(
                     "assistant",
                     f"System error detected: {error_block[:400]}",
+                    source="system",
                 )
 
             await monitor_logs(on_error_detected)
@@ -163,12 +167,42 @@ def _job_identity() -> tuple[str, str]:
         return default_room, ""
 
 
+@functools.lru_cache(maxsize=1)
+def _agent_identity() -> tuple[str, str]:
+    """(agent_id, version) this worker announces with its agent_token (K-38): the host name and the git
+    commit it started from (GIT_SHA, else the checkout's HEAD), read once per process."""
+    from src.core.agent_lock import _git_sha  # pylint: disable=import-outside-toplevel
+    version = (os.getenv("GIT_SHA") or "").strip() or _git_sha()
+    return (socket.gethostname() or "unknown")[:64], (version or "unknown")[:12]
+
+
+_CHAT_ID_MAX = 128
+
+
+def chat_input(payload: Any) -> tuple[str | None, str] | None:
+    """
+    (id, text) of a ui_command 'chat' (K-41): the UI's {id, text} keeps its id; a legacy plain string, or a
+    dict without a usable id (a str of 1-128 printable characters), gives None for the id. None when there
+    is no text to answer.
+    """
+    if isinstance(payload, dict):
+        text, msg_id = payload.get("text"), payload.get("id")
+        if not (isinstance(msg_id, str) and 0 < len(msg_id) <= _CHAT_ID_MAX and msg_id.isprintable()):
+            msg_id = None
+    else:
+        text, msg_id = payload, None
+    if not isinstance(text, str) or not text.strip():
+        return None
+    return msg_id, text
+
+
 class UIBridgeListener:
     """Manages Socket.IO connection and command handling for the UI Bridge."""
     def __init__(self, assistant: "BrainAssistant") -> None:
         self.assistant = assistant
         self.sio = socketio.AsyncClient(reconnection=False)
         self._is_reconnecting = False
+        self._auth_kind = "-"  # what the last connect authenticated with, for the log
 
         self.sio.on('agent_command', self.on_command)
         self.sio.on('agent_vision_frame', self.on_vision_frame)
@@ -214,9 +248,13 @@ class UIBridgeListener:
                     logger.info("SIM lookup workflow requested from UI.")
                     await lookup_sim_data(str(payload))
             elif cmd_type == "chat":
-                if payload:
-                    logger.info("💬 Chat message received: %s", payload)
-                    new_task = asyncio.create_task(self._task_wrapper(payload))
+                chat = chat_input(payload)
+                if chat is None:
+                    logger.debug("Chat command without text ignored (%s)", type(payload).__name__)
+                else:
+                    msg_id, text = chat
+                    logger.info("💬 Chat message received (id %s): %s", msg_id or "new", text)
+                    new_task = asyncio.create_task(self._task_wrapper(text, msg_id))
                     self.assistant._spawned_tasks.add(new_task) # type: ignore[attr-defined]
                     new_task.add_done_callback(self.assistant._spawned_tasks.discard) # type: ignore[attr-defined]
             elif cmd_type == "swarm":
@@ -228,12 +266,16 @@ class UIBridgeListener:
         except Exception as e:
             logger.error("❌ Error processing UI command %s: %s", cmd_type, e, exc_info=True)
 
-    async def _task_wrapper(self, payload: str) -> None:
-        """Handle UI chat as text only — never call session.say() (no TTS dependency)."""
+    async def _task_wrapper(self, payload: str, msg_id: str | None = None) -> None:
+        """
+        Handle UI chat as text only — never call session.say() (no TTS dependency). C-MSG-1: the user's
+        message is echoed with the UI's id (msg_id; a new id only for a legacy string) and source 'text', so
+        the bridge and the UI keep one bubble; the reply follows with source 'text' and turn_id = that id.
+        """
         response_text = "Sir, main yahan hoon."
+        user_msg_id = msg_id or str(uuid.uuid4())
         try:
-            user_msg_id = str(uuid.uuid4())
-            await notify_transcription("user", payload, msg_id=user_msg_id)
+            await notify_transcription("user", payload, msg_id=user_msg_id, source="text")
             logger.info("CHAT_TEXT_PATH_V2 user notified")
             safe_message = vortex_guard.sanitize_input(payload)
             try:
@@ -257,7 +299,8 @@ class UIBridgeListener:
 
         try:
             assistant_msg_id = str(uuid.uuid4())
-            await notify_transcription("assistant", response_text, msg_id=assistant_msg_id)
+            await notify_transcription("assistant", response_text, msg_id=assistant_msg_id,
+                                       source="text", turn_id=user_msg_id)
             logger.info(
                 "💬 Text reply sent to UI (%d chars): %s",
                 len(response_text),
@@ -286,7 +329,8 @@ class UIBridgeListener:
 
     async def on_connect(self) -> None:
         self._is_reconnecting = False
-        logger.info("✅ UI Bridge Connected.")
+        logger.info("✅ UI Bridge Connected. (auth %s)", self._auth_kind)
+        wake_retry_queue()  # the bridge is back: send the notifies that wait for a retry now
 
     async def on_disconnect(self) -> None:
         logger.warning("❌ UI Bridge Disconnected. Retrying...")
@@ -294,10 +338,21 @@ class UIBridgeListener:
 
     def _auth(self, url: str) -> dict[str, Any]:
         """Built anew for every connect. The internal :5002 listener (VPS brain) gets the agent role with
-        this job's room (K-38 v4); any other URL keeps today's token auth."""
+        this job's room (K-38 v4). Any other URL gets the agent_token with this host and version (role
+        'agent', C-SOCK-1) when the agent link v2 keys are set, else today's legacy token. The agent_token
+        auth declares the room and job too: K-38 v4 sends ui_command only to agent sockets whose declared
+        room is JARVIS_ROOM_NAME, and a bridge that predates that ignores the extra keys."""
         if is_internal_listener(url):
             room, job_id = _job_identity()
+            self._auth_kind = "internal"
             return {"role": "agent", "room": room, "job_id": job_id}
+        if agent_link_v2():
+            agent_id, version = _agent_identity()
+            room, job_id = _job_identity()
+            self._auth_kind = "agent_token"
+            return {"agent_token": config.agent_token, "agent_id": agent_id, "version": version,
+                    "room": room, "job_id": job_id}
+        self._auth_kind = "legacy token"
         return {'token': config.security_token}
 
     async def _close(self) -> None:

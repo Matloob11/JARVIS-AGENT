@@ -354,6 +354,7 @@ def test_the_internal_listener_gets_the_agent_role_with_the_job_room(monkeypatch
 def test_any_other_url_keeps_todays_token_auth(monkeypatch):
     listener = _listener(monkeypatch, MagicMock())
     monkeypatch.setattr(config, "security_token", "c112-fake-token")
+    monkeypatch.setattr(config, "agent_token", None)  # C-15: with AGENT_TOKEN set it sends that instead
     for url in ("http://203.0.113.10:5101", "https://jarvis.example/vortex"):
         assert listener._auth(url) == {"token": "c112-fake-token"}
 

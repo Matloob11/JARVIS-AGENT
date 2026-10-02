@@ -1,5 +1,6 @@
 # pylint: disable=redefined-outer-name, unused-variable, import-outside-toplevel
 import asyncio
+import json
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
 from services.utils.jarvis_bridge import notify_ui
@@ -19,7 +20,9 @@ async def test_notify_ui():
         await notify_ui("START")
         mock_post.assert_called_once()
         _, kwargs = mock_post.call_args
-        assert kwargs["json"]["payload"] == "START"
+        # C-15: the signed body goes as content= (agent link v2), the legacy one as json=
+        body = json.loads(kwargs["content"]) if "content" in kwargs else kwargs["json"]
+        assert body["payload"] == "START"
 
 
 @pytest.mark.asyncio
