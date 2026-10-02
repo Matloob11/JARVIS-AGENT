@@ -585,6 +585,7 @@
 .overview-hero__status-user {
   left: calc(var(--ox) + 447 * var(--u));
   top: calc(var(--oy) + 280 * var(--u));
+  min-height: max(20px, calc(24 * var(--u)));
   font-family: var(--font-med);
   font-size: max(13.5px, calc(20.25 * var(--u)));
   line-height: max(19px, calc(28 * var(--u)));
@@ -600,7 +601,10 @@
   display: inline-flex;
   align-items: center;
   gap: calc(8 * var(--u));
+  width: calc(216 * var(--u));
   max-width: calc(100cqw - var(--ox) - 447 * var(--u) - 12px);
+  height: max(24px, calc(28 * var(--u)));
+  box-sizing: border-box;
 }
 
 .overview-hero__status[data-tone='mute'] {
@@ -659,16 +663,19 @@
 }
 
 .overview-hero__status--hidden {
+  visibility: hidden;
   position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
+  left: calc(var(--ox) + 447 * var(--u));
+  top: calc(var(--oy) + 280 * var(--u));
+  width: calc(100cqw - var(--ox) - 447 * var(--u) - 16px);
+  min-height: max(20px, calc(24 * var(--u)));
+  margin: 0;
+  pointer-events: none;
 }
 
 .overview-hero__status-user {
   color: #fff;
+  min-height: max(20px, calc(24 * var(--u)));
 }
 
 .overview-hero__btns {
@@ -676,8 +683,10 @@
   left: calc(var(--ox) + 108 * var(--u));
   top: calc(var(--oy) + 360 * var(--u));
   gap: calc(15 * var(--u));
+  width: calc(625 * var(--u));
   z-index: 8;
   pointer-events: auto;
+  box-sizing: border-box;
 }
 
 @container (max-height: 320px) {
@@ -760,27 +769,22 @@
 }
 
 .overview-hero__quote {
-  left: calc(var(--ox) + 399.5 * var(--u));
+  left: calc(var(--ox) + 108 * var(--u));
   top: calc(var(--oy) + 437 * var(--u));
-  transform: translateX(-50%);
+  transform: none;
   font-size: max(12px, calc(14.25 * var(--u)));
   line-height: max(16px, calc(20 * var(--u)));
-  letter-spacing: max(0.8px, calc(1.6 * var(--u)));
-  color: var(--t-quote, #95aadf);
-  text-align: center;
-  max-width: calc(100cqw - 32px);
-  pointer-events: none;
-  z-index: 2;
-}
-
-.overview-hero__quote[data-helper='true'] {
-  left: calc(var(--ox) + 108 * var(--u));
-  transform: none;
   letter-spacing: 0.2px;
+  color: var(--t-quote, #95aadf);
   text-align: left;
+  width: calc(520 * var(--u));
   max-width: calc(100cqw - var(--ox) - 108 * var(--u) - 16px);
+  height: max(40px, calc(48 * var(--u)));
+  box-sizing: border-box;
   overflow: hidden;
   text-overflow: ellipsis;
+  pointer-events: none;
+  z-index: 2;
 }
 
 @media (max-width: 1023.98px) {

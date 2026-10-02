@@ -116,6 +116,7 @@ export function install() {
       return {
         loop: orb.loop,
         draws: orb.draws,
+        hasOrb: getActiveOrbRenderer() != null,
         roomWrites: orb.glowWrites,
         engineLoop: engine.engineLoop,
         engineTicks: engine.engineTicks,

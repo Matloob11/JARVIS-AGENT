@@ -1025,3 +1025,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** confirm-hidden + confirm e2e 11/11
 - **Commit:** bc2d98c · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-98 · Orb motion gates + presence.spec motion · 2026-10-03 03:45 PKT
+- **Kya kiya:** Orb animation ab agent audio level par chalti hai (speaking + feedAgent(0) quiet); reduced motion par static frame + loop stop; presence.spec motion/loop/layout gates; hero slot CSS taake status/quote/button row shift na ho.
+- **Files:** `OrbCanvas.tsx`, `orbRenderer.ts`, `presence.spec.ts`, `overview.css`, `e2eHooks.ts`, `plan.md`
+- **Verify:** `npm --prefix stonix_ui run build` pass; `npm --prefix stonix_ui run test:e2e -- tests/e2e/presence.spec.ts` 26/26 ×3; testid inventory 250 pass
+- **Commit:** (pending) · **Deploy:** no
+- **Doosre agent ke liye:** —

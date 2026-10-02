@@ -1323,7 +1323,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-95 | cursor | P3 | Product baselines, layout, Electron and performance gates; the nothing-removed audit | X-77, X-82, X-93, X-94, X-98, X-100, X-109 | TODO |
 | X-96 | cursor | P3 | One socket subscription store: Reconnect re-binds every listener, request_state once per connect, init_state merges (D1–D3) | X-69 | DONE (cursor, 02 Oct 22:10 PKT) |
 | X-97 | cursor | P3 | Voice state machine: ten states, the hero status line and inline actions, helper slot, buttons and mic mirrors, Voice pill, announcer | X-72, X-73, X-75, X-76, X-78, X-104 | DONE (cursor, 03 Oct 02:15 PKT) |
-| X-98 | cursor | P3 | Reduced motion and presence.spec motion part: motion follows the level, the loop stops, nothing shifts | X-97 | DOING (cursor, 03 Oct 02:55 PKT) |
+| X-98 | cursor | P3 | Reduced motion and presence.spec motion part: motion follows the level, the loop stops, nothing shifts | X-97 | DONE (cursor, 03 Oct 03:45 PKT) |
 | X-99 | cursor | P3 | Popover primitive; Agent, Voice and Devices popovers (mic, listening, stop, wake, pause/wake and Reconnect move out of the header) | X-78 | DONE |
 | X-100 | cursor | P3 | Electron: header reserve, window buttons at the window edge, drag region, header-layout.spec | X-99 | DONE (cursor, 03 Oct 02:35 PKT) |
 | X-101 | cursor | P3 | Approvals tab, and the phone confirm sheet with "Decide later" and the approvals bar | X-82, X-84 | DONE (cursor, 03 Oct 02:26 PKT) |

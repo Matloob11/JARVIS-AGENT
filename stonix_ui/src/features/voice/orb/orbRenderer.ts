@@ -113,6 +113,10 @@ export class OrbRenderer {
     const cfg = STATE_CFG[state];
     setPaletteTargets(persona, cfg.grey, cfg.dim);
     this.look = { ...cfg.look };
+    if (this.reducedMotion) {
+      this.drawStatic();
+      return;
+    }
     this.schedule();
   }
 
@@ -145,8 +149,12 @@ export class OrbRenderer {
 
   setVisible(on: boolean) {
     this.visible = on;
-    if (on) this.schedule();
-    else this.stopLoop();
+    if (on) {
+      if (this.reducedMotion) this.drawStatic();
+      else this.schedule();
+    } else {
+      this.stopLoop();
+    }
   }
 
   snapPalette() {
@@ -198,14 +206,18 @@ export class OrbRenderer {
   private computeLoopMode(t: number): 'full' | 'breath' | 'stop' {
     if (this.reducedMotion || !this.orbOnScreen()) return 'stop';
     const s = this.state;
-    if (
-      this.settling(t) ||
-      s === 'speaking' ||
-      s === 'listening' ||
-      s === 'thinking'
-    ) {
-      return 'full';
+    if (this.settling(t)) return 'full';
+    if (s === 'speaking') {
+      const lvl = audioEngine.readAgent().level;
+      if (lvl > 0.02 || this.L > 0.02) return 'full';
+      return 'breath';
     }
+    if (s === 'listening') {
+      const lvl = audioEngine.readUser().level;
+      if (lvl > 0.02 || this.L > 0.02) return 'full';
+      return 'breath';
+    }
+    if (s === 'thinking') return 'full';
     if (s === 'idle' || s === 'mic-off') return 'breath';
     return 'stop';
   }
@@ -297,6 +309,22 @@ export class OrbRenderer {
       return;
     }
 
+    const agent = audioEngine.readAgent();
+    const user = audioEngine.readUser();
+    const levelStill =
+      (this.state === 'speaking' && agent.level <= 0.02 && this.L <= 0.02) ||
+      (this.state === 'listening' && user.level <= 0.02 && this.L <= 0.02);
+
+    if (levelStill && (this.state === 'speaking' || this.state === 'listening')) {
+      audioEngine.setRate('coarse');
+      const { ctx, k } = setupOrbCanvas(this.orb, 520, 520, this.orbCssPx, this.phone);
+      drawOrbExact(ctx, k, 0, 0, this.state, this.persona, true, this.look, [], this.env);
+      this.paintWave(0, 0, null);
+      this.drawCount += 1;
+      this.schedule();
+      return;
+    }
+
     const dt = Math.min(0.1, (now - this.lastFrame) / 1000);
     this.lastFrame = now;
     this.lastDraw = now;
@@ -305,10 +333,14 @@ export class OrbRenderer {
     audioEngine.setRate(mode === 'full' ? 'frame' : 'coarse');
     if (mode === 'full') audioEngine.tickFrame(dt);
 
-    const agent = audioEngine.readAgent();
-    const user = audioEngine.readUser();
     let L = 0;
-    if (this.state === 'speaking') L = agent.level;
+    if (this.state === 'speaking') {
+      L = agent.level;
+      if (agent.level <= 0.02) {
+        this.ripples.length = 0;
+        this.L = 0;
+      }
+    }
     if (this.state === 'listening') {
       this.userL += (user.level - this.userL) * 0.5;
       L = this.userL * 0.55;
@@ -317,7 +349,8 @@ export class OrbRenderer {
     }
     this.look.pull = this.userL;
 
-    this.L += (L - this.L) * (L > this.L ? 0.6 : 0.18);
+    const release = L <= 0.02 && this.state === 'speaking' ? 0.45 : L > this.L ? 0.6 : 0.18;
+    this.L += (L - this.L) * release;
     if (this.L - this.prevL > 0.035 && this.L > 0.24 && agent.onset) {
       this.ripples.push({
         t0: t,
@@ -337,7 +370,18 @@ export class OrbRenderer {
     this.prevL = this.L;
 
     const { ctx, k } = setupOrbCanvas(this.orb, 520, 520, this.orbCssPx, this.phone);
-    drawOrbFrame(ctx, k, t, this.L, this.state, this.persona, false, this.look, this.ripples, this.env);
+    drawOrbFrame(
+      ctx,
+      k,
+      t,
+      this.L,
+      this.state,
+      this.persona,
+      levelStill,
+      this.look,
+      this.ripples,
+      this.env,
+    );
 
     const waveMode = this.waveMode();
     let waveBands: Float32Array | null = null;

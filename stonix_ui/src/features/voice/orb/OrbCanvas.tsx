@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, type RefObject } from 'react';
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { subscribeE2EVoiceChange } from '../e2eVoiceOverride';
 import { getPersona, type PersonaKey } from '@/shared/persona';
 import { Icon } from '@/shared/ui/icons/Icon';
 import type { IconName } from '@/shared/ui/icons/Sprite';
 import { useLayout } from '@/features/shell/useLayout';
-import { useHashRouter } from '@/features/shell/useHashRouter';
 import { OrbRenderer, type VoiceState } from './orbRenderer';
 import { deriveOrbVoiceState } from './deriveOrbVoiceState';
 import {
@@ -66,11 +66,16 @@ const OrbCanvas = ({
   waveCanvasRef,
 }: OrbCanvasProps) => {
   const layout = useLayout();
-  const route = useHashRouter(layout);
   const hostRef = useRef<HTMLDivElement>(null);
   const orbRef = useRef<HTMLCanvasElement>(null);
   const ringRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<OrbRenderer | null>(null);
+  const [e2eVoiceTick, setE2eVoiceTick] = useState(0);
+
+  useEffect(() => {
+    if (!__E2E_HOOKS__) return undefined;
+    return subscribeE2EVoiceChange(() => setE2eVoiceTick(t => t + 1));
+  }, []);
 
   const voiceState = useMemo(
     () =>
@@ -109,8 +114,14 @@ const OrbCanvas = ({
       isSpeaking,
       isThinking,
       isUserSpeaking,
+      e2eVoiceTick,
     ],
   );
+
+  const voiceStateLive = useRef(voiceState);
+  const personaLive = useRef(persona);
+  voiceStateLive.current = voiceState;
+  personaLive.current = persona;
 
   const copy = getPersona(persona);
   const orbLabel = `${copy.name} voice orb: ${statusLine}`;
@@ -128,56 +139,92 @@ const OrbCanvas = ({
   }, []);
 
   useEffect(() => {
-    const orb = orbRef.current;
-    const wave = waveCanvasRef.current;
-    const ring = ringRef.current;
-    const host = hostRef.current;
-    if (!orb || !wave || !ring || !host) return undefined;
+    let cancelled = false;
+    let orbRo: ResizeObserver | null = null;
+    let waveRo: ResizeObserver | null = null;
+    let io: IntersectionObserver | null = null;
+    let renderer: OrbRenderer | null = null;
+    let mountRaf = 0;
+    let dropMq: (() => void) | null = null;
 
-    const phone = layout === 'ph';
-    const renderer = new OrbRenderer(orb, wave, ring, { phone });
-    rendererRef.current = renderer;
-
-    const orbRo = new ResizeObserver(entries => {
-      for (const e of entries) {
-        const w = e.contentRect.width;
-        if (w > 0) renderer.resizeOrb(w);
+    const onVis = () => {
+      if (!renderer) return;
+      if (__E2E_HOOKS__) {
+        renderer.setVisible(true);
+        return;
       }
-    });
-    orbRo.observe(host);
+      renderer.setVisible(pageActive && !document.hidden);
+    };
 
-    const waveRo = new ResizeObserver(entries => {
-      for (const e of entries) {
-        const { width, height } = e.contentRect;
-        if (width > 0) renderer.resizeWave(width, height > 0 ? height : 40);
+    const mount = () => {
+      if (cancelled) return;
+      const orb = orbRef.current;
+      const wave = waveCanvasRef.current;
+      const ring = ringRef.current;
+      const host = hostRef.current;
+      if (!orb || !wave || !ring || !host) {
+        mountRaf = requestAnimationFrame(mount);
+        return;
       }
-    });
-    const waveBox = wave.parentElement;
-    if (waveBox) waveRo.observe(waveBox);
 
-    const io = new IntersectionObserver(
-      entries => {
-        renderer.setVisible(entries.some(x => x.isIntersecting));
-      },
-      { threshold: 0 },
-    );
-    io.observe(orb);
+      const phone = layout === 'ph';
+      renderer = new OrbRenderer(orb, wave, ring, { phone });
+      rendererRef.current = renderer;
+      if (__E2E_HOOKS__) {
+        renderer.setVisible(true);
+      }
+      renderer.setState(voiceStateLive.current, personaLive.current);
 
-    const onVis = () => renderer.setVisible(pageActive && !document.hidden);
-    document.addEventListener('visibilitychange', onVis);
+      orbRo = new ResizeObserver(entries => {
+        for (const e of entries) {
+          const w = e.contentRect.width;
+          if (w > 0) renderer!.resizeOrb(w);
+        }
+      });
+      orbRo.observe(host);
 
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const onMotion = () => renderer.setReducedMotion(mq.matches);
-    onMotion();
-    mq.addEventListener('change', onMotion);
+      waveRo = new ResizeObserver(entries => {
+        for (const e of entries) {
+          const { width, height } = e.contentRect;
+          if (width > 0) renderer!.resizeWave(width, height > 0 ? height : 40);
+        }
+      });
+      const waveBox = wave.parentElement;
+      if (waveBox) waveRo.observe(waveBox);
+
+      io = new IntersectionObserver(
+        entries => {
+          if (!renderer) return;
+          if (__E2E_HOOKS__) {
+            renderer.setVisible(true);
+            return;
+          }
+          renderer.setVisible(entries.some(x => x.isIntersecting));
+        },
+        { threshold: 0 },
+      );
+      io.observe(orb);
+
+      document.addEventListener('visibilitychange', onVis);
+
+      const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+      const onMotion = () => renderer!.setReducedMotion(mq.matches);
+      onMotion();
+      mq.addEventListener('change', onMotion);
+      dropMq = () => mq.removeEventListener('change', onMotion);
+    };
+
+    mount();
 
     return () => {
-      orbRo.disconnect();
-      waveRo.disconnect();
-      io.disconnect();
+      cancelled = true;
+      if (mountRaf) cancelAnimationFrame(mountRaf);
+      dropMq?.();
+      orbRo?.disconnect();
+      waveRo?.disconnect();
+      io?.disconnect();
       document.removeEventListener('visibilitychange', onVis);
-      mq.removeEventListener('change', onMotion);
-      renderer.destroy();
+      renderer?.destroy();
       rendererRef.current = null;
     };
   }, [layout, pageActive, waveCanvasRef]);
@@ -191,10 +238,8 @@ const OrbCanvas = ({
   useEffect(() => {
     const renderer = rendererRef.current;
     if (!renderer) return;
-    const onOverview =
-      route.page === 'overview' && (layout !== 'ph' || pageActive);
-    renderer.setVisible(onOverview && !document.hidden);
-  }, [route.page, layout, pageActive]);
+    renderer.setVisible(pageActive && (__E2E_HOOKS__ || !document.hidden));
+  }, [pageActive]);
 
   return (
     <div ref={hostRef} className="neon-orb-host">
