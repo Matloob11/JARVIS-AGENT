@@ -1,5 +1,6 @@
 import { FormEvent, useState } from 'react';
-import { Eye, EyeOff, Radar } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
+import { LogoRing } from '@/shared/ui/LogoRing';
 import { useAuth } from './AuthProvider';
 import { AuthApiError } from './api';
 
@@ -71,12 +72,13 @@ const LoginScreen = () => {
     <div className="login-root">
       <div className="login-card no-drag">
         <div className="login-brand">
-          <div className="brand-mark">
-            <Radar size={18} />
+          <div className="brand-mark overflow-hidden p-0">
+            <LogoRing size={32} />
           </div>
           <div>
-            <h1 className="text-[15px] font-semibold tracking-[0.18em] text-command-text">STONIX</h1>
-            <p className="text-[11px] text-command-muted">Owner session — password + authenticator</p>
+            <h1 className="text-[15px] font-semibold tracking-[0.18em] text-command-text">JARVIS & ANNA</h1>
+            <p className="text-[11px] text-command-muted">Your AI Command Center</p>
+            <p className="text-[10px] text-command-muted/80">Owner session: password and authenticator</p>
           </div>
         </div>
 

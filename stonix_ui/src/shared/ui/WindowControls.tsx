@@ -23,7 +23,7 @@ const WindowControls = () => {
     electronAPI.onMaximize(() => setIsMaximized(true));
     electronAPI.onUnmaximize(() => setIsMaximized(false));
     electronAPI.onBackendExit?.((code) => {
-      toast.error(`JARVIS backend band ho gaya (code ${code})`);
+      toast.error(`JARVIS & ANNA backend band ho gaya (code ${code})`);
     });
   }, [electronAPI]);
 

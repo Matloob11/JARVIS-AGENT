@@ -18,6 +18,7 @@ import { personaAccent } from '@/shared/theme/commandTheme';
 import { useLiveKit } from '@/features/voice/LiveKitProvider';
 import { useAgentStatus } from '@/features/status/useAgentStatus';
 import { useSettings } from '@/features/settings/useSettings';
+import { LogoRing } from '@/shared/ui/LogoRing';
 import {
   AgentChipMenu,
   AgentListeningToggle,
@@ -132,12 +133,12 @@ const TopBar = ({
   return (
     <header className="command-topbar drag-handle">
       <div className="no-drag flex items-center gap-3">
-        <div className="brand-mark">
-          <Radar size={15} />
+        <div className="brand-mark overflow-hidden p-0">
+          <LogoRing size={30} />
         </div>
         <div className="hidden sm:block">
-          <h1 className="text-[13px] font-semibold tracking-[0.18em] text-command-text">STONIX</h1>
-          <p className="text-[10px] text-command-muted">Assistant command center</p>
+          <h1 className="text-[13px] font-semibold tracking-[0.18em] text-command-text">JARVIS & ANNA</h1>
+          <p className="text-[10px] text-command-muted">Your AI Command Center</p>
         </div>
       </div>
 

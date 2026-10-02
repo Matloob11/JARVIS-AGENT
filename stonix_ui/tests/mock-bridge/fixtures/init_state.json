@@ -3,7 +3,7 @@
     {
       "id": "msg-welcome-001",
       "role": "assistant",
-      "text": "Mock bridge ready. STONIX dashboard online.",
+      "text": "Mock bridge ready. JARVIS & ANNA dashboard online.",
       "source": "system",
       "final": true,
       "ts": 1727700000,

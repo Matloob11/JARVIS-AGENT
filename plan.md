@@ -1295,7 +1295,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-67 | cursor | P0 | UI for the split: Laptop chip, Stop desktop, notification ack, media links, Electron 'desktop' mode | C-116, C-117, C-111 | TODO |
 | X-68 | cursor | P4 | (optional, deferred by user decision D3) Owner approval key in the browser: pairing and signed approvals over the arguments you see (V9) | C-111, C-116, X-67 | NOT NEEDED (deferred by user decision D3; reopen only if local approvals return) |
 | X-69 | cursor | P3 | Design tokens, Tailwind mapping, self-hosted fonts, icon sprite, full testid inventory baseline | C-135 | DONE (cursor, 02 Oct 21:50 PKT) |
-| X-70 | cursor | P3 | Brand: the reference ring logo, wordmark, rename STONIX (with the three specs and the fixture) | X-69 | TODO |
+| X-70 | cursor | P3 | Brand: the reference ring logo, wordmark, rename STONIX (with the three specs and the fixture) | X-69 | DONE (cursor, 02 Oct 22:15 PKT) |
 | X-71 | cursor | P3 | Favicon and tray icons from the ring logo; Electron window, tray and offline strings | X-70 | TODO |
 | X-72 | cursor | P3 | Persona copy table with grammatical gender, the owner constant, persona-aware strings | X-69 | TODO |
 | X-73 | cursor | P3 | UI primitives (the n- kit) and StatusShape | X-69 | TODO |
@@ -1321,7 +1321,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-93 | cursor | P3 | Motion hygiene: MotionConfig reducedMotion="user", no framer loops, human relative times (D11) | X-83, X-84, X-85, X-98 | TODO |
 | X-94 | cursor | P3 | Accessibility gate: axe on every page and state, the 12 px floor, focus rings, announcer | X-78, X-79, X-80, X-82, X-83, X-84, X-85, X-86, X-87, X-88, X-89, X-90, X-91, X-92, X-97, X-99, X-100, X-101, X-102, X-103, X-104, X-105, X-106, X-107, X-108 | TODO |
 | X-95 | cursor | P3 | Product baselines, layout, Electron and performance gates; the nothing-removed audit | X-77, X-82, X-93, X-94, X-98, X-100, X-109 | TODO |
-| X-96 | cursor | P3 | One socket subscription store: Reconnect re-binds every listener, request_state once per connect, init_state merges (D1–D3) | X-69 | TODO |
+| X-96 | cursor | P3 | One socket subscription store: Reconnect re-binds every listener, request_state once per connect, init_state merges (D1–D3) | X-69 | DOING (cursor, 02 Oct 21:58 PKT) |
 | X-97 | cursor | P3 | Voice state machine: ten states, the hero status line and inline actions, helper slot, buttons and mic mirrors, Voice pill, announcer | X-72, X-73, X-75, X-76, X-78, X-104 | TODO |
 | X-98 | cursor | P3 | Reduced motion and presence.spec motion part: motion follows the level, the loop stops, nothing shifts | X-97 | TODO |
 | X-99 | cursor | P3 | Popover primitive; Agent, Voice and Devices popovers (mic, listening, stop, wake, pause/wake and Reconnect move out of the header) | X-78 | TODO |

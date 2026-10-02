@@ -1,4 +1,4 @@
-# STONIX dashboard (stonix_ui)
+# JARVIS & ANNA dashboard (stonix_ui)
 
 React + Vite UI for JARVIS, with an optional Electron shell and a Node mock bridge for offline e2e tests.
 

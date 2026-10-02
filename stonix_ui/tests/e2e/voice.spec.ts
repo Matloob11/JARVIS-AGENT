@@ -8,7 +8,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('mock LiveKit 503 shows Voice unavailable without crashing', async ({ page }) => {
-  await expect(page.getByText(/STONIX/i).first()).toBeVisible();
+  await expect(page).toHaveTitle(/JARVIS & ANNA/);
   await expect(page.getByTestId('voice-status')).toContainText(/Voice unavailable|System active|linked/i, {
     timeout: 15_000,
   });

@@ -34,7 +34,7 @@ test('wrong password shows inline error', async ({ page }) => {
 
 test('recovery code login opens dashboard', async ({ page }) => {
   await loginViaRecovery(page);
-  await expect(page.getByText(/STONIX/i).first()).toBeVisible();
+  await expect(page).toHaveTitle(/JARVIS & ANNA/);
 });
 
 test('reload keeps session after login', async ({ page }) => {

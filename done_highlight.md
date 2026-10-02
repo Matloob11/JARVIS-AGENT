@@ -710,3 +710,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `npm --prefix stonix_ui run build` pass · `npm run lint` pass · `npm run test:e2e` 96/96 · `node stonix_ui/scripts/testid-inventory.mjs --check` pass · no fonts.googleapis · no `command-*/NN` in src
 - **Commit:** abhi nahi · **Deploy:** no
 - **Doosre agent ke liye:** X-70 brand/wordmark; `retired: ops-drawer-backdrop` baseline me (X-86 toggle alias).
+
+### ✅ [cursor] X-70 · Brand ring logo + JARVIS & ANNA rename · 2026-10-02 22:15 PKT
+- **Kya kiya:** `orbData.ts` + `LogoRing` canvas (prototype drawLogo, DPR≤2); TopBar aur login par ring + "JARVIS & ANNA" / "Your AI Command Center"; STONIX hata kar §19 strings (title, confirm BASE_TITLE, WindowControls toast, README, mock init_state); e2e title checks.
+- **Files:** stonix_ui/src/features/voice/orb/*, stonix_ui/src/shared/ui/LogoRing.tsx, TopBar.tsx, LoginScreen.tsx, ConfirmDialog.tsx, WindowControls.tsx, index.html, README.md, tests/e2e/{auth,dashboard,voice}.spec.ts, tests/mock-bridge/fixtures/init_state.json
+- **Verify:** `npm --prefix stonix_ui run build` pass · whole-word stonix grep (src/tests/index/README) empty · e2e auth+dashboard+voice 10/10 · testid-inventory --check pass
+- **Commit:** abhi nahi · **Deploy:** no
+- **Doosre agent ke liye:** X-71 favicons/tray; sidebar `brand-mark` testid jab X-103 aaye.

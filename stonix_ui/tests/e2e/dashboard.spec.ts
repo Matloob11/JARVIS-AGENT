@@ -8,7 +8,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('production dashboard renders and accepts a command', async ({ page }) => {
-  await expect(page.getByText(/STONIX/i).first()).toBeVisible();
+  await expect(page).toHaveTitle(/JARVIS & ANNA/);
   await expect(page.getByText(/System Flow/i)).toBeVisible();
   await expect(page.getByText(/System Logs/i)).toBeVisible();
 

@@ -11,8 +11,8 @@ interface ConfirmDialogProps {
   onDeny: (id: string) => void;
 }
 
-const TITLE_FLASH_PREFIX = '⚠ Confirm — ';
-const BASE_TITLE = 'STONIX Command';
+const TITLE_FLASH_PREFIX = '⚠ Confirm: ';
+const BASE_TITLE = 'JARVIS & ANNA';
 
 function playConfirmChime() {
   try {
