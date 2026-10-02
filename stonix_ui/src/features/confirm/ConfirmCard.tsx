@@ -20,6 +20,9 @@ export interface ConfirmCardProps {
   cancelNotice: boolean;
   onAllow: (id: string) => void;
   onDeny: (id: string) => void;
+  phoneSheet?: boolean;
+  onDecideLater?: () => void;
+  focusDenyOnOpen?: boolean;
 }
 
 const TITLE_FLASH_PREFIX = '⚠ Confirm: ';
@@ -110,6 +113,16 @@ function secondsRemaining(item: QueuedConfirm): number {
   return Math.max(0, Math.ceil((item.deadlineMs - Date.now()) / 1000));
 }
 
+function vibrateConfirmPulse() {
+  try {
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate([120, 60, 120]);
+    }
+  } catch {
+    /* optional */
+  }
+}
+
 const ConfirmCard = ({
   current,
   queue,
@@ -117,6 +130,9 @@ const ConfirmCard = ({
   cancelNotice,
   onAllow,
   onDeny,
+  phoneSheet = false,
+  onDecideLater,
+  focusDenyOnOpen = false,
 }: ConfirmCardProps) => {
   const layout = useLayout();
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -368,6 +384,10 @@ const ConfirmCard = ({
     if (announcedHeadRef.current === current.id) return;
     announcedHeadRef.current = current.id;
 
+    if (layout === 'ph' || phoneSheet) {
+      vibrateConfirmPulse();
+    }
+
     cfSay(announceHead(current));
     if ('Notification' in window && Notification.permission === 'granted') {
       try {
@@ -379,7 +399,44 @@ const ConfirmCard = ({
         /* optional */
       }
     }
-  }, [current, layout, open]);
+  }, [current, layout, open, phoneSheet]);
+
+  useEffect(() => {
+    if (!open || !phoneSheet || !focusDenyOnOpen) return undefined;
+    const timer = window.setTimeout(() => denyRef.current?.focus({ preventScroll: true }), 60);
+    return () => window.clearTimeout(timer);
+  }, [current?.id, focusDenyOnOpen, open, phoneSheet]);
+
+  useEffect(() => {
+    if (!open || !phoneSheet) return undefined;
+    const root = dialogRef.current;
+    if (!root) return undefined;
+
+    const focusables = () =>
+      Array.from(
+        root.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input, textarea, [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter(el => el.offsetParent !== null || el === denyRef.current);
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return;
+      const items = focusables();
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [open, phoneSheet]);
 
   useEffect(() => {
     const id = current?.id ?? null;
@@ -478,14 +535,16 @@ const ConfirmCard = ({
 
   if (!open || !current) return null;
 
+  const showPhoneChrome = phoneSheet || layout === 'ph';
+
   return (
     <div
       ref={dialogRef}
       role="alertdialog"
-      aria-modal={layout === 'ph' ? 'true' : 'false'}
+      aria-modal={showPhoneChrome ? 'true' : 'false'}
       aria-labelledby="confirm-dialog-title"
       aria-describedby="confirm-dialog-desc"
-      className="confirm-dialog confirm-card"
+      className={`confirm-dialog confirm-card${phoneSheet ? ' confirm-dialog--sheet' : ''}`}
       data-testid="confirm-dialog"
       data-risk={isHighRisk ? 'high' : 'medium'}
       data-expanded={expanded ? 'true' : 'false'}
@@ -560,7 +619,9 @@ const ConfirmCard = ({
         </span>
       ) : null}
 
-      <div className="confirm-dialog__actions confirm-card__actions">
+      <div
+        className={`confirm-dialog__actions confirm-card__actions${showPhoneChrome ? ' confirm-card__actions--phone' : ''}`}
+      >
         <button
           ref={denyRef}
           type="button"
@@ -618,6 +679,24 @@ const ConfirmCard = ({
           )}
         </button>
       </div>
+
+      {showPhoneChrome && isHighRisk ? (
+        <p className="confirm-card__touch-hint">Press and hold for 1 second to allow.</p>
+      ) : null}
+
+      {showPhoneChrome && onDecideLater ? (
+        <button
+          type="button"
+          className="confirm-card__later"
+          data-testid="confirm-later"
+          onClick={() => {
+            toast.dismiss();
+            onDecideLater();
+          }}
+        >
+          Decide later
+        </button>
+      ) : null}
 
       <p className="confirm-card__meta confirm-dialog__meta">
         <span>

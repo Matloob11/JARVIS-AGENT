@@ -25,6 +25,10 @@ import SettingsPage from '@/features/settings/SettingsPage';
 import SimAccessDialog from './components/SimAccessDialog';
 import VoiceEnrollDialog from '@/features/voice/VoiceEnrollDialog';
 import ConfirmDialog from '@/features/confirm/ConfirmDialog';
+import ConfirmBar from '@/features/confirm/ConfirmBar';
+import ConfirmPhoneLayer from '@/features/confirm/ConfirmPhoneLayer';
+import { useConfirmPhoneSheet } from '@/features/confirm/useConfirmPhoneSheet';
+import { toast } from '@/toast';
 import SystemTrace from './components/SystemTrace';
 import TopBar from './components/TopBar';
 import PageHeader from '@/features/shell/PageHeader';
@@ -66,6 +70,19 @@ const DashboardInner = () => {
   const laptopOnline = useLaptopOnline();
   const agentListeningMuted = useAgentListeningMuted();
   const heroWaveCanvasRef = useRef<HTMLCanvasElement>(null);
+  const phoneConfirm = useConfirmPhoneSheet(
+    command.confirmCurrent?.id ?? null,
+    command.confirmQueueCount,
+  );
+  const deferToastShownRef = useRef(false);
+  const confirmCardCommon = {
+    current: command.confirmCurrent,
+    queue: command.confirmQueue,
+    queueCount: command.confirmQueueCount,
+    cancelNotice: command.confirmCancelNotice,
+    onAllow: command.respondConfirmAllow,
+    onDeny: command.respondConfirmDeny,
+  };
   const deviceCount = useMemo(
     () => connectedDeviceCount(vortex.uiClients, agentStatus.online, vortex.laptopOnline),
     [vortex.uiClients, vortex.laptopOnline, agentStatus.online],
@@ -85,6 +102,23 @@ const DashboardInner = () => {
           : route.page === 'activity'
             ? 'trace'
             : mobileTab;
+
+  useEffect(() => {
+    if (layout !== 'ph' || !phoneConfirm.deferred || command.confirmQueueCount === 0) {
+      deferToastShownRef.current = false;
+      return;
+    }
+    if (shellMobileTab !== 'chat' && !deferToastShownRef.current) {
+      toast('Approval is waiting in Chat — Open Chat to decide.', {
+        icon: '◆',
+        duration: 6000,
+      });
+      deferToastShownRef.current = true;
+    }
+    if (shellMobileTab === 'chat') {
+      deferToastShownRef.current = false;
+    }
+  }, [command.confirmQueueCount, layout, phoneConfirm.deferred, shellMobileTab]);
 
   const overviewOrbActive = layout !== 'ph' || shellMobileTab === 'core';
 
@@ -357,15 +391,22 @@ const DashboardInner = () => {
               isThinking={command.isThinking}
               approvalsWaiting={command.confirmQueueCount}
               onOpenSim={command.openSimPanel}
+              confirmQueue={command.confirmQueue}
+              confirmDecisions={command.confirmDecisions}
+              confirmBar={
+                layout === 'ph' &&
+                phoneConfirm.deferred &&
+                command.confirmCurrent &&
+                command.confirmQueueCount > 0 ? (
+                  <ConfirmBar
+                    queueCount={command.confirmQueueCount}
+                    current={command.confirmCurrent}
+                    onReview={phoneConfirm.reopenSheet}
+                  />
+                ) : null
+              }
               confirmSlot={
-                <ConfirmDialog
-                  current={command.confirmCurrent}
-                  queue={command.confirmQueue}
-                  queueCount={command.confirmQueueCount}
-                  cancelNotice={command.confirmCancelNotice}
-                  onAllow={command.respondConfirmAllow}
-                  onDeny={command.respondConfirmDeny}
-                />
+                layout !== 'ph' ? <ConfirmDialog {...confirmCardCommon} /> : null
               }
             />
           </ErrorBoundary>
@@ -379,6 +420,14 @@ const DashboardInner = () => {
           />
         }
       />
+
+      {layout === 'ph' ? (
+        <ConfirmPhoneLayer
+          {...confirmCardCommon}
+          open={phoneConfirm.sheetOpen}
+          onDecideLater={phoneConfirm.decideLater}
+        />
+      ) : null}
 
       <ErrorBoundary name="VoiceEnrollDialog">
         <VoiceEnrollDialog open={voiceEnrollOpen} onClose={() => setVoiceEnrollOpen(false)} />

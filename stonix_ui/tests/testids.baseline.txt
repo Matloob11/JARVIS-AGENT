@@ -11,7 +11,9 @@ agent-wake-spinner
 agents-wake-toggle
 app-ready
 approvals-count
+approvals-history-row
 approvals-panel
+approvals-queue-row
 assistant-agent-listening
 brand-mark
 browser-card
@@ -39,10 +41,12 @@ chip-voice
 chip-wake
 chip-wake-spinner
 confirm-allow
+confirm-bar
 confirm-cancel-notice
 confirm-deny
 confirm-dialog
 confirm-expand
+confirm-later
 device-location-card
 device-location-updated
 devices-menu
@@ -227,6 +231,7 @@ voice-take-over
 voice-toggle
 voice-wake-agent
 window-close
+window-controls-shell
 window-maximize
 window-minimize
 

@@ -1306,7 +1306,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-78 | cursor | P3 | Page header: title and subtitle, the three status pills, divider, account block; interim Reconnect | X-73, X-80 | DONE (cursor, 02 Oct 2026 PKT) |
 | X-79 | cursor | P3 | Laptop states and Stop desktop: the Devices popover Laptop row and the Agents › Laptop card (X-67 data) | X-67, X-85, X-99 | TODO |
 | X-80 | cursor | P3 | App shell: the fluid reference grid (dk/tl/ph), slots, hash router with mounted pages, app-ready marker | X-69, X-73 | DONE (cursor, 02 Oct 23:10 PKT) |
-| X-81 | cursor | P3 | Agents › System Flow card: five nodes, the 'unknown' state, packets only while data moves | X-73, X-107 | DOING (cursor, 03 Oct 02:04 PKT) |
+| X-81 | cursor | P3 | Agents › System Flow card: five nodes, the 'unknown' state, packets only while data moves | X-73, X-107 | DONE (cursor, 03 Oct 02:12 PKT) |
 | X-82 | cursor | P3 | Phone shell: compact header and pill row, five-tab bar, mounted zones, keyboard rule | X-78, X-80 | DONE (cursor, 02 Oct 23:55 PKT) |
 | X-83 | cursor | P3 | Right panel: Chat / Approvals / Tools tabs, the reference chat, the Tools tab with the SIM opener | X-72, X-73, X-80, X-96 | DONE (cursor, 02 Oct 23:45 PKT) |
 | X-84 | cursor | P3 | Confirm Command card: the pinned head of the queue, meta line, long commands, hold to approve, keys, announcements | X-83 | DONE (cursor, 03 Oct 00:10 PKT) |
@@ -1325,8 +1325,8 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-97 | cursor | P3 | Voice state machine: ten states, the hero status line and inline actions, helper slot, buttons and mic mirrors, Voice pill, announcer | X-72, X-73, X-75, X-76, X-78, X-104 | DONE (cursor, 03 Oct 02:15 PKT) |
 | X-98 | cursor | P3 | Reduced motion and presence.spec motion part: motion follows the level, the loop stops, nothing shifts | X-97 | TODO |
 | X-99 | cursor | P3 | Popover primitive; Agent, Voice and Devices popovers (mic, listening, stop, wake, pause/wake and Reconnect move out of the header) | X-78 | DONE |
-| X-100 | cursor | P3 | Electron: header reserve, window buttons at the window edge, drag region, header-layout.spec | X-99 | TODO |
-| X-101 | cursor | P3 | Approvals tab, and the phone confirm sheet with "Decide later" and the approvals bar | X-82, X-84 | TODO |
+| X-100 | cursor | P3 | Electron: header reserve, window buttons at the window edge, drag region, header-layout.spec | X-99 | DOING (cursor, 03 Oct 02:20 PKT) |
+| X-101 | cursor | P3 | Approvals tab, and the phone confirm sheet with "Decide later" and the approvals bar | X-82, X-84 | DONE (cursor, 03 Oct 02:26 PKT) |
 | X-102 | cursor | P3 | Hidden-tab confirm alert: title flash, one chime, browser notification, phone vibration | X-84 | TODO |
 | X-103 | cursor | P3 | Sidebar: ring logo, wordmark, navigation with the reference active state, silk wave, tagline; tl icon rail; nav marks | X-70, X-80 | DONE (cursor, 02 Oct 23:13 PKT) |
 | X-104 | cursor | P3 | Overview hero card: the reference composition, eyebrow persona switch, name sheen, buttons, quote and helper slot | X-72, X-73, X-80 | DONE (cursor, 03 Oct 00:42 PKT) |

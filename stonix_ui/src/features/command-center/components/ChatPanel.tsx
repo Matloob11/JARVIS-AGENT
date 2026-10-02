@@ -1,4 +1,5 @@
 import RightPanel from '@/features/panel/RightPanel';
+import type { ConfirmDecision, QueuedConfirm } from '@/features/confirm/useConfirmQueue';
 import type { ReactNode } from 'react';
 import { Message, VortexLog } from '../hooks/useCommandCenter';
 import type { ChatMessage, LiveCaption } from '@/features/chat/types';
@@ -33,6 +34,9 @@ interface ChatPanelProps {
   approvalsWaiting?: number;
   onOpenSim: () => void;
   confirmSlot?: ReactNode;
+  confirmBar?: ReactNode;
+  confirmQueue?: QueuedConfirm[];
+  confirmDecisions?: ConfirmDecision[];
 }
 
 const ChatPanel = (props: ChatPanelProps) => <RightPanel {...props} />;

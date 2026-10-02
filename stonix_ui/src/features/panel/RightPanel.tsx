@@ -14,8 +14,10 @@ type VortexLog = {
   text: string;
   timestamp: number;
 };
+import type { ConfirmDecision, QueuedConfirm } from '@/features/confirm/useConfirmQueue';
 import ChatList, { ChatCaptionsStrip } from './ChatList';
 import PanelTabs, { type PanelMainTab } from './PanelTabs';
+import ApprovalsTab from './ApprovalsTab';
 import ToolsTab from './ToolsTab';
 import { useSwarmMode } from './useSwarmMode';
 
@@ -47,6 +49,9 @@ interface RightPanelProps {
   approvalsWaiting?: number;
   onOpenSim: () => void;
   confirmSlot?: ReactNode;
+  confirmBar?: ReactNode;
+  confirmQueue?: QueuedConfirm[];
+  confirmDecisions?: ConfirmDecision[];
 }
 
 const legacyTabs: LegacyTab[] = ['logs', 'notes', 'tasks'];
@@ -86,15 +91,6 @@ const LogsPane = ({ logs }: { logs: VortexLog[] }) => {
   );
 };
 
-const ApprovalsPane = () => (
-  <div className="approvals-tab-pane" data-testid="approvals-panel">
-    <div className="approvals-tab-pane__empty">
-      <p className="approvals-tab-pane__title">No approvals waiting</p>
-      <p>Guarded tools always ask first. Pending requests appear in the confirm card above.</p>
-    </div>
-  </div>
-);
-
 const RightPanel = ({
   persona,
   messages,
@@ -121,6 +117,9 @@ const RightPanel = ({
   approvalsWaiting = 0,
   onOpenSim,
   confirmSlot,
+  confirmBar,
+  confirmQueue = [],
+  confirmDecisions = [],
 }: RightPanelProps) => {
   const [mainTab, setMainTab] = useState<PanelMainTab>('chat');
   const [legacyTab, setLegacyTab] = useState<LegacyTab | null>(null);
@@ -187,7 +186,7 @@ const RightPanel = ({
       />
     );
   } else if (mainTab === 'approvals') {
-    feed = <ApprovalsPane />;
+    feed = <ApprovalsTab queue={confirmQueue} decisions={confirmDecisions} />;
   } else {
     feed = (
       <ToolsTab
@@ -231,6 +230,7 @@ const RightPanel = ({
         ))}
       </div>
 
+      {confirmBar ? confirmBar : null}
       {confirmSlot ? <div className="panel-confirm-slot">{confirmSlot}</div> : null}
 
       <div className="panel-feed">{wrappedFeed}</div>

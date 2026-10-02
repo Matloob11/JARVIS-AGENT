@@ -47,9 +47,14 @@ export function PhoneTabBar({
             <Icon className="mobile-tab-bar__icon" size={22} strokeWidth={2} aria-hidden />
             <span className="mobile-tab-bar__label">{label}</span>
             {showChatMark ? (
-              <span className="mobile-tab-bar__mark mobile-tab-bar__mark--chat" aria-hidden>
-                ◆ {approvalCount > 99 ? '99+' : approvalCount}
-              </span>
+              <>
+                <span className="mobile-tab-bar__mark mobile-tab-bar__mark--chat" aria-hidden>
+                  ◆ {approvalCount > 99 ? '99+' : approvalCount}
+                </span>
+                <span className="vh">
+                  {`, ${approvalCount} confirmation${approvalCount === 1 ? '' : 's'} waiting`}
+                </span>
+              </>
             ) : null}
             {showActivityMark ? (
               <span

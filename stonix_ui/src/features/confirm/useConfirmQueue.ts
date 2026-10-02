@@ -12,6 +12,10 @@ export interface ConfirmDecision {
   allow: boolean;
   reason: string;
   ts: number;
+  tool?: string;
+  summary?: string;
+  args_preview?: string;
+  expired?: boolean;
 }
 
 function pickConfirmList(state: Record<string, unknown>): unknown[] {
@@ -75,14 +79,22 @@ export function useConfirmQueue() {
     setServerOffsetMs(serverMs - Date.now());
   }, []);
 
-  const recordDecision = useCallback((id: string, allow: boolean, reason: string) => {
-    const entry: ConfirmDecision = { id, allow, reason, ts: Date.now() };
-    setDecisions(prev => [entry, ...prev].slice(0, 20));
-  }, []);
-
-  const dropById = useCallback((id: string) => {
-    setQueue(prev => prev.filter(item => item.id !== id));
-  }, []);
+  const recordDecision = useCallback(
+    (id: string, allow: boolean, reason: string, item?: QueuedConfirm, expired = false) => {
+      const entry: ConfirmDecision = {
+        id,
+        allow,
+        reason,
+        ts: Date.now(),
+        tool: item?.tool,
+        summary: item?.summary,
+        args_preview: item?.args_preview,
+        expired,
+      };
+      setDecisions(prev => [entry, ...prev].slice(0, 20));
+    },
+    [],
+  );
 
   const enqueue = useCallback(
     (raw: unknown) => {
@@ -136,14 +148,18 @@ export function useConfirmQueue() {
         }, 1600);
       }
 
-      recordDecision(
-        normalized.id,
-        normalized.allow ?? false,
-        normalized.reason ?? 'resolved',
-      );
-      dropById(normalized.id);
+      setQueue(prev => {
+        const item = prev.find(row => row.id === normalized.id);
+        recordDecision(
+          normalized.id,
+          normalized.allow ?? false,
+          normalized.reason ?? 'resolved',
+          item,
+        );
+        return prev.filter(row => row.id !== normalized.id);
+      });
     },
-    [dropById, recordDecision],
+    [recordDecision],
   );
 
   const markResponded = useCallback((id: string): boolean => {
@@ -161,10 +177,14 @@ export function useConfirmQueue() {
   const purgeExpired = useCallback(() => {
     const now = Date.now();
     setQueue(prev => {
+      const expiredRows = prev.filter(item => item.deadlineMs <= now);
+      for (const item of expiredRows) {
+        recordDecision(item.id, false, 'expired', item, true);
+      }
       const next = prev.filter(item => item.deadlineMs > now);
       return next.length === prev.length ? prev : next;
     });
-  }, []);
+  }, [recordDecision]);
 
   useEffect(() => {
     const timer = window.setInterval(purgeExpired, 400);

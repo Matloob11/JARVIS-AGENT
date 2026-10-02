@@ -1106,6 +1106,7 @@ export const useCommandCenter = () => {
     confirmQueue: confirmQueue.queue,
     confirmQueueCount: confirmQueue.queueCount,
     confirmCancelNotice: confirmQueue.cancelNotice,
+    confirmDecisions: confirmQueue.decisions,
     respondConfirmAllow: (id: string) => respondConfirm(id, true),
     respondConfirmDeny: (id: string) => respondConfirm(id, false),
     sessionRestartBanner,

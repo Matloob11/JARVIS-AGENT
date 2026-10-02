@@ -49,9 +49,10 @@ test('confirm_request shows modal; Deny emits allow:false once', async ({ page }
     ttl_ms: 120_000,
   });
 
-  await expect(page.getByTestId('confirm-dialog')).toBeVisible();
-  await expect(page.getByText('run_shell')).toBeVisible();
-  await expect(page.getByText('echo deny-test')).toBeVisible();
+  const dialog = page.getByTestId('confirm-dialog');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText('run_shell')).toBeVisible();
+  await expect(dialog.getByText('echo deny-test')).toBeVisible();
 
   const before = (await confirmResponses(page)).length;
   await page.getByTestId('confirm-deny').click();
@@ -110,13 +111,75 @@ test('second confirm_request stays queued until first is handled', async ({ page
     ttl_ms: 120_000,
   });
 
-  await expect(page.getByTestId('confirm-dialog')).toBeVisible();
-  await expect(page.getByText('Queue: 2')).toBeVisible();
-  await expect(page.getByText('First queued action')).toBeVisible();
+  const dialog = page.getByTestId('confirm-dialog');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText('Queue: 2')).toBeVisible();
+  await expect(dialog.getByText('First queued action')).toBeVisible();
 
   await page.getByTestId('confirm-deny').click();
-  await expect(page.getByText('Second queued action')).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByText('Queue: 1')).toBeVisible();
+  await expect(dialog.getByText('Second queued action')).toBeVisible({ timeout: 10_000 });
+  await expect(dialog.getByText('Queue: 1')).toBeVisible();
+});
+
+test('Approvals tab lists queue tail and history after a decision', async ({ page }) => {
+  await emitConfirm(page, {
+    id: 'confirm-e2e-appr-1',
+    tool: 'run_shell',
+    summary: 'First approval row',
+    risk: 'medium',
+    args_preview: 'echo queue-one',
+    ttl_ms: 120_000,
+  });
+  await emitConfirm(page, {
+    id: 'confirm-e2e-appr-2',
+    tool: 'send_email',
+    summary: 'Second approval row',
+    risk: 'high',
+    args_preview: 'mail test',
+    ttl_ms: 120_000,
+  });
+
+  await expect(page.getByTestId('approvals-panel')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Approvals' }).click();
+  const panel = page.getByTestId('approvals-panel');
+  await expect(panel).toBeVisible();
+  await expect(panel.getByTestId('approvals-queue-row')).toHaveCount(1);
+  await expect(panel.getByTestId('approvals-queue-row')).toContainText('Request 2 of 2');
+  await expect(panel.getByTestId('approvals-queue-row')).toContainText('Second approval row');
+
+  await page.getByRole('button', { name: 'Chat' }).click();
+  await expect(page.getByTestId('approvals-panel')).toHaveCount(0);
+
+  await page.getByTestId('confirm-deny').click();
+  await expect(page.getByTestId('confirm-dialog')).toContainText('Second approval row', {
+    timeout: 10_000,
+  });
+
+  await page.getByRole('button', { name: 'Approvals' }).click();
+  await expect(page.getByTestId('approvals-history-row').first()).toContainText('Denied');
+  await expect(page.getByTestId('approvals-history-row').first()).toContainText('run_shell');
+});
+
+test('phone sheet focuses Deny; Decide later shows confirm bar', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByTestId('mobile-tab-chat').click();
+
+  await emitConfirm(page, {
+    id: 'confirm-e2e-phone-sheet',
+    tool: 'run_shell',
+    summary: 'Phone sheet test',
+    risk: 'medium',
+    ttl_ms: 120_000,
+  });
+
+  const dialog = page.getByTestId('confirm-dialog');
+  await expect(dialog).toBeVisible();
+  await expect(page.getByTestId('confirm-deny')).toBeFocused({ timeout: 5000 });
+  await page.getByTestId('confirm-later').click();
+  await expect(dialog).toBeHidden({ timeout: 5000 });
+  await expect(page.getByTestId('confirm-bar')).toBeVisible();
+  await expect(page.getByTestId('confirm-bar')).toContainText('1 approval waiting');
 });
 
 test('Enter never allows a pending confirmation', async ({ page }) => {

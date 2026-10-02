@@ -98,6 +98,8 @@ for (const row of dkExpectations) {
   });
 }
 
+const MOCK = 'http://127.0.0.1:5199';
+
 const phoneSizes: { width: number; height: number }[] = [
   { width: 412, height: 915 },
   { width: 390, height: 844 },
@@ -122,7 +124,38 @@ async function composerAndTabBar(page: Page) {
   });
 }
 
+async function deferConfirmToBar(page: Page) {
+  const res = await page.request.post(`${MOCK}/__mock/emit`, {
+    data: {
+      event: 'confirm_request',
+      payload: {
+        id: `layout-bar-${Date.now()}`,
+        tool: 'run_shell',
+        summary: 'Confirm bar layout',
+        risk: 'medium',
+        ttl_ms: 120_000,
+      },
+    },
+  });
+  expect(res.ok()).toBeTruthy();
+  await expect(page.getByTestId('confirm-dialog')).toBeVisible();
+  await page.getByTestId('confirm-later').click();
+  await expect(page.getByTestId('confirm-bar')).toBeVisible();
+}
+
 for (const size of phoneSizes) {
+  test(`phone ${size.width}x${size.height}: confirm bar keeps composer above tab bar`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(size);
+    await page.getByTestId('mobile-tab-chat').click();
+    await deferConfirmToBar(page);
+    const layout = await composerAndTabBar(page);
+    expect(layout.composerBottom).not.toBeNull();
+    expect(layout.tabBarTop).not.toBeNull();
+    expect(layout.composerBottom!).toBeLessThanOrEqual(layout.tabBarTop! + 1);
+  });
+
   test(`phone ${size.width}x${size.height}: composer above tab bar`, async ({ page }) => {
     await page.setViewportSize(size);
     await page.getByTestId('mobile-tab-chat').click();
@@ -152,8 +185,6 @@ for (const size of phoneSizes) {
     expect(layout.composerBottom!).toBeLessThanOrEqual(layout.windowHeight + 1);
   });
 }
-
-const MOCK = 'http://127.0.0.1:5199';
 
 async function emitLongConfirm(page: Page) {
   const lines = Array.from({ length: 36 }, (_, i) => `line ${i} do-work`).join('\n');

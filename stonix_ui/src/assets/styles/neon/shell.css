@@ -1027,3 +1027,86 @@ body {
     position: relative;
   }
 }
+
+.confirm-sheet-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 240;
+  background: rgba(4, 8, 18, 0.62);
+  backdrop-filter: blur(2px);
+}
+
+html.confirm-sheet-open .confirm-dialog--sheet {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(64px + env(safe-area-inset-bottom, 0px) + 8px);
+  z-index: 250;
+  max-height: min(78vh, 640px);
+  overflow: auto;
+  margin: 0;
+}
+
+/* —— Electron (spec v2 §5.7) —— */
+html.is-electron .window-controls-shell {
+  position: fixed;
+  right: 0;
+  top: 0;
+  z-index: 500;
+  display: flex;
+  align-items: stretch;
+  height: 34px;
+  border-bottom-left-radius: 10px;
+  background: rgba(6, 11, 26, 0.55);
+  gap: 0;
+}
+
+html.is-electron .window-controls-shell .window-button {
+  width: 46px;
+  height: 34px;
+  border-radius: 0;
+  border: 0;
+}
+
+html.is-electron .page-header.topbar {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+html.is-electron .page-header.topbar .no-drag,
+html.is-electron .page-header.topbar button,
+html.is-electron .window-controls-shell {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+html.is-electron .page-header-greet1,
+html.is-electron .page-header-greet2,
+html.is-electron .page-header-chev {
+  display: none;
+}
+
+html.is-electron .page-header-account {
+  width: 70px;
+  padding-right: 0;
+  margin-right: 0;
+  justify-items: center;
+}
+
+@media (min-width: 1180px) {
+  html.is-electron .page-header.layout-dk {
+    padding-right: calc(140px + 12px);
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1179.98px) {
+  html.is-electron .page-header.layout-tl {
+    padding-right: 150px;
+  }
+}
+
+@media (max-width: 1023.98px) {
+  html.is-electron .page-header.layout-ph .page-header-acct {
+    margin-right: 132px;
+  }
+}

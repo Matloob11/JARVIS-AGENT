@@ -927,3 +927,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `npm --prefix stonix_ui run build` pass; dashboard + responsive + trace e2e 13/13 pass; testid inventory 230 pass
 - **Commit:** (pending) · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-101 · Approvals tab + phone confirm sheet/bar · 2026-10-03 02:26 PKT
+- **Kya kiya:** Approvals tab me waiting queue (2..N) aur last-20 decisions; phone par confirm bottom sheet (scrim, Deny focus, Decide later), Chat me 48px confirm-bar; Chat tab ◆ count + screen-reader text.
+- **Files:** `ApprovalsTab.tsx`, `ConfirmBar.tsx`, `ConfirmPhoneLayer.tsx`, `useConfirmPhoneSheet.ts`, `ConfirmCard.tsx`, `RightPanel.tsx`, `Dashboard.tsx`, e2e `confirm.spec.ts`/`layout.spec.ts`, neon `panel.css`/`shell.css`
+- **Verify:** `npm --prefix stonix_ui run build` pass; confirm+layout+responsive e2e 57/57 pass; testid inventory 235 pass
+- **Commit:** (pending) · **Deploy:** no
+- **Doosre agent ke liye:** X-102 hidden-tab alert alag hook par build kare.
