@@ -647,3 +647,38 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** apply + alag verify agent (har text word-for-word, koi aur line nahi badli, non-ASCII salamat); section 4 = docs body (script check); llm_text tests 47 passed, pylint 10/10
 - **Commit:** isi entry wala commit · **Deploy:** no
 - **Doosre agent ke liye:** Cursor: section 11 (cursor/next_cursor, 'unavailable', desktop_status sources).
+
+### ✅ [claude] C-15 · Agent link v2, agent side: signed raw-body notify + retry queue, AGENT_TOKEN socket, chat id echo · 2026-10-02 16:30–19:20 PKT
+- **Kya kiya:** Agent ab har notify ki asli bytes HMAC v2 se sign karta hai (X-Agent-Token/Timestamp/Nonce/Signature). Zaroori events (transcription, confirm_request, settings_sync, tool_sync, heartbeat) fail hon to har loop ki 500 wali queue me jaate hain aur 1→30 s backoff se 5 dafa tak dobara (har dafa naya nonce), har id ki tarteeb barqarar. UI socket ab AGENT_TOKEN se role 'agent'. Typed chat ka echo UI ki id aur source 'text' ke saath. Keys na hon to purana raasta. Live: PC ka UI_BRIDGE_URL https domain par (C-16 step 3 ka hissa), taake token khule http par na jaye.
+- **Files:** `services/utils/jarvis_bridge.py`, `services/ai_core/agent_loops.py`, `tests/unit/test_notify_signing.py` (naya), 3 test files
+- **Verify:** review me 1 blocker (har event loop ka ek hi semaphore) + 1 major (queue se purana event naye ke baad) pakde, theek; recheck approve (3 minor, http wala live theek); poora suite 1521 passed, 0 failed; real bridge ke saath interop 19/19; live 19:08: "Agent link v2: signed notify, UI socket as role 'agent'", "UI Bridge Connected. (auth agent_token)", VPS par POST /notify 200
+- **Commit:** `e30b20c` · **Deploy:** PC agent restart 19:08 PKT; PC env UI_BRIDGE_URL → https (backup `backup_20261002_190735.zip`)
+- **Doosre agent ke liye:** Cursor: section 11 (chat id echo, source).
+
+### ✅ [claude] C-113 · Compat layer: location provider, delivery helper, startfile/webbrowser shims + startup self-test · 2026-10-02 16:30–19:20 PKT
+- **Kya kiya:** VPS brain (remote mode) ke liye: shehar laptop ke cache se (ya USER_CITY), kabhi Kuala Lumpur nahi; os.startfile/webbrowser.open ki jagah laptop par delivery ya saaf error; har session par self-test. Local mode (aaj ka PC brain) me kuch nahi badla.
+- **Files:** `services/utils/jarvis_location.py`, `services/utils/jarvis_delivery.py`, `services/ai_core/remote_compat.py` (sab naye), `src/core/agent_runner.py`, 2 test files
+- **Verify:** review approve + 5 minor theek; poora suite 1521 passed; local mode me koi COMPAT line nahi
+- **Commit:** `eb29f37` (C-137 ke saath, dono agent_runner.py badalte hain) · **Deploy:** no (remote mode abhi live nahi)
+- **Doosre agent ke liye:** —
+
+### ✅ [claude] C-137 · Live-log hotfixes: vector memory event loop se bahar, ensure_room bina credentials, worker above-normal priority · 2026-10-02 16:30–19:20 PKT
+- **Kya kiya:** Memory ka bhaari import ab background thread me (16:32 par "hi" ka jawab 85 s event loop rukne se late hua tha). ensure_room ab sirf room ka naam/sid/timeouts dikhata hai, turn_password kabhi nahi. Loopwatch test load me bhi mazboot. agent_ctl worker ko above-normal priority deta hai (launcher ke peeche wala asli worker bhi), taake laptop par tests/builds JARVIS ko dheema na karein.
+- **Files:** `services/ai_core/jarvis_vector_memory.py`, `src/core/agent_runner.py`, `deploy/windows-local/ensure_room.py`, `tests/conftest.py`, `tests/unit/test_loopwatch.py`, `tests/unit/test_vector_memory_offloop.py` (naya), `scripts/agent_ctl.py`, `tests/unit/test_agent_ctl.py`
+- **Verify:** review approve + 3 minor theek; live 19:08: "Initializing Vector Memory (background thread)", "VECTOR_PREWARM done in 47.8s" aur koi EVENT_LOOP_STALL nahi; restart output me turn_password 0; worker AboveNormal
+- **Commit:** `eb29f37`, `2fd24fa`, `b4cd6b8` · **Deploy:** PC agent restart 19:08 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ [claude] C-61 · tests/exhaustive guard + keyboard/mouse aur Notepad exhaustive tests X-26/X-27 ke mutabiq · 2026-10-02 16:30–19:20 PKT
+- **Kya kiya:** tests/exhaustive ab asli mouse/keyboard/apps nahi chalate (sirf `JARVIS_LIVE_GUI_TESTS=1` par, jo is PC par kabhi set nahi). Tests naye desktop behaviour ke mutabiq. Review ne Cursor ke lane me ek safety bug pakda (Alt+F4 superset combos): section 11.
+- **Files:** `tests/exhaustive/conftest.py` (naya), 3 exhaustive test files
+- **Verify:** review approve + 3 minor theek; tests/exhaustive 183 passed
+- **Commit:** `16a24e4` · **Deploy:** no
+- **Doosre agent ke liye:** Cursor: `_is_close_combo` bug + `test_move_cursor_tool` ehtiyat (section 11).
+
+### ✅ 🔁 [claude] C-15 · Agent worker restart (agent_ctl) · 2026-10-02 19:08 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 28704) band, naya pid 2088; health 200 (9.4 s me), ensure_room.py OK.
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200, link connected
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 19:08 PKT
+- **Doosre agent ke liye:** —

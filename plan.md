@@ -1102,7 +1102,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | C-12 | claude | P0 | Deploy tooling: deploy_from_pc.sh (committed HEAD only), deploy.sh v2 (lock, backup, nginx -t, health gate, other-apps smoke), rollback.sh, smoke_other_apps.sh + first full sync deploy | C-04, C-09, C-11, K-54 (COORD-4) | DONE (02 Oct 03:00; first sync deploy OK) |
 | C-13 | claude | P0 | Bridge SQLite store on a volume + message normalization + init_state/history from the DB | C-12, K-41 (C-MSG-1), K-42 (C-STATE-1) | DONE (claude, 02 Oct 13:58) |
 | C-14 | claude | P0 | Agent link v2, bridge side: AGENT_TOKEN + HMAC v2 notify with replay protection, Socket.IO roles/rooms with a legacy transition, env-only origins, secrets tooling | C-13, C-09, K-38 (C-SOCK-1), K-39 (C-NOTIFY-1), K-40 (C-EVT-1), K-47 (C-ENV-1) | DONE (claude, 02 Oct 16:25) |
-| C-15 | claude | P0 | Agent link v2, agent side: signed raw-body notify with retry queue, AGENT_TOKEN socket with reconnect-forever loop, chat id echo | C-14, C-09, K-39 (C-NOTIFY-1), K-38 (C-SOCK-1), K-41 (C-MSG-1) | DOING (claude, 02 Oct 16:30) |
+| C-15 | claude | P0 | Agent link v2, agent side: signed raw-body notify with retry queue, AGENT_TOKEN socket with reconnect-forever loop, chat id echo | C-14, C-09, K-39 (C-NOTIFY-1), K-38 (C-SOCK-1), K-41 (C-MSG-1) | DONE (claude, 02 Oct 19:20) |
 | C-16 | claude | P0 | Network lockdown: nginx /agent + /twirp, PC agent on wss/https via the domain, 5101/7880 bound to 127.0.0.1, compose memory/log limits | C-12, C-09, C-15, K-48 (C-NET-1) | TODO |
 | C-17 | claude | P0 | Rotate the LiveKit API key/secret (they sat in world-readable files); values live only in env files | C-16, C-14 | TODO |
 | C-18 | claude | P0 | Least-privilege VPS env: bridge reads only bridge.env, compose .env keeps interpolation vars, unused VPS key copies moved to backups; user rotates Google/Gmail keys | C-14, C-17, K-47 (C-ENV-1) | TODO |
@@ -1154,7 +1154,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | C-54 | claude | P1 | Agent settings service: settings_update -> validate -> apply -> persist -> settings_sync | C-50, C-51, C-44, K-61 (CT-VC-SETTINGS) | TODO |
 | C-55 | claude | P1 | Announcer API (single module) + clipboard tip delivery (fix the chat_ctx append) | C-28, C-29, X-25, K-18 (AnnouncerAPI), K-19 (ClipboardSuggestion) | TODO |
 | C-56 | claude | P1 | Proactive speech primitive (CT-VC-PROACTIVE) and spoken reminders/tasks (interim wiring) | C-54, C-41, C-51, C-55, K-66 (CT-VC-PROACTIVE), K-18 (AnnouncerAPI) | TODO |
-| C-61 | claude | P1 | Guard and update the exhaustive test suite to the new desktop behaviour | X-11, X-26, X-27, K-27 (TestSideEffectGuard) | DOING (claude, 02 Oct 16:30) |
+| C-61 | claude | P1 | Guard and update the exhaustive test suite to the new desktop behaviour | X-11, X-26, X-27, K-27 (TestSideEffectGuard) | DONE (claude, 02 Oct 19:20) |
 | C-66 | claude | P1 | Gated turn mode implementation: JarvisGeminiRealtimeModel + TeeSTT (behind turn_mode=gated) | C-40, C-54, K-65 (CT-VC-GEMINI-GATE) | TODO |
 | C-67 | claude | P1 | Gemini session longevity: context compression, go_away notice, resumption without history re-send | C-66 | TODO |
 | C-68 | claude | P1 | SPIKE run: gated vs fast decision (variant B STT-level reject first) | C-67, C-40 | TODO |
@@ -1254,7 +1254,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | C-110 | claude | P4 | Enable self-repair apply mode after the two-agent build-out | C-46, C-83, C-109 | TODO |
 | C-111 | claude | P0 | Contracts v4 (K-70..K-77) + plan, CLAUDE.md and Cursor rules for the VPS brain | — | DONE (02 Oct 01:25) |
 | C-112 | claude | P0 | Linux-importable agent with role/brain/mode gating, validate by (role, mode), stable user id, reconnecting UI listener | C-111 | DONE (claude, 02 Oct 13:58) |
-| C-113 | claude | P0 | Compat layer: location provider, delivery helper, startfile/webbrowser shims with a startup self-test | C-112 | DOING (claude, 02 Oct 16:30) |
+| C-113 | claude | P0 | Compat layer: location provider, delivery helper, startfile/webbrowser shims with a startup self-test | C-112 | DONE (claude, 02 Oct 19:20) |
 | C-114 | claude | P0 | 24/7 voice session safety: compression, real truncation, re-seed, liveness attribute, idle close and recycle | C-33, C-35, C-111 | TODO |
 | C-115 | claude | P0 | Desktop Link protocol library (Ed25519, X25519/AEAD, replay, clock, resend) + key tooling | C-111 | DONE (claude, 02 Oct 18:15) |
 | C-116 | claude | P0 | Bridge: internal listener :5002, '/desktop' relay, presence and desktop_status, persisted link switch, minimal public health | C-13, C-115 | TODO |
@@ -1278,7 +1278,8 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | C-134 | claude | P4 | Monitoring, alerts, incident runbook and VPS-brain documentation | C-131 | TODO |
 | C-135 | claude | P3 | UI spec v2: exact 'Neon Command Center' design from the user's reference image (replica mockup, ANNA variant, all pages and states, phone), tasks X-69..X-102 updated | — | DOING (claude, 02 Oct 13:00) |
 | C-136 | claude | P1 | PC worker: visible LiveKit link state and recovery after laptop sleep or network loss | C-09, C-112 | DONE (claude, 02 Oct 16:25) |
-| C-137 | claude | P1 | Hotfixes from the 2 Oct live logs: vector memory init off the event loop (45 s stall at session start), ensure_room output without TURN credentials, loopwatch timing test under load | C-31 | DOING (claude, 02 Oct 16:30) |
+| C-137 | claude | P1 | Hotfixes from the 2 Oct live logs: vector memory init off the event loop (45 s stall at session start), ensure_room output without TURN credentials, loopwatch timing test under load | C-31 | DONE (claude, 02 Oct 19:20) |
+| C-138 | claude | P2 | Test hygiene: no test writes the live logs or telemetry, no test depends on the real .env keys, no vacuous diagnostics test | C-61 | TODO |
 | C-97 | claude | P4 | Voice and conversation regression suite + runbook | C-56, C-74, C-76, C-77, C-87, C-89, C-90, C-91, C-09 | TODO |
 | C-98 | claude | P4 | Internal-tool regression checks after the voice/dashboard fixes (change_voice, wake word, persona, identity, analyze_surroundings) | C-48, C-50, C-54, C-69, C-87 | TODO |
 | C-99 | claude | P4 | Live desktop-tools smoke run on the PC with Sir | C-31, C-75, C-55, C-84, C-85, X-63, C-96 | TODO |
@@ -1330,7 +1331,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 
 ---
 
-## 6. Claude tasks (136)
+## 6. Claude tasks (137)
 
 ### P0 · Security aur buniyad
 _Darwaza band, git, backup, keys, room delete ka bug. Claude pehle; Cursor isi dauran apne tools lane me kaam karta hai._
@@ -1786,6 +1787,7 @@ Verify:
 **Files:** `deploy/hostinger/jarvis.conf`, `deploy/hostinger/docker-compose.yml`, `.env`, `deploy/windows-local/.env`, `deploy/windows-local/start-agent.bat`, `deploy/windows-local/start_hybrid_agent.py`, `deploy/windows-local/test_chat_once.py`, `scripts/agent_ctl.py`
 **Depends on:** C-12, C-09, C-15, K-48 (C-NET-1)
 **User se chahiye:** After the switch, make one voice call and send one typed message.
+**As built (2 Oct):** Step 3 is half done (2 Oct 19:07): UI_BRIDGE_URL=https://jarvis.srv1802669.hstgr.cloud/vortex in both PC env files (rotate_env_secret.py, fp 113817ce), so AGENT_TOKEN never crosses plain http; the agent connects as 'role=agent (auth agent_token)'. LIVEKIT_URL is still ws://<ip>:7880 until steps 1-2 (nginx /agent, /twirp).
 **VPS brain (2 Oct):** Steps 1-5 (nginx /agent + /twirp, PC on the domain) run before cutover at V3, for the PC fallback. Step 6 mem_limit is REMOVED (user decision); the log rotation stays. The 5101/7880 loopback binds are applied in the V6 LiveKit window (C-131). Depends on C-12, C-09 and C-112 instead of C-15.
 
 Steps:
@@ -1960,6 +1962,7 @@ Verify:
 **Files:** `deploy/hostinger/docker-compose.yml`, `deploy/hostinger/Dockerfile.frontend`, `deploy/hostinger/jarvis.conf`, `deploy/hostinger/deploy.sh`, `deploy/hostinger/check_bundle_secrets.sh`, `services/utils/jarvis_config.py`, `.env`, `deploy/windows-local/.env`, `/opt/jarvis-agent/deploy/hostinger/.env (VPS)`, `/opt/jarvis-agent/deploy/hostinger/bridge.env (VPS)`
 **Depends on:** X-08, C-21, X-09, C-18, C-20, K-48 (C-NET-1)
 **User se chahiye:** Confirm you could log in with the new screen before Claude switches off legacy access and the browser password.
+**As built (2 Oct):** C-15: before LEGACY_TOKEN_AUTH=0 these posters still send only legacy headers and must move to jarvis_bridge.encode_event + signed_headers: services/ai_core/jarvis_confirm.py _post_to_bridge (C-29), services/ai_core/autonomous_planner.py notify_ui_progress (can call jarvis_bridge.notify_event), deploy/windows-local/ensure_room.py (C-23), deploy/windows-local/test_chat_once.py (C-16) and services/utils/qa_modules (C-103).
 **VPS brain (2 Oct):** Before cutover (V3b; C-30 needs it). check_bundle_secrets also scans the .env.agent names. With D3 the dashboard is the approval surface for risky laptop actions, and finishing C-22 before cutover also closes the legacy-token path to typed chat before the VPS brain goes live. C-22 stays a dependency of the optional C-133.
 
 Steps:
@@ -2140,6 +2143,7 @@ Verify:
 **Files:** `src/core/ui_bridge.py`, `services/ai_core/agent_loops.py`, `services/utils/jarvis_bridge.py`, `tests/integration/test_confirm_routing.py (new)`, `services/ai_core/jarvis_guard.py`, `services/ai_core/jarvis_plugin_manager.py`, `src/core/bridge_store.py`, `services/utils/jarvis_audit.py`, `tests/core/test_guard.py`, `tests/infrastructure/test_bridge_confirm.py`
 **Depends on:** C-28, C-13, C-14, C-15, C-19, K-14 (ConfirmFlow), K-13 (ToolSyncEvent), K-45 (C-CONFIRM-1)
 **User se chahiye:** —
+**As built (2 Oct):** C-15: notify_confirm_request / notify_confirm_resolved should post through jarvis_bridge.encode_event + signed_headers and return the parsed response; jarvis_confirm._post_to_bridge is still legacy-only.
 **VPS brain (2 Oct):** Now a cutover prerequisite (C-131 depends on it; V3b). Today several K-45 HIGH tools (run_cmd_command, automate_whatsapp, shutdown/restart/sleep/empty_recycle_bin, start_file_access_server, send_email, zip_files) set no risk in their @jarvis_tool decorator (so risk low) and run on the PC brain with no confirmation, because K-45's static list is not enforced in code before this task's guard. On the VPS brain the laptop ones are confirm-class (K-76) and need the ConfirmFlow approval, so this routing and C-30 must be live first, or WhatsApp, CMD, shutdown, the file server and laptop attachments would stop at cutover. Its dependencies are unchanged; on the VPS the agent side uses the :5002 listener (C-116). Switch the guard's HIGH asking on together with the C-30 frontend deploy, so the PC brain never asks for an Allow that no dialog can show.
 
 Steps:
@@ -2347,6 +2351,7 @@ _Typed chat aur voice dono ek hi Gemini session me; voice-ID, wake-word, memory,
 **Files:** `src/core/bridge_rooms.py`, `src/core/ui_bridge.py`, `src/core/agent.py`, `src/core/agent_runner.py`, `deploy/windows-local/ensure_room.py`, `deploy/hostinger/livekit.yaml`, `deploy/hostinger/docker-compose.yml`, `scripts/agent_ctl.py`, `tests/infrastructure/test_bridge_rooms.py`, `tests/infrastructure/test_no_room_delete.py`
 **Depends on:** C-09, C-13, C-14, C-15, K-44 (C-ROOM-1), K-39 (C-NOTIFY-1)
 **User se chahiye:** Keep a voice call open while Claude restarts the agent and say whether it dropped.
+**As built (2 Oct):** C-15/C-137: ensure_room.py now prints only non-secret room fields; it still tries delete_room before create and posts with the legacy token: switch it to jarvis_bridge.signed_headers and never delete.
 **VPS brain (2 Oct):** Pulled before cutover (V2a). Depends on C-12, C-13 and C-116 instead of C-14/C-15.
 - Dispatch target = the brain ('jarvis' or 'jarvis-pc'); AGENT_DISPATCH_MODE=on_demand in vps mode.
 - The loop runs every 5 s while a human or UI is present and no agent with a matching lk.agent.name and jarvis.session=running is in the room.
@@ -2820,6 +2825,7 @@ Verify:
 **Files:** `services/ai_core/jarvis_vector_memory.py`, `src/core/agent_runner.py`, `src/core/agent_core.py`, `services/ai_core/memory_store.py`, `tests/core/test_memory_recall.py`
 **Depends on:** C-52, C-49, C-32
 **User se chahiye:** —
+**As built (2 Oct):** C-137: the vector memory now initializes in a background thread at job start (VECTOR_PREWARM done in 48 s on 2 Oct 19:08, no loop stall). Step 2 'start prewarm from the worker prewarm' conflicts with C-32's VPS-brain note and K-69 ('Prewarm loads MiniLM and ECAPA, but never opens Chroma'; only the job serving jarvis-hybrid opens Chroma): prewarm the imports only. memory_store._sync_to_vector_db tasks can stay in memory_store._background_tasks on a stopped job loop: drop them at loop shutdown.
 
 Steps:
 1. VectorMemory.prewarm(): PersistentClient + SentenceTransformerEmbeddingFunction + get_or_create_collection entirely in asyncio.to_thread; _ensure_initialized uses the same threaded path.
@@ -3400,6 +3406,7 @@ Verify:
 **Files:** `services/utils/jarvis_logger.py`, `services/utils/jarvis_bug_hunter.py`, `services/utils/jarvis_audit.py`, `services/utils/jarvis_bridge.py`, `src/core/ui_bridge.py`, `src/core/bridge_security.py`, `tests/unit/test_logger_forwarding.py`, `tests/unit/test_bug_hunter.py`
 **Depends on:** C-14, C-15, K-39 (C-NOTIFY-1), K-40 (C-EVT-1)
 **User se chahiye:** —
+**As built (2 Oct):** C-15 review: every critical notify holds its loop's order lock for the whole HTTP round trip, so bursts of transcription/tool_sync for unrelated ids go out one at a time; order per id only (priority buckets here).
 **VPS brain (2 Oct):** Per-role log files (agent, svc, bridge, desktop) on separate files or volumes. Node WARNING+ lines reach the UI only through an agent peer: they are encrypted K-70 log_batch events to agent-svc, which redacts them and posts vortex_log_batch with source 'desktop'. While no svc peer is connected they stay only in the node's own log file; node alerts are notices and reach the bridge directly.
 
 Steps:
@@ -3917,6 +3924,7 @@ Verify:
 **Files:** `src/core/module_health.py (new)`, `src/core/agent_runner.py`, `src/core/ui_bridge.py`, `tests/core/test_module_health.py (new)`, `tests/infrastructure/test_bridge_location.py (new)`
 **Depends on:** C-13, C-63, C-44, K-06 (DASH-MODULE-HEALTH), K-08 (DASH-LOCATION)
 **User se chahiye:** —
+**As built (2 Oct):** C-113: merge remote_compat.health() into module_health (tools degraded when ok is False) and add the remote-mode location_sync emitter (K-08 v4); jarvis_location.get_current_city_data() returns {city, lat, lng, source, ts}.
 
 Steps:
 1. module_health.py: collect {voice, gemini (session running), vision (last call ok, model, camera_source), memory (store writable, vector ok), tools (registered count, failures_1h), voice_id (engine state, enrolled), ts}; never raises.
@@ -4616,6 +4624,7 @@ Verify:
 **User se chahiye:** —
 **As built (2 Oct):** Feed Desktop Node window_context events into assistant.vision_handler.on_window_context(event) with {title, ts} (C-112). C-115 library: one Receiver per endpoint with its own SeenStore (agent: conversations/desktop_seen.db, a namespace per peer), a ClockEstimator on the Receiver and ClockEstimator.ping_sent() for every ping; the Receiver hands every pong it verifies to that estimator, so the link never calls on_pong. The namespace is the agent peer id and is kept across restarts.
 **Contracts v5 (2 Oct):** While the link's ClockEstimator.skew_exceeded(), return CLOCK_SKEW at once, before the offline/stale fast path; its samples come from every node pong the Receiver verifies, also outside the window. Keep the link's Receiver and ClockEstimator for the life of the process, across node reconnects, and send a ping right after each handshake as well as every 30 s. Accepting a node hello that passed only on the agent's raw clock makes the estimator re-measure: skew_exceeded() stays true until the first new sample (K-70 check 5). An expired sample does not count there, so a laptop that went offline with a skewed clock still gets DESKTOP_OFFLINE. Treat an ack {accepted:false, code} as an explicit refusal: DESKTOP_REJECTED and START_WINDOW_MISSED become DESKTOP_NOT_STARTED; CLOCK_SKEW and every K-76 code are returned as they are; APPROVAL_REQUIRED becomes the step 3 ConfirmFlow item, and the exec is re-sent with the approval. Never send an exec for a call_id more than 1 h after its first send, and take laptop state only from 'status' hints, because agents receive no notices.
+**As built (2 Oct):** C-113: register the DesktopLink with jarvis_delivery.set_desktop_sender(link); online() follows the link presence; submit(op, args) is thread-safe and non-blocking (run_coroutine_threadsafe onto the link loop), sends agent-signed 'pc.fetch' / 'pc.open_url' with exactly the PC_OPERATIONS fields and raises OSError (ideally DeliveryError) when it cannot send. jarvis_delivery defers a pc.fetch of a file younger than K-73's 5 s rule (RELAY_MIN_AGE_S 5.0 + 0.5 s margin, at most 3 waits).
 
 Steps:
 1. DesktopLink per process (job or svc): - '/desktop' client on http://jarvis-bridge:5002 with reconnection=False, its own loop and a fresh signed agent_hello on every connect; - a pending map call_id → Future (never sio.call); - sync_request after start; - SeenStore in conversations/desktop_seen.db.
@@ -4808,6 +4817,7 @@ Verify:
 **User se chahiye:** —
 **As built (2 Oct):** C-112: in remote mode the agent no longer runs reminders or the task monitor, so agent-svc must own both before cutover.
 **Contracts v5 (2 Oct):** From the node, the svc gets only location and log_batch events: it writes location.json and sends location_sync (K-08), and it redacts log_batch items before posting vortex_log_batch with source 'desktop'. Vitals, desktop_state, power and alerts are notices that the bridge reads itself, so the svc forwards none of them.
+**As built (2 Oct):** C-113: agent-svc writes the location cache with jarvis_location.save_device_location(city, lat, lng).
 
 Steps:
 1. jarvis_filelock.locked(path) (fcntl on Linux, msvcrt on Windows) for identity.json, learning_state.json, delivery_ledger.json, desktop_outbox.json and location.json. IdentityManager and the adaptive engine reload when mtime/inode changes.
@@ -5123,6 +5133,27 @@ Done tab jab (acceptance):
 Verify:
 - $PY -m pytest tests/unit/test_vector_memory_offloop.py tests/unit/test_loopwatch.py -q -p no:cacheprovider
 - After the coordinator's restart: grep EVENT_LOOP_STALL logs/agent_stderr.log
+
+#### C-138 · Test hygiene: no test writes the live logs or telemetry, no test depends on the real .env keys
+**Phase:** P2 · **Size:** S · **Feature:** test isolation
+**Source:** C-61 and C-15 reviews, 2 Oct.
+**Kyun:** Test runs append lines to the live logs/bridge.log, logs/runner.log and logs/telemetry.jsonl (13 'test input' rows so far), one test passes vacuously, and one C-15-edited test signs with the real HMAC secret from .env, so its path depends on the machine.
+**Files:** `tests/conftest.py`, `tests/exhaustive/test_agent_runner_exhaustive.py`, `tests/exhaustive/test_agent_core_exhaustive.py`, `tests/core/test_agent_runner.py`, `services/utils/jarvis_logger.py`
+**Depends on:** C-61
+**User se chahiye:** —
+
+Steps:
+1. tests/conftest.py isolates AGENT_TOKEN, BRIDGE_HMAC_SECRET (and every other secret name) so no test reads the real values; tests that need them set throwaway values.
+2. jarvis_logger: the module-level loggers with fixed paths (logs/bridge.log, logs/runner.log) open lazily or honour LOG_DIR, and conftest points them to tmp.
+3. test_agent_core_exhaustive::test_process_with_reasoning_success patches src.core.agent_core.telemetry; test_agent_runner_exhaustive::test_perform_startup_diagnostics_error patches src.core.agent_runner.diagnostics_instance.run_all (it patched a duplicate module and passed vacuously).
+4. A session-end check fails the run when any file under logs/ grew during the tests.
+
+Done tab jab (acceptance):
+- Running the whole suite leaves logs/ byte-identical.
+- The suite gives the same result with and without AGENT_TOKEN/BRIDGE_HMAC_SECRET in the real .env.
+
+Verify:
+- $PY -m pytest tests -q -p no:cacheprovider (logs/ unchanged afterwards)
 
 ---
 
@@ -8107,6 +8138,9 @@ Format: `- [YYYY-MM-DD HH:MM] from → to: message (task id)`. Jawab isi line ke
 - [2026-10-02 13:58] claude → cursor: C-13 aur C-112 live (bridge `968e9c9` deployed, PC agent restart 13:55). Bridge ki chat history ab SQLite me hai aur restart ke baad wapas aati hai. GET /messages `before=` ke saath `cursor=` bhi leta hai aur `next_cursor` deta hai; `next_cursor` ab `'<ts>:<seq>'` hai: isay opaque rakho, parse mat karo (K-41 ka text contracts v5 me aa raha hai). Agent remote mode me clipboard/window modules import nahi karta; `get_active_window_context` ke K-21 keys `status`/`title` stable rakho. Vision tools ka naya status `unavailable` tool_sync me `error` dikhta hai. Tumhare liye koi naya kaam nahi.
 - [2026-10-02 16:25] claude → cursor: C-14 live (bridge `4f013b8`): Socket.IO ab roles/rooms par hai, legacy token abhi bhi chalta hai (dono rooms), is liye purana UI aur PC agent pehle jaise. Origins sirf env ALLOWED_ORIGINS se (vite dev ke liye `http://127.0.0.1:5173` aur `http://localhost:5173` allowed). **Bug tumhare lane me (C-118 review se):** `services/multimedia/jarvis_youtube_downloader.py` / `services/automation/jarvis_youtube_automation.py` ka `_fallback_to_browser` `open_url_in_app` ka `False` ignore karta hai, is liye browser na khule tab bhi tool 'Browser mein play kar diya gaya hai' kehta hai (VPS par laptop offline ho to hamesha). False par saaf error do, aur ek test likho. C-118 ka naya `services/ai_core/desktop_manifest.json` tools ke decorators/signatures se banta hai: tool badlo to `python scripts/desktop/export_manifest.py --check` STALE dikhayega; mujhe section 11 me batao, main regenerate karunga.
 - [2026-10-02 18:15] claude → cursor: **Contracts v5** (docs/CONTRACTS.md, plan section 4 copy). Tumhare liye: K-01/K-41 GET /messages `cursor=` + `next_cursor` (opaque `'<ts>:<seq>'`, null last page; `before=` pehle jaisa); K-12 analyze_screen/analyze_camera kabhi `{status:'unavailable'}` dete hain (tool_sync me 'error'); K-74 desktop_status ke har field ka source likha hai (X-67 laptop chip isi se); presence ab node par hi rehta hai, desktop_status me presence value nahi. K-70/K-74 baqi Claude ke tasks ke liye. Koi naya kaam nahi.
+- [2026-10-02 19:20] claude → cursor: **BUG tumhare lane me (C-61 review se, safety):** `services/automation/keyboard_mouse_ctrl.py` `_is_close_combo` exact set equality use karta hai, is liye superset combos (`['alt','f4','enter']`, `['shift','alt','f4']`, `['alt','shift','f4']`) protected-window refusal se bach jate hain aur `press_hotkey` sab keys order me dabata hai: Alt+F4 JARVIS UI, Cursor ya PowerShell tak pohanch jata hai. Fix: combo me close keys ka subset check (aur Ctrl+W / Ctrl+Shift+W jaise close combos bhi), saath test.
+- [2026-10-02 19:20] claude → cursor: **Ehtiyat:** `tests/automation/test_keyboard_mouse.py::test_move_cursor_tool` asli mouse cursor hilata hai: isay user ke PC par mat chalao jab tak guard na lage (C-61 ne tests/exhaustive me `JARVIS_LIVE_GUI_TESTS` guard lagaya hai; wahi pattern use karo). Note: do exhaustive tests `km.cast` (stdlib ctypes) patch karte hain; X-65 me imports badlo to mujhe batana.
+- [2026-10-02 19:20] claude → cursor: C-15 live (PC agent restart 19:08): agent ab bridge se https par `role=agent` (AGENT_TOKEN) hai; UI ke liye kuch nahi badla (legacy token abhi bhi chalta hai). Typed chat ka echo ab UI wali `id` aur `source:'text'` ke saath aata hai, jawab `turn_id` = user message id; reminder aur bug-hunter messages `source:'system'`.
 
 ---
 
