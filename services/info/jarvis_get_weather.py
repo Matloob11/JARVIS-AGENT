@@ -11,14 +11,11 @@ from collections import Counter
 from typing import Any
 
 import requests
-from dotenv import load_dotenv
 
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
-from services.info.jarvis_search import get_current_city, search_internet
+from services.info import jarvis_search
 from services.utils.jarvis_logger import setup_logger
 from services.utils.jarvis_security import redact_secrets
-
-load_dotenv()
 
 # Setup logging
 logger = setup_logger("JARVIS-WEATHER")
@@ -32,7 +29,7 @@ async def _resolve_city(city: str) -> str:
     city = (city or "").strip()
     if city:
         return city
-    city = (await get_current_city()).strip()
+    city = (await jarvis_search.get_current_city()).strip()
     if city:
         return city
     city = (os.getenv("USER_CITY") or "").strip()
@@ -228,7 +225,7 @@ async def get_weather_via_search(
         query = f"weather forecast rain probability next 24 hours in {city}"
     else:
         query = f"current weather in {city} temperature condition"
-    search_result = await search_internet(query)
+    search_result = await jarvis_search.search_internet(query)
 
     if search_result.get("status") == "success":
         summary = search_result.get("message", "No details found.")

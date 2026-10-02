@@ -13,20 +13,18 @@ from datetime import datetime
 from urllib.parse import quote
 
 import requests  # type: ignore
-from dotenv import load_dotenv
 try:
     from ddgs import DDGS
 except ImportError:
     from duckduckgo_search import DDGS
 
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
+from services.utils import jarvis_location
 from services.utils.jarvis_logger import setup_logger
 from services.utils.jarvis_security import redact_secrets
 
 # Setup logging
 logger = setup_logger("JARVIS-SEARCH")
-
-load_dotenv()
 
 GOOGLE_SEARCH_API_KEY = os.getenv("GOOGLE_SEARCH_API_KEY")
 SEARCH_ENGINE_ID = os.getenv("SEARCH_ENGINE_ID")
@@ -85,16 +83,26 @@ def _log_http_failure(provider: str, exc: BaseException) -> None:
         logger.warning("%s search failed: %s", provider, reason)
 
 
+def _default_city_data() -> dict[str, float | str]:
+    city = (os.getenv("USER_CITY") or "").strip() or jarvis_location.DEFAULT_CITY
+    return {"city": city, "lat": jarvis_location.DEFAULT_LAT, "lng": jarvis_location.DEFAULT_LNG}
+
+
+def _desktop_mode_remote() -> bool:
+    return (os.getenv("JARVIS_DESKTOP_MODE") or "").strip().lower() == "remote"
+
+
 async def get_current_city_data() -> dict:
     """
-    Detects the current location of the user based on IP address.
+    Device location from the Desktop Node cache when fresh; else ipinfo on local mode only.
     Returns: {"city": str, "lat": float, "lng": float}
     """
-    default_data = {
-        "city": os.getenv("USER_CITY", "Lahore"),
-        "lat": 31.5204,
-        "lng": 74.3587,
-    }
+    default_data = _default_city_data()
+    device = jarvis_location.get_device_location()
+    if device is not None:
+        return {"city": device["city"], "lat": device["lat"], "lng": device["lng"]}
+    if _desktop_mode_remote():
+        return default_data
     try:
         response = await asyncio.to_thread(requests.get, "https://ipinfo.io/json", timeout=5)
         data = response.json()
@@ -106,7 +114,7 @@ async def get_current_city_data() -> dict:
         detected_city = data.get("city", default_data["city"])
 
         if detected_city.lower() in ["unknown", "", "none"]:
-            detected_city = default_data["city"]
+            detected_city = str(default_data["city"])
 
         return {
             "city": detected_city,

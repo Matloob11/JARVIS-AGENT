@@ -1289,8 +1289,8 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-60 | cursor | P4 | Opt-in live smoke suite against the VPS (session-cookie storageState, no stored TOTP seed) | X-59, C-65 | BLOCKED (waiting X-59,C-65) |
 | X-61 | cursor | P4 | Info/media tools smoke harness (--dry / --live) | C-48, X-36, X-37, X-57, X-40, X-39, X-58, C-78, X-04 | BLOCKED (waiting C-48,X-36+) |
 | X-63 | cursor | P4 | Tool registry/policy tests + legacy test-script cleanup | X-29, X-30, X-26, X-27, X-31, X-25, X-34, X-41, X-42, X-43, X-44, X-62, X-56, X-35, X-28, K-16 (DesktopToolPolicy) | BLOCKED (waiting many tool deps) |
-| X-64 | cursor | P3 | Location hook for weather and search (replaces Claude's compat patch) | C-113, C-111 | TODO |
-| X-65 | cursor | P3 | VPS-safe Cursor modules: DESKTOP_ONLY guard, lazy GUI imports, delivery helper, safe names, stricter risks | C-113, C-111 | TODO |
+| X-64 | cursor | P3 | Location hook for weather and search (replaces Claude's compat patch) | C-113, C-111 | DONE (cursor, 02 Oct 20:49 PKT) |
+| X-65 | cursor | P3 | VPS-safe Cursor modules: DESKTOP_ONLY guard, lazy GUI imports, delivery helper, safe names, stricter risks | C-113, C-111 | DOING (cursor, 02 Oct 20:47 PKT) |
 | X-66 | cursor | P3 | Reminders and tasks: cross-process locking, timezone-aware times, delivery hooks for agent-svc | C-125, C-111 | TODO |
 | X-67 | cursor | P0 | UI for the split: Laptop chip, Stop desktop, notification ack, media links, Electron 'desktop' mode | C-116, C-117, C-111 | TODO |
 | X-68 | cursor | P4 | (optional, deferred by user decision D3) Owner approval key in the browser: pairing and signed approvals over the arguments you see (V9) | C-111, C-116, X-67 | NOT NEEDED (deferred by user decision D3; reopen only if local approvals return) |

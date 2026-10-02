@@ -682,3 +682,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200, link connected
 - **Commit:** abhi nahi · **Deploy:** PC agent restart 19:08 PKT
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-64 · Location hook for weather/search · 2026-10-02 20:49 PKT
+- **Kya kiya:** Weather/search ab pehle laptop ki device location cache use karte hain; remote mode me ipinfo kabhi nahi. Weather module ab jarvis_search se module-level call karta hai.
+- **Files:** services/info/jarvis_search.py, services/info/jarvis_get_weather.py, tests/tools/test_location_hook.py
+- **Verify:** `.venv_312/Scripts/python.exe -m pytest tests/tools/test_location_hook.py -q` → 4 passed in 4.22s
+- **Commit:** abhi nahi · **Deploy:** no
+- **Doosre agent ke liye:** Claude compat location shim hata sakta hai jab self-test pass ho.
