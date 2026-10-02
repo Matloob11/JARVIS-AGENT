@@ -2,6 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import AssistantCore from './components/AssistantCore';
 import OverviewPage from '@/features/overview/OverviewPage';
+import QuickStatsCard from '@/features/overview/QuickStatsCard';
+import RecentActivityCard from '@/features/overview/RecentActivityCard';
+import { useLaptopOnline } from '@/features/overview/useLaptopOnline';
+import { ensureActivityFeedSubscriptions } from '@/features/activity/feedStore';
+import {
+  connectedDeviceCount,
+  useVortexStatusPoll,
+} from '@/features/shell/useVortexStatusPoll';
 import { setPersonaSwitchBridge } from '@/features/overview/personaSwitchBridge';
 import { SwarmModeProvider } from '@/features/panel/useSwarmMode';
 import ChatPanel from './components/ChatPanel';
@@ -46,6 +54,16 @@ const DashboardInner = () => {
   const [mobileTab, setMobileTab] = useState<MobileTab>('core');
   const [opsDrawerOpen, setOpsDrawerOpen] = useState(false);
   const navMarks = useSidebarNavMarks(route);
+  const vortex = useVortexStatusPoll(command.isConnected);
+  const laptopOnline = useLaptopOnline();
+  const deviceCount = useMemo(
+    () => connectedDeviceCount(vortex.uiClients, agentStatus.online, vortex.laptopOnline),
+    [vortex.uiClients, vortex.laptopOnline, agentStatus.online],
+  );
+
+  useEffect(() => {
+    ensureActivityFeedSubscriptions();
+  }, []);
 
   const shellMobileTab: MobileTab =
     route.page === 'chat' ? 'chat' : route.page === 'settings' ? 'settings' : mobileTab;
@@ -174,6 +192,21 @@ const DashboardInner = () => {
                   sessionRestartBanner={command.sessionRestartBanner}
                   onSessionRestartBannerChange={command.setSessionRestartBanner}
                 />
+              </ErrorBoundary>
+            }
+            quickStats={
+              <ErrorBoundary name="QuickStats">
+                <QuickStatsCard
+                  vitalsPc={command.vitalsPc}
+                  vitalsVps={command.vitalsVps}
+                  laptopOnline={laptopOnline}
+                  deviceCount={deviceCount}
+                />
+              </ErrorBoundary>
+            }
+            recentActivity={
+              <ErrorBoundary name="RecentActivity">
+                <RecentActivityCard />
               </ErrorBoundary>
             }
             belowHero={

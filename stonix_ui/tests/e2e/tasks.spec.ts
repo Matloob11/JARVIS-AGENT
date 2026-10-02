@@ -27,7 +27,7 @@ test.describe.configure({ mode: 'serial' });
 
 test.beforeEach(async ({ page }) => {
   await loginViaRecovery(page);
-  await expect(page.getByText(/connected|Secure link|JARVIS Ready/i).first()).toBeVisible();
+  await expect(page.getByTestId('chip-bridge')).toHaveAttribute('data-active', 'true');
   await page.waitForTimeout(400);
   await page.getByRole('button', { name: 'tasks' }).click();
   await expect(page.getByTestId('tasks-tab-panel')).toBeVisible();
@@ -87,7 +87,9 @@ test('task_notification increments bell and shows toast', async ({ page }) => {
   });
 
   await expect(page.getByTestId('task-bell-count')).toHaveText('1');
-  await expect(page.getByText(/Call home now/)).toBeVisible({ timeout: 5_000 });
+  await expect(page.locator('[role="status"]').filter({ hasText: /Call home now/ })).toBeVisible({
+    timeout: 5_000,
+  });
 
   await page.getByTestId('topbar-task-bell').click();
   await expect(page.getByTestId('task-bell-menu')).toBeVisible();

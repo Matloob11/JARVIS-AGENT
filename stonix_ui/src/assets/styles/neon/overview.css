@@ -13,12 +13,293 @@
   container-type: size;
 }
 
+.overview-page__stats {
+  grid-column: 1;
+  grid-row: 2;
+  min-width: 0;
+  min-height: 0;
+}
+
+.overview-page__activity {
+  grid-column: 2;
+  grid-row: 2;
+  min-width: 0;
+  min-height: 0;
+}
+
+.overview-page__below {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
 .overview-page__legacy {
   grid-column: 1 / -1;
   display: flex;
   flex-direction: column;
   gap: 12px;
   min-width: 0;
+}
+
+.overview-qs-card {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  container-type: inline-size;
+  min-height: 0;
+}
+
+.overview-qs-card__icon {
+  width: 26px;
+  height: 26px;
+  color: var(--ic-card, #80befd);
+}
+
+.overview-qs-card__stale {
+  position: absolute;
+  top: 18px;
+  right: 56px;
+  font: 600 11px/1 var(--font-ui);
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--warn-t, #e9ab4a);
+}
+
+.overview-qs-card__tiles {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: 15px;
+  row-gap: max(10px, calc(14 * var(--vu, 1px)));
+  padding: 0 16px 16px;
+}
+
+.overview-qs-tile {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto auto;
+  column-gap: 10px;
+  align-content: start;
+  min-height: clamp(64px, calc(91 * var(--vu, 1px)), 91px);
+  padding: 14px 14px 12px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.overview-qs-tile:nth-child(n + 3) {
+  min-height: clamp(64px, calc(95 * var(--vu, 1px)), 95px);
+}
+
+.overview-qs-tile__icon {
+  grid-row: 1 / span 2;
+  width: 30px;
+  height: 30px;
+}
+
+.overview-qs-tile__icon--cpu {
+  color: var(--ic-cpu, #2ecc8f);
+}
+
+.overview-qs-tile__icon--mem {
+  color: var(--ic-mem, #65b7fa);
+}
+
+.overview-qs-tile__icon--disk {
+  color: var(--ic-disk, #fbc551);
+}
+
+.overview-qs-tile__icon--dev {
+  color: var(--ic-dev, #bfbdf9);
+}
+
+.overview-qs-tile__val {
+  grid-column: 2;
+  font: 600 clamp(18px, 2.2vh, 22px) / 1.1 var(--font-ui);
+  color: var(--t1, #f4f6f9);
+}
+
+.overview-qs-tile__lab {
+  grid-column: 2;
+  font: 400 13px/18px var(--font-ui);
+  color: var(--t4, #8794b4);
+}
+
+.overview-qs-tile__lab-short {
+  display: none;
+}
+
+@container (max-width: 290px) {
+  .overview-qs-tile[data-testid='qs-cpu'] .overview-qs-tile__lab-long {
+    display: none;
+  }
+
+  .overview-qs-tile[data-testid='qs-cpu'] .overview-qs-tile__lab-short {
+    display: inline;
+  }
+}
+
+@container (max-width: 400px) {
+  .overview-qs-tile[data-testid='qs-devices'] .overview-qs-tile__lab-long {
+    display: none;
+  }
+
+  .overview-qs-tile[data-testid='qs-devices'] .overview-qs-tile__lab-short {
+    display: inline;
+  }
+}
+
+.overview-qs-tile__warn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  color: var(--warn-t, #e9ab4a);
+  font-size: 11px;
+}
+
+.overview-qs-tile__bar {
+  grid-column: 1 / -1;
+  margin-top: 8px;
+}
+
+.overview-qs-tile__bar--cpu {
+  --c: var(--cpu, #2ecc8f);
+}
+
+.overview-qs-tile__bar--mem {
+  --c: linear-gradient(90deg, #65b7fa, #9ad4ff);
+}
+
+.overview-qs-tile__bar--disk {
+  --c: var(--disk, #fbc551);
+}
+
+.overview-qs-tile__bar--dev {
+  --c: var(--devc, #bfbdf9);
+}
+
+.overview-activity-card {
+  position: relative;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.overview-activity-card__icon {
+  width: 25px;
+  height: 25px;
+  color: var(--ic-card, #85bcfd);
+}
+
+.overview-activity-card__line {
+  position: absolute;
+  left: 29.5px;
+  top: 72px;
+  bottom: 16px;
+  width: 1px;
+  background: #2b3552;
+  pointer-events: none;
+}
+
+.overview-activity-card__empty {
+  margin: 8px 20px 20px 62px;
+  font: 400 14px/20px var(--font-ui);
+  color: var(--t4, #7484aa);
+}
+
+.overview-activity-card__list {
+  list-style: none;
+  margin: 0;
+  padding: 8px 0 12px;
+}
+
+.overview-activity-row {
+  position: relative;
+  height: clamp(46px, calc(54 * var(--vu, 1px)), 54px);
+}
+
+.overview-activity-row__dot {
+  position: absolute;
+  left: 23.5px;
+  top: 8.5px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--card, #0c1428);
+}
+
+.overview-activity-row.k-ok .overview-activity-row__dot {
+  background: var(--ok, #3ecf8e);
+  box-shadow: 0 0 0 2px var(--card, #0c1428), 0 0 8px rgba(62, 207, 142, 0.35);
+}
+
+.overview-activity-row.k-info .overview-activity-row__dot {
+  background: var(--info, #65b7fa);
+  box-shadow: 0 0 0 2px var(--card, #0c1428), 0 0 8px rgba(101, 183, 250, 0.35);
+}
+
+.overview-activity-row.k-device .overview-activity-row__dot {
+  background: var(--dev, #bfbdf9);
+  box-shadow: 0 0 0 2px var(--card, #0c1428), 0 0 8px rgba(191, 189, 249, 0.35);
+}
+
+.overview-activity-row.k-neutral .overview-activity-row__dot {
+  background: var(--neutral, #96a3c4);
+}
+
+.overview-activity-row.k-warn .overview-activity-row__dot {
+  background: var(--warn-t, #e9ab4a);
+}
+
+.overview-activity-row.k-err .overview-activity-row__dot {
+  background: var(--err-t, #ff6b6f);
+}
+
+.overview-activity-row__link {
+  display: block;
+  height: 100%;
+  text-decoration: none;
+  color: inherit;
+}
+
+.overview-activity-row__title {
+  position: absolute;
+  left: 62px;
+  top: 1px;
+  font: 500 clamp(13.5px, 1.5vh, 14.25px) / 20px var(--font-med);
+  color: var(--t1, #f4f6f9);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: calc(100% - 120px);
+}
+
+.overview-activity-row__repeat {
+  margin-left: 6px;
+  font-weight: 600;
+  color: var(--t4, #7484aa);
+}
+
+.overview-activity-row__sub {
+  position: absolute;
+  left: 63px;
+  top: 21px;
+  font: 400 clamp(13px, 1.5vh, 14.25px) / 20px var(--font-ui);
+  color: var(--t-act-sub, #8794b4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: calc(100% - 130px);
+}
+
+.overview-activity-row__time {
+  position: absolute;
+  right: 20px;
+  top: 3px;
+  font: 400 clamp(12.5px, 1.48vh, 14px) / 20px var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  color: var(--t-time, #7484aa);
 }
 
 .overview-legacy-strip {

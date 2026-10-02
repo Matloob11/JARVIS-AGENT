@@ -8,6 +8,8 @@ type OverviewPageProps = {
   stateLabel: string;
   legacyStrip: ReactNode;
   belowHero?: ReactNode;
+  quickStats?: ReactNode;
+  recentActivity?: ReactNode;
   orbSlot?: ReactNode;
   waveformSlot?: ReactNode;
 };
@@ -18,6 +20,8 @@ const OverviewPage = ({
   stateLabel,
   legacyStrip,
   belowHero,
+  quickStats,
+  recentActivity,
   orbSlot,
   waveformSlot,
 }: OverviewPageProps) => (
@@ -29,8 +33,10 @@ const OverviewPage = ({
       orbSlot={orbSlot}
       waveformSlot={waveformSlot}
     />
+    {quickStats ? <div className="overview-page__stats">{quickStats}</div> : null}
+    {recentActivity ? <div className="overview-page__activity">{recentActivity}</div> : null}
     <div className="overview-page__legacy">{legacyStrip}</div>
-    {belowHero}
+    {belowHero ? <div className="overview-page__below">{belowHero}</div> : null}
   </div>
 );
 
