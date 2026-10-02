@@ -1,12 +1,28 @@
 """
 # jarvis_vector_memory.py
 Long-Term Semantic Memory for JARVIS using ChromaDB.
+
+C-137: the start-up (the Chroma client, the sentence-transformers import and model load, the
+collection) runs in a background thread, never on an event loop. A cold sentence-transformers
+import scans the metadata of every installed package (transformers' import_utils) and froze the
+voice loop for 45 s on 2 Oct. prewarm() starts it without waiting, and the coroutines await it from
+any event loop: a recall waits at most RECALL_WAIT_S (that turn then goes on without long-term
+memories). A write made before the memory is ready is queued for the start-up thread, which makes it
+once the memory is ready, so it is kept even when its job's event loop stops meanwhile.
+
+prewarm() opens Chroma, which only the job serving jarvis-hybrid may do (K-69). warm_model() loads
+only the model and never opens Chroma: it is the part a worker's prewarm hook may run.
 """
 
 import asyncio
+import concurrent.futures
+import functools
 import logging
 import os
+import threading
+import time
 import uuid
+from collections.abc import Callable
 from typing import Any
 
 import chromadb
@@ -57,6 +73,57 @@ logger = setup_logger("JARVIS-VECTOR-MEMORY")
 # --- Configuration ---
 DB_PATH = config.chroma_db_dir
 COLLECTION_NAME = "jarvis_memory"
+MODEL_NAME = "all-MiniLM-L6-v2"
+# A recall during the warm-up waits this long, then that turn goes on without long-term memories.
+RECALL_WAIT_S = 3.0
+
+
+def _running_future() -> concurrent.futures.Future[bool]:
+    """A future set running at once, so a waiter's cancellation never cancels what it stands for."""
+    future: concurrent.futures.Future[bool] = concurrent.futures.Future()
+    future.set_running_or_notify_cancel()
+    return future
+
+
+def _wake(holder: list[asyncio.Future[None]], _: concurrent.futures.Future[bool]) -> None:
+    """
+    A background future's done callback, in its thread: resolves the waiter in holder on the
+    waiter's own loop and lets go of it. A done concurrent future keeps its callbacks, so an emptied
+    holder is what keeps a job's loop from staying alive after its job ended.
+    """
+    try:
+        waiter = holder.pop()
+    except IndexError:  # the waiter gave up first (timeout or cancel)
+        return
+    try:
+        waiter.get_loop().call_soon_threadsafe(_resolve, waiter)
+    except RuntimeError:  # its loop is closed (the job ended); a queued write is made regardless
+        pass
+
+
+def _resolve(waiter: asyncio.Future[None]) -> None:
+    if not waiter.done():  # a waiter that timed out or was cancelled stays as it is
+        waiter.set_result(None)
+
+
+async def _await_future(future: concurrent.futures.Future[bool],
+                        timeout: float | None = None) -> bool:
+    """
+    Awaits a future that a background thread resolves, without blocking the event loop and without
+    ever cancelling it (other waiters may share it): its result, or False after timeout seconds.
+    """
+    if not future.done():
+        waiter = asyncio.get_running_loop().create_future()
+        # Held strongly while it waits, so an awaiting task is never garbage collected meanwhile.
+        holder = [waiter]
+        future.add_done_callback(functools.partial(_wake, holder))
+        try:
+            await asyncio.wait_for(waiter, timeout)
+        except TimeoutError:
+            return False
+        finally:
+            holder.clear()
+    return bool(future.result())
 
 
 class VectorMemory:
@@ -68,59 +135,172 @@ class VectorMemory:
         self.client = None
         self.embedding_func = None
         self.collection = None
-        self._init_lock = asyncio.Lock()
+        # A thread lock and concurrent futures, not asyncio ones: LiveKit runs each job on its own
+        # event loop (one thread per job on Windows) and all of them share this instance.
+        self._init_lock = threading.Lock()
+        self._init_future: concurrent.futures.Future[bool] | None = None
+        self._model_future: concurrent.futures.Future[bool] | None = None
+        # Held by the thread that loads the model, so the model loads once when both threads run.
+        self._model_lock = threading.Lock()
+        # Writes made before the memory is ready, for the start-up thread: (the write, its outcome).
+        self._queued_writes: list[tuple[dict[str, Any], concurrent.futures.Future[bool]]] = []
+
+    @property
+    def warming_up(self) -> bool:
+        """True while the background start-up runs."""
+        future = self._init_future
+        return future is not None and not future.done()
+
+    @staticmethod
+    def _start(name: str, target: Callable[[concurrent.futures.Future[bool]], None]
+               ) -> concurrent.futures.Future[bool]:
+        """target(future) in a new daemon thread called name; the future it resolves."""
+        future = _running_future()
+        try:
+            threading.Thread(target=target, args=(future,), name=name, daemon=True).start()
+        except RuntimeError as e:  # no new thread now (interpreter shutdown)
+            logger.error("Vector Memory thread %s not started: %s", name, e)
+            future.set_result(False)
+        return future
+
+    def prewarm(self) -> concurrent.futures.Future[bool]:
+        """
+        Begins the background start-up unless it is running or has succeeded, and returns its future:
+        True once the memory is ready, False when the start-up failed (the next call tries again).
+        Never blocks, so it is safe on an event loop. It opens Chroma, so only the job serving
+        jarvis-hybrid calls it, never a worker's prewarm hook (K-69): that hook calls warm_model().
+        """
+        with self._init_lock:
+            future = self._init_future
+            if future is None or (future.done() and self.collection is None):
+                future = self._init_future = self._start("jarvis-vector-init", self._initialize)
+            return future
+
+    def warm_model(self) -> concurrent.futures.Future[bool]:
+        """
+        Loads only the embedding model (the sentence-transformers import and its model) in a
+        background thread unless that is running or has succeeded, and returns its future: True once
+        loaded. It never opens Chroma, so a worker's prewarm hook may call it in every process
+        (K-69); the start-up then finds the model loaded. Never blocks.
+        """
+        with self._init_lock:
+            future = self._model_future
+            if future is None or (future.done() and not future.result()):
+                future = self._model_future = self._start("jarvis-vector-model", self._warm_model)
+            return future
+
+    def _load_model(self) -> Any:
+        """The embedding function, made once; a thread arriving during a load waits for it."""
+        with self._model_lock:
+            if self.embedding_func is None:
+                self.embedding_func = SentenceTransformerEmbeddingFunction(model_name=MODEL_NAME)
+            return self.embedding_func
+
+    def _warm_model(self, future: concurrent.futures.Future[bool]) -> None:
+        """warm_model() itself, in the jarvis-vector-model thread."""
+        started = time.monotonic()
+        loaded = False
+        try:
+            self._load_model()
+            loaded = True
+            logger.info("VECTOR_MODEL ready in %.1fs", time.monotonic() - started)
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.error("Vector Memory model not loaded: %s", e)
+        finally:
+            future.set_result(loaded)
+
+    def _initialize(self, future: concurrent.futures.Future[bool]) -> None:
+        """The start-up, in the jarvis-vector-init thread; then it makes the queued writes."""
+        started = time.monotonic()
+        client = collection = None
+        try:
+            logger.info("Initializing Vector Memory (background thread)...")
+            client = chromadb.PersistentClient(path=DB_PATH)
+            embedding_func = self._load_model()  # at once when warm_model() has loaded it
+            collection = client.get_or_create_collection(
+                name=COLLECTION_NAME,
+                embedding_function=embedding_func,
+            )
+            logger.info("VECTOR_PREWARM done in %.1fs", time.monotonic() - started)
+        except Exception as e:
+            # Client and collection stay None, so the next use tries again.
+            logger.error("Failed to initialize Vector Memory: %s", e)
+            collection = None
+        finally:
+            with self._init_lock:
+                if collection is not None:
+                    # The collection last: a reader that sees it also sees the client. From here on
+                    # writes go straight to it, so the queue taken below is complete.
+                    self.client, self.collection = client, collection
+                else:
+                    # With the queue, under the lock: a later write starts a new start-up.
+                    future.set_result(False)
+                queued, self._queued_writes = self._queued_writes, []
+            try:
+                if queued and collection is None:
+                    logger.warning("Vector Memory not initialized. Skipping %d queued writes.",
+                                   len(queued))
+                for memory, outcome in queued:
+                    outcome.set_result(collection is not None and self._write(collection, memory))
+            finally:
+                if collection is not None:
+                    future.set_result(True)  # after the queued writes, so a recall then finds them
+
+    async def _wait_ready(self, timeout: float | None = None) -> bool:
+        """
+        Awaits the start-up (starting it when needed) without blocking the event loop: True once the
+        memory is ready, False when the start-up failed or still runs after timeout seconds.
+        """
+        if self.collection is not None:
+            return True
+        return await _await_future(self.prewarm(), timeout) and self.collection is not None
 
     async def _ensure_initialized(self) -> None:
-        """Initializes components only when needed with thread-safe locking."""
-        if self.client is not None:
-            return
+        """Waits, without blocking the event loop, until the start-up has succeeded or failed."""
+        await self._wait_ready()
 
-        async with self._init_lock:
-            # Double-check after acquiring lock
-            if self.client is not None:
-                return
+    def _queue_write(self, memory: dict[str, Any]) -> concurrent.futures.Future[bool] | None:
+        """
+        Queues a write for the start-up thread, starting the start-up when needed: the write's
+        outcome. None when the memory is ready (the caller then writes it itself).
+        """
+        self.prewarm()
+        with self._init_lock:
+            if self.collection is not None:
+                return None
+            outcome = _running_future()
+            start = self._init_future
+            if start is not None and not start.done():
+                self._queued_writes.append((memory, outcome))
+                return outcome
+        # The start-up has just failed or could not start.
+        logger.warning("Vector Memory not initialized. Skipping add_memory.")
+        outcome.set_result(False)
+        return outcome
 
-            try:
-                logger.info("Initializing Vector Memory (Lazy Loading)...")
-                # PersistentClient is a blocking operation, so we run in thread to avoid blocking loop
-                self.client = await asyncio.to_thread(chromadb.PersistentClient, path=DB_PATH)
-                self.embedding_func = SentenceTransformerEmbeddingFunction(
-                    model_name="all-MiniLM-L6-v2",
-                )
-                self.collection = await asyncio.to_thread(
-                    self.client.get_or_create_collection,
-                    name=COLLECTION_NAME,
-                    embedding_function=self.embedding_func,
-                )
-            except Exception as e:
-                logger.error("Failed to initialize Vector Memory: %s", e)
-                # Keep client/collection as None so we can try again
-                self.client = None
-                self.collection = None
+    @staticmethod
+    def _write(collection: Any, memory: dict[str, Any]) -> bool:
+        """collection.add for one memory (blocking): True once it is stored."""
+        try:
+            collection.add(**memory)
+            return True
+        except Exception as e:
+            logger.error("Error adding to Vector Memory: %s", e)
+            return False
 
     async def add_memory(self, text: str, metadata: dict[str, Any] | None = None) -> bool:
         """Add a piece of text to the semantic memory asynchronously."""
         if not text or not text.strip():
             return False
 
-        await self._ensure_initialized()
-        if self.collection is None:
-            logger.warning("Vector Memory not initialized. Skipping add_memory.")
-            return False
-
-        memory_id = str(uuid.uuid4())
-        try:
+        memory = {"documents": [text], "metadatas": [metadata or {}], "ids": [str(uuid.uuid4())]}
+        queued = self._queue_write(memory)
+        if queued is None:
             # collection.add is blocking, run in thread
-            await asyncio.to_thread(
-                self.collection.add,
-                documents=[text],
-                metadatas=[metadata or {}],
-                ids=[memory_id],
-            )
-            return True
-        except Exception as e:
-            logger.error("Error adding to Vector Memory: %s", e)
-            return False
+            return await asyncio.to_thread(self._write, self.collection, memory)
+        # The start-up thread makes the write once the memory is ready, so it is made even when this
+        # job's loop stops or this caller is cancelled meanwhile; here we only await its outcome.
+        return await _await_future(queued)
 
     async def query_memory(self, query_text: str, n_results: int = 5) -> list[dict[str, Any]]:
         """
@@ -130,8 +310,9 @@ class VectorMemory:
         if not query_text:
             return []
 
-        await self._ensure_initialized()
-        if self.collection is None:
+        if not await self._wait_ready(RECALL_WAIT_S):
+            if self.warming_up:
+                logger.info("Vector Memory still warming up: this recall returns no memories")
             return []
 
         try:

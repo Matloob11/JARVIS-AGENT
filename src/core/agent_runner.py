@@ -41,6 +41,12 @@ from services.utils.jarvis_logger import redact_root_handlers
 
 redact_root_handlers()
 
+# K-72 compat layer (C-113), remote mode only: rebinds os.startfile, webbrowser.open and the ipinfo location
+# before this module or discovery binds them by value. A no-op on the PC brain.
+from services.ai_core import remote_compat
+
+remote_compat.install()
+
 from livekit import agents, rtc
 from livekit.agents import AgentSession, cli, llm
 from livekit.agents.cli import cli as livekit_cli_module
@@ -329,6 +335,22 @@ def _start_loop_watchdog(ctx: agents.JobContext,
     return watchdog
 
 
+def _prewarm_vector_memory() -> None:
+    """
+    C-137: starts the vector memory (Chroma, the sentence-transformers import and its model) in its
+    background thread at job start, so no event loop runs that import and the first recall or write
+    finds the memory ready. Once per process: a later job finds it running or ready. It opens Chroma,
+    so it runs here in the job (K-69); a worker's prewarm hook may only call warm_model().
+    """
+    try:
+        from services.ai_core.jarvis_vector_memory import (  # pylint: disable=import-outside-toplevel
+            jarvis_vector_db,
+        )
+        jarvis_vector_db.prewarm()
+    except Exception as e:  # the memory then starts at its first use, still off the loop
+        logger.warning("VECTOR_PREWARM not started: %s", e)
+
+
 async def _process_user_audio(publication: rtc.TrackPublication, assistant: BrainAssistant) -> None:
     """Subscribes to user audio and feeds frames to the assistant for Voice ID."""
     if assistant.muted:
@@ -437,6 +459,7 @@ async def entrypoint(ctx: agents.JobContext):
             # INCREASED TIMEOUT: From 10s to 60s for high-load systems (Sir Matloob's Dell PC)
             await asyncio.wait_for(ctx.connect(), timeout=60.0)
             logger.info("✅ Connected to room: %s", ctx.room.name)
+            _prewarm_vector_memory()  # C-137: loads in its own thread while the session starts
 
             # Now perform secondary initialization
             current_dt_res = await get_formatted_datetime()
@@ -450,6 +473,8 @@ async def entrypoint(ctx: agents.JobContext):
             plugin_manager.discover_plugins(package_path)
             external_tools = plugin_manager.get_livekit_tools()
             logger.info("🛠️ Discovered %d external tools from plugins.", len(external_tools))
+            if not local:
+                remote_compat.self_test()  # K-72: every shim still bound once discovery imported the tools
 
             # Tune VAD to be less sensitive to background noise and prevent stuttering
             vad = silero.VAD.load(

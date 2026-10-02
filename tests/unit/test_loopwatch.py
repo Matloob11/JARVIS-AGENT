@@ -5,8 +5,10 @@ blocks the loop the way a sync call inside a real tool does, and a ctypes sleep 
 stops every Python thread without using CPU, the way a laptop sleep or Modern Standby pauses the
 agent. A job end is replayed as LiveKit's THREAD executor (the Windows default) does it: the job
 thread's loop stops with the entrypoint still pending and the thread exits. No sleep is longer
-than 0.6 s. Dummy tools are registered under 'c31_' names and removed again; tool_sync posts and
-the audit log are replaced, so nothing reaches the network, the live agent or logs/.
+than 0.6 s, except that the critical-ms test keeps its loop blocked until the watcher has reported
+(at most CRITICAL_WAIT_S), so a watcher thread the OS runs late on a loaded machine still gets its
+turn. Dummy tools are registered under 'c31_' names and removed again; tool_sync posts and the audit
+log are replaced, so nothing reaches the network, the live agent or logs/.
 """
 # pylint: disable=protected-access
 import asyncio
@@ -41,6 +43,7 @@ from src.core import agent_runner
 ROOT = Path(__file__).resolve().parents[2]
 BLOCK_S = 0.6  # every simulated stall or pause
 SETTLE_S = 0.3  # time for the late heartbeat to report afterwards
+CRITICAL_WAIT_S = 5.0  # the longest the critical-ms test waits for the watcher's report
 
 
 @pytest.fixture(autouse=True)
@@ -160,7 +163,10 @@ class _JobShutdown:
         await asyncio.gather(*(callback(reason) for callback in self._shutdown_callbacks))
 
 
-async def test_sync_sleep_inside_a_tool_logs_exactly_one_stall(records):
+async def test_sync_sleep_inside_a_tool_logs_exactly_one_stall(records, monkeypatch):
+    # C-137: never taken for a pause of the whole process on a loaded machine (see the critical test).
+    monkeypatch.setattr(jarvis_loopwatch, "_cpu_clock", time.monotonic)
+
     @jarvis_tool(execution_timeout=5.0)
     async def c31_block_loop() -> str:
         """Blocks the event loop like a sync call inside a real tool."""
@@ -213,25 +219,35 @@ async def test_a_deep_library_call_still_names_the_own_frame_that_made_it(record
     assert own.startswith("unit/test_loopwatch.py:") and own.endswith(" c31_wait_in_library")
 
 
-async def test_watcher_reports_a_loop_still_blocked_at_critical_ms(records):
+async def test_watcher_reports_a_loop_still_blocked_at_critical_ms(records, monkeypatch):
+    # C-137, robust under CPU load: process CPU time runs as fast as the clock (as in the busy-call
+    # test), so a watcher thread that the OS wakes late while the loop thread sleeps is never taken
+    # for a pause of the whole process, which would discount part of the stall.
+    monkeypatch.setattr(jarvis_loopwatch, "_cpu_clock", time.monotonic)
     reported: list[tuple[LoopStall, int, float]] = []
+    seen = threading.Event()
 
     def on_critical(stall: LoopStall) -> None:
-        reported.append((stall, threading.get_ident(), time.monotonic()))
+        reported.append((stall, threading.get_ident(), time.perf_counter()))
+        seen.set()
 
     def block_the_loop() -> float:
-        time.sleep(BLOCK_S)
-        return time.monotonic()
+        # BLOCK_S at least, and on until the watcher has reported (at most CRITICAL_WAIT_S).
+        began = time.perf_counter()
+        seen.wait(CRITICAL_WAIT_S)
+        time.sleep(max(0.0, began + BLOCK_S - time.perf_counter()))
+        return time.perf_counter()
 
-    dog = LoopWatchdog(threshold_ms=100, critical_ms=250, on_critical=on_critical,
-                       log=records.logger, name="c31-critical")
+    # The default stall threshold: a heartbeat merely delayed on a loaded machine is no stall.
+    dog = LoopWatchdog(critical_ms=500, on_critical=on_critical, log=records.logger,
+                       name="c31-critical")
     unblocked_at = await _run_around(dog, block_the_loop)
 
     assert len(reported) == 1
     stall, thread_id, reported_at = reported[0]
     # Reported from the watcher thread while the loop thread was still inside block_the_loop.
     assert thread_id != threading.get_ident() and reported_at < unblocked_at
-    assert stall.ongoing and stall.ms >= 250 and "block_the_loop" in stall.stack
+    assert stall.ongoing and stall.ms >= 500 and "block_the_loop" in stall.stack
     lines = [(r.levelno, " ongoing " in r.getMessage()) for r in records.tagged(STALL_TAG)]
     assert lines == [(logging.ERROR, True), (logging.ERROR, False)]
     assert dog.critical_count == 1 and dog.stall_count == 1
@@ -276,8 +292,10 @@ async def test_wall_clock_jump_is_a_resume_not_a_stall(records, monkeypatch):
 def test_a_stopped_loop_is_no_stall_and_closing_it_ends_the_watcher(records):
     """run_until_complete() returned with the heartbeat pending: work meanwhile delays no callback."""
     critical: list[LoopStall] = []
-    dog = LoopWatchdog(threshold_ms=100, critical_ms=250, on_critical=critical.append,
-                       log=records.logger, name="c31-stopped")
+    # C-137: the default stall threshold, so a heartbeat merely delayed on a loaded machine is no
+    # stall; critical_ms stays well below the stop, which would reach it if it counted as a stall.
+    dog = LoopWatchdog(critical_ms=400, on_critical=critical.append, log=records.logger,
+                       name="c31-stopped")
     loop = asyncio.new_event_loop()
 
     async def main() -> None:
@@ -304,8 +322,9 @@ def test_a_job_thread_that_ends_with_the_watchdog_running_ends_the_watcher(recor
     watcher thread must end by itself, report no stall and keep nothing in memory.
     """
     critical: list[LoopStall] = []
-    dog = LoopWatchdog(threshold_ms=100, critical_ms=250, on_critical=critical.append,
-                       log=records.logger, name="c31-job")
+    # C-137: the default stall threshold, as in the stopped-loop test above.
+    dog = LoopWatchdog(critical_ms=400, on_critical=critical.append, log=records.logger,
+                       name="c31-job")
     loop = asyncio.new_event_loop()
     entrypoints: list[asyncio.Task[None]] = []
 

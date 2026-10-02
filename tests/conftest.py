@@ -181,6 +181,26 @@ def mock_environment_variables(monkeypatch):
         monkeypatch.setenv(key, value)
 
 
+@pytest.fixture(autouse=True)
+def _vector_memory_never_loads_for_real(monkeypatch):
+    """
+    C-137: the vector memory starts in a background thread that outlives a test's event loop. A test
+    that reaches the global jarvis_vector_db unmocked (a conversation save, the agent entrypoint) would
+    load the real sentence-transformers model (model hub requests included) and open the project's
+    chroma_db; here that start fails at once instead, as when the memory is unavailable. Tests of
+    VectorMemory itself build their own instances.
+    """
+    import concurrent.futures  # pylint: disable=import-outside-toplevel
+
+    failed: concurrent.futures.Future[bool] = concurrent.futures.Future()
+    failed.set_result(False)
+    for name in ("services.ai_core.jarvis_vector_memory", "jarvis_vector_memory"):
+        module = sys.modules.get(name)
+        if module is not None and hasattr(module, "jarvis_vector_db"):
+            # In the instance's own dict, so the undo leaves no attribute behind.
+            monkeypatch.setitem(vars(module.jarvis_vector_db), "prewarm", lambda: failed)
+
+
 @pytest.fixture
 def mock_http_client():
     """Mock HTTP client fixture"""
