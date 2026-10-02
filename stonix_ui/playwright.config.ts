@@ -30,6 +30,7 @@ export default defineConfig({
         VITE_BRIDGE_BASE: '/vortex',
         VITE_VORTEX_URL: '',
         VITE_DEV_BRIDGE: 'http://127.0.0.1:5199',
+        VITE_E2E_HOOKS: '1',
       },
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,

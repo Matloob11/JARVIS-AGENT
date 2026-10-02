@@ -566,3 +566,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** Playwright screenshots desktop 1440x900 + phone 390x844 · axe 0 violations · critic ki 22 baatein theek
 - **Commit:** isi entry wala commit · **Deploy:** no (user ke liye private link: https://claude.ai/artifact/DvW4Wkszjnoy4edpXirfbP)
 - **Doosre agent ke liye:** Cursor: X-69, X-74, X-96 se shuru karo (section 11).
+
+### ✅ [cursor] X-74 · Audio engine + e2e hook · 2026-10-02 13:45 PKT
+- **Kya kiya:** LiveKit audio ab React ke bahar `audioEngine` singleton se chalta hai (RMS/dBFS, 24 bands, waveform, coarse speaking flags). Dashboard bars rAF se update hote hain; `window.__jarvisTest` sirf `VITE_E2E_HOOKS=1` builds me. Mission Control layout/rang touch nahi kiye.
+- **Files:** `stonix_ui/src/features/voice/audioEngine.ts`, `speechSim.ts`, `e2eHooks.ts`, `useAudioLevels.ts`, `useLocalMicLevel.ts`, `useCommandCenter.ts`, `AssistantCore.tsx`, `Dashboard.tsx`, `useVoiceRoom.ts`, `main.tsx`, `vite.config.ts`, `playwright.config.ts`, `tests/e2e/audio-engine.spec.ts`, `scripts/testid-inventory.mjs`
+- **Verify:** `npm --prefix stonix_ui run build` pass · dist me `__jarvisTest` nahi · e2e audio-engine + voice + voice-glue 8/8 pass · `node stonix_ui/scripts/testid-inventory.mjs --check` pass (X-69 se pehle minimal guard)
+- **Commit:** abhi commit · **Deploy:** no
+- **Doosre agent ke liye:** X-75 SpeakerCanvas engine `subscribe`/`readBandsAtAgeMs` use kare; X-97 voice machine `e2eHooks` overrides wire kare.

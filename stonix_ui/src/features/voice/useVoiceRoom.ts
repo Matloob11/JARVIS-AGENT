@@ -13,6 +13,7 @@ import {
 import { getSocket } from '@/shared/realtime/socket';
 import { fetchLiveKitToken, LiveKitUnavailableError } from './livekitToken';
 import { requestMicrophonePermission } from './requestMicrophonePermission';
+import { audioEngine } from './audioEngine';
 
 export type VoiceRoomState = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'error';
 
@@ -350,6 +351,7 @@ export function useVoiceRoom() {
         stopPreloadMic();
         setMicEnabled(true);
         setError(null);
+        await audioEngine.resumeAll();
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         setError(msg);
@@ -425,6 +427,7 @@ export function useVoiceRoom() {
     if (!room) return;
     try {
       await room.startAudio();
+      await audioEngine.resumeAll();
       setPlaybackBlocked(!room.canPlaybackAudio);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));

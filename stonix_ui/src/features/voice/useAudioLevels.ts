@@ -1,18 +1,23 @@
-import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   RoomEvent,
   Track,
+  type LocalAudioTrack,
+  type RemoteAudioTrack,
   type RemoteParticipant,
   type RemoteTrack,
   type Room,
 } from 'livekit-client';
+import type { AgentState } from './useVoiceRoom';
 import type { VoiceRoomState } from './useVoiceRoom';
+import {
+  AGENT_AUDIO_ACTIVE_THRESHOLD,
+  BAND_COUNT,
+  DISPLAY_BAR_COUNT,
+  audioEngine,
+} from './audioEngine';
 
-export const SPECTRAL_BIN_COUNT = 32;
-export const AGENT_AUDIO_ACTIVE_THRESHOLD = 0.06;
-
-const TARGET_FPS = 30;
-const FRAME_MS = 1000 / TARGET_FPS;
+export { AGENT_AUDIO_ACTIVE_THRESHOLD, BAND_COUNT, DISPLAY_BAR_COUNT };
 
 function isAgentParticipant(participant: RemoteParticipant): boolean {
   return participant.isAgent || participant.identity.startsWith('agent-');
@@ -21,148 +26,167 @@ function isAgentParticipant(participant: RemoteParticipant): boolean {
 export type UseAudioLevelsOptions = {
   getRoom: () => Room | null;
   roomState: VoiceRoomState;
-  spectralDataRef: MutableRefObject<number[]>;
+  agentState: AgentState;
+  micEnabled: boolean;
 };
 
-export function useAudioLevels({ getRoom, roomState, spectralDataRef }: UseAudioLevelsOptions) {
-  const [agentLevel, setAgentLevel] = useState(0);
-  const [vizFrame, setVizFrame] = useState(0);
+const COARSE_MS = 200;
 
-  const ctxRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
-  const boundTrackIdRef = useRef<string | null>(null);
-  const rafRef = useRef<number | null>(null);
-  const lastSampleMsRef = useRef(0);
-  const reducedMotionRef = useRef(false);
+export function useAudioLevels({
+  getRoom,
+  roomState,
+  agentState,
+  micEnabled,
+}: UseAudioLevelsOptions) {
+  const [agentAudioActive, setAgentAudioActive] = useState(false);
+  const [agentSpeakingRms, setAgentSpeakingRms] = useState(false);
+  const [localUserSpeaking, setLocalUserSpeaking] = useState(false);
+  const [activeSpeakerUser, setActiveSpeakerUser] = useState(false);
 
-  useEffect(() => {
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const sync = () => {
-      reducedMotionRef.current = mq.matches;
-    };
-    sync();
-    mq.addEventListener('change', sync);
-    return () => mq.removeEventListener('change', sync);
+  const agentAboveSinceRef = useRef(0);
+  const userHighSinceRef = useRef(0);
+  const userLowSinceRef = useRef(0);
+  const boundAgentTrackRef = useRef<string | null>(null);
+  const boundMicTrackRef = useRef<string | null>(null);
+
+  const bindAgentTrack = useCallback(async (track: RemoteTrack) => {
+    if (track.kind !== Track.Kind.Audio) return;
+    const mediaTrack = track.mediaStreamTrack;
+    if (!mediaTrack || boundAgentTrackRef.current === mediaTrack.id) return;
+    boundAgentTrackRef.current = mediaTrack.id;
+    await audioEngine.bindAgentTrack(track as RemoteAudioTrack);
   }, []);
 
-  const stopLoop = useCallback(() => {
-    if (rafRef.current != null) {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    }
+  const bindMicTrack = useCallback(async (track: LocalAudioTrack) => {
+    const mediaTrack = track.mediaStreamTrack;
+    if (!mediaTrack || boundMicTrackRef.current === mediaTrack.id) return;
+    boundMicTrackRef.current = mediaTrack.id;
+    await audioEngine.bindUserTrack(track);
   }, []);
 
-  const teardownAnalyser = useCallback(() => {
-    stopLoop();
-    sourceRef.current?.disconnect();
-    sourceRef.current = null;
-    analyserRef.current = null;
-    if (ctxRef.current) {
-      void ctxRef.current.close();
-      ctxRef.current = null;
-    }
-    boundTrackIdRef.current = null;
-    spectralDataRef.current = [];
-    setAgentLevel(0);
-  }, [spectralDataRef, stopLoop]);
+  const teardownAgent = useCallback(async () => {
+    boundAgentTrackRef.current = null;
+    await audioEngine.unbindAgent();
+  }, []);
 
-  const attachAgentTrack = useCallback(
-    (track: RemoteTrack) => {
-      if (track.kind !== Track.Kind.Audio) return;
-      const mediaTrack = track.mediaStreamTrack;
-      if (!mediaTrack || boundTrackIdRef.current === mediaTrack.id) return;
-
-      teardownAnalyser();
-      boundTrackIdRef.current = mediaTrack.id;
-
-      const ctx = new AudioContext();
-      ctxRef.current = ctx;
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = SPECTRAL_BIN_COUNT * 2;
-      analyser.smoothingTimeConstant = 0.75;
-      analyserRef.current = analyser;
-
-      const stream = new MediaStream([mediaTrack]);
-      const source = ctx.createMediaStreamSource(stream);
-      source.connect(analyser);
-      sourceRef.current = source;
-
-      const bins = new Uint8Array(analyser.frequencyBinCount);
-
-      const sample = (now: number) => {
-        const node = analyserRef.current;
-        if (!node) return;
-
-        if (now - lastSampleMsRef.current >= FRAME_MS) {
-          lastSampleMsRef.current = now;
-          if (reducedMotionRef.current) {
-            spectralDataRef.current = Array(SPECTRAL_BIN_COUNT).fill(0);
-            setAgentLevel(0);
-          } else {
-            node.getByteFrequencyData(bins);
-            const values = Array.from(bins.slice(0, SPECTRAL_BIN_COUNT));
-            spectralDataRef.current = values;
-            const peak = values.reduce((max, v) => (v > max ? v : max), 0) / 255;
-            setAgentLevel(peak);
-            setVizFrame(n => n + 1);
-          }
-        }
-
-        rafRef.current = requestAnimationFrame(sample);
-      };
-
-      lastSampleMsRef.current = 0;
-      rafRef.current = requestAnimationFrame(sample);
-      void ctx.resume();
-    },
-    [spectralDataRef, teardownAnalyser],
-  );
-
-  const bindExistingAgentAudio = useCallback(
-    (room: Room) => {
-      for (const participant of room.remoteParticipants.values()) {
-        if (!isAgentParticipant(participant)) continue;
-        for (const pub of participant.audioTrackPublications.values()) {
-          if (pub.track) {
-            attachAgentTrack(pub.track as RemoteTrack);
-            return;
-          }
-        }
-      }
-    },
-    [attachAgentTrack],
-  );
+  const teardownMic = useCallback(async () => {
+    boundMicTrackRef.current = null;
+    await audioEngine.unbindUser();
+  }, []);
 
   useEffect(() => {
     if (roomState !== 'connected') {
-      teardownAnalyser();
+      void teardownAgent();
+      void teardownMic();
       return undefined;
     }
 
     const room = getRoom();
     if (!room) return undefined;
 
-    bindExistingAgentAudio(room);
+    const bindExistingAgentAudio = () => {
+      for (const participant of room.remoteParticipants.values()) {
+        if (!isAgentParticipant(participant)) continue;
+        for (const pub of participant.audioTrackPublications.values()) {
+          if (pub.track) {
+            void bindAgentTrack(pub.track as RemoteTrack);
+            return;
+          }
+        }
+      }
+    };
+
+    bindExistingAgentAudio();
+
+    const syncMic = () => {
+      if (!micEnabled) {
+        void teardownMic();
+        return;
+      }
+      const publication = room.localParticipant.getTrackPublication(Track.Source.Microphone);
+      const track = publication?.track;
+      if (track && track.kind === Track.Kind.Audio) {
+        void bindMicTrack(track as LocalAudioTrack);
+      } else {
+        void teardownMic();
+      }
+    };
+
+    syncMic();
 
     const onTrackSubscribed = (track: RemoteTrack, _pub: unknown, participant: RemoteParticipant) => {
-      if (isAgentParticipant(participant)) attachAgentTrack(track);
+      if (isAgentParticipant(participant)) void bindAgentTrack(track);
     };
     const onTrackPublished = (pub: { track?: RemoteTrack | null }, participant: RemoteParticipant) => {
-      if (isAgentParticipant(participant) && pub.track) attachAgentTrack(pub.track);
+      if (isAgentParticipant(participant) && pub.track) void bindAgentTrack(pub.track);
     };
+    const onLocalTrackPublished = () => syncMic();
 
     room.on(RoomEvent.TrackSubscribed, onTrackSubscribed);
     room.on(RoomEvent.TrackPublished, onTrackPublished);
+    room.on(RoomEvent.LocalTrackPublished, onLocalTrackPublished);
+    room.on(RoomEvent.LocalTrackUnpublished, syncMic);
 
     return () => {
       room.off(RoomEvent.TrackSubscribed, onTrackSubscribed);
       room.off(RoomEvent.TrackPublished, onTrackPublished);
-      teardownAnalyser();
+      room.off(RoomEvent.LocalTrackPublished, onLocalTrackPublished);
+      room.off(RoomEvent.LocalTrackUnpublished, syncMic);
+      void teardownAgent();
+      void teardownMic();
     };
-  }, [roomState, getRoom, bindExistingAgentAudio, attachAgentTrack, teardownAnalyser]);
+  }, [
+    roomState,
+    getRoom,
+    micEnabled,
+    bindAgentTrack,
+    bindMicTrack,
+    teardownAgent,
+    teardownMic,
+  ]);
 
-  const agentAudioActive = agentLevel >= AGENT_AUDIO_ACTIVE_THRESHOLD;
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const agent = audioEngine.readAgent();
+      setAgentAudioActive(agent.level >= AGENT_AUDIO_ACTIVE_THRESHOLD);
 
-  return { agentLevel, agentAudioActive, vizFrame };
+      const now = performance.now();
+      if (agent.level >= AGENT_AUDIO_ACTIVE_THRESHOLD) {
+        if (!agentAboveSinceRef.current) agentAboveSinceRef.current = now;
+        setAgentSpeakingRms(now - agentAboveSinceRef.current >= 120);
+      } else {
+        agentAboveSinceRef.current = 0;
+        setAgentSpeakingRms(false);
+      }
+
+      if (!micEnabled) {
+        userHighSinceRef.current = 0;
+        userLowSinceRef.current = 0;
+        setLocalUserSpeaking(false);
+        return;
+      }
+
+      const { dbfs } = audioEngine.readUser();
+      if (dbfs > -45) {
+        userLowSinceRef.current = 0;
+        if (!userHighSinceRef.current) userHighSinceRef.current = now;
+        if (now - userHighSinceRef.current >= 100) setLocalUserSpeaking(true);
+      } else if (dbfs < -50) {
+        userHighSinceRef.current = 0;
+        if (!userLowSinceRef.current) userLowSinceRef.current = now;
+        if (now - userLowSinceRef.current >= 400) setLocalUserSpeaking(false);
+      }
+    }, COARSE_MS);
+    return () => window.clearInterval(id);
+  }, [micEnabled]);
+
+  void agentState; // merged in useCommandCenter with socket + RMS
+
+  return {
+    agentAudioActive,
+    agentSpeakingRms,
+    localUserSpeaking,
+    activeSpeakerUser,
+    setActiveSpeakerUser,
+  };
 }

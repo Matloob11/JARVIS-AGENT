@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import AssistantCore from './components/AssistantCore';
 import ChatPanel from './components/ChatPanel';
@@ -21,6 +21,11 @@ import IntelligencePanel from '@/features/intelligence/IntelligencePanel';
 import { SettingsProvider } from '@/features/settings/useSettings';
 
 const DashboardInner = () => {
+  useEffect(() => {
+    if (!__E2E_HOOKS__) return;
+    void import('@/features/voice/e2eHooks').then(m => m.recordDashboardCommit());
+  });
+
   const { logout } = useAuth();
   const liveKit = useLiveKit();
   const agentStatus = useAgentStatus();
@@ -133,9 +138,6 @@ const DashboardInner = () => {
               isThinking={command.isThinking}
               isUserSpeaking={command.isUserSpeaking}
               agentAudioActive={command.agentAudioActive}
-              agentLevel={command.agentLevel}
-              spectralDataRef={command.spectralDataRef}
-              vizFrame={command.vizFrame}
               voiceMatchLive={command.voiceMatchLive}
               onOpenVoiceEnroll={openVoiceEnroll}
               sessionRestartBanner={command.sessionRestartBanner}

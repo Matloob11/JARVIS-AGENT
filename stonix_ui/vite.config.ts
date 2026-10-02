@@ -35,6 +35,9 @@ function vortexProxy(): ProxyOptions {
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  define: {
+    __E2E_HOOKS__: JSON.stringify(process.env.VITE_E2E_HOOKS === '1'),
+  },
   plugins: [react()],
   server: {
     host: '127.0.0.1',

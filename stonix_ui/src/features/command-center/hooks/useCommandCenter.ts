@@ -339,11 +339,17 @@ export const useCommandCenter = () => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isUserSpeaking, setIsUserSpeaking] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
-  const spectralDataRef = useRef<number[]>([]);
-  const { agentLevel, agentAudioActive, vizFrame } = useAudioLevels({
+  const {
+    agentAudioActive,
+    agentSpeakingRms,
+    localUserSpeaking,
+    activeSpeakerUser,
+    setActiveSpeakerUser,
+  } = useAudioLevels({
     getRoom: liveKit.getRoom,
     roomState: liveKit.roomState,
-    spectralDataRef,
+    agentState: liveKit.agentState,
+    micEnabled: liveKit.micEnabled,
   });
   const [vitalsPc, setVitalsPc] = useState<VitalsSnapshot>(EMPTY_VITALS);
   const [vitalsVps, setVitalsVps] = useState<VitalsSnapshot>(EMPTY_VITALS);
@@ -974,7 +980,7 @@ export const useCommandCenter = () => {
 
   useEffect(() => {
     if (liveKit.roomState !== 'connected') {
-      setIsUserSpeaking(false);
+      setActiveSpeakerUser(false);
       return undefined;
     }
     const room = liveKit.getRoom();
@@ -982,31 +988,41 @@ export const useCommandCenter = () => {
 
     const syncActiveSpeakers = (speakers: Participant[]) => {
       if (!liveKit.micEnabled) {
-        setIsUserSpeaking(false);
+        setActiveSpeakerUser(false);
         return;
       }
       const localId = room.localParticipant.identity;
-      setIsUserSpeaking(speakers.some(s => s.identity === localId));
+      setActiveSpeakerUser(speakers.some(s => s.identity === localId));
     };
 
     room.on(RoomEvent.ActiveSpeakersChanged, syncActiveSpeakers);
     return () => {
       room.off(RoomEvent.ActiveSpeakersChanged, syncActiveSpeakers);
     };
-  }, [liveKit.roomState, liveKit.micEnabled, liveKit.getRoom]);
+  }, [liveKit.roomState, liveKit.micEnabled, liveKit.getRoom, setActiveSpeakerUser]);
+
+  useEffect(() => {
+    if (!liveKit.micEnabled) {
+      setIsUserSpeaking(false);
+      return;
+    }
+    setIsUserSpeaking(localUserSpeaking || activeSpeakerUser);
+  }, [liveKit.micEnabled, localUserSpeaking, activeSpeakerUser]);
+
+  const isSpeakingLive =
+    isSpeaking ||
+    liveKit.agentState === 'speaking' ||
+    agentSpeakingRms;
 
   return {
     isConnected,
     status,
-    isSpeaking,
+    isSpeaking: isSpeakingLive,
     isUserSpeaking,
     isThinking,
     isMuted: settings.muted,
     isWakeWordActive: settings.wakeWord,
-    spectralDataRef,
-    agentLevel,
     agentAudioActive,
-    vizFrame,
     vitalsPc,
     vitalsVps,
     telemetry,

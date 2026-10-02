@@ -1052,7 +1052,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-71 | cursor | P3 | Favicon and tray icon set from the ring mark; Electron window, tray and offline strings | X-70 | TODO |
 | X-72 | cursor | P3 | Persona copy table with grammatical gender; persona-aware strings | X-69 | TODO |
 | X-73 | cursor | P3 | StatusShape primitive: status is a shape plus a word everywhere | X-69 | TODO |
-| X-74 | cursor | P3 | AudioReactiveEngine outside React, plus an e2e-only test hook | — | TODO |
+| X-74 | cursor | P3 | AudioReactiveEngine outside React, plus an e2e-only test hook | — | DONE (cursor, 02 Oct 13:45 PKT) |
 | X-75 | cursor | P3 | SpeakerCanvas port: bezel, cone rings, ripples, glass-aurora core with membrane and jitter, loop policy | X-69, X-74 | TODO |
 | X-76 | cursor | P3 | Visualizer row: 33-bar equalizer, optional oscilloscope and view toggle | X-75, X-97 | TODO |
 | X-77 | cursor | P3 | Persona switch motion: View Transition circle from the orb, fallback and reduced motion | X-70, X-75 | TODO |

@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState, type MutableRefObject } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Activity, Ear, EarOff, Mic, MicOff, Power, ShieldCheck } from 'lucide-react';
 import { personaAccent } from '@/shared/theme/commandTheme';
 import { useLiveKit } from '@/features/voice/LiveKitProvider';
 import { useSettings } from '@/features/settings/useSettings';
 import { deriveVoiceMeterView, type VoiceMatchLive } from '@/features/voice/voiceMeter';
-import { SPECTRAL_BIN_COUNT } from '@/features/voice/useAudioLevels';
+import { audioEngine, bandsToDisplayBytes, DISPLAY_BAR_COUNT } from '@/features/voice/audioEngine';
 import { emitUiCommandWithAck, useAgentListeningMuted } from '@/features/status/AgentControls';
 import { useAgentStatus } from '@/features/status/useAgentStatus';
 
@@ -16,9 +16,6 @@ interface AssistantCoreProps {
   isThinking: boolean;
   isUserSpeaking: boolean;
   agentAudioActive: boolean;
-  agentLevel: number;
-  spectralDataRef: MutableRefObject<number[]>;
-  vizFrame: number;
   voiceMatchLive: VoiceMatchLive;
   onOpenVoiceEnroll: () => void;
   sessionRestartBanner: boolean;
@@ -39,9 +36,6 @@ const AssistantCore = ({
   isThinking,
   isUserSpeaking,
   agentAudioActive,
-  agentLevel,
-  spectralDataRef,
-  vizFrame,
   voiceMatchLive,
   onOpenVoiceEnroll,
   sessionRestartBanner,
@@ -51,6 +45,9 @@ const AssistantCore = ({
   const settings = useSettings();
   const agentStatus = useAgentStatus();
   const [shutdownAgentSupported, setShutdownAgentSupported] = useState(true);
+  const spectralRef = useRef<HTMLDivElement>(null);
+  const orbWrapRef = useRef<HTMLDivElement>(null);
+  const orbScaleRef = useRef(1);
   const meter = deriveVoiceMeterView(
     {
       voiceId: settings.voiceId,
@@ -67,17 +64,41 @@ const AssistantCore = ({
   const agentLabel = voice.agentState ? voice.agentState : voiceLive ? 'linked' : 'offline';
   const showUserSpeaking = isUserSpeaking && voice.micEnabled;
 
-  const spectralBars = useMemo(() => {
-    void vizFrame;
-    const bins = spectralDataRef.current;
-    if (bins.length >= SPECTRAL_BIN_COUNT) {
-      return bins.slice(0, SPECTRAL_BIN_COUNT);
-    }
-    return Array.from({ length: SPECTRAL_BIN_COUNT }, (_, i) => bins[i] ?? 0);
-  }, [spectralDataRef, vizFrame]);
+  useEffect(() => {
+    const root = spectralRef.current;
+    if (!root) return undefined;
+    const barEls = Array.from({ length: DISPLAY_BAR_COUNT }, () => {
+      const span = document.createElement('span');
+      span.className = 'assistant-core__spectral-bar';
+      span.style.height = '4%';
+      root.appendChild(span);
+      return span;
+    });
+
+    let raf = 0;
+    const tick = () => {
+      const bytes = bandsToDisplayBytes(audioEngine.readAgent().bands);
+      for (let i = 0; i < DISPLAY_BAR_COUNT; i++) {
+        const heightPct = Math.max(4, Math.round((bytes[i] / 255) * 100));
+        barEls[i].style.height = `${heightPct}%`;
+      }
+      const level = audioEngine.readAgent().level;
+      orbScaleRef.current = 1 + Math.min(level, 1) * 0.08;
+      if (orbWrapRef.current) {
+        orbWrapRef.current.style.setProperty('--orb-scale', String(orbScaleRef.current));
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      barEls.forEach(el => el.remove());
+    };
+  }, []);
 
   const orbPulse = agentAudioActive;
-  const orbScale = 1 + Math.min(agentLevel, 1) * 0.08;
+  const orbScale = orbScaleRef.current;
 
   useEffect(() => {
     if (agentStatus.restarting) {
@@ -141,23 +162,13 @@ const AssistantCore = ({
 
       <div className="assistant-core__viz-wrap">
         <div
+          ref={spectralRef}
           className="assistant-core__spectral"
           data-testid="agent-audio-visualizer"
           aria-hidden={!agentAudioActive}
-        >
-          {spectralBars.map((value, index) => {
-            const heightPct = Math.max(4, Math.round((value / 255) * 100));
-            return (
-              <span
-                key={index}
-                className="assistant-core__spectral-bar"
-                style={{ height: `${heightPct}%` }}
-              />
-            );
-          })}
-        </div>
+        />
 
-        <div className="assistant-core__orb-wrap">
+        <div className="assistant-core__orb-wrap" ref={orbWrapRef}>
           {showUserSpeaking ? (
             <motion.div
               className="assistant-core__user-speaking-ring"
