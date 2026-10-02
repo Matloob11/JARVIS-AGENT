@@ -7,7 +7,7 @@ Its /health answers 200 while it retries, so the state comes from the worker's c
 livekit.agents logger: connecting (start), connected, retrying, failed (livekit-agents stopped retrying;
 /health then answers 503). The worker writes every change to run/agent_link.json, which
 scripts/agent_ctl.py reads for status and wait, and it asks agent_ctl for a fresh worker when the link stays
-lost while the LiveKit host is reachable again.
+lost while LiveKit answers again (probe_livekit).
 
 Stdlib only, like agent_lock.py: agent_ctl imports it without the worker's dependencies or its .env loading;
 src/core/agent_runner.py wires the monitor into the process that runs the LiveKit worker.
@@ -15,15 +15,16 @@ src/core/agent_runner.py wires the monitor into the process that runs the LiveKi
 
 from __future__ import annotations
 
+import http.client
 import json
 import logging
 import os
 import re
-import socket
 import subprocess
 import sys
 import threading
 import time
+import urllib.error
 import urllib.request
 from collections.abc import Callable
 from datetime import datetime
@@ -186,9 +187,10 @@ def write_json_atomic(path: Path, doc: dict[str, Any], *, attempts: int = 20) ->
 
 
 def livekit_address(url: str | None = None) -> tuple[str, int] | None:
-    """(host, port) of LIVEKIT_URL: ws and http default to port 80, wss and https to 443."""
-    parts = urlsplit((os.getenv("LIVEKIT_URL", "") if url is None else url).strip())
+    """(host, port) of LIVEKIT_URL: ws and http default to port 80, wss and https to 443; None without a host
+    or when urlsplit refuses it ('wss://[host')."""
     try:
+        parts = urlsplit((os.getenv("LIVEKIT_URL", "") if url is None else url).strip())
         port = parts.port
     except ValueError:
         return None
@@ -197,16 +199,36 @@ def livekit_address(url: str | None = None) -> tuple[str, int] | None:
     return parts.hostname, port or (443 if parts.scheme in ("wss", "https") else 80)
 
 
+def livekit_validate_url(url: str | None = None) -> str | None:
+    """What probe_livekit asks: /rtc/validate under LIVEKIT_URL over http(s), ws as http and wss as https, below
+    its own path as livekit-agents puts /agent there; None without a usable ws(s) or http(s) URL."""
+    raw = (os.getenv("LIVEKIT_URL", "") if url is None else url).strip()
+    if livekit_address(raw) is None:
+        return None
+    parts = urlsplit(raw)
+    scheme = {"ws": "http", "wss": "https"}.get(parts.scheme, parts.scheme)
+    if scheme not in ("http", "https"):
+        return None
+    return f"{scheme}://{parts.netloc.rpartition('@')[2]}{parts.path.rstrip('/')}/rtc/validate"
+
+
 def probe_livekit(timeout: float = PROBE_TIMEOUT_S) -> bool:
-    """True when the LiveKit host accepts a TCP connection (nothing is sent)."""
-    address = livekit_address()
-    if address is None:
+    """True when LiveKit itself answers GET livekit_validate_url() with a status below 500 (401: no token).
+    A 5xx is no answer, like a refused, failed or timed-out connection: nginx on the domain sends 502 while
+    LiveKit behind it is down, and accepts a TCP connection all the same (C-16). Never through a proxy."""
+    url = livekit_validate_url()
+    if url is None:
         return False
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     try:
-        with socket.create_connection(address, timeout=timeout):
-            return True
-    except OSError:
+        with opener.open(url, timeout=timeout) as response:
+            status = response.status
+    except urllib.error.HTTPError as exc:  # every status from 400 up
+        status = exc.code
+        exc.close()
+    except (OSError, ValueError, http.client.HTTPException):  # DNS, refused, TLS, timeout, no HTTP answer
         return False
+    return status < 500
 
 
 def worker_active_jobs() -> int:
@@ -411,7 +433,7 @@ class LinkMonitor:
         Why this worker should be replaced now, else None. Never while connected (no probe either), nor for a
         worker that self_recovers() rules out. The link is retrying for RECOVER_AFTER_S or failed
         (livekit-agents stopped retrying and never will); a worker that never registered also waits
-        pause_s() from its start. The LiveKit host accepted TCP at two checks in a row, and no job runs
+        pause_s() from its start. LiveKit answered probe_livekit() at two checks in a row, and no job runs
         (its session still works). Only the monitor thread calls it.
         """
         with self._lock:

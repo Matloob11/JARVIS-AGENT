@@ -19,7 +19,10 @@ start    Exit 3 while a worker holds the lock. Rotates logs/agent_stdout.log and
          JARVIS_START_REASON, PYTHONPATH, PYTHONIOENCODING and JARVIS_HYBRID=1. Default: hidden, output
          appended to those logs, waits until the worker is ready (health 200 on 127.0.0.1:8081 and its
          LiveKit link connected, max 60 s), then runs deploy/windows-local/ensure_room.py once.
-         --foreground: in this console until the worker exits.
+         --foreground: in this console until the worker exits. Before a worker starts (also in restart) it
+         checks the VPS as the worker reaches it (C-16): GET <UI_BRIDGE_URL>/health must answer 200 and
+         GET <LIVEKIT_URL as http(s)>/rtc/validate 401, both on the domain since OP-13. A failed check is
+         printed and logged ('vps' in logs/agent_ctl.log), never a reason not to start the local worker.
 stop     Only the pid in agent.pid.json, and only when its command line runs src.core.agent: Ctrl+Break,
          then after --timeout 'taskkill /PID <pid> /F' for the worker, its agent children and its launcher
          (no /T: apps that JARVIS opened for the user are its children too). --force skips the Ctrl+Break.
@@ -55,6 +58,7 @@ from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 import psutil
@@ -97,6 +101,12 @@ LOCK_GRACE_S = 20
 REGISTER_SETTLE_S = 5
 # pid.json's started_at has whole seconds and is written just after the process starts.
 PID_START_SLACK_S = 5
+# The VPS as the worker reaches it (C-16, K-48): (label, setting, path, wanted status). LiveKit answers
+# /rtc/validate without a token with 401, so 401 means LiveKit itself answered.
+VPS_CHECKS = (("bridge", "UI_BRIDGE_URL", "/health", 200), ("LiveKit", "LIVEKIT_URL", "/rtc/validate", 401))
+VPS_CHECK_TIMEOUT_S = 4.0
+# The worker's own default when a setting is missing (services/utils/jarvis_config.py); LIVEKIT_URL has none.
+WORKER_URL_DEFAULTS = {"UI_BRIDGE_URL": "http://127.0.0.1:5001"}
 AGENT_MARKERS = ("src.core.agent", "src/core/agent.py")
 MP_MARKERS = ("--multiprocessing-fork", "from multiprocessing.")
 PKT = timezone(timedelta(hours=5), "PKT")
@@ -570,6 +580,76 @@ def print_highlight(action: str, args: argparse.Namespace, ok: bool, summary: st
     print("- **Doosre agent ke liye:** —")
 
 
+# --------------------------------------------------------------------------- VPS checks (C-16)
+
+
+def vps_check_url(setting: str, path: str) -> str:
+    """path under the URL in setting as the worker reads it (K-47, its default when missing), ws/wss as
+    http/https; '' when there is none. Since OP-13 both lead to the domain: https://<domain>/vortex/health and
+    https://<domain>/rtc/validate."""
+    base = _env_setting(setting) or WORKER_URL_DEFAULTS.get(setting, "")
+    if not base:
+        return ""
+    parts = urlsplit(base)
+    scheme = {"ws": "http", "wss": "https"}.get(parts.scheme.lower(), parts.scheme)
+    return urlunsplit((scheme, parts.netloc, parts.path.rstrip("/") + path, "", ""))
+
+
+def _shown(url: str) -> str:
+    """url without user info, query or fragment, for the console and logs/agent_ctl.log."""
+    parts = urlsplit(url)
+    return urlunsplit((parts.scheme, parts.netloc.rpartition("@")[2], parts.path, "", ""))
+
+
+def _http_status(url: str, timeout: float) -> tuple[int | None, str]:
+    """(status, '') for any answer, 4xx and 5xx too; (None, the error's type) when none comes (DNS, connect,
+    TLS, timeout)."""
+    try:
+        return httpx.get(url, timeout=httpx.Timeout(timeout)).status_code, ""
+    except (httpx.HTTPError, httpx.InvalidURL, ValueError) as exc:
+        _drop_frames(exc)
+        return None, type(exc).__name__
+
+
+def check_vps(timeout: float = VPS_CHECK_TIMEOUT_S) -> list[tuple[bool, str]]:
+    """(as wanted, note) for each of VPS_CHECKS, e.g. (True, 'LiveKit https://<domain>/rtc/validate 401'). A
+    setting that urlsplit refuses ('wss://[host') is a failed check; the note names only the error's type, since
+    its message may hold the URL's user info."""
+    results = []
+    for label, setting, path, want in VPS_CHECKS:
+        try:
+            url = vps_check_url(setting, path)
+            shown = _shown(url)
+        except ValueError as exc:
+            results.append((False, f"{label}: {setting} is not a usable URL ({type(exc).__name__})"))
+            continue
+        if not url:
+            results.append((False, f"{label}: {setting} is not set"))
+            continue
+        code, error = _http_status(url, timeout)
+        got = f"no answer ({error})" if code is None else str(code)
+        results.append((code == want, f"{label} {shown} {got}" + ("" if code == want else f", want {want}")))
+    return results
+
+
+def report_vps() -> str:
+    """Prints the VPS checks before a start; returns 'ok' or the failed checks (for logs/agent_ctl.log). A failed
+    check never stops the start: the worker runs on this PC and connects once the VPS answers (C-136). In a
+    restart the old worker has already stopped here, so not even an error in the checks may stop it."""
+    try:
+        results = check_vps()
+    except Exception as exc:  # pylint: disable=broad-exception-caught  # see the docstring
+        _drop_frames(exc)
+        results = [(False, f"the check itself failed ({type(exc).__name__})")]
+    notes = "; ".join(note for _good, note in results)
+    if all(good for good, _note in results):
+        print(f"[agent_ctl] VPS check ok: {notes}.", flush=True)
+        return "ok"
+    print(f"[agent_ctl] WARNING: VPS check failed: {notes}. Starting the worker anyway; it connects once the VPS "
+          "answers ('agent_ctl status' shows its LiveKit link).", file=sys.stderr, flush=True)
+    return "; ".join(note for good, note in results if not good)
+
+
 # --------------------------------------------------------------------------- start
 
 
@@ -678,16 +758,16 @@ def _start_background(cmd: list[str], env: dict[str, str], timeout: float,
     return EXIT_OK, {"result": "started", **details}
 
 
-def _run_foreground(cmd: list[str], env: dict[str, str], args: argparse.Namespace) -> int:
+def _run_foreground(cmd: list[str], env: dict[str, str], args: argparse.Namespace, *, vps: str = "") -> int:
     print(f"[agent_ctl] Starting the agent worker in this console ({args.mode} mode, by {args.by}). "
           "Ctrl+C or closing this window stops it.", flush=True)
     try:
         proc = _popen(cmd, cwd=ROOT, env=env)
     except OSError as exc:
         print(f"[agent_ctl] Could not start the worker: {exc}", file=sys.stderr)
-        audit("start", args, result="failed", error=str(exc))
+        audit("start", args, result="failed", error=str(exc), vps=vps)
         return EXIT_FAILED
-    audit("start", args, result="spawned", launcher_pid=proc.pid)
+    audit("start", args, result="spawned", launcher_pid=proc.pid, vps=vps)
     started = _monotonic()
     healthy = False
     next_probe = started + 2
@@ -751,14 +831,16 @@ def start_worker(args: argparse.Namespace, mode: str, *, foreground: bool,
         if listener:
             print(f"[agent_ctl] Its command line: {listener}", file=sys.stderr)
         return EXIT_REFUSED, {"result": "refused", "error": problem, "listener_cmdline": listener}
+    vps = report_vps()
     cmd = [str(agent_python()), "-m", "src.core.agent", mode]
     reason = _one_line(args.reason)
     rotated = rotate_agent_logs()
     if rotated:
         print(f"[agent_ctl] Rotated {', '.join(rotated)}.")
     if foreground:
-        return _run_foreground(cmd, agent_env(args.by, reason, background=False), args), {}
-    return _start_background(cmd, agent_env(args.by, reason, background=True), timeout, args)
+        return _run_foreground(cmd, agent_env(args.by, reason, background=False), args, vps=vps), {}
+    code, details = _start_background(cmd, agent_env(args.by, reason, background=True), timeout, args)
+    return code, {**details, "vps": vps}
 
 
 def cmd_start(args: argparse.Namespace) -> int:

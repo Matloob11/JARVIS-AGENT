@@ -1,19 +1,22 @@
 """C-136: the PC worker's LiveKit link state (run/agent_link.json), agent_ctl status/wait, and recovery.
 
-Nothing here starts, signals or kills a real process or opens a network connection: livekit-agents' real
-connection task runs against a fake websocket session, the TCP probe, the job count and the restart helper
-are fakes, time is a fake clock, and every file lives under tmp_path (JARVIS_RUN_DIR, agent_ctl.LOG_DIR).
+Nothing here starts, signals or kills a real process or opens a network connection beyond 127.0.0.1:
+livekit-agents' real connection task runs against a fake websocket session, the LiveKit probe (outside its
+own tests, which ask a local HTTP server), the job count and the restart helper are fakes, time is a fake
+clock, and every file lives under tmp_path (JARVIS_RUN_DIR, agent_ctl.LOG_DIR).
 """
 # pylint: disable=protected-access,redefined-outer-name,no-member,too-many-lines  # no-member: protobuf classes
 from __future__ import annotations
 
 import asyncio
+import http.server
 import importlib
 import importlib.util
 import inspect
 import json
 import logging
 import os
+import socket
 import ssl
 import subprocess
 import sys
@@ -479,7 +482,7 @@ def test_atomic_write_retries_while_a_reader_holds_the_file(tmp_path, monkeypatc
     assert [p.name for p in tmp_path.iterdir()] == ["agent_link.json"]
 
 
-# --------------------------------------------------------------------------- recovery decision (fake clock and TCP probe)
+# --------------------------------------------------------------------------- recovery decision (fake clock and probe)
 
 
 def run_for(monitor, seen, seconds: float, step: float = livekit_link.CHECK_S) -> None:
@@ -676,35 +679,87 @@ def test_a_helper_that_cannot_start_is_tried_again_later(run_dir):
     ("https://livekit.example.test:8443/", ("livekit.example.test", 8443)),
     ("http://livekit.example.test", ("livekit.example.test", 80)),
     ("", None), ("not a url", None), ("ws://livekit.example.test:99999", None),
+    ("wss://[livekit.example.test", None), ("wss://[livekit]:7880", None),  # urlsplit raises for both
 ])
-def test_the_tcp_probe_target_comes_from_livekit_url(url, address):
+def test_the_livekit_address_comes_from_livekit_url(url, address):
     assert livekit_link.livekit_address(url) == address
 
 
-def test_the_tcp_probe_only_connects(monkeypatch):
-    calls = []
+@pytest.mark.parametrize(("url", "target"), [
+    ("wss://livekit.example.test", "https://livekit.example.test/rtc/validate"),
+    ("ws://192.0.2.10:7880", "http://192.0.2.10:7880/rtc/validate"),
+    ("wss://livekit.example.test/lk/", "https://livekit.example.test/lk/rtc/validate"),
+    ("https://livekit.example.test:8443", "https://livekit.example.test:8443/rtc/validate"),
+    ("", None), ("not a url", None), ("wss://[livekit.example.test", None), ("ftp://livekit.example.test", None),
+])
+def test_the_probe_asks_rtc_validate_under_livekit_url(url, target):
+    assert livekit_link.livekit_validate_url(url) == target
 
-    class Conn:
-        def __enter__(self):
-            return self
 
-        def __exit__(self, *_exc):
-            return False
+@pytest.fixture
+def livekit_stub():
+    """A local HTTP server on 127.0.0.1 in the place of LiveKit, or of nginx in front of it: every GET gets
+    stub.status, and stub.paths records what was asked. LIVEKIT_URL for it: stub.url."""
+    stub = types.SimpleNamespace(status=401, paths=[])
 
-    def connect(address, timeout):
-        calls.append((address, timeout))
-        if address[0] == "down.example.test":
-            raise ConnectionRefusedError(10061, "refused")
-        return Conn()
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            stub.paths.append(self.path)
+            self.send_response(stub.status)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
 
-    monkeypatch.setattr(livekit_link, "socket", types.SimpleNamespace(create_connection=connect))
-    monkeypatch.setenv("LIVEKIT_URL", "ws://up.example.test:7880")
-    assert livekit_link.probe_livekit() is True
-    monkeypatch.setenv("LIVEKIT_URL", "wss://down.example.test")
-    assert livekit_link.probe_livekit() is False
-    monkeypatch.setenv("LIVEKIT_URL", "")
-    assert livekit_link.probe_livekit() is False
-    assert calls == [(("up.example.test", 7880), 5.0), (("down.example.test", 443), 5.0)]
+        def log_message(self, *args):
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True)
+    thread.start()
+    stub.url = f"ws://127.0.0.1:{server.server_address[1]}"
+    yield stub
+    server.shutdown()
+    server.server_close()
+    thread.join(timeout=5)
+
+
+@pytest.mark.parametrize(("status", "answers"), [(401, True), (404, True), (502, False), (503, False), (504, False)])
+def test_the_probe_counts_only_an_answer_of_livekit_itself(livekit_stub, monkeypatch, status, answers):
+    """LiveKit answers /rtc/validate without a token with 401. nginx on the domain accepts the connection and
+    answers 502 while LiveKit behind it is down (C-16): that is no answer."""
+    livekit_stub.status = status
+    monkeypatch.setenv("LIVEKIT_URL", livekit_stub.url)
+    monkeypatch.delenv("NO_PROXY", raising=False)
+    for name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"):  # nothing listens there: the probe uses no proxy
+        monkeypatch.setenv(name, "http://127.0.0.1:9")
+    assert livekit_link.probe_livekit(timeout=2.0) is answers
+    assert livekit_stub.paths == ["/rtc/validate"]
+
+
+def test_the_probe_without_an_answer_or_a_usable_livekit_url(monkeypatch):
+    with socket.socket() as sock:  # a local port that nothing listens on
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    monkeypatch.setenv("LIVEKIT_URL", f"ws://127.0.0.1:{port}")
+    assert livekit_link.probe_livekit(timeout=0.5) is False  # refused, or Windows' slow refusal: a timeout
+    monkeypatch.setattr(livekit_link.urllib.request, "build_opener", lambda *_a: pytest.fail("a request was sent"))
+    for unusable in ("", "not a url", "wss://[livekit.example.test", "ftp://livekit.example.test"):
+        monkeypatch.setenv("LIVEKIT_URL", unusable)
+        assert livekit_link.probe_livekit() is False
+
+
+def test_a_failed_link_waits_while_nginx_answers_for_a_livekit_that_is_down(livekit_stub, monkeypatch, run_dir):
+    """C-16: LIVEKIT_URL on the domain and LiveKit down behind nginx (502). A fresh worker now would not
+    register either and only start the growing pauses; it is asked for once LiveKit itself answers."""
+    monkeypatch.setenv("LIVEKIT_URL", livekit_stub.url)
+    monitor, seen = make_monitor(run_dir / livekit_link.LINK_FILE_NAME)
+    monitor._probe = lambda: livekit_link.probe_livekit(timeout=2.0)
+    connected_then_lost(monitor, seen, state="failed")
+    livekit_stub.status = 502
+    run_for(monitor, seen, 4 * livekit_link.CHECK_S)
+    assert not seen["restarts"] and len(livekit_stub.paths) == 4
+    livekit_stub.status = 401
+    run_for(monitor, seen, 2 * livekit_link.CHECK_S)
+    assert seen["restarts"] == ["C-136 link recovery: livekit-agents stopped retrying, the LiveKit host answers again"]
 
 
 # --------------------------------------------------------------------------- the restart request (no real process)
@@ -871,6 +926,9 @@ def ctl(monkeypatch, run_dir, tmp_path):
     monkeypatch.setattr(agent_ctl, "_popen", refuse)
     monkeypatch.setattr(agent_ctl, "probe_health", lambda timeout=2.0: 200)
     monkeypatch.setattr(agent_ctl, "worker_info", lambda: None)
+    # No test reaches the VPS (C-16): the bridge's health answers 200 and LiveKit's /rtc/validate 401.
+    monkeypatch.setattr(agent_ctl, "_http_status",
+                        lambda url, timeout: (401 if url.endswith("/rtc/validate") else 200, ""))
     monkeypatch.setattr(agent_ctl, "psutil", FakePsutil())
     state = {"locked": True}
     monkeypatch.setattr(agent_lock, "is_locked", lambda: state["locked"])

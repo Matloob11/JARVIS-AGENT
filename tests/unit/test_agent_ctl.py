@@ -1,15 +1,17 @@
 """C-09 / K-53: scripts/agent_ctl.py, the safe launchers and the root .env as the single settings source.
 
 No test starts, signals or kills a real process: agent_ctl's subprocess calls (_run, _popen), psutil and
-the health probe are replaced, and all files live under tmp_path (JARVIS_RUN_DIR, agent_ctl.LOG_DIR).
+the health probe are replaced, and all files live under tmp_path (JARVIS_RUN_DIR, agent_ctl.LOG_DIR). No test
+reaches the VPS: the C-16 checks get fake answers (fake_vps).
 The only real subprocess is a lock holder (as in test_agent_lock.py) that releases the lock and exits
-when its stdin closes; one test probes a closed local port.
+when its stdin closes; two tests probe a closed local port.
 """
-# pylint: disable=protected-access,redefined-outer-name
+# pylint: disable=protected-access,redefined-outer-name,too-many-lines  # agent_ctl and its launchers, one fixture set
 from __future__ import annotations
 
 import gc
 import importlib.util
+import io
 import json
 import os
 import queue
@@ -21,6 +23,7 @@ import sys
 import threading
 import time
 import types
+import urllib.error
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -123,6 +126,18 @@ class FakePsutil:
         return list(self.connections)
 
 
+def fake_vps(calls: list[str], answers: dict[str, int | None] | None = None):
+    """agent_ctl._http_status without a network: /health answers 200 and LiveKit's /rtc/validate 401, unless
+    answers maps a URL ending to another status (None: no answer). Each URL asked goes into calls."""
+    def status(url: str, timeout: float) -> tuple[int | None, str]:
+        calls.append(url)
+        for ending, code in (answers or {}).items():
+            if url.endswith(ending):
+                return code, "" if code is not None else "ConnectTimeout"
+        return (401 if url.endswith("/rtc/validate") else 200), ""
+    return status
+
+
 @pytest.fixture
 def ctl(monkeypatch, tmp_path):
     """agent_ctl with its files in tmp_path, a fake clock, no .env reads and every process call refused."""
@@ -144,9 +159,11 @@ def ctl(monkeypatch, tmp_path):
     monkeypatch.setattr(agent_ctl, "_popen", refuse)
     monkeypatch.setattr(agent_ctl, "probe_health", lambda timeout=2.0: None)
     monkeypatch.setattr(agent_ctl, "worker_info", lambda: None)
+    vps_calls: list[str] = []
+    monkeypatch.setattr(agent_ctl, "_http_status", fake_vps(vps_calls))  # no test reaches the VPS (C-16)
     fake_psutil = FakePsutil()
     monkeypatch.setattr(agent_ctl, "psutil", fake_psutil)
-    return types.SimpleNamespace(run=run_dir, logs=logs, clock=clock, psutil=fake_psutil)
+    return types.SimpleNamespace(run=run_dir, logs=logs, clock=clock, psutil=fake_psutil, vps_calls=vps_calls)
 
 
 def _lock(monkeypatch, state: dict) -> None:
@@ -712,6 +729,185 @@ def test_foreground_start_runs_in_this_console_and_returns_the_worker_exit_code(
     assert signal.getsignal(signal.SIGINT) is original_sigint
 
 
+# --------------------------------------------------------------------------- VPS checks (C-16)
+
+
+def _vps_env(monkeypatch, bridge: str = "https://jarvis.example.test/vortex",
+             livekit: str = "wss://jarvis.example.test") -> None:
+    monkeypatch.setenv("UI_BRIDGE_URL", bridge)
+    monkeypatch.setenv("LIVEKIT_URL", livekit)
+
+
+def _background_start(ctl, monkeypatch) -> list:
+    """A background start whose fake worker is ready at once; returns the commands it spawned."""
+    state = {"locked": False}
+    _lock(monkeypatch, state)
+    spawned: list = []
+
+    class FakePopen:
+        pid = 777
+        returncode = None
+
+        def poll(self):
+            return None
+
+    def fake_popen(cmd, **_kwargs):
+        spawned.append(cmd)
+        state["locked"] = True
+        write_pid_json(ctl.run, 31999, reason="C-16 test")
+        return FakePopen()
+
+    monkeypatch.setattr(agent_ctl, "_popen", fake_popen)
+    monkeypatch.setattr(agent_ctl, "probe_health", lambda timeout=2.0: 200 if state["locked"] else None)
+    monkeypatch.setattr(agent_ctl, "_run", lambda cmd, **_kwargs: ok(cmd))
+    return spawned
+
+
+@pytest.mark.parametrize(("bridge", "livekit", "expected"), [
+    ("https://jarvis.example.test/vortex", "wss://jarvis.example.test",
+     ["https://jarvis.example.test/vortex/health", "https://jarvis.example.test/rtc/validate"]),
+    ("https://jarvis.example.test/vortex/", "ws://203.0.113.7:7880/",
+     ["https://jarvis.example.test/vortex/health", "http://203.0.113.7:7880/rtc/validate"]),
+    ("", "https://lk.example.test", ["http://127.0.0.1:5001/health", "https://lk.example.test/rtc/validate"]),
+])
+def test_vps_checks_use_the_urls_the_worker_uses(ctl, monkeypatch, bridge, livekit, expected):
+    """UI_BRIDGE_URL and LIVEKIT_URL as the worker reads them (an empty UI_BRIDGE_URL: its local default)."""
+    _vps_env(monkeypatch, bridge, livekit)
+    assert [agent_ctl.vps_check_url(setting, path) for _label, setting, path, _want in agent_ctl.VPS_CHECKS] \
+        == expected
+
+
+def test_a_missing_livekit_url_is_reported_without_a_request(ctl, monkeypatch):
+    monkeypatch.setenv("UI_BRIDGE_URL", "https://jarvis.example.test/vortex")
+    monkeypatch.delenv("LIVEKIT_URL", raising=False)
+    assert agent_ctl.check_vps() == [(True, "bridge https://jarvis.example.test/vortex/health 200"),
+                                     (False, "LiveKit: LIVEKIT_URL is not set")]
+    assert ctl.vps_calls == ["https://jarvis.example.test/vortex/health"]
+
+
+def test_vps_notes_show_no_user_info_and_requests_carry_no_query(ctl, monkeypatch):
+    _vps_env(monkeypatch, bridge="https://c16user:c16-throwaway@jarvis.example.test/vortex?token=c16-throwaway")
+    notes = " ".join(note for _good, note in agent_ctl.check_vps())
+    assert "c16-throwaway" not in notes and "c16user" not in notes
+    assert "bridge https://jarvis.example.test/vortex/health 200" in notes
+    assert all("token=" not in url for url in ctl.vps_calls)
+
+
+def test_start_checks_the_vps_before_the_worker_and_logs_it(ctl, monkeypatch, capsys):
+    _vps_env(monkeypatch)
+    spawned = _background_start(ctl, monkeypatch)
+
+    assert agent_ctl.main(["start", "--by", "claude", "--reason", "C-16 test"]) == 0
+
+    assert len(spawned) == 1
+    assert ctl.vps_calls == ["https://jarvis.example.test/vortex/health", "https://jarvis.example.test/rtc/validate"]
+    out = capsys.readouterr().out
+    assert ("[agent_ctl] VPS check ok: bridge https://jarvis.example.test/vortex/health 200; "
+            "LiveKit https://jarvis.example.test/rtc/validate 401.") in out
+    assert out.index("VPS check ok") < out.index("Worker starting in the background")
+    entry = audit_lines(ctl.logs)[-1]
+    assert (entry["result"], entry["vps"]) == ("started", "ok")
+
+
+@pytest.mark.parametrize(("answer", "shown"), [
+    (None, "no answer (ConnectTimeout)"),
+    (502, "502"),          # nginx without LiveKit behind it
+    (200, "200"),          # a page instead of LiveKit (no LiveKit location in nginx)
+])
+def test_a_failed_vps_check_never_stops_the_local_start(ctl, monkeypatch, capsys, answer, shown):
+    _vps_env(monkeypatch)
+    monkeypatch.setattr(agent_ctl, "_http_status", fake_vps(ctl.vps_calls, {"/rtc/validate": answer}))
+    spawned = _background_start(ctl, monkeypatch)
+
+    assert agent_ctl.main(["start", "--by", "claude", "--reason", "C-16 offline"]) == 0
+
+    assert len(spawned) == 1  # started anyway: the worker waits for LiveKit by itself (C-136)
+    failed = f"LiveKit https://jarvis.example.test/rtc/validate {shown}, want 401"
+    err = capsys.readouterr().err
+    assert ("[agent_ctl] WARNING: VPS check failed: bridge https://jarvis.example.test/vortex/health 200; "
+            f"{failed}. Starting the worker anyway") in err
+    entry = audit_lines(ctl.logs)[-1]
+    assert (entry["result"], entry["vps"]) == ("started", failed)
+
+
+def test_a_foreground_start_logs_the_vps_check_with_the_spawn(ctl, monkeypatch, capsys):
+    _vps_env(monkeypatch)
+    _lock(monkeypatch, {"locked": False})
+    monkeypatch.setattr(agent_ctl, "_popen", lambda cmd, **_kwargs: types.SimpleNamespace(
+        pid=888, wait=lambda timeout=None: 0))
+
+    assert agent_ctl.main(["start", "--by", "user", "--reason", "start-agent.bat", "--foreground"]) == 0
+
+    entries = audit_lines(ctl.logs)
+    assert [(e["result"], e.get("vps")) for e in entries] == [("spawned", "ok"), ("exited", None)]
+    assert "VPS check ok" in capsys.readouterr().out
+
+
+def test_no_vps_check_when_no_worker_is_started(ctl, monkeypatch):
+    _lock(monkeypatch, {"locked": True})
+    write_pid_json(ctl.run, 31500)
+    assert agent_ctl.main(["start", "--by", "claude", "--reason", "C-16"]) == 3
+    assert ctl.vps_calls == []
+
+
+def test_http_status_takes_any_answer_and_names_the_error_otherwise(monkeypatch):
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    code, error = agent_ctl._http_status(f"http://127.0.0.1:{port}/health", 0.5)
+    assert code is None and error.startswith(("Connect", "Proxy"))  # refused, or Windows' slow refusal: timeout
+    monkeypatch.setattr(agent_ctl.httpx, "get", lambda url, timeout: types.SimpleNamespace(status_code=401))
+    assert agent_ctl._http_status("https://jarvis.example.test/rtc/validate", 4.0) == (401, "")
+
+
+@pytest.mark.parametrize("unusable", [
+    "wss://[jarvis.example.test",  # urlsplit: Invalid IPv6 URL
+    "wss://[jarvis]:7880",  # a bracketed host that is no IP address
+    "wss://c16user:c16-throwaway\uff0f@jarvis.example.test",  # NFKC makes '/' of it; the error quotes the netloc
+])
+def test_a_setting_that_is_no_url_is_a_failed_check_not_an_error(ctl, monkeypatch, unusable):
+    _vps_env(monkeypatch, livekit=unusable)
+    assert agent_ctl.check_vps() == [(True, "bridge https://jarvis.example.test/vortex/health 200"),
+                                     (False, "LiveKit: LIVEKIT_URL is not a usable URL (ValueError)")]
+    _vps_env(monkeypatch, bridge=unusable.replace("wss://", "https://") + "/vortex")
+    assert agent_ctl.check_vps() == [(False, "bridge: UI_BRIDGE_URL is not a usable URL (ValueError)"),
+                                     (True, "LiveKit https://jarvis.example.test/rtc/validate 401")]
+    assert ctl.vps_calls == ["https://jarvis.example.test/vortex/health", "https://jarvis.example.test/rtc/validate"]
+
+
+def test_a_restart_with_an_unusable_livekit_url_still_starts_the_new_worker(ctl, monkeypatch, capsys):
+    """The check runs after the old worker has stopped: an error in it would leave no worker at all."""
+    _vps_env(monkeypatch, livekit="wss://[jarvis.example.test")
+    spawned = _background_start(ctl, monkeypatch)
+    monkeypatch.setattr(agent_ctl, "stop_worker", lambda timeout, force=False: (
+        0, {"result": "stopped", "old_pid": 31500, "graceful": True, "killed": [], "stop_s": 1.0}))
+
+    assert agent_ctl.main(["restart", "--by", "claude", "--reason", "C-16 unusable URL"]) == 0
+
+    assert len(spawned) == 1
+    assert "LiveKit: LIVEKIT_URL is not a usable URL (ValueError). Starting the worker anyway" in capsys.readouterr().err
+    entry = audit_lines(ctl.logs)[-1]
+    assert (entry["result"], entry["start"]["result"], entry["start"]["vps"]) == (
+        "restarted", "started", "LiveKit: LIVEKIT_URL is not a usable URL (ValueError)")
+
+
+def test_an_error_in_the_checks_never_stops_a_start(ctl, monkeypatch, capsys):
+    spawned = _background_start(ctl, monkeypatch)
+
+    def broken(timeout=agent_ctl.VPS_CHECK_TIMEOUT_S):
+        raise RuntimeError("c16-throwaway detail")
+
+    monkeypatch.setattr(agent_ctl, "check_vps", broken)
+
+    assert agent_ctl.main(["start", "--by", "claude", "--reason", "C-16 broken check"]) == 0
+
+    assert len(spawned) == 1
+    err = capsys.readouterr().err
+    assert "VPS check failed: the check itself failed (RuntimeError). Starting the worker anyway" in err
+    assert "c16-throwaway" not in err
+    assert audit_lines(ctl.logs)[-1]["vps"] == "the check itself failed (RuntimeError)"
+
+
 # --------------------------------------------------------------------------- wait
 
 
@@ -945,6 +1141,83 @@ def test_no_launcher_prints_the_dead_5100_url():
         text = _text(path)
         assert "5100" not in text
         assert "https://jarvis.srv1802669.hstgr.cloud" in text
+
+
+def _load_windows_local(name: str) -> types.ModuleType:
+    spec = importlib.util.spec_from_file_location(f"c16_{name}", WINDOWS_LOCAL / f"{name}.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_launchers_check_the_vps_only_through_the_domain():
+    """C-16 (K-48): no raw-IP port in the launchers; start-agent.bat runs start_hybrid_agent.py's own check."""
+    bat = _text(WINDOWS_LOCAL / "start-agent.bat")
+    for text in (bat, _text(WINDOWS_LOCAL / "start_hybrid_agent.py")):
+        assert "187.127.123.235" not in text and ":5101" not in text and ":7880" not in text
+    check_at = bat.index("python deploy\\windows-local\\start_hybrid_agent.py check")
+    started_at = bat.index("[1/2] Starting LOCAL agent worker")
+    assert check_at < started_at and "exit /b 1" in bat[check_at:started_at]
+    assert _load_windows_local("start_hybrid_agent").VPS_CHECKS == (
+        ("VPS bridge", "https://jarvis.srv1802669.hstgr.cloud/vortex/health", 200),
+        ("VPS LiveKit", "https://jarvis.srv1802669.hstgr.cloud/rtc/validate", 401))
+
+
+@pytest.mark.parametrize(("answers", "expected"), [
+    ((200, 401), True),
+    ((200, 200), False),  # /rtc/validate answered by a page, not by LiveKit
+    ((502, 401), False),
+    ((200, OSError("unreachable")), False),
+])
+def test_hybrid_check_wants_200_from_the_bridge_and_401_from_livekit(monkeypatch, capsys, answers, expected):
+    hybrid = _load_windows_local("start_hybrid_agent")
+    by_url = dict(zip((url for _label, url, _want in hybrid.VPS_CHECKS), answers))
+
+    def fake_status(url, timeout=8):
+        if isinstance(by_url[url], Exception):
+            raise by_url[url]
+        return by_url[url]
+
+    monkeypatch.setattr(hybrid, "_status", fake_status)
+    assert hybrid.check_vps() is expected
+    out = capsys.readouterr().out
+    assert out.count("[OK]") + out.count("[ERROR]") == 2
+
+
+def test_hybrid_status_reads_an_error_status_as_an_answer(monkeypatch):
+    hybrid = _load_windows_local("start_hybrid_agent")
+
+    def fake_urlopen(url, timeout):
+        raise urllib.error.HTTPError(url, 401, "Unauthorized", {}, io.BytesIO(b""))  # type: ignore[arg-type]
+
+    monkeypatch.setattr(hybrid.urllib.request, "urlopen", fake_urlopen)
+    assert hybrid._status("https://jarvis.example.test/rtc/validate") == 401
+
+
+@pytest.mark.parametrize("mode", ["check", "start"])
+def test_hybrid_launcher_stops_on_a_failed_check(monkeypatch, tmp_path, mode):
+    hybrid = _load_windows_local("start_hybrid_agent")
+    env_file = tmp_path / ".env"
+    env_file.write_text("JARVIS_ROOM_NAME=jarvis-hybrid\n", encoding="utf-8")
+    monkeypatch.setattr(hybrid, "HYBRID_ENV", env_file)
+    monkeypatch.setattr(hybrid, "check_vps", lambda: False)
+    monkeypatch.setattr(hybrid.subprocess, "call", lambda *_a, **_k: pytest.fail("no worker after a failed check"))
+    monkeypatch.setattr(sys, "argv", ["start_hybrid_agent.py", mode])
+    with pytest.raises(SystemExit) as done:
+        hybrid.main()
+    assert done.value.code == 1
+
+
+def test_chat_probe_reaches_the_bridge_through_the_vortex_socketio_path():
+    from services.ai_core.agent_loops import bridge_socket_target  # pylint: disable=import-outside-toplevel
+
+    probe = _load_windows_local("test_chat_once")
+    assert probe.socket_target("https://jarvis.example.test/vortex") == ("https://jarvis.example.test",
+                                                                         "vortex/socket.io")
+    assert probe.socket_target("http://127.0.0.1:5001") == ("http://127.0.0.1:5001", "socket.io")
+    for url in ("https://jarvis.example.test/vortex/", "http://127.0.0.1:5001/", "https://h.example.test/a/vortex"):
+        assert probe.socket_target(url) == bridge_socket_target(url)
 
 
 def test_worker_priority_is_raised_only_for_the_agent_tree(monkeypatch):

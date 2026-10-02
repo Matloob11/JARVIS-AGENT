@@ -4,7 +4,7 @@ cd /d "%~dp0..\.."
 
 echo ============================================
 echo  JARVIS Hybrid Agent (Windows executor)
-echo  Bridge/LiveKit/UI = VPS 187.127.123.235
+echo  Bridge/LiveKit/UI = VPS via https://jarvis.srv1802669.hstgr.cloud
 echo ============================================
 echo.
 
@@ -39,23 +39,15 @@ if not errorlevel 1 (
   exit /b 3
 )
 
-echo [CHECK] VPS bridge...
-powershell -NoProfile -Command "try { (Invoke-WebRequest -Uri 'http://187.127.123.235:5101/health' -UseBasicParsing -TimeoutSec 8).StatusCode } catch { exit 1 }" >nul
+REM C-16 (K-48): the PC reaches the VPS only through the domain over https/wss, never on raw IP ports.
+REM start_hybrid_agent.py check: /vortex/health must answer 200 and LiveKit's /rtc/validate 401.
+echo [CHECK] VPS bridge and LiveKit through the domain...
+python deploy\windows-local\start_hybrid_agent.py check
 if errorlevel 1 (
-  echo [ERROR] VPS bridge not reachable on :5101
+  echo [ERROR] The VPS does not answer through https://jarvis.srv1802669.hstgr.cloud ^(see above^).
   pause
   exit /b 1
 )
-echo [OK] Bridge online
-
-echo [CHECK] VPS LiveKit...
-powershell -NoProfile -Command "try { (Invoke-WebRequest -Uri 'http://187.127.123.235:7880' -UseBasicParsing -TimeoutSec 8).StatusCode } catch { exit 1 }" >nul
-if errorlevel 1 (
-  echo [ERROR] VPS LiveKit not reachable on :7880
-  pause
-  exit /b 1
-)
-echo [OK] LiveKit online
 
 echo.
 echo [1/2] Starting LOCAL agent worker...
