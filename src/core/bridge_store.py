@@ -65,8 +65,15 @@ KV_DESKTOP_LINK = "desktop_link"          # 'on' | 'off': the persisted Desktop 
 KV_ACTIVE_JOB = "active_job"              # the one agent job allowed to drive the laptop
 KV_PAUSED = "paused"                      # bool: the owner paused the agent (C-ROOM-1)
 KV_LAST_ACTIVITY_TS = "last_activity_ts"  # epoch s of the last owner activity
+# C-116 (K-74 v5): a UI desktop_stop the node has not confirmed yet, and the latest node notice
+# values, overwritten in place (never a history), plus the node_id of the last verified hello.
+KV_DESKTOP_STOP = "desktop_stop"          # {ts, by} until a hello or desktop_state reports read/off
+KV_NODE_VITALS = "desktop_vitals_pc"      # the last vitals_pc notice, as emitted to the UI
+KV_NODE_STATE = "desktop_state"           # {mode, locked, panic, ts}
+KV_NODE_POWER = "desktop_power"           # {state, ts}
+KV_NODE_ID = "desktop_node_id"            # str: a different node_id raises the new-node alert
 
-SEEN_DESKTOP = "desktop"  # K-70 envelope ids
+SEEN_DESKTOP = "desktop"  # a 24 h scope; K-70 envelope ids live in the relay's own desktop_seen.db (C-116)
 SEEN_NOTIFY = "notify"    # C-NOTIFY-1 nonces
 SEEN_TTL_S: dict[str, float] = {SEEN_DESKTOP: 24 * 3600.0, SEEN_NOTIFY: 300.0}
 
@@ -462,6 +469,8 @@ class BridgeStore:  # pylint: disable=too-many-public-methods  # one flat facade
         self._repair = repair
         self._lock = threading.Lock()
         self._conn: sqlite3.Connection | None = None
+        # Corrupt databases this object renamed aside: the Desktop Link relay then takes a lost switch as off (C-116).
+        self.corrupt_renamed = 0
 
     # ------------------------------------------------------------------ lifecycle
 
@@ -567,6 +576,7 @@ class BridgeStore:  # pylint: disable=too-many-public-methods  # one flat facade
             if os.path.exists(self.path + suffix):
                 os.rename(self.path + suffix, target + suffix)
                 moved.append(os.path.basename(target + suffix))
+        self.corrupt_renamed += 1
         logger.critical("Bridge DB %s is corrupt (%s): renamed to %s (kept, never deleted); "
                         "started a fresh database", self.path, reason, ", ".join(moved) or "-")
 

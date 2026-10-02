@@ -11,13 +11,27 @@ Agent link v2 (C-14, C-SOCK-1 / C-NOTIFY-1): every Socket.IO client gets a role 
 LEGACY_TOKEN_AUTH=1 (today's broadcast, so the current UI and PC agent keep working); C-19 adds the
 session cookie for role 'ui' (room 'ui'). ui_command and vision_frame go only to room 'agent', every
 notify and periodic event only to room 'ui'. POST /notify is authenticated before it changes anything.
+
+VPS brain (C-116, K-38/K-39/K-48 v4): the same app also listens on the internal port 5002 (jarvis-network only,
+never published; started when JARVIS_ROLE=bridge). There the token-less agent role {role:'agent', room, job_id},
+unsigned agent notifies and /internal/* are accepted, and the legacy token never is; elsewhere /internal/* answers
+404. Room 'agent' holds only agent sockets that serve JARVIS_ROOM_NAME (plus legacy sockets), so canary and probe
+peers never get ui_command. The Desktop Link relay, namespace '/desktop', lives in src/core/bridge_desktop.py;
+desktop_status reaches the UI as an event, in init_state and in GET /status. The public GET /health answers only
+{status, version, uptime_s}.
 """
+# pylint: disable=too-many-lines  # the bridge app: every HTTP endpoint and Socket.IO handler of one process
 
 import asyncio
 import copy
 import ipaddress
+import json
 import math
 import os
+import re
+import secrets
+import socket
+import sys
 import time
 from collections import OrderedDict
 from collections.abc import AsyncGenerator, Awaitable, Mapping
@@ -33,16 +47,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from services.utils.jarvis_adaptive import adaptive_engine
-from services.utils.jarvis_config import ROLE_BRIDGE, config
+from services.utils.jarvis_config import ROLE_BRIDGE, active_brain, config, runtime_role
 from services.utils.jarvis_health import health_monitor
 from services.utils.jarvis_logger import setup_logger
 from services.utils.jarvis_telemetry import telemetry
-from src.core import bridge_security
-from src.core.bridge_security import NonceCache, NotifyAuthError, TokenBucket, same_secret
+from src.core import bridge_desktop, bridge_security
+from src.core.bridge_security import NOTIFY_MAX_BYTES, NonceCache, NotifyAuthError, TokenBucket, same_secret
 from src.core.bridge_store import (
     EVENT_LOG,
     EVENT_MEMORY,
     EVENT_TOOL,
+    KV_DESKTOP_LINK,
     MESSAGE_PAGE_MAX,
     SEEN_NOTIFY,
     BridgeStore,
@@ -101,6 +116,10 @@ UI_COMMANDS_PER_S = 10.0
 VISION_FRAMES_PER_S = 1.0
 VISION_FRAME_MAX_CHARS = 600 * 1024
 _SHORT_TEXT = 64
+_ROOM_NAME = re.compile(r"[A-Za-z0-9._:-]{1,64}")  # a LiveKit room as K-70 writes it
+PUBLIC_PORT = 5001  # nginx /vortex/ -> 127.0.0.1:5101 -> this port; the internal one is bridge_desktop.INTERNAL_PORT
+GIT_SHA = (os.getenv("GIT_SHA") or "").strip() or "unknown"  # exported by deploy.sh (K-47)
+_STARTED_MONO = time.monotonic()
 
 
 @asynccontextmanager
@@ -112,12 +131,22 @@ async def lifespan(_app_instance: FastAPI) -> AsyncGenerator[None, None]:
     telemetry_task = asyncio.create_task(telemetry_heartbeat())
     speaking_task = asyncio.create_task(user_speaking_monitor())
     retention_task = asyncio.create_task(store_retention_loop())
+    # In the background, like the store: a long integrity check of bridge.db must never delay /health.
+    desktop_task = asyncio.create_task(desktop.start())
     yield
     # Shutdown tasks
     vitals_task.cancel()
     telemetry_task.cancel()
     speaking_task.cancel()
     retention_task.cancel()
+    # start() is short (one kv read, the seen store's open): let it finish, so no store call outlives the close
+    await asyncio.wait({desktop_task}, timeout=10.0)
+    desktop_task.cancel()
+    await asyncio.gather(desktop_task, return_exceptions=True)
+    try:
+        await desktop.stop()  # its last audit rows go out before the store closes
+    except Exception:  # pylint: disable=broad-exception-caught
+        logger.warning("Desktop link did not stop cleanly", exc_info=True)
     store_task.cancel()
     try:
         await store.close()
@@ -125,6 +154,25 @@ async def lifespan(_app_instance: FastAPI) -> AsyncGenerator[None, None]:
         logger.warning("Bridge store did not close cleanly", exc_info=True)
 
 app: FastAPI = FastAPI(lifespan=lifespan)
+
+
+class InternalOnly:  # pylint: disable=too-few-public-methods  # pure ASGI middleware
+    """/internal/* exists only on the internal listener (K-39/K-48 v4); anywhere else it is a plain 404, so nothing
+    tells a public client the path exists. Pure ASGI, so streamed responses (C-117 blobs) pass untouched."""
+
+    def __init__(self, inner: Any) -> None:
+        self.inner = inner
+
+    async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
+        path = str(scope.get("path") or "")
+        if (scope.get("type") == "http" and (path == "/internal" or path.startswith("/internal/"))
+                and not bridge_desktop.is_internal_scope(scope)):
+            await JSONResponse({"detail": "Not Found"}, status_code=404)(scope, receive, send)
+            return
+        await self.inner(scope, receive, send)
+
+
+app.add_middleware(InternalOnly)
 
 app.add_middleware(
     CORSMiddleware,
@@ -227,6 +275,11 @@ bridge_manager: BridgeStateManager = BridgeStateManager()
 # SQLite store (C-STATE-1): BRIDGE_DB_PATH, /app/data/bridge.db on the jarvis_bridge_data volume.
 store: BridgeStore = BridgeStore(bridge_db_path())
 
+# Desktop Link relay (C-116, K-70/K-74): '/desktop', desktop_status and the persisted link controls. The lambdas look
+# store and emit_ui up on every call, so a replaced store is used.
+desktop: bridge_desktop.DesktopLink = bridge_desktop.DesktopLink(
+    sio=sio, store=lambda: store, emit_ui=lambda event, data: emit_ui(event, data))
+
 # Persisted UI state (store kv table) and the value each key has until the agent reports one.
 PERSISTED_DEFAULTS: dict[str, Any] = {
     "active_persona": "jarvis",
@@ -286,9 +339,10 @@ def _request_ip(request: Request) -> str:
 
 
 def _legacy_header_ok(request: Request) -> bool:
-    """X-Vortex-Token equals the legacy token, and legacy auth is still on (C-AUTH-1 transition)."""
-    return config.legacy_token_auth and same_secret(request.headers.get("X-Vortex-Token"),
-                                                    VORTEX_SECURITY_TOKEN)
+    """X-Vortex-Token equals the legacy token, and legacy auth is still on (C-AUTH-1 transition). The internal
+    listener never takes the legacy token (K-38 v4)."""
+    return (config.legacy_token_auth and not bridge_desktop.is_internal_scope(request.scope)
+            and same_secret(request.headers.get("X-Vortex-Token"), VORTEX_SECURITY_TOKEN))
 
 
 async def emit_ui(event: str, data: Any = None) -> None:
@@ -325,6 +379,8 @@ def update_rate_limit(request: Request) -> None:
 
 async def _handle_status_event(payload: Any) -> None:
     """Handle general status events."""
+    if payload == "START":
+        desktop.note_voice_activity()
     await bridge_manager.update_state("speaking", payload == "START")
 
     state: dict[str, Any] = await bridge_manager.get_state()
@@ -362,9 +418,24 @@ async def _handle_transcription_event(payload: Any) -> None:
         status, msg = "new", ui_message(normalize_message(raw, default_source))
 
     logger.info("📝 Transcription: role=%s, id=%s (%s)", msg["role"], msg["id"], status)
+    if msg.get("source") == "voice":
+        desktop.note_voice_activity()
 
     await emit_ui("new_message" if status == "new" else "update_message", msg)
     await emit_ui("transcription_update", {"text": msg["text"]})
+
+
+def _internal_notify_body(raw: bytes | None) -> dict[str, Any]:
+    """The {type, payload} object of an unsigned notify on the internal listener, with the public path's limits."""
+    if raw is None or len(raw) > NOTIFY_MAX_BYTES:
+        raise NotifyAuthError(413, "too_large")
+    try:
+        data = json.loads(raw)
+    except ValueError as exc:
+        raise NotifyAuthError(400, "bad_body") from exc
+    if not isinstance(data, dict):
+        raise NotifyAuthError(400, "bad_body")
+    return data
 
 
 @app.post("/notify")
@@ -374,12 +445,21 @@ async def notify_bridge(request: Request) -> Any:
     The raw body is authenticated first (agent HMAC v2, or the legacy headers while
     LEGACY_TOKEN_AUTH=1); only then does the runner contact count and the event reach room 'ui'.
     """
+    internal = bridge_desktop.is_internal_scope(request.scope)
     try:
         raw = await bridge_security.read_body(request)
-        auth = await bridge_security.verify_notify_request(
-            request, raw, agent_token=config.agent_token, legacy_token=VORTEX_SECURITY_TOKEN,
-            legacy_enabled=config.legacy_token_auth, nonces=_notify_nonces,
-            mark_seen=_mark_nonce_seen)
+        if internal and "x-agent-token" not in request.headers:
+            # K-39 v4: on the internal listener the jarvis network is the agent's credential; the legacy token
+            # is never taken there.
+            if "x-vortex-token" in request.headers:
+                raise NotifyAuthError(401, "bad_token")
+            data: dict[str, Any] = _internal_notify_body(raw)
+        else:
+            auth = await bridge_security.verify_notify_request(
+                request, raw, agent_token=config.agent_token, legacy_token=VORTEX_SECURITY_TOKEN,
+                legacy_enabled=config.legacy_token_auth and not internal, nonces=_notify_nonces,
+                mark_seen=_mark_nonce_seen)
+            data = auth.data
     except NotifyAuthError as exc:
         logger.warning("🚫 /notify refused (%d %s) from %s", exc.status, exc.error, _request_ip(request))
         return JSONResponse({"error": exc.error}, status_code=exc.status, headers=exc.headers)
@@ -388,7 +468,6 @@ async def notify_bridge(request: Request) -> Any:
     await bridge_manager.update_state("last_runner_contact", time.time())
     update_rate_limit(request) # Corrected to pass request context
 
-    data: dict[str, Any] = auth.data
     event_type: str | None = data.get("type")
     if not isinstance(event_type, str):
         return {"status": "ignored", "reason": "missing_type"}
@@ -435,6 +514,7 @@ async def notify_bridge(request: Request) -> Any:
     elif event_type == "user_speaking_sync":
         await bridge_manager.update_state("user_speaking", payload)
         if payload:
+            desktop.note_voice_activity()
             await bridge_manager.update_state("last_user_speak_pulse", time.time())
         await emit_ui("user_status_change", {"speaking": payload})
     elif event_type == "voice_id_sync":
@@ -491,10 +571,60 @@ async def notify_bridge(request: Request) -> Any:
     return {"status": "ok"}
 
 
+def _uptime_s() -> int:
+    return int(time.monotonic() - _STARTED_MONO)
+
+
 @app.get("/health")
 async def get_health() -> dict[str, Any]:
-    """Returns detailed system health state."""
-    return health_monitor.generate_health_report()
+    """Public liveness (K-43): exactly {status, version, uptime_s}; never presence, brain or vitals."""
+    return {"status": "ok", "version": GIT_SHA, "uptime_s": _uptime_s()}
+
+
+async def _pc_signed(request: Request) -> bool:
+    """K-70 PC-signed HTTP (X-Desk-* headers) for a bodiless request, checked by the Desktop Link relay."""
+    if "x-desk-sig" not in request.headers:
+        return False
+    declared = request.headers.get("content-length", "")
+    return await desktop.verify_pc_http(
+        request.headers.raw, method=request.method, path=request.scope.get("raw_path") or request.url.path.encode(),
+        query=request.scope.get("query_string", b""), content_length=int(declared) if declared.isdigit() else None,
+        read_body=request.body, ip=_request_ip(request))
+
+
+async def _db_ok() -> bool:
+    await store.kv_get(KV_DESKTOP_LINK)
+    return True
+
+
+@app.get("/status")
+async def get_status(request: Request) -> Any:
+    """
+    C-STATUS-1 (K-43) as far as the bridge knows it today, with the K-74 'desktop' block (C-116); C-63 adds LiveKit
+    and the agent heartbeats. Auth: the internal listener (agent role), K-70 PC-signed HTTP (agent_ctl brain and
+    node checks), or the legacy header while LEGACY_TOKEN_AUTH=1 (until the owner session of C-19).
+    """
+    if not (bridge_desktop.is_internal_scope(request.scope) or _legacy_header_ok(request)
+            or await _pc_signed(request)):
+        return JSONResponse({"error": "auth_required"}, status_code=401)
+    db_ok = await stored("status check", _db_ok(), False)
+    agents = [client for client in _clients.values() if _is_owner_agent(client)]
+    try:
+        db_size = sum(os.path.getsize(store.path + suffix) for suffix in ("", "-wal")
+                      if os.path.exists(store.path + suffix))
+    except OSError:
+        db_size = 0
+    return {
+        "status": "down" if not db_ok else ("ok" if agents else "degraded"),
+        "ts": round(time.time(), 3),
+        "bridge": {"ok": True, "version": GIT_SHA, "uptime_s": _uptime_s()},
+        "db": {"ok": db_ok, "size_bytes": db_size},
+        "agent": {"online": bool(agents), "since": agents[0].since if agents else None,
+                  "host": agents[0].host if agents else "", "version": agents[0].version if agents else ""},
+        "ui_clients": sum(1 for client in _clients.values() if client.role in (ROLE_UI, ROLE_LEGACY)),
+        "brain": active_brain(),
+        "desktop": desktop.status(),
+    }
 
 
 @app.get("/messages")
@@ -525,10 +655,12 @@ async def get_messages(request: Request, before: float | None = None,
 
 
 @app.get("/livekit/token")
-async def livekit_token(request: Request, identity: str = "web-user") -> dict[str, str]:
+async def livekit_token(request: Request) -> dict[str, str]:
     """
     Issue a LiveKit access token for the browser voice client.
     Auth: X-Vortex-Token header (same as UI socket auth).
+    The bridge mints the identity (C-116, K-37 v4): owner-<8 hex>, a new one for every token, so two tabs or devices
+    never push each other out; any identity the client sends is ignored. C-19 makes it stable per owner session.
     """
     if not _legacy_header_ok(request):
         raise HTTPException(status_code=401, detail="Unauthorized")
@@ -548,7 +680,7 @@ async def livekit_token(request: Request, identity: str = "web-user") -> dict[st
     if not api_key or not api_secret:
         raise HTTPException(status_code=503, detail="LiveKit keys not configured")
 
-    safe_identity = "".join(c for c in identity if c.isalnum() or c in "-_")[:64] or "web-user"
+    identity = f"owner-{secrets.token_hex(4)}"
     try:
         from livekit import api as lk_api  # pylint: disable=import-outside-toplevel
 
@@ -596,8 +728,9 @@ async def livekit_token(request: Request, identity: str = "web-user") -> dict[st
 
         access = (
             lk_api.AccessToken(api_key, api_secret)
-            .with_identity(safe_identity)
-            .with_name(safe_identity)
+            .with_identity(identity)
+            .with_name("Owner")
+            .with_attributes({"role": "owner"})
             .with_grants(
                 lk_api.VideoGrants(
                     room_join=True,
@@ -617,6 +750,7 @@ async def livekit_token(request: Request, identity: str = "web-user") -> dict[st
         "token": jwt_token,
         "url": public_url,
         "room": room_name,
+        "identity": identity,
     }
 
 
@@ -657,7 +791,8 @@ async def vitals_heartbeat() -> None:
                 "disk": vitals.get("disk", {}).get("percent", 0),
             }
             await bridge_manager.update_state("vitals", vitals_pkg)
-            await emit_ui("vitals_update", vitals_pkg)
+            # K-74: the legacy vitals_update prefers the laptop's own reading while it is under 30 s old.
+            await emit_ui("vitals_update", desktop.fresh_pc_vitals() or vitals_pkg)
         except asyncio.CancelledError:
             logger.info("Vitals heartbeat task cancelled.")
             break
@@ -773,6 +908,8 @@ async def build_init_state() -> dict[str, Any]:
     if snapshot["settings"]:
         # Only a stored object: an empty one would hide persona/muted from the settings panel.
         state["settings"] = snapshot["settings"]
+    state["desktop_status"] = desktop.status()  # K-74 (C-STATE-1 v4)
+    state["vitals_pc"] = desktop.latest_pc_vitals()
     state["server_time"] = time.time()
     return state
 
@@ -786,6 +923,9 @@ class SocketClient:
     since: float = field(default_factory=time.time)
     host: str = ""
     version: str = ""
+    room: str = ""      # agents: the LiveKit room they serve (K-38 v4); ui_command goes only to JARVIS_ROOM_NAME's
+    job_id: str = ""
+    internal: bool = False  # came in on the internal listener (jarvis-network)
     commands: TokenBucket = field(default_factory=lambda: TokenBucket(UI_COMMANDS_PER_S))
     frames: TokenBucket = field(default_factory=lambda: TokenBucket(VISION_FRAMES_PER_S))
 
@@ -835,16 +975,45 @@ def _socket_role(environ: Mapping[str, Any], auth: Any) -> tuple[str | None, str
     return None, "bad_token"
 
 
+def _internal_role(auth: Any) -> tuple[str | None, str]:
+    """The internal listener takes only the token-less agent role {role: 'agent', room, job_id} (K-38 v4): no
+    agent_token, no legacy token and no UI there; that role exists nowhere else."""
+    if isinstance(auth, dict) and auth.get("role") == ROLE_AGENT:
+        return ROLE_AGENT, ""
+    return None, "internal_agent_only"
+
+
 def _socket_ip(environ: Mapping[str, Any]) -> str:
     scope = environ.get("asgi.scope")
     peer = scope.get("client") if isinstance(scope, dict) else None
     return _peer_ip(str(peer[0]) if peer else "", environ.get("HTTP_X_REAL_IP"))
 
 
+def _owner_room() -> str:
+    return os.getenv("JARVIS_ROOM_NAME") or "jarvis-hybrid"
+
+
+def _is_owner_agent(client: SocketClient) -> bool:
+    """An agent socket serving the owner's room: only these get ui_command and count for agent_status (K-38 v4);
+    canary and probe peers declare another room."""
+    return client.role == ROLE_AGENT and client.room == _owner_room()
+
+
+def _agent_room(auth: Mapping[str, Any], internal: bool) -> str:
+    """The room an agent socket declares. A public agent_token socket that declares none predates C-15 and serves
+    JARVIS_ROOM_NAME; an internal one must declare it."""
+    room = auth.get("room")
+    if isinstance(room, str) and _ROOM_NAME.fullmatch(room):
+        return room
+    return "" if internal else _owner_room()
+
+
 async def _join_rooms(sid: str, client: SocketClient) -> None:
-    """Puts the socket in its role's rooms and records the role in its Socket.IO session."""
+    """Puts the socket in its role's rooms and records the role in its Socket.IO session. An agent socket that
+    serves another room than JARVIS_ROOM_NAME joins none, so it never receives a ui_command or a camera frame."""
+    rooms = ROLE_ROOMS[client.role] if client.role != ROLE_AGENT or _is_owner_agent(client) else ()
     try:
-        for room in ROLE_ROOMS[client.role]:
+        for room in rooms:
             await sio.enter_room(sid, room)
         await sio.save_session(sid, {"role": client.role, "ip": client.ip, "since": client.since})
     except (KeyError, ValueError):  # no such live socket (it has already gone)
@@ -865,7 +1034,8 @@ async def handle_connect(sid: str, environ: dict[str, Any], auth: dict[str, Any]
     Anything else is refused (False) and audited as 'socket_auth_failed'. UI and legacy sockets get
     init_state; the first agent socket turns agent_status online.
     """
-    role, reason = _socket_role(environ, auth)
+    internal = bridge_desktop.is_internal_environ(environ)
+    role, reason = _internal_role(auth) if internal else _socket_role(environ, auth)
     ip = _socket_ip(environ)
     if role is None:
         logger.warning("🚨 Socket refused (%s) from %s: %s", reason, ip, sid)
@@ -874,17 +1044,21 @@ async def handle_connect(sid: str, environ: dict[str, Any], auth: dict[str, Any]
                                               {"reason": reason, "sid": sid}, ip), 0)
         return False
 
-    client = SocketClient(role=role, ip=ip)
+    client = SocketClient(role=role, ip=ip, internal=internal)
     if role == ROLE_AGENT and isinstance(auth, dict):
         client.host, client.version = _short(auth.get("agent_id")), _short(auth.get("version"))
+        client.room, client.job_id = _agent_room(auth, internal), _short(auth.get("job_id"))
     _clients[sid] = client
     await _join_rooms(sid, client)
-    logger.info("✅ Socket connected: role=%s sid=%s from %s%s", role, sid, ip,
-                f" host={client.host}" if client.host else "")
+    logger.info("✅ Socket connected: role=%s sid=%s from %s%s%s", role, sid, ip,
+                f" host={client.host}" if client.host else "",
+                f" room={client.room or '-'}{' (internal)' if internal else ''}" if role == ROLE_AGENT else "")
     if role == ROLE_AGENT:
-        if sum(1 for c in _clients.values() if c.role == ROLE_AGENT) == 1:
+        if _is_owner_agent(client) and sum(1 for c in _clients.values() if _is_owner_agent(c)) == 1:
             await emit_ui("agent_status", _agent_status(client))
         return True
+    if role == ROLE_UI:  # a legacy socket may be an old agent, so only a real UI session counts as the owner
+        await desktop.note_owner_activity()
     state: dict[str, Any] = await build_init_state()
     await sio.emit('init_state', state, room=sid)
     return True
@@ -892,17 +1066,19 @@ async def handle_connect(sid: str, environ: dict[str, Any], auth: dict[str, Any]
 
 @sio.on("disconnect") # type: ignore[untyped-decorator]
 async def handle_disconnect(sid: str, *_reason: Any) -> None:
-    """Forgets the socket; when the last agent socket leaves, agent_status goes offline in room 'ui'."""
+    """Forgets the socket; when the last agent socket serving the owner's room leaves, agent_status goes offline
+    in room 'ui'."""
     client = _clients.pop(sid, None)
     logger.info("Socket disconnected: role=%s sid=%s", client.role if client else "unknown", sid)
-    if client is not None and client.role == ROLE_AGENT and not any(
-            c.role == ROLE_AGENT for c in _clients.values()):
+    if client is not None and _is_owner_agent(client) and not any(
+            _is_owner_agent(c) for c in _clients.values()):
         await emit_ui("agent_status", {"online": False, "since": time.time()})
 
 
 @sio.on("agent_hello") # type: ignore[untyped-decorator]
 async def handle_agent_hello(sid: str, data: Any) -> dict[str, str]:
-    """The only event an agent socket may send: {version, host} (C-SOCK-1)."""
+    """The only event an agent socket may send: {version, host} (C-SOCK-1). Only an agent serving the owner's
+    room updates agent_status."""
     client = _clients.get(sid)
     if client is None or client.role != ROLE_AGENT:
         return _rejected("not_allowed")
@@ -910,8 +1086,16 @@ async def handle_agent_hello(sid: str, data: Any) -> dict[str, str]:
         client.version = _short(data.get("version")) or client.version
         client.host = _short(data.get("host")) or client.host
     logger.info("Agent hello: host=%s version=%s sid=%s", client.host or "-", client.version or "-", sid)
-    await emit_ui("agent_status", _agent_status(client))
+    if _is_owner_agent(client):
+        await emit_ui("agent_status", _agent_status(client))
     return {"status": "ok"}
+
+
+async def _ack_notification(payload: Any) -> None:
+    """notification_ack {id} (K-74/K-77): the stored UI notification counts as delivered."""
+    notification_id = payload.get("id") if isinstance(payload, dict) else None
+    if isinstance(notification_id, str) and 0 < len(notification_id) <= 128:
+        await stored("notification ack", store.ack_notification(notification_id, "ui"), False)
 
 
 @sio.on('ui_command') # type: ignore[untyped-decorator]
@@ -933,6 +1117,12 @@ async def handle_ui_command(sid: str, data: Any) -> dict[str, str]:
         return _rejected("unknown_type")
     if cmd_type == "chat" and isinstance(data.get("payload"), dict):
         bridge_manager.remember_chat_id(data["payload"].get("id"))
+    await desktop.note_owner_activity()
+    if cmd_type == "desktop_stop":
+        # K-74 tighten-only Stop desktop: persisted, sent to the laptop and to the agent peers (stop_all).
+        await desktop.ui_desktop_stop(by=client.role)
+    elif cmd_type == "notification_ack":
+        await _ack_notification(data.get("payload"))
     await sio.emit('agent_command', data, to=ROOM_AGENT)
     return {"status": "sent"}
 
@@ -955,5 +1145,63 @@ async def handle_vision_frame(sid: str, data: Any) -> dict[str, str]:
     return {"status": "sent"}
 
 
+# ---------------------------------------------------------------- Desktop Link ('/desktop', C-116)
+
+
+@sio.on("connect", namespace=bridge_desktop.NAMESPACE) # type: ignore[untyped-decorator]
+async def handle_desktop_connect(sid: str, environ: dict[str, Any], auth: Any = None) -> bool:
+    """'/desktop' connect: the node's signed hello on the public listener, an agent peer's agent_hello on the
+    internal one (K-70); see src/core/bridge_desktop.py."""
+    return await desktop.on_connect(sid, environ, auth)
+
+
+@sio.on("disconnect", namespace=bridge_desktop.NAMESPACE) # type: ignore[untyped-decorator]
+async def handle_desktop_disconnect(sid: str, *reason: Any) -> None:
+    await desktop.on_disconnect(sid, *reason)
+
+
+@sio.on(bridge_desktop.EVENT_MSG, namespace=bridge_desktop.NAMESPACE) # type: ignore[untyped-decorator]
+async def handle_desktop_msg(sid: str, data: Any = None) -> None:
+    """One signed K-70 envelope (JSON text): verified, then relayed or, for a notice, consumed."""
+    await desktop.on_msg(sid, data)
+
+
+# As asyncio's create_server (uvicorn.run's path before C-116): SO_REUSEADDR only on POSIX. On Windows it would let a
+# second local bridge bind a port that is in use instead of failing, and the UI and the agent could then reach
+# different bridges.
+_REUSE_ADDRESS = os.name == "posix" and sys.platform != "cygwin"
+
+
+def _listen_socket(port: int) -> socket.socket:
+    """A TCP socket bound to 0.0.0.0:port for uvicorn."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        if _REUSE_ADDRESS:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind(("0.0.0.0", port))
+    except OSError:
+        sock.close()
+        raise
+    sock.set_inheritable(True)
+    return sock
+
+
+def main() -> None:
+    """Serves the app on PUBLIC_PORT and, in the bridge container (JARVIS_ROLE=bridge), also on the internal port
+    5002 (K-48 v4: compose never publishes it). One uvicorn server, so one lifespan and one Socket.IO server for
+    both listeners. The local bridge on the PC (vortex.py) keeps the public port only."""
+    try:
+        sockets = [_listen_socket(PUBLIC_PORT)]
+        if runtime_role() == ROLE_BRIDGE:
+            sockets.append(_listen_socket(bridge_desktop.INTERNAL_PORT))
+            # uvicorn's 'running on' line names only the public port
+            logger.info("Internal listener on 0.0.0.0:%d (jarvis-network only, never published)",
+                        bridge_desktop.INTERNAL_PORT)
+    except OSError as exc:  # as uvicorn.run did: a port in use is one error line and exit code 1
+        logger.error("Cannot listen: %s", exc)
+        sys.exit(1)
+    uvicorn.Server(uvicorn.Config(app_asgi, host="0.0.0.0", port=PUBLIC_PORT)).run(sockets=sockets)
+
+
 if __name__ == "__main__":
-    uvicorn.run(app_asgi, host="0.0.0.0", port=5001)
+    main()

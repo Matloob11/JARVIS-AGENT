@@ -23,7 +23,9 @@ ENV JARVIS_SHARED_DIR=/app/Jarvis_Shared
 RUN mkdir -p /app/logs /app/Jarvis_Outputs /app/Jarvis_Shared \
     /app/conversations /app/chroma_db /app/pretrained_models /app/backups /app/data
 
-EXPOSE 5001
+# 5001: the public API (nginx /vortex/, published on the host as 5101). 5002: the internal listener for the agent
+# containers (C-116, K-48 v4); it opens when JARVIS_ROLE=bridge and compose never publishes it.
+EXPOSE 5001 5002
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD curl -fsS http://127.0.0.1:5001/health || exit 1

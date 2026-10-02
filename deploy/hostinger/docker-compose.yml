@@ -18,6 +18,12 @@ services:
     volumes:
       - ./livekit.yaml:/etc/livekit.yaml:ro
     restart: unless-stopped
+    # Log rotation (C-16): Docker's json-file driver keeps at most 3 files of 10 MB per container
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - jarvis-net
 
@@ -27,8 +33,14 @@ services:
       dockerfile: deploy/hostinger/Dockerfile.bridge
     image: jarvis-bridge:hostinger
     container_name: jarvis-bridge
+    # K-75: the bridge is not the first process the kernel's OOM killer should spare (agents get 500)
+    oom_score_adj: 300
     ports:
       - "5101:5001"
+    # Internal listener (C-116, K-48 v4): agent role, unsigned agent notify and /internal/* for the containers on
+    # jarvis-net only. Never add it to ports.
+    expose:
+      - "5002"
     # bridge.env (root 600, gitignored; scripts/ops/gen_secrets.py --vps writes it) holds the agent link
     # secrets (C-ENV-1). Optional, so the bridge also starts before it exists; its values win over .env.
     env_file:
@@ -46,16 +58,25 @@ services:
       ALLOWED_ORIGINS: https://jarvis.srv1802669.hstgr.cloud,http://127.0.0.1:5173,http://localhost:5173
       COOKIE_PATH: /vortex
       COOKIE_SECURE: "1"
-      # Bridge SQLite store (C-STATE-1); backup_vps.sh copies it online
+      # Bridge SQLite store (C-STATE-1); backup_vps.sh copies it online. The Desktop Link seen store is
+      # desktop_seen.db in the same folder (K-70 check 7).
       BRIDGE_DB_PATH: /app/data/bridge.db
+      # deploy.sh and rollback.sh export it; the public /health reports it (K-43)
+      GIT_SHA: ${GIT_SHA:-unknown}
     depends_on:
       - livekit
     volumes:
       - jarvis_logs:/app/logs
-      - jarvis_outputs:/app/Jarvis_Outputs
-      - jarvis_shared:/app/Jarvis_Shared
+      # read-only (C-116, K-75): the bridge only serves these folders (C-117 media relay)
+      - jarvis_outputs:/app/Jarvis_Outputs:ro
+      - jarvis_shared:/app/Jarvis_Shared:ro
       - jarvis_bridge_data:/app/data
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - jarvis-net
     healthcheck:
@@ -81,6 +102,11 @@ services:
       ui-bridge:
         condition: service_healthy
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - jarvis-net
 
