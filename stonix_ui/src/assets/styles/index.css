@@ -1,4 +1,5 @@
 @import './tokens.css';
+@import './neon/base.css';
 
 @tailwind base;
 @tailwind components;

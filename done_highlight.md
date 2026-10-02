@@ -724,3 +724,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `npm --prefix stonix_ui run build` pass · e2e reconnect/status/confirm/chat/settings/trace 31/31 (CI=1) · grep `.off('event')` empty · testid-inventory --check pass
 - **Commit:** (next) · **Deploy:** no
 - **Doosre agent ke liye:** X-78 interim reload hata sakte ho; X-97+ isi registry se subscribe karein.
+
+### ✅ [cursor] X-73 · Neon n- primitives + StatusShape · 2026-10-02 22:45 PKT
+- **Kya kiya:** Prototype ke n- CSS primitives `neon/base.css` me (hairline `.edge`, StatusShape shapes incl. unknown/rec, bars via transform); React wrappers Card/Tile/Pill/Button/Switch/Segmented/Badge/Bar; Panel ab Card look; StatusDot → StatusShape.
+- **Files:** stonix_ui/src/assets/styles/neon/base.css, stonix_ui/src/assets/styles/index.css, stonix_ui/src/shared/ui/{StatusShape,Card,Tile,Pill,Button,Switch,Segmented,Badge,Bar,Panel}.tsx
+- **Verify:** `npm --prefix stonix_ui run build` pass · e2e status/vitals/camera pass · `node stonix_ui/scripts/testid-inventory.mjs --check` pass (180)
+- **Commit:** (next) · **Deploy:** no
+- **Doosre agent ke liye:** X-78+ in primitives use karein; poora dashboard abhi migrate nahi.
