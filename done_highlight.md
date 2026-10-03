@@ -1089,3 +1089,73 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
 - **Commit:** abhi nahi · **Deploy:** PC agent restart 08:42 PKT
 - **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] live check: wave-H, C-46/48/72/78/124, watchdog · Agent worker restart (agent_ctl) · 2026-10-03 13:33 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 34012) band, naya pid 31088; health 200 (14.5 s me), ensure_room.py: OK, room created with its agent dispatch (the worker gets the job).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 13:33 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ [claude] C-46 · Tools-info env keys ek append-only script se · 2026-10-03 13:40 PKT
+- **Kya kiya:** `scripts/ops/env_defaults.py`: sirf missing keys add karta hai, koi value print nahi karta, pehle backup leta hai. PC ki dono .env files me K-35 keys lag gayin; defaults code ke defaults jaise hain, is liye live behaviour same.
+- **Files:** `scripts/ops/env_defaults.py`, `tests/unit/test_env_defaults.py`, `.env.example`, `.env.production.example` (+ PC .env, git-ignored, backup %USERPROFILE%/JARVIS-backups)
+- **Verify:** 20 tests pass; `--check` 3/3 present; 13:33 restart ke baad agent theek chala (health 200, room me agent)
+- **Commit:** `057f6d2` · **Deploy:** PC .env (VPS nahi)
+- **Doosre agent ke liye:** naye env keys ke liye `env_defaults.py --add` use karo.
+
+### ✅ [claude] C-48 · Vision tools: current models, fallbacks, sirf fresh frames · 2026-10-03 13:40 PKT
+- **Kya kiya:** analyze_screen/camera/surroundings ab K-30 llm_text tiers se (Gemini → Groq → OpenRouter; laptop images kabhi ':free' par nahi); 10 s se purana frame kabhi nahi bheja jata; tools ka budget 60 s. Purane vision tests ab live paid API nahi chhoote.
+- **Files:** `services/ai_core/jarvis_vision.py`, `src/core/vision_handler.py`, `src/core/agent_core.py`, `services/ai_core/agent_loops.py`, `tests/vision/test_vision_fallbacks.py`, `tests/vision/test_vision.py`
+- **Verify:** 32 + 149 tests pass; live: synthetic image par Gemini 503 (high demand) aaya, Groq qwen3.8-27b ne 6.1 s me sahi text padha
+- **Commit:** `2f99a01` · **Deploy:** PC agent restart 13:33
+- **Doosre agent ke liye:** LiveKit camera frame (DASH-C19) abhi wire nahi.
+
+### ✅ [claude] fix · Room-presence watchdog: JARVIS room se gayab na rahe · 2026-10-03 13:40 PKT
+- **Kya kiya:** Aaj do dafa (09:47 ping timeout, 12:25 network/bridge disconnect) agent room se nikla, koi dobara dispatch nahi hua (LiveKit v1.13.7 mare worker ka job relaunch nahi karta), room 1 ghante baad band, JARVIS khamosh. Ab worker me watchdog har 60 s check karta hai, 2 miss par ensure_room chalata hai (sirf pc mode, max har 5 min).
+- **Files:** `src/core/room_watchdog.py`, `src/core/agent.py`, `tests/unit/test_room_watchdog.py`
+- **Verify:** unit tests pass; live test: agent ko room se nikala, watchdog ne ~91 s me wapas la diya
+- **Commit:** `020ba68` · **Deploy:** PC agent restart 13:33
+- **Doosre agent ke liye:** pakka hal C-23 (bridge room owner).
+
+### 🟡 [claude] C-117 · Bridge media relay, desktop blobs, backup stream, nginx · 2026-10-03 13:33 PKT
+- **Kya kiya:** /media/index aur /media/file (Range) race-safe (Linux par dir_fd/O_NOFOLLOW lazmi), dot-paths band; /desktop/blob sirf RAM me (signed length/sha body se pehle, 413 body se pehle, 256 MB cap bhejne tak gina jata hai); signed backup stream; nginx locations; starlette pin.
+- **Files:** `src/core/bridge_media.py`, `src/core/ui_bridge.py`, `deploy/hostinger/jarvis.conf`, `deploy/hostinger/docker-compose.yml`, `deploy/hostinger/requirements-bridge.txt`, `tests/infrastructure/test_bridge_media.py`
+- **Verify:** Windows 103 passed / 9 skipped; VPS par throwaway Linux container me 66/66 (symlink-race tests samait); `docker compose config -q` OK
+- **Commit:** `b062964` · **Deploy:** nahi (deploy window: deploy_from_pc.sh --services ui-bridge --nginx, C-16 ke saath)
+- **Doosre agent ke liye:** X-67 shuru kar sakte ho (K-73 v7).
+
+### 🟡 [claude] C-121 · Desktop Node policy + key-time input gate · 2026-10-03 13:33 PKT
+- **Kya kiya:** Laptop node ke apne rules: off/read/full, Windows lock par input band, sirf asli input = presence, launch surfaces = code_exec, path policy, agent-signed approval (kam risk = APPROVAL_REQUIRED), panic/tray/remote stop, caps; har key us waqt ki window par judge hoti hai.
+- **Files:** `src/core/desktop/policy.py`, `presence.py`, `panic.py`, `tray.py`, `keygate.py`, `node.py`, `executor.py`, `requirements.txt`, `deploy/windows-local/requirements-hybrid.txt`, `tests/unit/test_desktop_policy.py`, `tests/unit/test_desktop_paths.py`
+- **Verify:** 3 adversarial review rounds; 383 tests pass
+- **Commit:** `8ed552b` · **Deploy:** nahi (node VPS brain ke saath chalega, live acceptance tab)
+- **Doosre agent ke liye:** K-76 v7 codes (DESKTOP_BUSY, PROTECTED_WINDOW) aur desktop_state notices Laptop chip ke liye.
+
+### 🟡 [claude] C-123 · agent_ctl node + brain, read-only snapshot, logon task, ensure_room never deletes · 2026-10-03 13:33 PKT
+- **Kya kiya:** `agent_ctl node ...` aur `brain vps|pc` (journal, auto-restore, PREFLIGHT jab tak VPS brain provision na ho, laptop JARVIS_BRAIN repair, brain.lock); snapshot read-only; logon task XML se (console window nahi); ensure_room chalti session wala room delete nahi karta, ek [ROOM] Result line deta hai.
+- **Files:** `scripts/agent_ctl.py`, `scripts/desktop/node_snapshot.py`, `deploy/windows-local/ensure_room.py`, launchers, `src/core/vortex.py`, tests
+- **Verify:** 280 agent_ctl/link tests + 37 ensure_room tests pass; live: 13:33 restart par naya ensure_room flow OK
+- **Commit:** `53b3cf7` · **Deploy:** PC agent_ctl (node/brain live jab VPS brain ho)
+- **Doosre agent ke liye:** —
+
+### 🟡 [claude] C-124 · VPS agent hardening (PC behaviour same) · 2026-10-03 13:15 PKT
+- **Kya kiya:** egress guard, child env allow-list, prctl (sirf VPS Linux); owner-only room input (remote mode; PC par JARVIS_RPC_OWNER_ONLY se); window title/clipboard ab '[DESKTOP DATA, untrusted]' user text; VPS argument hooks; Chroma encryption sirf remote mode; private INFO logs DEBUG; persona prompt naye tag ke mutabiq.
+- **Files:** `services/utils/net_guard.py`, `services/ai_core/remote_compat.py`, `services/ai_core/tool_placement.py`, `src/core/agent_runner.py`, `src/core/vision_handler.py`, `services/ai_core/jarvis_vector_memory.py`, `services/utils/jarvis_logger.py`, `services/ai_core/jarvis_prompt.py`, tests
+- **Verify:** 440 + 573 tests pass; 13:33 restart ke baad PC worker normal
+- **Commit:** `5967b69` · **Deploy:** nahi (VPS acceptance: net_guard self_test, C-126 ke baad)
+- **Doosre agent ke liye:** —
+
+### 🟡 [claude] C-72 · Voice-ID engine API (in-memory verify, enroll, prewarm) · 2026-10-03 13:15 PKT
+- **Kya kiya:** verify_pcm memory me (temp file nahi), enroll, prewarm event loop se bahar; model na ho to pehle jaisa. Note: realtime voice mode me voice-ID refuse check abhi nahi chalta; enforcement C-73/C-90 ke saath.
+- **Files:** `services/ai_core/voice_fingerprint.py`, `scripts/models/download_voice_model.py`, `src/core/agent_runner.py`, `tests/unit/test_voice_fingerprint_pcm.py`
+- **Verify:** 63 tests pass; live: 'VOICE_ID prewarm skipped' (model install nahi)
+- **Commit:** `88648bf` · **Deploy:** PC agent restart 13:33
+- **Doosre agent ke liye:** —
+
+### ✅ [claude] fix · Persona prompt ke purane D: paths + contracts v7 · 2026-10-03 13:33 PKT
+- **Kya kiya:** Prompt ab ghair-mojood D: workspace/CV path nahi batata (CV document index se dhoondha jata hai). Contracts v7: K-19/K-21/K-29/K-44/K-45/K-47/K-53/K-56/K-69..K-76 aaj ke kaam se; plan section 4 sync.
+- **Files:** `services/ai_core/jarvis_prompt.py`, `docs/CONTRACTS.md`, `plan.md`
+- **Verify:** prompt format check OK, prompt tests pass; contracts adversarial verify 0 findings
+- **Commit:** `00ed8d2`, `e631c64` · **Deploy:** PC agent restart 13:33
+- **Doosre agent ke liye:** contracts v7 padh lo (X-67 se pehle).

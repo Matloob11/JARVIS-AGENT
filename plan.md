@@ -1154,7 +1154,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | C-16 | claude | P0 | Network lockdown: nginx /agent + /twirp, PC agent on wss/https via the domain, 5101/7880 bound to 127.0.0.1, compose memory/log limits | C-12, C-09, C-15, K-48 (C-NET-1) | DOING (claude, 02 Oct 20:50) |
 | C-17 | claude | P0 | Rotate the LiveKit API key/secret (they sat in world-readable files); values live only in env files | C-16, C-14 | TODO |
 | C-18 | claude | P0 | Least-privilege VPS env: bridge reads only bridge.env, compose .env keeps interpolation vars, unused VPS key copies moved to backups; user rotates Google/Gmail keys | C-14, C-17, K-47 (C-ENV-1) | TODO |
-| C-19 | claude | P0 | Owner session auth backend: password + TOTP + recovery codes, JWT cookie on /vortex, session-protected endpoints, LiveKit token per C-LK-1 | C-13, C-14, C-16, K-36 (C-AUTH-1), K-37 (C-LK-1) | TODO |
+| C-19 | claude | P0 | Owner session auth backend: password + TOTP + recovery codes, JWT cookie on /vortex, session-protected endpoints, LiveKit token per C-LK-1 | C-13, C-14, C-16, K-36 (C-AUTH-1), K-37 (C-LK-1) | DOING (claude, 03 Oct 13:42) |
 | C-20 | claude | P0 | Owner credential enrollment (password + TOTP + recovery codes), run by the user | C-19, K-36 (C-AUTH-1) | TODO |
 | C-21 | claude | P0 | Deploy #0: ship the login UI to the VPS and do the first real login (precondition for the cut-over) | X-08, C-12, C-14, C-15, C-19, C-20 | TODO |
 | C-22 | claude | P0 | Cut-over: legacy token auth off, token out of the frontend build, temporary basic auth commented out, security headers + login rate limit, bundle secret check | X-08, C-21, X-09, C-18, C-20, K-48 (C-NET-1) | TODO |
@@ -1192,8 +1192,8 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | C-43 | claude | P1 | Router extras: reasoning_update for every typed and voice turn, '/swarm' through the swarm command | C-42, K-67 (CT-VC-REASONING) | TODO |
 | C-44 | claude | P1 | Bridge: voice event passthroughs, field-merging message upsert, voice command allow-list | C-12, C-13, C-14, C-19, K-58 (CT-VC-MESSAGE), K-62 (CT-VC-TURN-GATE), K-60 (CT-VC-CONTROL), K-63 (CT-VC-VOICE-ENROLL) | TODO |
 | C-45 | claude | P1 | llm_text helper: Gemini 3.x -> Groq -> OpenRouter with header auth | C-25, K-30 (llm_text) | DONE (claude, 02 Oct 16:25) |
-| C-46 | claude | P1 | Tools-info env keys via one append-only script | C-26, K-35 (tools_info_env) | DOING (claude, 03 Oct 10:31) |
-| C-48 | claude | P1 | Vision tools on current models + fallbacks + fresh frames only | C-45, K-30 (llm_text) | DOING (claude, 03 Oct 10:31) |
+| C-46 | claude | P1 | Tools-info env keys via one append-only script | C-26, K-35 (tools_info_env) | DONE (claude, 03 Oct 13:40) |
+| C-48 | claude | P1 | Vision tools on current models + fallbacks + fresh frames only | C-45, K-30 (llm_text) | DONE (claude, 03 Oct 13:40) |
 | C-49 | claude | P1 | Instructions reach Gemini; compose_instructions per persona and turn mode (no rule deleted) | C-43 | TODO |
 | C-50 | claude | P1 | Real Gemini voices and a voice switch that actually restarts the Gemini session | C-49 | TODO |
 | C-51 | claude | P1 | Control commands: Stop = interrupt, Mute = mic input off, guarded shutdown_agent and clear_memory | C-50, C-34, K-60 (CT-VC-CONTROL) | TODO |
@@ -1311,7 +1311,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | C-119 | claude | P0 | Agent DesktopLink client and laptop-tool proxies (honest outcomes, repeat guard, ordering, stop, fallback) | C-115, C-118, C-32, C-28 | TODO |
 | C-120 | claude | P0 | Desktop Node runtime: supervisor, link, tool executor, WAL, dead-man switch, health, power events | C-115, C-111, C-31 | DONE (claude, 03 Oct 00:15) |
 | C-121 | claude | P0 | Node policy: modes, Windows-lock pause and presence, class floors, launch surfaces, path policy, ConfirmFlow approval check, stops | C-120 | DOING (claude, 03 Oct 08:35) |
-| C-122 | claude | P0 | Node capabilities, sensors, file mirror and encrypted backup pull | C-120, C-121, C-117 | TODO |
+| C-122 | claude | P0 | Node capabilities, sensors, file mirror and encrypted backup pull | C-120, C-121, C-117 | DOING (claude, 03 Oct 13:42) |
 | C-123 | claude | P0 | agent_ctl node and brain commands, pinned node snapshot, logon autostart (limited), brain journal | C-120, C-12 | DOING (claude, 03 Oct 08:35) |
 | C-124 | claude | P0 | Agent hardening for the VPS: egress guard, child env, RPC and text owner-only, untrusted context, VPS argument hooks, encrypted Chroma | C-112, C-113 | DOING (claude, 03 Oct 11:26) |
 | C-125 | claude | P0 | Always-on service jarvis-agent-svc: reminders/tasks with a delivery ledger, scheduler host, location cache, encrypted daily snapshot | C-112, C-119, C-13 | TODO |
@@ -1327,7 +1327,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | C-135 | claude | P3 | UI spec v2: exact 'Neon Command Center' design from the user's reference image (replica mockup, ANNA variant, all pages and states, phone), tasks X-69..X-102 updated | — | DONE (claude, 02 Oct 21:40) |
 | C-136 | claude | P1 | PC worker: visible LiveKit link state and recovery after laptop sleep or network loss | C-09, C-112 | DONE (claude, 02 Oct 16:25) |
 | C-137 | claude | P1 | Hotfixes from the 2 Oct live logs: vector memory init off the event loop (45 s stall at session start), ensure_room output without TURN credentials, loopwatch timing test under load | C-31 | DONE (claude, 02 Oct 19:20) |
-| C-138 | claude | P2 | Test hygiene: no test writes the live logs or telemetry, no test depends on the real .env keys, no vacuous diagnostics test | C-61 | TODO |
+| C-138 | claude | P2 | Test hygiene: no test writes the live logs or telemetry, no test depends on the real .env keys, no vacuous diagnostics test | C-61 | DOING (claude, 03 Oct 13:42) |
 | C-97 | claude | P4 | Voice and conversation regression suite + runbook | C-56, C-74, C-76, C-77, C-87, C-89, C-90, C-91, C-09 | TODO |
 | C-98 | claude | P4 | Internal-tool regression checks after the voice/dashboard fixes (change_voice, wake word, persona, identity, analyze_surroundings) | C-48, C-50, C-54, C-69, C-87 | TODO |
 | C-99 | claude | P4 | Live desktop-tools smoke run on the PC with Sir | C-31, C-75, C-55, C-84, C-85, X-63, C-96 | TODO |
