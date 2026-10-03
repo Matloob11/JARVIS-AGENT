@@ -9,11 +9,15 @@
   'degraded': every input-lock tool is refused (DESKTOP_DEGRADED) until that work ends.
 - Executor.cancel answers through the call's outcome; the node sends 'cancelled' within CANCEL_ANSWER_S or
   the real result (K-70 cancel).
+- input_runner (set by C-121's policy install): runs an input-lock call's tool inside the held lock, in chunks
+  with the foreground verified between them. An InputInterrupted it raises ends the call 'failed' with its code
+  (effect 'possible' once a chunk was sent, else 'none'); nothing more is sent.
 - SeqGate keeps the order of the laptop calls of one reply: seq {speech_id, n} (stamped by the agent's
   proxies) holds a later call up to SEQ_HOLD_S for the earlier ones.
 - Tools are reached only through a ToolProvider (describe(name) -> ToolSpec): RegistryToolProvider loads
   the real laptop tools of the K-71 table from the plugin registry and runs them through their K-11 wrapper
-  with _confirmed=True ('without asking again': the ConfirmFlow approval came from the agent, K-76);
+  with _confirmed=True ('without asking again': the ConfirmFlow approval came from the agent, K-76); every
+  K-16 desktop_input tool takes the input lock on the node, whatever its decorator says (K16_DESKTOP_INPUT);
   OperationRegistry holds the pc.* operations (pc.ping here, the rest is C-122). Tests use fakes only.
 
 The executor never sees the link: the node turns an exec into an ExecCall, and a CallOutcome into the K-70
@@ -49,6 +53,14 @@ _POLL_S = 0.02
 
 ACTUATION_CLASSES = frozenset({tool_placement.INPUT, tool_placement.MESSAGING, tool_placement.CODE_EXEC,
                                tool_placement.AVAILABILITY, tool_placement.EXPOSURE})
+# The tools the canonical K-16 table marks 'desktop_input'. The node takes the input lock for every one of them,
+# also when the tool's decorator does not set exclusive (open_app, save_notepad and automate_whatsapp do not), so
+# two input calls never overlap and each of them gets the K-76 input rules (DESKTOP_LOCKED, the run-time
+# foreground checks).
+K16_DESKTOP_INPUT: frozenset[str] = frozenset({
+    "open_app", "save_notepad", "create_template_code", "write_custom_code", "edit_notepad_file_tool",
+    "append_notepad_file_tool", "move_cursor_tool", "mouse_click_tool", "scroll_cursor_tool", "press_key_tool",
+    "swipe_gesture_tool", "press_hotkey_tool", "type_text_tool", "type_code_animation_tool", "automate_whatsapp"})
 
 # Call outcome statuses (the K-70 result body 'status') and effects.
 COMPLETED, CANCELLED, TIMEOUT, FAILED, NOT_STARTED = "completed", "cancelled", "timeout", "failed", "not_started"
@@ -73,6 +85,17 @@ def current_call_id() -> str | None:
     return _current_call.get()
 
 
+class InputInterrupted(Exception):
+    """Raised by an input runner when it stops an input-lock call between two chunks (the foreground or the
+    node state changed under it, K-76). code is the K-76 code; sent says whether a chunk had been sent."""
+
+    def __init__(self, code: str, message: str | None = None, *, sent: bool) -> None:
+        super().__init__(code)
+        self.code = code
+        self.message = message
+        self.sent = bool(sent)
+
+
 def k12_error(tool: str, code: str, message: str | None = None, *, status: str = "error") -> dict[str, Any]:
     """A K-12 ToolResult for a refusal or a failure the node produces itself."""
     return {"status": status, "tool": tool, "error_code": code,
@@ -93,8 +116,11 @@ class CountingThreadPool(concurrent.futures.ThreadPoolExecutor):
         call_id = _current_call.get()
         with self._count_lock:
             self._counts[call_id] += 1
+        # The work runs in a copy of the submitting context, so current_call_id() names its call in the worker
+        # thread as well (run_in_executor does not copy the context itself): the keystroke gate needs it.
+        context = contextvars.copy_context()
         try:
-            future = super().submit(fn, *args, **kwargs)
+            future = super().submit(context.run, fn, *args, **kwargs)
         except BaseException:
             self._done(call_id)
             raise
@@ -332,8 +358,9 @@ class RegistryToolProvider:
             # K-11 v4: run through the wrapper (lock, kill switch, timeout, audit) without asking again.
             return await _wrapper(**dict(args), _confirmed=True)
 
+        exclusive = meta.get("exclusive") or (INPUT_LOCK if name in K16_DESKTOP_INPUT else None)
         return ToolSpec(name=name, cls=entry.cls, param_schema_sha256=schema, invoke=invoke,
-                        exclusive=meta.get("exclusive"),
+                        exclusive=exclusive,
                         timeout_s=float(timeout) if isinstance(timeout, (int, float)) and timeout > 0 else 15.0,
                         idempotent=entry.idempotent, risk=meta.get("risk", "low"))
 
@@ -441,6 +468,8 @@ class Executor:
         self._stuck: set[str] = set()  # calls whose thread work outlived the cap (degraded)
         self._background: set[asyncio.Task[None]] = set()
         self.last_finished: dict[str, Any] = {}
+        # Runs an input-lock call's tool while the lock is held (C-121 sets it); None runs spec.invoke(args).
+        self.input_runner: Callable[[CallHandle], Awaitable[Any]] | None = None
 
     # --- state ---------------------------------------------------------------------------------------------
 
@@ -464,19 +493,26 @@ class Executor:
 
     # --- start and cancel ------------------------------------------------------------------------------------
 
-    def start(self, call: ExecCall) -> CallHandle:
-        """Starts a call on the tool loop; an in-flight call_id returns its existing handle (idempotent)."""
+    def start(self, call: ExecCall, *, cancel_reason: str | None = None) -> CallHandle:
+        """Starts a call on the tool loop; an in-flight call_id returns its existing handle (idempotent). With
+        cancel_reason (a cancel or stop that came while the call was being accepted) the call never starts: its
+        task is cancelled before its first step and it ends NOT_STARTED with that code. A cancel() that comes
+        before the tool loop created the task is applied the same way."""
         with self._calls_lock:
             existing = self._calls.get(call.call_id)
             if existing is not None and not existing.done:
                 return existing
             handle = CallHandle(call, self._clock)
+            if cancel_reason is not None:
+                handle.cancel_reason, handle.cancel_requested = cancel_reason, self._clock()
             self._calls[call.call_id] = handle
 
         def create() -> None:
             task = self.tool_loop.loop.create_task(self._run(handle), name=f"desktop-call:{call.tool}")
             task.add_done_callback(lambda _task: self._settle_unstarted(handle))
             handle.task = task
+            if handle.cancel_reason is not None:
+                task.cancel()  # before its first step: _run never runs and the call never starts
 
         self.tool_loop.call_soon(create)
         return handle
@@ -552,8 +588,13 @@ class Executor:
                     outcome = self._not_started(handle, "DESKTOP_DEGRADED")
                     return
             handle.run_started = self._clock()
-            result = await asyncio.wait_for(call.spec.invoke(call.args), timeout=call.timeout_s)
+            runner = self.input_runner if held else None
+            work = runner(handle) if runner is not None else call.spec.invoke(call.args)
+            result = await asyncio.wait_for(work, timeout=call.timeout_s)
             outcome = self._outcome(handle, COMPLETED, self._k12(call.tool, result), EFFECT_DONE)
+        except InputInterrupted as exc:  # stopped between two chunks: nothing more was sent (K-76)
+            outcome = self._outcome(handle, FAILED, k12_error(call.tool, exc.code, exc.message),
+                                    EFFECT_POSSIBLE if exc.sent else EFFECT_NONE, exc.code)
         except asyncio.CancelledError:
             code = _cancel_code(handle.cancel_reason)
             outcome = self._outcome(handle, CANCELLED if handle.running else NOT_STARTED,

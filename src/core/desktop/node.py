@@ -691,6 +691,7 @@ class NodeRuntime:
                       seq: Any = None, state: str = wal_mod.STATE_REFUSED) -> None:
         """The K-70 refusal: WAL first, then the ack {accepted:false, code}; nothing more for this exec."""
         self.gate.done(seq)
+        self._policy_call_hook("release_call", ref.call_id)  # cap slots the policy reserved go back, no toast
         written = await self.wal.arefuse(ref.call_id, code=code, state=state, tool=ref.tool, room=ref.room,
                                          origin=ref.origin, peer=peer_ident, exec_id=exec_id, boot_id=self.boot_id)
         if not written:  # it started meanwhile: its real outcome instead
@@ -715,16 +716,18 @@ class NodeRuntime:
         if not await self.wal.aaccept(ref.call_id, tool=ref.tool, room=ref.room, origin=ref.origin, peer=peer.ident,
                                       exec_id=env.header.get("id"), boot_id=self.boot_id):
             self.gate.done(call.seq)
+            self._policy_call_hook("release_call", ref.call_id)
             await self._answer_started(await self.wal.aget(ref.call_id), ref, peer.ident)
             return
         self.gate.done(call.seq)
-        handle = self.executor.start(call)
+        # A cancel or stop that came while the WAL recorded the acceptance: the call never starts. It is taken
+        # before the start, because the tool loop may run a quick call to its end before a later cancel lands.
         early = self._take_early_cancel(ref.call_id)
-        if early is not None:  # it came while the WAL recorded the acceptance: the call never starts
-            self.executor.cancel(ref.call_id, "CANCELLED" if early == "DESKTOP_REJECTED" else early)
+        handle = self.executor.start(call, cancel_reason=None if early is None else
+                                     ("CANCELLED" if early == "DESKTOP_REJECTED" else early))
         run = _Running(handle=handle, ref=ref, peer=peer.ident, exec_ts=float(env.header["ts"]), risk=pending.risk,
                        cls=pending.cls, last_progress=self._mono())
-        self._running[ref.call_id] = run
+        self._running[ref.call_id] = run  # no await since the take: a later cancel finds the run here
         self.audit.record("exec_accepted", call_id=ref.call_id, tool=ref.tool, cls=pending.cls, risk=pending.risk,
                           origin=ref.origin, room=ref.room, peer=peer.ident, args_sha256=pending.args_sha256,
                           approval_channel=(pending.approval or {}).get("channel"), in_order=in_order)
@@ -732,13 +735,28 @@ class NodeRuntime:
         await self._send(ref, peer.ident, "ack", {"call_id": ref.call_id, "accepted": True, "risk": pending.risk,
                                                   "cls": pending.cls})
         outcome = await self.executor.wait(handle)
+        if outcome is None or not outcome.started:
+            self._policy_call_hook("release_call", ref.call_id)  # it never started: no cap slot, no toast
         if outcome is not None:
             await self._finish(run, outcome)  # a no-op when a cancel already answered for it
         self.executor.forget(ref.call_id)
 
     def _on_running(self, handle: CallHandle) -> None:
-        """Tool loop, right before the tool runs: the WAL says 'running' first (write-ahead)."""
+        """Tool loop, right before the tool runs: the WAL says 'running' first (write-ahead), then the policy
+        learns that the call really starts (its cap slots stay taken and a capture shows its toast)."""
         self.wal.mark_running(handle.call_id)
+        self._policy_call_hook("call_started", handle.call_id)
+
+    def _policy_call_hook(self, name: str, call_id: str) -> None:
+        """C-121's policy hears when an accepted call starts (call_started) or will never start (release_call);
+        a policy without the hook (BaselinePolicy) is skipped. Never raises."""
+        hook = getattr(self.policy, name, None)
+        if hook is None:
+            return
+        try:
+            hook(call_id)
+        except Exception:  # pylint: disable=broad-exception-caught
+            logger.exception("Desktop policy %s failed", name)
 
     async def _finish(self, run: _Running, outcome: CallOutcome) -> None:
         """The one result of a call: WAL and outbox in one transaction, then the result to its peer. Nothing

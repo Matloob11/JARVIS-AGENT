@@ -54,6 +54,7 @@ pillow==12.1.1
 PyAutoGUI==0.9.54
 pyperclip==1.9.0
 pynput==1.7.7
+pystray==0.19.5  # Desktop Node tray control (C-121); optional, guarded import
 fuzzywuzzy==0.18.0
 python-Levenshtein==0.23.0
 pygetwindow==0.0.9
