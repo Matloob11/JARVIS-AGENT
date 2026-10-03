@@ -1,14 +1,21 @@
 """src/core/room_watchdog.py: the PC worker re-runs ensure_room.py when the room loses its agent.
 
-Everything is injected or mocked: no network, no process and no wait on the 60 s clock (one test runs the real
-thread at a 10 ms interval). Settings are throwaway values.
+Everything is injected or mocked: no network and no wait on the 60 s clock (one test runs the real thread at a
+10 ms interval). Settings are throwaway values. ensure_room.py itself is never started: the tests that need a real
+child run a throwaway sleeper script in its place (it ends by itself after 30 s at the latest), and two run a
+throwaway Python process that imports this module to show what the worker's stderr gets.
 """
 # pylint: disable=protected-access,redefined-outer-name,unnecessary-lambda,no-member  # protobuf members are generated
 from __future__ import annotations
 
+import json
 import logging
+import os
 import subprocess
 import sys
+import threading
+import time
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -71,6 +78,8 @@ def fake_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(rw.SWITCH_ENV, raising=False)
     monkeypatch.setattr(rw, "ENV_FILES", ())  # never the real .env
     monkeypatch.setattr(rw, "_watchdog", None)
+    # setup_logger's logger does not propagate (its own stderr handler); caplog listens on the root logger.
+    monkeypatch.setattr(rw.LOG, "propagate", True)
 
 
 # --------------------------------------------------------------------------- the checks
@@ -210,26 +219,271 @@ def test_logs_contain_no_key_secret_or_address(caplog: pytest.LogCaptureFixture)
 # --------------------------------------------------------------------------- ensure_room.py as a subprocess
 
 
-def test_run_ensure_room_captures_output_and_returns_the_result_line(monkeypatch: pytest.MonkeyPatch) -> None:
+class FakeChild:
+    """A finished ensure_room.py child as Popen shows it."""
+
+    def __init__(self, stdout: bytes, returncode: int = 0) -> None:
+        self.pid, self.returncode, self._stdout, self._code = 4242, None, stdout, returncode
+        self.timeouts: list[float | None] = []
+        self.killed = False
+
+    def communicate(self, timeout: float | None = None) -> tuple[bytes, bytes]:
+        self.timeouts.append(timeout)
+        self.returncode = self._code
+        return self._stdout, b""
+
+    def poll(self) -> int | None:
+        return self.returncode
+
+    def kill(self) -> None:
+        self.killed = True
+
+
+def _fake_popen(monkeypatch: pytest.MonkeyPatch, child: FakeChild) -> dict[str, Any]:
     seen: dict[str, Any] = {}
+
+    def fake_popen(cmd: list[str], **kwargs: Any) -> FakeChild:
+        seen["cmd"], seen["kwargs"] = cmd, kwargs
+        return child
+
+    monkeypatch.setattr(rw, "_popen", fake_popen)
+    monkeypatch.setattr(rw, "bind_to_this_process", lambda pid: seen.setdefault("bound", pid) == pid)
+    return seen
+
+
+def test_run_ensure_room_captures_output_and_returns_the_result_line(monkeypatch: pytest.MonkeyPatch) -> None:
     output = (f"[ROOM] LiveKit API: https://{FAKE_HOST}:7443\n[ROOM] Ensuring room: wave-room\n"
               "[ROOM] Result: OK, an agent of the current worker is in the room\n").encode("utf-8")
-
-    def fake_run(cmd: list[str], **kwargs: Any) -> SimpleNamespace:
-        seen["cmd"], seen["kwargs"] = cmd, kwargs
-        return SimpleNamespace(returncode=0, stdout=output, stderr=b"")
-
-    monkeypatch.setattr(rw, "_run", fake_run)
+    child = FakeChild(output)
+    seen = _fake_popen(monkeypatch, child)
     assert rw.run_ensure_room() == "[ROOM] Result: OK, an agent of the current worker is in the room"
     assert seen["cmd"] == [sys.executable, str(rw.ENSURE_ROOM)]
     assert seen["kwargs"]["cwd"] == str(rw.ROOT)
-    assert seen["kwargs"]["timeout"] == rw.ENSURE_TIMEOUT_S
-    assert seen["kwargs"]["capture_output"] is True
+    assert seen["kwargs"]["stdout"] is subprocess.PIPE and seen["kwargs"]["stdin"] is subprocess.DEVNULL
+    assert child.timeouts == [rw.ENSURE_TIMEOUT_S]
+    if sys.platform == "win32":  # started suspended, put into the worker's job, then resumed
+        assert seen["kwargs"]["creationflags"] & rw.CREATE_SUSPENDED
+        assert seen["kwargs"]["creationflags"] & rw.CREATE_NO_WINDOW
+        assert seen["bound"] == child.pid
+    assert rw._child is None  # no longer tracked once it has finished
 
 
 def test_run_ensure_room_without_result_line(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(rw, "_run", lambda cmd, **kw: SimpleNamespace(returncode=1, stdout=b"[ERROR] x\n"))
+    _fake_popen(monkeypatch, FakeChild(b"[ERROR] x\n", returncode=1))
     assert rw.run_ensure_room() == "ensure_room.py exited 1 without a result line"
+
+
+def test_a_child_that_cannot_be_resumed_is_killed(monkeypatch: pytest.MonkeyPatch) -> None:
+    child = FakeChild(b"")
+    _fake_popen(monkeypatch, child)
+
+    def cannot_resume(_pid: int) -> bool:
+        raise OSError("NtResumeProcess failed")
+
+    monkeypatch.setattr(rw, "bind_to_this_process", cannot_resume)
+    monkeypatch.setattr(rw.sys, "platform", "win32")
+    with pytest.raises(OSError):
+        rw.run_ensure_room()
+    assert child.killed and rw._child is None
+
+
+SLEEPER = (
+    "import os, sys, time\n"
+    "from pathlib import Path\n"
+    "Path(os.environ['ROOM_WATCHDOG_TEST_PID']).write_text(str(os.getpid()))\n"
+    "print('[ROOM] Ensuring room: wave-room', flush=True)\n"
+    "time.sleep(30)\n"  # ends by itself if a test fails before it is ended
+    "print('[ROOM] Result: OK, too late')\n"
+)
+
+
+def _gone(pid: int, timeout: float = 15.0) -> bool:
+    import psutil  # pylint: disable=import-outside-toplevel
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            if psutil.Process(pid).status() == psutil.STATUS_ZOMBIE:
+                return True
+        except psutil.NoSuchProcess:
+            return True
+        time.sleep(0.1)
+    return False
+
+
+def _wait_for_pid(path: Path, timeout: float = 60.0) -> int:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            return int(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            time.sleep(0.05)
+    raise AssertionError("the stand-in ensure_room.py never started")
+
+
+def test_stop_ends_an_ensure_room_run_still_in_progress(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A real child (a sleeper standing in for ensure_room.py): RoomWatchdog.stop(), as on a worker stop, ends
+    it and the run reports no result line."""
+    script = tmp_path / "ensure_room_standin.py"
+    script.write_text(SLEEPER, encoding="utf-8")
+    pid_file = tmp_path / "child.pid"
+    monkeypatch.setattr(rw, "ENSURE_ROOM", script)
+    monkeypatch.setenv("ROOM_WATCHDOG_TEST_PID", str(pid_file))
+    results: list[Any] = []
+
+    def run() -> None:
+        try:
+            results.append(rw.run_ensure_room())
+        except Exception as exc:  # pylint: disable=broad-exception-caught  # reported by the assertion below
+            results.append(exc)
+
+    runner = threading.Thread(target=run, daemon=True)
+    runner.start()
+    child_pid = _wait_for_pid(pid_file)
+    watchdog = rw.RoomWatchdog("wave-room", connected=lambda: False, check=lambda _r: rw.PRESENT,
+                               ensure=lambda: "", interval=3600)
+    watchdog.stop()
+    runner.join(30)
+    assert not runner.is_alive()
+    assert _gone(child_pid)
+    assert len(results) == 1 and isinstance(results[0], str) and "without a result line" in results[0]
+    assert rw._child is None and rw.terminate_child() is False
+
+
+BINDER = (
+    "import os, sys, threading, time\n"
+    "from pathlib import Path\n"
+    "from src.core import room_watchdog as rw\n"
+    "rw.ENSURE_ROOM = Path(sys.argv[1])\n"
+    "threading.Thread(target=rw.run_ensure_room, daemon=True).start()\n"
+    "pid_file = Path(os.environ['ROOM_WATCHDOG_TEST_PID'])\n"
+    "deadline = time.monotonic() + 60\n"
+    "while not pid_file.exists() and time.monotonic() < deadline:\n"
+    "    time.sleep(0.05)\n"
+    "time.sleep(0.5)\n"
+    "os._exit(0)\n"  # like taskkill /F: no atexit hook, no stop()
+)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the kill-on-close job object is Windows only")
+def test_an_ensure_room_child_dies_with_a_worker_that_is_killed(tmp_path: Path) -> None:
+    """A throwaway process plays the worker: it starts the stand-in ensure_room.py through run_ensure_room and
+    then ends at once without any cleanup (as under taskkill /F). The child was put into the worker's
+    kill-on-close job, so Windows ends it with the worker instead of leaving it running for up to 150 s."""
+    script = tmp_path / "ensure_room_standin.py"
+    script.write_text(SLEEPER, encoding="utf-8")
+    pid_file = tmp_path / "child.pid"
+    env = {**os.environ, "ROOM_WATCHDOG_TEST_PID": str(pid_file), "JARVIS_RUN_DIR": str(tmp_path / "run"),
+           "LOG_LEVEL": "INFO"}
+    env.pop("PYTEST_CURRENT_TEST", None)
+    worker = subprocess.run([sys.executable, "-c", BINDER, str(script)], cwd=rw.ROOT, env=env,
+                            capture_output=True, timeout=120, check=False)
+    assert worker.returncode == 0, worker.stderr.decode("utf-8", "replace")[-2000:]
+    child_pid = _wait_for_pid(pid_file, timeout=5)
+    assert _gone(child_pid), "the ensure_room.py stand-in outlived the worker"
+
+
+WORKER_LOG = (
+    "import logging, sys\n"
+    "logging.basicConfig(level=logging.WARNING, force=True)\n"  # a root logger that hides INFO, as in the worker
+    "from src.core import room_watchdog as rw\n"
+    "result = '[ROOM] Result: OK, an agent of the current worker is in the room'\n"
+    "w = rw.RoomWatchdog('wave-room', connected=lambda: False, check=lambda r: rw.PRESENT,\n"
+    "                    ensure=lambda: result, interval=3600)\n"
+    "w.start()\n"
+    "w._run_ensure()\n"
+    "w.stop()\n"
+)
+
+
+def test_the_worker_stderr_gets_the_start_line_and_one_line_per_ensure_room_run(tmp_path: Path) -> None:
+    """In a real process whose root logger shows only warnings (the worker's case: none of the watchdog's lines
+    reached logs/agent_stderr.log), the watchdog's own logger still writes its INFO lines to stderr: the start
+    line and one line per ensure_room.py run with the '[ROOM] Result:' text."""
+    env = {**os.environ, "JARVIS_RUN_DIR": str(tmp_path / "run"), "LOG_LEVEL": "INFO",
+           "LIVEKIT_URL": f"wss://{FAKE_HOST}:7443", "LIVEKIT_API_KEY": FAKE_KEY, "LIVEKIT_API_SECRET": FAKE_SECRET}
+    env.pop("PYTEST_CURRENT_TEST", None)
+    done = subprocess.run([sys.executable, "-c", WORKER_LOG], cwd=rw.ROOT, env=env, capture_output=True,
+                          timeout=120, check=False)
+    err = done.stderr.decode("utf-8", "replace")
+    assert done.returncode == 0, err[-2000:]
+    lines = [line for line in err.splitlines() if "ROOM-WATCHDOG" in line]
+    starts = [line for line in lines if "ROOM WATCHDOG on: every 3600 s, room wave-room" in line]
+    runs = [line for line in lines if "[ROOM] Result: OK, an agent of the current worker is in the room" in line]
+    assert len(starts) == 1 and " - INFO - " in starts[0]
+    assert len(runs) == 1 and " - INFO - " in runs[0] and "ran ensure_room.py" in runs[0]
+    for value in (FAKE_KEY, FAKE_SECRET, FAKE_HOST):
+        assert value not in err
+
+
+def test_the_module_logs_through_the_projects_logger() -> None:
+    from services.utils.jarvis_logger import RedactingFormatter  # pylint: disable=import-outside-toplevel
+
+    assert rw.LOG.name == "ROOM-WATCHDOG"
+    streams = [h for h in rw.LOG.handlers if type(h) is logging.StreamHandler]  # pylint: disable=unidiomatic-typecheck
+    assert streams and all(isinstance(h.formatter, RedactingFormatter) for h in streams)
+
+
+def test_one_info_line_when_it_starts(caplog: pytest.LogCaptureFixture) -> None:
+    watchdog = rw.RoomWatchdog("wave-room", connected=lambda: False, check=lambda _r: rw.PRESENT,
+                               ensure=lambda: "", interval=rw.CHECK_S)
+    with caplog.at_level(logging.INFO, logger=rw.LOG.name):
+        watchdog.start()
+        watchdog.stop()
+    infos = [r.getMessage() for r in caplog.records if r.name == rw.LOG.name and r.levelno == logging.INFO]
+    assert len(infos) == 1 and infos[0].startswith("ROOM WATCHDOG on: every 60 s, room wave-room")
+
+
+def test_one_info_line_per_ensure_room_run_with_its_result(caplog: pytest.LogCaptureFixture) -> None:
+    h = Harness([rw.NO_AGENT])
+    with caplog.at_level(logging.INFO, logger=rw.LOG.name):
+        h.ticks(2)
+    assert h.ensure_calls == 1
+    runs = [r for r in caplog.records if "ensure_room.py" in r.getMessage() and "[ROOM] Result:" in r.getMessage()]
+    assert len(runs) == 1 and runs[0].levelno == logging.INFO
+    assert runs[0].getMessage() == ("ROOM WATCHDOG ran ensure_room.py (no agent in room wave-room for 2 checks): "
+                                    "[ROOM] Result: OK, room created with its agent dispatch (the worker gets the job)")
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+
+
+# --------------------------------------------------------------------------- link_connected on real files
+
+
+def _write_worker_files(run_dir: Path, *, state: str, lock_pid: int = 4242,
+                        lock_started_at: str = "2026-10-03T09:15:00+05:00") -> None:
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "agent.pid.json").write_text(json.dumps({"pid": 4242, "started_at": "2026-10-03T09:15:00+05:00",
+                                                        "by": "claude", "reason": "test"}), encoding="utf-8")
+    (run_dir / "agent_link.json").write_text(json.dumps({
+        "state": state, "since": 1759465000.0, "worker_id": "AW_watchdogTest", "detail": "", "cause": "",
+        "connected_once": state == "connected", "recovery": True, "recoveries": 0, "pid": 4242,
+        "lock_pid": lock_pid, "lock_started_at": lock_started_at}), encoding="utf-8")
+
+
+def test_link_connected_reads_the_real_run_files(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """The real link_connected(): run/agent.pid.json and run/agent_link.json written in JARVIS_RUN_DIR, read
+    through agent_lock and livekit_link as the worker writes them (no mock of either)."""
+    run_dir = tmp_path / "run"
+    monkeypatch.setenv("JARVIS_RUN_DIR", str(run_dir))
+    assert rw.link_connected() is False  # no files at all
+
+    _write_worker_files(run_dir, state="connected")
+    assert rw.link_connected() is True
+
+    for state in ("connecting", "retrying", "failed"):
+        _write_worker_files(run_dir, state=state)
+        assert rw.link_connected() is False, state
+
+    _write_worker_files(run_dir, state="connected", lock_pid=1)  # an earlier worker's file
+    assert rw.link_connected() is False
+    _write_worker_files(run_dir, state="connected", lock_started_at="2026-10-03T08:00:00+05:00")
+    assert rw.link_connected() is False
+
+    _write_worker_files(run_dir, state="connected")
+    (run_dir / "agent_link.json").write_text("{not json", encoding="utf-8")
+    assert rw.link_connected() is False
+    (run_dir / "agent_link.json").unlink()
+    assert rw.link_connected() is False  # a worker from before C-136 writes no link file
 
 
 # --------------------------------------------------------------------------- the LiveKit check (fake API)

@@ -15,11 +15,21 @@ Started only by the worker's main process (src/core/agent.py, the one holding ru
 never in a job process, never under pytest or on import, and not with JARVIS_ROOM_WATCHDOG=0. Nothing here may
 stop or block the worker: its own thread, its own event loop, every call bounded by a timeout, every error
 caught. Logs carry no key, secret or LiveKit address, and never ensure_room.py's output (only its result line).
+
+It logs through the project's setup_logger (services/utils/jarvis_logger.py) like the other worker modules, so
+its lines reach the worker's stderr (logs/agent_stderr.log under agent_ctl): one INFO line when it starts
+('ROOM WATCHDOG on: every 60 s, room <name>') and one INFO line per ensure_room.py run with its
+'[ROOM] Result: ...' text.
+
+An ensure_room.py child never outlives the worker: on Windows it starts suspended, is put into a job object
+that kills it when the worker's last handle to the job closes (the worker's exit, however it ends: Ctrl+Break
+or taskkill /F), and only then runs; stop() and the interpreter's exit also terminate a child still running.
 """
 
 from __future__ import annotations
 
 import asyncio
+import atexit
 import logging
 import multiprocessing
 import os
@@ -30,6 +40,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+from services.utils.jarvis_logger import setup_logger
 from src.core import agent_lock, livekit_link
 
 ROOT = agent_lock.PROJECT_ROOT
@@ -52,10 +63,15 @@ RESULT_PREFIX = "[ROOM] Result:"
 PRESENT, MISSING_ROOM, NO_AGENT = "present", "room missing", "no agent in the room"
 _OFF = ("0", "false", "no", "off")
 
-LOG = logging.getLogger("ROOM-WATCHDOG")
-_run = subprocess.run  # replaced in tests: no test starts a real process
+# The project's logger (console = the worker's stderr, secrets masked, K-29), as agent_runner and the other
+# worker modules use it; a bare logging.getLogger never reached logs/agent_stderr.log.
+LOG = setup_logger("ROOM-WATCHDOG")
+_popen = subprocess.Popen  # replaced in tests: no test starts ensure_room.py
 _watchdog: RoomWatchdog | None = None
 _start_lock = threading.Lock()
+_child_lock = threading.Lock()
+_child: subprocess.Popen[bytes] | None = None  # the ensure_room.py run in progress, if any
+_exit_hook_registered = False
 
 
 def env_value(name: str) -> str:
@@ -151,21 +167,162 @@ def room_state(room: str) -> str:
     return asyncio.run(asyncio.wait_for(_room_state_async(room, url, key, secret), API_TIMEOUT_S))
 
 
+# --------------------------------------------------------------------------- the ensure_room.py child
+
+CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+CREATE_SUSPENDED = 0x00000004
+_JOB_KILL_ON_CLOSE = 0x00002000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+_JOB_EXTENDED_LIMITS = 9  # JobObjectExtendedLimitInformation
+_PROCESS_RIGHTS = 0x0001 | 0x0100 | 0x0800  # PROCESS_TERMINATE | PROCESS_SET_QUOTA | PROCESS_SUSPEND_RESUME
+_job_handle: int | None = None  # this process's kill-on-close job; never closed: the OS closes it at exit
+
+
+def _win_api() -> tuple[Any, Any, Any]:
+    """(kernel32, ntdll, the JOBOBJECT_EXTENDED_LIMIT_INFORMATION type) with typed signatures; Windows only."""
+    # pylint: disable=import-outside-toplevel,too-few-public-methods
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+    ntdll = ctypes.WinDLL("ntdll")  # type: ignore[attr-defined]
+
+    class IoCounters(ctypes.Structure):
+        _fields_ = [(name, ctypes.c_ulonglong) for name in (
+            "ReadOperationCount", "WriteOperationCount", "OtherOperationCount", "ReadTransferCount",
+            "WriteTransferCount", "OtherTransferCount")]
+
+    class BasicLimits(ctypes.Structure):
+        _fields_ = [("PerProcessUserTimeLimit", ctypes.c_int64), ("PerJobUserTimeLimit", ctypes.c_int64),
+                    ("LimitFlags", wintypes.DWORD), ("MinimumWorkingSetSize", ctypes.c_size_t),
+                    ("MaximumWorkingSetSize", ctypes.c_size_t), ("ActiveProcessLimit", wintypes.DWORD),
+                    ("Affinity", ctypes.c_size_t), ("PriorityClass", wintypes.DWORD),
+                    ("SchedulingClass", wintypes.DWORD)]
+
+    class ExtendedLimits(ctypes.Structure):
+        _fields_ = [("BasicLimitInformation", BasicLimits), ("IoInfo", IoCounters),
+                    ("ProcessMemoryLimit", ctypes.c_size_t), ("JobMemoryLimit", ctypes.c_size_t),
+                    ("PeakProcessMemoryUsed", ctypes.c_size_t), ("PeakJobMemoryUsed", ctypes.c_size_t)]
+
+    kernel32.CreateJobObjectW.argtypes = (wintypes.LPVOID, wintypes.LPCWSTR)
+    kernel32.CreateJobObjectW.restype = wintypes.HANDLE
+    kernel32.SetInformationJobObject.argtypes = (wintypes.HANDLE, ctypes.c_int, wintypes.LPVOID, wintypes.DWORD)
+    kernel32.SetInformationJobObject.restype = wintypes.BOOL
+    kernel32.AssignProcessToJobObject.argtypes = (wintypes.HANDLE, wintypes.HANDLE)
+    kernel32.AssignProcessToJobObject.restype = wintypes.BOOL
+    kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    ntdll.NtResumeProcess.argtypes = (wintypes.HANDLE,)
+    ntdll.NtResumeProcess.restype = ctypes.c_long
+    return kernel32, ntdll, ExtendedLimits
+
+
+def _worker_job(kernel32: Any, limits_type: Any) -> int:
+    """This process's job object whose processes die when its handle closes (created once and never closed by
+    this module; not inheritable, so no child keeps it open)."""
+    global _job_handle  # pylint: disable=global-statement
+    if _job_handle is None:
+        import ctypes  # pylint: disable=import-outside-toplevel
+
+        job = kernel32.CreateJobObjectW(None, None)
+        if not job:
+            raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]
+        limits = limits_type()
+        limits.BasicLimitInformation.LimitFlags = _JOB_KILL_ON_CLOSE
+        if not kernel32.SetInformationJobObject(job, _JOB_EXTENDED_LIMITS, ctypes.byref(limits),
+                                                ctypes.sizeof(limits)):
+            error = ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]
+            kernel32.CloseHandle(job)
+            raise error
+        _job_handle = int(job)
+    return _job_handle
+
+
+def bind_to_this_process(pid: int) -> bool:
+    """Windows: puts the child pid (started with CREATE_SUSPENDED) into this process's kill-on-close job, then
+    resumes it, so neither it nor a process it starts (the venv launcher's interpreter) outlives this process.
+    True when it is in the job; False when only the resume worked (it still runs, and stop() or the exit hook
+    still terminate it). Raises OSError when the child could not be resumed: the caller must kill it."""
+    import ctypes  # pylint: disable=import-outside-toplevel
+
+    kernel32, ntdll, limits_type = _win_api()
+    handle = kernel32.OpenProcess(_PROCESS_RIGHTS, False, pid)
+    if not handle:
+        raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]
+    try:
+        try:
+            bound = bool(kernel32.AssignProcessToJobObject(_worker_job(kernel32, limits_type), handle))
+        except OSError:
+            bound = False
+        status = ntdll.NtResumeProcess(handle)
+        if status != 0:
+            raise OSError(f"NtResumeProcess failed (NTSTATUS {status & 0xFFFFFFFF:#010x})")
+        return bound
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+def terminate_child() -> bool:
+    """Ends the ensure_room.py run in progress (worker stop, interpreter exit). True when one was ended."""
+    with _child_lock:
+        child = _child
+    if child is None or child.poll() is not None:
+        return False
+    try:
+        child.kill()
+        child.wait(timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return True
+
+
+def _register_exit_hook() -> None:
+    global _exit_hook_registered  # pylint: disable=global-statement
+    if not _exit_hook_registered:
+        _exit_hook_registered = True
+        atexit.register(terminate_child)
+
+
 def run_ensure_room() -> str:
     """Runs '<this python> deploy/windows-local/ensure_room.py' (cwd: the repo root, ENSURE_TIMEOUT_S) with its
-    output captured and dropped; returns its '[ROOM] Result: ...' line or a short note without it."""
+    output captured and dropped; returns its '[ROOM] Result: ...' line or a short note without it. The child is
+    bound to this process (bind_to_this_process, Windows) and tracked, so terminate_child() can end it. Past the
+    timeout it is killed and subprocess.TimeoutExpired raised."""
+    global _child  # pylint: disable=global-statement
     env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     kwargs: dict[str, Any] = {"cwd": str(ROOT), "env": env, "stdin": subprocess.DEVNULL,
-                              "capture_output": True, "timeout": ENSURE_TIMEOUT_S}
-    if sys.platform == "win32":
-        kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    done = _run([sys.executable, str(ENSURE_ROOM)], check=False, **kwargs)
-    output = done.stdout or b""
+                              "stdout": subprocess.PIPE, "stderr": subprocess.PIPE}
+    windows = sys.platform == "win32"
+    if windows:
+        kwargs["creationflags"] = CREATE_NO_WINDOW | CREATE_SUSPENDED
+    proc = _popen([sys.executable, str(ENSURE_ROOM)], **kwargs)
+    with _child_lock:
+        _child = proc
+    try:
+        if windows:
+            try:
+                bind_to_this_process(proc.pid)
+            except OSError:
+                proc.kill()  # still suspended: it ran nothing
+                proc.communicate()
+                raise
+        try:
+            output, _ = proc.communicate(timeout=ENSURE_TIMEOUT_S)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+            raise
+    finally:
+        with _child_lock:
+            if _child is proc:
+                _child = None
+    output = output or b""
     text = output.decode("utf-8", "replace") if isinstance(output, bytes) else str(output)
     results = [line.strip() for line in text.splitlines() if line.strip().startswith(RESULT_PREFIX)]
     if results:
         return results[-1]
-    return f"ensure_room.py exited {done.returncode} without a result line"
+    return f"ensure_room.py exited {proc.returncode} without a result line"
 
 
 class RoomWatchdog:
@@ -190,14 +347,17 @@ class RoomWatchdog:
         self._thread: threading.Thread | None = None
 
     def start(self) -> None:
+        _register_exit_hook()
         self._thread = threading.Thread(target=self._loop, name="jarvis-room-watchdog", daemon=True)
         self._thread.start()
-        self._log.info("ROOM WATCHDOG on: room '%s' checked every %.0f s while the LiveKit link is connected; "
-                       "ensure_room.py after %d misses in a row, at most every %.0f s (%s=0 turns it off)",
-                       self.room, self.interval, MISSES_NEEDED, ENSURE_EVERY_S, SWITCH_ENV)
+        self._log.info("ROOM WATCHDOG on: every %.0f s, room %s (while the LiveKit link is connected; "
+                       "ensure_room.py after %d misses in a row, at most every %.0f s; %s=0 turns it off)",
+                       self.interval, self.room, MISSES_NEEDED, ENSURE_EVERY_S, SWITCH_ENV)
 
     def stop(self) -> None:
+        """Stops the thread and ends an ensure_room.py run it started that still runs."""
         self._stopped.set()
+        terminate_child()
         if self._thread is not None and self._thread is not threading.current_thread():
             self._thread.join(timeout=5)
 
@@ -255,21 +415,22 @@ class RoomWatchdog:
             self._run_ensure()
 
     def _run_ensure(self) -> None:
-        """ensure_room.py once, logged by its result line only; a timeout or a start error is logged."""
+        """ensure_room.py once, logged as ONE INFO line with its '[ROOM] Result: ...' text; a timeout or a start
+        error is logged as one WARNING instead."""
         self.misses = 0
         self.ensure_runs += 1
-        self._log.warning("ROOM WATCHDOG: no agent in room '%s' for %d checks: running ensure_room.py",
-                          self.room, MISSES_NEEDED)
         try:
             result = self._ensure()
         except subprocess.TimeoutExpired:
-            self._log.warning("ROOM WATCHDOG: ensure_room.py did not finish within %.0f s", ENSURE_TIMEOUT_S)
+            self._log.warning("ROOM WATCHDOG: ensure_room.py (no agent in room %s for %d checks) did not finish "
+                              "within %.0f s", self.room, MISSES_NEEDED, ENSURE_TIMEOUT_S)
             return
         except Exception as exc:  # pylint: disable=broad-exception-caught
-            self._log.warning("ROOM WATCHDOG: ensure_room.py could not run: %s: %s",
-                              type(exc).__name__, masked(exc))
+            self._log.warning("ROOM WATCHDOG: ensure_room.py (no agent in room %s for %d checks) could not run: "
+                              "%s: %s", self.room, MISSES_NEEDED, type(exc).__name__, masked(exc))
             return
-        self._log.info("ROOM WATCHDOG: ensure_room.py %s", masked(result))
+        self._log.info("ROOM WATCHDOG ran ensure_room.py (no agent in room %s for %d checks): %s",
+                       self.room, MISSES_NEEDED, masked(result))
 
 
 def start_room_watchdog(**kwargs: Any) -> RoomWatchdog | None:
