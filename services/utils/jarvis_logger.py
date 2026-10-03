@@ -87,6 +87,83 @@ class JSONFormatter(RedactingFormatter):
         return json.dumps(log_record)
 
 
+# C-124 step 8: window titles, clipboard text, locations and tool arguments are never logged at INFO,
+# because UIBridgeHandler forwards INFO and above to the UI log panel. A call site marks such a line with
+# extra=PRIVATE (or logs it at DEBUG); the INFO templates below, which tool modules use today, are
+# demoted the same way. Demoted lines stay available at LOG_LEVEL=DEBUG on the console only.
+PRIVATE_ATTR = "jarvis_private"
+PRIVATE: dict[str, Any] = {PRIVATE_ATTR: True}
+PRIVATE_INFO_TEMPLATES: frozenset[str] = frozenset({
+    # window titles
+    "Focused window: %s",
+    "Window focus mein hai: %s",
+    "OPEN → raw='%s' clean='%s' match='%s'",
+    # tool arguments (queries, names, paths, recipients, URLs, prompts)
+    "Generating Stylish QR (Dots) for: %s",
+    "QR Code saved successfully to: %s",
+    "Searching for %d images for query: '%s'...",
+    "Downloading images to %s",
+    "Folder '%s' zipped successfully.",
+    "Real Email sent to %s successfully.",
+    "Opening WhatsApp via URI: %s",
+    "Searching for contact: %s",
+    "Sending message via type_text_tool: %s",
+    "Searching for video URL: %s",
+    "YouTube Automation: Action=%s, Query=%s",
+    "Attempting to open URL in App Mode: %s",
+    "Found YouTube URL: %s",
+    "Query detected, searching for video: %s",
+    "Executing yt-dlp: %s",
+    "Controller Action: %s",
+    "Matched '%s' to '%s' (score: %d)",
+    "File khol rahe hain: %s",
+    "Direct path detected, skipping index: %s",
+    "File saved: %s",
+    "Starting deep research for query: %s",
+    "Starting Agentic Workflow: Research + Email for %s",
+    "Searching Tavily for: '%s'",
+    "Searching Google for: '%s'",
+    "Attempting DuckDuckGo fallback for: '%s'",
+    "Generating image (model=%s, provider=%s) for prompt: %s",
+    "Polling Pollinations.ai: %s",
+    "Semantic search initiated for query: %s",
+    "\U0001f6e0️ Tool: analyze_surroundings called with query: %s",
+    "RAG-OPT: Searching for '%s' (Filter: %s)",
+    # reminder and task text (set_reminder's message, and the same text when it falls due)
+    "Setting reminder: %s at %s",
+    "\U0001f514 Triggering proactive reminder: %s",
+    "\U0001f514 Task Due: %s",
+    "\U0001f514 Notifying UI of due task: %s",
+    # locations
+    "City ke liye weather fetch kiya ja raha hai: %s (forecast=%s)",
+    "Attempting weather fallback via search for: %s",
+    "Updating map to: %s (zoom=%s)",
+    "Map sync successful for %s",
+})
+
+
+def is_private_record(record: logging.LogRecord) -> bool:
+    """True for a line that carries a window title, clipboard text, a location or tool arguments."""
+    return bool(getattr(record, PRIVATE_ATTR, False)) or (
+        isinstance(record.msg, str) and record.msg in PRIVATE_INFO_TEMPLATES)
+
+
+class PrivateInfoFilter(logging.Filter):
+    """
+    A logger filter (it runs before the handlers' level checks): a private INFO record becomes DEBUG, so
+    the console at INFO, the file at ERROR and UIBridgeHandler at INFO all leave it out. Higher levels
+    are kept as they are: a WARNING or ERROR line must stay visible.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.levelno == logging.INFO and is_private_record(record):
+            record.levelno, record.levelname = logging.DEBUG, logging.getLevelName(logging.DEBUG)
+        return True
+
+
+_PRIVATE_FILTER = PrivateInfoFilter()
+
+
 def redact_root_handlers() -> None:
     """
     Contract K-29: puts a RedactingFormatter on every root handler and on logging.lastResort,
@@ -126,6 +203,8 @@ class UIBridgeHandler(logging.Handler):
 
         if record.levelno < logging.INFO:
             return
+        if record.levelno == logging.INFO and is_private_record(record):
+            return  # C-124: never a title, clipboard text or tool argument in the UI log panel
 
         UIBridgeHandler._emitting = True
         try:
@@ -281,6 +360,8 @@ def setup_logger(name: str, log_file: str | Path | None = None,
 
     logger: logging.Logger = logging.getLogger(name)
     logger.setLevel(level)
+    if not any(isinstance(f, PrivateInfoFilter) for f in logger.filters):
+        logger.addFilter(_PRIVATE_FILTER)  # C-124: private INFO lines become DEBUG
 
     # Clear existing handlers to prevent duplicates
     if logger.hasHandlers():

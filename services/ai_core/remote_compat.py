@@ -23,13 +23,22 @@ unseen. Each symbol that fails logs ERROR 'COMPAT_SHIM_MISSING <symbol>', and he
 the layer degraded for module_health (K-06). The shimmed symbols are frozen until X-64/X-65 replace
 the shims.
 
-Local mode (the PC brain) installs nothing: install() returns False. Importing this module patches
-nothing.
+C-124: install_arg_hooks(plugin_manager), which agent_runner runs after discovery and before the tools
+are converted for LiveKit, wraps the tools that have VPS argument hooks (tool_placement.ARG_HOOKS side
+'vps'): send_email's attachment must lie inside Jarvis_Outputs, Jarvis_Shared or the blob dir and never
+in /proc, /sys, /etc or the agent data folders; a recipient other than the owner makes the call K-45
+'high' (ConfirmFlow first); download_images' folder_name, the QR filename and the zip name become
+basenames. A refused argument returns a K-12 error and the tool never runs.
+
+Local mode (the PC brain) installs nothing: install() returns False and install_arg_hooks() hooks no
+tool. Importing this module patches nothing.
 """
 
 from __future__ import annotations
 
+import functools
 import importlib
+import inspect
 import os
 import sys
 import threading
@@ -363,6 +372,119 @@ def self_test() -> CompatReport:
         link = "online" if jarvis_delivery.desktop_online() else "offline: opens answer DESKTOP_OFFLINE"
         logger.info("COMPAT self-test passed, laptop link %s: %s", link, "; ".join(report.shimmed))
     return report
+
+
+# ---------------------------------------------------------------- VPS argument hooks (C-124)
+
+HOOKED_FLAG = "__vps_arg_hooks__"
+_CONFIRMED_KWARG = "_confirmed"  # jarvis_plugin_manager.CONFIRMED_KWARG (K-14 approved re-run)
+_CONFIRM_RISKS = ("medium", "high")
+
+
+def _hook_roots() -> tool_placement.HookRoots:
+    from services.utils.jarvis_config import config  # pylint: disable=import-outside-toplevel
+    return tool_placement.vps_hook_roots(config.project_root, config.outputs_dir, config.shared_dir)
+
+
+def owner_addresses() -> tuple[str, ...]:
+    """The owner's own e-mail address (EMAIL_USER, the account JARVIS sends from); empty when unset, so
+    every recipient then counts as a non-owner."""
+    value = (os.getenv("EMAIL_USER") or "").strip()
+    return (value,) if value else ()
+
+
+def _hook_refusal(tool: str, error: tool_placement.ArgHookError) -> dict[str, Any]:
+    return {"status": "error", "tool": tool, "error_code": error.code,
+            "message": f"Sir, yeh kaam VPS par nahi ho sakta: {error}"}
+
+
+def _desktop_online() -> bool:
+    try:
+        return bool(jarvis_delivery.desktop_online())
+    except Exception:  # pylint: disable=broad-exception-caught
+        return False
+
+
+def hook_tool(tool: Callable[..., Any]) -> Callable[..., Any]:
+    """
+    tool (a registered plugin-manager wrapper) with its VPS argument hooks applied before every call:
+    a refused path returns a K-12 error without running the tool, a basename replaces a name, and a
+    non-owner recipient makes the call K-45 'high', so it goes through ConfirmFlow first (unless the
+    tool's own risk already asks). The signature, metadata and name stay the tool's own.
+    """
+    name = getattr(tool, "__name__", "")
+    if getattr(tool, HOOKED_FLAG, False) or not tool_placement.vps_hooks(name):
+        return tool
+    sig = getattr(tool, "__signature__", None) or inspect.signature(tool)
+    own_risk = (getattr(tool, "__jarvis_meta__", None) or {}).get("risk")
+    asks_itself = isinstance(own_risk, str) and own_risk in _CONFIRM_RISKS
+
+    @functools.wraps(tool)
+    async def hooked(*args: Any, **kwargs: Any) -> Any:
+        confirmed = kwargs.pop(_CONFIRMED_KWARG, None) is True
+        try:
+            bound = sig.bind_partial(*args, **kwargs)
+        except TypeError:
+            return await tool(*args, **kwargs)  # the tool reports the bad call itself
+        try:
+            outcome = tool_placement.apply_vps_arg_hooks(
+                name, bound.arguments, roots=_hook_roots(), owners=owner_addresses(),
+                online=_desktop_online())
+        except tool_placement.ArgHookError as e:
+            logger.warning("ARG_HOOK %s refused %s:%s (%s)", name, e.hook, e.arg, e.code)
+            return _hook_refusal(name, e)
+        call_kwargs = dict(outcome.arguments)
+        if confirmed:
+            return await tool(**call_kwargs, **{_CONFIRMED_KWARG: True})
+        if outcome.risk in _CONFIRM_RISKS and not asks_itself:
+            logger.info("ARG_HOOK %s: a recipient other than the owner, K-45 %s", name, outcome.risk)
+            return await _confirm_then_run(hooked, name, call_kwargs, outcome.risk)
+        return await tool(**call_kwargs)
+
+    setattr(hooked, HOOKED_FLAG, True)
+    return hooked
+
+
+async def _confirm_then_run(hooked: Callable[..., Any], name: str, arguments: dict[str, Any],
+                            risk: str) -> Any:
+    """K-14: the call becomes a pending ConfirmFlow action; it runs (with the hooks again) once Sir
+    approves it."""
+    try:
+        broker = importlib.import_module("services.ai_core.jarvis_confirm").confirmation_broker
+        return await broker.create_pending(
+            name, f"{name}: recipient is not the owner", risk, arguments=arguments,
+            args_preview=", ".join(sorted(arguments)),
+            run=functools.partial(hooked, **arguments, **{_CONFIRMED_KWARG: True}))
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.error("ARG_HOOK confirmation of %s failed: %s", name, type(e).__name__)
+        return {"status": "error", "tool": name, "error_code": "CONFIRM_UI_UNREACHABLE",
+                "message": "Sir, confirmation shuru nahi ho saki, is liye yeh kaam nahi kiya."}
+
+
+def install_arg_hooks(manager: Any, mode: str | None = None) -> list[str]:
+    """
+    Remote mode only: replaces every registered tool that has VPS argument hooks (K-71 ARG_HOOKS side
+    'vps') with its hooked wrapper, before the tools are converted for LiveKit. Returns the hooked
+    names; local mode (the PC brain) hooks nothing. Idempotent.
+    """
+    if (mode or desktop_mode()) != DESKTOP_MODE_REMOTE:
+        return []
+    hooked_names: list[str] = []
+    lock = getattr(manager, "_tools_lock", None) or threading.RLock()
+    with lock:
+        tools = list(getattr(manager, "tools", []) or [])
+        for index, tool in enumerate(tools):
+            wrapped = hook_tool(tool)
+            if getattr(wrapped, HOOKED_FLAG, False):
+                hooked_names.append(getattr(tool, "__name__", ""))
+            tools[index] = wrapped
+        manager.tools = tools
+    expected = sorted(name for name in tool_placement.PLACEMENTS if tool_placement.vps_hooks(name))
+    absent = [name for name in expected if name not in hooked_names]
+    logger.info("ARG_HOOKS on the VPS: %d tools hooked", len(hooked_names))
+    if absent:
+        logger.warning("ARG_HOOKS: no registered tool for %s", ", ".join(absent))
+    return hooked_names
 
 
 def health() -> dict[str, Any]:

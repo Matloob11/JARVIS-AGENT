@@ -47,6 +47,13 @@ from services.ai_core import remote_compat
 
 remote_compat.install()
 
+# C-124: VPS agent/svc processes only (Linux, remote mode): child env allow-list, PR_SET_DUMPABLE=0 and,
+# with JARVIS_NET_GUARD=1, the egress guard. Runs in the worker and again in every spawned job process
+# (it imports this module). The PC worker (Windows, local mode) gets nothing.
+from services.utils import net_guard
+
+net_guard.harden_process()
+
 from livekit import agents, rtc
 from livekit.agents import AgentSession, cli, llm
 from livekit.agents.cli import cli as livekit_cli_module
@@ -140,9 +147,161 @@ try:
 except (ImportError, ValueError):
     from agent_core import BrainAssistant  # type: ignore
 
+from src.core.vision_handler import append_chat_message, desktop_data_message
+
 logger = setup_logger("AGENT-RUNNER")
 
 # Notification functions moved to services.utils.jarvis_bridge
+
+DEFAULT_ROOM_NAME = "jarvis-hybrid"
+CLIPBOARD_TIP_LABEL = "CLIPBOARD ERROR DETECTED: the clipboard helper's tip for an error the user copied"
+
+# ------------------------------------------------------------------ C-124: room input owner-only
+# LiveKit 1.4.6 serves lk.agent.send_message (session.run for any caller), lk.agent.get_chat_history,
+# get_session_state and get_agent_info over RPC, the same four over the lk.agent.request text stream,
+# and typed text on lk.chat. On the VPS brain only the linked 'owner-*' participant (the identity the
+# bridge mints, K-38 v4) may use them. The PC worker keeps today's behaviour unless
+# JARVIS_RPC_OWNER_ONLY=1: the live UI's identity there is not yet proven to be 'owner-*'.
+RPC_OWNER_ONLY_ENV = "JARVIS_RPC_OWNER_ONLY"
+OWNER_IDENTITY_PREFIX = "owner-"
+GUARDED_RPC_METHODS = ("lk.agent.send_message", "lk.agent.get_chat_history", "lk.agent.get_session_state",
+                       "lk.agent.get_agent_info")
+GUARDED_TEXT_TOPICS = ("lk.agent.request",)
+TEXT_INPUT_TOPIC = "lk.chat"
+RPC_REFUSED_CODE = 403
+_OWNER_ONLY_FLAG = "__jarvis_owner_only__"
+
+
+def rpc_owner_only(mode: str | None = None) -> bool:
+    """True when room input is owner-only: always in remote mode (the VPS brain); in local mode only with
+    JARVIS_RPC_OWNER_ONLY=1 (default off on the PC)."""
+    if (mode or desktop_mode()) == DESKTOP_MODE_REMOTE:
+        return True
+    return (os.getenv(RPC_OWNER_ONLY_ENV) or "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _identity_kind(identity: Any) -> str:
+    """The prefix of an identity for a log line ('owner', 'web', ...); never the identity itself."""
+    text = identity if isinstance(identity, str) else ""
+    return f"{text.split('-', 1)[0]}-*" if "-" in text else "unprefixed"
+
+
+def _linked_identity(session: Any) -> str | None:
+    room_io = getattr(session, "_room_io", None)
+    linked = getattr(room_io, "linked_participant", None) if room_io is not None else None
+    identity = getattr(linked, "identity", None)
+    return identity if isinstance(identity, str) else None
+
+
+def owner_may_use(identity: Any, session: Any) -> bool:
+    """True for an 'owner-*' identity that is the linked participant (or any 'owner-*' while nobody is
+    linked)."""
+    if not isinstance(identity, str) or not identity.startswith(OWNER_IDENTITY_PREFIX):
+        return False
+    linked = _linked_identity(session)
+    return linked is None or linked == identity
+
+
+def _refuse_log(channel: str, identity: Any) -> None:
+    logger.warning("ROOM_INPUT refused on %s from a %s participant (owner-only)", channel,
+                   _identity_kind(identity))
+
+
+def _owner_only_rpc(method: str, handler: Callable[..., Any], session: Any) -> Callable[..., Any]:
+    async def guarded(data: rtc.RpcInvocationData) -> Any:
+        if not owner_may_use(getattr(data, "caller_identity", None), session):
+            _refuse_log(method, getattr(data, "caller_identity", None))
+            raise rtc.RpcError(RPC_REFUSED_CODE, "owner only")
+        result = handler(data)
+        return await result if asyncio.iscoroutine(result) else result
+
+    setattr(guarded, _OWNER_ONLY_FLAG, True)
+    return guarded
+
+
+def _owner_only_stream(topic: str, handler: Callable[..., Any], session: Any) -> Callable[..., Any]:
+    def guarded(reader: Any, participant_identity: str) -> Any:
+        if not owner_may_use(participant_identity, session):
+            _refuse_log(topic, participant_identity)
+            return None
+        return handler(reader, participant_identity)
+
+    setattr(guarded, _OWNER_ONLY_FLAG, True)
+    return guarded
+
+
+def _owner_only_text_input(callback: Callable[..., Any], session: Any) -> Callable[..., Any]:
+    async def guarded(sess: Any, event: Any) -> None:
+        identity = getattr(getattr(event, "participant", None), "identity", None)
+        if not owner_may_use(identity, session):
+            _refuse_log(TEXT_INPUT_TOPIC, identity)
+            return
+        result = callback(sess, event)
+        if asyncio.iscoroutine(result):
+            await result
+
+    setattr(guarded, _OWNER_ONLY_FLAG, True)
+    return guarded
+
+
+def harden_room_input(session: Any, room: Any, mode: str | None = None) -> list[str]:
+    """
+    C-124 step 3, after session.start: when rpc_owner_only(mode), wraps the lk.agent.* RPCs, the
+    lk.agent.request stream and the text-input callback so only the linked owner-* participant gets an
+    answer; an RPC that cannot be wrapped is unregistered instead. Returns what it guarded (empty when
+    owner-only is off: today's behaviour). Idempotent.
+    """
+    if not rpc_owner_only(mode):
+        return []
+    guarded: list[str] = []
+    local = getattr(room, "local_participant", None)
+    handlers = getattr(local, "_rpc_handlers", None)
+    for method in GUARDED_RPC_METHODS:
+        try:
+            if isinstance(handlers, dict):
+                handler = handlers.get(method)
+                if handler is None:
+                    continue  # not registered: nothing answers it
+                if not getattr(handler, _OWNER_ONLY_FLAG, False):
+                    local.register_rpc_method(method, _owner_only_rpc(method, handler, session))
+                guarded.append(method)
+            elif local is not None:
+                local.unregister_rpc_method(method)  # the handler cannot be wrapped: take the method away
+                guarded.append(f"{method} (removed)")
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.error("ROOM_INPUT could not guard %s: %s", method, type(e).__name__)
+    streams = getattr(room, "_text_stream_handlers", None)
+    events = getattr(session, "_client_events_handler", None)
+    callback = getattr(events, "_text_input_cb", None)
+    topics = list(GUARDED_TEXT_TOPICS)
+    if callable(callback) and hasattr(events, "register_text_input"):
+        if not getattr(callback, _OWNER_ONLY_FLAG, False):
+            events.register_text_input(_owner_only_text_input(callback, session))
+        guarded.append(f"{TEXT_INPUT_TOPIC} text input")
+    else:
+        topics.append(TEXT_INPUT_TOPIC)  # no callback to wrap: guard the text stream itself
+    for topic in topics:
+        handler = streams.get(topic) if isinstance(streams, dict) else None
+        if handler is None:
+            continue
+        try:
+            if not getattr(handler, _OWNER_ONLY_FLAG, False):
+                room.unregister_text_stream_handler(topic)
+                room.register_text_stream_handler(topic, _owner_only_stream(topic, handler, session))
+            guarded.append(topic)
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.error("ROOM_INPUT could not guard %s: %s", topic, type(e).__name__)
+    logger.info("ROOM_INPUT owner-only: %s", ", ".join(guarded) or "nothing to guard")
+    return guarded
+
+
+def clipboard_tip_text(payload: Any) -> str:
+    """The K-19 ClipboardSuggestion (or the old plain str) as one text: the copied error, the search,
+    the tip and its source; the same information the model got before."""
+    if isinstance(payload, dict):
+        fields = (("error_excerpt", "error"), ("query", "search"), ("solution", "tip"), ("source_url", "source"))
+        return "\n".join(f"{label}: {payload[key]}" for key, label in fields if payload.get(key))
+    return "" if payload is None else str(payload)
 
 
 async def start_memory_loop(assistant: BrainAssistant | Any, memory_extractor: MemoryExtractor | None = None) -> None:
@@ -300,14 +459,20 @@ async def _start_background_tasks(session: AgentSession, assistant: BrainAssista
         clip_monitor = ClipboardMonitor()
 
         async def _on_clipboard_detected(solution):
-            logger.info("📋 Clipboard Detection: %s", solution)
+            # C-124: clipboard text never reaches the log, and the tip reaches the model as quoted,
+            # untrusted user-side desktop data, never as a system notification.
+            tip = clipboard_tip_text(solution)
+            logger.info("📋 Clipboard tip ready (%d chars)", len(tip))
             if assistant and hasattr(assistant, "chat_ctx"):
-                assistant.chat_ctx.messages.append(
-                    llm.ChatMessage(
-                        role="assistant",
-                        content=[f"[SYSTEM NOTIFICATION: CLIPBOARD ERROR DETECTED]\n{solution}"],
-                    ),
-                )
+                # BrainAssistant.chat_ctx is an llm.ChatContext, whose messages is a method: the tip goes
+                # into its items list (a plain messages list is used when one is there).
+                try:
+                    message = desktop_data_message(CLIPBOARD_TIP_LABEL, tip)
+                    added = append_chat_message(assistant.chat_ctx, message)
+                except RuntimeError:  # a read-only LiveKit chat context
+                    added = False
+                if not added:
+                    logger.debug("Clipboard tip not added: no writable chat context.")
 
         # Clipboard monitor doesn't naturally support a coro_func retry without refactor,
         # so we wrap it in a custom task for now.
@@ -335,17 +500,23 @@ def _start_loop_watchdog(ctx: agents.JobContext,
     return watchdog
 
 
-def _prewarm_vector_memory() -> None:
+def _prewarm_vector_memory(room_name: str | None = None) -> None:
     """
     C-137: starts the vector memory (Chroma, the sentence-transformers import and its model) in its
     background thread at job start, so no event loop runs that import and the first recall or write
     finds the memory ready. Once per process: a later job finds it running or ready. It opens Chroma,
     so it runs here in the job (K-69); a worker's prewarm hook may only call warm_model().
+    C-124: in remote mode only the job serving JARVIS_ROOM_NAME (jarvis-hybrid) opens Chroma; a job for
+    another room (canary, probe) runs without vector recall.
     """
     try:
         from services.ai_core.jarvis_vector_memory import (  # pylint: disable=import-outside-toplevel
             jarvis_vector_db,
         )
+        if (isinstance(room_name, str) and desktop_mode() == DESKTOP_MODE_REMOTE
+                and room_name != (os.getenv("JARVIS_ROOM_NAME") or DEFAULT_ROOM_NAME)):
+            jarvis_vector_db.disable("this job does not serve the JARVIS room")
+            return
         jarvis_vector_db.prewarm()
     except Exception as e:  # the memory then starts at its first use, still off the loop
         logger.warning("VECTOR_PREWARM not started: %s", e)
@@ -470,6 +641,7 @@ async def entrypoint(ctx: agents.JobContext):
     """Main job entrypoint."""
     # K-29 backstop for _mask_cli_log_handler(): masks any root handler added since then.
     redact_root_handlers()
+    net_guard.harden_process()  # C-124: again in the job (PR_SET_DUMPABLE does not survive an exec)
     local = desktop_mode() == DESKTOP_MODE_LOCAL
     max_retries = 5
     attempt = 0
@@ -495,7 +667,8 @@ async def entrypoint(ctx: agents.JobContext):
             # INCREASED TIMEOUT: From 10s to 60s for high-load systems (Sir Matloob's Dell PC)
             await asyncio.wait_for(ctx.connect(), timeout=60.0)
             logger.info("✅ Connected to room: %s", ctx.room.name)
-            _prewarm_vector_memory()  # C-137: loads in its own thread while the session starts
+            # C-137: loads in its own thread while the session starts (C-124: the JARVIS room's job only)
+            _prewarm_vector_memory(getattr(ctx.room, "name", None))
 
             # Now perform secondary initialization
             current_dt_res = await get_formatted_datetime()
@@ -507,6 +680,8 @@ async def entrypoint(ctx: agents.JobContext):
             # Root-level services directory
             package_path = os.path.join(config.project_root, "services")
             plugin_manager.discover_plugins(package_path)
+            if not local:
+                remote_compat.install_arg_hooks(plugin_manager)  # C-124: VPS argument hooks
             external_tools = plugin_manager.get_livekit_tools()
             logger.info("🛠️ Discovered %d external tools from plugins.", len(external_tools))
             if not local:
@@ -566,6 +741,7 @@ async def entrypoint(ctx: agents.JobContext):
             logger.info("[AGENT] Connecting room and starting session...")
             await session.start(room=ctx.room, agent=assistant)
             logger.info("[AGENT] Session started successfully.")
+            harden_room_input(session, ctx.room)  # C-124: owner-only RPC and text (VPS; PC opt-in)
             assistant.attach_session(session)
 
             # --- Location Update Loop --- (local mode only, K-72)

@@ -12,6 +12,15 @@ once the memory is ready, so it is kept even when its job's event loop stops mea
 
 prewarm() opens Chroma, which only the job serving jarvis-hybrid may do (K-69). warm_model() loads
 only the model and never opens Chroma: it is the part a worker's prewarm hook may run.
+
+C-124: on the VPS brain (JARVIS_DESKTOP_MODE=remote) with JARVIS_ENCRYPTION_KEY set, every document is
+stored Fernet-encrypted ('jarvis-fernet:v1:' prefix); recall decrypts in every mode. The PC brain keeps
+writing plain text as before; the embedding function decrypts before it embeds, so the vectors still
+come from the plain text (they carry its meaning; the text itself is not on disk). A document without the
+prefix (every memory written before, or without a key) is plain text and is recalled as it is; one that
+does not decrypt (another key) is returned as stored, with a WARNING, never dropped. On POSIX the
+process that opens the PersistentClient holds an exclusive fcntl lock on chroma_db/.jarvis.lock; another
+process runs without vector recall. Windows keeps the single worker of the agent_ctl runtime lock.
 """
 
 import asyncio
@@ -26,9 +35,17 @@ from collections.abc import Callable
 from typing import Any
 
 import chromadb
-from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
-from services.utils.jarvis_config import config
+from chromadb.utils.embedding_functions import (
+    SentenceTransformerEmbeddingFunction as _ChromaSentenceTransformer,
+)
+from cryptography.fernet import Fernet, InvalidToken
+from services.utils.jarvis_config import DESKTOP_MODE_REMOTE, config, desktop_mode
 from services.utils.jarvis_logger import setup_logger
+
+try:
+    import fcntl  # POSIX only: the single Chroma opener (C-124)
+except ImportError:  # Windows: one worker at a time is the agent_ctl runtime lock (K-53)
+    fcntl = None  # type: ignore[assignment]
 
 # Late-bound Phoenix import to avoid startup lag
 _PX_CACHED = None
@@ -76,12 +93,86 @@ COLLECTION_NAME = "jarvis_memory"
 MODEL_NAME = "all-MiniLM-L6-v2"
 # A recall during the warm-up waits this long, then that turn goes on without long-term memories.
 RECALL_WAIT_S = 3.0
+ENCRYPTION_KEY_ENV = "JARVIS_ENCRYPTION_KEY"
+ENC_PREFIX = "jarvis-fernet:v1:"
+LOCK_FILE = ".jarvis.lock"
+# After another process was found holding chroma_db, the next try waits this long.
+LOCK_RETRY_S = 60.0
+_warned: set[str] = set()
+
+
+def _warn_once(kind: str, message: str) -> None:
+    if kind not in _warned:
+        _warned.add(kind)
+        logger.warning(message)
+
+
+@functools.lru_cache(maxsize=4)
+def _fernet_for(key: str) -> Fernet | None:
+    try:
+        return Fernet(key.encode())
+    except (ValueError, TypeError):
+        _warn_once("bad_key", f"{ENCRYPTION_KEY_ENV} is not a valid Fernet key: vector memory documents "
+                              "are stored without encryption")
+        return None
+
+
+def _cipher() -> Fernet | None:
+    """The Fernet of JARVIS_ENCRYPTION_KEY, read on every call; None without a (valid) key."""
+    key = (os.getenv(ENCRYPTION_KEY_ENV) or "").strip()
+    return _fernet_for(key) if key else None
+
+
+def encrypts_writes() -> bool:
+    """True when new documents are stored encrypted: the VPS brain (remote mode) with a valid key."""
+    return desktop_mode() == DESKTOP_MODE_REMOTE and _cipher() is not None
+
+
+def seal_document(text: str) -> str:
+    """The document as stored: encrypted with the prefix on the VPS brain with a key, else the text
+    itself (the PC brain, as before)."""
+    cipher = _cipher() if desktop_mode() == DESKTOP_MODE_REMOTE else None
+    if cipher is None:
+        return text
+    return ENC_PREFIX + cipher.encrypt(text.encode("utf-8")).decode("ascii")
+
+
+def open_document(stored: Any) -> Any:
+    """The text of a stored document. Without the prefix it is plain text (memories from before C-124);
+    a token that does not decrypt is returned as stored, so no memory is ever dropped."""
+    if not isinstance(stored, str) or not stored.startswith(ENC_PREFIX):
+        return stored
+    cipher = _cipher()
+    if cipher is None:
+        _warn_once("no_key", f"Encrypted vector memories found but {ENCRYPTION_KEY_ENV} is not set")
+        return stored
+    try:
+        return cipher.decrypt(stored[len(ENC_PREFIX):].encode("ascii")).decode("utf-8")
+    except (InvalidToken, ValueError, UnicodeError):
+        _warn_once("bad_token", "A vector memory does not decrypt with the current key; kept as stored")
+        return stored
+
+
+class SentenceTransformerEmbeddingFunction(_ChromaSentenceTransformer):
+    """Chroma's sentence-transformers function that embeds the plain text of an encrypted document
+    (C-124), so recall still matches meaning. Same name and config as Chroma's, so a collection made
+    before keeps its embedding function."""
+
+    def __call__(self, input: Any) -> Any:  # pylint: disable=redefined-builtin
+        return super().__call__([open_document(text) for text in input])
 
 
 def _running_future() -> concurrent.futures.Future[bool]:
     """A future set running at once, so a waiter's cancellation never cancels what it stands for."""
     future: concurrent.futures.Future[bool] = concurrent.futures.Future()
     future.set_running_or_notify_cancel()
+    return future
+
+
+def _done_future(result: bool) -> concurrent.futures.Future[bool]:
+    """A future that already holds result."""
+    future = _running_future()
+    future.set_result(result)
     return future
 
 
@@ -144,6 +235,11 @@ class VectorMemory:
         self._model_lock = threading.Lock()
         # Writes made before the memory is ready, for the start-up thread: (the write, its outcome).
         self._queued_writes: list[tuple[dict[str, Any], concurrent.futures.Future[bool]]] = []
+        # C-124: the open chroma_db/.jarvis.lock (POSIX), held for the life of the process once taken;
+        # until when a refused lock is not tried again; why this process never opens Chroma.
+        self._lock_handle: Any = None
+        self._lock_refused_until = 0.0
+        self._disabled: str | None = None
 
     @property
     def warming_up(self) -> bool:
@@ -173,8 +269,36 @@ class VectorMemory:
         with self._init_lock:
             future = self._init_future
             if future is None or (future.done() and self.collection is None):
+                if self._disabled is not None or time.monotonic() < self._lock_refused_until:
+                    return _done_future(False)  # this process runs without vector recall (C-124)
                 future = self._init_future = self._start("jarvis-vector-init", self._initialize)
             return future
+
+    def disable(self, reason: str) -> None:
+        """C-124: this process never opens Chroma (a job that does not serve jarvis-hybrid): recalls
+        answer at once without memories and writes are skipped."""
+        with self._init_lock:
+            if self._disabled is None:
+                self._disabled = reason
+                logger.info("Vector memory off in this process: %s", reason)
+
+    def _acquire_db_lock(self) -> bool:
+        """
+        C-124: the exclusive, non-blocking fcntl lock on chroma_db/.jarvis.lock, kept for the life of
+        the process. True when this process holds it (always on Windows, where agent_ctl's runtime
+        lock already allows a single worker); False when another process holds it.
+        """
+        if fcntl is None or self._lock_handle is not None:
+            return True
+        os.makedirs(DB_PATH, exist_ok=True)
+        handle = open(os.path.join(DB_PATH, LOCK_FILE), "a+", encoding="utf-8")  # pylint: disable=consider-using-with
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            handle.close()
+            return False
+        self._lock_handle = handle
+        return True
 
     def warm_model(self) -> concurrent.futures.Future[bool]:
         """
@@ -215,6 +339,11 @@ class VectorMemory:
         client = collection = None
         try:
             logger.info("Initializing Vector Memory (background thread)...")
+            if not self._acquire_db_lock():
+                self._lock_refused_until = time.monotonic() + LOCK_RETRY_S
+                logger.warning("VECTOR_LOCK held by another process: this process runs without vector "
+                               "recall (next try in %.0f s)", LOCK_RETRY_S)
+                return
             client = chromadb.PersistentClient(path=DB_PATH)
             embedding_func = self._load_model()  # at once when warm_model() has loaded it
             collection = client.get_or_create_collection(
@@ -293,7 +422,10 @@ class VectorMemory:
         if not text or not text.strip():
             return False
 
-        memory = {"documents": [text], "metadatas": [metadata or {}], "ids": [str(uuid.uuid4())]}
+        # C-124: stored encrypted on the VPS brain with JARVIS_ENCRYPTION_KEY; the embedding function
+        # embeds the plain text (SentenceTransformerEmbeddingFunction above).
+        memory = {"documents": [seal_document(text)], "metadatas": [metadata or {}],
+                  "ids": [str(uuid.uuid4())]}
         queued = self._queue_write(memory)
         if queued is None:
             # collection.add is blocking, run in thread
@@ -327,7 +459,7 @@ class VectorMemory:
             extracted = []
             if results and results.get("documents") and results["documents"][0]:
                 for i in range(len(results["documents"][0])):
-                    doc = results["documents"][0][i]
+                    doc = open_document(results["documents"][0][i])
                     # Convert distance to a similarity score (0.0 to 1.0)
                     dist = results["distances"][0][i] if "distances" in results else 1.0
                     # Normalizing distance (L2 distance in ChromaDB)

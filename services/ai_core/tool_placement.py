@@ -33,6 +33,7 @@ import math
 import os
 import re
 import sys
+import tempfile
 import types
 import typing
 from collections.abc import Callable, Collection, Iterable, Mapping
@@ -853,6 +854,180 @@ def install_import_guard() -> None:
 def remove_import_guard() -> None:
     sys.meta_path[:] = [finder for finder in sys.meta_path
                         if not isinstance(finder, LaptopOnlyImportGuard)]
+
+
+# ---------------------------------------------------------------- VPS argument hooks (C-124)
+#
+# The VPS side of ARG_HOOKS, applied by the agent to a tool call that runs on the VPS (remote mode;
+# services/ai_core/remote_compat.install_arg_hooks wraps the registered tools). The PC brain never
+# applies them. Paths are checked after realpath, so a symlink, '..' or /proc/self cannot leave a root.
+
+VPS_APP_ROOT = "/app"
+# Where the agent writes a blob pulled from the laptop (K-73, a Windows-path attachment, C-119).
+VPS_BLOB_DIR = os.path.join(tempfile.gettempdir(), "jarvis_blobs")
+VPS_DATA_DIRS = ("conversations", "chroma_db", "data", "logs", "backups")
+VPS_SYSTEM_DENY = ("/proc", "/sys", "/etc")
+HOOK_DENIED = "ARG_PATH_DENIED"
+HOOK_OUTSIDE = "ARG_PATH_OUTSIDE_ROOTS"
+HOOK_BAD_VALUE = "ARG_INVALID"
+
+
+class ArgHookError(ValueError):
+    """A VPS argument hook refused a call. code is a K-12 error_code; the argument value is never in
+    the message."""
+
+    def __init__(self, code: str, hook: str, arg: str, message: str) -> None:
+        super().__init__(message)
+        self.code, self.hook, self.arg = code, hook, arg
+
+
+@dataclass(frozen=True)
+class HookRoots:
+    """Folders the VPS hooks use: attachment roots, media roots (zip_files), denied trees and the
+    folders a relative path is tried in."""
+
+    attachments: tuple[str, ...]
+    media: tuple[str, ...]
+    denied: tuple[str, ...]
+    relative_bases: tuple[str, ...]
+
+
+def vps_hook_roots(project_root: str, outputs_dir: str, shared_dir: str,
+                   blob_dir: str = VPS_BLOB_DIR) -> HookRoots:
+    """The roots for this deployment: /app/Jarvis_Outputs, /app/Jarvis_Shared and the blob dir (plus
+    the configured outputs and shared folders) for attachments; /proc, /sys, /etc and the agent data
+    folders under /app and under project_root are denied."""
+    app_outputs = os.path.join(VPS_APP_ROOT, "Jarvis_Outputs")
+    app_shared = os.path.join(VPS_APP_ROOT, "Jarvis_Shared")
+    media = tuple(dict.fromkeys((outputs_dir, shared_dir, app_outputs, app_shared)))
+    denied = list(VPS_SYSTEM_DENY)
+    for root in dict.fromkeys((VPS_APP_ROOT, project_root)):
+        denied += [os.path.join(root, name) for name in VPS_DATA_DIRS]
+        denied += [os.path.join(root, name) for name in (".env", ".env.agent", ".env.svc")]
+    return HookRoots(attachments=media + (blob_dir,), media=media, denied=tuple(dict.fromkeys(denied)),
+                     relative_bases=tuple(dict.fromkeys((project_root, outputs_dir))))
+
+
+def _real(path: str) -> str:
+    try:
+        return os.path.normcase(os.path.realpath(path))
+    except (OSError, ValueError):
+        return os.path.normcase(os.path.abspath(path))
+
+
+def _inside(path: str, root: str, strict: bool = False) -> bool:
+    root = _real(root)
+    try:
+        common = os.path.commonpath([path, root])
+    except ValueError:  # another drive
+        return False
+    return common == root and not (strict and path == root)
+
+
+def contained_path(value: Any, roots: tuple[str, ...], denied: tuple[str, ...],
+                   relative_bases: tuple[str, ...], *, hook: str, arg: str,
+                   strict: bool = False) -> str:
+    """
+    The real path of value when it lies inside one of roots (strictly inside with strict) and in no
+    denied tree; a relative value is tried against each relative base in turn. Raises ArgHookError
+    otherwise. The real path is what the tool then gets, so it cannot change between check and use.
+    """
+    if not isinstance(value, str) or not value.strip() or "\x00" in value:
+        raise ArgHookError(HOOK_BAD_VALUE, hook, arg, f"{arg}: not a usable path")
+    raw = os.path.expanduser(value.strip())
+    candidates = [raw] if os.path.isabs(raw) else [os.path.join(base, raw) for base in relative_bases]
+    reals = [_real(candidate) for candidate in candidates]
+    if any(_inside(real, root) for real in reals for root in denied):
+        raise ArgHookError(HOOK_DENIED, hook, arg, f"{arg}: this location is never used on the VPS")
+    inside = [candidate for candidate, real in zip(candidates, reals)
+              if any(_inside(real, root, strict) for root in roots)]
+    if not inside:
+        raise ArgHookError(HOOK_OUTSIDE, hook, arg,
+                           f"{arg}: only files inside Jarvis_Outputs or Jarvis_Shared can be used here")
+    existing = [candidate for candidate in inside if os.path.exists(candidate)]
+    return os.path.realpath((existing or inside)[0])
+
+
+def safe_basename(value: Any) -> str | None:
+    """The last path part of a model-supplied name ('\\' counts as a separator); None when nothing
+    usable is left ('', '.', '..'), so the tool's own default applies."""
+    if not isinstance(value, str):
+        return None
+    base = value.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1].strip().replace("\x00", "")
+    if ":" in base[:2]:  # a bare drive spelling such as 'C:name'
+        base = base.split(":", 1)[1]
+    return None if base in ("", ".", "..") else base
+
+
+def non_owner_recipients(value: Any, owners: Iterable[str]) -> list[str]:
+    """The addresses in a recipient field (comma lists and 'Name <addr>' allowed) that are not the
+    owner's; an empty or unparsable field counts as one non-owner recipient."""
+    from email.utils import getaddresses  # pylint: disable=import-outside-toplevel
+    known = {owner.strip().lower() for owner in owners if owner and owner.strip()}
+    addresses = [addr.strip().lower() for _, addr in getaddresses([str(value or "")]) if addr.strip()]
+    if not addresses:
+        return ["<none>"]
+    return [addr for addr in addresses if addr not in known]
+
+
+@dataclass(frozen=True)
+class HookOutcome:
+    """The arguments after the VPS hooks and the risk they raise the call to (None: unchanged)."""
+
+    arguments: dict[str, Any]
+    risk: str | None = None
+    applied: tuple[str, ...] = ()
+
+
+def vps_hooks(name: str, entry: ToolPlacement | None = None) -> tuple[tuple[str, str], ...]:
+    """The (hook, argument) pairs the agent applies to name on the VPS."""
+    entry = PLACEMENTS.get(name) if entry is None else entry
+    if entry is None:
+        return ()
+    pairs = (hook.partition(":") for hook in entry.arg_hooks)
+    return tuple((hook, arg) for hook, _, arg in pairs if ARG_HOOKS.get(hook) == VPS)
+
+
+def apply_vps_arg_hooks(name: str, arguments: Mapping[str, Any], *, roots: HookRoots,
+                        owners: Iterable[str], online: bool = False) -> HookOutcome:
+    """
+    Applies the VPS hooks of tool name to its bound arguments (C-124): vps_attachment and
+    vps_media_path replace the path by its checked real path (ArgHookError when it is outside the
+    roots or in a denied tree), safe_name reduces a name to its basename (or drops it for the tool's
+    default), owner_recipient raises the call to K-45 'high' for a recipient other than the owner.
+    A routed tool whose call goes to the laptop gets no VPS hook.
+    """
+    entry = PLACEMENTS.get(name)
+    hooks = vps_hooks(name, entry)
+    args = dict(arguments)
+    if not hooks or (entry is not None and isinstance(entry.place, Route)
+                     and entry.place(args, online) == LAPTOP):
+        return HookOutcome(args)
+    risk: str | None = None
+    applied: list[str] = []
+    owner_list = list(owners)
+    for hook, arg in hooks:
+        if arg not in args:
+            continue
+        value = args[arg]
+        if hook == "vps_attachment":
+            if isinstance(value, str) and value.strip():
+                args[arg] = contained_path(value, roots.attachments, roots.denied, roots.relative_bases,
+                                           hook=hook, arg=arg)
+        elif hook == "vps_media_path":
+            args[arg] = contained_path(value, roots.media, roots.denied, roots.relative_bases[1:]
+                                       or roots.relative_bases, hook=hook, arg=arg, strict=True)
+        elif hook == "safe_name":
+            base = safe_basename(value)
+            if base is None:
+                del args[arg]
+            else:
+                args[arg] = base
+        elif hook == "owner_recipient":
+            if non_owner_recipients(value, owner_list):
+                risk = "high"
+        applied.append(f"{hook}:{arg}")
+    return HookOutcome(args, risk, tuple(applied))
 
 
 class RemoteDiscovery:
