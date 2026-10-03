@@ -33,7 +33,7 @@ function readRootEnvValue(name) {
 function shouldStartVortex() {
   const backend = (process.env.JARVIS_ELECTRON_BACKEND || '').trim().toLowerCase();
   if (backend === 'local') return true;
-  if (backend === 'none' || backend === 'agent') return false;
+  if (backend === 'none' || backend === 'desktop' || backend === 'agent') return false;
   return readRootEnvValue('JARVIS_HYBRID') !== '1';
 }
 

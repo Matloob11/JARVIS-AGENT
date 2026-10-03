@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { toast } from '@/toast';
 import { normalizeTasks, toEpochMs } from '@/shared/contracts/events';
 import { useSocketEvent } from '@/shared/realtime/subscriptions';
+import { sendNotificationAck } from '@/features/notifications/notificationAck';
 
 export type TaskSource = 'task' | 'reminder';
 
@@ -130,6 +131,7 @@ export function useTasks(emitCommand: (type: string, payload?: unknown) => void)
     setUnreadCount(c => c + 1);
     showTaskToast(note);
     maybeBrowserNotification(note);
+    sendNotificationAck(note.id);
   }, []);
 
   const seedFromInit = useCallback((state: Record<string, unknown>) => {
@@ -177,6 +179,7 @@ export function useTasks(emitCommand: (type: string, payload?: unknown) => void)
 
   useSocketEvent('task_sync', (payload: unknown) => applyTaskSync(payload));
   useSocketEvent('task_notification', (payload: unknown) => applyNotification(payload));
+  useSocketEvent('reminder_due', (payload: unknown) => applyNotification(payload));
 
   return {
     tasks,

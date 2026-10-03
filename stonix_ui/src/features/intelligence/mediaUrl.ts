@@ -13,12 +13,24 @@ export function isLanOnlyMediaUrl(url: string): boolean {
   }
 }
 
+/** True for K-73 relay URLs (/vortex/media/file?area=&path=). */
+export function isRelayMediaFileUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url, typeof window !== 'undefined' ? window.location.origin : 'https://local');
+    const path = parsed.pathname.replace(/\/+$/, '');
+    return path.endsWith('/media/file');
+  } catch {
+    return /\/media\/file(?:\?|$)/.test(url);
+  }
+}
+
 /** Resolve relative bridge paths; leave absolute http(s) unchanged. */
 export function resolveMediaUrl(url: string): string {
   const trimmed = url.trim();
   if (!trimmed) return trimmed;
   if (/^https?:\/\//i.test(trimmed)) return trimmed;
   if (trimmed.startsWith('/')) return bridgeUrl(trimmed.replace(/^\/vortex(?=\/)/, ''));
+  if (trimmed.startsWith('media/file')) return bridgeUrl(`/${trimmed}`);
   return bridgeUrl(trimmed.startsWith('media/') ? `/${trimmed}` : `/media/${trimmed}`);
 }
 
@@ -37,6 +49,7 @@ export function extractMediaId(url: string): string | null {
 export async function fetchSignedMediaUrl(url: string): Promise<string> {
   const resolved = resolveMediaUrl(url);
   if (isLanOnlyMediaUrl(resolved)) return resolved;
+  if (isRelayMediaFileUrl(resolved)) return resolved;
 
   let response = await fetch(resolved, { credentials: 'include' });
   if (response.status !== 401 && response.status !== 403) {

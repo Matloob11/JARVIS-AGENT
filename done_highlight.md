@@ -1180,3 +1180,11 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `.venv_312\Scripts\python.exe -m pytest` (7 paths) → **59 passed** in ~15s
 - **Commit:** abhi nahi · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-67 · Laptop chip, Stop desktop, notification ack, media relay, Electron desktop mode · 2026-10-03 16:15 PKT
+- **Kya kiya:** Devices popover Laptop chip (unknown/Full/Stale/Offline/Locked/Panic/Read-only), Stop desktop (`ui_command desktop_stop`) Devices + Agents Laptop, reminder `notification_ack` (bell count rehta hai), DESKTOP_* toasts, `/vortex/media/file` relay URLs, Electron `JARVIS_ELECTRON_BACKEND=desktop` → `agent_ctl node start`.
+- **Files:** `stonix_ui/src/features/status/*`, `stonix_ui/src/features/controls/StopDesktopButton.tsx`, `stonix_ui/src/features/notifications/notificationAck.ts`, `stonix_ui/electron/main.cjs`, `stonix_ui/launcher.js`, `stonix_ui/tests/e2e/laptop.spec.ts`, `stonix_ui/tests/mock-bridge/`
+- **Verify:** `npx playwright test tests/e2e/laptop.spec.ts --project=chromium` → **13 passed**; full chromium e2e **216 passed / 1 flake** (`voice-settings` enroll, retry **passed**)
+- **Commit:** abhi nahi · **Deploy:** no (Claude frontend deploy before C-131)
+- **Doosre agent ke liye:** REQ-DEPLOY frontend so Stop desktop is live; X-79/X-92 can polish on this data
+

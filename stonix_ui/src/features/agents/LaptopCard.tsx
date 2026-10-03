@@ -5,6 +5,13 @@ import { Pill } from '@/shared/ui/Pill';
 import { personaAccent } from '@/shared/theme/commandTheme';
 import { toEpochMs } from '@/shared/contracts/events';
 import type { LocationData } from '@/features/command-center/hooks/useCommandCenter';
+import { useDesktopStatus } from '@/features/status/useDesktopStatus';
+import {
+  formatDesktopLastSeen,
+  formatDesktopMode,
+} from '@/features/status/desktopStatusStore';
+import { deriveLaptopChipPresentation } from '@/features/status/laptopChipPresentation';
+import { StopDesktopButton } from '@/features/controls/StopDesktopButton';
 
 function formatLocationUpdated(ts: unknown, nowMs: number): string {
   const ms = toEpochMs(ts);
@@ -31,12 +38,29 @@ export type LaptopCardProps = {
 
 export function LaptopCard({ persona, location }: LaptopCardProps) {
   const accent = personaAccent(persona);
+  const desktop = useDesktopStatus();
+  const chip = deriveLaptopChipPresentation(desktop);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
     const id = window.setInterval(() => setNowMs(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, []);
+
+  const stateLine = desktop.seen ? chip.long : 'unknown';
+  const modeLine = desktop.seen ? formatDesktopMode(desktop.mode) : '—';
+  const lockedLine = desktop.seen ? (desktop.locked ? 'Yes' : 'No') : '—';
+  const voiceLine = desktop.seen ? (desktop.voiceActive ? 'Yes' : 'No') : '—';
+  const busyLine = desktop.busyTool?.trim() ? desktop.busyTool : 'none';
+  const versionLine =
+    desktop.version?.trim() ||
+    (desktop.gitSha ? desktop.gitSha.slice(0, 8) : '') ||
+    'unknown';
+  const rttLine =
+    desktop.rttMsP50 != null && Number.isFinite(desktop.rttMsP50)
+      ? `${desktop.rttMsP50} ms`
+      : 'n/a';
+  const lastSeenLine = desktop.seen ? formatDesktopLastSeen(desktop.lastSeenMs, nowMs) : 'never';
 
   return (
     <div data-testid="laptop-card" data-anchor="laptop" className="agents-anchor">
@@ -47,33 +71,41 @@ export function LaptopCard({ persona, location }: LaptopCardProps) {
         boundaryName="Laptop (Desktop Node)"
         className="agents-card agents-card--laptop"
         action={
-          <Pill tone="off" status="off">
-            unknown
+          <Pill tone={chip.tone} status={chip.statusKind} statusLabel={chip.long}>
+            {chip.short}
           </Pill>
         }
       >
         <dl className="agents-kv">
           <dt>State</dt>
-          <dd>unknown</dd>
+          <dd>{stateLine}</dd>
           <dt>Control mode</dt>
-          <dd>—</dd>
+          <dd>{modeLine}</dd>
           <dt>Locked</dt>
-          <dd>—</dd>
+          <dd>{lockedLine}</dd>
           <dt>Voice active</dt>
-          <dd>—</dd>
+          <dd>{voiceLine}</dd>
           <dt>Busy tool</dt>
-          <dd>none</dd>
+          <dd>{busyLine}</dd>
           <dt>Version</dt>
-          <dd>unknown</dd>
+          <dd>{versionLine}</dd>
           <dt>Round trip</dt>
-          <dd>n/a</dd>
+          <dd>{rttLine}</dd>
           <dt>Last seen</dt>
-          <dd>never</dd>
+          <dd>{lastSeenLine}</dd>
         </dl>
 
-        <p className="agents-vid-note">
-          No report from the laptop yet. It counts once it reports.
-        </p>
+        {!desktop.seen ? (
+          <p className="agents-vid-note">
+            No report from the laptop yet. It counts once it reports.
+          </p>
+        ) : chip.shape === 'readonly' ? (
+          <p className="agents-vid-note">
+            Read-only until the laptop tray switches back to Full.
+          </p>
+        ) : null}
+
+        <StopDesktopButton desktop={desktop} testId="desktop-stop" className="mt-3" />
 
         <div className="location-card agents-laptop-loc" data-testid="device-location-card">
           <MapPin size={16} className={accent.text} />

@@ -1,0 +1,12 @@
+{
+  "online": true,
+  "state": "online",
+  "mode": "full",
+  "locked": false,
+  "voice_active": false,
+  "busy_tool": null,
+  "last_seen": 1727700100,
+  "rtt_ms_p50": 38,
+  "version": "mock-node-1.0",
+  "git_sha": "mocksha01"
+}

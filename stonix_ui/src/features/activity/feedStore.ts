@@ -27,6 +27,7 @@ let bridgeConnected = false;
 let lastAgentOnline: boolean | null = null;
 let lastAgentPaused = false;
 let lastDesktopState: string | null = null;
+let lastDesktopMode: string | null = null;
 let lastLaptopOnline: boolean | null = null;
 let lastPcHost: string | null = null;
 
@@ -175,7 +176,7 @@ function handleDesktopStatus(raw: unknown) {
       subtitle: '',
       href: '#/agents/laptop',
     });
-  } else if (row.mode === 'read' && lastDesktopState !== 'read') {
+  } else if (row.mode === 'read' && lastDesktopMode !== 'read') {
     pushActivityRow({
       kind: 'device',
       level: 'warn',
@@ -194,6 +195,7 @@ function handleDesktopStatus(raw: unknown) {
   }
 
   if (state) lastDesktopState = state;
+  if (row.mode != null) lastDesktopMode = String(row.mode);
   if (typeof row.online === 'boolean') lastLaptopOnline = row.online;
 }
 

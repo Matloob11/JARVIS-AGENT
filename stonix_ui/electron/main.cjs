@@ -44,8 +44,8 @@ function resolveBackendMode() {
     return 'none';
   }
   const explicit = (process.env.JARVIS_ELECTRON_BACKEND || '').trim().toLowerCase();
-  if (explicit === 'none' || explicit === 'local' || explicit === 'agent') {
-    return explicit;
+  if (explicit === 'none' || explicit === 'local' || explicit === 'desktop' || explicit === 'agent') {
+    return explicit === 'agent' ? 'desktop' : explicit;
   }
   const hybrid = readRootEnvValue('JARVIS_HYBRID');
   if (hybrid === '1') {
@@ -96,15 +96,15 @@ function startLocalBackend() {
   });
 }
 
-function startAgentWorker() {
+function startDesktopNode() {
   const rootDir = path.join(__dirname, '../../');
   const pythonCmd = resolvePythonCmd(rootDir);
   const agentCtl = path.join(rootDir, 'scripts/agent_ctl.py');
-  console.log('[Electron] Starting hybrid worker via agent_ctl...');
+  console.log('[Electron] Starting Desktop Node via agent_ctl node start...');
 
   backendProcess = spawn(
     pythonCmd,
-    [agentCtl, 'start', '--by', 'user', '--reason', 'electron'],
+    [agentCtl, 'node', 'start', '--by', 'user', '--reason', 'electron'],
     {
       cwd: rootDir,
       stdio: 'inherit',
@@ -113,11 +113,11 @@ function startAgentWorker() {
   );
 
   backendProcess.on('error', (err) => {
-    console.error(`[Electron] agent_ctl start failed: ${err}`);
+    console.error(`[Electron] agent_ctl node start failed: ${err}`);
   });
 
   backendProcess.on('exit', (code) => {
-    console.log(`[Electron] agent_ctl start finished with code ${code}`);
+    console.log(`[Electron] agent_ctl node start finished with code ${code}`);
     backendProcess = null;
     if (code !== 0 && !isQuitting && mainWindow) {
       mainWindow.webContents.send('backend-exit', code);
@@ -128,8 +128,8 @@ function startAgentWorker() {
 function startBackendForMode(mode) {
   if (mode === 'local') {
     startLocalBackend();
-  } else if (mode === 'agent') {
-    startAgentWorker();
+  } else if (mode === 'desktop') {
+    startDesktopNode();
   }
 }
 

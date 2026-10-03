@@ -46,6 +46,7 @@ chat-status-hint
 chip-agent
 chip-agent-menu
 chip-bridge
+chip-laptop
 chip-persona
 chip-persona-spinner
 chip-voice
@@ -62,6 +63,8 @@ composer-attach
 composer-mic
 device-location-card
 device-location-updated
+desktop-stop
+desktop-stop-menu
 devices-menu
 enable-audio
 flow-core-status

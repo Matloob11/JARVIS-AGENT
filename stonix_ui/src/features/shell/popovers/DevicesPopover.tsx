@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from 'react';
+import { type RefObject } from 'react';
 import { Wifi } from 'lucide-react';
 import { useAgentStatus } from '@/features/status/useAgentStatus';
 import { formatLastSeen, useAgentStatusStore } from '@/features/status/agentStatusStore';
@@ -6,7 +6,9 @@ import { BRIDGE_BASE } from '@/shared/config/runtime';
 import { useLiveKit } from '@/features/voice/LiveKitProvider';
 import type { CameraState } from '@/features/command-center/components/cameraState';
 import { cameraBadgeLabel } from '@/features/command-center/components/cameraState';
-import { pullVortexStatus, type VortexStatusSnapshot } from '../useVortexStatusPoll';
+import type { VortexStatusSnapshot } from '../useVortexStatusPoll';
+import { useDesktopStatus } from '@/features/status/useDesktopStatus';
+import { LaptopDevicesSection } from '@/features/status/LaptopDevicesSection';
 import { Popover } from './Popover';
 
 function agentShortLabel(agent: { online: boolean; paused: boolean; restarting: boolean }): string {
@@ -51,22 +53,16 @@ export function DevicesPopover({
   sheet,
   bridgeConnected,
   deviceCount,
-  vortex,
+  vortex: _vortex,
   onReconnect,
   cameraState,
 }: DevicesPopoverProps) {
   const voice = useLiveKit();
   const agent = useAgentStatus();
+  const desktop = useDesktopStatus();
   const { status } = useAgentStatusStore();
-  const [detail, setDetail] = useState<VortexStatusSnapshot | null>(null);
   const nowMs = Date.now();
 
-  useEffect(() => {
-    if (!open) return;
-    void pullVortexStatus().then(setDetail);
-  }, [open]);
-
-  const merged = detail ? { ...vortex, ...detail } : vortex;
   const basePath = BRIDGE_BASE.startsWith('http') ? '/vortex' : BRIDGE_BASE || '/vortex';
   const lastSeen = formatLastSeen(status.lastSeenMs, nowMs).replace(/^last seen /, '');
 
@@ -135,12 +131,7 @@ export function DevicesPopover({
         </div>
       </div>
 
-      {merged.laptopOnline != null ? (
-        <div className="neon-pop-sec">
-          <b>Laptop (Desktop Node)</b>
-          <p className="neon-pop-note">Laptop details arrive with a future update.</p>
-        </div>
-      ) : null}
+      <LaptopDevicesSection desktop={desktop} />
     </Popover>
   );
 }

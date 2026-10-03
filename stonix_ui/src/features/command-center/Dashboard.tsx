@@ -4,7 +4,10 @@ import OverviewPage from '@/features/overview/OverviewPage';
 import QuickStatsCard from '@/features/overview/QuickStatsCard';
 import RecentActivityCard from '@/features/overview/RecentActivityCard';
 import { useLaptopOnline } from '@/features/overview/useLaptopOnline';
+import { useDesktopStatus } from '@/features/status/useDesktopStatus';
 import { ensureActivityFeedSubscriptions } from '@/features/activity/feedStore';
+import { ensureDesktopStatusSubscriptions } from '@/features/status/desktopStatusStore';
+import { useDesktopAlertToasts } from '@/features/status/useDesktopAlertToasts';
 import {
   connectedDeviceCount,
   useVortexStatusPoll,
@@ -70,6 +73,7 @@ const DashboardInner = () => {
   const navMarks = useSidebarNavMarks(route);
   const vortex = useVortexStatusPoll(command.isConnected);
   const laptopOnline = useLaptopOnline();
+  const desktopStatus = useDesktopStatus();
   const agentListeningMuted = useAgentListeningMuted();
   const heroWaveCanvasRef = useRef<HTMLCanvasElement>(null);
   const phoneConfirm = useConfirmPhoneSheet(
@@ -85,14 +89,18 @@ const DashboardInner = () => {
     onAllow: command.respondConfirmAllow,
     onDeny: command.respondConfirmDeny,
   };
+  const laptopForCount = desktopStatus.seen ? desktopStatus.online : vortex.laptopOnline;
   const deviceCount = useMemo(
-    () => connectedDeviceCount(vortex.uiClients, agentStatus.online, vortex.laptopOnline),
-    [vortex.uiClients, vortex.laptopOnline, agentStatus.online],
+    () => connectedDeviceCount(vortex.uiClients, agentStatus.online, laptopForCount),
+    [vortex.uiClients, laptopForCount, agentStatus.online],
   );
 
   useEffect(() => {
     ensureActivityFeedSubscriptions();
+    ensureDesktopStatusSubscriptions();
   }, []);
+
+  useDesktopAlertToasts();
 
   const shellMobileTab: MobileTab =
     route.page === 'chat'

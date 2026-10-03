@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAgentStatus } from '@/features/status/useAgentStatus';
+import { useDesktopStatus } from '@/features/status/useDesktopStatus';
 import { useSocketEvent } from '@/shared/realtime/subscriptions';
 import type { AppRoute } from './router';
 
@@ -31,8 +32,8 @@ function ingestAlert(raw: Record<string, unknown>): NavAlert | null {
 
 export function useSidebarNavMarks(route: AppRoute) {
   const agent = useAgentStatus();
+  const desktop = useDesktopStatus();
   const [alerts, setAlerts] = useState<NavAlert[]>([]);
-  const [laptopPanic, setLaptopPanic] = useState(false);
 
   const pushAlert = (row: NavAlert) => {
     setAlerts(prev => {
@@ -55,18 +56,6 @@ export function useSidebarNavMarks(route: AppRoute) {
     if (row) pushAlert(row);
   });
 
-  useSocketEvent('init_state', (state: unknown) => {
-    if (!state || typeof state !== 'object') return;
-    const desktop = (state as { desktop_status?: { state?: string } }).desktop_status;
-    setLaptopPanic(desktop?.state === 'panic');
-  });
-
-  useSocketEvent('desktop_state', (data: unknown) => {
-    if (!data || typeof data !== 'object') return;
-    const panic = (data as { panic?: boolean }).panic === true;
-    setLaptopPanic(panic);
-  });
-
   useEffect(() => {
     if (route.page === 'activity' && (route.tab === 'timeline' || route.tab === undefined)) {
       setAlerts(prev => prev.map(a => ({ ...a, seen: true })));
@@ -77,6 +66,7 @@ export function useSidebarNavMarks(route: AppRoute) {
     const unseen = alerts.filter(a => !a.seen);
     const warnCount = unseen.length;
     const activityTone = unseen.some(a => a.severity === 'err') ? ('err' as const) : ('warn' as const);
+    const laptopPanic = desktop.seen && (desktop.state === 'panic' || desktop.panic);
     const agentsDot = !agent.online || laptopPanic;
     return {
       activityCount: warnCount,
@@ -84,5 +74,5 @@ export function useSidebarNavMarks(route: AppRoute) {
       showActivityBadge: warnCount > 0,
       showAgentsDot: agentsDot,
     };
-  }, [alerts, agent.online, laptopPanic]);
+  }, [alerts, agent.online, desktop.panic, desktop.seen, desktop.state]);
 }

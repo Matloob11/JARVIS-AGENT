@@ -32,6 +32,8 @@ const persistedMemories = [];
 /** @type {number} */
 let visionFrameCount = 0;
 let mockDesktopOnline = true;
+/** @type {Record<string, unknown> | null} */
+let mockDesktopStatus = null;
 const REFERENCE_FIXTURE_PATH = join(__dirname, '../visual/reference_fixture.json');
 
 /** @type {Map<string, { count: number, resetAt: number }>} */
@@ -477,6 +479,26 @@ function handleUiCommand(socket, cmd, cb) {
     case 'wake_word_toggle':
       ackUi(socket, cb, 'sent');
       break;
+    case 'desktop_stop': {
+      ackUi(socket, cb, 'sent');
+      mockDesktopOnline = true;
+      mockDesktopStatus = {
+        online: true,
+        state: 'online',
+        mode: 'read',
+        locked: false,
+        voice_active: false,
+        busy_tool: null,
+        last_seen: Math.floor(Date.now() / 1000),
+        rtt_ms_p50: 42,
+        version: 'mock-node',
+      };
+      emitToUi('desktop_status', mockDesktopStatus);
+      break;
+    }
+    case 'notification_ack':
+      ackUi(socket, cb, 'sent');
+      break;
     default:
       ackUi(socket, cb, 'rejected', 'unknown_type');
   }
@@ -512,6 +534,8 @@ async function handleMockControl(req, res, pathname, method) {
 
   if (pathname === '/__mock/reset-login-rate' && method === 'POST') {
     loginRate.clear();
+    mockDesktopOnline = true;
+    mockDesktopStatus = null;
     json(res, 200, { ok: true });
     return true;
   }
@@ -586,7 +610,7 @@ async function handleVortex(req, res, subPath, method, url) {
       bridge: 'mock',
       agent_online: agentOnline,
       ui_clients: Math.max(1, uiSockets.length),
-      desktop: { online: mockDesktopOnline },
+      desktop: mockDesktopStatus ?? { online: mockDesktopOnline },
     });
     return;
   }
@@ -664,6 +688,20 @@ async function handleVortex(req, res, subPath, method, url) {
     json(res, 200, {
       ...page,
       messages: [...(page.messages || []), ...persistedChatMessages],
+    });
+    return;
+  }
+
+  if (subPath === '/media/file' && method === 'GET') {
+    if (!hasSession(req)) {
+      json(res, 401, { error: 'unauthorized' });
+      return;
+    }
+    json(res, 200, {
+      ok: true,
+      area: url.searchParams.get('area'),
+      path: url.searchParams.get('path'),
+      relay: true,
     });
     return;
   }

@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { fetchSignedMediaUrl, isLanOnlyMediaUrl, resolveMediaUrl } from './mediaUrl';
+import {
+  fetchSignedMediaUrl,
+  isLanOnlyMediaUrl,
+  isRelayMediaFileUrl,
+  resolveMediaUrl,
+} from './mediaUrl';
 
 export function useBridgeMediaUrl(rawUrl: string | undefined, enabled: boolean): {
   displayUrl: string | undefined;
@@ -17,6 +22,7 @@ export function useBridgeMediaUrl(rawUrl: string | undefined, enabled: boolean):
 
   const resolved = rawUrl ? resolveMediaUrl(rawUrl) : undefined;
   const lanOnly = resolved ? isLanOnlyMediaUrl(resolved) : false;
+  const relayFile = resolved ? isRelayMediaFileUrl(resolved) : false;
 
   useEffect(() => {
     signedOnceRef.current = false;
@@ -25,6 +31,13 @@ export function useBridgeMediaUrl(rawUrl: string | undefined, enabled: boolean):
 
     if (!enabled || !rawUrl || lanOnly) {
       setDisplayUrl(undefined);
+      setLoading(false);
+      setError(null);
+      return undefined;
+    }
+
+    if (relayFile) {
+      setDisplayUrl(resolved);
       setLoading(false);
       setError(null);
       return undefined;
@@ -52,7 +65,7 @@ export function useBridgeMediaUrl(rawUrl: string | undefined, enabled: boolean):
     return () => {
       cancelled = true;
     };
-  }, [enabled, rawUrl, lanOnly]);
+  }, [enabled, rawUrl, lanOnly, relayFile, resolved]);
 
   const runFetch = (generation: number) => {
     if (!rawUrl || lanOnly) return;
