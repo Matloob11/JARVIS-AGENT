@@ -244,6 +244,55 @@ def _owner_only_text_input(callback: Callable[..., Any], session: Any) -> Callab
     return guarded
 
 
+_LINKABLE_KINDS = (rtc.ParticipantKind.PARTICIPANT_KIND_STANDARD, rtc.ParticipantKind.PARTICIPANT_KIND_SIP)
+
+
+def _may_link(participant: Any) -> bool:
+    """A participant the voice session may listen to: a person (standard or SIP), never an agent."""
+    return (getattr(participant, "kind", None) in _LINKABLE_KINDS
+            and isinstance(getattr(participant, "identity", None), str))
+
+
+def relink_room_input(session: Any, room: Any) -> str | None:
+    """
+    Points the session's room input at the owner again after a reconnect under a new identity. The bridge
+    mints a new 'owner-<8 hex>' identity for every LiveKit token, so a UI reconnect comes back as another
+    participant; livekit-agents' RoomIO keeps waiting for the identity it linked first and ignores the new one,
+    so the agent stopped hearing the owner (2026-10-03, after the C-116 bridge went live). When the linked
+    participant has left, the newest person still in the room is linked. Returns that identity, else None.
+    """
+    room_io = getattr(session, "_room_io", None)
+    if room_io is None or not callable(getattr(room_io, "set_participant", None)):
+        return None
+    remote = dict(getattr(room, "remote_participants", None) or {})
+    linked = _linked_identity(session)
+    if linked is not None and linked in remote:
+        return None
+    people = [participant for participant in remote.values() if _may_link(participant)]
+    if not people:
+        return None
+    identity = people[-1].identity  # remote_participants keeps join order: the newest one is last
+    room_io.set_participant(identity)
+    logger.info("ROOM INPUT linked to %s after a reconnect", _identity_kind(identity))
+    return identity
+
+
+def follow_owner_reconnects(session: Any, room: Any) -> None:
+    """After session.start: re-links the room input when the owner reconnects under a new identity, or when the
+    linked participant leaves while another person is still in the room (a second tab or device)."""
+
+    def _on_connected(participant: Any) -> None:
+        if _may_link(participant):
+            relink_room_input(session, room)
+
+    def _on_disconnected(_participant: Any) -> None:
+        relink_room_input(session, room)
+
+    room.on("participant_connected", _on_connected)
+    room.on("participant_disconnected", _on_disconnected)
+    relink_room_input(session, room)  # the linked person may have left before these handlers existed
+
+
 def harden_room_input(session: Any, room: Any, mode: str | None = None) -> list[str]:
     """
     C-124 step 3, after session.start: when rpc_owner_only(mode), wraps the lk.agent.* RPCs, the
@@ -764,6 +813,7 @@ async def entrypoint(ctx: agents.JobContext):
             await session.start(room=ctx.room, agent=assistant)
             logger.info("[AGENT] Session started successfully.")
             harden_room_input(session, ctx.room)  # C-124: owner-only RPC and text (VPS; PC opt-in)
+            follow_owner_reconnects(session, ctx.room)  # the owner comes back under a new identity
             assistant.attach_session(session)
 
             # --- Location Update Loop --- (local mode only, K-72)
