@@ -232,3 +232,38 @@ def is_sim_lookup_configured() -> bool:
 - `lookup_sim_data` in `services/info/jarvis_sim_lookup.py` currently accepts lengths {10,11,12,13}; 10/12 will now fail routing with `_PATTERN_HINT`. Optional: tighten `_is_valid_lookup_query` to {11,13}.
 
 When this lands, tell Claude in plan.md §11 so Claude flips `SIM_SOURCE` to `auto`, restarts the PC agent, and the owner tests a real number. For the VPS brain, these keys move to `.env.agent` (C-127), never the bridge.
+
+## UPDATE (tested live 2026-10-03): the real response is a single `raw_text` field
+
+SIM is already live (`SIM_SOURCE=auto`, agent restarted). A real lookup returns each record as ONE field, not the structured keys the draft assumed:
+
+`data[0] = {"source": "SIM / CNIC Records", "fields": {"raw_text": "Mobile Name CNIC Address <11-digit-mobile> <NAME> <13-digit-CNIC> <ADDRESS>"}}`
+
+— a header (`Mobile Name CNIC Address`) then the values: an 11-digit mobile starting 0, the name, a 13-digit CNIC, the address. So the current `_record_from_fields` (which looks for `full_name`/`cnic`/`phone` keys) returns blanks and only keeps the whole thing in `details.raw_text`, unmasked. Parse `raw_text` when the structured keys are absent, and mask the digits in the kept copy:
+
+```python
+import re
+
+_PHONE_RE = re.compile(r"\b(0\d{10})\b")
+_CNIC_RE = re.compile(r"\b(\d{13})\b")
+
+def _parse_raw_text(text: str) -> dict[str, str]:
+    """pak-sim 'Mobile Name CNIC Address <mobile> <name> <cnic> <address>' -> structured fields."""
+    phone = _PHONE_RE.search(text)
+    cnic = _CNIC_RE.search(text, phone.end() if phone else 0)
+    out: dict[str, str] = {}
+    if phone:
+        out["phone"] = phone.group(1)
+    if cnic:
+        out["cnic"] = cnic.group(1)
+        if phone:
+            name = text[phone.end():cnic.start()].strip()
+            if name:
+                out["full_name"] = name
+        address = text[cnic.end():].strip()
+        if address:
+            out["address"] = address
+    return out
+```
+
+In `_record_from_fields`, when `fields` has no `full_name`/`name`/`cnic`/`phone` but has `raw_text`, do `fields = {**_parse_raw_text(fields["raw_text"]), "raw_text": fields["raw_text"]}` first, then build the record as before. Also mask every digit run in the kept `raw_text` (so `details.raw_text` is not a plaintext CNIC/phone). Add a test with a fake-digit `raw_text` sample asserting `full_name`, `cnic_masked` (last 4), `phone_masked`, and `address` populate, and that `details.raw_text` has no bare CNIC/phone. Never put a real number/CNIC or the key in a test or a log.
