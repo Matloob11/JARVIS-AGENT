@@ -33,6 +33,9 @@ Presence and desktop_status (K-74 v5):
   suspend, shutdown or logoff until a later verified node message or the next hello;
 - desktop_status goes to the UI sockets on '/' (event 'desktop_status' and init_state) and to the agent peers as
   'status' hints, on every change;
+- the node gets desktop_status in its welcome and, right after it, in a 'status' hint, and again in a 'status' hint
+  whenever voice_active, brain or active_job change (a voice turn at once, the end of the voice minute within the
+  1 s tick), so its K-73 large-file rule never runs on a stale welcome snapshot;
 - the latest vitals_pc, desktop_state and power values are kept in the C-13 kv, overwritten in place;
 - an alert notice becomes a system_alert and an audit row (the only notice that writes one).
 
@@ -416,6 +419,8 @@ class DesktopLink:  # pylint: disable=too-many-public-methods  # the relay plus 
         self._state = "offline"
         self._since = wall()
         self._sent_key: Any = None
+        self._welcomed: tuple[str, str | None] | None = None  # (node sid, sess) whose welcome went out
+        self._node_key: Any = None  # what the node got in its last desktop_status push (_push_node_status)
         self._voice_mono = -math.inf
         self._vitals: dict[str, Any] | None = None
         self._vitals_mono = -math.inf
@@ -678,7 +683,7 @@ class DesktopLink:  # pylint: disable=too-many-public-methods  # the relay plus 
                               f"A different laptop node connected: {node_id} (before: {previous})", ip=node.ip)
         if previous != node_id:
             await self._kv_set(KV_NODE_ID, node_id)
-        await self._send_hint(node, "welcome", self._hint_body())
+        await self._welcome_node(node)
         await self._apply_stop(node)
         if self.active_job:
             await self._send_hint(node, "control", {"kind": "active_job", "job_id": self.active_job})
@@ -976,8 +981,9 @@ class DesktopLink:  # pylint: disable=too-many-public-methods  # the relay plus 
 
     async def _status_changed(self, *, force: bool = False) -> None:
         """Sends desktop_status to the UI sockets and a status hint to every agent peer when it changed (last_seen
-        alone does not count)."""
+        alone does not count), and a status hint to the node when what it acts on changed (_push_node_status)."""
         status = self.status()
+        await self._push_node_status(status)
         key = ({name: value for name, value in status.items() if name != "last_seen"}, self.link_on,
                self.active_job)
         if key == self._sent_key and not force:
@@ -987,6 +993,30 @@ class DesktopLink:  # pylint: disable=too-many-public-methods  # the relay plus 
         body = self._hint_body(status)
         for agent in self._agents():
             await self._send_hint(agent, "status", body)
+
+    async def _welcome_node(self, node: LinkPeer) -> None:
+        """The welcome of a node hello (connect or in-band), then at once a status hint with the same
+        desktop_status: from then on the node trusts desktop_status for this link session, since every change of
+        what it acts on is pushed to it (_push_node_status), instead of a welcome snapshot that goes stale."""
+        await self._send_hint(node, "welcome", self._hint_body())
+        self._welcomed = (node.sid, self.node_sess)
+        await self._push_node_status(force=True)
+
+    async def _push_node_status(self, status: Mapping[str, Any] | None = None, *, force: bool = False) -> None:
+        """K-70 Bridge hints / K-74: a status hint (unsigned, as every bridge hint: the bridge holds no link key;
+        built and checked by dp.build_bridge_hint) with desktop_status to the node whenever voice_active, brain or
+        active_job changed, so the node keeps the last value for its session (the K-73 large-file rule reads
+        voice_active). Only to a node whose welcome went out on its current socket and session, and only while the
+        link is on; a new socket or session always gets the value again."""
+        node = self.peers.get(self.node_sid) if self.node_sid else None
+        if node is None or not self.link_on or self._welcomed != (node.sid, self.node_sess):
+            return
+        current = dict(status) if status is not None else self.status()
+        key = (node.sid, self.node_sess, current.get("voice_active"), current.get("brain"), self.active_job)
+        if key == self._node_key and not force:
+            return
+        self._node_key = key
+        await self._send_hint(node, "status", self._hint_body(current))
 
     # ------------------------------------------------------------ controls (C-13 kv)
 
@@ -1008,6 +1038,7 @@ class DesktopLink:  # pylint: disable=too-many-public-methods  # the relay plus 
         self._sent_key = ({name: value for name, value in status.items() if name != "last_seen"}, self.link_on,
                           self.active_job)
         await self._emit_ui("desktop_status", status)
+        await self._push_node_status(status)
 
     async def _apply_stop(self, node: LinkPeer) -> None:
         """At a node hello: a pending stop is cleared when the hello reports mode read or off, else sent again."""
@@ -1066,8 +1097,18 @@ class DesktopLink:  # pylint: disable=too-many-public-methods  # the relay plus 
             await self._kv_set(KV_LAST_ACTIVITY_TS, round(self.last_activity_ts, 3))
 
     def note_voice_activity(self) -> None:
-        """A voice turn or speech (bridge notify events): desktop_status.voice_active for a minute."""
+        """A voice turn or speech (bridge notify events): desktop_status.voice_active for a minute. When voice was
+        idle, the change goes out at once (UI, agent peers and the node) instead of on the next 1 s tick; the end
+        of the minute is the tick's."""
+        was_active = self.voice_active()
         self._voice_mono = self._mono()
+        if was_active or not self.active:
+            return
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:  # no event loop in this thread: the next tick sends it
+            return
+        self._spawn(self._status_changed())
 
     def latest_pc_vitals(self) -> dict[str, Any] | None:
         """The node's last vitals_pc as sent to the UI (init_state.vitals_pc), or None."""

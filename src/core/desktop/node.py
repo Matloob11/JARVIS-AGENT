@@ -115,6 +115,7 @@ WATCHDOG_INTERVAL_S = 1.0
 WATCHDOG_THRESHOLD_MS = 5000.0
 RESULT_BODY_MAX = 180_000  # plaintext bytes; sealed and base64'd it stays under the 256 KiB result cap
 OPTIONAL_PLUGINS = ("policy", "capabilities", "sensors", "mirror", "backup_pull")
+BRIDGE_HINT_KEYS = ("brain", "active_job", "desktop_status")  # what welcome and status hints may update
 MODES = ("off", "read", "full")
 _MODE_RANK = {"off": 0, "read": 1, "full": 2}
 _HEX64 = re.compile(r"[0-9a-f]{64}")
@@ -208,6 +209,24 @@ class PendingCall:
     @property
     def actuation(self) -> bool:
         return self.cls in ACTUATION_CLASSES
+
+
+@dataclass(frozen=True)
+class CallContext:
+    """What a pc.* operation (C-122) may know about its own accepted call while it runs: the agent peer whose
+    session key seals its blobs, its origin and room, its class and the ConfirmFlow approval reference
+    (confirm_id, channel, risk) it was accepted with. Never the arguments; never logged."""
+
+    call_id: str
+    peer: str
+    origin: str
+    room: str
+    cls: str
+    risk: str
+    approval: Mapping[str, Any] | None = None
+
+
+_CALL_CONTEXT_MAX = 512
 
 
 class Policy(Protocol):
@@ -431,6 +450,7 @@ class NodeRuntime:
         self.plugins: dict[str, str] = {}
         self.active_job: Mapping[str, Any] | None = None
         self.bridge_hint: dict[str, Any] = {}
+        self._status_seen: tuple[float, str | None, bool] | None = None  # (mono, link sess, pushed) of desktop_status
         self.exit_code = EXIT_OK
         self._watchdog_factory = watchdog_factory
         self._watchdog: Any = None
@@ -441,6 +461,7 @@ class NodeRuntime:
         self._running: dict[str, _Running] = {}
         self._pending: dict[str, str] = {}  # call_id being judged -> its peer
         self._early_cancel: dict[str, tuple[str, float]] = {}
+        self._call_context: dict[str, CallContext] = {}  # accepted calls on the executor (C-122 call_context)
         self.power_listener: Any = None  # link.PowerListener in the node process (C-121 adds session events)
         self._dead_man: asyncio.TimerHandle | None = None
         self._tasks: list[asyncio.Task[Any]] = []
@@ -483,6 +504,15 @@ class NodeRuntime:
     def raise_alert(self, code: str, **fields: Any) -> None:
         """A K-74 alert notice (link.raise_alert); thread-safe."""
         self.link.raise_alert(code, **fields)
+
+    def call_context(self, call_id: str | None = None) -> CallContext | None:
+        """The context of an accepted call that is on the executor (by default the call whose tool code runs in
+        this task or thread, executor.current_call_id()); None for any other. Thread-safe read (C-122)."""
+        if call_id is None:
+            from src.core.desktop.executor import current_call_id  # pylint: disable=import-outside-toplevel
+
+            call_id = current_call_id()
+        return self._call_context.get(call_id) if call_id else None
 
     def install_plugins(self, names: Sequence[str] = OPTIONAL_PLUGINS, *,
                         import_module: Callable[[str], Any] = importlib.import_module) -> dict[str, str]:
@@ -720,6 +750,12 @@ class NodeRuntime:
             await self._answer_started(await self.wal.aget(ref.call_id), ref, peer.ident)
             return
         self.gate.done(call.seq)
+        approval = pending.approval or {}
+        self._call_context[ref.call_id] = CallContext(
+            call_id=ref.call_id, peer=peer.ident, origin=ref.origin, room=ref.room, cls=pending.cls, risk=pending.risk,
+            approval={key: approval[key] for key in ("confirm_id", "channel", "risk") if key in approval} or None)
+        while len(self._call_context) > _CALL_CONTEXT_MAX:  # a call whose task died before its pop below
+            self._call_context.pop(next(iter(self._call_context)))
         # A cancel or stop that came while the WAL recorded the acceptance: the call never starts. It is taken
         # before the start, because the tool loop may run a quick call to its end before a later cancel lands.
         early = self._take_early_cancel(ref.call_id)
@@ -740,6 +776,7 @@ class NodeRuntime:
         if outcome is not None:
             await self._finish(run, outcome)  # a no-op when a cancel already answered for it
         self.executor.forget(ref.call_id)
+        self._call_context.pop(ref.call_id, None)
 
     def _on_running(self, handle: CallHandle) -> None:
         """Tool loop, right before the tool runs: the WAL says 'running' first (write-ahead), then the policy
@@ -938,6 +975,17 @@ class NodeRuntime:
             await _maybe_await(listener(kind, body, source))
         self._status_dirty.set()
 
+    def trusted_desktop_status(self, fresh_s: float) -> Mapping[str, Any] | None:
+        """The bridge's desktop_status (K-74) when it can still be trusted, else None (unknown): it must have come
+        on the link session that is connected now, and either the bridge pushes it in status hints on this session
+        (each change arrives) or it is at most fresh_s old (a welcome is a snapshot only)."""
+        status, seen = self.bridge_hint.get("desktop_status"), self._status_seen
+        if not isinstance(status, Mapping) or seen is None or not self.link.connected or seen[1] != self.link.sess:
+            return None
+        if seen[2] or self._mono() - seen[0] <= fresh_s:
+            return status
+        return None
+
     async def handle_sync_request(self, peer: AgentPeer) -> None:
         await self._resend_outbox(peer)
 
@@ -946,8 +994,17 @@ class NodeRuntime:
         self._status_dirty.set()
 
     async def handle_hint(self, hint: dp.BridgeHint) -> None:
-        self.bridge_hint = {key: hint.body[key] for key in ("brain", "active_job", "desktop_status")
-                            if key in hint.body}
+        """Welcome and status hints: brain, active_job and desktop_status are merged by key, so a status hint that
+        carries only an alert keeps the values before it. When desktop_status was received is kept with the link
+        session it came on, and whether the bridge pushes it in status hints on this session (K-70, K-74)."""
+        body = hint.body
+        for key in BRIDGE_HINT_KEYS:
+            if key in body:
+                self.bridge_hint[key] = body[key]
+        if isinstance(body.get("desktop_status"), Mapping):
+            sess, prior = self.link.sess, self._status_seen
+            pushed = hint.typ == "status" or (prior is not None and prior[1] == sess and prior[2])
+            self._status_seen = (self._mono(), sess, pushed)
         for listener in list(self._hint_listeners):
             await _maybe_await(listener(hint))
 

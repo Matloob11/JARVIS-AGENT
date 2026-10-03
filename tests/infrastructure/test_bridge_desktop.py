@@ -819,6 +819,82 @@ async def test_a_node_message_waits_for_its_hello_work(relay):
     assert relay.link.status()["state"] == "locked" and relay.link.mode == "read"
 
 
+def node_status_hints(ns: Any, sid: str = "sid-node") -> list[dp.BridgeHint]:
+    """The status hints a node socket got that carry desktop_status (alert hints carry none)."""
+    return [hint for hint in ns.sio.hints(sid, "status") if "desktop_status" in hint.body]
+
+
+async def test_the_node_gets_desktop_status_after_its_welcome_and_on_every_voice_change(relay):
+    """K-73 large-file rule: the node keeps the last pushed voice_active for its session, so the bridge pushes it
+    right after the welcome and on every change (a voice turn at once, its end within the 1 s tick); changes the
+    node does not act on (state, busy_tool, rtt) are not pushed to it."""
+    node, agent = relay.node(), relay.agent()
+    await connect_agent(relay, agent)
+    await connect_node(relay, node)
+    assert [hint.typ for hint in relay.sio.hints("sid-node")][:2] == ["welcome", "status"]
+    [first] = node_status_hints(relay)
+    assert first.body["desktop_status"]["voice_active"] is False and first.to == node.ident
+    raw = [json.loads(data) for event, data, to, _ns in relay.sio.sent
+           if event == bridge_desktop.EVENT_HINT and to == "sid-node"]
+    assert all(item["from"] == "bridge" and "sig" not in item for item in raw)  # K-70: a hint, never signed
+    await handshake(relay, node, agent)
+    relay.sio.clear()
+
+    relay.link.note_voice_activity()  # a voice turn reaches the node at once, without waiting for a tick
+    await relay.link.drain()
+    assert [h.body["desktop_status"]["voice_active"] for h in node_status_hints(relay)] == [True]
+    relay.link.note_voice_activity()  # still active: nothing new
+    await relay.link.drain()
+    await relay.link.tick()
+    await relay.link.on_msg("sid-node", node.notice("desktop_state", mode="full", locked=True, panic=False))
+    assert len(node_status_hints(relay)) == 1  # the lock reached the agent peers and the UI, not the node
+    assert relay.sio.hints("sid-agent", "status")[-1].body["desktop_status"]["state"] == "locked"
+
+    relay.clock.now += bridge_desktop.VOICE_ACTIVE_S + 1
+    await relay.link.on_msg("sid-node", node.notice("desktop_state", mode="full", locked=False, panic=False,
+                                                    now=relay.clock.now))
+    await relay.link.tick()
+    assert [h.body["desktop_status"]["voice_active"] for h in node_status_hints(relay)] == [True, False]
+    for _ in range(3):
+        await relay.link.tick()
+    assert len(node_status_hints(relay)) == 2
+
+    await relay.link.set_active_job("job-7")  # what the node merges from status hints is pushed as well
+    assert node_status_hints(relay)[-1].body["active_job"] == "job-7"
+
+
+async def test_every_node_socket_and_session_gets_the_status_again(relay):
+    node = relay.node()
+    await connect_node(relay, node)
+    assert len(node_status_hints(relay)) == 1
+    await relay.link.on_msg("sid-node", node.hello())  # an in-band hello of the same session: welcome again
+    assert [hint.typ for hint in relay.sio.hints("sid-node")][-2:] == ["welcome", "status"]
+    node.reconnect()
+    await connect_node(relay, node, sid="sid-node2")
+    # the replaced-connection alert hint comes first; desktop_status only once the welcome went out
+    kinds = [hint.typ if "alert" not in hint.body else "alert" for hint in relay.sio.hints("sid-node2")]
+    assert kinds[:3] == ["alert", "welcome", "status"]
+    assert len(node_status_hints(relay, "sid-node2")) == 1
+    relay.sio.clear()
+    await relay.link.set_link(False)  # off: the node is disconnected and gets no status push
+    relay.link.note_voice_activity()
+    await relay.link.drain()
+    await relay.link.tick()
+    assert node_status_hints(relay, "sid-node2") == []
+
+
+async def test_no_status_push_reaches_a_node_before_its_welcome(relay):
+    node = relay.node()
+    assert await relay.link.on_connect("sid-node", PUBLIC, {"hello": node.hello()}) is True
+    await relay.link._push_node_status()  # the post-connect work has not sent the welcome yet
+    relay.link.note_voice_activity()
+    await relay.link.tick()
+    await relay.link.drain()
+    typs = [hint.typ for hint in relay.sio.hints("sid-node")]
+    assert typs[0] == "welcome" and typs[1] == "status"
+    assert node_status_hints(relay)[-1].body["desktop_status"]["voice_active"] is True
+
+
 # ---------------------------------------------------------------- controls: stop, link switch, active job
 
 
