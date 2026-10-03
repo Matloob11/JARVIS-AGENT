@@ -1351,3 +1351,38 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 | F113 | No UI; untouched | — | spec/mapping |
 
 - **Git SHA (X-95):** b5cf0be
+
+### ✅ [claude] C-138 · Test hygiene: live logs, real .env aur production mode tests se door · 2026-10-03 22:12 PKT
+- **Kya kiya:** Tests ab hamesha development mode me aur har run ke fake secrets ke saath chalte hain; asli .env ke secrets aur mode switches is process aur child processes dono me filter hote hain; fixed-name logs LOG_DIR se temp folder me (default wahi). Bridge ki test files akele bhi pass.
+- **Files:** `tests/conftest.py`, `tests/core/test_agent_runner.py`, exhaustive agent tests, `services/utils/jarvis_logger.py`, `tests/unit/test_vector_memory_offloop.py`
+- **Verify:** poora suite 3378 passed, 0 failed (subah 56 failed thay)
+- **Commit:** `88e9442` · **Deploy:** nahi (sirf tests)
+- **Doosre agent ke liye:** —
+
+### 🟡 [claude] C-19 · Owner login backend: password + TOTP + recovery codes + session cookie · 2026-10-03 22:12 PKT
+- **Kya kiya:** bcrypt password, TOTP (Urdu/Arabic digits bhi), ek dafa wale recovery codes, JWT session cookie (HttpOnly, Secure, Strict), brute-force limits, enrolment CLI; purane raaste (UI token, agent token, PC-signed routes) C-22 tak waise hi.
+- **Files:** `src/core/bridge_auth.py`, `src/core/ui_bridge.py`, `services/utils/jarvis_config.py`, `services/utils/jarvis_security.py`, requirements, `deploy/windows-local/test_chat_once.py`, `tests/infrastructure/test_bridge_auth.py`
+- **Verify:** 3 adversarial rounds; auth tests 174 + full suite green
+- **Commit:** `00dfe81` · **Deploy:** nahi (VPS deploy + enrollment C-20/C-21 ke saath)
+- **Doosre agent ke liye:** naya UI ka login isi backend par chalega (K-36 v8).
+
+### 🟡 [claude] C-122 · Node capabilities, sensors, file mirror, encrypted backup pull · 2026-10-03 22:12 PKT
+- **Kya kiya:** pc.* operations, active-mode sensors (redacted clipboard, window, vitals, location, power), VPS files ka mirror (name validation, Mark-of-the-Web, 20 MB se bari files voice ke dauran nahi), backup pull; bridge ab node ko har voice_active badlav par status bhejta hai; `agent_ctl backup pull`.
+- **Files:** `src/core/desktop/capabilities.py`, `sensors.py`, `mirror.py`, `backup_pull.py`, `node.py`, `src/core/bridge_desktop.py`, tests
+- **Verify:** 3 rounds; 535 desktop/bridge tests pass
+- **Commit:** `a986dda`, `0701e4f` · **Deploy:** nahi (node VPS brain ke saath)
+- **Doosre agent ke liye:** —
+
+### ✅ [claude] fix · Ops: link recovery, watchdog logs, ensure_room result, stale-lock retry, exhaustive tests · 2026-10-03 22:12 PKT
+- **Kya kiya:** Internet outage ke baad recovery ab zombie job se nahi rukti (room me agent na ho to fresh worker); watchdog ki lines worker log me; ensure_room har raaste par ek [ROOM] Result line; Windows par stale lock hatate waqt sharing error par retry; exhaustive keyboard/notepad tests X-65 ke mutabiq.
+- **Files:** `src/core/livekit_link.py`, `src/core/room_watchdog.py`, `scripts/agent_ctl.py`, `deploy/windows-local/ensure_room.py`, tests
+- **Verify:** 138 link/watchdog tests; racing test 8/8; full suite green
+- **Commit:** `4276610`, `9c2629e`, `0701e4f`, `c89b536` · **Deploy:** PC: agle restart par
+- **Doosre agent ke liye:** —
+
+### ✅ [claude] contracts v8 · K-29/K-36/K-37/K-53/K-56/K-70/K-73/K-74/K-76 aaj ke code se · 2026-10-03 22:12 PKT
+- **Kya kiya:** C-19, C-122, ops follow-ups aur link recovery ka asal behaviour contracts me; plan section 4 sync.
+- **Files:** `docs/CONTRACTS.md`, `plan.md`
+- **Verify:** adversarial verify (1 refix) 0 blocker/major
+- **Commit:** is commit me · **Deploy:** nahi
+- **Doosre agent ke liye:** contracts v8 padh lo.
