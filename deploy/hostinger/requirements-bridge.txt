@@ -1,5 +1,6 @@
 # Slim deps for UI bridge only (Hostinger VPS)
 fastapi==0.133.0
+starlette==1.7.0  # C-117: the blob cap accounting relies on StreamingResponse; the version the tests ran on
 uvicorn==0.41.0
 python-socketio==5.11.0
 python-engineio==4.12.1

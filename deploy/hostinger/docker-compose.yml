@@ -61,15 +61,20 @@ services:
       # Bridge SQLite store (C-STATE-1); backup_vps.sh copies it online. The Desktop Link seen store is
       # desktop_seen.db in the same folder (K-70 check 7).
       BRIDGE_DB_PATH: /app/data/bridge.db
+      # C-117 (K-73): the media relay reads these two mounts; the backup pull reads the snapshots mount below
+      JARVIS_OUTPUTS_DIR: /app/Jarvis_Outputs
+      JARVIS_SNAPSHOTS_DIR: /app/snapshots
       # deploy.sh and rollback.sh export it; the public /health reports it (K-43)
       GIT_SHA: ${GIT_SHA:-unknown}
     depends_on:
       - livekit
     volumes:
       - jarvis_logs:/app/logs
-      # read-only (C-116, K-75): the bridge only serves these folders (C-117 media relay)
+      # read-only (C-116, K-75): the bridge only serves these folders (C-117 media relay, K-73)
       - jarvis_outputs:/app/Jarvis_Outputs:ro
       - jarvis_shared:/app/Jarvis_Shared:ro
+      # C-117 (K-73): the newest encrypted snapshot is streamed from here, read-only, for the backup pull
+      - jarvis_agent_snapshots:/app/snapshots:ro
       - jarvis_bridge_data:/app/data
     restart: unless-stopped
     logging:
@@ -122,5 +127,8 @@ volumes:
     name: jarvis_outputs
   jarvis_shared:
     name: jarvis_shared
+  # C-117 (K-73): the agent service (VPS brain) writes the encrypted snapshots; the bridge mounts them read-only
+  jarvis_agent_snapshots:
+    name: jarvis_agent_snapshots
   jarvis_bridge_data:
     name: jarvis_bridge_data

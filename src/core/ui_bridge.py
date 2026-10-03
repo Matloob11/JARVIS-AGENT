@@ -44,14 +44,14 @@ import socketio
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from services.utils.jarvis_adaptive import adaptive_engine
 from services.utils.jarvis_config import ROLE_BRIDGE, active_brain, config, runtime_role
 from services.utils.jarvis_health import health_monitor
 from services.utils.jarvis_logger import setup_logger
 from services.utils.jarvis_telemetry import telemetry
-from src.core import bridge_desktop, bridge_security
+from src.core import bridge_desktop, bridge_media, bridge_security
 from src.core.bridge_security import NOTIFY_MAX_BYTES, NonceCache, NotifyAuthError, TokenBucket, same_secret
 from src.core.bridge_store import (
     EVENT_LOG,
@@ -279,6 +279,16 @@ store: BridgeStore = BridgeStore(bridge_db_path())
 # store and emit_ui up on every call, so a replaced store is used.
 desktop: bridge_desktop.DesktopLink = bridge_desktop.DesktopLink(
     sio=sio, store=lambda: store, emit_ui=lambda event, data: emit_ui(event, data))
+
+# The single media path (C-117, K-73 / DASH-C21): the index and files from the read-only jarvis_shared and
+# jarvis_outputs mounts, the in-RAM blob inbox, and the newest backup snapshot from jarvis_agent_snapshots. The
+# roots are read on every request, so a reconfigured mount is picked up; JARVIS_SNAPSHOTS_DIR is set in compose.
+_SNAPSHOTS_DIR = (os.getenv("JARVIS_SNAPSHOTS_DIR") or "/app/snapshots").strip() or "/app/snapshots"
+media_relay: bridge_media.MediaRelay = bridge_media.MediaRelay(
+    shared_dir=lambda: config.shared_dir, outputs_dir=lambda: config.outputs_dir)
+blob_store: bridge_media.BlobStore = bridge_media.BlobStore()
+backup_relay: bridge_media.BackupRelay = bridge_media.BackupRelay(snapshots_dir=lambda: _SNAPSHOTS_DIR)
+_BLOB_ID = re.compile(r"[0-9a-f]{32}")
 
 # Persisted UI state (store kv table) and the value each key has until the agent reports one.
 PERSISTED_DEFAULTS: dict[str, Any] = {
@@ -625,6 +635,105 @@ async def get_status(request: Request) -> Any:
         "brain": active_brain(),
         "desktop": desktop.status(),
     }
+
+
+async def _media_auth(request: Request) -> bool:
+    """Auth for the media path (K-73): the owner session (the legacy token until C-22) for the UI, or K-70
+    PC-signed HTTP for the laptop node. A GET is bodiless, so the PC signature covers method, path and query."""
+    return _legacy_header_ok(request) or await _pc_signed(request)
+
+
+@app.get("/media/index")
+async def media_index(request: Request, area: str, cursor: float | None = None) -> Any:
+    """GET /media/index?area=shared|outputs&cursor=<ts> (K-73/DASH-C21): the allowed, non-excluded regular files
+    of the area, each with seq, relpath, size, mtime_ns and sha256 when known; the returned cursor is the listing
+    time minus 5 s. The directory walk never follows a symlink."""
+    if not await _media_auth(request):
+        return JSONResponse({"error": "auth_required"}, status_code=401)
+    try:
+        return await asyncio.to_thread(media_relay.build_index, area, cursor)
+    except bridge_media.MediaError as exc:
+        return JSONResponse({"error": exc.reason}, status_code=exc.status)
+
+
+@app.get("/media/file")
+async def media_file(request: Request, area: str, path: str) -> Any:
+    """GET /media/file?area=&path= with HTTP Range (K-73/DASH-C21). The file is opened component by component
+    with O_NOFOLLOW (only a regular file is served), so a symlink swapped in after a listing is refused."""
+    if not await _media_auth(request):
+        return JSONResponse({"error": "auth_required"}, status_code=401)
+    try:
+        fd, st = await asyncio.to_thread(media_relay.open_file, area, path)
+    except bridge_media.MediaError as exc:
+        return JSONResponse({"error": exc.reason}, status_code=exc.status)
+    size = st.st_size
+    try:
+        span = bridge_media.parse_range(request.headers.get("range"), size)
+    except bridge_media.MediaError:
+        os.close(fd)
+        return Response(status_code=416, headers={"Content-Range": f"bytes */{size}", "Accept-Ranges": "bytes"})
+    headers = {"Accept-Ranges": "bytes", "Content-Type": bridge_media.content_type(path)}
+    if span is None:
+        headers["Content-Length"] = str(size)
+        return StreamingResponse(bridge_media.stream_fd(fd, 0, size), headers=headers)
+    start, end = span
+    length = end - start + 1
+    headers["Content-Length"] = str(length)
+    headers["Content-Range"] = f"bytes {start}-{end}/{size}"
+    return StreamingResponse(bridge_media.stream_fd(fd, start, length), status_code=206, headers=headers)
+
+
+@app.post("/desktop/blob")
+async def desktop_blob(request: Request) -> Any:
+    """POST /desktop/blob (K-73): the laptop node uploads an agent-sealed blob. The PC-signed length (<= 30 MB)
+    and sha256 are verified before the body is read; the body is streamed and hashed under that hard cap, at most
+    two uploads at once, and kept in RAM only (<= 256 MB total, TTL 15 min, deleted after the first fetch). The
+    agent fetches it on GET /internal/blob/<id> on the internal listener only."""
+    if not (desktop.active and desktop.keys is not None and desktop.seen is not None):
+        return JSONResponse({"error": "link_unconfigured"}, status_code=503)
+    declared = request.headers.get("content-length", "")
+    try:
+        blob_id, size = await bridge_media.receive_blob(
+            public_key=desktop.keys.pc, seen=desktop.seen, headers=request.headers.raw, method=request.method,
+            path=request.scope.get("raw_path") or request.url.path.encode(),
+            query=request.scope.get("query_string", b""),
+            content_length=int(declared) if declared.isdigit() else None,
+            body_iter=request.stream(), store=blob_store, now=time.time())
+    except bridge_media.MediaError as exc:
+        return JSONResponse({"error": exc.reason}, status_code=exc.status)
+    logger.info("Desktop blob stored (%d bytes)", size)
+    return {"blob_id": blob_id, "size": size}
+
+
+@app.get("/internal/blob/{blob_id}")
+async def internal_blob(request: Request, blob_id: str) -> Any:
+    """GET /internal/blob/<id> (K-73): the agent fetches a blob once, on the internal :5002 listener only (nginx
+    answers 404 for /vortex/internal/, and InternalOnly 404s it on the public listener). The blob is deleted on
+    this fetch."""
+    if not bridge_desktop.is_internal_scope(request.scope) or not _BLOB_ID.fullmatch(blob_id):
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
+    data = blob_store.take(blob_id)
+    if data is None:
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
+    # Streamed in chunks so the blob stays counted against the 256 MB cap until the transport took it all.
+    return StreamingResponse(bridge_media.blob_chunks(data), headers={"Content-Length": str(len(data))},
+                             media_type="application/octet-stream")
+
+
+@app.get("/desktop/backup/latest")
+async def desktop_backup_latest(request: Request) -> Any:
+    """GET /desktop/backup/latest (K-73, PC-signed): streams the newest encrypted snapshot from the read-only
+    jarvis_agent_snapshots mount. The agent service writes the snapshots; the bridge only picks the newest."""
+    if not await _pc_signed(request):
+        return JSONResponse({"error": "auth_required"}, status_code=401)
+    try:
+        fd, st, name = await asyncio.to_thread(backup_relay.open_latest)
+    except bridge_media.MediaError as exc:
+        return JSONResponse({"error": exc.reason}, status_code=exc.status)
+    safe_name = re.sub(r'[^A-Za-z0-9._-]', "_", name) or "snapshot"
+    headers = {"Content-Length": str(st.st_size), "Content-Type": "application/octet-stream",
+               "Content-Disposition": f'attachment; filename="{safe_name}"'}
+    return StreamingResponse(bridge_media.stream_fd(fd, 0, st.st_size), headers=headers)
 
 
 @app.get("/messages")
