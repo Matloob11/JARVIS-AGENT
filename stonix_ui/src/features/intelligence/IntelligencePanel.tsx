@@ -75,7 +75,8 @@ const IntelligencePanel = ({ latest, history }: IntelligencePanelProps) => {
             aria-expanded={!collapsed}
             onClick={() => setCollapsed(value => !value)}
           >
-            {collapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+            <span className="vh">{collapsed ? 'Expand intelligence' : 'Collapse intelligence'}</span>
+            {collapsed ? <ChevronDown size={14} aria-hidden /> : <ChevronUp size={14} aria-hidden />}
           </button>
         }
       >
@@ -268,7 +269,7 @@ function LanOnlyNotice({
         <Copy size={12} />
         Copy URL
       </button>
-      {copyHint && <span className="text-[10px] text-command-accent">{copyHint}</span>}
+      {copyHint && <span className="text-xs text-command-accent">{copyHint}</span>}
     </div>
   );
 }

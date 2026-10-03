@@ -448,7 +448,7 @@ const MessageBubble = ({
           {showRetry ? (
             <button
               type="button"
-              className="mt-2 text-[11px] font-semibold text-command-accent hover:underline"
+              className="mt-2 text-xs font-semibold text-command-accent hover:underline"
               data-testid="chat-retry"
               onClick={() => onRetry?.(message.id)}
             >

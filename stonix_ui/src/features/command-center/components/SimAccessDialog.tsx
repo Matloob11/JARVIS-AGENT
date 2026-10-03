@@ -149,6 +149,7 @@ const SimAccessDialog = ({
         <form onSubmit={submit} className="sim-search">
           <input
             data-testid="sim-query-input"
+            aria-label="Authorized number"
             value={query}
             onChange={event => setQuery(event.target.value)}
             placeholder="Enter authorized number..."
@@ -158,6 +159,7 @@ const SimAccessDialog = ({
             type="submit"
             disabled={!canSubmit}
             title={agentOnline ? 'Start lookup' : 'Agent offline — lookup disabled'}
+            aria-label={agentOnline ? 'Start lookup' : 'Agent offline — lookup disabled'}
           >
             <Search size={15} />
           </button>

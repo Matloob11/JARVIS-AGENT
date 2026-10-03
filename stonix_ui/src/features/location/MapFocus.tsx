@@ -69,7 +69,7 @@ const MapFocus = ({ focus, emptyHint = 'No map focus' }: MapFocusProps) => {
             href={externalUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex shrink-0 items-center gap-1 text-[10px] font-medium text-command-accent hover:underline"
+            className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-command-accent hover:underline"
             data-testid="map-focus-open-link"
           >
             Open map

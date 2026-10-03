@@ -66,21 +66,22 @@ const ToolLogList = ({ rows }: ToolLogListProps) => {
   return (
     <div className="tool-log-list" data-testid="tool-log-list">
       <div className="tool-log-list__filters">
-        <label className="text-[10px] font-semibold uppercase tracking-wide text-command-muted">
+        <label className="text-xs font-semibold uppercase tracking-wide text-command-muted">
           Filter
-        </label>
-        <select
-          className="tool-log-filter"
-          data-testid="tool-log-filter"
-          value={filter}
-          onChange={event => setFilter(event.target.value as StatusFilter)}
-        >
+          <select
+            className="tool-log-filter"
+            data-testid="tool-log-filter"
+            aria-label="Filter logs"
+            value={filter}
+            onChange={event => setFilter(event.target.value as StatusFilter)}
+          >
           <option value="all">All</option>
           <option value="running">Running</option>
           <option value="success">Success</option>
           <option value="error">Error</option>
           <option value="issues">Issues</option>
         </select>
+        </label>
       </div>
 
       <div className="space-y-2">

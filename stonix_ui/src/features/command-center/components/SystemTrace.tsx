@@ -293,6 +293,7 @@ const ReasoningCard = ({
             value={selectedIndex}
             onChange={event => onSelectIndex(Number(event.target.value))}
             data-testid="trace-reasoning-select"
+            aria-label="Reasoning history"
             title={formatReasoningOption(history[selectedIndex] ?? history[0], selectedIndex)}
           >
             {history.slice(0, 5).map((item, index) => (

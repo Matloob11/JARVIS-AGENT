@@ -131,7 +131,7 @@
   background: transparent;
   border-radius: 6px;
   padding: 4px 10px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   text-transform: lowercase;
   color: var(--t4);
@@ -558,7 +558,7 @@
 }
 
 .chat-msg-time {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--t-ai-time);
   font-variant-numeric: tabular-nums;
 }
@@ -840,7 +840,7 @@
 }
 
 .approvals-row__pill {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   padding: 3px 8px;
   border-radius: 999px;

@@ -55,6 +55,7 @@ const MemoryList = ({ rows, onClearConfirmed }: MemoryListProps) => {
           className="memory-search"
           data-testid="memory-search"
           placeholder="Memory search..."
+          aria-label="Memory search"
           value={query}
           onChange={event => setQuery(event.target.value)}
         />

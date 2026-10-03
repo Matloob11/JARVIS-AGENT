@@ -123,11 +123,11 @@ export function LaptopCard({ persona, location }: LaptopCardProps) {
           <MapPin size={16} className={accent.text} />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-command-text">{location.city || 'Detecting...'}</p>
-            <p className="mt-1 font-mono text-[11px] text-command-muted">
+            <p className="mt-1 font-mono text-xs text-command-muted">
               {formatCoords(location.lat, location.lng)}
             </p>
             {location.ts != null ? (
-              <p className="mt-1 text-[10px] text-command-muted" data-testid="device-location-updated">
+              <p className="mt-1 text-xs text-command-muted" data-testid="device-location-updated">
                 {formatLocationUpdated(location.ts, nowMs)}
               </p>
             ) : null}

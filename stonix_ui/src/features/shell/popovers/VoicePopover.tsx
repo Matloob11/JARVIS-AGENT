@@ -126,6 +126,7 @@ export function VoicePopover({
               checked={settings.wakeWord}
               data-testid="chip-wake"
               data-active={settings.wakeWord ? 'true' : 'false'}
+              aria-label="Wake word"
               aria-checked={settings.wakeWord}
               onCheckedChange={() => settings.toggleWakeWord()}
             />

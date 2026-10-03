@@ -61,12 +61,12 @@ export function AgentsAlertsStrip({ systemAlerts, logs }: AgentsAlertsStripProps
                   <AlertTriangle size={13} className="mt-0.5 text-command-warning" />
                   <div className="min-w-0">
                     <p className="font-semibold text-command-text">
-                      <span className="mr-2 uppercase text-[10px] text-command-warning">
+                      <span className="mr-2 uppercase text-xs text-command-warning">
                         {alert.severity || 'alert'}
                       </span>
                       {alert.title}
                     </p>
-                    <p className="text-[10px] text-command-muted">
+                    <p className="text-xs text-command-muted">
                       {count > 1 ? `×${count}` : null}
                       {count > 1 && lastSeen ? ' · ' : null}
                       {lastSeen ? `last ${lastSeen}` : null}
@@ -84,7 +84,7 @@ export function AgentsAlertsStrip({ systemAlerts, logs }: AgentsAlertsStripProps
               >
                 <AlertTriangle size={13} className="mt-0.5 text-command-warning" />
                 <div className="min-w-0">
-                  <span className="mr-2 text-[10px] font-semibold uppercase text-command-warning">
+                  <span className="mr-2 text-xs font-semibold uppercase text-command-warning">
                     {level}
                   </span>
                   <span>{log.text}</span>

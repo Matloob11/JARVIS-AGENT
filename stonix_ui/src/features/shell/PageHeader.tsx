@@ -131,6 +131,7 @@ export function PageHeader({
           aria-haspopup="dialog"
           aria-expanded={menuOpen}
         >
+          <span className="vh">Account and reminders</span>
           <span className="page-header-avatar avatar" aria-hidden>
             M
           </span>

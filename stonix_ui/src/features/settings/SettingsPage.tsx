@@ -86,7 +86,7 @@ function AgentPendingHint({ field }: { field: string }) {
   const { isAgentUpdatePending } = useSettings();
   if (!isAgentUpdatePending(field)) return null;
   return (
-    <span className="text-[10px] text-command-muted" data-testid={`settings-agent-pending-${field}`}>
+    <span className="text-xs text-command-muted" data-testid={`settings-agent-pending-${field}`}>
       Agent update pending
     </span>
   );
@@ -139,16 +139,15 @@ function ToggleRow({
   const blocked = disabled || isAgentUpdatePending(field);
   return (
     <SetField label={label} hint={hint} field={field}>
-      <label className="flex cursor-pointer items-center gap-2">
-        <input
-          type="checkbox"
-          data-testid={`settings-${field}`}
-          data-active={checked ? 'true' : 'false'}
-          checked={checked}
-          disabled={blocked}
-          onChange={event => onChange(event.target.checked)}
-        />
-      </label>
+      <input
+        type="checkbox"
+        aria-label={label}
+        data-testid={`settings-${field}`}
+        data-active={checked ? 'true' : 'false'}
+        checked={checked}
+        disabled={blocked}
+        onChange={event => onChange(event.target.checked)}
+      />
     </SetField>
   );
 }
@@ -175,6 +174,7 @@ function QuietHoursField({ disabled }: { disabled: boolean }) {
         type="text"
         className="setting-select w-full max-w-[160px] font-mono text-xs"
         data-testid="settings-quiet-hours"
+        aria-label="Quiet hours"
         placeholder="HH:MM-HH:MM"
         value={draft}
         disabled={disabled || settings.isAgentUpdatePending('quietHours')}
@@ -219,6 +219,7 @@ function ThresholdField({ disabled }: { disabled: boolean }) {
         step={0.01}
         className="w-full max-w-[220px]"
         data-testid="settings-voice-id-threshold"
+        aria-label="Match threshold"
         data-active="true"
         value={draft}
         disabled={disabled || settings.isAgentUpdatePending('voiceIdThreshold')}
@@ -486,6 +487,7 @@ export function SettingsPage({
                 <select
                   className="setting-select"
                   data-testid="settings-voice-select"
+                  aria-label="Voice"
                   value={settings.voice}
                   disabled={bridgeDisabled}
                   onChange={event => settings.update({ voice: event.target.value })}
@@ -502,6 +504,7 @@ export function SettingsPage({
                 <select
                   className="setting-select"
                   data-testid="settings-language-select"
+                  aria-label="Language"
                   value={settings.language}
                   disabled={bridgeDisabled}
                   onChange={event => settings.update({ language: event.target.value })}
@@ -520,7 +523,7 @@ export function SettingsPage({
                     Turn mode
                     {settings.restartRequired.includes('turn_mode') ? (
                       <span
-                        className="ml-2 rounded bg-ink-muted-20 px-1.5 py-0.5 text-[10px] text-command-muted"
+                        className="ml-2 rounded bg-ink-muted-20 px-1.5 py-0.5 text-xs text-command-muted"
                         data-testid="settings-turn-mode-restart-badge"
                       >
                         restart required
@@ -559,6 +562,7 @@ export function SettingsPage({
                 <select
                   className="setting-select"
                   data-testid="settings-wake-followup-select"
+                  aria-label="Follow-up window"
                   value={String(settings.wakeFollowupS)}
                   disabled={bridgeDisabled || settings.isAgentUpdatePending('wakeFollowupS')}
                   onChange={event =>
@@ -642,7 +646,7 @@ export function SettingsPage({
               {settings.turnMode === 'fast' ? (
                 <div className="mb-2">
                   <span
-                    className="rounded bg-sky-500/20 px-1.5 py-0.5 text-[10px] text-sky-300"
+                    className="rounded bg-sky-500/20 px-1.5 py-0.5 text-xs text-sky-300"
                     data-testid="settings-voice-id-monitor-badge"
                   >
                     monitor only
@@ -722,7 +726,7 @@ export function SettingsPage({
                 </SetField>
               ) : (
                 <SetField label="Voice-ID enrolled">
-                  <span className="text-[11px] text-command-accent">Voice-ID enrolled</span>
+                  <span className="text-xs text-command-accent">Voice-ID enrolled</span>
                 </SetField>
               )}
             </div>
@@ -816,10 +820,10 @@ export function SettingsPage({
               {settings.guardedTools.length ? (
                 settings.guardedTools.map(tool => <code key={tool}>{tool}</code>)
               ) : (
-                <span className="text-[11px] text-command-muted">—</span>
+                <span className="text-xs text-command-muted">—</span>
               )}
             </div>
-            <p className="mt-2 text-[11px] text-command-muted" lang="ur-Latn">
+            <p className="mt-2 text-xs text-command-muted" lang="ur-Latn">
               list .env (JARVIS_CONFIRM_EXTRA/SKIP) se badalti hai
             </p>
             <AgentPendingHint field="guardedTools" />
@@ -894,7 +898,7 @@ export function SettingsPage({
               </div>
             </dl>
             {debugMode && voice.identity ? (
-              <p className="mt-3 text-[11px] text-command-muted">
+              <p className="mt-3 text-xs text-command-muted">
                 LiveKit identity:{' '}
                 <code className="font-mono text-xs">{voice.identity}</code>
               </p>

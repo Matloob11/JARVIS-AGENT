@@ -30,11 +30,11 @@ const AssistantCore = ({ persona, isConnected, isThinking }: AssistantCoreProps)
   return (
     <div className="overview-legacy-strip assistant-core assistant-core--legacy" data-legacy>
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2 text-[11px] font-semibold text-command-text">
+        <div className="flex items-center gap-2 text-xs font-semibold text-command-text">
           <Activity size={14} className={accent.text} />
           {stateLabel}
         </div>
-        <p className="mt-1 text-[11px] text-command-muted">
+        <p className="mt-1 text-xs text-command-muted">
           {voice.voiceUnavailable
             ? 'LiveKit abhi available nahi — chat aur bridge controls chalte rahenge.'
             : voice.micEnabled
@@ -44,7 +44,7 @@ const AssistantCore = ({ persona, isConnected, isThinking }: AssistantCoreProps)
                 : 'Login ke baad room auto-link hota hai (mic off). Mic on = permission allow.'}
         </p>
         {voice.error ? (
-          <p className="mt-1 max-w-md text-[11px] text-red-400" role="alert">
+          <p className="mt-1 max-w-md text-xs text-red-400" role="alert">
             Voice: {voice.error}
           </p>
         ) : null}

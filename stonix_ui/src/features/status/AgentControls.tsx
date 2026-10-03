@@ -62,7 +62,8 @@ export function TopBarStopButton() {
       title={stopTitle(persona)}
       onClick={onStop}
     >
-      <Square size={14} fill="currentColor" strokeWidth={0} />
+      <span className="vh">{stopTitle(persona)}</span>
+      <Square size={14} fill="currentColor" strokeWidth={0} aria-hidden />
     </button>
   );
 }
@@ -102,6 +103,7 @@ export function AgentListeningSwitch() {
       data-testid="topbar-agent-listening"
       data-muted={agentMuted ? 'true' : 'false'}
       title={listeningMutedTitle(persona)}
+      aria-label={listeningMutedTitle(persona)}
       onCheckedChange={onToggle}
     />
   );
@@ -127,6 +129,7 @@ export function MicToggleSwitch() {
       disabled={disabled}
       onCheckedChange={() => void voice.toggleMic()}
       title={voice.micEnabled ? 'Mic off (browser publish)' : 'Mic on (browser publish)'}
+      aria-label={voice.micEnabled ? 'Mic off (browser publish)' : 'Mic on (browser publish)'}
     />
   );
 }

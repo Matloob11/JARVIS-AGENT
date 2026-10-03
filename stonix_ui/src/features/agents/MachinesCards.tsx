@@ -51,7 +51,7 @@ function VitalsCard({
         <Metric icon={Cpu} label="CPU" value={metricValue(vitals.cpu)} />
         <Metric icon={MemoryStick} label="Memory" value={metricValue(vitals.ram)} />
         <Metric icon={HardDrive} label={diskLabel} value={metricValue(vitals.disk)} />
-        <div className="flex items-center justify-between gap-2 text-[10px] text-command-muted">
+        <div className="flex items-center justify-between gap-2 text-xs text-command-muted">
           <span data-testid={`${testId}-updated`}>updated {formatRelativeAgo(agoSec)}</span>
           {stale ? (
             <span

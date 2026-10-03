@@ -59,7 +59,7 @@ const TelemetryCard = ({
     >
       {embedded ? (
         <div className="mb-3 flex justify-end">
-          <span className="text-[10px] uppercase tracking-wide text-command-muted" data-testid="telemetry-source">
+          <span className="text-xs uppercase tracking-wide text-command-muted" data-testid="telemetry-source">
             {sourceLabel(telemetry.source, brain)}
           </span>
         </div>
@@ -69,7 +69,7 @@ const TelemetryCard = ({
             <Activity size={13} className="text-command-muted" />
             Telemetry
           </div>
-          <span className="text-[10px] uppercase tracking-wide text-command-muted" data-testid="telemetry-source">
+          <span className="text-xs uppercase tracking-wide text-command-muted" data-testid="telemetry-source">
             {sourceLabel(telemetry.source, brain)}
           </span>
         </div>
@@ -100,7 +100,7 @@ const TelemetryCard = ({
           </p>
         </div>
       </div>
-      <div className="mt-3 flex items-center gap-2 text-[11px] text-command-muted">
+      <div className="mt-3 flex items-center gap-2 text-xs text-command-muted">
         <StatusDot active tone={tone} />
         <span data-testid="telemetry-status">{telemetry.status || 'unknown'}</span>
       </div>

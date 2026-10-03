@@ -132,7 +132,7 @@ button {
   }
 
   .voice-banner {
-    @apply relative z-50 flex flex-wrap items-center justify-center gap-3 border-b border-command-border bg-panel-scrim px-4 py-2 text-[11px] text-command-text;
+    @apply relative z-50 flex flex-wrap items-center justify-center gap-3 border-b border-command-border bg-panel-scrim px-4 py-2 text-xs text-command-text;
   }
 
   .voice-banner--warn {
@@ -140,7 +140,7 @@ button {
   }
 
   .voice-banner button {
-    @apply rounded-md border border-command-border bg-white/[0.06] px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-command-text transition hover:bg-white/[0.1];
+    @apply rounded-md border border-command-border bg-white/[0.06] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-command-text transition hover:bg-white/[0.1];
   }
 
   .brand-mark {
@@ -148,11 +148,11 @@ button {
   }
 
   .topbar-status {
-    @apply flex items-center gap-2 text-[11px] capitalize text-command-muted;
+    @apply flex items-center gap-2 text-xs capitalize text-command-muted;
   }
 
   .status-chip {
-    @apply flex max-w-[9rem] shrink-0 items-center gap-1.5 rounded-md border border-command-border bg-white/[0.03] px-2 py-1 text-[10px] capitalize text-command-text sm:max-w-none;
+    @apply flex max-w-[9rem] shrink-0 items-center gap-1.5 rounded-md border border-command-border bg-white/[0.03] px-2 py-1 text-xs capitalize text-command-text sm:max-w-none;
   }
 
   .status-chip--compact {
@@ -215,11 +215,11 @@ button {
   }
 
   .panel-header {
-    @apply flex h-10 shrink-0 items-center justify-between border-b border-command-border px-4 text-[10px] font-semibold uppercase tracking-[0.16em] text-command-muted;
+    @apply flex h-10 shrink-0 items-center justify-between border-b border-command-border px-4 text-xs font-semibold uppercase tracking-[0.16em] text-command-muted;
   }
 
   .panel-kicker {
-    @apply text-[10px] font-semibold uppercase tracking-[0.16em] text-command-muted;
+    @apply text-xs font-semibold uppercase tracking-[0.16em] text-command-muted;
   }
 
   .camera-panel {
@@ -235,7 +235,7 @@ button {
   }
 
   .camera-status {
-    @apply absolute left-3 top-3 flex items-center gap-2 rounded-md border border-command-border bg-black/45 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-command-text backdrop-blur;
+    @apply absolute left-3 top-3 flex items-center gap-2 rounded-md border border-command-border bg-black/45 px-2 py-1 text-xs font-medium uppercase tracking-[0.12em] text-command-text backdrop-blur;
   }
 
   .location-card {
@@ -322,7 +322,7 @@ button {
   }
 
   .assistant-core__user-speaking-label {
-    @apply text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-300;
+    @apply text-xs font-semibold uppercase tracking-[0.14em] text-sky-300;
   }
 
   .assistant-core__ring {
@@ -350,7 +350,7 @@ button {
   }
 
   .assistant-core__sublabel {
-    @apply relative z-10 mt-2 text-[10px] text-command-muted;
+    @apply relative z-10 mt-2 text-xs text-command-muted;
   }
 
   .assistant-core__footer {
@@ -358,15 +358,15 @@ button {
   }
 
   .assistant-core__terminate {
-    @apply absolute right-5 top-5 flex items-center gap-2 rounded-md border border-err-border bg-err-surface px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-command-danger transition hover:bg-err-surface-strong disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-err-surface;
+    @apply absolute right-5 top-5 flex items-center gap-2 rounded-md border border-err-border bg-err-surface px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-command-danger transition hover:bg-err-surface-strong disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-err-surface;
   }
 
   .assistant-core__restart-banner {
-    @apply absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-md border border-acc-edge-medium bg-acc-tint px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-command-accent;
+    @apply absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-md border border-acc-edge-medium bg-acc-tint px-4 py-2 text-xs font-semibold uppercase tracking-[0.06em] text-command-accent;
   }
 
   .command-input__swarm {
-    @apply flex shrink-0 items-center gap-1 rounded-md border border-white/10 bg-white/[0.03] px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-command-muted transition hover:bg-white/[0.06];
+    @apply flex shrink-0 items-center gap-1 rounded-md border border-white/10 bg-white/[0.03] px-2 py-2 text-xs font-semibold uppercase tracking-wide text-command-muted transition hover:bg-white/[0.06];
   }
 
   .command-input__swarm--on {
@@ -386,7 +386,7 @@ button {
   }
 
   .task-bell-row__spoken {
-    @apply ml-1 inline-flex items-center gap-1 text-[10px] text-command-muted;
+    @apply ml-1 inline-flex items-center gap-1 text-xs text-command-muted;
   }
 
   .intelligence-panel__body {
@@ -426,11 +426,11 @@ button {
   }
 
   .intelligence-lan-url {
-    @apply block break-all rounded-md border border-command-border bg-black/30 px-2 py-1 font-mono text-[11px] text-ink-body-80;
+    @apply block break-all rounded-md border border-command-border bg-black/30 px-2 py-1 font-mono text-xs text-ink-body-80;
   }
 
   .intelligence-copy {
-    @apply mt-2 inline-flex items-center gap-1 rounded-md border border-command-border px-2 py-1 text-[11px] text-command-text transition hover:bg-white/[0.04];
+    @apply mt-2 inline-flex items-center gap-1 rounded-md border border-command-border px-2 py-1 text-xs text-command-text transition hover:bg-white/[0.04];
   }
 
   .intelligence-history {
@@ -438,7 +438,7 @@ button {
   }
 
   .intelligence-history__chip {
-    @apply flex shrink-0 items-center gap-1 rounded-md border border-command-border bg-white/[0.03] px-2 py-1 text-[10px] text-command-muted transition hover:bg-white/[0.06];
+    @apply flex shrink-0 items-center gap-1 rounded-md border border-command-border bg-white/[0.03] px-2 py-1 text-xs text-command-muted transition hover:bg-white/[0.06];
   }
 
   .intelligence-history__chip--active {
@@ -479,7 +479,7 @@ button {
   }
 
   .system-trace__tab {
-    @apply rounded-md px-3 py-1 text-[11px] font-medium uppercase tracking-wide text-command-muted transition hover:text-command-text;
+    @apply rounded-md px-3 py-1 text-xs font-medium uppercase tracking-wide text-command-muted transition hover:text-command-text;
   }
 
   .system-trace__tab.is-active {
@@ -503,7 +503,7 @@ button {
   }
 
   .trace-chip {
-    @apply rounded border border-command-border px-2 py-0.5 text-[10px] uppercase tracking-wide text-command-muted;
+    @apply rounded border border-command-border px-2 py-0.5 text-xs uppercase tracking-wide text-command-muted;
   }
 
   .trace-chip--active {
@@ -519,15 +519,15 @@ button {
   }
 
   .trace-filter {
-    @apply min-w-[120px] flex-1 rounded-md border border-command-border bg-black/20 px-2 py-1 text-[11px] text-command-text outline-none focus:border-acc-edge-focus;
+    @apply min-w-[120px] flex-1 rounded-md border border-command-border bg-black/20 px-2 py-1 text-xs text-command-text outline-none focus:border-acc-edge-focus;
   }
 
   .trace-toolbar__btn {
-    @apply inline-flex items-center gap-1 rounded-md border border-command-border px-2 py-1 text-[10px] uppercase tracking-wide text-command-muted transition hover:text-command-text;
+    @apply inline-flex items-center gap-1 rounded-md border border-command-border px-2 py-1 text-xs uppercase tracking-wide text-command-muted transition hover:text-command-text;
   }
 
   .trace-dropped {
-    @apply px-1 text-[10px] text-err-soft;
+    @apply px-1 text-xs text-err-soft;
   }
 
   .trace-terminal {
@@ -539,7 +539,7 @@ button {
   }
 
   .trace-system-feed ul {
-    @apply mt-1 max-h-[52px] space-y-1 overflow-y-auto text-[10px] text-command-muted;
+    @apply mt-1 max-h-[52px] space-y-1 overflow-y-auto text-xs text-command-muted;
   }
 
   .trace-system-feed li {
@@ -559,11 +559,11 @@ button {
   }
 
   .trace-line {
-    @apply grid grid-cols-[56px_44px_72px_minmax(0,1fr)] gap-2 border-l border-white/10 py-1 pl-3 text-[11px];
+    @apply grid grid-cols-[56px_44px_72px_minmax(0,1fr)] gap-2 border-l border-white/10 py-1 pl-3 text-xs;
   }
 
   .trace-line__level {
-    @apply truncate text-[10px] uppercase text-acc-line-soft;
+    @apply truncate text-xs uppercase text-acc-line-soft;
   }
 
   .trace-line__time {
@@ -587,7 +587,7 @@ button {
   }
 
   .reasoning-card__select {
-    @apply max-w-[140px] rounded border border-command-border bg-black/20 px-2 py-0.5 text-[10px] text-command-text;
+    @apply max-w-[140px] rounded border border-command-border bg-black/20 px-2 py-0.5 text-xs text-command-text;
   }
 
   .reasoning-card__title-row {
@@ -595,11 +595,11 @@ button {
   }
 
   .reasoning-card__time {
-    @apply mt-1 text-[10px] text-command-muted;
+    @apply mt-1 text-xs text-command-muted;
   }
 
   .reasoning-badge {
-    @apply rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wide;
+    @apply rounded-full px-2 py-0.5 text-xs uppercase tracking-wide;
   }
 
   .reasoning-badge--warn {
@@ -615,7 +615,7 @@ button {
   }
 
   .reasoning-confidence__row {
-    @apply grid grid-cols-[72px_minmax(0,1fr)_36px] items-center gap-2 text-[10px] text-command-muted;
+    @apply grid grid-cols-[72px_minmax(0,1fr)_36px] items-center gap-2 text-xs text-command-muted;
   }
 
   .reasoning-confidence__track {
@@ -627,7 +627,7 @@ button {
   }
 
   .reasoning-plan-progress {
-    @apply mt-3 rounded-md border border-acc-banner bg-acc-tint-soft px-2 py-1 text-[11px] text-command-accent;
+    @apply mt-3 rounded-md border border-acc-banner bg-acc-tint-soft px-2 py-1 text-xs text-command-accent;
   }
 
   .reasoning-step {
@@ -635,7 +635,7 @@ button {
   }
 
   .reasoning-step span {
-    @apply flex h-5 w-5 shrink-0 items-center justify-center rounded bg-white/[0.05] font-mono text-[10px] text-command-accent;
+    @apply flex h-5 w-5 shrink-0 items-center justify-center rounded bg-white/[0.05] font-mono text-xs text-command-accent;
   }
 
   .chat-panel {
@@ -647,7 +647,7 @@ button {
   }
 
   .chat-tab {
-    @apply rounded-md px-3 py-1.5 text-[11px] font-semibold capitalize text-command-muted transition hover:bg-white/[0.04] hover:text-command-text;
+    @apply rounded-md px-3 py-1.5 text-xs font-semibold capitalize text-command-muted transition hover:bg-white/[0.04] hover:text-command-text;
   }
 
   .chat-tab--active {
@@ -695,11 +695,11 @@ button {
   }
 
   .chat-live-label {
-    @apply not-italic text-[10px] font-semibold uppercase tracking-wide text-command-accent;
+    @apply not-italic text-xs font-semibold uppercase tracking-wide text-command-accent;
   }
 
   .chat-load-older {
-    @apply rounded-md border border-command-border px-3 py-1.5 text-[11px] font-semibold text-command-muted transition hover:bg-white/[0.04] hover:text-command-text;
+    @apply rounded-md border border-command-border px-3 py-1.5 text-xs font-semibold text-command-muted transition hover:bg-white/[0.04] hover:text-command-text;
   }
 
   .data-row {
@@ -719,7 +719,7 @@ button {
   }
 
   .tool-log-filter {
-    @apply rounded-md border border-command-border bg-black/20 px-2 py-1 text-[11px] text-command-text outline-none;
+    @apply rounded-md border border-command-border bg-black/20 px-2 py-1 text-xs text-command-text outline-none;
   }
 
   .tool-row {
@@ -735,15 +735,15 @@ button {
   }
 
   .tool-row__name {
-    @apply min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-wide text-command-accent;
+    @apply min-w-0 flex-1 truncate text-xs font-semibold uppercase tracking-wide text-command-accent;
   }
 
   .tool-row__meta {
-    @apply font-mono text-[10px] text-ink-muted-70;
+    @apply font-mono text-xs text-ink-muted-70;
   }
 
   .tool-row__summary {
-    @apply mt-2 flex items-center gap-3 text-[10px] text-command-muted;
+    @apply mt-2 flex items-center gap-3 text-xs text-command-muted;
   }
 
   .tool-row__progress {
@@ -763,7 +763,7 @@ button {
   }
 
   .tool-row__label {
-    @apply text-[10px] font-semibold uppercase tracking-wide text-command-muted;
+    @apply text-xs font-semibold uppercase tracking-wide text-command-muted;
   }
 
   .tool-row__text {
@@ -771,7 +771,7 @@ button {
   }
 
   .tool-pill {
-    @apply inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize;
+    @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold capitalize;
   }
 
   .tool-pill--running {
@@ -811,7 +811,7 @@ button {
   }
 
   .memory-row__meta {
-    @apply ml-auto font-mono text-[10px] text-ink-muted-70;
+    @apply ml-auto font-mono text-xs text-ink-muted-70;
   }
 
   .memory-row__content {
@@ -819,7 +819,7 @@ button {
   }
 
   .memory-pill {
-    @apply inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize;
+    @apply inline-flex rounded-full px-2 py-0.5 text-xs font-semibold capitalize;
   }
 
   .memory-pill--user {
@@ -851,7 +851,7 @@ button {
   }
 
   .memory-panel__note {
-    @apply text-[10px] leading-4 text-command-muted;
+    @apply text-xs leading-4 text-command-muted;
   }
 
   .memory-clear-btn {
@@ -875,11 +875,11 @@ button {
   }
 
   .tasks-panel__refresh {
-    @apply rounded-md border border-command-border bg-white/[0.04] px-3 py-1.5 text-[11px] font-semibold text-command-text transition hover:bg-white/[0.07];
+    @apply rounded-md border border-command-border bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-command-text transition hover:bg-white/[0.07];
   }
 
   .tasks-panel__btn {
-    @apply rounded-md border border-command-border px-3 py-1.5 text-[11px] font-semibold text-command-muted transition hover:bg-white/[0.04];
+    @apply rounded-md border border-command-border px-3 py-1.5 text-xs font-semibold text-command-muted transition hover:bg-white/[0.04];
   }
 
   .tasks-panel__btn--danger {
@@ -899,11 +899,11 @@ button {
   }
 
   .task-row__countdown {
-    @apply text-[11px] font-semibold text-command-accent;
+    @apply text-xs font-semibold text-command-accent;
   }
 
   .task-row__due {
-    @apply ml-auto font-mono text-[10px] text-ink-muted-70;
+    @apply ml-auto font-mono text-xs text-ink-muted-70;
   }
 
   .task-row__description {
@@ -911,11 +911,11 @@ button {
   }
 
   .task-row__cancel {
-    @apply mt-2 text-[11px] font-semibold text-red-300 hover:underline;
+    @apply mt-2 text-xs font-semibold text-red-300 hover:underline;
   }
 
   .task-pill {
-    @apply inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize;
+    @apply inline-flex rounded-full px-2 py-0.5 text-xs font-semibold capitalize;
   }
 
   .task-pill--task {
@@ -947,7 +947,7 @@ button {
   }
 
   .task-bell-badge {
-    @apply absolute -right-1 -top-1 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-command-accent px-1 text-[9px] font-bold text-black;
+    @apply absolute -right-1 -top-1 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-command-accent px-1 text-xs font-bold text-black;
   }
 
   .task-bell-menu {
@@ -956,7 +956,7 @@ button {
   }
 
   .task-bell-menu__title {
-    @apply mb-2 text-[10px] font-semibold uppercase tracking-wide text-command-muted;
+    @apply mb-2 text-xs font-semibold uppercase tracking-wide text-command-muted;
   }
 
   .task-bell-menu__empty {
@@ -976,7 +976,7 @@ button {
   }
 
   .task-bell-row__meta {
-    @apply mt-1 text-[10px] text-command-muted;
+    @apply mt-1 text-xs text-command-muted;
   }
 
   .memory-clear-btn--danger {
@@ -1000,7 +1000,7 @@ button {
   }
 
   .jobs-list__title {
-    @apply text-[10px] font-semibold uppercase tracking-[0.14em] text-command-muted;
+    @apply text-xs font-semibold uppercase tracking-[0.14em] text-command-muted;
   }
 
   .job-row {
@@ -1016,11 +1016,11 @@ button {
   }
 
   .job-row__status {
-    @apply text-[10px] font-semibold uppercase tracking-wide text-command-muted;
+    @apply text-xs font-semibold uppercase tracking-wide text-command-muted;
   }
 
   .job-row__tool {
-    @apply mt-1 text-[11px] text-command-muted;
+    @apply mt-1 text-xs text-command-muted;
   }
 
   .job-row__bar {
@@ -1040,7 +1040,7 @@ button {
   }
 
   .job-row__btn {
-    @apply rounded-md border border-command-border px-2.5 py-1 text-[11px] font-semibold text-command-text transition hover:bg-white/[0.05];
+    @apply rounded-md border border-command-border px-2.5 py-1 text-xs font-semibold text-command-text transition hover:bg-white/[0.05];
   }
 
   .job-row__btn--cancel {
@@ -1101,7 +1101,7 @@ button {
   }
 
   .settings-segmented__btn {
-    @apply flex-1 rounded px-3 py-2 text-[11px] font-medium text-command-muted transition hover:text-command-text;
+    @apply flex-1 rounded px-3 py-2 text-xs font-medium text-command-muted transition hover:text-command-text;
   }
 
   .settings-segmented__btn--active {
@@ -1109,7 +1109,7 @@ button {
   }
 
   .settings-field-status {
-    @apply mt-1 block text-[10px] capitalize;
+    @apply mt-1 block text-xs capitalize;
   }
 
   .settings-field-status--applied {
@@ -1125,7 +1125,7 @@ button {
   }
 
   .settings-connection-chip {
-    @apply inline-flex items-center gap-1.5 rounded-md border border-command-border px-2 py-1 text-[10px] text-command-muted;
+    @apply inline-flex items-center gap-1.5 rounded-md border border-command-border px-2 py-1 text-xs text-command-muted;
   }
 
   .connection-card {
@@ -1181,7 +1181,7 @@ button {
   }
 
   .sim-status-chip {
-    @apply mb-3 inline-flex rounded-full border border-command-border bg-black/25 px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-wide text-command-muted;
+    @apply mb-3 inline-flex rounded-full border border-command-border bg-black/25 px-2.5 py-0.5 font-mono text-xs uppercase tracking-wide text-command-muted;
   }
 
   .sim-status-chip[data-status='loading'] {
@@ -1272,7 +1272,7 @@ button {
   }
 
   .confirm-dialog__risk {
-    @apply rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em];
+    @apply rounded-md border px-2 py-1 text-xs font-semibold uppercase tracking-[0.12em];
   }
 
   .confirm-dialog__risk--high {

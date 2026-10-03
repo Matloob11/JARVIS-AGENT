@@ -258,7 +258,7 @@ const CameraPanel = ({ embedded = false, onCameraStateChange }: CameraPanelProps
           />
         </div>
       ) : (
-        <label className="flex cursor-pointer items-center justify-between gap-3 border-t border-command-border px-4 py-2 text-[11px] text-command-muted">
+        <label className="flex cursor-pointer items-center justify-between gap-3 border-t border-command-border px-4 py-2 text-xs text-command-muted">
           <span>Share with agent</span>
           <input
             type="checkbox"
@@ -313,7 +313,8 @@ const CameraPanel = ({ embedded = false, onCameraStateChange }: CameraPanelProps
             onClick={toggleCamera}
             title={isCameraOn ? 'Turn camera off' : 'Turn camera on'}
           >
-            {isCameraOn ? <CameraOff size={14} /> : <Camera size={14} />}
+            <span className="vh">{isCameraOn ? 'Turn camera off' : 'Turn camera on'}</span>
+            {isCameraOn ? <CameraOff size={14} aria-hidden /> : <Camera size={14} aria-hidden />}
           </button>
         }
       >

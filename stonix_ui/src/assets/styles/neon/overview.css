@@ -61,7 +61,7 @@
   position: absolute;
   top: 18px;
   right: 56px;
-  font: 600 11px/1 var(--font-ui);
+  font: 600 12px/1 var(--font-ui);
   letter-spacing: 0.6px;
   text-transform: uppercase;
   color: var(--warn-t, #e9ab4a);
@@ -155,7 +155,7 @@
   top: 10px;
   right: 10px;
   color: var(--warn-t, #e9ab4a);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .overview-qs-tile__bar {
