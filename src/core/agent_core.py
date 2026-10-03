@@ -34,6 +34,7 @@ from services.utils.jarvis_autonomous import resilient_tool
 from services.utils.jarvis_config import config, is_local_mode
 from services.utils.jarvis_health import health_monitor
 from services.utils.jarvis_logger import setup_logger
+from services.utils.jarvis_resilience import resilience_manager
 from services.utils.jarvis_security import vortex_guard
 from services.utils.jarvis_telemetry import telemetry
 
@@ -75,6 +76,7 @@ class _NoVisionHandler:
 
     def __init__(self) -> None:
         self.last_vision_frame: str | None = None
+        self.last_vision_frame_ts: float | None = None
         self.active_window_context: dict[str, Any] = {}
 
     def start_loop(self) -> None:
@@ -93,13 +95,28 @@ class _NoVisionHandler:
         """No window context to inject."""
 
     async def analyze_current_frame(self, prompt: str) -> str:
-        return "Sir, vision system abhi available nahi hai."
+        return "Error: Sir, vision system abhi available nahi hai."
 
 
 if _vision_import_error is not None:
     _optional_handler_failed("VisionHandler", _vision_import_error)
 
+
+def _vision_analysis_failed(analysis: str) -> bool:
+    """
+    True when analyze_current_frame's string reports a failure (C-48). jarvis_vision.analysis_failed
+    keeps a real answer that starts with 'Error' (an error dialog in view); without the vision module
+    (the stand-in above) every 'Error...' string is a failure.
+    """
+    try:
+        from services.ai_core.jarvis_vision import analysis_failed  # pylint: disable=import-outside-toplevel
+    except Exception:  # pylint: disable=broad-exception-caught
+        return analysis.startswith("Error")
+    return analysis_failed(analysis)
+
 INSTRUCTIONS_PROMPT = BEHAVIOR_PROMPT
+# C-48: a camera analysis goes through up to three vision providers; 15 s (the breaker default) cut it off.
+ANALYZE_SURROUNDINGS_TIMEOUT_S = 60.0
 
 # pylint: disable=too-many-instance-attributes
 class BrainAssistant(Agent):
@@ -195,6 +212,7 @@ class BrainAssistant(Agent):
         self._background_tasks: set[asyncio.Task[Any]] = set()
         self._spawned_tasks: set[asyncio.Task[Any]] = set()
         self.last_vision_frame: bytes | None = None
+        self.last_vision_frame_ts: float | None = None
 
         # Start Advanced Task Monitor when constructed inside an active event loop. Local mode only:
         # with the VPS brain agent-svc checks due tasks (K-72).
@@ -204,6 +222,10 @@ class BrainAssistant(Agent):
                 self._run_back(self._task_monitor_loop())
             except RuntimeError:
                 logger.debug("Task monitor deferred: no running event loop during init.")
+
+        # C-48: resilient_tool reuses this cached breaker, so analyze_surroundings gets 60 s, not 15 s.
+        resilience_manager.get_breaker("analyze_surroundings",
+                                       execution_timeout=ANALYZE_SURROUNDINGS_TIMEOUT_S)
 
         # --- Wrap internal tools within this scope to capture 'self' ---
         @resilient_tool("set_wake_word_mode")
@@ -335,6 +357,16 @@ class BrainAssistant(Agent):
 
         # Perform direct analysis using the vision handler
         analysis = await self.vision_handler.analyze_current_frame(query)
+        if not isinstance(analysis, str):
+            analysis = str(analysis)
+
+        # C-48: a failed analysis is an error, never 'success' with the error text as the report.
+        if _vision_analysis_failed(analysis):
+            return {
+                "status": "error",
+                "message": f"Sir, camera view analyze nahi ho saka: {analysis}",
+                "analysis": analysis,
+            }
 
         return {
             "status": "success",

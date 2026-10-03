@@ -312,14 +312,24 @@ class UIBridgeListener:
     async def on_vision_frame(self, data: Any) -> None:
         frame = data.get("frame") if isinstance(data, dict) else data
         command = data.get("command") if isinstance(data, dict) else None
+        # C-48: the UI's capture time (K-05 'vision_frame' {frame, ts epoch ms}); a legacy frame has none.
+        ts = data.get("ts") if isinstance(data, dict) else None
+
+        from services.ai_core.jarvis_vision import (  # pylint: disable=import-outside-toplevel
+            frame_timestamp,
+            vision_system,
+        )
+        frame_ts = frame_timestamp(ts) if frame else None
 
         if hasattr(self.assistant, 'vision_handler'):
-            self.assistant.vision_handler.last_vision_frame = frame # type: ignore[attr-defined]
+            handler = self.assistant.vision_handler # type: ignore[attr-defined]
+            handler.last_vision_frame = frame
+            handler.last_vision_frame_ts = frame_ts
         else:
             self.assistant.last_vision_frame = frame # type: ignore[attr-defined]
+            self.assistant.last_vision_frame_ts = frame_ts # type: ignore[attr-defined]
 
-        from services.ai_core.jarvis_vision import vision_system  # pylint: disable=import-outside-toplevel
-        vision_system.update_webcam_frame(frame)
+        vision_system.update_webcam_frame(frame, ts=ts)
 
         if self.assistant._active_session: # type: ignore[attr-defined]
             if command == "check_intelligence":

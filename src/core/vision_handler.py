@@ -1,14 +1,22 @@
 import asyncio
 import base64
+import binascii
 import contextlib
 import json
-from io import BytesIO
+import time
 from typing import Any
 
 from livekit.agents import llm
-from PIL import Image
 
-from services.ai_core.jarvis_vision import vision_system
+from services.ai_core.jarvis_vision import (
+    LLMUnavailableError,
+    frame_max_age_s,
+    frame_timestamp,
+    is_fresh,
+    providers_failed_message,
+    record_analysis,
+    vision_system,
+)
 from services.utils.jarvis_config import DESKTOP_MODE_LOCAL, desktop_mode
 from services.utils.jarvis_logger import setup_logger
 
@@ -16,6 +24,8 @@ logger = setup_logger("VISION-HANDLER")
 
 WINDOW_POLL_S = 60
 _TITLE_MAX = 200
+LIVEKIT_FRAME_MIN_INTERVAL_S = 1.0  # K-05 (DASH-C19): keep at most one LiveKit camera frame a second
+NO_CAMERA_MESSAGE = "Sir, right now I don't have a clear view from the camera. Please make sure it's turned on."
 
 
 async def _poll_active_window() -> dict[str, Any]:
@@ -73,9 +83,27 @@ class VisionHandler:
 
     def __init__(self, assistant_ref: Any, mode: str | None = None) -> None:
         self._assistant: Any = assistant_ref
-        self.last_vision_frame: str | None = None
+        self._last_vision_frame: str | None = None
+        # C-48: when the socket frame was taken (epoch s: the UI ts when it sent one, else arrival); None = none.
+        self.last_vision_frame_ts: float | None = None
+        # A frame found only on the assistant object, without its own timestamp: (frame hash, first seen).
+        self._assistant_frame_seen: tuple[int, float] | None = None
+        # EXT DASH-C19: the latest LiveKit camera frame (JPEG bytes) and its time, filled by on_livekit_frame.
+        self.last_livekit_frame: bytes | None = None
+        self.last_livekit_frame_ts: float | None = None
         self.window_context = WindowContextProvider(mode)
         self._proactive_vision_task: asyncio.Task[None] | None = None
+
+    @property
+    def last_vision_frame(self) -> str | None:
+        """The last socket camera frame (a data URL or base64), whatever its age."""
+        return self._last_vision_frame
+
+    @last_vision_frame.setter
+    def last_vision_frame(self, frame: str | None) -> None:
+        # Set directly (not through on_vision_frame), a frame counts as received now.
+        self._last_vision_frame = frame
+        self.last_vision_frame_ts = time.time() if frame else None
 
     @property
     def active_window_context(self) -> dict[str, Any]:
@@ -89,6 +117,26 @@ class VisionHandler:
     def on_window_context(self, event: Any) -> None:
         """Remote mode: a Desktop Node window_context event (K-70) updates the cached context."""
         self.window_context.on_window_context(event)
+
+    def on_vision_frame(self, frame: Any, ts: Any = None) -> None:
+        """Stores a socket 'vision_frame' (K-05 {frame, ts epoch ms}) with its timestamp."""
+        self._last_vision_frame = frame if isinstance(frame, str) and frame else None
+        self.last_vision_frame_ts = frame_timestamp(ts) if self._last_vision_frame else None
+
+    def on_livekit_frame(self, frame: bytes, ts: Any = None) -> bool:
+        """
+        EXT DASH-C19: stores one JPEG frame of the linked participant's LiveKit camera track, at most one
+        a second. Returns True when the frame was kept.
+        """
+        if not isinstance(frame, (bytes, bytearray)) or not frame:
+            return False
+        stamp = frame_timestamp(ts)
+        last = self.last_livekit_frame_ts
+        if last is not None and 0 <= stamp - last < LIVEKIT_FRAME_MIN_INTERVAL_S:
+            return False
+        self.last_livekit_frame = bytes(frame)
+        self.last_livekit_frame_ts = stamp
+        return True
 
     def start_loop(self) -> None:
         """Starts the proactive awareness loop (local mode; in remote mode the Desktop Node pushes the window)."""
@@ -132,11 +180,15 @@ class VisionHandler:
         kw: list[str] = ["vision", "dekh", "see", "view", "camera", "nazar", "peeche", "pic", "click", "tasveer", "environment", "surroundings"]
         is_vision: bool = any(w in text.lower() for w in kw)
 
-        if is_vision and self._current_frame():
-            logger.info("Vision query detected. Injecting frame.")
-            b64_data: str | None = self._get_b64_frame()
-            if not b64_data:
+        if is_vision and (self._current_frame() or self.last_livekit_frame):
+            # C-48: only a frame within JARVIS_FRAME_MAX_AGE_S is shown to the model, never an old one.
+            frame_bytes: bytes | None = self.freshest_frame()
+            if not frame_bytes:
+                logger.info("Vision query detected, but no camera frame is newer than %.0f s; nothing injected.",
+                            frame_max_age_s())
                 return
+            logger.info("Vision query detected. Injecting frame.")
+            b64_data: str = base64.b64encode(frame_bytes).decode("ascii")
 
             try:
                 img_content: llm.ImageContent = llm.ImageContent(image=b64_data, mime_type="image/jpeg")
@@ -176,20 +228,75 @@ class VisionHandler:
         logger.debug("VisionHandler: no appendable chat context found.")
         return False
 
+    def _socket_frame_ts(self) -> float | None:
+        """
+        When the socket frame in use was taken: this handler's stamp, else the assistant's
+        last_vision_frame_ts. An assistant object that keeps no timestamp gets the moment this handler
+        first saw that frame, so a frame that stops changing still ages out.
+        """
+        if self._last_vision_frame:
+            return self.last_vision_frame_ts
+        frame = self._current_frame()
+        if not frame:
+            return None
+        stamp = getattr(self._assistant, "last_vision_frame_ts", None)
+        if isinstance(stamp, (int, float)) and not isinstance(stamp, bool):
+            return float(stamp)
+        key = hash(frame)
+        if self._assistant_frame_seen is None or self._assistant_frame_seen[0] != key:
+            self._assistant_frame_seen = (key, time.time())
+        return self._assistant_frame_seen[1]
+
+    def freshest_frame(self, max_age: float | None = None, now: float | None = None) -> bytes | None:
+        """
+        C-48: the newest camera frame (JPEG bytes) that is at most max_age (default
+        JARVIS_FRAME_MAX_AGE_S) old: the DASH-C19 LiveKit frame when present, else the socket frame.
+        A frame without a timestamp, or an older one, is never returned.
+        """
+        limit = frame_max_age_s() if max_age is None else max_age
+        current = time.time() if now is None else now
+        candidates: list[tuple[float, bytes]] = []
+        if self.last_livekit_frame and is_fresh(self.last_livekit_frame_ts, limit, current):
+            candidates.append((float(self.last_livekit_frame_ts or 0.0), self.last_livekit_frame))
+        socket_ts = self._socket_frame_ts()
+        b64_data = self._get_b64_frame()
+        if b64_data and is_fresh(socket_ts, limit, current):
+            try:
+                decoded = base64.b64decode(b64_data)
+            except (binascii.Error, ValueError) as e:
+                logger.warning("Socket camera frame could not be decoded: %s", e)
+            else:
+                if decoded:
+                    candidates.append((float(socket_ts or 0.0), decoded))
+        if not candidates:
+            return None
+        # The LiveKit frame wins a tie; otherwise the newer frame.
+        return max(candidates, key=lambda item: item[0])[1]
+
     async def analyze_current_frame(self, prompt: str) -> str:
-        """Analyze the current frame using the jarvis_vision system."""
-        b64_data: str | None = self._get_b64_frame()
-        if not b64_data:
-            return "Sir, right now I don't have a clear view from the camera. Please make sure it's turned on."
+        """
+        Analyzes the freshest camera frame (C-48): the LiveKit frame, else the socket frame, each only
+        within JARVIS_FRAME_MAX_AGE_S; without one, vision_system.capture_webcam (a fresh UI frame or the
+        local camera). The analysis runs through vision_system.analyze_image (Gemini, Groq, OpenRouter).
+        Every failure returns a string starting with 'Error'; each result is recorded, so
+        jarvis_vision.analysis_failed() keeps a real answer that happens to start with 'Error'.
+        """
+        image_bytes: bytes | None = self.freshest_frame()
+        try:
+            if image_bytes is None:
+                image_bytes = await vision_system.capture_webcam()
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.warning("No fresh camera frame for analysis: %s: %s", type(e).__name__, e)
+            return record_analysis(f"Error: {NO_CAMERA_MESSAGE} ({e!s})", failed=True)
 
         try:
-            image_bytes: bytes = base64.b64decode(b64_data)
-            image: Image.Image = Image.open(BytesIO(image_bytes))
-            result: str = await vision_system.analyze_via_google(prompt, image)
-            return result
+            return record_analysis(await vision_system.analyze_image(prompt, image_bytes), failed=False)
+        except LLMUnavailableError as e:
+            logger.error("Vision providers failed for the camera frame: %s", e)
+            return record_analysis(f"Error: {providers_failed_message(e)}", failed=True)
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger.error("direct analysis failed: %s", e)
-            return f"Error analyzing surroundings: {e!s}"
+            return record_analysis(f"Error analyzing surroundings: {e!s}", failed=True)
 
     async def inject_window_context(self, turn_ctx: Any) -> None:
         """Injects current window context into the chat messages."""
