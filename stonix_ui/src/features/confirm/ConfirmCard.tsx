@@ -10,7 +10,7 @@ import {
 import { Mic, Shield, Sparkles } from 'lucide-react';
 import { toast } from '@/toast';
 import { useLayout } from '@/features/shell/useLayout';
-import { formatMmSs } from '@/shared/time';
+import { confirmSecondsRemaining, formatMmSs } from '@/shared/time';
 import type { QueuedConfirm } from './useConfirmQueue';
 
 export interface ConfirmCardProps {
@@ -88,7 +88,7 @@ function CommandPreview({ text }: { text: string }) {
 }
 
 function secondsRemaining(item: QueuedConfirm): number {
-  return Math.max(0, Math.ceil((item.deadlineMs - Date.now()) / 1000));
+  return confirmSecondsRemaining(item.deadlineMs, item.ttl_ms);
 }
 
 function vibrateConfirmPulse() {

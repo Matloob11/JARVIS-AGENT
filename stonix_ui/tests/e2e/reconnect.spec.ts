@@ -46,8 +46,10 @@ test('reconnect keeps live subscriptions and request_state once per connect', as
   const requestStatesBefore = (await uiCommands(page)).filter(cmd => cmd.type === 'request_state').length;
 
   await page.getByTestId('chip-bridge').click();
-  await page.getByTestId('topbar-reconnect').click();
+  await page.getByTestId('devices-menu').getByTestId('topbar-reconnect').click();
   await expect(page.getByText('Reconnected', { exact: true })).toBeVisible({ timeout: 20_000 });
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('devices-menu')).toBeHidden();
 
   await expect
     .poll(async () => {
@@ -97,6 +99,7 @@ test('reconnect keeps live subscriptions and request_state once per connect', as
     .poll(async () => (await uiCommands(page)).filter(cmd => cmd.type === 'request_state').length)
     .toBe(requestStatesAfterEvents);
 
+  await gotoPage(page, 'activity', 'logs');
   await expect(
     page.getByTestId('trace-log-line').filter({ hasText: warningText }),
   ).toHaveCount(1);

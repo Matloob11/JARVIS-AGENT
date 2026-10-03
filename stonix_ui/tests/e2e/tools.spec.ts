@@ -27,7 +27,7 @@ test.describe.configure({ mode: 'serial' });
 
 test.beforeEach(async ({ page }) => {
   await loginViaRecovery(page);
-  await expect(page.getByText(/connected|Secure link|JARVIS Ready/i).first()).toBeVisible();
+  await expect(page.getByTestId('chip-bridge')).toBeVisible({ timeout: 15_000 });
   await page.waitForTimeout(400);
   await page.getByRole('button', { name: 'tools' }).click();
   await expect(page.getByTestId('tools-tab-panel')).toBeVisible();

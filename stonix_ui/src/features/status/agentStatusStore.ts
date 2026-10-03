@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { formatRelativeSeconds } from '@/shared/time';
 import { toEpochMs } from '@/shared/contracts/events';
 import { getSocket } from '@/shared/realtime/socket';
 import { subscribeSocketEvent } from '@/shared/realtime/subscriptions';
@@ -144,5 +145,6 @@ export function labelFromAgentState(state: AgentState): string | null {
 export function formatLastSeen(lastSeenMs: number | undefined, nowMs: number): string {
   if (lastSeenMs == null || !Number.isFinite(lastSeenMs)) return 'last seen unknown';
   const agoSec = Math.max(0, Math.floor((nowMs - lastSeenMs) / 1000));
-  return `last seen ${agoSec}s ago`;
+  if (agoSec < 1) return 'last seen just now';
+  return `last seen ${formatRelativeSeconds(agoSec)} ago`;
 }

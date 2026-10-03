@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { MotionConfig } from 'framer-motion';
 import { Toast } from '@/toast';
 import { AuthProvider, useAuth } from '@/features/auth/AuthProvider';
 import LoginScreen from '@/features/auth/LoginScreen';
@@ -87,22 +88,24 @@ const AuthenticatedApp = () => {
 };
 
 export const App = () => (
-  <Toast>
-    <div
-      id="cf-announce"
-      className="vh"
-      role="status"
-      aria-live="assertive"
-      aria-atomic="true"
-    />
-    <Sprite />
-    <AuthProvider>
-      <ConfirmHiddenTabWatcher />
-      <HtmlElectron />
-      <div className="relative min-h-screen">
-        <WindowControls />
-        <AuthenticatedApp />
-      </div>
-    </AuthProvider>
-  </Toast>
+  <MotionConfig reducedMotion="user">
+    <Toast>
+      <div
+        id="cf-announce"
+        className="vh"
+        role="status"
+        aria-live="assertive"
+        aria-atomic="true"
+      />
+      <Sprite />
+      <AuthProvider>
+        <ConfirmHiddenTabWatcher />
+        <HtmlElectron />
+        <div className="relative min-h-screen">
+          <WindowControls />
+          <AuthenticatedApp />
+        </div>
+      </AuthProvider>
+    </Toast>
+  </MotionConfig>
 );

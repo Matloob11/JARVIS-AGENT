@@ -29,6 +29,8 @@ test('panel crash shows fallback inside the card and retry restores it', async (
   await gotoPage(page, 'activity', 'logs');
   await expect(page.getByText(/System Logs/i).first()).toBeVisible();
 
+  await gotoPage(page, 'agents');
+  await expect(flowCard.getByRole('heading', { name: 'System Flow' })).toBeVisible();
   await flowCard.getByTestId('panel-error-retry').click();
 
   await expect(flowCard.getByTestId('panel-error')).toHaveCount(0, { timeout: 10_000 });

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { formatTaskCountdown } from '@/shared/time';
 import type { TaskItem, TaskNotification, TaskSource } from './useTasks';
 
 interface TasksPanelProps {
@@ -6,25 +7,6 @@ interface TasksPanelProps {
   notifications?: TaskNotification[];
   onCancelConfirmed: (id: string, source: TaskSource) => void;
   onRefresh: () => void;
-}
-
-function formatCountdown(dueMs: number, nowMs: number): string {
-  const diffSec = Math.floor((dueMs - nowMs) / 1000);
-  if (diffSec <= 0) {
-    const overdue = Math.abs(diffSec);
-    if (overdue < 60) return 'Due now';
-    const min = Math.floor(overdue / 60);
-    if (min < 60) return `Overdue ${min}m`;
-    const hr = Math.floor(min / 60);
-    return `Overdue ${hr}h ${min % 60}m`;
-  }
-  if (diffSec < 60) return `In ${diffSec}s`;
-  const min = Math.floor(diffSec / 60);
-  if (min < 60) return `In ${min}m ${diffSec % 60}s`;
-  const hr = Math.floor(min / 60);
-  if (hr < 48) return `In ${hr}h ${min % 60}m`;
-  const day = Math.floor(hr / 24);
-  return `In ${day}d ${hr % 24}h`;
 }
 
 function formatDueClock(dueMs: number): string {
@@ -153,7 +135,7 @@ const TasksPanel = ({
                     <span className={statusPill(row.status)}>{row.status}</span>
                   ) : null}
                   <span className="task-row__countdown" data-testid="task-countdown">
-                    {formatCountdown(row.due_at, nowMs)}
+                    {formatTaskCountdown(row.due_at, nowMs)}
                   </span>
                   <span className="task-row__due">{formatDueClock(row.due_at)}</span>
                 </div>

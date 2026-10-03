@@ -34,7 +34,7 @@ test('Stop emits ui_command stop once', async ({ page }) => {
 test('Pause agent emits pause_agent once', async ({ page }) => {
   const before = await countType(page, 'pause_agent');
   await page.getByTestId('chip-agent').click();
-  await page.getByTestId('agent-pause').click();
+  await page.getByTestId('chip-agent-menu').getByTestId('agent-pause').click();
   await expect.poll(async () => countType(page, 'pause_agent')).toBe(before + 1);
 });
 
@@ -57,7 +57,7 @@ test('offline message queues then sends once after Wake and agent online', async
   await page.request.post(`${MOCK}/__mock/agent`, { data: { online: false } });
   await expect(page.getByTestId('chip-agent')).toHaveAttribute('data-active', 'false');
   await page.getByTestId('chip-agent').click();
-  await expect(page.getByTestId('agent-wake')).toBeVisible();
+  await expect(page.getByTestId('chip-agent-menu').getByTestId('agent-wake')).toBeVisible();
 
   const unique = `e2e-queue-${Date.now()}`;
   const chatBefore = (await uiCommands(page)).filter(
@@ -75,7 +75,7 @@ test('offline message queues then sends once after Wake and agent online', async
 
   const startBefore = await countType(page, 'start');
   await page.getByTestId('chip-agent').click();
-  await page.getByTestId('agent-wake').click();
+  await page.getByTestId('chip-agent-menu').getByTestId('agent-wake').click();
   await expect.poll(async () => countType(page, 'start')).toBe(startBefore + 1);
 
   await page.request.post(`${MOCK}/__mock/agent`, { data: { online: true } });

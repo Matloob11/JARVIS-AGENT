@@ -3,6 +3,7 @@ import { Cpu, HardDrive, MemoryStick } from 'lucide-react';
 import { Card } from '@/shared/ui/Card';
 import type { VitalsSnapshot } from '@/features/command-center/hooks/useCommandCenter';
 import TelemetryCard, { type TelemetrySnapshot } from '@/features/telemetry/TelemetryCard';
+import { formatRelativeAgo } from '@/shared/time';
 
 const STALE_MS = 30_000;
 const HIGH_THRESHOLD = 85;
@@ -11,16 +12,10 @@ function metricValue(value: number): number {
   return Number.isFinite(value) ? value : 0;
 }
 
-function vitalsAgeMs(vitals: VitalsSnapshot, nowMs: number): number {
+function vitalsAgeMs(vitals: VitalsSnapshot, nowMs: number): number | null {
   const ts = vitals.updatedAtMs;
-  if (typeof ts !== 'number' || !Number.isFinite(ts)) return Number.POSITIVE_INFINITY;
+  if (typeof ts !== 'number' || !Number.isFinite(ts) || ts <= 0) return null;
   return Math.max(0, nowMs - ts);
-}
-
-function formatAgo(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds < 0) return 'unknown';
-  if (seconds < 1) return 'just now';
-  return `${Math.floor(seconds)}s ago`;
 }
 
 function VitalsCard({
@@ -41,8 +36,8 @@ function VitalsCard({
   nowMs: number;
 }) {
   const ageMs = vitalsAgeMs(vitals, nowMs);
-  const stale = ageMs > STALE_MS;
-  const agoSec = ageMs / 1000;
+  const stale = ageMs == null || ageMs > STALE_MS;
+  const agoSec = ageMs == null ? Number.NaN : ageMs / 1000;
 
   return (
     <Card
@@ -57,7 +52,7 @@ function VitalsCard({
         <Metric icon={MemoryStick} label="Memory" value={metricValue(vitals.ram)} />
         <Metric icon={HardDrive} label={diskLabel} value={metricValue(vitals.disk)} />
         <div className="flex items-center justify-between gap-2 text-[10px] text-command-muted">
-          <span data-testid={`${testId}-updated`}>updated {formatAgo(agoSec)}</span>
+          <span data-testid={`${testId}-updated`}>updated {formatRelativeAgo(agoSec)}</span>
           {stale ? (
             <span
               className="rounded border border-warn-border-strong bg-warn-surface px-1.5 py-0.5 uppercase tracking-wide text-command-warning"

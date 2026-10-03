@@ -16,6 +16,12 @@
 @tailwind components;
 @tailwind utilities;
 
+@media (prefers-reduced-motion: reduce) {
+  .animate-spin {
+    animation: none;
+  }
+}
+
 .sr-only {
   position: absolute;
   width: 1px;

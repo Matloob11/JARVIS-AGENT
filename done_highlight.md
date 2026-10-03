@@ -1053,3 +1053,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** refdiff port validation pass; V-1 baseline metrics in prior entry
 - **Commit:** 91a9182 · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-93 · MotionConfig, D11 times, reduced-motion CSS · 2026-10-03 04:25 PKT
+- **Kya kiya:** App `MotionConfig reducedMotion="user"`; shared `time.ts` for relative ago, task countdown, confirm TTL clamp; vitals/last-seen human units (no giant second counts); overview/Tailwind spinners off under reduced motion; e2e strict-mode/popover fixes so full suite stays green.
+- **Files:** App.tsx, time.ts, MachinesCards.tsx, TasksPanel.tsx, ConfirmCard.tsx, agentStatusStore.ts, overview.css, index.css, e2e controls-agent/reconnect/status/tools/panel-error specs, plan.md
+- **Verify:** `npm --prefix stonix_ui run build` pass; `npm --prefix stonix_ui run test:e2e` 204/204 pass; testid inventory 250 pass; presence reduced-motion gate pass
+- **Commit:** (pending) · **Deploy:** no
+- **Doosre agent ke liye:** —

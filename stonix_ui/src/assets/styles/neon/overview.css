@@ -793,3 +793,10 @@
     margin-inline: 16px;
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .overview-hero__eyebrow-spin,
+  .overview-hero__status-spin {
+    animation: none;
+  }
+}
