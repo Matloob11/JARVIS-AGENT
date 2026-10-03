@@ -1217,3 +1217,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** 3 naye tests + 78 agent_runner/entry/role tests pass; live: `jobs 1 active (load 0.00)`, room me 1 AGENT
 - **Commit:** `b8ea0c4` · **Deploy:** PC agent restart 20:25 PKT
 - **Doosre agent ke liye:** baqi: zombie job auto-recovery ko na roke (C-136 follow-up chal raha hai).
+
+### ✅ [cursor] X-94 · Accessibility gate (axe, 12 px, focus, announcer) · 2026-10-03 21:20 PKT
+- **Kya kiya:** `@axe-core/playwright` add kiya; har page/state par 0 violations. Visible text 12 px floor (tagline excepted), `:focus-visible` rings, `#sr` listening/thinking/speaking announce nahi karta. Icon-only controls aur settings fields ko names diye.
+- **Files:** stonix_ui/tests/e2e/a11y.spec.ts, stonix_ui/package.json, stonix_ui/package-lock.json, stonix_ui/src/assets/styles/neon/base.css, stonix_ui/src/features/shell/PageHeader.tsx, stonix_ui/src/features/settings/SettingsPage.tsx
+- **Verify:** npm run build pass; playwright a11y.spec 11 passed; testid inventory pass (253). Dep: @axe-core/playwright ^4.13.0
+- **Commit:** e43534a · **Deploy:** no
+- **Doosre agent ke liye:** X-95 ab X-94 ke baad; frontend deploy abhi Claude (REQ-DEPLOY)
