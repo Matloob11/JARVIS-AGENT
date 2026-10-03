@@ -1386,3 +1386,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** adversarial verify (1 refix) 0 blocker/major
 - **Commit:** is commit me · **Deploy:** nahi
 - **Doosre agent ke liye:** contracts v8 padh lo.
+
+### ✅ 🔁 [claude] load batch 3: link recovery, ops follow-ups, C-19 redaction · Agent worker restart (agent_ctl) · 2026-10-03 22:13 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 33408) band, naya pid 2964; health 200, ensure_room.py ne purane worker ke agent ka intezar kiya aur bataya: OK, an agent of the current worker is in the room. ROOM WATCHDOG on (ab log me dikhta hai), load 0.00.
+- **Files:** —
+- **Verify:** `agent_ctl.py status` → health 200, jobs 1 active; room probe: 1 AGENT
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 22:13 PKT
+- **Doosre agent ke liye:** —
