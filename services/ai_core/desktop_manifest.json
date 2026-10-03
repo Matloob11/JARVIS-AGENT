@@ -1,12 +1,12 @@
 {
-  "git_sha": "9ee160546cad02a69658dcec7e4f22459a1603d7",
+  "git_sha": "b55edea11248555851d673acb0e5891ca39d0cce",
   "lk_schema_libs": {
     "docstring-parser": "0.18.0",
     "livekit-agents": "1.4.6",
     "pydantic": "2.12.5",
     "pydantic-core": "2.41.5"
   },
-  "manifest_sha256": "7575e34be0be9e1f41fd673ed4f71639e0ab541ac437e3ae8d226732e917459c",
+  "manifest_sha256": "ce546cec003043a1bcd3a516eb61c5e635080abe6f944d30f84efe2860b808ee",
   "pc_operations": [
     {
       "arg_hooks": [],
@@ -179,7 +179,7 @@
         "long_running": false,
         "max_output_chars": 12000,
         "risk": "low",
-        "timeout": 15.0,
+        "timeout": 60.0,
         "voice_confirm": null
       },
       "module": "services.ai_core.jarvis_vision",
@@ -207,7 +207,7 @@
         "long_running": false,
         "max_output_chars": 12000,
         "risk": "low",
-        "timeout": 15.0,
+        "timeout": 60.0,
         "voice_confirm": null
       },
       "module": "services.ai_core.jarvis_vision",
@@ -272,7 +272,7 @@
         "long_running": false,
         "max_output_chars": 12000,
         "risk": "low",
-        "timeout": 15.0,
+        "timeout": 60.0,
         "voice_confirm": null
       },
       "module": "services.ai_core.jarvis_rag",
@@ -1388,7 +1388,7 @@
         "exclusive": null,
         "long_running": false,
         "max_output_chars": 12000,
-        "risk": "low",
+        "risk": "dynamic",
         "timeout": 15.0,
         "voice_confirm": null
       },
