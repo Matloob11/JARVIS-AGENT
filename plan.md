@@ -1368,7 +1368,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-92 | cursor | P3 | Account & reminders menu on the avatar, neon toasts, ack markers and DESKTOP_* toasts (X-67 data) | X-67, X-73, X-78, X-99 | DONE (cursor, 03 Oct 16:10 PKT) |
 | X-93 | cursor | P3 | Motion hygiene: MotionConfig reducedMotion="user", no framer loops, human relative times (D11) | X-83, X-84, X-85, X-98 | DONE (cursor, 03 Oct 04:25 PKT) |
 | X-94 | cursor | P3 | Accessibility gate: axe on every page and state, the 12 px floor, focus rings, announcer | X-78, X-79, X-80, X-82, X-83, X-84, X-85, X-86, X-87, X-88, X-89, X-90, X-91, X-92, X-97, X-99, X-100, X-101, X-102, X-103, X-104, X-105, X-106, X-107, X-108 | DONE (cursor, 03 Oct 21:20 PKT) |
-| X-95 | cursor | P3 | Product baselines, layout, Electron and performance gates; the nothing-removed audit | X-77, X-82, X-93, X-94, X-98, X-100, X-109 | TODO |
+| X-95 | cursor | P3 | Product baselines, layout, Electron and performance gates; the nothing-removed audit | X-77, X-82, X-93, X-94, X-98, X-100, X-109 | DONE (cursor, 03 Oct 22:00 PKT) |
 | X-96 | cursor | P3 | One socket subscription store: Reconnect re-binds every listener, request_state once per connect, init_state merges (D1–D3) | X-69 | DONE (cursor, 02 Oct 22:10 PKT) |
 | X-97 | cursor | P3 | Voice state machine: ten states, the hero status line and inline actions, helper slot, buttons and mic mirrors, Voice pill, announcer | X-72, X-73, X-75, X-76, X-78, X-104 | DONE (cursor, 03 Oct 02:15 PKT) |
 | X-98 | cursor | P3 | Reduced motion and presence.spec motion part: motion follows the level, the loop stops, nothing shifts | X-97 | DONE (cursor, 03 Oct 03:45 PKT) |

@@ -231,3 +231,61 @@ for (const size of confirmLayoutSizes) {
     await expect.poll(() => composerFullyVisible(page)).toBe(true);
   });
 }
+
+const extraGateSizes: { width: number; height: number }[] = [
+  { width: 1280, height: 595 },
+  { width: 1280, height: 635 },
+  { width: 1280, height: 560 },
+  { width: 1366, height: 657 },
+  { width: 1440, height: 900 },
+  { width: 1600, height: 900 },
+  { width: 1179, height: 640 },
+  { width: 1024, height: 600 },
+];
+
+async function shellGeometry(page: Page) {
+  return page.evaluate(() => {
+    const shell = document.querySelector('.app-shell') as HTMLElement | null;
+    const transform = shell ? getComputedStyle(shell).transform : 'none';
+    const undersize: string[] = [];
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      const text = node.textContent?.trim() ?? '';
+      if (!text) continue;
+      const el = node.parentElement;
+      if (!el) continue;
+      if (el.closest('.vh, [aria-hidden="true"], .sidebar-tagline')) continue;
+      const style = getComputedStyle(el);
+      if (style.display === 'none' || style.visibility === 'hidden') continue;
+      const rect = el.getBoundingClientRect();
+      if (rect.width < 1 || rect.height < 1) continue;
+      const size = parseFloat(style.fontSize);
+      if (Number.isFinite(size) && size < 11.95) undersize.push(`${size} ${text.slice(0, 40)}`);
+    }
+    const composer = document.querySelector('.command-input') as HTMLElement | null;
+    const panel = document.querySelector('.app-shell-panel') as HTMLElement | null;
+    const c = composer?.getBoundingClientRect();
+    const p = panel?.getBoundingClientRect();
+    const composerInPanel = Boolean(
+      c && p && c.left >= p.left - 1 && c.right <= p.right + 1 && c.bottom <= p.bottom + 2,
+    );
+    return { transform, undersize, composerInPanel, scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth };
+  });
+}
+
+for (const size of extraGateSizes) {
+  test(`§5.8 extra size ${size.width}x${size.height}: scroll, transform, composer, 12px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(size);
+    const geo = await shellGeometry(page);
+    expect(geo.scrollWidth).toBeLessThanOrEqual(geo.clientWidth + 1);
+    expect(geo.transform === 'none' || geo.transform === 'matrix(1, 0, 0, 1, 0, 0)').toBeTruthy();
+    expect(geo.undersize, geo.undersize.slice(0, 8).join(' | ')).toEqual([]);
+    if (size.width >= 1024) {
+      expect(geo.composerInPanel).toBe(true);
+    }
+  });
+}
+

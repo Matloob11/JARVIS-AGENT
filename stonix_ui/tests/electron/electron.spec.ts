@@ -65,6 +65,19 @@ test('unreachable VPS URL shows offline.html', async () => {
   }
 });
 
+test('tray and favicon strings', async () => {
+  const app = await launchElectron();
+  try {
+    const window = await app.firstWindow();
+    await window.waitForLoadState('domcontentloaded');
+    const html = await window.content();
+    expect(html).toMatch(/favicon/i);
+    await expect(window).toHaveTitle(/JARVIS & ANNA/i);
+  } finally {
+    await app.close();
+  }
+});
+
 test('backend mode none does not spawn agent or vortex python', async () => {
   const before = countJarvisPythonProcesses();
   const app = await launchElectron();
