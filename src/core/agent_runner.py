@@ -11,7 +11,6 @@ import functools
 import logging
 import os
 import traceback
-import uuid
 from collections.abc import Awaitable, Callable, Coroutine
 from typing import Any
 
@@ -148,6 +147,7 @@ try:
 except (ImportError, ValueError):
     from agent_core import BrainAssistant  # type: ignore
 
+from src.core.conversation_router import ConversationRouter, preview
 from src.core.vision_handler import append_chat_message, desktop_data_message
 
 logger = setup_logger("AGENT-RUNNER")
@@ -278,15 +278,20 @@ def relink_room_input(session: Any, room: Any) -> str | None:
     return identity
 
 
-def session_room_options() -> Any:
+def session_room_options(text_input_cb: Callable[..., Any] | None = None) -> Any:
     """
     The room options of the voice session. close_on_disconnect is off: by default livekit-agents closes the
     whole AgentSession when the linked participant leaves on purpose (a page refresh), and since the bridge mints a
     new identity for every token the owner always comes back as another participant, so the agent stayed in the
     room but never listened again (2026-10-03). With it off the session stays up and follow_owner_reconnects()
     links the owner's new identity.
+    C-42 (K-59): text_input_cb (the ConversationRouter's) answers 'lk.chat' instead of LiveKit's default, so
+    typed text from the room takes the same path as typed text from the UI. None keeps LiveKit's default.
     """
-    return lk_room_io.RoomOptions(close_on_disconnect=False)
+    if text_input_cb is None:
+        return lk_room_io.RoomOptions(close_on_disconnect=False)
+    return lk_room_io.RoomOptions(close_on_disconnect=False,
+                                  text_input=lk_room_io.TextInputOptions(text_input_cb=text_input_cb))
 
 
 def follow_owner_reconnects(session: Any, room: Any) -> None:
@@ -729,6 +734,7 @@ async def entrypoint(ctx: agents.JobContext):
 
     while attempt < max_retries:
         session: AgentSession | None = None
+        router: ConversationRouter | None = None
         # ULTRA-STRICT: Centralized Task Tracking Set
         active_tasks: set[asyncio.Task] = set()
 
@@ -741,7 +747,6 @@ async def entrypoint(ctx: agents.JobContext):
             from services.utils.jarvis_bridge import (  # pylint: disable=import-outside-toplevel
                 notify_location,
                 notify_thinking,
-                notify_transcription,
                 notify_ui,
             )
             logger.info("Attempting to start session (Timeout: 60s)...")
@@ -797,6 +802,10 @@ async def entrypoint(ctx: agents.JobContext):
                 current_city=city,
                 user_id=user_id,
             )
+            # C-42: typed chat (UI and lk.chat) goes into this job's session through the router, and the
+            # router emits every transcript message once (conversation_item_added).
+            router = ConversationRouter(assistant, spawn=track)
+            assistant.attach_router(router)
 
             # Realtime model owns in-room voice. Do not attach Cloud TTS for chat
             # (AI Studio keys are not Cloud TTS credentials; chat uses text notify).
@@ -822,8 +831,10 @@ async def entrypoint(ctx: agents.JobContext):
 
 
             logger.info("[AGENT] Connecting room and starting session...")
-            await session.start(room=ctx.room, agent=assistant, room_options=session_room_options())
+            await session.start(room=ctx.room, agent=assistant,
+                                room_options=session_room_options(router.text_input_cb))
             logger.info("[AGENT] Session started successfully.")
+            router.attach(session)
             harden_room_input(session, ctx.room)  # C-124: owner-only RPC and text (VPS; PC opt-in)
             follow_owner_reconnects(session, ctx.room)  # the owner comes back under a new identity
             assistant.attach_session(session)
@@ -846,44 +857,25 @@ async def entrypoint(ctx: agents.JobContext):
                         track(_process_user_audio(publication, assistant))
             # --------------------------------------------
 
-            # --- Message ID Tracking for UI Stability ---
-            current_user_msg_id = None
-
+            # --- Transcript messages (K-58) ---
+            # C-42: conversation_item_added is the single source of chat messages (voice user text with the
+            # item id, typed text never twice, replies with turn_id); a final transcription is only logged.
             @session.on("user_input_transcribed")
             def on_user_transcription(event: agents.voice.UserInputTranscribedEvent, _assistant=assistant):
-                nonlocal current_user_msg_id
-                if event.transcript:
-                    if _assistant.muted:
-                        # Skip UI broadcast if muted
-                        return
-
-                    # 🔋 PERFORMANCE OPTIMIZATION: Only notify UI of FINAL user transcriptions
-                    # This prevents the UI from over-rendering one word at a time, which was causing hangs.
-                    if event.is_final:
-                        logger.info("🎤 User Transcription (Final): %s", event.transcript)
-
-                        # Generate or reuse ID
-                        if current_user_msg_id is None:
-                            current_user_msg_id = str(uuid.uuid4())
-
-                        track(notify_transcription(
-                            "user", event.transcript, is_final=True,
-                            msg_id=current_user_msg_id))
-
-                        current_user_msg_id = None # Reset for next turn
-                    else:
-                        # Optional: Just log locally for debugging, don't flood the UI
-                        logger.debug("🎤 Partial Input: %s", event.transcript)
+                if not event.transcript or _assistant.muted:
+                    return
+                if event.is_final:
+                    logger.info("🎤 User Transcription (Final, %d chars): %s", len(event.transcript),
+                                preview(event.transcript))
+                    logger.debug("🎤 User Transcription (Final): %s", event.transcript)
+                else:
+                    # Optional: Just log locally for debugging, don't flood the UI
+                    logger.debug("🎤 Partial Input: %s", event.transcript)
 
             @session.on("conversation_item_added")
-            def on_conversation_item_added(event: agents.voice.ConversationItemAddedEvent):
-                item = event.item
-                if hasattr(item, 'role') and item.role == "assistant":
-                    text = getattr(item, 'text_content', None)
-                    if text:
-                        logger.info("🤖 Agent Transcription: %s", text)
-                        track(notify_transcription(
-                            "agent", text, is_final=True))
+            def on_conversation_item_added(event: agents.voice.ConversationItemAddedEvent,
+                                           _router: ConversationRouter = router):
+                _router.on_conversation_item_added(event)
 
             @session.on("agent_state_changed")
             def on_agent_state_changed(event: agents.voice.AgentStateChangedEvent):
@@ -941,6 +933,8 @@ async def entrypoint(ctx: agents.JobContext):
                 logger.info("🔄 Retrying in %ds...", retry_delay)
                 await asyncio.sleep(retry_delay)
         finally:
+            if router is not None:
+                router.detach()  # typed chat gets the offline answer until the next session attaches
             await _cleanup_session_resources(session, list(active_tasks))
 
 

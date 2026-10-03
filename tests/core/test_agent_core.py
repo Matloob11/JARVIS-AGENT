@@ -151,3 +151,27 @@ async def test_handle_persona_switch(mock_agent_deps):
         await assistant._handle_persona_switch(is_anna=True, is_jarvis=False)
         assert assistant.persona_manager.is_anna is True
         mock_update.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_handle_user_query_delegates_to_an_attached_router(mock_agent_deps):
+    """C-42 step 8: with a router the query goes into the live session; the router emits the messages."""
+    assistant, _ = create_test_assistant(mock_agent_deps)
+    router = MagicMock()
+    router.handle_text = AsyncMock(return_value="accepted")
+    assistant.attach_router(router)
+    with patch.object(assistant, "process_with_reasoning", new_callable=AsyncMock) as template:
+        assert await assistant.handle_user_query("Jarvis, 7 times 8?") == ""
+    router.handle_text.assert_awaited_once_with("Jarvis, 7 times 8?", origin="query")
+    template.assert_not_awaited()
+    assert assistant.conversation_router is router
+
+
+@pytest.mark.asyncio
+async def test_handle_user_query_without_a_router_keeps_the_template_path(mock_agent_deps):
+    assistant, _ = create_test_assistant(mock_agent_deps)
+    assert assistant.conversation_router is None
+    with patch.object(assistant, "process_with_reasoning", new_callable=AsyncMock,
+                      return_value="Ji Sir") as template:
+        assert await assistant.handle_user_query("salam; Sir") == "Ji Sir"
+    template.assert_awaited_once_with("salam Sir")

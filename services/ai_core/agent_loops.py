@@ -181,12 +181,12 @@ _CHAT_ID_MAX = 128
 
 def chat_input(payload: Any) -> tuple[str | None, str] | None:
     """
-    (id, text) of a ui_command 'chat' (K-41): the UI's {id, text} keeps its id; a legacy plain string, or a
-    dict without a usable id (a str of 1-128 printable characters), gives None for the id. None when there
-    is no text to answer.
+    (id, text) of a ui_command 'chat' (K-41, K-59): the UI's {id|client_msg_id, text} keeps its id; a legacy
+    plain string, or a dict without a usable id (a str of 1-128 printable characters), gives None for the
+    id. None when there is no text to answer.
     """
     if isinstance(payload, dict):
-        text, msg_id = payload.get("text"), payload.get("id")
+        text, msg_id = payload.get("text"), payload.get("id") or payload.get("client_msg_id")
         if not (isinstance(msg_id, str) and 0 < len(msg_id) <= _CHAT_ID_MAX and msg_id.isprintable()):
             msg_id = None
     else:
@@ -253,7 +253,8 @@ class UIBridgeListener:
                     logger.debug("Chat command without text ignored (%s)", type(payload).__name__)
                 else:
                     msg_id, text = chat
-                    logger.info("💬 Chat message received (id %s): %s", msg_id or "new", text)
+                    # The text itself is logged by the router (a 60-character preview at INFO, K-59).
+                    logger.info("💬 Chat message received (id %s, %d chars)", msg_id or "new", len(text))
                     new_task = asyncio.create_task(self._task_wrapper(text, msg_id))
                     self.assistant._spawned_tasks.add(new_task) # type: ignore[attr-defined]
                     new_task.add_done_callback(self.assistant._spawned_tasks.discard) # type: ignore[attr-defined]
@@ -268,11 +269,28 @@ class UIBridgeListener:
 
     async def _task_wrapper(self, payload: str, msg_id: str | None = None) -> None:
         """
-        Handle UI chat as text only — never call session.say() (no TTS dependency). C-MSG-1: the user's
-        message is echoed with the UI's id (msg_id; a new id only for a legacy string) and source 'text', so
-        the bridge and the UI keep one bubble; the reply follows with source 'text' and turn_id = that id.
+        C-42 (K-59): a thin call into the job's ConversationRouter, which emits the user message once with
+        the UI's id and sends the text into the live session (the reply comes from conversation_item_added).
+        An assistant without a router (an old integration, tests) keeps the text-only template path.
         """
-        response_text = "Sir, main yahan hoon."
+        from src.core.conversation_router import (  # pylint: disable=import-outside-toplevel
+            ORIGIN_UI,
+            router_of,
+        )
+        router = router_of(self.assistant)
+        if router is not None:
+            await router.handle_text(payload, msg_id, origin=ORIGIN_UI)
+            return
+        await self._template_reply(payload, msg_id)
+
+    async def _template_reply(self, payload: str, msg_id: str | None = None) -> None:
+        """
+        The pre-C-42 text path, only for an assistant without a router: never calls session.say() (no TTS).
+        C-MSG-1: the user's message is echoed with the UI's id (msg_id; a new id only for a legacy string)
+        and source 'text', so the bridge and the UI keep one bubble; the reply follows with source 'text'
+        and turn_id = that id. An empty answer sends no reply bubble.
+        """
+        response_text = ""
         user_msg_id = msg_id or str(uuid.uuid4())
         try:
             await notify_transcription("user", payload, msg_id=user_msg_id, source="text")
@@ -280,7 +298,7 @@ class UIBridgeListener:
             safe_message = vortex_guard.sanitize_input(payload)
             try:
                 response = await self.assistant.handle_user_query(safe_message)
-                response_text = str(response or "").strip() or response_text
+                response_text = str(response or "").strip()
                 logger.info("CHAT_TEXT_PATH_V2 query ok (%d chars)", len(response_text))
             except Exception as query_err:  # pylint: disable=broad-exception-caught
                 logger.error(
@@ -297,15 +315,13 @@ class UIBridgeListener:
                 "Sir, mujhe jawab generate karte waqt issue aaya. Dobara try karein."
             )
 
+        if not response_text:
+            return
         try:
             assistant_msg_id = str(uuid.uuid4())
             await notify_transcription("assistant", response_text, msg_id=assistant_msg_id,
                                        source="text", turn_id=user_msg_id)
-            logger.info(
-                "💬 Text reply sent to UI (%d chars): %s",
-                len(response_text),
-                response_text[:120],
-            )
+            logger.info("💬 Text reply sent to UI (%d chars)", len(response_text))
         except Exception as notify_err:  # pylint: disable=broad-exception-caught
             logger.error("CHAT_TEXT_PATH_V2 assistant notify failed: %s", notify_err, exc_info=True)
 

@@ -270,9 +270,9 @@ async def test_notify_event_posts_exactly_the_signed_bytes(link, monkeypatch):
     request = bridge.requests[0]
     assert str(request.url) == "http://bridge.test/vortex/notify"
     raw = request.content
-    assert json.loads(raw)["payload"] | {"timestamp": 0} == {"id": "u-1", "role": "user", "text": "salam",
-                                                             "is_final": True, "source": "text",
-                                                             "turn_id": "t-0", "timestamp": 0}
+    assert json.loads(raw)["payload"] | {"timestamp": 0, "ts": 0} == {
+        "id": "u-1", "role": "user", "text": "salam", "final": True, "is_final": True, "source": "text",
+        "turn_id": "t-0", "ts": 0, "timestamp": 0}
     headers = request.headers
     assert headers["x-agent-token"] == AGENT_TOKEN and "x-vortex-token" not in headers
     assert jarvis_security.verify_notify(headers["x-agent-timestamp"], headers["x-agent-nonce"], raw,
@@ -281,11 +281,27 @@ async def test_notify_event_posts_exactly_the_signed_bytes(link, monkeypatch):
 
 
 async def test_old_transcription_callers_send_what_they_sent_before(link, monkeypatch):
+    """K-58 (C-42 step 1): an old call keeps every field it sent, and only gains the K-58 ones."""
     bridge = Bridge(monkeypatch)
     await jarvis_bridge.notify_transcription("agent", "Ji Sir", is_final=False)
     [body] = bridge.bodies()
-    assert set(body["payload"]) == {"id", "role", "text", "is_final", "timestamp"}  # no source, no turn_id
-    assert body["payload"]["is_final"] is False and body["payload"]["role"] == "agent"
+    payload = body["payload"]
+    assert {"id", "role", "text", "is_final", "timestamp"} <= set(payload)  # the legacy fields stay
+    assert set(payload) == {"id", "role", "text", "is_final", "timestamp", "final", "ts", "source"}
+    assert payload["is_final"] is False and payload["final"] is False
+    assert payload["role"] == "assistant" and payload["source"] == "voice"  # 'agent' -> 'assistant'
+    assert payload["ts"] == payload["timestamp"]
+    await bridge.client.aclose()
+
+
+async def test_transcription_extra_fields_are_added_and_never_replace_one(link, monkeypatch):
+    bridge = Bridge(monkeypatch)
+    await jarvis_bridge.notify_transcription("user", "salam", msg_id="u-1", source=None,
+                                             extra={"score": 0.9, "id": "other", "persona": "jarvis"})
+    [body] = bridge.bodies()
+    payload = body["payload"]
+    assert payload["id"] == "u-1" and payload["score"] == 0.9 and payload["persona"] == "jarvis"
+    assert "source" not in payload  # source=None: the bridge decides, as before
     await bridge.client.aclose()
 
 

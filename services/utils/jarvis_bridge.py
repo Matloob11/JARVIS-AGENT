@@ -571,24 +571,32 @@ async def notify_thinking(status: str) -> None:
 async def notify_transcription(role: str, text: str,
                                msg_id: str | None = None,
                                is_final: bool = True,
-                               *,
-                               source: str | None = None,
-                               turn_id: str | None = None) -> None:
+                               source: str | None = "voice",
+                               turn_id: str | None = None,
+                               extra: dict[str, Any] | None = None) -> None:
     """
-    Sends a chat message to the STONIX UI Bridge (C-MSG-1), which upserts it by id. source is 'voice',
-    'text' or 'system' (left out: the bridge decides); turn_id names the user message a reply answers.
+    Sends a chat message to the STONIX UI Bridge (K-58 CT-VC-MESSAGE, C-MSG-1), which upserts it by id:
+    {id, role ('agent' becomes 'assistant'), text, source, final, ts (epoch s), turn_id?, is_final,
+    timestamp, **extra}. is_final/timestamp stay for the UIs that still read them. source is 'voice'
+    (default), 'text' or 'system' (None: left out, the bridge decides); turn_id names the user message a
+    reply answers; extra adds fields (text_native, score, persona) and never replaces one of these.
     """
+    now = time.time()
     payload: dict[str, Any] = {
         "id": msg_id or str(uuid.uuid4()),
-        "role": role,
+        "role": "assistant" if role == "agent" else role,
         "text": text,
+        "final": is_final,
+        "ts": now,
         "is_final": is_final,
-        "timestamp": time.time(),
+        "timestamp": now,
     }
     if source:
         payload["source"] = source
     if turn_id:
         payload["turn_id"] = turn_id
+    for key, value in (extra or {}).items():
+        payload.setdefault(key, value)
     await notify_event("transcription", payload)
 
 

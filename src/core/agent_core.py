@@ -183,6 +183,7 @@ class BrainAssistant(Agent):
         self.conversation_history: list[dict[str, Any]] = []
         self._wake_word_mode: bool = True
         self._active_session: AgentSession | None = None
+        self._conversation_router: Any = None  # C-42: typed chat goes into the session through it
         self._muted: bool = False
         self._audio_buffer: deque[int] = deque(maxlen=96000)
         self._audio_sample_rate: int = 16000 # Default
@@ -481,6 +482,15 @@ class BrainAssistant(Agent):
             "modality": "audio" if self.persona_manager.is_anna else "text",
         }
 
+    @property
+    def conversation_router(self) -> Any:
+        """The job's ConversationRouter (C-42), when one is attached."""
+        return getattr(self, "_conversation_router", None)
+
+    def attach_router(self, router: Any) -> None:
+        """C-42: typed questions (handle_user_query, UI chat) go through this router into the live session."""
+        self._conversation_router = router
+
     def attach_session(self, session: AgentSession) -> None:
         """
         Stores the active LiveKit session for dynamic updates and starts vision context polling.
@@ -679,7 +689,15 @@ class BrainAssistant(Agent):
         await self.bridge_notifier.notify_persona(persona)
 
     async def handle_user_query(self, query: str) -> str:
-        """EntryPoint for user queries."""
+        """
+        EntryPoint for typed user queries. C-42: with a ConversationRouter attached the query goes into the
+        live session (the same brain, tools and memory as voice) and the router emits the messages itself,
+        so this returns ''. Without a router: the old template path.
+        """
+        router = self.conversation_router
+        if router is not None:
+            await router.handle_text(query, origin="query")
+            return ""
         start_time = datetime.now()
         sanitized = vortex_guard.sanitize_input(query)
         threat = vortex_guard.detect_threat(sanitized)

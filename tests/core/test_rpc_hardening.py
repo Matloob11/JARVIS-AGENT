@@ -216,7 +216,8 @@ async def test_the_pc_worker_keeps_todays_room_input_by_default(local):
 
 def test_the_entrypoint_hardens_right_after_session_start():
     source = pathlib.Path(agent_runner.__file__).read_text(encoding="utf-8")
-    start = source.index("await session.start(room=ctx.room, agent=assistant, room_options=session_room_options())")
+    start = source.index("await session.start(room=ctx.room, agent=assistant,")
+    assert source.index("room_options=session_room_options(router.text_input_cb))") > start
     assert source.index("harden_room_input(session, ctx.room)") > start
     assert source.index("harden_room_input(session, ctx.room)") < source.index("assistant.attach_session(session)")
 
