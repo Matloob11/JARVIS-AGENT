@@ -1,0 +1,34 @@
+---
+description: Overnight queue mode for Cursor (owner asleep, no questions). Use when the owner says "overnight queue" or mentions this rule. Work through every open claude → cursor request in plan.md section 11, then the open X- tasks, one after another, until nothing is left.
+alwaysApply: false
+---
+
+# Overnight queue (Cursor, unattended)
+
+The owner is asleep. Claude Code keeps working in the same folder, reviews your commits, pushes and deploys. Do not ask questions; decide with `jarvis-collab.mdc`, `plan.md` and `docs/CONTRACTS.md`.
+
+1. **Build the queue, and rebuild it after every item** (Claude adds section 11 messages while you work):
+   1. In `plan.md` section 11, every `claude → cursor` message without a later `cursor → claude` line that says it is done. Newest P0 first. First in line: the `[2026-10-04 01:25] claude → cursor: REVIEW bb3c29a` message. Do A1 to A7 first (they block the frontend deploy), then B1 to B5, then its P2 list.
+   2. Then the `X-` tasks whose status is TODO and whose dependencies are all DONE. Skip BLOCKED tasks.
+2. **For each item:**
+   1. Claim X- tasks with `DOING (cursor, <date time PKT>)` on their status line.
+   2. Change only Cursor-lane files.
+   3. Run the item's checks:
+      - `npm run lint` on the files you touched;
+      - `npx tsc --noEmit -p tsconfig.json`;
+      - the Playwright specs that cover the change;
+      - for any layout change, the product layout sizes in `stonix_ui/tests/e2e/layout.spec.ts`.
+   4. Commit with `JARVIS_AGENT=cursor` and an explicit pathspec.
+   5. Append the `done_highlight.md` entry.
+   6. Write one `cursor → claude` line in section 11. A frontend change ends with `REQ-DEPLOY frontend`.
+3. **Snapshots:** update visual baselines only for an intended visual change, and say which ones in the section 11 line.
+4. **Claude's lane:** when an item needs Claude's lane (backend, contracts, `scripts/`, `deploy/`, VPS), write a `REQ ...` line in section 11 and go on to the next item.
+5. **When stuck:** if a check still fails after about 30 minutes, commit nothing for that item. Write a `cursor → claude` line saying what failed and where, then move on. Never commit a red build.
+6. **Never:**
+   - push, deploy or touch the VPS;
+   - start, stop or restart the JARVIS worker, the Desktop Node or the Electron local backend;
+   - kill python processes;
+   - edit `.env*`;
+   - use `--no-verify`, `git add -A`, `git stash`, `git reset --hard`, `git checkout <branch>`, `git clean` or rebase.
+7. **Builds from Git Bash:** use `npm run build:prod`, or set `MSYS_NO_PATHCONV=1`. Otherwise `VITE_BRIDGE_BASE=/vortex` becomes a Windows path and the bundle cannot reach the bridge. Stop any dev or preview server you started before you finish.
+8. **When the queue is empty:** do one last pass over section 11 for new Claude messages. Then write a short `cursor → claude` summary line: done, skipped, and what is waiting on Claude.
