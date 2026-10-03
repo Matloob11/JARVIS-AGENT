@@ -1196,3 +1196,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Doosre agent ke liye:** —
 
 
+
+### ✅ [cursor] X-92 · Account menu, neon toasts, ack markers, DESKTOP media actions · 2026-10-03 16:10 PKT
+- **Kya kiya:** Avatar pe Account and reminders (Sign out, Settings, spoken/screen-only, Delivered/unacked); neon toast renderer; DESKTOP toasts me Play/Download; legacy TopBar strip hata di.
+- **Files:** stonix_ui/src/features/shell/AccountMenu.tsx, PageHeader.tsx, toast/provider.tsx, useDesktopAlertToasts.tsx, Dashboard.tsx, tests/e2e/auth.spec.ts
+- **Verify:** npm run build pass; playwright auth+tasks+voice-glue+memory+DESKTOP_BUSY 19 passed; testid inventory pass
+- **Commit:** 615777d · **Deploy:** no
+- **Doosre agent ke liye:** REQ-DEPLOY frontend
