@@ -32,7 +32,7 @@ export function LaptopDevicesSection({ desktop }: LaptopDevicesSectionProps) {
       : 'n/a';
 
   return (
-    <div className="neon-pop-sec" data-testid="chip-laptop">
+    <div className="neon-pop-sec" data-testid="chip-laptop" data-shape={chip.shape}>
       <b>
         Laptop (Desktop Node){' '}
         <Pill tone={chip.tone} status={chip.statusKind} statusLabel={chip.long}>

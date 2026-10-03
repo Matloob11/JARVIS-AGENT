@@ -47,15 +47,16 @@ async function openDevicesLaptop(page: import('@playwright/test').Page) {
 test('unknown laptop chip before first desktop_status', async ({ page }) => {
   await openDevicesLaptop(page);
   await expect(page.getByTestId('chip-laptop')).toContainText('unknown');
+  await expect(page.getByTestId('chip-laptop')).toHaveAttribute('data-shape', 'unknown');
 });
 
-const chipCases: { fixture: string; label: string }[] = [
-  { fixture: 'desktop_status_online', label: 'Full' },
-  { fixture: 'desktop_status_stale', label: 'Stale' },
-  { fixture: 'desktop_status_offline', label: 'Offline' },
-  { fixture: 'desktop_status_locked', label: 'Locked' },
-  { fixture: 'desktop_status_panic', label: 'Panic' },
-  { fixture: 'desktop_status_readonly', label: 'Read-only' },
+const chipCases: { fixture: string; label: string; shape: string }[] = [
+  { fixture: 'desktop_status_online', label: 'Full', shape: 'full' },
+  { fixture: 'desktop_status_stale', label: 'Stale', shape: 'stale' },
+  { fixture: 'desktop_status_offline', label: 'Offline', shape: 'offline' },
+  { fixture: 'desktop_status_locked', label: 'Locked', shape: 'locked' },
+  { fixture: 'desktop_status_panic', label: 'Panic', shape: 'panic' },
+  { fixture: 'desktop_status_readonly', label: 'Read-only', shape: 'readonly' },
 ];
 
 for (const row of chipCases) {
@@ -67,6 +68,10 @@ for (const row of chipCases) {
     await mockEmit(page, 'desktop_status', payload);
     await openDevicesLaptop(page);
     await expect(page.getByTestId('chip-laptop')).toContainText(row.label);
+    await expect(page.getByTestId('chip-laptop')).toHaveAttribute('data-shape', row.shape);
+    await gotoPage(page, 'agents', 'laptop');
+    await expect(page.getByTestId('laptop-card')).toContainText(row.label);
+    await expect(page.getByTestId('laptop-card')).toHaveAttribute('data-shape', row.shape);
   });
 }
 

@@ -56,6 +56,9 @@ export function LaptopCard({ persona, location }: LaptopCardProps) {
     desktop.version?.trim() ||
     (desktop.gitSha ? desktop.gitSha.slice(0, 8) : '') ||
     'unknown';
+  const manifestLine =
+    desktop.manifestOk === true ? 'ok' : desktop.manifestOk === false ? 'fail' : '—';
+  const brainLine = desktop.brain?.trim() ? desktop.brain : '—';
   const rttLine =
     desktop.rttMsP50 != null && Number.isFinite(desktop.rttMsP50)
       ? `${desktop.rttMsP50} ms`
@@ -63,7 +66,7 @@ export function LaptopCard({ persona, location }: LaptopCardProps) {
   const lastSeenLine = desktop.seen ? formatDesktopLastSeen(desktop.lastSeenMs, nowMs) : 'never';
 
   return (
-    <div data-testid="laptop-card" data-anchor="laptop" className="agents-anchor">
+    <div data-testid="laptop-card" data-anchor="laptop" className="agents-anchor" data-shape={chip.shape}>
       <Card
         icon="laptop"
         title="Laptop (Desktop Node)"
@@ -87,8 +90,13 @@ export function LaptopCard({ persona, location }: LaptopCardProps) {
           <dd>{voiceLine}</dd>
           <dt>Busy tool</dt>
           <dd>{busyLine}</dd>
+          <dt>Brain</dt>
+          <dd>{brainLine}</dd>
           <dt>Version</dt>
-          <dd>{versionLine}</dd>
+          <dd>
+            {versionLine}
+            {desktop.seen ? ` · manifest ${manifestLine}` : ''}
+          </dd>
           <dt>Round trip</dt>
           <dd>{rttLine}</dd>
           <dt>Last seen</dt>
@@ -102,6 +110,10 @@ export function LaptopCard({ persona, location }: LaptopCardProps) {
         ) : chip.shape === 'readonly' ? (
           <p className="agents-vid-note">
             Read-only until the laptop tray switches back to Full.
+          </p>
+        ) : chip.shape === 'panic' ? (
+          <p className="agents-vid-note">
+            Panic: desktop control is halted until the laptop recovers.
           </p>
         ) : null}
 

@@ -11,6 +11,8 @@ import { useLiveKit } from '@/features/voice/LiveKitProvider';
 import { getPersona } from '@/shared/persona';
 import type { LayoutMode } from './useLayout';
 import { connectedDeviceCount, useVortexStatusPoll } from './useVortexStatusPoll';
+import { useDesktopStatus } from '@/features/status/useDesktopStatus';
+import { deriveLaptopChipPresentation, type LaptopChipShape } from '@/features/status/laptopChipPresentation';
 import { deriveVoicePillCopy } from './voicePillState';
 import { useE2EVoiceTick } from '@/features/voice/voiceState';
 import { AgentPopover } from './popovers/AgentPopover';
@@ -54,6 +56,30 @@ function agentSystemPillCopy(
   return { full: 'System Online', compact: 'Online', active: true, shape: 'online' };
 }
 
+function DevicesPillMarks({
+  shape,
+  cameraOn,
+}: {
+  shape: LaptopChipShape;
+  cameraOn: boolean;
+}) {
+  const mark =
+    shape === 'panic'
+      ? 'panic'
+      : shape === 'stale' || shape === 'locked'
+        ? 'warn'
+        : shape === 'readonly'
+          ? 'readonly'
+          : null;
+  return (
+    <span className="header-pill-marks" aria-hidden>
+      {mark === 'panic' ? <span className="n-sh" data-s="err" data-laptop-mark="panic" /> : null}
+      {mark === 'warn' ? <span className="n-sh" data-s="warn" data-laptop-mark="stale" /> : null}
+      {mark === 'readonly' ? <span className="n-sh" data-s="dev" data-laptop-mark="readonly" /> : null}
+      {cameraOn ? <span className="n-sh" data-s="rec" data-laptop-mark="camera" /> : null}
+    </span>
+  );
+}
 function AgentPillShape({ shape }: { shape: 'online' | 'warn' | 'err' | 'unknown' | 'spinner' }) {
   if (shape === 'spinner') {
     return <Loader2 size={16} className="header-pill-spin animate-spin" aria-hidden />;
@@ -93,6 +119,7 @@ export function StatusPills({
   const { status, agentStatusSeen } = useAgentStatusStore();
   const agent = useAgentStatus();
   const vortex = useVortexStatusPoll(true);
+  const desktop = useDesktopStatus();
   const nowMs = useNowMsMinute();
   const sheet = layout === 'ph';
 
@@ -105,10 +132,12 @@ export function StatusPills({
     setOpenPop(prev => (prev === id ? null : id));
   };
 
+  const laptopForCount = desktop.seen ? desktop.online : vortex.laptopOnline;
   const deviceCount = useMemo(
-    () => connectedDeviceCount(vortex.uiClients, status.online, vortex.laptopOnline),
-    [vortex.uiClients, vortex.laptopOnline, status.online],
+    () => connectedDeviceCount(vortex.uiClients, status.online, laptopForCount),
+    [vortex.uiClients, laptopForCount, status.online],
   );
+  const laptopChip = deriveLaptopChipPresentation(desktop);
 
   const agentTitle = useMemo(() => {
     const last = formatLastSeen(status.lastSeenMs, nowMs);
@@ -154,6 +183,8 @@ export function StatusPills({
           compact={compact}
           narrow={narrow}
           deviceCount={deviceCount}
+          laptopMark={laptopChip.shape}
+          cameraOn={cameraState.enabled}
           expanded={openPop === 'devices'}
           onToggle={() => togglePop('devices')}
         />
@@ -199,11 +230,13 @@ const BridgeDevicesPill = forwardRef<
     compact: boolean;
     narrow: boolean;
     deviceCount: number;
+    laptopMark: LaptopChipShape;
+    cameraOn: boolean;
     expanded: boolean;
     onToggle: () => void;
   }
 >(function BridgeDevicesPill(
-  { bridgeConnected, compact, narrow, deviceCount, expanded, onToggle },
+  { bridgeConnected, compact, narrow, deviceCount, laptopMark, cameraOn, expanded, onToggle },
   ref,
 ) {
   const label = useMemo(() => {
@@ -237,6 +270,7 @@ const BridgeDevicesPill = forwardRef<
       onClick={onToggle}
     >
       <Monitor className="header-pill-ic" size={20} aria-hidden />
+      <DevicesPillMarks shape={laptopMark} cameraOn={cameraOn} />
       <span className="header-pill-lbl">{label}</span>
     </button>
   );
