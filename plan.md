@@ -1161,7 +1161,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | C-69 | claude | P1 | Gated pipeline in production: UtteranceGate, wake-word gate, accepted-turn hook | C-68, K-62 (CT-VC-TURN-GATE) | TODO |
 | C-70 | claude | P1 | Per-turn context: ContextBuilder (memory, window, vision, reasoning, ANNA notes, clipboard) for voice and typed turns | C-69, C-53, C-50, C-67, K-21 (ActiveWindowContext), K-19 (ClipboardSuggestion) | TODO |
 | C-71 | claude | P1 | STT resilience: Gemini REST fallback STT with model resolution at startup | C-69 | TODO |
-| C-72 | claude | P1 | Voice-ID engine API: in-memory verify_pcm, enroll, prewarm | C-38, K-64 (CT-VC-VOICE-ID-STORE) | TODO |
+| C-72 | claude | P1 | Voice-ID engine API: in-memory verify_pcm, enroll, prewarm | C-38, K-64 (CT-VC-VOICE-ID-STORE) | DOING (claude, 03 Oct 11:26) |
 | C-73 | claude | P1 | Voice-ID in the turn gate, CLI enrollment, calibration and reject flow | C-72, C-69, C-56, K-62 (CT-VC-TURN-GATE) | TODO |
 | C-74 | claude | P1 | Transcript language and script: A/B test, STT config, Roman Urdu display with original kept | C-71, C-73, C-44 | TODO |
 | C-75 | claude | P1 | Verify spoken confirmations against real user transcripts | C-28, C-74 | TODO |
@@ -1265,7 +1265,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | C-121 | claude | P0 | Node policy: modes, Windows-lock pause and presence, class floors, launch surfaces, path policy, ConfirmFlow approval check, stops | C-120 | DOING (claude, 03 Oct 08:35) |
 | C-122 | claude | P0 | Node capabilities, sensors, file mirror and encrypted backup pull | C-120, C-121, C-117 | TODO |
 | C-123 | claude | P0 | agent_ctl node and brain commands, pinned node snapshot, logon autostart (limited), brain journal | C-120, C-12 | DOING (claude, 03 Oct 08:35) |
-| C-124 | claude | P0 | Agent hardening for the VPS: egress guard, child env, RPC and text owner-only, untrusted context, VPS argument hooks, encrypted Chroma | C-112, C-113 | TODO |
+| C-124 | claude | P0 | Agent hardening for the VPS: egress guard, child env, RPC and text owner-only, untrusted context, VPS argument hooks, encrypted Chroma | C-112, C-113 | DOING (claude, 03 Oct 11:26) |
 | C-125 | claude | P0 | Always-on service jarvis-agent-svc: reminders/tasks with a delivery ledger, scheduler host, location cache, encrypted daily snapshot | C-112, C-119, C-13 | TODO |
 | C-126 | claude | P0 | Agent image and compose services (agent + agent-svc), no CPU/RAM limits, dedicated builder | C-112, C-118 | TODO |
 | C-127 | claude | P0 | Secrets split in two deploys, env-layout-aware rollback, DPAPI fallback secrets, second LiveKit key pair | C-12, C-116, C-112 | TODO |
