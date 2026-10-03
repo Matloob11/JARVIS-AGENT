@@ -276,6 +276,35 @@ async def test_agent_status_goes_offline_when_the_last_agent_leaves(direct):
     assert direct.module._clients == {}
 
 
+def _init_state(emitted: list[tuple[str, Any, Any]], sid: str) -> dict[str, Any]:
+    [state] = [data for event, data, room in emitted if event == "init_state" and room == sid]
+    return state
+
+
+async def test_a_ui_that_connects_after_the_agent_gets_agent_status_in_init_state(direct):
+    """C-ROOM-1: agent_status is in init_state, or the dashboard shows 'System Unknown' until the agent reconnects."""
+    await _connect_agent(direct, "sid-agent")
+    await _connect_legacy(direct, "sid-ui")
+
+    client = direct.module._clients["sid-agent"]
+    assert _init_state(direct.emitted, "sid-ui")["agent_status"] == {
+        "online": True, "since": client.since, "host": "pc-host", "version": "abc123"}
+
+
+async def test_init_state_says_offline_while_no_agent_serves_the_owner_room(direct, monkeypatch):
+    monkeypatch.setattr(direct.module, "_agent_offline_since", 1234.5)
+    await _connect_agent(direct, "sid-canary", room="canary-room")  # a canary peer never counts
+    await _connect_legacy(direct, "sid-ui-1")
+    assert _init_state(direct.emitted, "sid-ui-1")["agent_status"] == {"online": False, "since": 1234.5}
+
+    await _connect_agent(direct, "sid-agent")
+    await direct.module.handle_disconnect("sid-agent")
+    [offline] = [data for event, data, _room in direct.emitted if event == "agent_status" and not data["online"]]
+    assert offline["since"] > 1234.5
+    await _connect_legacy(direct, "sid-ui-2")
+    assert _init_state(direct.emitted, "sid-ui-2")["agent_status"] == offline
+
+
 # ---------------------------------------------------------------- end to end: uvicorn + python-socketio
 
 

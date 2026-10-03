@@ -1125,6 +1125,7 @@ async def build_init_state() -> dict[str, Any]:
     if snapshot["settings"]:
         # Only a stored object: an empty one would hide persona/muted from the settings panel.
         state["settings"] = snapshot["settings"]
+    state["agent_status"] = _current_agent_status()  # C-ROOM-1: a late UI must not show 'System Unknown'
     state["desktop_status"] = desktop.status()  # K-74 (C-STATE-1 v4)
     state["vitals_pc"] = desktop.latest_pc_vitals()
     state["server_time"] = time.time()
@@ -1151,6 +1152,9 @@ class SocketClient:
 _clients: dict[str, SocketClient] = {}
 # Audit rows for refused sockets: a steady trickle, so a flood of bad connects cannot fill the disk.
 _refusal_audit = TokenBucket(1.0, 30.0)
+# When the last agent socket serving the owner's room left (bridge start until one has): agent_status.since
+# while offline, in the event and in init_state.
+_agent_offline_since = time.time()
 
 
 def _short(value: Any) -> str:
@@ -1245,6 +1249,14 @@ def _agent_status(client: SocketClient) -> dict[str, Any]:
     return {"online": True, "since": client.since, "host": client.host, "version": client.version}
 
 
+def _current_agent_status() -> dict[str, Any]:
+    """agent_status as the UI should see it right now (init_state, C-ROOM-1): the first agent socket serving the
+    owner's room, else offline since the last one left. Without it a UI that connects after the agent shows
+    'System Unknown' until the agent reconnects."""
+    agent = next((client for client in _clients.values() if _is_owner_agent(client)), None)
+    return _agent_status(agent) if agent is not None else {"online": False, "since": _agent_offline_since}
+
+
 @sio.on("connect") # type: ignore[untyped-decorator]
 async def handle_connect(sid: str, environ: dict[str, Any], auth: dict[str, Any] | None = None) -> bool:
     """
@@ -1296,11 +1308,13 @@ async def handle_connect(sid: str, environ: dict[str, Any], auth: dict[str, Any]
 async def handle_disconnect(sid: str, *_reason: Any) -> None:
     """Forgets the socket; when the last agent socket serving the owner's room leaves, agent_status goes offline
     in room 'ui'."""
+    global _agent_offline_since  # pylint: disable=global-statement
     client = _clients.pop(sid, None)
     logger.info("Socket disconnected: role=%s sid=%s", client.role if client else "unknown", sid)
     if client is not None and _is_owner_agent(client) and not any(
             _is_owner_agent(c) for c in _clients.values()):
-        await emit_ui("agent_status", {"online": False, "since": time.time()})
+        _agent_offline_since = time.time()
+        await emit_ui("agent_status", _current_agent_status())
 
 
 @sio.on("agent_hello") # type: ignore[untyped-decorator]
