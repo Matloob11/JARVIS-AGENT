@@ -160,4 +160,7 @@ if __name__ == "__main__":
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
     OPTS = build_worker_options(entrypoint)
+    # W-room-watchdog: re-runs ensure_room.py when the room loses its agent (pc mode, this process only).
+    from src.core.room_watchdog import start_room_watchdog
+    start_room_watchdog()
     agents.cli.run_app(OPTS)
