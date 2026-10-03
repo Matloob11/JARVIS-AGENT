@@ -56,6 +56,7 @@ net_guard.harden_process()
 
 from livekit import agents, rtc
 from livekit.agents import AgentSession, cli, llm
+from livekit.agents.voice import room_io as lk_room_io
 from livekit.agents.cli import cli as livekit_cli_module
 from livekit.plugins import google, silero
 
@@ -275,6 +276,17 @@ def relink_room_input(session: Any, room: Any) -> str | None:
     room_io.set_participant(identity)
     logger.info("ROOM INPUT linked to %s after a reconnect", _identity_kind(identity))
     return identity
+
+
+def session_room_options() -> Any:
+    """
+    The room options of the voice session. close_on_disconnect is off: by default livekit-agents closes the
+    whole AgentSession when the linked participant leaves on purpose (a page refresh), and since the bridge mints a
+    new identity for every token the owner always comes back as another participant, so the agent stayed in the
+    room but never listened again (2026-10-03). With it off the session stays up and follow_owner_reconnects()
+    links the owner's new identity.
+    """
+    return lk_room_io.RoomOptions(close_on_disconnect=False)
 
 
 def follow_owner_reconnects(session: Any, room: Any) -> None:
@@ -810,7 +822,7 @@ async def entrypoint(ctx: agents.JobContext):
 
 
             logger.info("[AGENT] Connecting room and starting session...")
-            await session.start(room=ctx.room, agent=assistant)
+            await session.start(room=ctx.room, agent=assistant, room_options=session_room_options())
             logger.info("[AGENT] Session started successfully.")
             harden_room_input(session, ctx.room)  # C-124: owner-only RPC and text (VPS; PC opt-in)
             follow_owner_reconnects(session, ctx.room)  # the owner comes back under a new identity

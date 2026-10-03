@@ -100,3 +100,23 @@ def test_the_room_events_relink_on_a_reconnect_but_not_for_an_agent():
     room.remote_participants[back.identity] = back
     room.fire("participant_connected", back)
     assert room_io.calls == ["owner-1002473c"]
+
+
+def test_the_voice_session_survives_the_owner_leaving():
+    """A page refresh is a client-initiated leave; with the library default the whole session closed."""
+    assert agent_runner.session_room_options().close_on_disconnect is False
+
+
+def test_the_entrypoint_starts_the_session_with_these_room_options():
+    import ast
+    import inspect
+
+    tree = ast.parse(inspect.getsource(agent_runner))
+    starts = [node for node in ast.walk(tree) if isinstance(node, ast.Call)
+              and isinstance(node.func, ast.Attribute) and node.func.attr == "start"
+              and isinstance(node.func.value, ast.Name) and node.func.value.id == "session"]
+    assert starts, "session.start(...) not found"
+    for call in starts:
+        options = [kw for kw in call.keywords if kw.arg == "room_options"]
+        assert options and isinstance(options[0].value, ast.Call)
+        assert getattr(options[0].value.func, "id", None) == "session_room_options"
