@@ -987,12 +987,26 @@ def build_worker_options(
     (explicit dispatch, K-44). check_runtime_profile() runs first.
     """
     check_runtime_profile()
-    return agents.WorkerOptions(
-        entrypoint_fnc=entrypoint if entrypoint_fnc is None else entrypoint_fnc,
-        host=os.getenv("JARVIS_WORKER_HOST") or "127.0.0.1",
-        port=int(os.getenv("JARVIS_WORKER_PORT") or "8081"),
-        agent_name=os.getenv("JARVIS_AGENT_NAME", "").strip(),
-    )
+    options: dict[str, Any] = {
+        "entrypoint_fnc": entrypoint if entrypoint_fnc is None else entrypoint_fnc,
+        "host": os.getenv("JARVIS_WORKER_HOST") or "127.0.0.1",
+        "port": int(os.getenv("JARVIS_WORKER_PORT") or "8081"),
+        "agent_name": os.getenv("JARVIS_AGENT_NAME", "").strip(),
+    }
+    if desktop_mode() != DESKTOP_MODE_REMOTE:
+        options["load_fnc"] = pc_worker_load
+    return agents.WorkerOptions(**options)
+
+
+def pc_worker_load() -> float:
+    """
+    The load the PC worker reports to LiveKit: always 0.0. It is the owner's only worker and serves only
+    the JARVIS room, so it must never call itself full. livekit-agents' default load is the CPU use with
+    a 0.7 threshold in production, so a busy laptop (2026-10-03 20:14: CPU 95-99 %) was marked full and
+    the owner's job was never dispatched; JARVIS stayed out of its room. A second agent is still prevented
+    by ensure_room.py and the room watchdog, which dispatch only when the room has no live agent.
+    """
+    return 0.0
 
 
 if __name__ == "__main__":
