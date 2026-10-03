@@ -1075,3 +1075,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Commit:** (next) · **Deploy:** no
 - **Doosre agent ke liye:** REQ-RESTART — agent ko naya provider code chahiye; phir owner live number dubara test kare.
 
+### ✅ [cursor] SIM · 92-prefix mobile in raw_text · 2026-10-03 08:42 PKT
+- **Kya kiya:** Live mobile 12-digit country-code form; CNIC-anchor parse + normalize to local 0… (handoff UPDATE). Fake-digit test updated.
+- **Files:** services/info/sim_providers.py, services/info/tests/test_cnic_lookup.py, plan.md
+- **Verify:** pytest services/info/tests/test_cnic_lookup.py -q → 8 passed
+- **Commit:** (next) · **Deploy:** no
+- **Doosre agent ke liye:** REQ-RESTART — phir owner re-test.
+

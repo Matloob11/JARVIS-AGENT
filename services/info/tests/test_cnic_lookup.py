@@ -141,14 +141,15 @@ async def test_cnic_lookup_posts_correct_path_and_body() -> None:
 
 @pytest.mark.asyncio
 async def test_raw_text_fields_are_parsed_and_masked(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Live pak-sim returns one raw_text blob; parse + mask without real PII in fixtures."""
+    """Live pak-sim returns one raw_text blob; 92… mobile normalizes to 03…; fake digits only."""
     monkeypatch.setenv("SIM_LOOKUP_SHOW_ADDRESS", "1")
-    # Fake digits only (not a real Pakistani number/CNIC).
-    fake_phone = "03001112233"
+    # Fake digits only (not a real Pakistani number/CNIC). Live API uses 12-digit 92… mobiles.
+    fake_mobile_cc = "921111222333"
+    fake_phone_local = "01111222333"
     fake_cnic = "1111222233334"
     fake_name = "Sample Holder"
-    fake_address = "Example Block Sector"
-    raw = f"Mobile Name CNIC Address {fake_phone} {fake_name} {fake_cnic} {fake_address}"
+    fake_address = "Example Block Chak 12 Sector"
+    raw = f"Mobile Name CNIC Address {fake_mobile_cc} {fake_name} {fake_cnic} {fake_address}"
 
     async def fake_post(
         url: str,
@@ -177,7 +178,7 @@ async def test_raw_text_fields_are_parsed_and_masked(monkeypatch: pytest.MonkeyP
     mock_client.post = fake_post
     source = AuthorizedApiSource(_FAKE_BASE, _FAKE_KEY, client=mock_client)
 
-    records, error = await source.lookup(fake_phone)
+    records, error = await source.lookup(fake_phone_local)
 
     assert error is None
     assert len(records) == 1
@@ -185,11 +186,12 @@ async def test_raw_text_fields_are_parsed_and_masked(monkeypatch: pytest.MonkeyP
     assert record["full_name"] == fake_name
     assert record["cnic_masked"].endswith("3334")
     assert fake_cnic not in record["cnic_masked"]
-    assert fake_phone not in record["phone_masked"]
+    assert fake_mobile_cc not in record["phone_masked"]
+    assert fake_phone_local not in record["phone_masked"]
     assert record["address"] == fake_address
     details_raw = record["details"]["raw_text"]
     assert fake_cnic not in details_raw
-    assert fake_phone not in details_raw
+    assert fake_mobile_cc not in details_raw
     assert "Sample Holder" in details_raw
 
 

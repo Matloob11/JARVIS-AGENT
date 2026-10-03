@@ -15,8 +15,9 @@ import httpx
 
 from services.utils.jarvis_security import redact_secrets
 
-_PHONE_RE = re.compile(r"\b(0\d{10})\b")
 _CNIC_RE = re.compile(r"\b(\d{13})\b")
+_PHONE_RE = re.compile(r"\b(\d{10,12})\b")  # 92XXXXXXXXXX (12) or 03XXXXXXXXX (11)
+_HEADER_RE = re.compile(r"^(?:\s*(?:Mobile|Name|CNIC|Address))+\s*", re.I)
 _DIGIT_RUN_RE = re.compile(r"\d+")
 
 # Known person fields inside each data[].fields object (pass the rest through, masked).
@@ -92,19 +93,26 @@ def _looks_like_phone_or_cnic(key: str) -> bool:
     return any(tok in k for tok in ("cnic", "nic", "phone", "mobile", "msisdn", "number"))
 
 
+def _normalize_phone(digits: str) -> str:
+    if len(digits) == 12 and digits.startswith("92"):
+        return "0" + digits[2:]  # country-code form -> local 0…
+    return digits
+
+
 def _parse_raw_text(text: str) -> dict[str, str]:
     """pak-sim 'Mobile Name CNIC Address <mobile> <name> <cnic> <address>' -> structured fields."""
-    phone = _PHONE_RE.search(text)
-    cnic = _CNIC_RE.search(text, phone.end() if phone else 0)
     out: dict[str, str] = {}
-    if phone:
-        out["phone"] = phone.group(1)
+    cnic = _CNIC_RE.search(text)
+    phone = _PHONE_RE.search(text)  # first 10–12 digit run; CNIC is 13 so it never matches here
+    has_phone = phone is not None and (cnic is None or phone.start() < cnic.start())
+    if has_phone:
+        out["phone"] = _normalize_phone(phone.group(1))
     if cnic:
         out["cnic"] = cnic.group(1)
-        if phone:
-            name = text[phone.end() : cnic.start()].strip()
-            if name:
-                out["full_name"] = name
+        start = phone.end() if has_phone else 0
+        name = _HEADER_RE.sub("", text[start : cnic.start()]).strip()
+        if name:
+            out["full_name"] = name
         address = text[cnic.end() :].strip()
         if address:
             out["address"] = address
