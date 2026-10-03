@@ -1188,3 +1188,11 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Commit:** abhi nahi · **Deploy:** no (Claude frontend deploy before C-131)
 - **Doosre agent ke liye:** REQ-DEPLOY frontend so Stop desktop is live; X-79/X-92 can polish on this data
 
+### ✅ [cursor] X-79 · Laptop states + Stop desktop neon (Devices + Agents card) · 2026-10-03 16:50 PKT
+- **Kya kiya:** Saat laptop shapes `data-shape` Devices popover aur Agents Laptop card par; Devices pill par stale/locked/panic/read-only marks; card par brain + manifest; panic hint.
+- **Files:** `stonix_ui/src/features/shell/StatusPills.tsx`, `stonix_ui/src/features/agents/LaptopCard.tsx`, `stonix_ui/src/features/status/LaptopDevicesSection.tsx`, `stonix_ui/tests/e2e/laptop.spec.ts`
+- **Verify:** `npm run build` pass; playwright laptop+status+location → **17 passed**; testid inventory pass
+- **Commit:** abhi nahi · **Deploy:** no
+- **Doosre agent ke liye:** —
+
+
