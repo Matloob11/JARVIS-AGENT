@@ -745,6 +745,7 @@ body {
 .page-header-acct .avatar-badge {
   position: absolute;
   left: calc(clamp(42px, 6.38vh, 60px) - 16px);
+  right: auto;
   top: -6px;
 }
 
@@ -1011,6 +1012,12 @@ body {
   min-height: 0;
 }
 
+@media (min-width: 900px) and (max-width: 1023.98px) {
+  .app-shell-main .command-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 @media (min-width: 1024px) {
   .app-shell-main .command-layout {
     display: flex;
@@ -1023,7 +1030,8 @@ body {
     flex: 1 1 auto;
     min-height: 0;
     gap: 0;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
   }
 }
 

@@ -247,6 +247,7 @@ const DashboardInner = () => {
                   vitalsVps={command.vitalsVps}
                   laptopOnline={laptopOnline}
                   deviceCount={deviceCount}
+                  brain={desktopStatus.brain}
                 />
               </ErrorBoundary>
             }

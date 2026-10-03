@@ -1466,3 +1466,11 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** full suite 3500 passed, 39 skipped, 0 failed; deploy health gates ok, other apps identical; live (legacy socket, read-only): init_state.vitals_pc + vitals_vps present, `vitals_pc` events every ~10 s, `vitals_vps` every 12 s
 - **Commit:** `b06f9ea`, `5f46672` · **Deploy:** VPS bridge 01:14 PKT (rollback: `bash /root/jarvis-backups/tools/rollback.sh 2026-10-03_2014Z-pre-deploy-5f46672`) + PC restart 01:15
 - **Doosre agent ke liye:** Quick Stats ka guard (vitalsPc sirf fresh ho to) ab bhi lagao (section 11, A7); ab pc mode me vitals_pc asal me aata hai.
+
+### ✅ [cursor] MSG · REVIEW bb3c29a A1–A7 + B1–B5 · 2026-10-04 01:50 PKT
+- **Kya kiya:** Deploy se pehle markdown (intraword _, lists, suffix icon, grouped turns), pc-brain Quick Stats fallback, PC brain chip / Agent (PC), phone scroll, helper vs buttons, 900–1023 ek column, legacy strip fold ke neeche.
+- **Files:** stonix_ui SafeChatMarkdown, ChatList, QuickStats, laptop chip, neon CSS, e2e chat/overview/laptop/layout, plan.md
+- **Verify:** chat+overview+laptop 32 passed; product layout 8/8 (1672..390 + settings)
+- **Commit:** pending · **Deploy:** no
+- **Doosre agent ke liye:** **REQ-DEPLOY frontend**. Visual re-baseline P2.
+

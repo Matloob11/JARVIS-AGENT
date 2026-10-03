@@ -10,7 +10,9 @@ import { useAuth } from '@/features/auth/AuthProvider';
 import { useSettings } from '@/features/settings/useSettings';
 import { simProviderBannerText } from '@/features/command-center/hooks/useCommandCenter';
 import { useLaptopOnline } from '@/features/overview/useLaptopOnline';
+import { agentHostTitle } from '@/features/status/agentHostLabel';
 import { useAgentStatus } from '@/features/status/useAgentStatus';
+import { useDesktopStatus } from '@/features/status/useDesktopStatus';
 import { useLiveKit } from '@/features/voice/LiveKitProvider';
 import { useHashRouter } from '@/features/shell/useHashRouter';
 import { useLayout } from '@/features/shell/useLayout';
@@ -257,6 +259,7 @@ export function SettingsPage({
   const route = useHashRouter(layout);
   const { user } = useAuth();
   const agent = useAgentStatus();
+  const desktop = useDesktopStatus();
   const voice = useLiveKit();
   const laptopOnline = useLaptopOnline();
   const settings = useSettings();
@@ -417,7 +420,7 @@ export function SettingsPage({
             <SetField label="Status">
               <div className="settings-conn-tiles">
                 <ConnectionTile label="Bridge" active={isConnected} />
-                <ConnectionTile label="Agent (VPS)" active={agentChipActive} />
+                <ConnectionTile label={agentHostTitle(desktop.brain)} active={agentChipActive} />
                 <ConnectionTile label="Laptop" active={laptopOnline} />
                 <ConnectionTile label="Voice" active={voiceChipActive && !voice.voiceUnavailable} />
               </div>

@@ -7,6 +7,7 @@ import { useLiveKit } from '@/features/voice/LiveKitProvider';
 import type { CameraState } from '@/features/command-center/components/cameraState';
 import { cameraBadgeLabel } from '@/features/command-center/components/cameraState';
 import type { VortexStatusSnapshot } from '../useVortexStatusPoll';
+import { agentHostTitle } from '@/features/status/agentHostLabel';
 import { useDesktopStatus } from '@/features/status/useDesktopStatus';
 import { LaptopDevicesSection } from '@/features/status/LaptopDevicesSection';
 import { Popover } from './Popover';
@@ -118,7 +119,7 @@ export function DevicesPopover({
 
       <div className="neon-pop-sec">
         <b>
-          Agent (VPS){' '}
+          {agentHostTitle(desktop.brain)}{' '}
           <span className="n-pill" data-tone={agent.online && !agent.paused ? 'ok' : 'warn'}>
             {agentShortLabel(agent)}
           </span>

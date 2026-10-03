@@ -55,6 +55,18 @@ test('laptop offline switches vitals source and subtitle', async ({ page }) => {
   await expect(page.getByTestId('qs-disk')).toContainText('Disk (VPS)');
 });
 
+test('pc brain without vitals_pc falls back to VPS numbers', async ({ page }) => {
+  const baseSec = Math.floor(Date.now() / 1000);
+  await mockEmit(page, 'vitals_vps', { cpu: 77, ram: 55, disk: 66, ts: baseSec });
+  await mockEmit(page, 'agent_status', { online: true, voice_ready: true });
+  await mockEmit(page, 'desktop_status', { online: false, state: 'offline', brain: 'pc' });
+
+  await expect(page.getByTestId('qs-card')).toContainText('Agent offline: showing VPS');
+  await expect(page.getByTestId('qs-cpu')).toContainText('77%');
+  await expect(page.getByTestId('qs-cpu')).not.toContainText('0%');
+  await expect(page.getByTestId('qs-stale')).toHaveCount(0);
+});
+
 test('pc brain uses agent online and PC vitals, not Laptop offline', async ({ page }) => {
   const baseSec = Math.floor(Date.now() / 1000);
   await mockEmit(page, 'vitals_pc', { cpu: 33, ram: 44, disk: 55, ts: baseSec });
@@ -64,6 +76,15 @@ test('pc brain uses agent online and PC vitals, not Laptop offline', async ({ pa
 
   await expect(page.getByTestId('qs-card')).toContainText('Live system status');
   await expect(page.getByTestId('qs-cpu')).toContainText('33%');
+});
+
+test('disk label does not duplicate Disk', async ({ page }) => {
+  const ts = Math.floor(Date.now() / 1000);
+  await mockEmit(page, 'vitals_pc', { cpu: 10, ram: 20, disk: 30, disk_label: 'Disk C', ts });
+  await mockEmit(page, 'agent_status', { online: true, voice_ready: true });
+  await mockEmit(page, 'desktop_status', { online: true, state: 'online', brain: 'pc' });
+  await expect(page.getByTestId('qs-disk')).toContainText('Disk (C)');
+  await expect(page.getByTestId('qs-disk')).not.toContainText('Disk (Disk');
 });
 
 test('Quick Stats shows stale after 30 seconds without fresh vitals', async ({ page }) => {

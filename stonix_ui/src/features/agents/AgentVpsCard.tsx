@@ -7,6 +7,8 @@ import { formatLastSeen, useAgentStatusStore } from '@/features/status/agentStat
 import { emitUiCommandWithAck, handleUiCommandAck } from '@/features/status/AgentControls';
 import { getSocket } from '@/shared/realtime/socket';
 import { useSettings } from '@/features/settings/useSettings';
+import { agentHostTitle } from '@/features/status/agentHostLabel';
+import { useDesktopStatus } from '@/features/status/useDesktopStatus';
 import { pullVortexStatus, type VortexStatusSnapshot } from '@/features/shell/useVortexStatusPoll';
 
 type UiCommandAck = {
@@ -50,6 +52,7 @@ export function AgentVpsCard({
   onSessionRestartBannerChange,
 }: AgentVpsCardProps) {
   const agent = useAgentStatus();
+  const desktop = useDesktopStatus();
   const { agentStatusSeen, status } = useAgentStatusStore();
   const settings = useSettings();
   const [detail, setDetail] = useState<VortexStatusSnapshot | null>(null);
@@ -140,9 +143,9 @@ export function AgentVpsCard({
     <div data-testid="agent-card" data-anchor="agent" className="agents-anchor">
     <Card
       icon="server"
-      title="Agent (VPS)"
+      title={agentHostTitle(desktop.brain ?? merged.brain)}
       subtitle="The brain that listens and answers. Runs on the VPS."
-      boundaryName="Agent (VPS)"
+      boundaryName={agentHostTitle(desktop.brain ?? merged.brain)}
       className="agents-card agents-card--agent"
       action={
         <Pill tone={state.tone === 'ok' ? 'ok' : state.tone === 'err' ? 'err' : 'warn'}>

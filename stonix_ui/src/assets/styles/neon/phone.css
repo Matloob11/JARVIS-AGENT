@@ -135,4 +135,13 @@
   .page-header[data-narrow='true'] .header-pill--devices .header-pill-ic {
     display: none;
   }
+
+  .overview-page > * {
+    flex-shrink: 0;
+  }
+
+  .app-shell-main .command-layout[data-mobile-tab='core'] .layout-zone--core,
+  .app-shell-main .command-layout[data-mobile-tab='core'] .overview-page {
+    overflow-y: auto;
+  }
 }

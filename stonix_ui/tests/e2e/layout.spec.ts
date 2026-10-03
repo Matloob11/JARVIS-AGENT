@@ -241,6 +241,7 @@ const extraGateSizes: { width: number; height: number }[] = [
   { width: 1600, height: 900 },
   { width: 1179, height: 640 },
   { width: 1024, height: 600 },
+  { width: 960, height: 800 },
 ];
 
 async function shellGeometry(page: Page) {
@@ -295,6 +296,7 @@ const productLayoutSizes: { width: number; height: number }[] = [
   { width: 1366, height: 657 },
   { width: 1920, height: 947 },
   { width: 1100, height: 700 },
+  { width: 960, height: 800 },
   { width: 390, height: 844 },
 ];
 
@@ -313,10 +315,25 @@ async function overviewProductLayout(page: Page) {
       if (!a || !b) return false;
       return !(a.right <= b.left + 1 || a.left >= b.right - 1 || a.bottom <= b.top + 1 || a.top >= b.bottom - 1);
     };
+    const clipView = (
+      a: { top: number; left: number; right: number; bottom: number; width: number; height: number } | null,
+    ) => {
+      if (!a) return null;
+      const top = Math.max(a.top, 0);
+      const bottom = Math.min(a.bottom, window.innerHeight);
+      if (bottom <= top) return null;
+      return { top, left: a.left, right: a.right, bottom };
+    };
     const hero = box('.overview-hero');
-    const stats = box('.overview-page__stats');
-    const activity = box('.overview-page__activity');
-    const legacy = box('.overview-page__legacy');
+    const stats = box('[data-testid="qs-card"]');
+    const activity = box('[data-testid="activity-card"]');
+    const helper = box('[data-testid="hero-helper"]');
+    const btns = box('.overview-hero__btns');
+    const listen = document.querySelector('[data-testid="voice-toggle"]') as HTMLElement | null;
+    const listenLbl = listen?.querySelector('.overview-hero__btn-lbl') as HTMLElement | null;
+    const listenBox = listen ? listen.getBoundingClientRect() : null;
+    const lblBox = listenLbl ? listenLbl.getBoundingClientRect() : null;
+    const legacy = box('.overview-legacy-strip');
     const main = box('[data-testid="shell-main"]');
     const composer = document.querySelector('.neon-composer') as HTMLElement | null;
     const composerStyle = composer ? getComputedStyle(composer) : null;
@@ -326,6 +343,16 @@ async function overviewProductLayout(page: Page) {
       activity,
       legacy,
       main,
+      innerHeight: window.innerHeight,
+      legacyTop: legacy?.top ?? null,
+      labelInsideButton: Boolean(
+        listenBox &&
+          lblBox &&
+          lblBox.left >= listenBox.left - 1 &&
+          lblBox.right <= listenBox.right + 1 &&
+          lblBox.top >= listenBox.top - 1 &&
+          lblBox.bottom <= listenBox.bottom + 1,
+      ),
       heroFills: Boolean(hero && main && hero.width >= main.width * 0.72),
       statsActivitySideBySide: Boolean(
         stats && activity && Math.abs(stats.top - activity.top) < 8 && stats.right <= activity.left + 2,
@@ -334,9 +361,10 @@ async function overviewProductLayout(page: Page) {
         heroStats: overlap(hero, stats),
         heroActivity: overlap(hero, activity),
         statsActivity: overlap(stats, activity),
-        heroLegacy: overlap(hero, legacy),
-        statsLegacy: overlap(stats, legacy),
-        activityLegacy: overlap(activity, legacy),
+        helperButtons: overlap(helper, btns),
+        heroLegacy: overlap(clipView(hero), clipView(legacy)),
+        statsLegacy: overlap(clipView(stats), clipView(legacy)),
+        activityLegacy: overlap(clipView(activity), clipView(legacy)),
       },
       composerDisplay: composerStyle?.display ?? null,
       composerRows: composerStyle?.gridTemplateRows ?? null,
@@ -355,10 +383,13 @@ for (const size of productLayoutSizes) {
     expect(geo.overlaps.heroLegacy).toBe(false);
     expect(geo.overlaps.statsLegacy).toBe(false);
     expect(geo.overlaps.activityLegacy).toBe(false);
+    expect(geo.overlaps.helperButtons).toBe(false);
+    expect(geo.labelInsideButton).toBe(true);
     if (size.width >= 1024) {
       expect(geo.heroFills).toBe(true);
       expect(geo.statsActivitySideBySide).toBe(true);
       expect(geo.overlaps.statsActivity).toBe(false);
+      expect(geo.legacyTop == null || geo.legacyTop >= geo.innerHeight - 1).toBe(true);
       expect(geo.composerDisplay).toBe('grid');
       expect(String(geo.composerRows).split(' ').length).toBeGreaterThanOrEqual(2);
     } else {
@@ -366,6 +397,25 @@ for (const size of productLayoutSizes) {
     }
   });
 }
+
+test('agents devices rail stays on-screen at 960x800', async ({ page }) => {
+  await page.setViewportSize({ width: 960, height: 800 });
+  await page.goto('/#/agents');
+  await expect(page.getByTestId('operations-rail')).toBeVisible();
+  const geo = await page.evaluate(() => {
+    const rail = document.querySelector('[data-testid="operations-rail"]') as HTMLElement | null;
+    const r = rail?.getBoundingClientRect();
+    return {
+      left: r?.left ?? -1,
+      right: r?.right ?? -1,
+      transform: rail ? getComputedStyle(rail).transform : 'none',
+      innerWidth: window.innerWidth,
+    };
+  });
+  expect(geo.left).toBeGreaterThanOrEqual(-1);
+  expect(geo.right).toBeLessThanOrEqual(geo.innerWidth + 1);
+  expect(geo.transform === 'none' || geo.transform === 'matrix(1, 0, 0, 1, 0, 0)').toBeTruthy();
+});
 
 test('settings page fills main column', async ({ page }) => {
   await page.setViewportSize({ width: 1672, height: 941 });

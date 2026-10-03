@@ -96,6 +96,7 @@ test('legacy role agent renders as assistant', async ({ page }) => {
   });
 
   test('assistant markdown renders bold, not literal asterisks', async ({ page }) => {
+    await expect(page.getByTestId('chip-bridge')).toHaveAttribute('data-active', 'true');
     const id = `md-msg-${Date.now()}`;
     await page.request.post('http://127.0.0.1:5199/__mock/emit', {
       data: {
@@ -116,5 +117,132 @@ test('legacy role agent renders as assistant', async ({ page }) => {
     await expect(bubble.locator('li')).toHaveCount(2);
     await expect(bubble.locator('code')).toHaveText('ls');
     await expect(bubble).not.toContainText('**Automation:**');
+  });
+
+  test('markdown keeps snake_case and 2*3*4', async ({ page }) => {
+    await expect(page.getByTestId('chip-bridge')).toHaveAttribute('data-active', 'true');
+    const id = `md-snake-${Date.now()}`;
+    await page.request.post('http://127.0.0.1:5199/__mock/emit', {
+      data: {
+        event: 'new_message',
+        payload: {
+          id,
+          role: 'assistant',
+          text: 'run set_owner_credentials.py then 2*3*4 = 24',
+          source: 'text',
+          final: true,
+          ts: Math.floor(Date.now() / 1000),
+        },
+      },
+    });
+    const bubble = page.locator(`[data-testid="chat-msg"][data-id="${id}"]`);
+    await expect(bubble).toBeVisible({ timeout: 15_000 });
+    await expect(bubble).toContainText('set_owner_credentials.py');
+    await expect(bubble).toContainText('2*3*4 = 24');
+    await expect(bubble.locator('em')).toHaveCount(0);
+  });
+
+  test('markdown ordered list uses decimal markers', async ({ page }) => {
+    await expect(page.getByTestId('chip-bridge')).toHaveAttribute('data-active', 'true');
+    const id = `md-ol-${Date.now()}`;
+    await page.request.post('http://127.0.0.1:5199/__mock/emit', {
+      data: {
+        event: 'new_message',
+        payload: {
+          id,
+          role: 'assistant',
+          text: '1. first\n2. second',
+          source: 'text',
+          final: true,
+          ts: Math.floor(Date.now() / 1000),
+        },
+      },
+    });
+    const bubble = page.locator(`[data-testid="chat-msg"][data-id="${id}"]`);
+    await expect(bubble.locator('ol li')).toHaveCount(2);
+    await expect(bubble.locator('ol')).toHaveCSS('list-style-type', 'decimal');
+  });
+
+  test('voice source icon sits inline in last paragraph', async ({ page }) => {
+    await expect(page.getByTestId('chip-bridge')).toHaveAttribute('data-active', 'true');
+    const id = `md-voice-${Date.now()}`;
+    await page.request.post('http://127.0.0.1:5199/__mock/emit', {
+      data: {
+        event: 'new_message',
+        payload: {
+          id,
+          role: 'assistant',
+          text: 'Spoken reply',
+          source: 'voice',
+          final: true,
+          ts: Math.floor(Date.now() / 1000),
+        },
+      },
+    });
+    const bubble = page.locator(`[data-testid="chat-msg"][data-id="${id}"]`);
+    const icon = bubble.locator('.chat-msg-md p .chat-msg-src');
+    await expect(icon).toBeVisible({ timeout: 15_000 });
+    const inline = await icon.evaluate(el => getComputedStyle(el).display);
+    expect(inline).toMatch(/inline/);
+  });
+
+  test('grouped turn markdown is not literal asterisks', async ({ page }) => {
+    await expect(page.getByTestId('chip-bridge')).toHaveAttribute('data-active', 'true');
+    const turn = `turn-${Date.now()}`;
+    const id1 = `${turn}-a`;
+    const id2 = `${turn}-b`;
+    await page.request.post('http://127.0.0.1:5199/__mock/emit', {
+      data: {
+        event: 'new_message',
+        payload: {
+          id: id1,
+          turn_id: turn,
+          role: 'assistant',
+          text: '**First**',
+          source: 'text',
+          final: true,
+          ts: Math.floor(Date.now() / 1000),
+        },
+      },
+    });
+    await page.request.post('http://127.0.0.1:5199/__mock/emit', {
+      data: {
+        event: 'new_message',
+        payload: {
+          id: id2,
+          turn_id: turn,
+          role: 'assistant',
+          text: '**Second**',
+          source: 'text',
+          final: true,
+          ts: Math.floor(Date.now() / 1000),
+        },
+      },
+    });
+    const group = page.locator(`[data-testid="chat-msg"][data-id="${id1}"]`);
+    await expect(group.locator('strong')).toHaveCount(2);
+    await expect(group).not.toContainText('**First**');
+  });
+
+  test('markdown headings, fences and space-only lines', async ({ page }) => {
+    await expect(page.getByTestId('chip-bridge')).toHaveAttribute('data-active', 'true');
+    const id = `md-fence-${Date.now()}`;
+    await page.request.post('http://127.0.0.1:5199/__mock/emit', {
+      data: {
+        event: 'new_message',
+        payload: {
+          id,
+          role: 'assistant',
+          text: '### Title\n\n   \n```\n  col_a  col_b\n```\nkeep going',
+          source: 'text',
+          final: true,
+          ts: Math.floor(Date.now() / 1000),
+        },
+      },
+    });
+    const bubble = page.locator(`[data-testid="chat-msg"][data-id="${id}"]`);
+    await expect(bubble.locator('h3')).toHaveText('Title');
+    await expect(bubble.locator('pre code')).toContainText('  col_a  col_b');
+    await expect(bubble).toContainText('keep going');
   });
 });

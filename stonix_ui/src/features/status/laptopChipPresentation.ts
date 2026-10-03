@@ -7,6 +7,7 @@ export type LaptopChipShape =
   | 'full'
   | 'stale'
   | 'offline'
+  | 'pcbrain'
   | 'locked'
   | 'panic'
   | 'readonly';
@@ -33,6 +34,16 @@ export function deriveLaptopChipPresentation(
       long: 'Unknown',
       statusKind: 'unknown',
       tone: 'off',
+    };
+  }
+
+  if (desktop.brain === 'pc') {
+    return {
+      shape: 'pcbrain',
+      short: 'PC brain',
+      long: 'PC brain',
+      statusKind: 'ok',
+      tone: 'ok',
     };
   }
 
@@ -96,7 +107,7 @@ export function deriveLaptopChipPresentation(
 }
 
 export function laptopStopVisible(desktop: DesktopStatusSnapshot): boolean {
-  return desktop.seen && desktop.online;
+  return desktop.seen && desktop.online && desktop.brain !== 'pc';
 }
 
 export function laptopStopDisabled(desktop: DesktopStatusSnapshot): boolean {

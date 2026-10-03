@@ -347,12 +347,12 @@ const MessageGroup = ({
         <div className="chat-msg-bubble">
           <div className="space-y-3">
             {messages.map((msg, index) => (
-              <p
+              <div
                 key={msg.id}
                 className={`chat-msg-text${index > 0 ? ' chat-msg-row--grouped' : ''}`}
               >
-                {msg.text}
-              </p>
+                <SafeChatMarkdown text={msg.text} />
+              </div>
             ))}
           </div>
           <AnswerFeedback messageId={head.id} score={feedbackScore} onFeedback={onFeedback} />
@@ -429,13 +429,19 @@ const MessageBubble = ({
         ) : null}
         <div className="chat-msg-bubble">
           <div className="chat-msg-text">
-            <SafeChatMarkdown text={message.text} />
-            {meta.show && SrcIcon ? (
-              <span className="chat-msg-src">
-                <SrcIcon size={12} aria-hidden />
-              </span>
-            ) : null}
-            <span className="sr-only"> ({meta.sr})</span>
+            <SafeChatMarkdown
+              text={message.text}
+              suffix={
+                <>
+                  {meta.show && SrcIcon ? (
+                    <span className="chat-msg-src">
+                      <SrcIcon size={12} aria-hidden />
+                    </span>
+                  ) : null}
+                  <span className="sr-only"> ({meta.sr})</span>
+                </>
+              }
+            />
           </div>
           {isUser ? (
             <span className="chat-msg-time">{formatMessageTime(message.ts)}</span>

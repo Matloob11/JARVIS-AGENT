@@ -222,6 +222,24 @@
   min-width: 0;
 }
 
+/* index.css 900–1179 drawer rule targets .operations-rail and would hide this portal */
+@media (min-width: 900px) and (max-width: 1179.98px) {
+  .agents-devices-mount .operations-rail.agents-devices-rail {
+    position: static;
+    transform: none;
+    top: auto;
+    left: auto;
+    bottom: auto;
+    z-index: auto;
+    width: auto;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    box-shadow: none;
+  }
+}
+
 .agents-devices-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

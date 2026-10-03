@@ -11,6 +11,7 @@ import { useLiveKit } from '@/features/voice/LiveKitProvider';
 import { getPersona } from '@/shared/persona';
 import type { LayoutMode } from './useLayout';
 import { connectedDeviceCount, useVortexStatusPoll } from './useVortexStatusPoll';
+import { agentHostTitle } from '@/features/status/agentHostLabel';
 import { useDesktopStatus } from '@/features/status/useDesktopStatus';
 import { deriveLaptopChipPresentation, type LaptopChipShape } from '@/features/status/laptopChipPresentation';
 import { deriveVoicePillCopy } from './voicePillState';
@@ -141,8 +142,8 @@ export function StatusPills({
 
   const agentTitle = useMemo(() => {
     const last = formatLastSeen(status.lastSeenMs, nowMs);
-    return `Agent (VPS), ${last}`;
-  }, [status.lastSeenMs, nowMs]);
+    return `${agentHostTitle(desktop.brain)}, ${last}`;
+  }, [desktop.brain, status.lastSeenMs, nowMs]);
 
   const agentPill = agentSystemPillCopy(bridgeConnected, agentStatusSeen, agent);
   const agentLabel = compact ? agentPill.compact : agentPill.full;

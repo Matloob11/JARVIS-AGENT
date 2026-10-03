@@ -6,6 +6,8 @@ import { useAgentStatus } from '@/features/status/useAgentStatus';
 import { formatLastSeen, useAgentStatusStore } from '@/features/status/agentStatusStore';
 import { handleUiCommandAck } from '@/features/status/AgentControls';
 import { useSettings } from '@/features/settings/useSettings';
+import { agentHostTitle } from '@/features/status/agentHostLabel';
+import { useDesktopStatus } from '@/features/status/useDesktopStatus';
 import { pullVortexStatus, type VortexStatusSnapshot } from '../useVortexStatusPoll';
 import { Popover } from './Popover';
 
@@ -54,6 +56,7 @@ export function AgentPopover({
   vortex,
 }: AgentPopoverProps) {
   const agent = useAgentStatus();
+  const desktop = useDesktopStatus();
   const { agentStatusSeen, status } = useAgentStatusStore();
   const settings = useSettings();
   const [detail, setDetail] = useState<VortexStatusSnapshot | null>(null);
@@ -114,6 +117,7 @@ export function AgentPopover({
     emit('start');
   };
 
+  const hostTitle = agentHostTitle(desktop.brain ?? merged.brain);
   const agentInRoom =
     merged.agentInRoom ?? (agent.voiceReady && agent.online ? true : agent.online ? false : null);
 
@@ -122,12 +126,12 @@ export function AgentPopover({
       open={open}
       onClose={onClose}
       triggerRef={triggerRef}
-      ariaLabel="Agent (VPS)"
+      ariaLabel={hostTitle}
       data-testid="chip-agent-menu"
       sheet={sheet}
     >
       <div className="neon-pop-hd">
-        <b>Agent (VPS)</b>
+        <b>{hostTitle}</b>
         <span className="n-pill" data-tone={agent.online && !agent.paused ? 'ok' : 'warn'}>
           {stateWord}
         </span>

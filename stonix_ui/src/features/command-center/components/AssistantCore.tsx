@@ -28,7 +28,7 @@ const AssistantCore = ({ persona, isConnected, isThinking }: AssistantCoreProps)
             : 'Offline';
 
   return (
-    <div className="overview-legacy-strip assistant-core assistant-core--legacy" data-legacy>
+    <div className="overview-legacy-strip assistant-core--legacy" data-legacy>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 text-xs font-semibold text-command-text">
           <Activity size={14} className={accent.text} />

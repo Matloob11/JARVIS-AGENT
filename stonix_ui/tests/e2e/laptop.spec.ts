@@ -75,6 +75,22 @@ for (const row of chipCases) {
   });
 }
 
+test('pc brain laptop chip hides Stop desktop', async ({ page }) => {
+  await mockEmit(page, 'desktop_status', {
+    ...loadDesktopFixture('desktop_status_offline'),
+    brain: 'pc',
+    last_seen: Math.floor(Date.now() / 1000),
+  });
+  await openDevicesLaptop(page);
+  await expect(page.getByTestId('chip-laptop')).toContainText('PC brain');
+  await expect(page.getByTestId('chip-laptop')).toHaveAttribute('data-shape', 'pcbrain');
+  await expect(page.getByTestId('desktop-stop-menu')).toHaveCount(0);
+  await expect(page.getByTestId('devices-menu')).toContainText('Agent (PC)');
+  await gotoPage(page, 'agents', 'laptop');
+  await expect(page.getByTestId('laptop-card')).toContainText('PC brain');
+  await expect(page.getByTestId('desktop-stop')).toHaveCount(0);
+});
+
 test('stop desktop sends ui_command and shows read-only', async ({ page }) => {
   await mockEmit(page, 'desktop_status', {
     ...loadDesktopFixture('desktop_status_online'),

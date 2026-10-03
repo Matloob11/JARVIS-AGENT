@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { VitalsSnapshot } from '@/features/command-center/hooks/useCommandCenter';
+import { formatDiskCaption } from '@/features/overview/diskLabel';
 import { Bar } from '@/shared/ui/Bar';
 import { Icon } from '@/shared/ui/icons/Icon';
 
@@ -10,6 +11,7 @@ type QuickStatsCardProps = {
   vitalsVps: VitalsSnapshot;
   laptopOnline: boolean;
   deviceCount: number;
+  brain?: string | null;
 };
 
 function metricPercent(value: number): number {
@@ -32,6 +34,7 @@ const QuickStatsCard = ({
   vitalsVps,
   laptopOnline,
   deviceCount,
+  brain,
 }: QuickStatsCardProps) => {
   const [nowMs, setNowMs] = useState(() => Date.now());
 
@@ -40,18 +43,25 @@ const QuickStatsCard = ({
     return () => window.clearInterval(id);
   }, []);
 
-  const source = laptopOnline ? vitalsPc : vitalsVps;
+  const pcFresh = vitalsAgeMs(vitalsPc, nowMs) <= STALE_MS;
+  const usePc =
+    brain === 'pc' ? pcFresh && vitalsPc.updatedAtMs > 0 : laptopOnline;
+  const source = usePc ? vitalsPc : vitalsVps;
   const stale = vitalsAgeMs(source, nowMs) > STALE_MS;
 
   const diskLabel = useMemo(() => {
-    if (!laptopOnline) return 'Disk (VPS)';
-    if (source.disk_label) return `Disk (${source.disk_label})`;
-    return 'Disk (C:)';
-  }, [laptopOnline, source.disk_label]);
+    if (!usePc) return 'Disk (VPS)';
+    return formatDiskCaption(source.disk_label, 'C:');
+  }, [usePc, source.disk_label]);
 
-  const subtitle = laptopOnline
-    ? 'Live system status'
-    : 'Laptop offline: showing Agent (VPS)';
+  const subtitle =
+    brain === 'pc'
+      ? usePc
+        ? 'Live system status'
+        : 'Agent offline: showing VPS'
+      : laptopOnline
+        ? 'Live system status'
+        : 'Laptop offline: showing Agent (VPS)';
 
   const cpuWarn = metricPercent(source.cpu) >= 85;
   const memWarn = metricPercent(source.ram) >= 90;

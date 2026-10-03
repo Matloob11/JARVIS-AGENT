@@ -604,7 +604,7 @@
 
 .chat-msg-md {
   display: block;
-  white-space: normal;
+  white-space: pre-wrap;
   word-break: break-word;
 }
 
@@ -623,9 +623,34 @@
   padding-left: 1.2em;
 }
 
+.chat-msg-md ul {
+  list-style: disc;
+}
+
+.chat-msg-md ol {
+  list-style: decimal;
+}
+
 .chat-msg-md code {
   font-family: var(--font-mono);
   font-size: 0.92em;
+}
+
+.chat-msg-md pre {
+  margin: 0.4em 0 0;
+  white-space: pre-wrap;
+}
+
+.chat-msg-md h1,
+.chat-msg-md h2,
+.chat-msg-md h3,
+.chat-msg-md h4,
+.chat-msg-md h5,
+.chat-msg-md h6 {
+  margin: 0.4em 0 0;
+  font-size: 1em;
+  font-weight: 700;
+  line-height: inherit;
 }
 
 .chat-msg-src {

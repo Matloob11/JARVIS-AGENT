@@ -3,6 +3,8 @@ import { Cpu, HardDrive, MemoryStick } from 'lucide-react';
 import { Card } from '@/shared/ui/Card';
 import type { VitalsSnapshot } from '@/features/command-center/hooks/useCommandCenter';
 import TelemetryCard, { type TelemetrySnapshot } from '@/features/telemetry/TelemetryCard';
+import { formatDiskCaption } from '@/features/overview/diskLabel';
+import { agentHostTitle } from '@/features/status/agentHostLabel';
 import { formatRelativeAgo } from '@/shared/time';
 
 const STALE_MS = 30_000;
@@ -122,16 +124,16 @@ export function MachinesCards({ vitalsPc, vitalsVps, telemetry, brain }: Machine
         title="PC (laptop)"
         subtitle={pcSubtitle}
         vitals={vitalsPc}
-        diskLabel={vitalsPc.disk_label ? `Disk (${vitalsPc.disk_label})` : 'Disk (C:)'}
+        diskLabel={formatDiskCaption(vitalsPc.disk_label, 'C:')}
         nowMs={nowMs}
       />
       <VitalsCard
         testId="vitals-vps"
         icon="server"
-        title="Agent (VPS)"
+        title={agentHostTitle(brain)}
         subtitle={vpsSubtitle}
         vitals={vitalsVps}
-        diskLabel={vitalsVps.disk_label ? `Disk (${vitalsVps.disk_label})` : 'Disk'}
+        diskLabel={formatDiskCaption(vitalsVps.disk_label, 'VPS')}
         nowMs={nowMs}
       />
       <div data-testid="telemetry-card" className="agents-card-wrap agents-card-wrap--telemetry">
