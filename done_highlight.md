@@ -1400,3 +1400,5 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** otplib 32-char verify true / 16-char SecretTooShortError; pytest 20 passed; playwright auth.spec 8/8 (TOTP login included)
 - **Commit:** pending · **Deploy:** no
 - **Doosre agent ke liye:** exhaustive xfail(strict=False) FailSafe tests ab XPASS ho sakte hain; markers Claude lane me hain.
+
+- **Git SHA (MSG TOTP/FailSafe):** b0de9ec
