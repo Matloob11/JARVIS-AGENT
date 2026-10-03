@@ -4,7 +4,8 @@ import { verifySync } from 'otplib';
 export const TEST_PASSWORD = 'test-pass';
 
 /** Fixed base32 secret — pair with any TOTP app using this secret for local login. */
-export const TEST_TOTP_SECRET = 'JBSWY3DPEHPK3PXP';
+/** 32 base32 chars (≥16 bytes). otplib rejects the 16-char RFC example. */
+export const TEST_TOTP_SECRET = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP';
 
 export const TEST_RECOVERY = 'TEST-0000-0000';
 

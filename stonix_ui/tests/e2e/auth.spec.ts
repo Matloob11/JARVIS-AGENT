@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 test.describe.configure({ mode: 'serial' });
-import { TEST_PASSWORD, TEST_RECOVERY, loginViaRecovery } from './helpers/login';
+import { TEST_PASSWORD, TEST_RECOVERY, loginViaRecovery, loginViaTotp } from './helpers/login';
 
 test('shows login only and never calls getUserMedia before auth', async ({ page }) => {
   await page.addInitScript(() => {
@@ -35,6 +35,12 @@ test('wrong password shows inline error', async ({ page }) => {
 test('recovery code login opens dashboard', async ({ page }) => {
   await loginViaRecovery(page);
   await expect(page).toHaveTitle(/JARVIS & ANNA/);
+});
+
+test('authenticator TOTP login opens dashboard', async ({ page }) => {
+  await page.request.post('http://127.0.0.1:5199/__mock/reset-login-rate');
+  await loginViaTotp(page);
+  await expect(page.getByTestId('app-ready')).toBeVisible();
 });
 
 test('reload keeps session after login', async ({ page }) => {

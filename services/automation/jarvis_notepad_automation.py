@@ -59,6 +59,12 @@ def _pyautogui_mod():
     return _pyautogui
 
 
+def _pyautogui_failsafe() -> tuple[type, ...]:
+    pg = _pyautogui
+    fs = getattr(pg, "FailSafeException", None) if pg is not None else None
+    return (fs,) if isinstance(fs, type) else ()
+
+
 def _outputs_dir() -> str:
     root = getattr(config, "project_root", os.getcwd())
     return str(getattr(config, "outputs_dir", None) or os.path.join(root, "Jarvis_Outputs"))
@@ -235,7 +241,7 @@ class NotepadAutomation:
         try:
             await run_cancellable(_type_text, text)
             return True
-        except (RuntimeError, AttributeError, asyncio.CancelledError) as e:
+        except (RuntimeError, AttributeError, asyncio.CancelledError, *_pyautogui_failsafe()) as e:
             logger.exception("Typing simulation failed: %s", e)
             return False
 

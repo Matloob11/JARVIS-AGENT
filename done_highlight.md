@@ -1393,3 +1393,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `agent_ctl.py status` → health 200, jobs 1 active; room probe: 1 AGENT
 - **Commit:** abhi nahi · **Deploy:** PC agent restart 22:13 PKT
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] MSG · Mock TOTP 32-char + FailSafe/pywintypes restore · 2026-10-03 22:25 PKT
+- **Kya kiya:** Mock login ka TOTP secret 32 base32 characters (otplib SecretTooShortError hataya). Swipe aur Notepad typing phir FailSafeException catch karte hain; volume set/interface par pywintypes.error wapas.
+- **Files:** `stonix_ui/tests/mock-bridge/scenarios.mjs`, `stonix_ui/tests/e2e/helpers/login.ts`, `stonix_ui/tests/e2e/auth.spec.ts`, `stonix_ui/README.md`, `services/automation/keyboard_mouse_ctrl.py`, `services/automation/jarvis_notepad_automation.py`, `tests/tools/test_keyboard_mouse_tools.py`, `tests/automation/test_notepad_automation.py`
+- **Verify:** otplib 32-char verify true / 16-char SecretTooShortError; pytest 20 passed; playwright auth.spec 8/8 (TOTP login included)
+- **Commit:** pending · **Deploy:** no
+- **Doosre agent ke liye:** exhaustive xfail(strict=False) FailSafe tests ab XPASS ho sakte hain; markers Claude lane me hain.

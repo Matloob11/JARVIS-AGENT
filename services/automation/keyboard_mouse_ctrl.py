@@ -84,6 +84,16 @@ def _load_input_controllers():
             raise RuntimeError("pynput unavailable") from exc
 
 
+def _pyautogui_failsafe(pg: Any) -> tuple[type, ...]:
+    fs = getattr(pg, "FailSafeException", None)
+    return (fs,) if isinstance(fs, type) else ()
+
+
+def _volume_com_errors() -> tuple[type, ...]:
+    err = getattr(pywintypes, "error", None) if pywintypes is not None else None
+    return (err,) if isinstance(err, type) else ()
+
+
 def _load_volume_stack():
     global pythoncom, pywintypes, CLSCTX_ALL, AudioUtilities, IAudioEndpointVolume
     if AudioUtilities is None:
@@ -366,14 +376,14 @@ class SafeController:
 
             interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
             return cast(interface, POINTER(IAudioEndpointVolume))
-        except (AttributeError, OSError, Exception) as e:
+        except (AttributeError, OSError, *_volume_com_errors(), Exception) as e:
             logger.warning("Volume interface error: %s", e)
             try:
                 device_enumerator = AudioUtilities.GetDeviceEnumerator()
                 default_device = device_enumerator.GetDefaultAudioEndpoint(0, 1)
                 interface = default_device.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
                 return cast(interface, POINTER(IAudioEndpointVolume))
-            except (AttributeError, OSError, Exception) as final_e:
+            except (AttributeError, OSError, *_volume_com_errors(), Exception) as final_e:
                 logger.warning("Volume interface fallback error: %s", final_e)
                 return None
 
@@ -628,7 +638,7 @@ class SafeController:
             volume.SetMasterVolumeLevelScalar(percentage / 100, None)
             self.log(f"Volume set to {percentage}%")
             return f"Volume {percentage} percent par set ho gaya.", {"percent": percentage}
-        except (AttributeError, ValueError, OSError) as set_e:
+        except (AttributeError, ValueError, OSError, *_volume_com_errors()) as set_e:
             self.log(f"Volume set error: {set_e!s}")
             return f"❌ Volume set nahi ho paaya: {set_e}", {}
 
@@ -651,7 +661,7 @@ class SafeController:
             elif direction == "right":
                 pg.moveTo(x - 200, y)
                 pg.dragTo(x + 200, y, duration=0.5)
-        except (AttributeError, OSError) as e:
+        except (AttributeError, OSError, *_pyautogui_failsafe(pg)) as e:
             logger.warning("Swipe gesture failed or aborted: %s", e)
         await asyncio.sleep(0.5)
         self.log(f"Swipe gesture: {direction}")

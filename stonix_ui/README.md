@@ -12,7 +12,7 @@ npm install
 npm run dev:mock
 ```
 
-Login for mock/dev: password `test-pass`, TOTP secret `JBSWY3DPEHPK3PXP` (see `tests/mock-bridge/scenarios.mjs`), or recovery code `TEST-0000-0000`.
+Login for mock/dev: password `test-pass`, TOTP secret `JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP` (see `tests/mock-bridge/scenarios.mjs`), or recovery code `TEST-0000-0000`.
 
 ## Production-like build
 

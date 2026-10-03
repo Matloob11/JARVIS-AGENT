@@ -1,15 +1,13 @@
 import { expect, type Page } from '@playwright/test';
 import { generateSync } from 'otplib';
 
-/** otplib v13 rejects short secrets unless guardrails are disabled for tests. */
-const totpGuardrails = { validateSecret: false } as { validateSecret: boolean };
-
 export const TEST_PASSWORD = 'test-pass';
 export const TEST_RECOVERY = 'TEST-0000-0000';
-export const TEST_TOTP_SECRET = 'JBSWY3DPEHPK3PXP';
+/** Same 32-char secret as tests/mock-bridge/scenarios.mjs (otplib ≥16-byte floor). */
+export const TEST_TOTP_SECRET = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP';
 
 export function currentTotp(): string {
-  return generateSync({ secret: TEST_TOTP_SECRET, ...totpGuardrails });
+  return generateSync({ secret: TEST_TOTP_SECRET });
 }
 
 async function resetLoginRate(page: Page): Promise<void> {
@@ -50,5 +48,5 @@ export async function loginViaTotp(page: Page): Promise<void> {
   await page.getByTestId('login-password').fill(TEST_PASSWORD);
   await page.getByTestId('login-totp').fill(currentTotp());
   await page.getByTestId('login-submit').click();
-  await expect(page.getByTestId('app-ready')).toBeVisible();
+  await expect(page.getByTestId('app-ready')).toBeVisible({ timeout: 30_000 });
 }

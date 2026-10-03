@@ -42,6 +42,17 @@ async def test_simulate_typing_uses_run_cancellable():
 
 
 @pytest.mark.asyncio
+async def test_simulate_typing_catches_failsafe() -> None:
+    fs = type("FailSafeException", (Exception,), {})
+    pg = MagicMock()
+    pg.FailSafeException = fs
+    nap._pyautogui = pg
+    with patch.object(nap, "run_cancellable", new_callable=AsyncMock, side_effect=fs("corner")):
+        assert await nap.notepad_automation.simulate_typing("fail") is False
+    nap._pyautogui = None
+
+
+@pytest.mark.asyncio
 async def test_save_file_safely(monkeypatch):
     tmp = _safe_tmp_dir()
     monkeypatch.setattr(nap, "_outputs_dir", lambda: str(tmp))

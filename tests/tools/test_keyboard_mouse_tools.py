@@ -95,6 +95,36 @@ def test_control_log_has_no_token_or_typed_text(tmp_path, monkeypatch: pytest.Mo
     assert "len=12" in body
 
 
+@pytest.mark.asyncio
+async def test_swipe_failsafe_is_caught() -> None:
+    controller = km.SafeController()
+    controller.active = True
+    pg = MagicMock()
+    pg.size.return_value = (1000, 800)
+    pg.FailSafeException = type("FailSafeException", (Exception,), {})
+    pg.moveTo.side_effect = pg.FailSafeException("corner")
+    with patch.object(km, "_load_pyautogui", return_value=pg):
+        assert await controller.swipe_gesture("up") == "Swipe up complete ho gaya."
+    pg.dragTo.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_set_volume_reports_pywintypes_error() -> None:
+    controller = km.SafeController()
+    controller.active = True
+    win_err = type("error", (Exception,), {})
+    pwt = MagicMock()
+    pwt.error = win_err
+    volume = MagicMock()
+    volume.SetMasterVolumeLevelScalar.side_effect = win_err("com")
+    with patch.object(km, "_load_volume_stack"), patch.object(km, "pythoncom", MagicMock()), patch.object(
+        km, "pywintypes", pwt
+    ), patch.object(controller, "_get_volume_interface", new_callable=AsyncMock, return_value=volume):
+        msg, data = await controller.set_volume_percentage(50)
+    assert msg.startswith("❌ Volume set nahi ho paaya:")
+    assert data == {}
+
+
 def test_get_tool_meta_type_text_raw_and_exclusive() -> None:
     meta = plugin_manager.get_tool_meta("type_text_tool")
     assert meta is not None
