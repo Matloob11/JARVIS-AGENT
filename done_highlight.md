@@ -1402,3 +1402,45 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Doosre agent ke liye:** exhaustive xfail(strict=False) FailSafe tests ab XPASS ho sakte hain; markers Claude lane me hain.
 
 - **Git SHA (MSG TOTP/FailSafe):** b0de9ec
+
+### ✅ [claude] C-16 · nginx /agent + /twirp live, PC agent LiveKit via the domain (wss) · 2026-10-03 22:22 PKT
+- **Kya kiya:** VPS par bridge + nginx deploy (`bdd8932`): nginx ab /agent aur /twirp ko LiveKit tak le jata hai; isi deploy se C-117 media relay aur C-19 login backend bhi live hue. PC agent ab LiveKit se domain ke wss raaste par judta hai (agent_ctl restart, pid 2964 → 14472). Port binds (steps 6–7) C-131 ke V6 window me.
+- **Files:** `deploy/hostinger/jarvis.conf`, PC env ka LIVEKIT_URL (sirf naam; value repo me nahi)
+- **Verify:** deploy health gates ok, other apps identical (regressions=0); agent_ctl: health 200, "OK, an agent of the current worker is in the room"
+- **Commit:** `bdd8932` · **Deploy:** VPS 22:20 PKT (rollback: `bash /root/jarvis-backups/tools/rollback.sh 2026-10-03_1720Z-pre-deploy-bdd8932`) + PC restart 22:22
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] fix · Voice session owner ke reconnect aur page refresh ke baad bhi chalta hai · Agent worker restarts (agent_ctl) · 2026-10-03 22:41 PKT
+- **Kya kiya:** Naya bridge har token par naya `owner-<8 hex>` identity deta hai, is liye refresh par voice band ho jati thi. Ab session naye owner ko relink karta hai (`92f896b`, restart 22:31, pid 28912) aur client ke jane par band nahi hota (close_on_disconnect off, `8a29cc8`, restart 22:41, pid 26900). Owner ne confirm kiya: "bol bi raha ha or sun bi raha ha".
+- **Files:** `src/core/agent_runner.py`, `tests/unit/test_room_input_relink.py`, `tests/core/test_rpc_hardening.py`
+- **Verify:** unit tests pass; dono restarts par agent_ctl health 200 + room OK; owner live voice test OK
+- **Commit:** `92f896b`, `8a29cc8` · **Deploy:** PC restarts 22:31 aur 22:41 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ [claude] C-20 · Owner enrolled: password + authenticator (TOTP) + recovery codes · 2026-10-03 22:52 PKT
+- **Kya kiya:** Owner ne apne terminal me `scripts/ops/set_owner_credentials.py` chalaya (Claude ne password ya TOTP secret kabhi nahi dekha). VPS bridge.env me likha (backup `bridge.env.pre-c20`), bridge redeploy `8688a0e`, phir `--test-login`: LOGIN OK aur test session logout.
+- **Files:** `scripts/ops/set_owner_credentials.py`, `tests/unit/test_set_owner_credentials.py`
+- **Verify:** owner ka test-login OK; deploy health gates ok
+- **Commit:** `8688a0e` · **Deploy:** VPS bridge 22:52 PKT (rollback: `bash /root/jarvis-backups/tools/rollback.sh 2026-10-03_1752Z-pre-deploy-8688a0e`)
+- **Doosre agent ke liye:** —
+
+### ✅ [claude] C-21 · Naya login UI live, owner ka pehla asli login · 2026-10-03 23:15 PKT
+- **Kya kiya:** Naya neon UI (password + 6-digit code) VPS par deploy (`8688a0e`). Pehli koshish VPS par pade purane `TopBar.tsx` ki wajah se build par ruk gayi (failed-before-live, kuch live nahi badla); woh file backup ke stale-files folder me move karke dobara deploy OK. Owner ne asli login kiya (screenshot: "Good evening, Matloob", chat ka asli jawab).
+- **Files:** — (sirf deploy)
+- **Verify:** deploy health gates ok, bundle me legacy token nahi; owner screenshot 23:15 PKT
+- **Commit:** `8688a0e` · **Deploy:** VPS frontend 22:58 PKT (rollback: `bash /root/jarvis-backups/tools/rollback.sh 2026-10-03_1758Z-pre-deploy-8688a0e`)
+- **Doosre agent ke liye:** Live Overview layout toota hai (owner screenshot): wajah aur fix plan section 11 (23:45) me.
+
+### ✅ 🔁 [claude] C-42 · Typed chat ab live Gemini session me · Agent worker restart (agent_ctl) · 2026-10-03 23:12 PKT
+- **Kya kiya:** ConversationRouter: typed chat (Socket.IO aur lk.chat) live Gemini session me ek hi dafa jati hai, aur chat bubbles sirf `conversation_item_added` se bante hain (pehle canned "Ji Sir" jawab aate thay). agent_ctl restart: pid 26900 → 33760, health 200, room OK.
+- **Files:** `src/core/conversation_router.py`, `src/core/agent_runner.py`, `src/core/agent_core.py`, `services/ai_core/agent_loops.py`, `services/utils/jarvis_bridge.py`, `services/ai_core/jarvis_prompt.py`, `tests/core/test_conversation_router.py`
+- **Verify:** 33 naye router tests pass; agent_ctl status: health 200, jobs 1, load 0.00
+- **Commit:** `dd1a506` · **Deploy:** PC restart 23:12 PKT
+- **Doosre agent ke liye:** notify_transcription ab final, ts aur source bhejta hai, aur role 'agent' ki jagah 'assistant'. Owner ka typed-chat test baaqi hai (isi liye C-42 DOING).
+
+### ✅ [claude] fix · "System Unknown" khatam: init_state me agent_status; jawab markdown ke baghair · 2026-10-03 23:37 PKT
+- **Kya kiya:** Bridge init_state me agent_status nahi bhejta tha, is liye agent ke baad khulne wala dashboard "System Unknown" dikhata tha. Ab init_state me current agent_status aata hai (K-44 / C-STATE-1 jaisa). Prompt me rule daala ke JARVIS aur ANNA markdown symbols (**, #, bullets) na likhein, kyun ke yeh chat bubbles me dikh rahe thay (agle worker restart se).
+- **Files:** `src/core/ui_bridge.py`, `tests/infrastructure/test_bridge_socket_rooms.py`, `services/ai_core/jarvis_prompt.py`
+- **Verify:** bridge/init_state ki 18 test files: 871 passed, 27 skipped, 0 failed; deploy health gates ok, other apps identical; bridge log 23:37: UI aur agent sockets dobara connect
+- **Commit:** `6bd575d`, `0d9dcbd` · **Deploy:** VPS bridge 23:37 PKT (rollback: `bash /root/jarvis-backups/tools/rollback.sh 2026-10-03_1837Z-pre-deploy-0d9dcbd`); prompt: PC ke agle restart par
+- **Doosre agent ke liye:** init_state.agent_status ab hamesha aata hai (online, ya `{online:false, since}`). UI bug list plan section 11 (23:45) me.
