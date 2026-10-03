@@ -351,6 +351,42 @@ def _prewarm_vector_memory() -> None:
         logger.warning("VECTOR_PREWARM not started: %s", e)
 
 
+RAG_WARM_DELAY_DEFAULT_S = 120.0
+
+
+def _rag_warm_delay() -> float | None:
+    """C-78: seconds before the document index warms (JARVIS_RAG_WARM_DELAY_S, default 120); a negative
+    value turns the warm-up off, and a question then starts the index itself."""
+    raw = (os.getenv("JARVIS_RAG_WARM_DELAY_S") or "").strip()
+    if not raw:
+        return RAG_WARM_DELAY_DEFAULT_S
+    try:
+        value = float(raw)
+    except ValueError:
+        logger.warning("JARVIS_RAG_WARM_DELAY_S=%r is not a number; using %.0f s", raw, RAG_WARM_DELAY_DEFAULT_S)
+        return RAG_WARM_DELAY_DEFAULT_S
+    return None if value < 0 else value
+
+
+async def _warm_document_index(delay_s: float) -> None:
+    """
+    C-78: after delay_s, loads or builds the local document index for ask_about_document. The walk runs
+    in a worker thread (jarvis_rag.DocumentRAG.warm_index), so the voice loop never waits for it, and the
+    delay keeps it clear of the other start-up file walks. A failure is logged; the first question then
+    starts the index.
+    """
+    try:
+        await asyncio.sleep(delay_s)
+        from services.ai_core.jarvis_rag import (  # pylint: disable=import-outside-toplevel
+            rag_system,
+        )
+        await rag_system.warm_index()
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:
+        logger.warning("DOC_INDEX warm-up failed: %s", e)
+
+
 async def _process_user_audio(publication: rtc.TrackPublication, assistant: BrainAssistant) -> None:
     """Subscribes to user audio and feeds frames to the assistant for Voice ID."""
     if assistant.muted:
@@ -615,6 +651,11 @@ async def entrypoint(ctx: agents.JobContext):
             for bt in bg_tasks:
                 active_tasks.add(bt)
                 bt.add_done_callback(active_tasks.discard)
+
+            # C-78: the document index warms after a delay, so its walk never overlaps the start-up walks
+            rag_warm_delay = _rag_warm_delay()
+            if local and rag_warm_delay is not None:
+                track(_warm_document_index(rag_warm_delay))
 
             # Wait until session ends, room disconnects, or UI stop command
             stop_event = asyncio.Event()
