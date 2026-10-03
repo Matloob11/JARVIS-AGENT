@@ -8,11 +8,24 @@
 }
 
 .settings-page.settings-drawer {
+  position: relative;
+  inset: auto;
+  top: auto;
+  right: auto;
+  bottom: auto;
+  left: auto;
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
   height: 100%;
+  width: auto;
+  max-width: none;
+  z-index: auto;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
 }
 
 .set-wrap {

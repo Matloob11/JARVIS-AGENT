@@ -1,10 +1,11 @@
 .overview-page {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 411fr) minmax(0, 404fr);
-  grid-template-rows: auto minmax(150px, 1fr);
+  grid-template-rows: auto minmax(290px, 1fr) auto;
   column-gap: calc(15 * var(--hu, 1px));
   row-gap: calc(16 * var(--vu, 1px));
-  margin: calc(2 * var(--vu, 1px)) var(--gm, 18px) 0 var(--gl, 23px);
+  margin: 0;
   padding-bottom: calc(29 * var(--vu, 1px));
   min-height: 0;
   flex: 1 1 auto;
@@ -27,6 +28,11 @@
   min-height: 0;
 }
 
+.overview-page__stats > *,
+.overview-page__activity > * {
+  height: 100%;
+}
+
 .overview-page__below {
   grid-column: 1 / -1;
   display: flex;
@@ -36,11 +42,18 @@
 }
 
 .overview-page__legacy {
+  position: relative;
+  top: auto;
+  left: auto;
+  right: auto;
   grid-column: 1 / -1;
+  grid-row: 3;
   display: flex;
   flex-direction: column;
   gap: 12px;
   min-width: 0;
+  margin-top: 16px;
+  padding-bottom: 24px;
 }
 
 .overview-qs-card {
@@ -323,7 +336,8 @@
   height: min(
     clamp(240px, calc(58vh - 71.5px), 474px),
     calc(100cqw * 0.5712),
-    max(240px, 100cqh)
+    max(240px, 100cqh),
+    max(300px, calc(100cqh - 16 * var(--vu, 1px) - 290px))
   );
   min-height: 240px;
   --u: min(calc(100cqw / 830), calc(100cqh / 474));
@@ -787,10 +801,51 @@
   z-index: 2;
 }
 
+@container (max-height: 340px) {
+  .overview-hero__quote {
+    white-space: nowrap;
+    height: max(20px, calc(24 * var(--u)));
+    max-height: max(20px, calc(24 * var(--u)));
+  }
+}
+
 @media (max-width: 1023.98px) {
   .overview-page {
-    grid-template-columns: minmax(0, 1fr);
-    margin-inline: 16px;
+    display: flex;
+    flex-direction: column;
+    grid-template-columns: none;
+    grid-template-rows: none;
+    margin: 0;
+    padding-inline: 0;
+    row-gap: 12px;
+  }
+
+  .overview-page__stats,
+  .overview-page__activity {
+    grid-column: auto;
+    grid-row: auto;
+    height: auto;
+    min-height: 240px;
+  }
+
+  .overview-page__stats > *,
+  .overview-page__activity > * {
+    height: auto;
+    min-height: 240px;
+  }
+
+  .overview-page__legacy {
+    position: relative;
+    top: auto;
+    grid-row: auto;
+    margin-top: 8px;
+  }
+
+  .overview-hero {
+    height: auto;
+    aspect-ratio: 830 / 474;
+    max-height: min(420px, 55vh);
+    width: 100%;
   }
 }
 

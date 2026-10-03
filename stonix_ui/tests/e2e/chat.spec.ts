@@ -94,4 +94,27 @@ test('legacy role agent renders as assistant', async ({ page }) => {
   await expect(bubble).toHaveAttribute('data-role', 'assistant');
   await expect(bubble).toContainText('Legacy agent line');
   });
+
+  test('assistant markdown renders bold, not literal asterisks', async ({ page }) => {
+    const id = `md-msg-${Date.now()}`;
+    await page.request.post('http://127.0.0.1:5199/__mock/emit', {
+      data: {
+        event: 'new_message',
+        payload: {
+          id,
+          role: 'assistant',
+          text: '**Automation:** done\n- item one\n- item two\nUse `ls` please',
+          source: 'text',
+          final: true,
+          ts: Math.floor(Date.now() / 1000),
+        },
+      },
+    });
+    const bubble = page.locator(`[data-testid="chat-msg"][data-id="${id}"]`);
+    await expect(bubble).toBeVisible({ timeout: 15_000 });
+    await expect(bubble.locator('strong')).toHaveText('Automation:');
+    await expect(bubble.locator('li')).toHaveCount(2);
+    await expect(bubble.locator('code')).toHaveText('ls');
+    await expect(bubble).not.toContainText('**Automation:**');
+  });
 });

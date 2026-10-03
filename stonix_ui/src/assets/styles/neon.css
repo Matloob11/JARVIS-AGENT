@@ -1,0 +1,13 @@
+/* Neon UI after Tailwind so legacy @layer components cannot override these rules. */
+@import './neon/base.css';
+@import './neon/shell.css';
+@import './neon/panel.css';
+@import './neon/phone.css';
+@import './neon/overview.css';
+@import './neon/agents.css';
+@import './neon/activity.css';
+@import './neon/orb.css';
+@import './neon/overlays.css';
+@import './neon/screens.css';
+@import './neon/dialogs.css';
+@import './neon/settings.css';

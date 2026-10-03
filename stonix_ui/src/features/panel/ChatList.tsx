@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bell, Mic, ThumbsDown, ThumbsUp } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { ChatMessage, LiveCaption } from '@/features/chat/types';
+import { SafeChatMarkdown } from '@/features/chat/SafeChatMarkdown';
 import { LogoRing } from '@/shared/ui/LogoRing';
 import {
   asPersonaKey,
@@ -393,7 +394,9 @@ const MessageBubble = ({
         data-role="system"
         data-id={message.id}
       >
-        <div className="chat-msg-bubble">{message.text}</div>
+        <div className="chat-msg-bubble">
+          <SafeChatMarkdown text={message.text} />
+        </div>
       </motion.div>
     );
   }
@@ -425,15 +428,15 @@ const MessageBubble = ({
           </div>
         ) : null}
         <div className="chat-msg-bubble">
-          <p className="chat-msg-text">
-            {message.text}
+          <div className="chat-msg-text">
+            <SafeChatMarkdown text={message.text} />
             {meta.show && SrcIcon ? (
               <span className="chat-msg-src">
                 <SrcIcon size={12} aria-hidden />
               </span>
             ) : null}
             <span className="sr-only"> ({meta.sr})</span>
-          </p>
+          </div>
           {isUser ? (
             <span className="chat-msg-time">{formatMessageTime(message.ts)}</span>
           ) : null}

@@ -1009,12 +1009,21 @@ body {
 .app-shell-main .command-layout {
   flex: 1 1 auto;
   min-height: 0;
-  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
 }
 
-@media (min-width: 1024px) and (max-width: 1179.98px) {
+@media (min-width: 1024px) {
   .app-shell-main .command-layout {
-    grid-template-columns: minmax(0, 1fr);
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    gap: 0;
+  }
+
+  .app-shell-main .command-center-stage {
+    flex: 1 1 auto;
+    min-height: 0;
+    gap: 0;
+    overflow: hidden;
   }
 }
 

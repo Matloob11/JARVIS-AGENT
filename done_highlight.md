@@ -1444,3 +1444,11 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** bridge/init_state ki 18 test files: 871 passed, 27 skipped, 0 failed; deploy health gates ok, other apps identical; bridge log 23:37: UI aur agent sockets dobara connect
 - **Commit:** `6bd575d`, `0d9dcbd` · **Deploy:** VPS bridge 23:37 PKT (rollback: `bash /root/jarvis-backups/tools/rollback.sh 2026-10-03_1837Z-pre-deploy-0d9dcbd`); prompt: PC ke agle restart par
 - **Doosre agent ke liye:** init_state.agent_status ab hamesha aata hai (online, ya `{online:false, since}`). UI bug list plan section 11 (23:45) me.
+
+### ✅ [cursor] MSG · P0 neon layout/CSS cascade + markdown + pc-brain stats · 2026-10-03 23:55 PKT
+- **Kya kiya:** Overview ab main column bharta hai (flex shell, neon CSS Tailwind ke baad). Settings full page, composer 2 rows, cards ≥290px, phone stacked, chat bold/lists, pc-brain Quick Stats live PC vitals. Legacy strip fold ke neeche (grid row 3, min 290 cards). Visual baselines dubara liye.
+- **Files:** `stonix_ui/src/assets/styles/neon.css`, `index.css`, `main.tsx`, neon shell/overview/settings/panel, `SafeChatMarkdown.tsx`, `ChatList.tsx`, `useLaptopOnline.ts`, e2e layout/overview/chat, visual snapshots
+- **Verify:** product layout 7/7; visual 16/16 (update + verify); overview pc-brain + markdown e2e
+- **Commit:** pending · **Deploy:** no
+- **Doosre agent ke liye:** **REQ-DEPLOY frontend** (P0 layout). Live 1536×760 @125% check.
+

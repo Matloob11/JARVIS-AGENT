@@ -174,8 +174,8 @@ for (const size of phoneSizes) {
     await page.getByTestId('mobile-tab-chat').click();
     await expect(page.getByTestId('chat-panel')).toBeVisible();
 
-    const field = page.getByPlaceholder(/Message JARVIS|Message ANNA/i);
-    await field.click();
+    const field = page.getByTestId('chat-panel').getByTestId('chat-composer-input');
+    await field.evaluate((el: HTMLTextAreaElement) => el.focus());
 
     await expect.poll(async () => page.evaluate(() => document.documentElement.classList.contains('typing'))).toBe(true);
     await expect(page.getByTestId('mobile-tab-bar')).toBeHidden();
@@ -288,4 +288,102 @@ for (const size of extraGateSizes) {
     }
   });
 }
+
+const productLayoutSizes: { width: number; height: number }[] = [
+  { width: 1672, height: 941 },
+  { width: 1536, height: 760 },
+  { width: 1366, height: 657 },
+  { width: 1920, height: 947 },
+  { width: 1100, height: 700 },
+  { width: 390, height: 844 },
+];
+
+async function overviewProductLayout(page: Page) {
+  return page.evaluate(() => {
+    const box = (sel: string) => {
+      const el = document.querySelector(sel) as HTMLElement | null;
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { top: r.top, left: r.left, right: r.right, bottom: r.bottom, width: r.width, height: r.height };
+    };
+    const overlap = (
+      a: { top: number; left: number; right: number; bottom: number } | null,
+      b: { top: number; left: number; right: number; bottom: number } | null,
+    ) => {
+      if (!a || !b) return false;
+      return !(a.right <= b.left + 1 || a.left >= b.right - 1 || a.bottom <= b.top + 1 || a.top >= b.bottom - 1);
+    };
+    const hero = box('.overview-hero');
+    const stats = box('.overview-page__stats');
+    const activity = box('.overview-page__activity');
+    const legacy = box('.overview-page__legacy');
+    const main = box('[data-testid="shell-main"]');
+    const composer = document.querySelector('.neon-composer') as HTMLElement | null;
+    const composerStyle = composer ? getComputedStyle(composer) : null;
+    return {
+      hero,
+      stats,
+      activity,
+      legacy,
+      main,
+      heroFills: Boolean(hero && main && hero.width >= main.width * 0.72),
+      statsActivitySideBySide: Boolean(
+        stats && activity && Math.abs(stats.top - activity.top) < 8 && stats.right <= activity.left + 2,
+      ),
+      overlaps: {
+        heroStats: overlap(hero, stats),
+        heroActivity: overlap(hero, activity),
+        statsActivity: overlap(stats, activity),
+        heroLegacy: overlap(hero, legacy),
+        statsLegacy: overlap(stats, legacy),
+        activityLegacy: overlap(activity, legacy),
+      },
+      composerDisplay: composerStyle?.display ?? null,
+      composerRows: composerStyle?.gridTemplateRows ?? null,
+    };
+  });
+}
+
+for (const size of productLayoutSizes) {
+  test(`product overview layout ${size.width}x${size.height}`, async ({ page }) => {
+    await page.setViewportSize(size);
+    await page.goto('/#/overview');
+    await expect(page.getByTestId('qs-card')).toBeVisible();
+    const geo = await overviewProductLayout(page);
+    expect(geo.overlaps.heroStats).toBe(false);
+    expect(geo.overlaps.heroActivity).toBe(false);
+    expect(geo.overlaps.heroLegacy).toBe(false);
+    expect(geo.overlaps.statsLegacy).toBe(false);
+    expect(geo.overlaps.activityLegacy).toBe(false);
+    if (size.width >= 1024) {
+      expect(geo.heroFills).toBe(true);
+      expect(geo.statsActivitySideBySide).toBe(true);
+      expect(geo.overlaps.statsActivity).toBe(false);
+      expect(geo.composerDisplay).toBe('grid');
+      expect(String(geo.composerRows).split(' ').length).toBeGreaterThanOrEqual(2);
+    } else {
+      expect(geo.overlaps.statsActivity).toBe(false);
+    }
+  });
+}
+
+test('settings page fills main column', async ({ page }) => {
+  await page.setViewportSize({ width: 1672, height: 941 });
+  await page.goto('/#/settings');
+  await expect(page.getByTestId('settings-drawer')).toBeVisible();
+  const geo = await page.evaluate(() => {
+    const settings = document.querySelector('[data-testid="settings-drawer"]') as HTMLElement | null;
+    const main = document.querySelector('[data-testid="shell-main"]') as HTMLElement | null;
+    const s = settings?.getBoundingClientRect();
+    const m = main?.getBoundingClientRect();
+    return {
+      settingsWidth: s?.width ?? 0,
+      mainWidth: m?.width ?? 0,
+      position: settings ? getComputedStyle(settings).position : null,
+    };
+  });
+  expect(geo.position).not.toBe('absolute');
+  expect(geo.settingsWidth).toBeGreaterThan(geo.mainWidth * 0.72);
+});
+
 
