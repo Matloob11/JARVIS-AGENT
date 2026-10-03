@@ -30,8 +30,11 @@ SECRET_ENV_NAMES: tuple[str, ...] = (
     "VORTEX_SECURITY_TOKEN", "CONTROLLER_TOKEN", "JARVIS_ENCRYPTION_KEY", "LIVEKIT_API_SECRET",
     "AGENT_TOKEN", "BRIDGE_HMAC_SECRET", "SESSION_JWT_SECRET", "POLLINATIONS_TOKEN",
     "PINCHTAB_TOKEN", "SIM_LOOKUP_API_KEY", "VITE_VORTEX_SECURITY_TOKEN", "OWNER_TOTP_SECRET",
-    "OWNER_PASSWORD_HASH",
+    "OWNER_PASSWORD_HASH", "OWNER_RECOVERY_HASHES", "DESKTOP_AGENT_SIGNING_KEY",
 )
+# Names whose value is a ','-separated list of secrets (C-AUTH-1): each item is masked on its own as well, so one
+# recovery hash in a log line is masked even where the whole list never appears.
+SECRET_LIST_ENV_NAMES: frozenset[str] = frozenset({"OWNER_RECOVERY_HASHES"})
 MIN_SECRET_CHARS = 8
 REDACTED = "***"
 
@@ -78,6 +81,8 @@ def _current_secrets() -> frozenset[str]:
         value = (os.environ.get(name) or "").strip()
         if len(value) >= MIN_SECRET_CHARS:
             secrets.add(value)
+        if name in SECRET_LIST_ENV_NAMES:
+            secrets.update(item.strip() for item in value.split(",") if len(item.strip()) >= MIN_SECRET_CHARS)
     return frozenset(secrets)
 
 
@@ -94,9 +99,10 @@ def _secret_needles(secrets: frozenset[str]) -> tuple[str, ...]:
 def redact_secrets(text: str) -> str:
     """
     Contract K-29: replaces secrets in text bound for logs, the UI or the LLM with '***'.
-    Masks the current values (8+ chars, longest first, also URL-encoded) of SECRET_ENV_NAMES and
-    of register_runtime_secret(), then the values of key=, api_key=, appid=, token= and sig= URL
-    query parameters and 'Bearer <token>' (a token has 8+ chars with a digit, or 20+ chars).
+    Masks the current values (8+ chars, longest first, also URL-encoded) of SECRET_ENV_NAMES (and
+    each ','-separated item of a SECRET_LIST_ENV_NAMES value) and of register_runtime_secret(),
+    then the values of key=, api_key=, appid=, token= and sig= URL query parameters and
+    'Bearer <token>' (a token has 8+ chars with a digit, or 20+ chars).
     Never raises: None is returned as is, any other non-str value goes through str() first, and
     an unexpected error returns '***' instead of the text.
     """

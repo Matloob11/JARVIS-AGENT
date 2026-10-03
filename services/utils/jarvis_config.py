@@ -97,12 +97,16 @@ class _Needs(NamedTuple):
     required: tuple[str, ...]
     fatal: tuple[str, ...] = ()
     any_of: tuple[tuple[str, ...], ...] = ()
+    # Missing ones log one WARNING and never fail validate(): a feature stays off until they are set.
+    recommended: tuple[str, ...] = ()
 
 
 _LIVEKIT_KEYS = ("LIVEKIT_API_KEY", "LIVEKIT_API_SECRET")
 # Without it jarvis_crypto encrypts memory with a throw-away session key, so nothing written survives a restart.
 _ENCRYPTION_KEY = "JARVIS_ENCRYPTION_KEY"
 _AGENT_LINK_KEY = "DESKTOP_AGENT_SIGNING_KEY"
+_SESSION_JWT_KEY = "SESSION_JWT_SECRET"
+_COOKIE_SECURE_MODES = ("1", "0", "auto")
 
 
 def _role_needs(role: str, mode: str) -> _Needs:
@@ -116,7 +120,9 @@ def _role_needs(role: str, mode: str) -> _Needs:
         return _Needs((_AGENT_LINK_KEY,), fatal=(_ENCRYPTION_KEY,))
     if role == ROLE_BRIDGE:
         legacy = ("VORTEX_SECURITY_TOKEN",) if _env_bool("LEGACY_TOKEN_AUTH", True) else ()
-        return _Needs((*_LIVEKIT_KEYS, *legacy))
+        # C-19: without SESSION_JWT_SECRET the owner login answers 503 owner_not_enrolled; the legacy token and the
+        # agent link keep working, so today's bridge.env still starts (the cut-over C-22 makes the login the path).
+        return _Needs((*_LIVEKIT_KEYS, *legacy), recommended=(_SESSION_JWT_KEY,))
     return _Needs(("DESKTOP_PC_SIGNING_KEY", "DESKTOP_AGENT_PUBLIC_KEY"))
 
 
@@ -180,6 +186,17 @@ def _env_list(name: str, default: list[str], paths: bool = True) -> list[str]:
     items = [part.strip().strip('"').strip("'").strip() for part in raw.split(";")]
     items = [_expand(item) if paths else item for item in items if item]
     return items or list(default)
+
+
+def _env_cookie_secure(name: str) -> str:
+    """COOKIE_SECURE (K-09/K-36): '1' (default: Secure on every session cookie), '0' (plain-http local bridge) or
+    'auto' (Secure only for an HTTPS request); the yes/no words of _env_bool are accepted as 1/0."""
+    value = (os.getenv(name) or "").strip().lower()
+    if value in _TRUE_WORDS:
+        return "1"
+    if value in _FALSE_WORDS:
+        return "0"
+    return _env_choice(name, _COOKIE_SECURE_MODES, "1")
 
 
 def _env_origins(name: str) -> list[str]:
@@ -334,6 +351,12 @@ class JarvisConfig:
     agent_token: str | None
     bridge_hmac_secret: str | None
     legacy_token_auth: bool
+    session_jwt_secret: str | None
+    owner_password_hash: str | None
+    owner_totp_secret: str | None
+    owner_recovery_hashes: list[str]
+    cookie_path: str
+    cookie_secure: str
     bridge_db_path: str
     bridge_url: str
     ui_bridge_url: str
@@ -391,6 +414,7 @@ class JarvisConfig:
         "VORTEX_SECURITY_TOKEN": "security_token",
         "AGENT_TOKEN": "agent_token",
         "BRIDGE_HMAC_SECRET": "bridge_hmac_secret",
+        "SESSION_JWT_SECRET": "session_jwt_secret",
         "LIVEKIT_API_KEY": "livekit_key",
         "LIVEKIT_API_SECRET": "livekit_secret",
         "DESKTOP_PC_SIGNING_KEY": "desktop_pc_signing_key",
@@ -406,6 +430,16 @@ class JarvisConfig:
         self.agent_token = _env_str("AGENT_TOKEN")
         self.bridge_hmac_secret = _env_str("BRIDGE_HMAC_SECRET")
         self.legacy_token_auth = _env_bool("LEGACY_TOKEN_AUTH", True)
+        # Owner session auth (C-19, C-AUTH-1 / K-36), read by src/core/bridge_auth.py: the JWT key, the owner's
+        # bcrypt password hash, TOTP secret and recovery code hashes. The hashes are base64url-encoded, so compose's
+        # env_file interpolation never sees a '$'; OWNER_RECOVERY_HASHES is a ','-separated list. Never logged.
+        self.session_jwt_secret = _env_str(_SESSION_JWT_KEY)
+        self.owner_password_hash = _env_str("OWNER_PASSWORD_HASH")
+        self.owner_totp_secret = _env_str("OWNER_TOTP_SECRET")
+        self.owner_recovery_hashes = _env_list("OWNER_RECOVERY_HASHES", [], paths=False)
+        # The session cookie: Path (nginx serves the bridge under /vortex) and the Secure flag mode.
+        self.cookie_path = _env_str("COOKIE_PATH") or "/vortex"
+        self.cookie_secure = _env_cookie_secure("COOKIE_SECURE")
         self.bridge_url = os.getenv("UI_BRIDGE_URL", "http://127.0.0.1:5001")
         self.ui_bridge_url = self.bridge_url  # alias for compatibility
 
@@ -557,7 +591,8 @@ class JarvisConfig:
         - bridge: LIVEKIT_API_KEY/SECRET, plus VORTEX_SECURITY_TOKEN while the legacy token is in use
           (LEGACY_TOKEN_AUTH unset or true). AGENT_TOKEN and BRIDGE_HMAC_SECRET stay optional: without them
           the public agent link v2 (C-14) is off and src/core/ui_bridge.py logs which names are missing;
-          the VPS brain's agents use the internal :5002 listener instead (K-38 v4);
+          the VPS brain's agents use the internal :5002 listener instead (K-38 v4). SESSION_JWT_SECRET (C-19) is
+          recommended: a missing one logs a WARNING and the owner login answers 503 owner_not_enrolled;
         - desktop: DESKTOP_PC_SIGNING_KEY and DESKTOP_AGENT_PUBLIC_KEY.
         role and mode default to JARVIS_ROLE and JARVIS_DESKTOP_MODE; the mode matters only for the agent.
         A missing JARVIS_ENCRYPTION_KEY raises in every environment; any other missing key raises only in
@@ -599,6 +634,10 @@ class JarvisConfig:
 
         if fatal or missing:
             logger.critical("❌ CRITICAL CONFIG MISSING (%s): %s", label, ", ".join(fatal + missing))
+        unset = [name for name in needs.recommended if not self._setting(name)]
+        if unset:
+            logger.warning("Config (%s): %s not set; the owner session login stays off until it is",
+                           label, ", ".join(unset))
         if fatal:
             raise RuntimeError(f"Missing {fatal} for {label}: refusing to start")
         if missing and self.is_production():

@@ -8,9 +8,14 @@ C-STATE-1); BridgeStateManager keeps only volatile flags.
 
 Agent link v2 (C-14, C-SOCK-1 / C-NOTIFY-1): every Socket.IO client gets a role at connect. An agent
 (auth.agent_token = AGENT_TOKEN) joins room 'agent'; the legacy shared token joins BOTH rooms while
-LEGACY_TOKEN_AUTH=1 (today's broadcast, so the current UI and PC agent keep working); C-19 adds the
-session cookie for role 'ui' (room 'ui'). ui_command and vision_frame go only to room 'agent', every
-notify and periodic event only to room 'ui'. POST /notify is authenticated before it changes anything.
+LEGACY_TOKEN_AUTH=1 (today's broadcast, so the current UI and PC agent keep working); the owner session
+cookie jarvis_session (C-19) gives role 'ui' (room 'ui'). ui_command and vision_frame go only to room 'agent',
+every notify and periodic event only to room 'ui'. POST /notify is authenticated before it changes anything.
+
+Owner session auth (C-19, C-AUTH-1 / K-36, src/core/bridge_auth.py): POST /auth/login, POST /auth/logout and
+GET /auth/me. /livekit/token, /messages, /feedback, /telemetry/production and the media index/file take the
+session or, while LEGACY_TOKEN_AUTH=1, the legacy X-Vortex-Token header; /status also takes the session and the
+agent's signed headers. A revoked or expired session ends its UI sockets with 'session_expired' {reason}.
 
 VPS brain (C-116, K-38/K-39/K-48 v4): the same app also listens on the internal port 5002 (jarvis-network only,
 never published; started when JARVIS_ROLE=bridge). There the token-less agent role {role:'agent', room, job_id},
@@ -37,12 +42,13 @@ from collections import OrderedDict
 from collections.abc import AsyncGenerator, Awaitable, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from datetime import timedelta
 from typing import Any, TypeVar, cast
 from urllib.parse import unquote
 
 import socketio
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
@@ -51,7 +57,7 @@ from services.utils.jarvis_config import ROLE_BRIDGE, active_brain, config, runt
 from services.utils.jarvis_health import health_monitor
 from services.utils.jarvis_logger import setup_logger
 from services.utils.jarvis_telemetry import telemetry
-from src.core import bridge_desktop, bridge_media, bridge_security
+from src.core import bridge_auth, bridge_desktop, bridge_media, bridge_security
 from src.core.bridge_security import NOTIFY_MAX_BYTES, NonceCache, NotifyAuthError, TokenBucket, same_secret
 from src.core.bridge_store import (
     EVENT_LOG,
@@ -118,6 +124,14 @@ VISION_FRAME_MAX_CHARS = 600 * 1024
 _SHORT_TEXT = 64
 _ROOM_NAME = re.compile(r"[A-Za-z0-9._:-]{1,64}")  # a LiveKit room as K-70 writes it
 PUBLIC_PORT = 5001  # nginx /vortex/ -> 127.0.0.1:5101 -> this port; the internal one is bridge_desktop.INTERNAL_PORT
+# C-19 step 7: uvicorn takes the client address and scheme from X-Forwarded-For / X-Forwarded-Proto, but only from a
+# peer on loopback or a private network (nginx through Docker's port proxy, the jarvis network). The right-most
+# untrusted X-Forwarded-For entry is nginx's own $remote_addr, so a client-sent X-Forwarded-For never becomes the
+# address the login limiter counts ('*' would take the left-most, client-controlled entry).
+TRUSTED_PROXIES = "127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7"
+LIVEKIT_TOKEN_TTL_S = 3600         # C-LK-1: a session's LiveKit token
+LIVEKIT_LEGACY_TOKEN_TTL_S = 6 * 3600  # the legacy token keeps livekit-api's default TTL until the cut-over
+SESSION_WATCH_S = 60.0             # how often UI sockets are checked against the sessions table
 GIT_SHA = (os.getenv("GIT_SHA") or "").strip() or "unknown"  # exported by deploy.sh (K-47)
 _STARTED_MONO = time.monotonic()
 
@@ -131,6 +145,7 @@ async def lifespan(_app_instance: FastAPI) -> AsyncGenerator[None, None]:
     telemetry_task = asyncio.create_task(telemetry_heartbeat())
     speaking_task = asyncio.create_task(user_speaking_monitor())
     retention_task = asyncio.create_task(store_retention_loop())
+    session_task = asyncio.create_task(session_watch_loop())
     # In the background, like the store: a long integrity check of bridge.db must never delay /health.
     desktop_task = asyncio.create_task(desktop.start())
     yield
@@ -139,6 +154,7 @@ async def lifespan(_app_instance: FastAPI) -> AsyncGenerator[None, None]:
     telemetry_task.cancel()
     speaking_task.cancel()
     retention_task.cancel()
+    session_task.cancel()
     # start() is short (one kv read, the seen store's open): let it finish, so no store call outlives the close
     await asyncio.wait({desktop_task}, timeout=10.0)
     desktop_task.cancel()
@@ -332,14 +348,25 @@ async def stored(action: str, call: Awaitable[T], fallback: T) -> T:
         return fallback
 
 
-def _peer_ip(peer: str, real_ip: str | None) -> str:
-    """The client address for logs and audit rows: nginx's X-Real-IP when the peer is the proxy (a
-    loopback or private address), else the peer itself."""
+_TRUSTED_PROXY_NETS = tuple(ipaddress.ip_network(net) for net in TRUSTED_PROXIES.split(","))
+
+
+def _trusted_proxy_peer(peer: str) -> bool:
+    """True for a peer in TRUSTED_PROXIES (loopback or a private network: nginx through Docker), the same set
+    uvicorn takes X-Forwarded-For from. An IPv4-mapped IPv6 peer counts as its IPv4 address."""
     try:
-        behind_proxy = bool(peer) and (ipaddress.ip_address(peer).is_loopback
-                                       or ipaddress.ip_address(peer).is_private)
+        addr = ipaddress.ip_address(peer)
     except ValueError:
-        behind_proxy = False
+        return False
+    if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped is not None:
+        addr = addr.ipv4_mapped
+    return any(addr in net for net in _TRUSTED_PROXY_NETS)
+
+
+def _peer_ip(peer: str, real_ip: str | None) -> str:
+    """The client address for logs, audit rows and the login limiter: nginx's X-Real-IP when the peer is a
+    trusted proxy (TRUSTED_PROXIES), else the peer itself."""
+    behind_proxy = bool(peer) and _trusted_proxy_peer(peer)
     real = (real_ip or "").strip()
     return real[:_SHORT_TEXT] if real and behind_proxy else (peer or "unknown")
 
@@ -368,6 +395,49 @@ async def _mark_nonce_seen(nonce: str) -> bool:
     """False when the store saw this nonce before (a replay across a restart); a failing store counts
     as unseen, since the in-memory cache has already checked it."""
     return await stored("notify nonce", store.mark_seen(SEEN_NOTIFY, nonce), True)
+
+
+async def _agent_request_ok(request: Request) -> bool:
+    """An agent request (C-AUTH-1): the internal listener (K-38 v4), or the C-NOTIFY-1 signed headers over the raw
+    body (b'' for a GET) on the public one; the nonce is spent like a notify's."""
+    if bridge_desktop.is_internal_scope(request.scope):
+        return True
+    if "x-agent-token" not in request.headers:
+        return False
+    try:
+        raw = await bridge_security.read_body(request)
+    except NotifyAuthError:
+        return False
+    if raw is None:
+        return False
+    return await bridge_auth.verify_agent_headers(request.headers, raw, agent_token=config.agent_token,
+                                                  nonces=_notify_nonces, mark_seen=_mark_nonce_seen)
+
+
+async def _end_session_sockets(session_id: str, reason: str) -> None:
+    """Tells the UI sockets of a revoked or expired owner session ('session_expired' {reason}) and closes them."""
+    for sid, client in list(_clients.items()):
+        if client.role == ROLE_UI and client.session_id == session_id:
+            try:
+                await sio.emit("session_expired", {"reason": reason}, to=sid)
+                await sio.disconnect(sid)
+            except (KeyError, ValueError):  # the socket has already gone
+                logger.debug("Socket %s left before its session ended", sid)
+
+
+# The owner login and the session checks (C-19). The lambdas look the store and the helpers up on every call, so
+# a replaced one (tests swap the store) is used.
+# pylint: disable=unnecessary-lambda
+owner_auth: bridge_auth.OwnerAuth = bridge_auth.OwnerAuth(
+    lambda: store,
+    allowed_origins=lambda: ALLOWED_ORIGINS,
+    client_ip=lambda request: _request_ip(request),
+    legacy_ok=lambda request: _legacy_header_ok(request),
+    agent_ok=lambda request: _agent_request_ok(request),
+    is_internal=bridge_desktop.is_internal_scope,
+    on_revoke=lambda session_id, reason: _end_session_sockets(session_id, reason))
+# pylint: enable=unnecessary-lambda
+owner_auth.install(app)
 
 
 def update_rate_limit(request: Request) -> None:
@@ -612,10 +682,12 @@ async def get_status(request: Request) -> Any:
     """
     C-STATUS-1 (K-43) as far as the bridge knows it today, with the K-74 'desktop' block (C-116); C-63 adds LiveKit
     and the agent heartbeats. Auth: the internal listener (agent role), K-70 PC-signed HTTP (agent_ctl brain and
-    node checks), or the legacy header while LEGACY_TOKEN_AUTH=1 (until the owner session of C-19).
+    node checks), the owner session (C-19), the agent's signed headers, or the legacy header while
+    LEGACY_TOKEN_AUTH=1.
     """
     if not (bridge_desktop.is_internal_scope(request.scope) or _legacy_header_ok(request)
-            or await _pc_signed(request)):
+            or await owner_auth.session_from_request(request) is not None
+            or await _agent_request_ok(request) or await _pc_signed(request)):
         return JSONResponse({"error": "auth_required"}, status_code=401)
     db_ok = await stored("status check", _db_ok(), False)
     agents = [client for client in _clients.values() if _is_owner_agent(client)]
@@ -640,7 +712,8 @@ async def get_status(request: Request) -> Any:
 async def _media_auth(request: Request) -> bool:
     """Auth for the media path (K-73): the owner session (the legacy token until C-22) for the UI, or K-70
     PC-signed HTTP for the laptop node. A GET is bodiless, so the PC signature covers method, path and query."""
-    return _legacy_header_ok(request) or await _pc_signed(request)
+    return (_legacy_header_ok(request) or await owner_auth.session_from_request(request) is not None
+            or await _pc_signed(request))
 
 
 @app.get("/media/index")
@@ -737,17 +810,16 @@ async def desktop_backup_latest(request: Request) -> Any:
 
 
 @app.get("/messages")
-async def get_messages(request: Request, before: float | None = None,
-                       limit: int = MESSAGE_PAGE_MAX, cursor: str | None = None) -> dict[str, Any]:
+async def get_messages(before: float | None = None, limit: int = MESSAGE_PAGE_MAX, cursor: str | None = None,
+                       _owner: bridge_auth.Principal = Depends(owner_auth.require_session_or_legacy),
+                       ) -> dict[str, Any]:
     """
     Chat history (C-MSG-1): up to `limit` (1..100) messages older than `before` (epoch s or ms),
     ascending, has_more, and next_cursor for the dashboard's pager. `cursor` takes a previous
     next_cursor, which names the page's oldest message exactly, so messages that share a ts are
     never skipped; `before` wins when both are given.
-    Auth: X-Vortex-Token header (legacy token, until the session login of OP-17).
+    Auth: the owner session, or the X-Vortex-Token header while LEGACY_TOKEN_AUTH=1 (C-AUTH-1).
     """
-    if not _legacy_header_ok(request):
-        raise HTTPException(status_code=401, detail="Unauthorized")
     before_seq: int | None = None
     if before is None and cursor:
         try:
@@ -764,15 +836,17 @@ async def get_messages(request: Request, before: float | None = None,
 
 
 @app.get("/livekit/token")
-async def livekit_token(request: Request) -> dict[str, str]:
+async def livekit_token(owner: bridge_auth.Principal = Depends(owner_auth.require_session_or_legacy)) -> Any:
     """
-    Issue a LiveKit access token for the browser voice client.
-    Auth: X-Vortex-Token header (same as UI socket auth).
-    The bridge mints the identity (C-116, K-37 v4): owner-<8 hex>, a new one for every token, so two tabs or devices
-    never push each other out; any identity the client sends is ignored. C-19 makes it stable per owner session.
+    Issue a LiveKit access token for the browser voice client (C-LK-1 / K-37).
+    Auth: the owner session, or the X-Vortex-Token header while LEGACY_TOKEN_AUTH=1.
+    The bridge mints the identity and ignores any identity the client sends: 'owner-<first 8 chars of the session
+    id>' for a session (stable per session, TTL 1 h); the legacy token keeps a new owner-<8 hex> for every token
+    (C-116), so two legacy tabs or devices never push each other out. (K-37 names 'owner-legacy' for legacy mode; a
+    single fixed identity would make LiveKit drop the other tab, so today's per-token identity and 6 h TTL stay
+    until the cut-over C-22, which ends legacy mode.) 503 {error: 'livekit_unavailable'} when no token can be
+    minted.
     """
-    if not _legacy_header_ok(request):
-        raise HTTPException(status_code=401, detail="Unauthorized")
 
     api_key = os.getenv("LIVEKIT_API_KEY", "")
     api_secret = os.getenv("LIVEKIT_API_SECRET", "")
@@ -787,9 +861,13 @@ async def livekit_token(request: Request) -> dict[str, str]:
         public_url = os.getenv("LIVEKIT_PUBLIC_URL", "ws://187.127.123.235:7880")
 
     if not api_key or not api_secret:
-        raise HTTPException(status_code=503, detail="LiveKit keys not configured")
+        logger.error("LiveKit token refused: LIVEKIT_API_KEY / LIVEKIT_API_SECRET not configured")
+        return JSONResponse({"error": "livekit_unavailable"}, status_code=503)
 
-    identity = f"owner-{secrets.token_hex(4)}"
+    if owner.is_session:
+        identity, ttl_s = f"owner-{owner.session_id[:8]}", LIVEKIT_TOKEN_TTL_S
+    else:
+        identity, ttl_s = f"owner-{secrets.token_hex(4)}", LIVEKIT_LEGACY_TOKEN_TTL_S
     try:
         from livekit import api as lk_api  # pylint: disable=import-outside-toplevel
 
@@ -838,6 +916,7 @@ async def livekit_token(request: Request) -> dict[str, str]:
         access = (
             lk_api.AccessToken(api_key, api_secret)
             .with_identity(identity)
+            .with_ttl(timedelta(seconds=ttl_s))
             .with_name("Owner")
             .with_attributes({"role": "owner"})
             .with_grants(
@@ -850,30 +929,34 @@ async def livekit_token(request: Request) -> dict[str, str]:
                 )
             )
         )
+        issued_at = time.time()
         jwt_token = access.to_jwt()
-    except Exception as exc:  # pylint: disable=broad-exception-caught
+    except Exception:  # pylint: disable=broad-exception-caught
         logger.exception("LiveKit token mint failed")
-        raise HTTPException(status_code=500, detail=f"Token error: {exc}") from exc
+        return JSONResponse({"error": "livekit_unavailable"}, status_code=503)
 
     return {
         "token": jwt_token,
         "url": public_url,
         "room": room_name,
         "identity": identity,
+        "expires_at": int(issued_at) + ttl_s,
     }
 
 
 @app.get("/telemetry/production")
-async def get_production_telemetry() -> dict[str, Any]:
-    """Returns real-world interaction metrics for the dashboard."""
-    return telemetry.get_production_metrics()
+async def get_production_telemetry(
+        _owner: bridge_auth.Principal = Depends(owner_auth.require_session_or_legacy)) -> dict[str, Any]:
+    """Returns real-world interaction metrics for the dashboard (the owner session or the legacy header). The
+    metrics call is a coroutine: awaiting it fixes the old 500."""
+    return await telemetry.get_production_metrics()
 
 
 @app.post("/feedback")
-async def record_user_feedback(data: dict[str, Any], request: Request) -> dict[str, str]:
-    """Receives user feedback and updates adaptive engine."""
-    if not _legacy_header_ok(request):
-        raise HTTPException(status_code=401, detail="Unauthorized")
+async def record_user_feedback(data: dict[str, Any],
+                               _owner: bridge_auth.Principal = Depends(owner_auth.require_session_or_legacy),
+                               ) -> dict[str, str]:
+    """Receives user feedback and updates adaptive engine (the owner session or the legacy header)."""
 
     intent: str | None = data.get("intent")
     score: int = data.get("score", 0)
@@ -986,6 +1069,31 @@ async def store_retention_loop() -> None:
         await asyncio.sleep(3600.0)
 
 
+async def _expire_ui_sessions() -> None:
+    """Ends the UI sockets whose owner session was revoked (revoke-all, another logout) or has expired."""
+    checked: dict[str, bool] = {}
+    for client in list(_clients.values()):
+        session_id = client.session_id
+        if client.role != ROLE_UI or not session_id or session_id in checked:
+            continue
+        checked[session_id] = await owner_auth.session_active(session_id)
+        if not checked[session_id]:
+            await _end_session_sockets(session_id, "expired")
+
+
+async def session_watch_loop() -> None:
+    """Every SESSION_WATCH_S: UI sockets of a session that is no longer valid get 'session_expired' and close."""
+    while True:
+        await asyncio.sleep(SESSION_WATCH_S)
+        try:
+            await _expire_ui_sessions()
+        except asyncio.CancelledError:
+            logger.info("Session watch task cancelled.")
+            break
+        except Exception:  # pylint: disable=broad-exception-caught
+            logger.exception("Session watch failed")
+
+
 async def build_init_state() -> dict[str, Any]:
     """init_state (C-STATE-1): volatile flags from memory, the rest from the store, with every
     legacy key the current dashboard reads (persona, vortex_logs, ...)."""
@@ -1035,6 +1143,7 @@ class SocketClient:
     room: str = ""      # agents: the LiveKit room they serve (K-38 v4); ui_command goes only to JARVIS_ROOM_NAME's
     job_id: str = ""
     internal: bool = False  # came in on the internal listener (jarvis-network)
+    session_id: str = ""    # role 'ui': the owner session of the jarvis_session cookie (C-19)
     commands: TokenBucket = field(default_factory=lambda: TokenBucket(UI_COMMANDS_PER_S))
     frames: TokenBucket = field(default_factory=lambda: TokenBucket(VISION_FRAMES_PER_S))
 
@@ -1068,7 +1177,8 @@ def _legacy_tokens(environ: Mapping[str, Any], auth: Mapping[str, Any]) -> list[
 
 def _socket_role(environ: Mapping[str, Any], auth: Any) -> tuple[str | None, str]:
     """(role, '') for valid credentials, else (None, reason). An agent_token decides on its own; the
-    legacy token counts only while LEGACY_TOKEN_AUTH=1. C-19 adds the jarvis_session cookie (role 'ui')."""
+    legacy token counts only while LEGACY_TOKEN_AUTH=1. The jarvis_session cookie (role 'ui', C-19) is checked
+    before this, in handle_connect, because it needs the store."""
     auth = auth if isinstance(auth, dict) else {}
     if "agent_token" in auth:
         if same_secret(auth.get("agent_token"), config.agent_token):
@@ -1138,13 +1248,22 @@ def _agent_status(client: SocketClient) -> dict[str, Any]:
 @sio.on("connect") # type: ignore[untyped-decorator]
 async def handle_connect(sid: str, environ: dict[str, Any], auth: dict[str, Any] | None = None) -> bool:
     """
-    Socket.IO roles (C-SOCK-1): auth.agent_token = AGENT_TOKEN -> 'agent' (room 'agent');
-    auth.token or ?token= = VORTEX_SECURITY_TOKEN -> 'legacy' in both rooms while LEGACY_TOKEN_AUTH=1.
+    Socket.IO roles (C-SOCK-1): auth.agent_token = AGENT_TOKEN -> 'agent' (room 'agent'); a valid
+    jarvis_session cookie in the handshake -> 'ui' (room 'ui', C-19); auth.token or ?token= =
+    VORTEX_SECURITY_TOKEN -> 'legacy' in both rooms while LEGACY_TOKEN_AUTH=1.
     Anything else is refused (False) and audited as 'socket_auth_failed'. UI and legacy sockets get
     init_state; the first agent socket turns agent_status online.
     """
     internal = bridge_desktop.is_internal_environ(environ)
-    role, reason = _internal_role(auth) if internal else _socket_role(environ, auth)
+    session: bridge_auth.Principal | None = None
+    if not internal and not (isinstance(auth, dict) and "agent_token" in auth):
+        session = await owner_auth.session_from_environ(environ)
+    if session is not None:
+        role, reason = ROLE_UI, ""
+    else:
+        role, reason = _internal_role(auth) if internal else _socket_role(environ, auth)
+        if role is None and reason == "no_credentials" and owner_auth.has_session_cookie(environ):
+            reason = "bad_session"
     ip = _socket_ip(environ)
     if role is None:
         logger.warning("🚨 Socket refused (%s) from %s: %s", reason, ip, sid)
@@ -1153,7 +1272,7 @@ async def handle_connect(sid: str, environ: dict[str, Any], auth: dict[str, Any]
                                               {"reason": reason, "sid": sid}, ip), 0)
         return False
 
-    client = SocketClient(role=role, ip=ip, internal=internal)
+    client = SocketClient(role=role, ip=ip, internal=internal, session_id=session.session_id if session else "")
     if role == ROLE_AGENT and isinstance(auth, dict):
         client.host, client.version = _short(auth.get("agent_id")), _short(auth.get("version"))
         client.room, client.job_id = _agent_room(auth, internal), _short(auth.get("job_id"))
@@ -1309,7 +1428,8 @@ def main() -> None:
     except OSError as exc:  # as uvicorn.run did: a port in use is one error line and exit code 1
         logger.error("Cannot listen: %s", exc)
         sys.exit(1)
-    uvicorn.Server(uvicorn.Config(app_asgi, host="0.0.0.0", port=PUBLIC_PORT)).run(sockets=sockets)
+    uvicorn.Server(uvicorn.Config(app_asgi, host="0.0.0.0", port=PUBLIC_PORT, proxy_headers=True,
+                                  forwarded_allow_ips=TRUSTED_PROXIES)).run(sockets=sockets)
 
 
 if __name__ == "__main__":
