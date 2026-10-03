@@ -52,6 +52,9 @@ FAKE_METADATA = "c137-private-room-metadata"
 Room = models.Room  # pylint: disable=no-member
 ListRoomsResponse = livekit_room.ListRoomsResponse  # pylint: disable=no-member
 AgentDispatch = agent_dispatch.AgentDispatch  # pylint: disable=no-member
+ListParticipantsResponse = livekit_room.ListParticipantsResponse  # pylint: disable=no-member
+ParticipantInfo = models.ParticipantInfo  # pylint: disable=no-member
+C137_WORKER_ID = "AW_c137current"
 
 SLOW_MODULE = '''"""C-137 test double for the sentence-transformers import: as slow, without a model."""
 import threading
@@ -534,38 +537,47 @@ def test_the_prewarm_hook_never_fails_the_job(monkeypatch):
 # --------------------------------------------------------------------------- ensure_room.py
 
 
-def _load_ensure_room(monkeypatch) -> Any:
-    """deploy/windows-local/ensure_room.py as a module: throwaway settings, no .env read, no sleeps."""
+def _load_ensure_room(monkeypatch, tmp_path: Path) -> Any:
+    """deploy/windows-local/ensure_room.py as a module: throwaway settings, no .env read, no sleeps, run/
+    under tmp_path (never the live worker's) and a current worker that started a minute ago."""
     monkeypatch.setenv("LIVEKIT_URL", "wss://livekit.c137.invalid")
     monkeypatch.setenv("LIVEKIT_API_KEY", FAKE_KEY)
     monkeypatch.setenv("LIVEKIT_API_SECRET", FAKE_SECRET)
     monkeypatch.setenv("JARVIS_ROOM_NAME", "c137-room")
+    monkeypatch.setenv("JARVIS_RUN_DIR", str(tmp_path / "run"))
     monkeypatch.setattr(dotenv, "load_dotenv", lambda *args, **kwargs: False)
     spec = importlib.util.spec_from_file_location(
         "c137_ensure_room", ROOT / "deploy" / "windows-local" / "ensure_room.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     monkeypatch.setattr(module, "asyncio", SimpleNamespace(sleep=AsyncMock(), run=asyncio.run))
+    monkeypatch.setattr(module, "current_worker", lambda: module.Worker(time.time() - 60, C137_WORKER_ID))
     return module
 
 
-def _fake_livekit(monkeypatch, *, rooms: list[Room], dispatches=(),
-                  delete_error: Exception | None = None,
-                  dispatch_error: Exception | None = None) -> None:
-    """LiveKitAPI replaced: the calls ensure_room.py makes, answered with real protobufs."""
+def _fake_livekit(monkeypatch, *, rooms: list[Room], dispatches=(), participants=(),
+                  dispatch_error: Exception | None = None,
+                  create_dispatch_error: Exception | None = None) -> SimpleNamespace:
+    """LiveKitAPI replaced: the calls ensure_room.py makes, answered with real protobufs. Returns the
+    room and agent_dispatch services, whose AsyncMocks record the calls."""
+    room_svc = SimpleNamespace(
+        delete_room=AsyncMock(),
+        create_room=AsyncMock(),
+        list_rooms=AsyncMock(return_value=ListRoomsResponse(rooms=rooms)),
+        list_participants=AsyncMock(return_value=ListParticipantsResponse(participants=list(participants))))
+    dispatch_svc = SimpleNamespace(
+        list_dispatch=AsyncMock(side_effect=dispatch_error, return_value=list(dispatches)),
+        create_dispatch=AsyncMock(side_effect=create_dispatch_error))
 
     class FakeLiveKitAPI:
         def __init__(self, url: str, key: str, secret: str) -> None:
             assert (url, key, secret) == ("https://livekit.c137.invalid", FAKE_KEY, FAKE_SECRET)
-            self.room = SimpleNamespace(
-                delete_room=AsyncMock(side_effect=delete_error),
-                create_room=AsyncMock(),
-                list_rooms=AsyncMock(return_value=ListRoomsResponse(rooms=rooms)))
-            self.agent_dispatch = SimpleNamespace(
-                list_dispatch=AsyncMock(side_effect=dispatch_error, return_value=list(dispatches)))
+            self.room = room_svc
+            self.agent_dispatch = dispatch_svc
             self.aclose = AsyncMock()
 
     monkeypatch.setattr(livekit_api, "LiveKitAPI", FakeLiveKitAPI)
+    return SimpleNamespace(room=room_svc, agent_dispatch=dispatch_svc)
 
 
 def _room(name: str) -> Room:
@@ -574,40 +586,60 @@ def _room(name: str) -> Room:
                 metadata=FAKE_METADATA)
 
 
+def _person() -> ParticipantInfo:
+    joined = time.time() - 600
+    return ParticipantInfo(identity="c137-owner-browser", kind=ParticipantInfo.Kind.STANDARD,
+                           state=ParticipantInfo.State.ACTIVE, joined_at=int(joined),
+                           joined_at_ms=int(joined * 1000))
+
+
 def _assert_no_credentials(out: str) -> None:
-    for secret in (FAKE_TURN, "turn_password", FAKE_KEY, FAKE_SECRET, FAKE_METADATA):
+    for secret in (FAKE_TURN, "turn_password", FAKE_KEY, FAKE_SECRET, FAKE_METADATA, C137_WORKER_ID,
+                   "c137-owner-browser"):
         assert secret not in out
 
 
-async def test_ensure_room_prints_the_room_without_credentials(monkeypatch, capsys):
-    module = _load_ensure_room(monkeypatch)
+async def test_ensure_room_prints_the_room_without_credentials(monkeypatch, capsys, tmp_path):
+    module = _load_ensure_room(monkeypatch, tmp_path)
     room = _room(module.ROOM_NAME)
     # What the old print showed: the whole protobuf, TURN password included.
     assert FAKE_TURN in str(ListRoomsResponse(rooms=[room]))
-    _fake_livekit(monkeypatch, rooms=[room],
-                  dispatches=[AgentDispatch(id="AD_c137", room=module.ROOM_NAME)],
-                  delete_error=RuntimeError(f"unauthenticated: key {FAKE_KEY} secret {FAKE_SECRET}"))
+    # The owner's UI is in the room, the dispatch has no live job, and adding one fails with an error that
+    # quotes the credentials: the room is listed by chosen fields only and the error is masked.
+    fake = _fake_livekit(monkeypatch, rooms=[room], participants=[_person()],
+                         dispatches=[AgentDispatch(id="AD_c137", room=module.ROOM_NAME)],
+                         create_dispatch_error=RuntimeError(
+                             f"unauthenticated: key {FAKE_KEY} secret {FAKE_SECRET}"))
     await module.ensure_room()
 
     out = capsys.readouterr().out
     _assert_no_credentials(out)
     assert ("[ROOM] Listed: name=c137-room sid=RM_c137 empty_timeout=3600s departure_timeout=3600s "
             "agent_dispatch=yes (1)") in out
-    assert "[ROOM] delete_room note: unauthenticated: key *** secret ***" in out
-    assert "[OK] Room ready" in out
+    assert "[ROOM] create_dispatch note: unauthenticated: key *** secret ***" in out
+    assert f"[ROOM] Result: {module.RESULT_NO_AGENT}" in out
+    fake.agent_dispatch.create_dispatch.assert_awaited_once()
+    fake.room.delete_room.assert_not_awaited()  # a person is in the room: never deleted
+    fake.room.create_room.assert_not_awaited()
 
 
-async def test_ensure_room_without_a_dispatch_list_or_without_the_room(monkeypatch, capsys):
-    module = _load_ensure_room(monkeypatch)
-    _fake_livekit(monkeypatch, rooms=[_room(module.ROOM_NAME)],
-                  dispatch_error=RuntimeError(f"404 not found for key {FAKE_KEY}"))
+async def test_ensure_room_without_a_dispatch_list_or_without_the_room(monkeypatch, capsys, tmp_path):
+    module = _load_ensure_room(monkeypatch, tmp_path)
+    fake = _fake_livekit(monkeypatch, rooms=[_room(module.ROOM_NAME)], participants=[_person()],
+                         dispatch_error=RuntimeError(f"404 not found for key {FAKE_KEY}"))
     await module.ensure_room()
     out = capsys.readouterr().out
     _assert_no_credentials(out)
     assert "agent_dispatch=unknown" in out and "[ROOM] list_dispatch note: 404 not found for key ***" in out
+    assert f"[ROOM] Result: {module.RESULT_NO_AGENT}" in out
+    fake.agent_dispatch.create_dispatch.assert_not_awaited()
+    fake.room.delete_room.assert_not_awaited()
 
-    _fake_livekit(monkeypatch, rooms=[])
+    fake = _fake_livekit(monkeypatch, rooms=[])
     await module.ensure_room()
     out = capsys.readouterr().out
     _assert_no_credentials(out)
     assert "[ROOM] Listed: room 'c137-room' not found" in out and "[OK]" not in out
+    assert f"[ROOM] Result: {module.RESULT_NO_AGENT}" in out
+    fake.room.create_room.assert_awaited_once()
+    fake.room.delete_room.assert_not_awaited()

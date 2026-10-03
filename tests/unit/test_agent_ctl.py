@@ -587,7 +587,8 @@ def test_start_runs_a_hidden_worker_waits_for_health_then_ensures_the_room(ctl, 
     runs: list = []
     monkeypatch.setattr(agent_ctl, "_popen", fake_popen)
     monkeypatch.setattr(agent_ctl, "probe_health", fake_probe)
-    monkeypatch.setattr(agent_ctl, "_run", lambda cmd, **kwargs: runs.append((cmd, kwargs)) or ok(cmd))
+    monkeypatch.setattr(agent_ctl, "_run_streamed",
+                        lambda cmd, **kwargs: runs.append((cmd, kwargs)) or (0, ["[ROOM] Ensuring room", ROOM_OK]))
 
     code = agent_ctl.main(["start", "--by", "claude", "--reason", "C-09 test"])
 
@@ -613,9 +614,121 @@ def test_start_runs_a_hidden_worker_waits_for_health_then_ensures_the_room(ctl, 
     entry = audit_lines(ctl.logs)[-1]
     assert (entry["action"], entry["result"], entry["new_pid"], entry["health"], entry["ensure_room"]) == \
         ("start", "started", 31999, 200, 0)
+    assert (entry["room_result"], entry["room_warning"]) == (ROOM_OK[len("[ROOM] Result: "):], False)
     out = capsys.readouterr().out
     assert "Worker pid 31999 healthy (200)" in out
     assert "### ✅ 🔁 [claude] C-09 test · Agent worker start (agent_ctl) · " in out
+    assert "ensure_room.py: OK, an agent of the current worker is in the room." in out  # summary + entry
+
+
+# --------------------------------------------------------------------------- ensure_room's result (start/restart)
+
+
+ROOM_OK = "[ROOM] Result: OK, an agent of the current worker is in the room"
+ROOM_NO_AGENT = ("[ROOM] Result: NO AGENT in the room: JARVIS may stay silent until the UI reconnects or "
+                 "ensure_room.py runs again")
+ROOM_UNKNOWN = "[ROOM] Result: UNKNOWN: the room could not be read, nothing was changed"
+
+
+@pytest.mark.parametrize("lines, shown", [
+    (["[ROOM] Ensuring room: x", ROOM_NO_AGENT], "WARNING NO AGENT in the room"),
+    (["[ROOM] Ensuring room: x", ROOM_UNKNOWN], "WARNING UNKNOWN: the room could not be read"),
+    (["[ROOM] Ensuring room: x"], "WARNING no [ROOM] Result line"),
+])
+def test_a_no_agent_or_unknown_room_result_is_a_warning_in_the_start_summary(ctl, monkeypatch, capsys, lines,
+                                                                            shown):
+    """ensure_room.py exits 0 but says the room has no agent (or could not be read): the start still succeeds
+    (exit 0, as before) but the console, the audit line and the done_highlight.md entry carry the result as a
+    warning instead of 'ensure_room.py OK'."""
+    _background_start(ctl, monkeypatch)
+    monkeypatch.setattr(agent_ctl, "_run_streamed", lambda cmd, **_kwargs: (0, list(lines)))
+
+    assert agent_ctl.main(["start", "--by", "claude", "--reason", "C-123 room"]) == 0
+
+    captured = capsys.readouterr()
+    assert f"[agent_ctl] WARNING: ensure_room.py: {shown}" in captured.err
+    highlight = captured.out[captured.out.index("done_highlight.md entry"):]
+    assert "### 🟡 🔁 [claude] C-123 room · Agent worker start (agent_ctl)" in highlight
+    assert f"ensure_room.py: {shown}" in highlight and "ensure_room.py OK" not in highlight
+    assert "ensure_room warning" in highlight
+    entry = audit_lines(ctl.logs)[-1]
+    assert (entry["result"], entry["exit"], entry["room_warning"]) == ("started", 0, True)
+
+
+def test_a_restart_carries_the_room_result_into_its_summary(ctl, monkeypatch, capsys):
+    _background_start(ctl, monkeypatch)
+    monkeypatch.setattr(agent_ctl, "_run_streamed", lambda cmd, **_kwargs: (0, [ROOM_NO_AGENT]))
+    monkeypatch.setattr(agent_ctl, "stop_worker", lambda timeout, force=False: (
+        0, {"result": "stopped", "old_pid": 31500, "graceful": True, "killed": [], "stop_s": 1.0}))
+
+    assert agent_ctl.main(["restart", "--by", "cursor", "--reason", "C-123 restart"]) == 0
+
+    captured = capsys.readouterr()
+    assert "[agent_ctl] WARNING: ensure_room.py: WARNING NO AGENT in the room" in captured.err
+    highlight = captured.out[captured.out.index("done_highlight.md entry"):]
+    assert "### 🟡 🔁 [cursor] C-123 restart · Agent worker restart (agent_ctl)" in highlight
+    assert "naya pid 31999" in highlight and "ensure_room.py: WARNING NO AGENT in the room" in highlight
+    entry = audit_lines(ctl.logs)[-1]
+    assert (entry["result"], entry["start"]["room_warning"]) == ("restarted", True)
+
+    # An OK result is no warning: ✅ and the result text.
+    _background_start(ctl, monkeypatch)  # a fresh fake worker for the second restart
+    monkeypatch.setattr(agent_ctl, "_run_streamed", lambda cmd, **_kwargs: (0, [ROOM_OK]))
+    assert agent_ctl.main(["restart", "--by", "cursor", "--reason", "C-123 again", "--force"]) == 0
+    out = capsys.readouterr().out
+    assert "### ✅ 🔁 [cursor] C-123 again" in out and "ensure_room.py: OK, an agent" in out
+
+
+def test_ensure_room_output_is_streamed_and_its_result_line_captured(ctl, monkeypatch, capsys, tmp_path):
+    """A real child process (a stand-in for ensure_room.py, never the real one): every line reaches this console
+    as it comes and the last '[ROOM] Result:' line is returned."""
+    script = tmp_path / "fake_ensure_room.py"
+    script.write_text("print('[ROOM] Ensuring room: owner')\nimport sys\nprint('[WARN] something', file=sys.stderr)\n"
+                      f"print({ROOM_NO_AGENT!r})\n", encoding="utf-8")
+    monkeypatch.setattr(agent_ctl, "ENSURE_ROOM", script)
+    monkeypatch.setattr(agent_ctl, "agent_python", lambda: Path(sys.executable))
+    monkeypatch.setattr(agent_ctl, "_popen", lambda cmd, **kwargs: subprocess.Popen(cmd, **kwargs))
+
+    code, result = agent_ctl.ensure_room_run(dict(os.environ))
+
+    assert code == 0 and result.startswith("NO AGENT in the room")
+    out = capsys.readouterr().out
+    assert "[ROOM] Ensuring room: owner" in out and "[WARN] something" in out and ROOM_NO_AGENT in out
+    assert agent_ctl.room_result_warning(result) is True
+    assert agent_ctl.room_result_warning("OK, room created with its agent dispatch (the worker gets the job)") is False
+
+
+def test_a_streamed_run_past_its_timeout_is_ended_like_subprocess_run(ctl, monkeypatch, capsys):
+    """Past the timeout the child is ended and TimeoutExpired raised (subprocess.run(timeout=) semantics); a fake
+    child, so no real process is ended here."""
+    events: list = []
+
+    class Child:
+        stdout = io.StringIO("[ROOM] Ensuring room: owner\n")
+
+        def __init__(self) -> None:
+            self.waits = 0
+
+        def wait(self, timeout=None):
+            self.waits += 1
+            events.append(("wait", timeout))
+            if self.waits == 1:
+                raise subprocess.TimeoutExpired("ensure_room", timeout)
+            return -9
+
+        def kill(self):
+            events.append(("kill",))
+
+    monkeypatch.setattr(agent_ctl, "_popen", lambda cmd, **kwargs: Child())
+    with pytest.raises(subprocess.TimeoutExpired):
+        agent_ctl._run_streamed(["python", "ensure_room.py"], timeout=7.0)
+    assert events == [("wait", 7.0), ("kill",), ("wait", None)]
+    assert "[ROOM] Ensuring room: owner" in capsys.readouterr().out
+
+    monkeypatch.setattr(agent_ctl, "_run_streamed", lambda cmd, **kwargs: (_ for _ in ()).throw(
+        subprocess.TimeoutExpired(cmd, kwargs["timeout"])))
+    monkeypatch.setattr(agent_ctl, "ENSURE_ROOM", Path(__file__))  # any existing file
+    assert agent_ctl.ensure_room_run({}) == (agent_ctl.EXIT_FAILED, "")
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="job objects are a Windows feature")
@@ -759,7 +872,7 @@ def _background_start(ctl, monkeypatch) -> list:
 
     monkeypatch.setattr(agent_ctl, "_popen", fake_popen)
     monkeypatch.setattr(agent_ctl, "probe_health", lambda timeout=2.0: 200 if state["locked"] else None)
-    monkeypatch.setattr(agent_ctl, "_run", lambda cmd, **_kwargs: ok(cmd))
+    monkeypatch.setattr(agent_ctl, "_run_streamed", lambda cmd, **_kwargs: (0, [ROOM_OK]))
     return spawned
 
 

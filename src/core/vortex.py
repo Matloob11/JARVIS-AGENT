@@ -28,16 +28,28 @@ logger = logging.getLogger("VORTEX")
 SKIP_AGENT_MESSAGE = "agent worker is managed by scripts/agent_ctl.py - not starting a second one"
 
 
+def _env_value(name: str) -> str | None:
+    """`name` from the environment, else from the root .env (dotenv when available)."""
+    value = os.environ.get(name)
+    if value is not None:
+        return value
+    try:
+        from dotenv import dotenv_values  # pylint: disable=import-outside-toplevel
+    except ImportError:
+        return None
+    return dotenv_values(os.path.join(project_root, ".env")).get(name)
+
+
 def _hybrid_mode() -> bool:
     """JARVIS_HYBRID=1 in the environment or, when it is unset there, in the root .env."""
-    value = os.environ.get("JARVIS_HYBRID")
-    if value is None:
-        try:
-            from dotenv import dotenv_values  # pylint: disable=import-outside-toplevel
-        except ImportError:
-            return False
-        value = dotenv_values(os.path.join(project_root, ".env")).get("JARVIS_HYBRID")
-    return (value or "").strip() == "1"
+    return (_env_value("JARVIS_HYBRID") or "").strip() == "1"
+
+
+def _brain() -> str:
+    """The brain this laptop serves (K-72): JARVIS_BRAIN from the environment or the root .env, default
+    'pc'. In vps mode the laptop runtime is the Desktop Node ('agent_ctl node'), not this orchestrator."""
+    value = (_env_value("JARVIS_BRAIN") or "pc").strip().lower()
+    return value if value in ("vps", "pc") else "pc"
 
 
 def start_process(command: str, name: str, extra_env: dict[str, str] | None = None) -> subprocess.Popen[str]:
@@ -92,6 +104,13 @@ def main() -> None:
     print("="*50)
 
     python_cmd = sys.executable
+
+    # VPS brain (K-72): in vps mode the laptop runs the Desktop Node, managed by 'agent_ctl node', and the
+    # brain (agent + bridge) lives on the VPS. This orchestrator starts nothing then.
+    if _brain() == "vps":
+        print("[VORTEX] JARVIS_BRAIN=vps: the laptop runs the Desktop Node (scripts/agent_ctl.py node), and "
+              "the agent + bridge run on the VPS. Nothing to start here.")
+        return
 
     # Single worker (K-53): never start a second agent next to a running one or the hybrid one.
     hybrid = _hybrid_mode()

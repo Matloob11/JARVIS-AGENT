@@ -7,6 +7,10 @@ The PC reaches the VPS only through the domain over https/wss (C-16, K-48): the 
 answer 200 and LiveKit's /rtc/validate 401 (LiveKit answers it without a token with 401).
 Usage: python deploy/windows-local/start_hybrid_agent.py [start|dev|check]   (default: start)
        check: only those two checks (start-agent.bat runs it); exit 0 when both answer as wanted, else 1.
+
+C-123 (VPS brain): this starts the pc-mode worker. While JARVIS_BRAIN=vps the laptop target is the
+Desktop Node and agent_ctl refuses this worker start, so the delegated 'agent_ctl start' below surfaces
+that refusal; switch with 'agent_ctl brain pc' first, or run the node with 'agent_ctl node start'.
 """
 
 from __future__ import annotations

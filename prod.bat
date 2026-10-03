@@ -12,6 +12,8 @@ set /p START_BACKEND="Bhai, kya aap Backend (Python) start karna chahte hain? (y
 
 REM Electron never spawns the backend here: 'y' starts the single hybrid agent worker through
 REM scripts\agent_ctl.py (K-49, K-53), which refuses a second worker and names the running one.
+REM C-123 (VPS brain): in vps mode agent_ctl refuses this pc worker (the laptop runs the Desktop Node);
+REM the UI still starts below. Switch with 'agent_ctl brain pc' or run 'agent_ctl node start' for the node.
 SET DISABLE_BACKEND=1
 if /i "%START_BACKEND%"=="y" (
     echo [PROD] Starting Frontend + Backend ^(agent worker via scripts\agent_ctl.py^)...

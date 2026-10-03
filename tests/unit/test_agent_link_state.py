@@ -1072,7 +1072,9 @@ def test_start_runs_ensure_room_only_after_the_link_connected(ctl, monkeypatch, 
     runs: list = []
     monkeypatch.setattr(agent_ctl, "_popen", fake_popen)
     monkeypatch.setattr(agent_ctl, "probe_health", fake_probe)
-    monkeypatch.setattr(agent_ctl, "_run", lambda cmd, **kw: runs.append(polls["n"]) or subprocess.CompletedProcess(cmd, 0))
+    # ensure_room.py now runs through _run_streamed (its '[ROOM] Result:' line reaches the start summary)
+    monkeypatch.setattr(agent_ctl, "_run_streamed", lambda cmd, **kw: runs.append(polls["n"]) or (
+        0, ["[ROOM] Result: OK, room created with its agent dispatch (the worker gets the job)"]))
 
     assert agent_ctl.main(["start", "--by", "claude", "--reason", "C-136 test"]) == 0
     assert runs == [4]  # ensure_room.py once, after the poll that saw the link connected

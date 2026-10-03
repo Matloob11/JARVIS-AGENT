@@ -7,6 +7,8 @@ Usage (Git Bash in the repo root, PY=.venv_312/Scripts/python.exe):
     $PY scripts/agent_ctl.py restart --by claude|cursor|user [--reason WHY] [--mode start|dev] [--force]
     $PY scripts/agent_ctl.py wait    [--timeout 60]
     $PY scripts/agent_ctl.py logs    [-n 50] [--file all|stdout|stderr|ctl]
+    $PY scripts/agent_ctl.py node    start|stop|status|logs|update [--sha SHA] [--canary]   (C-123, the Desktop Node)
+    $PY scripts/agent_ctl.py brain   vps|pc [--when-idle|--now]                            (C-123, the brain switch)
 
 The worker holds run/agent.lock for its whole life (src/core/agent_lock.py): the lock is the source of
 truth, run/agent.pid.json only describes the holder and stays behind after it exits. Since C-136 it also
@@ -18,7 +20,8 @@ start    Exit 3 while a worker holds the lock. Rotates logs/agent_stdout.log and
          (5 MB, keeps .1-.5) and runs '.venv_312 python -m src.core.agent <mode>' with JARVIS_STARTED_BY,
          JARVIS_START_REASON, PYTHONPATH, PYTHONIOENCODING and JARVIS_HYBRID=1. Default: hidden, output
          appended to those logs, waits until the worker is ready (health 200 on 127.0.0.1:8081 and its
-         LiveKit link connected, max 60 s), then runs deploy/windows-local/ensure_room.py once.
+         LiveKit link connected, max 60 s), then runs deploy/windows-local/ensure_room.py once, its output
+         streamed here; its '[ROOM] Result: ...' line goes into the summary, NO AGENT / UNKNOWN as a warning.
          --foreground: in this console until the worker exits. Before a worker starts (also in restart) it
          checks the VPS as the worker reaches it (C-16): GET <UI_BRIDGE_URL>/health must answer 200 and
          GET <LIVEKIT_URL as http(s)>/rtc/validate 401, both on the domain since OP-13. A failed check is
@@ -41,7 +44,12 @@ start/stop/restart/wait append a JSON line to logs/agent_ctl.log; start/stop/res
 also print a ready-to-paste done_highlight.md entry (K-53: log every restart there).
 Exit codes: 0 ok, 1 failed, 2 usage, 3 a worker already runs (start), 4 refused for safety (restart
 cooldown, a restart in progress, a pid that is not the agent, port 8081 answered by another process, a
-worker's recovery request that no longer applies).
+worker's recovery request that no longer applies), 130 interrupted (Ctrl+C).
+JARVIS_BRAIN (environment, else the root .env): only an explicit 'vps' refuses start/restart (exit 4, the laptop
+then runs the Desktop Node); unset, empty or 'pc' changes nothing above, and any other value counts as 'pc' with
+a warning. 'brain vps|pc' is its only writer: the VPS .env and the laptop's root .env (that one line, in place);
+when the VPS already says the target it repairs only a laptop that differs. A running 'brain' holds
+run/brain.lock: a second 'brain' and a start/restart (except the worker's own recovery) are refused meanwhile.
 """
 # pylint: disable=too-many-lines  # one self-contained CLI; the six commands share these helpers
 from __future__ import annotations
@@ -49,13 +57,16 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 import signal
 import subprocess
 import sys
+import threading
 import time
 import traceback
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import datetime, timedelta, timezone
+from html import escape as _html_escape
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
@@ -87,6 +98,7 @@ EXIT_OK = 0
 EXIT_FAILED = 1
 EXIT_ALREADY_RUNNING = agent_lock.EXIT_ALREADY_RUNNING
 EXIT_REFUSED = 4
+EXIT_INTERRUPTED = 130   # Ctrl+C (128 + SIGINT)
 
 START_TIMEOUT_S = 60
 STOP_TIMEOUT_S = 20
@@ -562,12 +574,14 @@ def audit(action: str, args: argparse.Namespace | None, **fields: Any) -> None:
 _TITLES = {"start": "Agent worker start", "stop": "Agent worker stop", "restart": "Agent worker restart"}
 
 
-def print_highlight(action: str, args: argparse.Namespace, ok: bool, summary: str) -> None:
-    """A done_highlight.md entry (that file's template) for the agents; the user's launchers skip it."""
+def print_highlight(action: str, args: argparse.Namespace, ok: bool, summary: str, *,
+                    warning: bool = False) -> None:
+    """A done_highlight.md entry (that file's template) for the agents; the user's launchers skip it. warning:
+    the worker runs but ensure_room.py reported NO AGENT / UNKNOWN (🟡 PARTIAL instead of ✅)."""
     if args.by not in ("claude", "cursor"):
         return
     now = datetime.now(PKT)
-    status = "✅ 🔁" if ok else "🔴"
+    status = ("🟡 🔁" if warning else "✅ 🔁") if ok else "🔴"
     task = _one_line(args.reason, 60) or "runtime"
     print()
     print("done_highlight.md entry (paste at the end of the file):")
@@ -575,7 +589,9 @@ def print_highlight(action: str, args: argparse.Namespace, ok: bool, summary: st
     print(f"- **Kya kiya:** {summary}")
     print("- **Files:** —")
     verify = "`.venv_312/Scripts/python.exe scripts/agent_ctl.py status`"
-    print(f"- **Verify:** {verify} → {'health 200' if ok else 'dekho upar wala error'}")
+    outcome = ("health 200, lekin room me agent ki tasdeeq nahi (ensure_room warning)" if warning else
+               "health 200") if ok else "dekho upar wala error"
+    print(f"- **Verify:** {verify} → {outcome}")
     print(f"- **Commit:** abhi nahi · **Deploy:** PC agent {action} {now:%H:%M} PKT")
     print("- **Doosre agent ke liye:** —")
 
@@ -685,18 +701,76 @@ def _spawn_background(cmd: list[str], env: dict[str, str], out: Any, err: Any) -
         return _popen(cmd, creationflags=flags, **kwargs)
 
 
-def run_ensure_room(env: dict[str, str]) -> int:
+def _run_streamed(cmd: list[str], *, timeout: float, **kwargs: Any) -> tuple[int, list[str]]:
+    """Run cmd with stdout and stderr merged, echo each line to this console as it comes (as an uncaptured run
+    shows it) and return (exit code, its lines). Past timeout the child is killed and TimeoutExpired raised, as
+    subprocess.run(timeout=) does; OSError when it cannot start."""
+    proc = _popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                  encoding="utf-8", errors="replace", bufsize=1, **kwargs)
+    lines: list[str] = []
+
+    def pump() -> None:
+        for line in proc.stdout or ():
+            text = line.rstrip("\r\n")
+            lines.append(text)
+            print(text, flush=True)
+
+    reader = threading.Thread(target=pump, name="agent-ctl-output", daemon=True)
+    reader.start()
+    try:
+        code = proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+        reader.join(5)
+        raise
+    reader.join(5)
+    return code, list(lines)
+
+
+ROOM_RESULT_PREFIX = "[ROOM] Result:"
+# ensure_room.py results that leave the room without the worker's agent (or unread): a start reports them as a
+# warning; its exit code stays as it was.
+ROOM_WARNING_RESULTS = ("NO AGENT", "UNKNOWN")
+
+
+def room_result(lines: list[str]) -> str:
+    """The text of ensure_room.py's last '[ROOM] Result: ...' line, '' when it printed none."""
+    results = [line.strip() for line in lines if line.strip().startswith(ROOM_RESULT_PREFIX)]
+    return results[-1][len(ROOM_RESULT_PREFIX):].strip() if results else ""
+
+
+def room_result_warning(result: str) -> bool:
+    """True for a NO AGENT or UNKNOWN result, and for a run that printed no result line at all."""
+    return not result or result.upper().startswith(ROOM_WARNING_RESULTS)
+
+
+def describe_room_result(result: str) -> str:
+    """ensure_room.py's result for the start/restart summary and the done_highlight.md entry (one line)."""
+    shown = _one_line(result, 160) if result else "no [ROOM] Result line"
+    return f"ensure_room.py: {'WARNING ' if room_result_warning(result) else ''}{shown}"
+
+
+def ensure_room_run(env: dict[str, str]) -> tuple[int, str]:
+    """Run deploy/windows-local/ensure_room.py with its output streamed to this console; (exit code, the text of
+    its '[ROOM] Result: ...' line or '')."""
     if not ENSURE_ROOM.is_file():
         print(f"[agent_ctl] {ENSURE_ROOM} is missing: the room was not prepared.", file=sys.stderr)
-        return EXIT_FAILED
+        return EXIT_FAILED, ""
     print("[agent_ctl] Running deploy/windows-local/ensure_room.py (room + agent dispatch)...", flush=True)
+    child_env = {**env, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"}  # lines arrive as printed
     try:
-        result = _run([str(agent_python()), str(ENSURE_ROOM)], cwd=ROOT, env=env,
-                      timeout=ENSURE_ROOM_TIMEOUT_S)
+        code, lines = _run_streamed([str(agent_python()), str(ENSURE_ROOM)], cwd=ROOT, env=child_env,
+                                    timeout=ENSURE_ROOM_TIMEOUT_S)
     except (OSError, subprocess.SubprocessError) as exc:
         print(f"[agent_ctl] ensure_room.py failed: {exc}", file=sys.stderr)
-        return EXIT_FAILED
-    return result.returncode
+        return EXIT_FAILED, ""
+    return code, room_result(lines)
+
+
+def run_ensure_room(env: dict[str, str]) -> int:
+    """ensure_room_run's exit code only (the brain switch's ENSURE; its VERIFY checks the agent itself)."""
+    return ensure_room_run(env)[0]
 
 
 def _raise_worker_priority(pids: list[int]) -> None:
@@ -749,12 +823,18 @@ def _start_background(cmd: list[str], env: dict[str, str], timeout: float,
     print(f"[agent_ctl] Worker pid {details['new_pid']} healthy (200){linked} after {details['start_s']} s.",
           flush=True)
     _raise_worker_priority([pid for pid in (proc.pid, info.get("pid")) if isinstance(pid, int)])
-    room = run_ensure_room(env)
-    details["ensure_room"] = room
+    room, result = ensure_room_run(env)
+    details.update(ensure_room=room, room_result=result, room_warning=room_result_warning(result))
     if room != 0:
         print(f"[agent_ctl] ensure_room.py exited {room}: the room may have no job. The worker keeps "
               "running; run 'python deploy/windows-local/ensure_room.py' again.", file=sys.stderr)
         return EXIT_FAILED, {"result": "failed", "error": f"ensure_room.py exited {room}", **details}
+    if details["room_warning"]:
+        print(f"[agent_ctl] WARNING: {describe_room_result(result)}. The worker runs, but JARVIS may stay silent "
+              "until an agent joins the room; run 'python deploy/windows-local/ensure_room.py' again or reconnect "
+              "from the UI.", file=sys.stderr, flush=True)
+    else:
+        print(f"[agent_ctl] {describe_room_result(result)}", flush=True)
     return EXIT_OK, {"result": "started", **details}
 
 
@@ -844,6 +924,11 @@ def start_worker(args: argparse.Namespace, mode: str, *, foreground: bool,
 
 
 def cmd_start(args: argparse.Namespace) -> int:
+    refused = _vps_mode_worker_refused(args, "start") or _brain_switch_worker_refused(args, "start")
+    if refused is not None:
+        code, details = refused
+        audit("start", args, exit=code, **details)
+        return code
     if args.force:
         print("[agent_ctl] --force has no effect on start: a running worker is never replaced "
               "(use restart).")
@@ -854,10 +939,17 @@ def cmd_start(args: argparse.Namespace) -> int:
     if details.get("result") in ("started", "failed"):
         ok = code == EXIT_OK
         summary = (f"`agent_ctl start` se worker chala: pid {details.get('new_pid')}, health 200 "
-                   f"({details.get('start_s')} s me), ensure_room.py OK." if ok
+                   f"({details.get('start_s')} s me), {_room_summary(details)}." if ok
                    else f"`agent_ctl start` nakam: {details.get('error')}.")
-        print_highlight("start", args, ok, summary)
+        print_highlight("start", args, ok, summary, warning=ok and bool(details.get("room_warning")))
     return code
+
+
+def _room_summary(start: Mapping[str, Any]) -> str:
+    """The ensure_room part of a start/restart summary, from start_worker's details."""
+    if "room_result" not in start:
+        return "ensure_room.py exit 0" if start.get("ensure_room") == 0 else "ensure_room.py ran"
+    return describe_room_result(str(start.get("room_result") or ""))
 
 
 # --------------------------------------------------------------------------- stop
@@ -967,8 +1059,10 @@ def _read_json(path: Path) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def _restart_lock_state(path: Path) -> tuple[bool, str]:
-    """(stale, description): stale after 10 min or once the restart that wrote it has exited."""
+def _run_lock_state(path: Path, what: str = "restart",
+                    stale_s: float = RESTART_LOCK_STALE_S) -> tuple[bool, str]:
+    """(stale, description) of a run/*.lock written by _take_run_lock: stale after stale_s or once the process
+    that wrote it has exited."""
     data = _read_json(path)
     stamp = data.get("ts")
     if not isinstance(stamp, (int, float)):
@@ -977,8 +1071,8 @@ def _restart_lock_state(path: Path) -> tuple[bool, str]:
         except OSError:
             stamp = 0.0
     age = time.time() - stamp
-    who = f"a restart by {data.get('by', '?')} (pid {data.get('pid', '?')}) {age:.0f} s ago"
-    if age > RESTART_LOCK_STALE_S:
+    who = f"a {what} by {data.get('by', '?')} (pid {data.get('pid', '?')}) {age:.0f} s ago"
+    if age > stale_s:
         return True, who
     pid = data.get("pid")
     if isinstance(pid, int) and not _pid_running_since(pid, stamp):
@@ -986,31 +1080,42 @@ def _restart_lock_state(path: Path) -> tuple[bool, str]:
     return False, who
 
 
-def take_restart_lock(args: argparse.Namespace) -> tuple[Path | None, str]:
-    """run/restart.lock created with O_EXCL; (None, why) when another restart holds it."""
-    path = agent_lock.run_dir() / "restart.lock"
+def _restart_lock_state(path: Path) -> tuple[bool, str]:
+    """(stale, description): stale after 10 min or once the restart that wrote it has exited."""
+    return _run_lock_state(path, "restart", RESTART_LOCK_STALE_S)
+
+
+def _take_run_lock(name: str, what: str, stale_s: float, args: argparse.Namespace) -> tuple[Path | None, str]:
+    """run/<name> created with O_EXCL; (None, why) when another live <what> holds it. A stale one (older than
+    stale_s, or its process has exited) is removed and taken."""
+    path = agent_lock.run_dir() / name
     path.parent.mkdir(parents=True, exist_ok=True)
-    payload = json.dumps({"pid": os.getpid(), "ts": time.time(), "by": args.by,
-                          "reason": _one_line(args.reason)})
+    payload = json.dumps({"pid": os.getpid(), "ts": time.time(), "by": getattr(args, "by", None),
+                          "reason": _one_line(getattr(args, "reason", "") or "")})
     for _ in range(2):
         try:
             fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
         except FileExistsError:
-            stale, who = _restart_lock_state(path)
+            stale, who = _run_lock_state(path, what, stale_s)
             if not stale:
-                return None, f"run/restart.lock is held by {who}"
-            print(f"[agent_ctl] Removing a stale run/restart.lock ({who}).")
+                return None, f"run/{name} is held by {who}"
+            print(f"[agent_ctl] Removing a stale run/{name} ({who}).")
             try:
                 path.unlink()
             except FileNotFoundError:
                 pass
             except OSError as exc:
-                return None, f"cannot remove the stale run/restart.lock: {exc}"
+                return None, f"cannot remove the stale run/{name}: {exc}"
             continue
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(payload)
         return path, ""
-    return None, "another restart took run/restart.lock first"
+    return None, f"another {what} took run/{name} first"
+
+
+def take_restart_lock(args: argparse.Namespace) -> tuple[Path | None, str]:
+    """run/restart.lock created with O_EXCL; (None, why) when another restart holds it."""
+    return _take_run_lock("restart.lock", "restart", RESTART_LOCK_STALE_S, args)
 
 
 def worker_recovery_running() -> bool:
@@ -1019,12 +1124,16 @@ def worker_recovery_running() -> bool:
     return _read_json(path).get("by") == "worker" and not _restart_lock_state(path)[0]
 
 
-def release_restart_lock(path: Path) -> None:
+def release_run_lock(path: Path) -> None:
+    """Remove a run/*.lock this process took (never one another process holds)."""
     if _read_json(path).get("pid") in (os.getpid(), None):
         try:
             path.unlink()
         except OSError:
             pass
+
+
+release_restart_lock = release_run_lock
 
 
 def _cooldown_left() -> tuple[float, dict[str, Any]]:
@@ -1099,6 +1208,11 @@ def _restart(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
 
 
 def cmd_restart(args: argparse.Namespace) -> int:
+    refused = _vps_mode_worker_refused(args, "restart") or _brain_switch_worker_refused(args, "restart")
+    if refused is not None:
+        code, details = refused
+        audit("restart", args, exit=code, **details)
+        return code
     lock, why = take_restart_lock(args)
     if lock is None:
         print(f"[agent_ctl] Restart refused: {why}.", file=sys.stderr)
@@ -1112,11 +1226,13 @@ def cmd_restart(args: argparse.Namespace) -> int:
     if details.get("result") == "refused":
         return code
     old_pid = details.get("stop", {}).get("old_pid", "-")
-    new_pid = details.get("start", {}).get("new_pid")
+    start = details.get("start", {})
+    new_pid = start.get("new_pid")
+    ok = code == EXIT_OK
     summary = (f"`agent_ctl restart`: purana worker (pid {old_pid}) band, naya pid {new_pid}; health 200 "
-               f"({details.get('restart_s')} s me), ensure_room.py OK." if code == EXIT_OK
+               f"({details.get('restart_s')} s me), {_room_summary(start)}." if ok
                else f"`agent_ctl restart` nakam: {details.get('error')}.")
-    print_highlight("restart", args, code == EXIT_OK, summary)
+    print_highlight("restart", args, ok, summary, warning=ok and bool(start.get("room_warning")))
     return code
 
 
@@ -1203,6 +1319,1306 @@ def cmd_logs(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+# =============================================================================================================
+# VPS brain: the Desktop Node, the brain switch and the two-runtimes rule (plan task C-123; K-72, K-70).
+#
+# The laptop runs exactly one brain-side runtime at a time (the two-runtimes rule, docs/CONTRACTS.md K-72):
+#   - vps mode: the Desktop Node (a worker start is refused), plus the VPS agent/agent-svc containers which
+#     only Claude's deploy touches;
+#   - pc mode:  the PC worker named JARVIS_PC_AGENT_NAME ('jarvis-pc'), the commands above.
+# 'agent_ctl node ...' drives the node through its logon task and its 127.0.0.1:8082 health/stop server
+# (src/core/desktop). 'agent_ctl brain vps|pc' is the only writer of JARVIS_BRAIN: the VPS .env (the source of
+# truth) and, at the same FLIP_ENV step, the laptop's root .env, so every laptop reader (current_brain, vortex.py,
+# ensure_room.py, the launchers) agrees. It journals a resumable state machine and restores the old brain (both
+# .env files) if it fails half-way.
+# Every VPS effect goes through ssh and every bridge read through PC-signed HTTP, both injected so the tests
+# mock them and no real ssh, container, scheduled task or /stop is ever touched.
+# -------------------------------------------------------------------------------------------------------------
+
+BRAINS = ("vps", "pc")
+VPS_AGENT_NAME = "jarvis"              # the brain running in the VPS containers
+PC_AGENT_NAME_DEFAULT = "jarvis-pc"    # the PC fallback worker (JARVIS_PC_AGENT_NAME in the VPS .env)
+BRAIN_ENV = "JARVIS_BRAIN"
+NODE_HEALTH_HOST = "127.0.0.1"
+NODE_HEALTH_PORT = 8082
+NODE_TASK_NAME = "JARVIS Desktop Node"
+NODE_STATUS_FILE = "node_current.json"
+NODE_TOKEN_FILE = "desktop_node.token"
+NODE_START_TIMEOUT_S = 60
+NODE_STOP_TIMEOUT_S = 20
+# The default public bridge (src/core/desktop/settings.DEFAULT_LINK_URL); JARVIS_LINK_URL overrides it.
+DEFAULT_LINK_URL = "https://jarvis.srv1802669.hstgr.cloud"
+BRAIN_STATES = ("PREFLIGHT", "BACKUP", "STOP_OLD", "SYNC_DATA", "FLIP_ENV", "START_NEW", "ENSURE", "VERIFY",
+                "DONE")
+BRAIN_JOURNAL_FILE = "brain_switch.json"
+BRAIN_LOCK_FILE = "brain.lock"
+# A brain switch runs much longer than a restart (the 60 s notice, ssh steps of up to 600 s each, 60 s of VERIFY),
+# so its run/brain.lock only goes stale by age after 2 h; a lock whose process has exited is stale at once.
+BRAIN_LOCK_STALE_S = 2 * 3600
+# The exact command that makes this laptop pc again (named in the worker-start refusal).
+BRAIN_PC_COMMAND = ".venv_312/Scripts/python.exe scripts/agent_ctl.py brain pc"
+IDLE_GATE_S = 600          # no speech, typed chat or tool call for this long (bridge last_activity_ts)
+SPOKEN_NOTICE_S = 60        # --now: the spoken notice before the switch
+VERIFY_TRIES = 30
+VERIFY_STEP_S = 2.0
+# The logon task's program and working directory are plain Windows paths (MAX_PATH 260 with its terminator).
+TASK_PATH_MAX = 259
+TASK_XML_NS = "http://schemas.microsoft.com/windows/2004/02/mit/task"
+NODE_SUPERVISOR_MODULE = "src.core.desktop.supervisor"
+
+# The VPS side of the switch (K-72). The checkout and compose layout are deploy.sh's: /opt/jarvis-agent with the
+# compose file and its .env in deploy/hostinger, compose project 'jarvis'. The helpers below come with later tasks
+# (C-126..C-129), so PREFLIGHT checks each of them before anything is backed up or stopped.
+VPS_APP_DIR = "/opt/jarvis-agent"
+VPS_COMPOSE_DIR = f"{VPS_APP_DIR}/deploy/hostinger"
+VPS_COMPOSE_PROJECT = "jarvis"
+VPS_BRAIN_PROFILE = "vps-brain"
+# (path in the checkout, test flag): the shell scripts run as ./<path>, so they must be executable; set_env.py
+# runs through python3, so it must be readable.
+VPS_HELPERS = (("deploy/hostinger/backup.sh", "-x"), ("deploy/hostinger/sync_brain_data.sh", "-x"),
+               ("deploy/hostinger/set_env.py", "-r"))
+# The VPS brain's two containers and the compose service names that may define each (the design names the
+# services 'agent' and 'agent-svc' with these container names; the container names are accepted as well).
+VPS_BRAIN_CONTAINERS = (("jarvis-agent", ("agent", "jarvis-agent")),
+                        ("jarvis-agent-svc", ("agent-svc", "jarvis-agent-svc")))
+VPS_DEFAULT_SERVICES = ("agent", "agent-svc")
+VPS_PROVISIONED_BY = "C-126..C-129"
+
+
+_brain_warned: set[str] = set()
+
+
+def current_brain() -> str:
+    """The brain this laptop serves: JARVIS_BRAIN from the environment, else the root .env (then the hybrid
+    .env, K-47), default 'pc' (today's PC brain). Only 'agent_ctl brain' writes it (set_laptop_brain, at FLIP_ENV
+    and in the restore).
+
+    PC-mode safety: only an explicit 'vps' (any case, surrounding blanks ignored) means vps mode, the one mode
+    that refuses a PC worker start. Unset or empty is pc; any other value is pc too, with a warning (once per
+    process), so a typo can never block the owner's worker."""
+    raw = _env_setting(BRAIN_ENV) or ""
+    value = raw.strip().lower()
+    if not value or value in BRAINS:
+        return value or "pc"
+    shown = _one_line(raw, 20).encode("ascii", "replace").decode("ascii")
+    if shown not in _brain_warned:
+        _brain_warned.add(shown)
+        print(f"[agent_ctl] WARNING: {BRAIN_ENV}={shown!r} is neither 'vps' nor 'pc'; treating it as 'pc'.",
+              file=sys.stderr, flush=True)
+    return "pc"
+
+
+def laptop_env_file() -> Path | None:
+    """The laptop file that 'agent_ctl brain' writes JARVIS_BRAIN into: the root .env, the first of ENV_FILES
+    (it wins over the hybrid .env, K-47). None only when no settings file is configured at all."""
+    return ENV_FILES[0] if ENV_FILES else None
+
+
+_BRAIN_LINE_PREFIXES = (f"{BRAIN_ENV}=", f"{BRAIN_ENV} =", f"export {BRAIN_ENV}=", f"export {BRAIN_ENV} =")
+
+
+def _is_brain_line(line: str) -> bool:
+    return line.strip().startswith(_BRAIN_LINE_PREFIXES)
+
+
+def set_laptop_brain(brain: str, path: Path | None = None) -> None:
+    """Write JARVIS_BRAIN=<brain> into the laptop's root .env in place: every other line (and its line ending)
+    is kept byte for byte, every JARVIS_BRAIN line is replaced (dotenv reads the last one, so all of them must
+    agree), and the line is appended when there was none. The file is replaced atomically. No value of the
+    file is ever printed. A JARVIS_BRAIN in this process's environment is updated too, since it wins over the
+    .env for current_brain() and is passed on to the workers this process starts.
+
+    Raises BrainSwitchError when the file cannot be read or written (the switch then restores)."""
+    if brain not in BRAINS:
+        raise ValueError(f"brain must be one of {BRAINS}")
+    target = path if path is not None else laptop_env_file()
+    if target is None:
+        raise BrainSwitchError("no laptop .env is configured, so JARVIS_BRAIN could not be written on this laptop")
+    target = Path(target)
+    try:
+        raw = target.read_bytes() if target.is_file() else b""
+    except OSError as exc:
+        raise BrainSwitchError(f"could not read the laptop .env ({type(exc).__name__})") from None
+    bom = raw.startswith(b"\xef\xbb\xbf")
+    text = raw[3:].decode("utf-8", errors="surrogateescape") if bom else raw.decode("utf-8",
+                                                                                   errors="surrogateescape")
+    lines = text.splitlines(keepends=True)
+    newline = "\r\n" if "\r\n" in text else "\n"
+    wanted = f"{BRAIN_ENV}={brain}"
+    found = False
+    for index, line in enumerate(lines):
+        if _is_brain_line(line):
+            ending = line[len(line.rstrip("\r\n")):] or ""
+            lines[index] = wanted + ending
+            found = True
+    if not found:
+        if lines and not lines[-1].endswith(("\n", "\r")):
+            lines[-1] += newline
+        lines.append(wanted + newline)
+    data = "".join(lines).encode("utf-8", errors="surrogateescape")
+    if bom:
+        data = b"\xef\xbb\xbf" + data
+    temp = target.with_name(f".{target.name}.{os.getpid()}.tmp")
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temp.write_bytes(data)
+        os.replace(temp, target)
+    except OSError as exc:
+        try:
+            temp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise BrainSwitchError(f"could not write JARVIS_BRAIN to the laptop .env ({type(exc).__name__})") from None
+    if (os.environ.get(BRAIN_ENV) or "").strip():
+        os.environ[BRAIN_ENV] = brain
+
+
+def pc_agent_name() -> str:
+    return (_env_setting("JARVIS_PC_AGENT_NAME") or PC_AGENT_NAME_DEFAULT).strip() or PC_AGENT_NAME_DEFAULT
+
+
+def brain_agent_name(brain: str) -> str:
+    """The lk.agent.name a running brain registers: 'jarvis' for vps, JARVIS_PC_AGENT_NAME for pc."""
+    return VPS_AGENT_NAME if brain == "vps" else pc_agent_name()
+
+
+def _vps_mode_worker_refused(args: argparse.Namespace, action: str) -> tuple[int, dict[str, Any]] | None:
+    """The two-runtimes rule: while JARVIS_BRAIN=vps the laptop target is the Desktop Node, so a PC worker
+    start/restart is refused (K-72). Returns a refusal tuple, or None in pc mode. The message names the exact
+    command that makes this laptop pc again: 'brain pc' only rewrites the laptop's JARVIS_BRAIN when the VPS
+    already says pc (a laptop .env left at vps), else it switches the brain."""
+    if current_brain() != "vps":
+        return None
+    by = getattr(args, "by", None) or "<you>"
+    error = (f"JARVIS_BRAIN=vps: the laptop runs the Desktop Node, not a PC worker. Use 'agent_ctl node {action}'; "
+             f"to make this laptop pc again run: {BRAIN_PC_COMMAND} --by {by} (when the VPS already says pc it only "
+             "rewrites this laptop's JARVIS_BRAIN; otherwise it switches the brain, add --now to skip the 10 min "
+             "idle wait)")
+    if (os.environ.get(BRAIN_ENV) or "").strip().lower() == "vps":
+        error += (f". {BRAIN_ENV}=vps is also set in this shell's environment, which wins over the .env: remove it "
+                  "there too")
+    print(f"[agent_ctl] {action.capitalize()} refused: {error}.", file=sys.stderr)
+    return EXIT_REFUSED, {"result": "refused", "error": error, "brain": "vps"}
+
+
+def take_brain_lock(args: argparse.Namespace) -> tuple[Path | None, str]:
+    """run/brain.lock created with O_EXCL, so two 'agent_ctl brain' runs never drive a switch at once; the same
+    stale rules as run/restart.lock (its process has exited, or older than BRAIN_LOCK_STALE_S)."""
+    return _take_run_lock(BRAIN_LOCK_FILE, "brain switch", BRAIN_LOCK_STALE_S, args)
+
+
+def brain_switch_running() -> str:
+    """Who holds a live run/brain.lock, else ''."""
+    path = agent_lock.run_dir() / BRAIN_LOCK_FILE
+    if not path.exists():
+        return ""
+    stale, who = _run_lock_state(path, "brain switch", BRAIN_LOCK_STALE_S)
+    return "" if stale else who
+
+
+def _brain_switch_worker_refused(args: argparse.Namespace, action: str) -> tuple[int, dict[str, Any]] | None:
+    """A worker start/restart while 'agent_ctl brain' runs is refused: the switch itself stops and starts the
+    laptop side. The worker's own LiveKit link recovery ('restart --by worker', C-136) only replaces itself and
+    is let through."""
+    if getattr(args, "by", None) == "worker":
+        return None
+    who = brain_switch_running()
+    if not who:
+        return None
+    error = f"a brain switch is running (run/{BRAIN_LOCK_FILE} is held by {who}); wait for it to finish"
+    print(f"[agent_ctl] {action.capitalize()} refused: {error}.", file=sys.stderr)
+    return EXIT_REFUSED, {"result": "refused", "error": error}
+
+
+# --------------------------------------------------------------------------- the node health/stop server
+
+
+def node_health_url() -> str:
+    return f"http://{NODE_HEALTH_HOST}:{NODE_HEALTH_PORT}/health"
+
+
+def node_stop_url() -> str:
+    return f"http://{NODE_HEALTH_HOST}:{NODE_HEALTH_PORT}/stop"
+
+
+def probe_node_health(timeout: float = 2.0) -> dict[str, Any] | None:
+    """The Desktop Node supervisor's /health document, or None when nothing answers on 8082."""
+    try:
+        response = httpx.get(node_health_url(), timeout=_timeout(timeout), trust_env=False)
+        data = response.json() if response.status_code == 200 else None
+    except (httpx.HTTPError, httpx.InvalidURL, ValueError) as exc:
+        _drop_frames(exc)
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def node_running() -> bool:
+    return probe_node_health(timeout=1.0) is not None
+
+
+def _node_token() -> str | None:
+    try:
+        token = (agent_lock.run_dir() / NODE_TOKEN_FILE).read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return token or None
+
+
+def node_stop_request(timeout: float = NODE_STOP_TIMEOUT_S) -> tuple[bool, str]:
+    """Graceful POST /stop with the node token; (True, '') when the supervisor accepted and then went away."""
+    token = _node_token()
+    if token is None:
+        return False, "run/desktop_node.token is missing (the supervisor is not serving 8082)"
+    try:
+        response = httpx.post(node_stop_url(), headers={"X-Node-Token": token}, timeout=_timeout(5.0),
+                              trust_env=False)
+    except (httpx.HTTPError, httpx.InvalidURL, ValueError) as exc:
+        _drop_frames(exc)
+        return False, "the supervisor did not answer POST /stop"
+    if response.status_code != 200:
+        return False, f"POST /stop was refused (HTTP {response.status_code})"
+    if _wait_until(lambda: not node_running(), timeout):
+        return True, ""
+    return False, f"the node still answers /health {timeout:g} s after POST /stop"
+
+
+# --------------------------------------------------------------------------- the node scheduled task
+
+
+def node_python_w() -> Path:
+    """The .venv_312 pythonw (no console) that the logon task runs, else this interpreter's pythonw."""
+    if sys.platform == "win32":
+        venv = ROOT / ".venv_312" / "Scripts" / "pythonw.exe"
+        if venv.is_file():
+            return venv
+    return agent_python()
+
+
+def node_task_action(snapshot: Path, *, canary: bool = False) -> tuple[str, str, str]:
+    """The logon task's action as (program, arguments, working directory): the .venv_312 pythonw runs the
+    snapshot's supervisor with the snapshot as its working directory, so 'src.core.desktop.supervisor' resolves
+    there (the venv is not inside the snapshot). Task Scheduler starts pythonw itself: no cmd.exe or other console
+    program runs, so no console window shows at logon. -B: the snapshot is read-only, so the supervisor never
+    tries to write __pycache__ there (its node child gets PYTHONDONTWRITEBYTECODE=1 from the supervisor)."""
+    arguments = f"-B -m {NODE_SUPERVISOR_MODULE}" + (" --canary" if canary else "")
+    return str(node_python_w()), arguments, str(snapshot)
+
+
+def xml_escape(text: str) -> str:
+    """text for an XML element (&, < and > escaped; quotes are fine in element text)."""
+    return _html_escape(text, quote=False)
+
+
+def _task_user() -> str:
+    """DOMAIN\\user of this logon (the account icacls grants the snapshot to), '' when unknown."""
+    name = (os.environ.get("USERNAME") or "").strip()
+    domain = (os.environ.get("USERDOMAIN") or "").strip()
+    return f"{domain}\\{name}" if name and domain else name
+
+
+def node_task_xml(snapshot: Path, *, canary: bool = False, user: str | None = None) -> str:
+    """The Task Scheduler definition of the node's logon task (K-76 Process rules): a logon trigger for this user,
+    LeastPrivilege (never elevated) with the interactive token, and one Exec action with an explicit
+    WorkingDirectory (node_task_action). Unlike schtasks' /SC defaults it has no 72 h run limit and also starts and
+    keeps running on battery, since the node runs for the whole logon session."""
+    program, arguments, workdir = node_task_action(snapshot, canary=canary)
+    user = _task_user() if user is None else user
+    user_id = f"<UserId>{xml_escape(user)}</UserId>" if user else ""
+    return "\n".join([
+        '<?xml version="1.0" encoding="UTF-16"?>',
+        f'<Task version="1.2" xmlns="{TASK_XML_NS}">',
+        "  <RegistrationInfo><Description>JARVIS Desktop Node supervisor from the pinned read-only snapshot "
+        "(agent_ctl node update)</Description></RegistrationInfo>",
+        f"  <Triggers><LogonTrigger><Enabled>true</Enabled>{user_id}</LogonTrigger></Triggers>",
+        '  <Principals><Principal id="Author">'
+        f"{user_id}<LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel>"
+        "</Principal></Principals>",
+        "  <Settings>",
+        "    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>",
+        "    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>",
+        "    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>",
+        "    <AllowHardTerminate>true</AllowHardTerminate>",
+        "    <StartWhenAvailable>false</StartWhenAvailable>",
+        "    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>",
+        "    <IdleSettings><StopOnIdleEnd>false</StopOnIdleEnd><RestartOnIdle>false</RestartOnIdle></IdleSettings>",
+        "    <AllowStartOnDemand>true</AllowStartOnDemand>",
+        "    <Enabled>true</Enabled>",
+        "    <Hidden>false</Hidden>",
+        "    <RunOnlyIfIdle>false</RunOnlyIfIdle>",
+        "    <WakeToRun>false</WakeToRun>",
+        "    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>",
+        "    <Priority>7</Priority>",
+        "  </Settings>",
+        '  <Actions Context="Author"><Exec>'
+        f"<Command>{xml_escape(program)}</Command><Arguments>{xml_escape(arguments)}</Arguments>"
+        f"<WorkingDirectory>{xml_escape(workdir)}</WorkingDirectory></Exec></Actions>",
+        "</Task>",
+        ""])
+
+
+def _schtasks(*args: str, check: bool = False) -> subprocess.CompletedProcess[Any]:
+    cmd = ["schtasks", *args]
+    try:
+        result = _run(cmd, capture_output=True, text=True, timeout=60,
+                      **({"creationflags": CREATE_NO_WINDOW} if sys.platform == "win32" else {}))
+    except (OSError, subprocess.SubprocessError) as exc:
+        if check:
+            raise
+        return subprocess.CompletedProcess(cmd, 1, "", str(exc))
+    return result
+
+
+def node_task_exists() -> bool:
+    return _schtasks("/Query", "/TN", NODE_TASK_NAME).returncode == 0
+
+
+def create_node_task(snapshot: Path, *, canary: bool = False) -> bool:
+    """schtasks /Create /XML (node_task_xml: logon trigger, limited rights, interactive token, the snapshot as the
+    working directory, no console program) replacing an existing task (/F). True on success. The definition goes
+    through a temporary file in the run dir (paths and the user name only, no secret), removed right after."""
+    program, _, workdir = node_task_action(snapshot, canary=canary)
+    too_long = [f"{label} ({len(value)} characters)" for label, value in (("pythonw path", program),
+                                                                          ("snapshot path", workdir))
+                if len(value) > TASK_PATH_MAX]
+    if too_long:
+        print(f"[agent_ctl] The logon task's {' and '.join(too_long)} is longer than {TASK_PATH_MAX} characters, "
+              "which Task Scheduler cannot run. Move the repo or %LOCALAPPDATA% to a shorter path.", file=sys.stderr)
+        return False
+    run_dir = agent_lock.run_dir()
+    definition = run_dir / f".node_task.{os.getpid()}.xml"
+    try:
+        run_dir.mkdir(parents=True, exist_ok=True)
+        definition.write_bytes(node_task_xml(snapshot, canary=canary).encode("utf-16"))  # BOM + UTF-16, as declared
+    except OSError as exc:
+        print(f"[agent_ctl] Could not write the logon task definition ({type(exc).__name__}).", file=sys.stderr)
+        return False
+    try:
+        result = _schtasks("/Create", "/TN", NODE_TASK_NAME, "/XML", str(definition), "/F")
+    finally:
+        try:
+            definition.unlink(missing_ok=True)
+        except OSError:
+            pass
+    return result.returncode == 0
+
+
+def set_node_task_enabled(enabled: bool) -> bool:
+    return _schtasks("/Change", "/TN", NODE_TASK_NAME, "/Enable" if enabled else "/Disable").returncode == 0
+
+
+def run_node_task() -> bool:
+    return _schtasks("/Run", "/TN", NODE_TASK_NAME).returncode == 0
+
+
+def node_task_state() -> str | None:
+    """'enabled', 'disabled' (or 'enabled, running' ...) from a read-only 'schtasks /Query /V'; None when the
+    task does not exist. Only the state lines are read: the rest (the command line, the user) is never shown."""
+    result = _schtasks("/Query", "/TN", NODE_TASK_NAME, "/FO", "LIST", "/V")
+    if result.returncode != 0:
+        return None
+    state = status = ""
+    for line in (result.stdout or "").splitlines():
+        key, _, value = line.partition(":")
+        key, value = key.strip().lower(), value.strip()
+        if key == "scheduled task state" and not state:
+            state = value.lower()
+        elif key == "status" and not status:
+            status = value.lower()
+    if not state:
+        return "present"
+    return state if not status or status == "disabled" else f"{state}, {status}"
+
+
+# --------------------------------------------------------------------------- node start/stop/status/logs
+
+
+def _node_current() -> dict[str, Any] | None:
+    try:
+        from scripts.desktop import node_snapshot  # noqa: E402  pylint: disable=import-outside-toplevel
+    except Exception:  # pylint: disable=broad-exception-caught
+        return _read_json(agent_lock.run_dir() / NODE_STATUS_FILE) or None
+    return node_snapshot.read_current(agent_lock.run_dir())
+
+
+def cmd_node(args: argparse.Namespace) -> int:
+    handler = {"start": node_start, "stop": node_stop, "status": node_status, "logs": node_logs,
+               "update": node_update}[args.node_command]
+    return handler(args)
+
+
+def node_start(args: argparse.Namespace) -> int:
+    current = _node_current()
+    if not current or not current.get("snapshot"):
+        print("[agent_ctl] No pinned node snapshot yet: run 'agent_ctl node update' first "
+              "(run/node_current.json is missing).", file=sys.stderr)
+        audit("node_start", args, result="no_snapshot")
+        return EXIT_FAILED
+    if node_running():
+        print("[agent_ctl] The Desktop Node already answers on 127.0.0.1:8082. Not starting a second one.")
+        audit("node_start", args, result="already_running")
+        return EXIT_OK
+    if agent_lock.is_locked():
+        # The two-runtimes rule (K-72): a PC worker holds run/agent.lock (and run/desktop_actor.lock), so the node
+        # would only exit 3. The owner's worker is never stopped implicitly; 'brain vps' stops it first.
+        error = ("a PC agent worker runs (run/agent.lock is held); stop it with 'agent_ctl stop' or switch with "
+                 "'agent_ctl brain vps'")
+        print(f"[agent_ctl] Node start refused: {error}.", file=sys.stderr)
+        audit("node_start", args, result="refused", error=error)
+        return EXIT_REFUSED
+    if not node_task_exists():
+        print(f"[agent_ctl] The '{NODE_TASK_NAME}' logon task is missing: run 'agent_ctl node update' to "
+              "create it.", file=sys.stderr)
+        audit("node_start", args, result="no_task")
+        return EXIT_FAILED
+    if not set_node_task_enabled(True):   # a previous 'node stop' left it disabled
+        print(f"[agent_ctl] Warning: could not enable the '{NODE_TASK_NAME}' task; the node runs now but will "
+              "not start at the next logon.", file=sys.stderr)
+    if not run_node_task():
+        print(f"[agent_ctl] schtasks could not start the '{NODE_TASK_NAME}' task.", file=sys.stderr)
+        audit("node_start", args, result="failed", error="schtasks /Run failed")
+        return EXIT_FAILED
+    healthy = _wait_until(node_running, NODE_START_TIMEOUT_S)
+    audit("node_start", args, result="started" if healthy else "failed",
+          sha=current.get("short_sha") or current.get("sha"))
+    if not healthy:
+        print(f"[agent_ctl] The node did not answer /health within {NODE_START_TIMEOUT_S} s; see "
+              "logs/desktop_supervisor.log.", file=sys.stderr)
+        return EXIT_FAILED
+    print("[agent_ctl] Desktop Node up (127.0.0.1:8082/health).")
+    return EXIT_OK
+
+
+def node_stop(args: argparse.Namespace) -> int:
+    """'node stop', and the brain switch's vps laptop side (LaptopBrain), whose 'brain' arguments have no
+    --timeout: the default NODE_STOP_TIMEOUT_S applies then."""
+    if not node_running():
+        print("[agent_ctl] The Desktop Node is not running.")
+        set_node_task_enabled(False)  # keep it from re-launching at the next logon
+        audit("node_stop", args, result="not_running")
+        return EXIT_OK
+    timeout = getattr(args, "timeout", None) or NODE_STOP_TIMEOUT_S
+    ok_stop, why = node_stop_request(timeout)
+    # The task stays disabled until the next 'node start' (C-123 step 2), so it does not come back at logon.
+    disabled = set_node_task_enabled(False)
+    audit("node_stop", args, result="stopped" if ok_stop else "failed", error=None if ok_stop else why,
+          task_disabled=disabled)
+    if not ok_stop:
+        print(f"[agent_ctl] Could not stop the node gracefully: {why}.", file=sys.stderr)
+        return EXIT_FAILED
+    print("[agent_ctl] Desktop Node stopped; its logon task stays disabled until 'agent_ctl node start'.")
+    return EXIT_OK
+
+
+def node_status(_args: argparse.Namespace) -> int:
+    current = _node_current()
+    health = probe_node_health()
+    if current:
+        print(f"snapshot  {current.get('short_sha') or current.get('sha') or '?'} "
+              f"(run mode {current.get('run_mode', '?')})")
+    else:
+        print("snapshot  none pinned (run 'agent_ctl node update')")
+    task = node_task_state()
+    print(f"task      {NODE_TASK_NAME}: {task or 'not created'}")
+    print(f"brain     {current_brain()} (JARVIS_BRAIN on this laptop)")
+    if health is None:
+        print("node      NOT RUNNING (no answer on 127.0.0.1:8082)")
+        return 1
+    supervisor = health.get("supervisor") or {}
+    print("node      RUNNING")
+    print(f"  status  {health.get('status', '?')}")
+    for key in ("mode", "locked", "panic", "link", "git_sha", "node_id"):
+        if key in health:
+            print(f"  {key:<6}{health[key]}")
+    if supervisor:
+        print(f"  pid     {supervisor.get('child_pid')} (supervisor {supervisor.get('pid')}, "
+              f"restarts {supervisor.get('restarts')})")
+    return 0
+
+
+def node_logs(args: argparse.Namespace) -> int:
+    for rel in ("logs/desktop_supervisor.log", "logs/desktop_node.stdio.log", "logs/desktop_node.log"):
+        path = ROOT / rel
+        print(f"===== {rel} (last {args.lines} lines) =====")
+        if not path.is_file():
+            print("(no such file)")
+            continue
+        for line in tail_lines(path, args.lines):
+            print(line)
+    return EXIT_OK
+
+
+def _node_config_inputs() -> dict[str, Any]:
+    """The non-secret node_config.json values from the root .env: the pinned K-70 public keys and the owner
+    room. Secrets are never read here; 'update' wraps the tokens separately through DPAPI."""
+    return {"agent_public_key": _env_setting("DESKTOP_AGENT_PUBLIC_KEY"),
+            "pc_public_key": _env_setting("DESKTOP_PC_PUBLIC_KEY"),
+            "node_id": _env_setting("JARVIS_NODE_ID"),
+            "owner_room": _env_setting("JARVIS_ROOM_NAME")}
+
+
+def node_update(args: argparse.Namespace) -> int:
+    """Pin the deployed commit into a read-only snapshot, write node_config.json and the DPAPI-wrapped
+    secrets, (re)create the logon task and restart the supervisor (C-123 steps 1-3)."""
+    try:
+        from scripts.desktop import node_snapshot  # noqa: E402  pylint: disable=import-outside-toplevel
+        from services.utils import desktop_protocol as dp  # noqa: E402  pylint: disable=import-outside-toplevel
+        from src.core.desktop import health as node_health  # noqa: E402  pylint: disable=import-outside-toplevel
+    except ImportError as exc:
+        print(f"[agent_ctl] node update needs the desktop modules: {exc}", file=sys.stderr)
+        audit("node_update", args, result="failed", error="imports")
+        return EXIT_FAILED
+    run_mode = "canary" if getattr(args, "canary", False) else "active"
+    restrict = node_health.restrict_to_current_user if sys.platform == "win32" else (lambda _p: None)
+    try:
+        plan = node_snapshot.update_snapshot(
+            sha=getattr(args, "sha", None), data_root=ROOT, run_dir=agent_lock.run_dir(), run_mode=run_mode,
+            protect=dp.dpapi_protect, restrict=restrict, runner=_run, **_node_config_inputs())
+    except node_snapshot.SnapshotError as exc:
+        print(f"[agent_ctl] node update failed: {exc}", file=sys.stderr)
+        audit("node_update", args, result="failed", error=str(exc))
+        return EXIT_FAILED
+    created = create_node_task(plan.snapshot, canary=run_mode == "canary")
+    # Restart the supervisor onto the new snapshot: a node that ran is stopped gracefully and started again; in
+    # vps mode a stopped node is started too. In pc mode the laptop target is the PC worker (K-72), so a node that
+    # was not running stays stopped and its logon task stays disabled (it would take run/desktop_actor.lock at the
+    # next logon and the owner's worker would then exit 3); 'node start' or 'brain vps' enables it.
+    was_running = node_running()
+    brain = current_brain()
+    if not created:
+        # Without the task the node could not be started again: a running node is left alone on its old snapshot
+        # (stopping it would leave the laptop without a node), and the update reports a failure.
+        note = (f"the '{NODE_TASK_NAME}' logon task could not be (re)created, so "
+                + ("the running node was left on its old snapshot" if was_running else "the node was not started"))
+        print(f"[agent_ctl] node update failed: {note}. The snapshot {plan.sha[:12]} is pinned; fix schtasks and "
+              "run 'agent_ctl node update' again.", file=sys.stderr)
+        audit("node_update", args, result="failed", sha=plan.sha[:12], run_mode=run_mode, task=False,
+              restarted=False, brain=brain, error="schtasks /Create failed", note=note)
+        return EXIT_FAILED
+    note = ""
+    if was_running:
+        stopped, why = node_stop_request(NODE_STOP_TIMEOUT_S)
+        if not stopped:
+            note = f"the running node did not stop ({why}); it still runs the old snapshot"
+    want_start = (was_running or brain == "vps") and not note
+    if want_start and agent_lock.is_locked():
+        want_start, note = False, "a PC agent worker holds run/agent.lock, so the node was not started"
+    restarted = False
+    if node_task_exists():
+        if want_start:
+            set_node_task_enabled(True)
+            restarted = run_node_task() and _wait_until(node_running, NODE_START_TIMEOUT_S)
+        elif brain != "vps":
+            set_node_task_enabled(False)
+    audit("node_update", args, result="updated", sha=plan.sha[:12], run_mode=run_mode, task=created,
+          restarted=restarted, brain=brain, **({"note": note} if note else {}))
+    if restarted:
+        tail = "Supervisor restarted." if was_running else "Supervisor started."
+    elif note:
+        tail = f"Not restarted: {note}."
+    elif want_start:
+        tail = ("The supervisor did not come up on the new snapshot; see logs/desktop_supervisor.log, then "
+                "'agent_ctl node start'.")
+    elif brain != "vps":
+        tail = "pc mode: the node stays stopped and its logon task disabled until 'agent_ctl node start'."
+    else:
+        tail = "Start it with: agent_ctl node start."
+    print(f"[agent_ctl] Pinned snapshot {plan.sha[:12]} ({run_mode}); node_config.json and secrets written. {tail}")
+    print_highlight_node(args, plan.sha[:12], run_mode)
+    return EXIT_OK
+
+
+def print_highlight_node(args: argparse.Namespace, sha: str, run_mode: str) -> None:
+    if getattr(args, "by", None) not in ("claude", "cursor"):
+        return
+    now = datetime.now(PKT)
+    print()
+    print("done_highlight.md entry (paste at the end of the file):")
+    print(f"### ✅ [{args.by}] {_one_line(getattr(args, 'reason', '') or 'C-123', 60)} · Desktop Node update "
+          f"(agent_ctl) · {now:%Y-%m-%d %H:%M} PKT")
+    print(f"- **Kya kiya:** node snapshot {sha} pin kiya ({run_mode}); node_config.json + secrets.dpapi likhe, "
+          "logon task set kiya.")
+    print("- **Files:** —")
+    print("- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py node status`")
+    print(f"- **Commit:** abhi nahi · **Deploy:** node update {now:%H:%M} PKT")
+    print("- **Doosre agent ke liye:** —")
+
+
+# --------------------------------------------------------------------------- PC-signed bridge reads (K-70)
+
+
+def link_base_url() -> str:
+    """The public bridge base (JARVIS_LINK_URL or the default); trailing slash removed."""
+    return (_env_setting("JARVIS_LINK_URL") or DEFAULT_LINK_URL).rstrip("/")
+
+
+def _pc_signing_key() -> Any:
+    """The node's Ed25519 PC key (keys.dpapi, DPAPI-unwrapped). Raises when it is missing or unreadable."""
+    from services.utils import desktop_protocol as dp  # noqa: E402  pylint: disable=import-outside-toplevel
+    from src.core.desktop import settings as node_settings  # noqa: E402  pylint: disable=import-outside-toplevel
+    key_file = node_settings.node_home() / node_settings.KEYS_FILE
+    return dp.load_pc_key_file(key_file)
+
+
+def pc_signed_get(path: str, *, base: str | None = None, timeout: float = 8.0) -> dict[str, Any] | None:
+    """GET a bodiless PC-signed (K-70 X-Desk-*) bridge route and return its JSON, or None on any failure.
+    Used by the brain switch's idle gate and VERIFY (GET /vortex/status)."""
+    from services.utils import desktop_protocol as dp  # noqa: E402  pylint: disable=import-outside-toplevel
+    base = (base or link_base_url()).rstrip("/")
+    try:
+        key = _pc_signing_key()
+        headers = dp.sign_http_request(key, method="GET", path=path, body=b"")
+        response = httpx.get(f"{base}{path}", headers=headers, timeout=httpx.Timeout(timeout))
+        return response.json() if response.status_code == 200 else None
+    except (OSError, ValueError, httpx.HTTPError, httpx.InvalidURL) as exc:
+        _drop_frames(exc)
+        return None
+
+
+def pc_signed_post(path: str, body: bytes = b"", *, base: str | None = None,
+                   timeout: float = 8.0) -> tuple[int | None, dict[str, Any] | None]:
+    """POST a PC-signed bridge route (the ensure call runs in pc mode); (status, json|None)."""
+    from services.utils import desktop_protocol as dp  # noqa: E402  pylint: disable=import-outside-toplevel
+    base = (base or link_base_url()).rstrip("/")
+    try:
+        key = _pc_signing_key()
+        headers = {**dp.sign_http_request(key, method="POST", path=path, body=body),
+                   "Content-Type": "application/json"}
+        response = httpx.post(f"{base}{path}", headers=headers, content=body, timeout=httpx.Timeout(timeout))
+        try:
+            data = response.json()
+        except ValueError:
+            data = None
+        return response.status_code, data if isinstance(data, dict) else None
+    except (OSError, ValueError, httpx.HTTPError, httpx.InvalidURL) as exc:
+        _drop_frames(exc)
+        return None, None
+
+
+def vortex_status(base: str | None = None) -> dict[str, Any] | None:
+    """GET /vortex/status (PC-signed). The brain switch reads the brain, the agent participant and the idle
+    timestamp from it."""
+    return pc_signed_get("/vortex/status", base=base)
+
+
+def _status_last_activity(status: Mapping[str, Any] | None) -> float | None:
+    """last_activity_ts from /vortex/status (top level or the desktop block); None when absent."""
+    if not status:
+        return None
+    for holder in (status, status.get("desktop") if isinstance(status.get("desktop"), Mapping) else None):
+        if isinstance(holder, Mapping):
+            value = holder.get("last_activity_ts")
+            if isinstance(value, (int, float)):
+                return float(value)
+    return None
+
+
+def status_shows_brain(status: Mapping[str, Any] | None, target: str) -> bool:
+    """True when /vortex/status reports the target brain AND an agent participant whose lk.agent.name is the
+    target's and whose jarvis.session is running (K-72 success condition)."""
+    if not status:
+        return False
+    desktop = status.get("desktop") if isinstance(status.get("desktop"), Mapping) else {}
+    brain = status.get("brain") or desktop.get("brain")
+    if brain != target:
+        return False
+    want = brain_agent_name(target)
+    agent = status.get("agent") if isinstance(status.get("agent"), Mapping) else {}
+    livekit = status.get("livekit") if isinstance(status.get("livekit"), Mapping) else {}
+    candidates: list[Mapping[str, Any]] = [agent] if agent else []
+    for participants in (status.get("participants"), livekit.get("participants")):
+        if isinstance(participants, list):
+            candidates += [p for p in participants if isinstance(p, Mapping)]
+    for part in candidates:
+        # A participant's own fields, else its LiveKit attributes. Only an agent-name field counts: a plain
+        # display name or identity is never taken for lk.agent.name.
+        attrs = part.get("attributes") if isinstance(part.get("attributes"), Mapping) else {}
+        name = next((src.get(key) for src in (part, attrs)
+                     for key in ("lk.agent.name", "agent_name", "worker_agent_name") if src.get(key)), None)
+        session = next((src.get(key) for src in (part, attrs)
+                        for key in ("jarvis.session", "session") if src.get(key)), None)
+        if name == want and str(session).lower() == "running":
+            return True
+    return False
+
+
+# --------------------------------------------------------------------------- the brain switch (K-72)
+
+
+class BrainSwitchError(RuntimeError):
+    """A brain-switch step failed; the switch then restores the previous brain."""
+
+
+class BrainSwitchRefused(BrainSwitchError):
+    """PREFLIGHT refused the switch: nothing was backed up, stopped or changed, so nothing is restored."""
+
+    def __init__(self, message: str, *, missing: list[str] | None = None) -> None:
+        super().__init__(message)
+        self.missing = list(missing or [])
+
+
+class LaptopBrain:
+    """The laptop side of each brain, so the switch can start/stop/ensure without caring which it is. The
+    tests inject a fake; the real one drives the node (vps) and the PC worker (pc) through this module."""
+
+    def __init__(self, args: argparse.Namespace) -> None:
+        self._args = args
+
+    def start(self, brain: str) -> int:
+        if brain == "vps":
+            return node_start(self._args)
+        code, _ = start_worker(self._args, "start", foreground=False)
+        return EXIT_OK if code == EXIT_OK else EXIT_FAILED
+
+    def stop(self, brain: str) -> int:
+        if brain == "vps":
+            # The 'brain' arguments carry no --timeout; node_stop then uses NODE_STOP_TIMEOUT_S. A graceful POST
+            # /stop, and the logon task disabled so the node cannot take run/desktop_actor.lock at the next logon.
+            return node_stop(self._args)
+        code, _ = stop_worker(STOP_TIMEOUT_S)
+        return EXIT_OK if code == EXIT_OK else EXIT_FAILED
+
+    def ensure(self, brain: str) -> int:
+        if brain != "pc":
+            return EXIT_OK  # the VPS dispatches its own job; ensure_room runs in pc mode only (C-123 step 5)
+        # ensure_room.py asks the PC-signed /vortex/desktop/ensure first and falls back to the LiveKit API; it
+        # never deletes a room. It runs with the env the worker got, so it sees JARVIS_BRAIN as pc.
+        env = agent_env(getattr(self._args, "by", "user"), _one_line(getattr(self._args, "reason", "") or ""),
+                        background=True)
+        env[BRAIN_ENV] = "pc"
+        return EXIT_OK if run_ensure_room(env) == 0 else EXIT_FAILED
+
+
+def _default_ssh(command: list[str]) -> subprocess.CompletedProcess[Any]:
+    """Run a command on the VPS over ssh, never interactively (BatchMode: a missing key fails at once instead of
+    asking for a password). The target is JARVIS_VPS_SSH ('user@host' or an ssh alias), else JARVIS_VPS_HOST as
+    deploy_from_pc.sh reads it; the key is JARVIS_SSH_KEY when set, else ssh's own configuration."""
+    target = _env_setting("JARVIS_VPS_SSH") or _env_setting("JARVIS_VPS_HOST") or ""
+    if not target:
+        raise BrainSwitchError("JARVIS_VPS_SSH is not set: cannot reach the VPS for the brain switch")
+    key = _env_setting("JARVIS_SSH_KEY")
+    options = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=15", "-o", "ServerAliveInterval=20"]
+    if key:
+        options = ["-i", os.path.expanduser(key), *options]
+    # ssh joins its arguments into one string for the remote shell, so the argv goes as ONE quoted argument:
+    # ['bash', '-lc', 'cd X && Y'] then really runs 'cd X && Y' inside bash -lc.
+    return _run(["ssh", *options, target, shlex.join(command)], capture_output=True, text=True, timeout=600)
+
+
+def _vps_shell(script: str) -> list[str]:
+    """The argv of one shell script on the VPS; _default_ssh sends it to ssh as a single quoted argument."""
+    return ["bash", "-lc", script]
+
+
+def _vps_compose(*args: str) -> str:
+    """docker compose for the VPS brain services the way deploy.sh runs compose: project 'jarvis', the compose
+    file and its .env in deploy/hostinger, plus the vps-brain profile that holds the agent services."""
+    return (f"cd {VPS_COMPOSE_DIR} && docker compose -p {VPS_COMPOSE_PROJECT} --profile {VPS_BRAIN_PROFILE} "
+            + " ".join(shlex.quote(arg) for arg in args))
+
+
+def _vps_helper(path: str, *args: str) -> str:
+    """A helper of the VPS checkout (VPS_HELPERS): a .py through python3, a shell script as ./<path>."""
+    runner = "python3 " if path.endswith(".py") else "./"
+    return f"cd {VPS_APP_DIR} && {runner}{path}" + "".join(" " + shlex.quote(arg) for arg in args)
+
+
+def vps_provision_script() -> str:
+    """A read-only check run on the VPS at PREFLIGHT. It prints 'missing:<item>' for the checkout and for each
+    helper of VPS_HELPERS that is absent or lacks its permission, 'service:<name>' for each compose service the
+    vps-brain profile defines, and 'missing:<compose config>' when compose cannot read its file and .env (it reads
+    JARVIS_BRAIN as ${JARVIS_BRAIN:?}). It changes nothing and always exits 0 once it ran."""
+    lines = [f'cd {VPS_APP_DIR} 2>/dev/null || {{ echo "missing:{VPS_APP_DIR}"; exit 0; }}']
+    lines += [f'{{ [ -f {path} ] && [ {flag} {path} ]; }} || echo "missing:{path}"' for path, flag in VPS_HELPERS]
+    lines.append(f"if out=$(cd {VPS_COMPOSE_DIR} && docker compose -p {VPS_COMPOSE_PROJECT} --profile "
+                 f"{VPS_BRAIN_PROFILE} config --services 2>/dev/null); then "
+                 "printf '%s\\n' \"$out\" | sed -n 's/^\\(..*\\)$/service:\\1/p'; "
+                 "else echo \"missing:a docker compose config that compose accepts (deploy/hostinger)\"; fi")
+    lines.append("exit 0")
+    return "\n".join(lines)
+
+
+def parse_vps_provision(stdout: str) -> tuple[list[str], dict[str, str]]:
+    """(the missing items, {container: its compose service}) from vps_provision_script's output. A brain
+    container without a compose service in the vps-brain profile is missing too."""
+    missing: list[str] = []
+    services: set[str] = set()
+    for line in (stdout or "").splitlines():
+        kind, _, value = line.strip().partition(":")
+        if kind == "missing" and value.strip():
+            missing.append(value.strip())
+        elif kind == "service" and value.strip():
+            services.add(value.strip())
+    resolved: dict[str, str] = {}
+    for container, names in VPS_BRAIN_CONTAINERS:
+        found = next((name for name in names if name in services), None)
+        if found is None:
+            missing.append(f"compose service {container}")
+        else:
+            resolved[container] = found
+    return missing, resolved
+
+
+class BrainSwitch:
+    """PREFLIGHT -> BACKUP -> STOP_OLD -> SYNC_DATA -> FLIP_ENV -> START_NEW -> ENSURE -> VERIFY -> DONE,
+    journalled in run/brain_switch.json and resumable.
+
+    - PREFLIGHT changes nothing. It checks that the VPS is provisioned for the switch (the checkout, every helper of
+      VPS_HELPERS, the two brain services in compose), that the VPS brain is readable, the node snapshot (for vps),
+      that the PC-signed /vortex/status already shows the current brain and its running agent (the condition VERIFY
+      and the restore check need) and last the idle gate (or the --now notice). A PREFLIGHT problem is a refusal
+      (exit 4): it is journalled as such, nothing is restored because nothing changed. A journal left at PREFLIGHT
+      starts over with a full PREFLIGHT.
+    - A failure at BACKUP changes nothing either (exit 1, no restore).
+    - From STOP_OLD on the old brain may be down, so a failure restores the previous brain automatically, whatever
+      the error (an unexpected exception too; only KeyboardInterrupt/SystemExit leave the journal for a resume).
+    - A journal of a switch to the OTHER brain that stopped half-way blocks a new switch (exit 4) until that one is
+      resumed with 'agent_ctl brain <its target>', which finishes it or restores the previous brain.
+
+    - FLIP_ENV writes JARVIS_BRAIN on the VPS .env and then in the laptop's root .env (set_laptop_brain), so the
+      laptop agrees (a PC worker start is refused once it says vps). The restore writes the previous brain back to
+      both, and a resume past FLIP_ENV re-applies the laptop value before it goes on.
+    - When the VPS already says the target, both sides are compared: equal is 'already' (nothing to switch); a
+      laptop that differs is repaired alone (its JARVIS_BRAIN written, journalled; no VPS command, nothing stopped
+      or started), so 'brain pc' frees the owner's worker from a laptop .env left at vps.
+
+    ssh, status, laptop, laptop_env and laptop_brain are injected (the tests pass fakes or a tmp .env), so no real
+    VPS command, container, scheduled task, /vortex call or laptop .env write runs under test. Success is declared
+    only when VERIFY sees the target brain and its agent participant (status_shows_brain)."""
+
+    def __init__(self, target: str, *, journal_path: Path, ssh: Callable[[list[str]], Any],
+                 status: Callable[[], dict[str, Any] | None], laptop: LaptopBrain,
+                 notify: Callable[[str], None] | None = None, when_idle: bool = False, now_force: bool = False,
+                 clock: Callable[[], float] = time.time, sleep: Callable[[float], None] | None = None,
+                 laptop_env: Callable[[str], None] | None = None,
+                 laptop_brain: Callable[[], str] | None = None) -> None:
+        if target not in BRAINS:
+            raise ValueError(f"brain must be one of {BRAINS}")
+        self.target = target
+        self.journal_path = Path(journal_path)
+        self._ssh, self._status, self._laptop = ssh, status, laptop
+        self._notify = notify or (lambda _m: None)
+        # The laptop's JARVIS_BRAIN writer and reader; looked up at call time so a test's patched function applies.
+        self._laptop_env = laptop_env or (lambda brain: set_laptop_brain(brain))  # pylint: disable=unnecessary-lambda
+        self._laptop_brain = laptop_brain or (lambda: current_brain())  # pylint: disable=unnecessary-lambda
+        self._when_idle, self._now_force = when_idle, now_force
+        self._clock = clock
+        self._sleep = sleep or _sleep
+        self.journal: dict[str, Any] = {}
+
+    # --- journal ---------------------------------------------------------------------------------------------
+
+    def _load_journal(self) -> dict[str, Any]:
+        """The journal of an unfinished switch to this target; {} for none, another target or a refusal record."""
+        data = _read_json(self.journal_path)
+        if data.get("target") != self.target or data.get("result") == "refused":
+            return {}
+        return data
+
+    def _other_switch_in_progress(self) -> str:
+        """Why a switch to the other brain must be finished first, else ''. Only a journal past PREFLIGHT counts
+        (from BACKUP on STOP_OLD may have begun), or one that was restoring."""
+        data = _read_json(self.journal_path)
+        other = data.get("target")
+        if other in (None, self.target) or data.get("result") == "refused":
+            return ""
+        state = data.get("state")
+        begun = state in BRAIN_STATES and BRAIN_STATES.index(state) >= BRAIN_STATES.index("BACKUP")
+        if not (begun or data.get("restoring")):
+            return ""
+        how = "while restoring" if data.get("restoring") else f"after {state}"
+        return (f"a switch to '{other}' stopped half-way ({how}, run/{BRAIN_JOURNAL_FILE}); run 'agent_ctl brain "
+                f"{other}' first: it finishes that switch or restores the previous brain")
+
+    def _save(self, **fields: Any) -> None:
+        self.journal.update(fields, updated_at=self._clock())
+        self.journal_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            self.journal_path.write_text(json.dumps(self.journal, indent=2, default=str), encoding="utf-8")
+        except OSError as exc:
+            print(f"[agent_ctl] Warning: could not write run/{BRAIN_JOURNAL_FILE}: {exc}", file=sys.stderr)
+
+    def _clear(self) -> None:
+        try:
+            self.journal_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    # --- the run ---------------------------------------------------------------------------------------------
+
+    def run(self) -> tuple[int, dict[str, Any]]:
+        other = self._other_switch_in_progress()
+        if other:
+            print(f"[agent_ctl] Brain switch refused: {other}.", file=sys.stderr)
+            return EXIT_REFUSED, {"result": "refused", "state": None, "error": other}
+        self.journal = self._load_journal()
+        if self.journal.get("restoring"):
+            return self._restore("resumed a restore from the journal")
+        if self.journal.get("state") in (None, "PREFLIGHT"):
+            # Nothing was backed up, stopped or changed yet (a crash at or right after PREFLIGHT), so the switch
+            # starts over with a full PREFLIGHT: the provisioning, status and idle checks and the --now notice.
+            self.journal = {}
+        previous = self.journal.get("previous") or self._read_vps_brain()
+        if previous == self.target and not self.journal:
+            return self._settle_laptop()
+        if not self.journal:
+            self.journal = {"target": self.target, "previous": previous, "state": None,
+                            "started_at": self._clock()}
+            self._save()
+        done = self.journal.get("state")
+        start_index = BRAIN_STATES.index(done) + 1 if done in BRAIN_STATES else 0
+        if start_index > BRAIN_STATES.index("FLIP_ENV"):
+            # A resume past FLIP_ENV: make sure the laptop still says the target (the .env may have been edited or
+            # restored by hand since), so the laptop readers agree with the VPS before START_NEW goes on.
+            try:
+                self._laptop_env(self.target)
+            except Exception as exc:  # pylint: disable=broad-exception-caught  # the old brain is down: restore
+                why = str(exc) if isinstance(exc, BrainSwitchError) else f"unexpected {type(exc).__name__}"
+                print(f"[agent_ctl] brain switch failed re-applying FLIP_ENV on resume: {why}", file=sys.stderr)
+                return self._restore(f"failed at FLIP_ENV (resume): {why}")
+        steps: dict[str, Callable[[], None]] = {
+            "PREFLIGHT": self._preflight, "BACKUP": self._backup, "STOP_OLD": self._stop_old,
+            "SYNC_DATA": self._sync_data, "FLIP_ENV": self._flip_env, "START_NEW": self._start_new,
+            "ENSURE": self._ensure, "VERIFY": self._verify, "DONE": lambda: None}
+        for state in BRAIN_STATES[start_index:]:
+            try:
+                print(f"[agent_ctl] brain {self.target}: {state}...", flush=True)
+                steps[state]()
+            except BrainSwitchRefused as exc:
+                return self._refuse(state, exc)
+            except Exception as exc:  # pylint: disable=broad-exception-caught  # never skip the restore
+                # A BrainSwitchError says what failed. Any other error is a bug or an unexpected condition; only
+                # its type is shown (its text may hold a URL or a path). KeyboardInterrupt and SystemExit are not
+                # caught: the journal keeps the last finished state and the next run resumes from it.
+                why = str(exc) if isinstance(exc, BrainSwitchError) else f"unexpected {type(exc).__name__}"
+                print(f"[agent_ctl] brain switch failed at {state}: {why}", file=sys.stderr)
+                if BRAIN_STATES.index(state) < BRAIN_STATES.index("STOP_OLD"):
+                    return self._fail_unchanged(state, why)
+                return self._restore(f"failed at {state}: {why}")
+            self._save(state=state)
+        self._clear()
+        print(f"[agent_ctl] Brain switched to '{self.target}'.")
+        return EXIT_OK, {"result": "switched", "brain": self.target}
+
+    def _settle_laptop(self) -> tuple[int, dict[str, Any]]:
+        """The VPS .env already says the target. 'Nothing to switch' only when this laptop's JARVIS_BRAIN says it
+        too; when only the laptop differs (e.g. a .env left at vps while the VPS says pc, so the owner's worker is
+        refused), this repairs the laptop side alone: its JARVIS_BRAIN is written (journalled like a switch), no
+        VPS command runs and nothing is stopped or started."""
+        laptop = self._laptop_brain()
+        if laptop == self.target:
+            print(f"[agent_ctl] JARVIS_BRAIN is already '{self.target}' on the VPS and on this laptop. Nothing to "
+                  "switch.")
+            return EXIT_OK, {"result": "already", "brain": self.target}
+        in_shell = bool((os.environ.get(BRAIN_ENV) or "").strip())
+        print(f"[agent_ctl] JARVIS_BRAIN on the VPS is already '{self.target}' but this laptop says '{laptop}': "
+              "repairing only this laptop's JARVIS_BRAIN (no VPS command; nothing is stopped or started).",
+              flush=True)
+        self.journal = {"target": self.target, "previous": self.target, "state": None, "repair": "laptop",
+                        "laptop_was": laptop, "started_at": self._clock()}
+        self._save()
+        try:
+            self._laptop_env(self.target)
+        except Exception as exc:  # pylint: disable=broad-exception-caught  # reported, nothing else was changed
+            why = str(exc) if isinstance(exc, BrainSwitchError) else f"unexpected {type(exc).__name__}"
+            print(f"[agent_ctl] Could not repair this laptop's JARVIS_BRAIN: {why}. Nothing else was changed.",
+                  file=sys.stderr)
+            self._clear()
+            return EXIT_FAILED, {"result": "failed", "state": "REPAIR_LAPTOP", "error": why, "changed": False,
+                                 "brain": self.target, "laptop_was": laptop}
+        self._clear()
+        now = self._laptop_brain()
+        if now != self.target:
+            error = f"this laptop still reads JARVIS_BRAIN as '{now}' after the repair"
+            print(f"[agent_ctl] {error}.", file=sys.stderr)
+            return EXIT_FAILED, {"result": "failed", "state": "REPAIR_LAPTOP", "error": error, "brain": self.target,
+                                 "laptop_was": laptop}
+        print(f"[agent_ctl] This laptop's JARVIS_BRAIN is now '{self.target}', matching the VPS.")
+        if in_shell:
+            print(f"[agent_ctl] Note: {BRAIN_ENV} is also set in this shell's environment, which wins over the .env: "
+                  f"set it to '{self.target}' or remove it there too.", file=sys.stderr)
+        if self.target == "pc":
+            print("[agent_ctl] Next: if the Desktop Node still runs, stop it with 'agent_ctl node stop'; then start "
+                  "the PC worker with 'agent_ctl start --by <you>'.")
+        else:
+            print("[agent_ctl] Next: if a PC worker still runs, stop it with 'agent_ctl stop --by <you>'; then start "
+                  "the Desktop Node with 'agent_ctl node start'.")
+        return EXIT_OK, {"result": "repaired", "repaired": "laptop", "brain": self.target, "laptop_was": laptop}
+
+    def _refuse(self, state: str, exc: BrainSwitchRefused) -> tuple[int, dict[str, Any]]:
+        """PREFLIGHT said no: nothing was backed up, stopped or changed. The journal keeps the refusal as a record
+        (never resumed: the next run starts a fresh PREFLIGHT)."""
+        message = str(exc)
+        print(f"[agent_ctl] Brain switch refused at {state}: {message}. Nothing was backed up, stopped or "
+              "changed.", file=sys.stderr)
+        previous = self.journal.get("previous")
+        self.journal = {"target": self.target, "previous": previous, "state": None, "result": "refused",
+                        "refused_at": state, "error": message, "missing": exc.missing,
+                        "started_at": self.journal.get("started_at", self._clock())}
+        self._save()
+        details: dict[str, Any] = {"result": "refused", "state": state, "error": message, "brain": previous}
+        if exc.missing:
+            details["missing"] = exc.missing
+        return EXIT_REFUSED, details
+
+    def _fail_unchanged(self, state: str, why: str) -> tuple[int, dict[str, Any]]:
+        """A failure before STOP_OLD: the old brain still runs and JARVIS_BRAIN is unchanged, so no restore."""
+        previous = self.journal.get("previous")
+        print(f"[agent_ctl] Nothing was stopped or changed; '{previous}' is still the brain.", file=sys.stderr)
+        self._clear()
+        return EXIT_FAILED, {"result": "failed", "state": state, "error": why, "changed": False, "brain": previous}
+
+    # --- states ----------------------------------------------------------------------------------------------
+
+    def _preflight(self) -> None:
+        """Every check that can refuse comes before the --now notice, so a refused switch is never announced."""
+        self._check_vps_provisioned()
+        previous = self.journal.get("previous")
+        if previous not in BRAINS:
+            previous = self._read_vps_brain()
+            if previous not in BRAINS:
+                raise BrainSwitchRefused("JARVIS_BRAIN could not be read from the VPS .env ('set_env.py --get "
+                                         "JARVIS_BRAIN' gave neither vps nor pc), so a failure could not be restored")
+            self._save(previous=previous)
+        if previous == self.target:
+            raise BrainSwitchRefused(f"JARVIS_BRAIN on the VPS is already '{self.target}'")
+        # The node needs a pinned snapshot and its logon task (a read-only schtasks /Query) before it can be the
+        # laptop target; without the task START_NEW could not start it after STOP_OLD stopped the owner's worker.
+        if self.target == "vps" and not _node_current():
+            raise BrainSwitchRefused("no pinned node snapshot: run 'agent_ctl node update' before 'brain vps'")
+        if self.target == "vps" and not node_task_exists():
+            raise BrainSwitchRefused(f"the '{NODE_TASK_NAME}' logon task is missing: run 'agent_ctl node update' "
+                                     "(it creates the task) before 'brain vps'")
+        status = self._status()
+        if status is None:
+            raise BrainSwitchRefused("the PC-signed /vortex/status does not answer (JARVIS_LINK_URL, the node's PC "
+                                     "key), so VERIFY could never confirm the switch")
+        # VERIFY and the restore's own check both need the K-72 condition (status_shows_brain), so it must already
+        # hold for the current brain. Otherwise the switch would stop the owner's brain, spend VERIFY failing and
+        # then restore without being able to confirm it: refuse now, before anything is backed up or stopped.
+        if not status_shows_brain(status, previous):
+            raise BrainSwitchRefused(self._status_gap(status, previous))
+        if self._when_idle or self._now_force:
+            self._idle_gate(status)
+
+    @staticmethod
+    def _status_gap(status: Mapping[str, Any], previous: str) -> str:
+        """Why /vortex/status does not confirm the current brain (PREFLIGHT's refusal message)."""
+        desktop = status.get("desktop") if isinstance(status.get("desktop"), Mapping) else {}
+        shown = status.get("brain") or desktop.get("brain")
+        tail = "so neither VERIFY nor a restore could ever confirm a switch"
+        if shown not in BRAINS:
+            return f"/vortex/status does not report the brain field yet (contracts v4, K-72), {tail}"
+        if shown != previous:
+            return (f"/vortex/status reports brain '{shown}' but the VPS .env says '{previous}'; settle that first, "
+                    f"{tail}")
+        return (f"/vortex/status shows brain '{previous}' but no agent participant whose lk.agent.name is "
+                f"'{brain_agent_name(previous)}' with jarvis.session running (the bridge does not report those "
+                f"agent fields yet, or the current brain is not running), {tail}")
+
+    def _check_vps_provisioned(self) -> None:
+        """The VPS-side prerequisites every later state needs (C-126..C-129); refuses with the full list."""
+        try:
+            result = self._ssh(_vps_shell(vps_provision_script()))
+        except BrainSwitchError as exc:
+            raise BrainSwitchRefused(str(exc)) from None
+        except Exception as exc:  # pylint: disable=broad-exception-caught  # ssh itself: refused, never a crash
+            raise BrainSwitchRefused(f"the VPS could not be reached over ssh ({type(exc).__name__})") from None
+        code = getattr(result, "returncode", 1)
+        if code != 0:
+            raise BrainSwitchRefused(f"the VPS provisioning check exited {code} (is the VPS reachable over ssh?)")
+        missing, services = parse_vps_provision(getattr(result, "stdout", "") or "")
+        if missing:
+            raise BrainSwitchRefused(f"VPS brain not provisioned yet: missing {', '.join(missing)} "
+                                     f"({VPS_PROVISIONED_BY})", missing=missing)
+        self._save(vps_services=[services[container] for container, _names in VPS_BRAIN_CONTAINERS])
+
+    def _idle_gate(self, status: Mapping[str, Any] | None) -> None:
+        if self._now_force:
+            self._notify(f"JARVIS brain switch to {self.target} in {SPOKEN_NOTICE_S} seconds.")
+            self._sleep(SPOKEN_NOTICE_S)
+            return
+        last = _status_last_activity(status)
+        idle_for = None if last is None else self._clock() - last
+        if idle_for is None or idle_for < IDLE_GATE_S:
+            waited = "unknown" if idle_for is None else f"{idle_for:.0f} s"
+            raise BrainSwitchRefused(f"not idle for {IDLE_GATE_S} s yet (last activity {waited} ago); wait or "
+                                     "use --now")
+
+    def _services(self) -> list[str]:
+        services = self.journal.get("vps_services")
+        return list(services) if isinstance(services, list) and services else list(VPS_DEFAULT_SERVICES)
+
+    def _backup(self) -> None:
+        self._ssh_step(_vps_shell(_vps_helper("deploy/hostinger/backup.sh")), "BACKUP")
+
+    def _stop_old(self) -> None:
+        previous = self.journal.get("previous")
+        if previous == "pc":
+            if self._laptop.stop("pc") != EXIT_OK:
+                raise BrainSwitchError("the PC worker did not stop")
+        elif previous == "vps":
+            if self._laptop.stop("vps") != EXIT_OK:
+                raise BrainSwitchError("the Desktop Node did not stop")
+            self._ssh_step(_vps_shell(_vps_compose("stop", *self._services())), "STOP_OLD")
+
+    def _sync_data(self) -> None:
+        self._ssh_step(_vps_shell(_vps_helper("deploy/hostinger/sync_brain_data.sh", self.target)), "SYNC_DATA")
+
+    def _flip_env(self) -> None:
+        # Edit JARVIS_BRAIN in place on the VPS .env, keeping every other line (K-72 env writer), then the laptop's
+        # root .env the same way, so current_brain(), vortex.py, ensure_room.py and the launchers agree.
+        self._ssh_step(_vps_shell(_vps_helper("deploy/hostinger/set_env.py", BRAIN_ENV, self.target)), "FLIP_ENV")
+        self._laptop_env(self.target)
+
+    def _start_new(self) -> None:
+        if self.target == "vps":
+            self._ssh_step(_vps_shell(_vps_compose("up", "-d", *self._services())), "START_NEW")
+            if self._laptop.start("vps") != EXIT_OK:
+                raise BrainSwitchError("the Desktop Node did not start")
+        else:
+            self._ssh_step(_vps_shell(_vps_compose("stop", *self._services())), "START_NEW")
+            if self._laptop.start("pc") != EXIT_OK:
+                raise BrainSwitchError("the PC worker did not start")
+
+    def _ensure(self) -> None:
+        if self._laptop.ensure(self.target) != EXIT_OK:
+            raise BrainSwitchError("the room could not be ensured")
+
+    def _verify(self) -> None:
+        if not self._wait_for_brain(self.target):
+            raise BrainSwitchError(f"/vortex/status never showed brain '{self.target}' with a running "
+                                   f"'{brain_agent_name(self.target)}' agent")
+
+    def _wait_for_brain(self, brain: str) -> bool:
+        for attempt in range(VERIFY_TRIES):
+            if status_shows_brain(self._status(), brain):
+                return True
+            if attempt < VERIFY_TRIES - 1:
+                self._sleep(VERIFY_STEP_S)
+        return False
+
+    # --- restore ---------------------------------------------------------------------------------------------
+
+    def _restore(self, why: str) -> tuple[int, dict[str, Any]]:
+        """Bring the previous brain back: the new laptop side down, JARVIS_BRAIN back (the VPS .env, then the
+        laptop's root .env), the old side up. Every
+        action runs even when one before it failed; the journal says 'restoring' so a crash resumes the restore."""
+        previous = self.journal.get("previous")
+        if previous not in BRAINS or previous == self.target:
+            self._clear()
+            return EXIT_FAILED, {"result": "failed", "error": why, "restored": False}
+        self._save(restoring=True)
+        print(f"[agent_ctl] Restoring the previous brain '{previous}' ({why})...", file=sys.stderr)
+        services = self._services()
+        actions: list[tuple[str, Callable[[], Any]]] = [
+            (f"stop the {self.target} laptop side", lambda: self._laptop.stop(self.target)),
+            ("restore JARVIS_BRAIN", lambda: self._ssh(_vps_shell(
+                _vps_helper("deploy/hostinger/set_env.py", BRAIN_ENV, previous)))),
+            ("restore JARVIS_BRAIN on this laptop", lambda: self._laptop_env(previous))]
+        if previous == "vps":
+            actions += [("start the VPS brain", lambda: self._ssh(_vps_shell(_vps_compose("up", "-d", *services)))),
+                        ("start the Desktop Node", lambda: self._laptop.start("vps"))]
+        else:
+            actions += [("stop the VPS brain", lambda: self._ssh(_vps_shell(_vps_compose("stop", *services)))),
+                        ("start the PC worker", lambda: self._laptop.start("pc")),
+                        ("ensure the room", lambda: self._laptop.ensure("pc"))]
+        for label, action in actions:
+            try:
+                outcome = action()
+            except Exception as exc:  # pylint: disable=broad-exception-caught  # restore must always finish
+                detail = str(exc) if isinstance(exc, BrainSwitchError) else type(exc).__name__
+                print(f"[agent_ctl] WARNING: restore could not {label}: {detail}", file=sys.stderr)
+                continue
+            # A laptop step returns an exit code, an ssh step a CompletedProcess: a non-zero one is reported too
+            # (e.g. a node that would not stop keeps run/desktop_actor.lock, so the PC worker cannot start).
+            code = getattr(outcome, "returncode", outcome)
+            if isinstance(code, int) and code != EXIT_OK:
+                print(f"[agent_ctl] WARNING: restore could not {label}: exit {code}", file=sys.stderr)
+        restored = self._wait_for_brain(previous)
+        self._clear()
+        return EXIT_FAILED, {"result": "failed", "error": why, "restored": restored, "brain": previous}
+
+    # --- helpers ---------------------------------------------------------------------------------------------
+
+    def _ssh_step(self, command: list[str], state: str) -> None:
+        try:
+            result = self._ssh(command)
+        except BrainSwitchError:
+            raise
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            raise BrainSwitchError(f"ssh for {state} failed ({type(exc).__name__})") from None
+        code = getattr(result, "returncode", 1)
+        if code != 0:
+            raise BrainSwitchError(f"the VPS command for {state} exited {code}")
+
+    def _read_vps_brain(self) -> str | None:
+        try:
+            result = self._ssh(_vps_shell(_vps_helper("deploy/hostinger/set_env.py", "--get", BRAIN_ENV)))
+        except Exception:  # pylint: disable=broad-exception-caught
+            return None
+        if getattr(result, "returncode", 1) != 0:
+            return None
+        value = (getattr(result, "stdout", "") or "").strip().lower()
+        return value if value in BRAINS else None
+
+
+def cmd_brain(args: argparse.Namespace) -> int:
+    """The idle gate applies unless --now (which gives the spoken 60 s notice instead). run/brain.lock keeps a
+    second 'agent_ctl brain' from running a switch at the same time (it is refused, exit 4)."""
+    lock, why = take_brain_lock(args)
+    if lock is None:
+        print(f"[agent_ctl] Brain switch refused: {why}.", file=sys.stderr)
+        audit("brain", args, exit=EXIT_REFUSED, target=args.target, result="refused", error=why)
+        return EXIT_REFUSED
+    try:
+        laptop = LaptopBrain(args)
+        switch = BrainSwitch(args.target, journal_path=agent_lock.run_dir() / BRAIN_JOURNAL_FILE, ssh=_default_ssh,
+                             status=vortex_status, laptop=laptop, notify=_speak_notice,
+                             when_idle=args.when_idle or not args.now, now_force=args.now)
+        try:
+            code, details = switch.run()
+        except KeyboardInterrupt:
+            _report_interrupted_switch(args, switch.journal_path)
+            return EXIT_INTERRUPTED
+    finally:
+        release_run_lock(lock)
+    audit("brain", args, exit=code, target=args.target, **details)
+    return code
+
+
+def _report_interrupted_switch(args: argparse.Namespace, journal_path: Path) -> None:
+    """Ctrl+C during 'brain': the run does not catch it (no restore runs in an interrupted process), so the
+    journal keeps the last finished state. Audit that and tell the owner how to finish or undo it."""
+    journal = _read_json(journal_path)
+    state = journal.get("state")
+    restoring = bool(journal.get("restoring"))
+    begun = restoring or (state in BRAIN_STATES and BRAIN_STATES.index(state) >= BRAIN_STATES.index("BACKUP"))
+    audit("brain", args, exit=EXIT_INTERRUPTED, target=args.target, result="interrupted", state=state,
+          restoring=restoring, previous=journal.get("previous"), half_done=begun)
+    if not begun:
+        print(f"[agent_ctl] Brain switch interrupted before anything was stopped or changed; "
+              f"'{journal.get('previous') or current_brain()}' is still the brain.", file=sys.stderr)
+        return
+    how = "while restoring the previous brain" if restoring else f"after {state}"
+    print(f"[agent_ctl] Brain switch to '{args.target}' INTERRUPTED {how}: it is half-done and the laptop may have "
+          f"no brain running. run/{BRAIN_JOURNAL_FILE} keeps its progress; run 'agent_ctl brain {args.target}' "
+          "now: it finishes the switch or restores the previous brain.", file=sys.stderr)
+
+
+SAY_ROUTE = "/vortex/desktop/say"
+
+
+def _speak_notice(message: str) -> None:
+    """The 60 s notice before a --now switch. It is always printed. It is spoken only once the bridge serves the
+    PC-signed SAY_ROUTE: today's bridge has no such route (it answers 404), so the notice is printed only."""
+    print(f"[agent_ctl] {message}", flush=True)
+    status, _ = pc_signed_post(SAY_ROUTE, json.dumps({"text": message}).encode("utf-8"))
+    if status != 200:
+        why = ("the bridge does not serve it yet" if status == 404
+               else "no answer" if status is None else f"HTTP {status}")
+        print(f"[agent_ctl] (notice printed only, not spoken: {SAY_ROUTE} {why})", file=sys.stderr)
+
+
 # --------------------------------------------------------------------------- command line
 
 
@@ -1259,12 +2675,60 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     logs = sub.add_parser("logs", help="last lines of the agent logs and logs/agent_ctl.log")
     logs.add_argument("-n", "--lines", type=_positive_int, default=50)
     logs.add_argument("--file", choices=tuple(LOG_CHOICES), default="all")
+    _add_node_parser(sub)
+    _add_brain_parser(sub)
     return parser.parse_args(argv)
+
+
+def _add_node_parser(sub: Any) -> None:
+    """node start|stop|status|logs|update (C-123 steps 1-3): the laptop Desktop Node, its logon task and the
+    pinned snapshot."""
+    node = sub.add_parser("node", help="the Desktop Node: start|stop|status|logs|update")
+    node_sub = node.add_subparsers(dest="node_command", required=True)
+    for name, text in (("start", "enable and run the logon task, wait for /health"),
+                       ("stop", "graceful POST /stop; the logon task stays disabled until node start"),
+                       ("status", "the node's /health, pinned snapshot and logon task"),
+                       ("update", "pin the deployed commit, write node_config.json + secrets, restart")):
+        action = node_sub.add_parser(name, help=text)
+        if name in ("start", "stop", "update"):
+            action.add_argument("--by", choices=WHO, default="user", help="who asks (logged)")
+            action.add_argument("--reason", default="", help="task ID or why (logged)")
+        if name == "stop":
+            action.add_argument("--timeout", type=_positive, default=NODE_STOP_TIMEOUT_S)
+        if name == "update":
+            action.add_argument("--sha", default=None, help="the commit to pin (default: HEAD)")
+            action.add_argument("--canary", action="store_true", help="pin and run the node in canary mode")
+    node_logs_p = node_sub.add_parser("logs", help="last lines of the supervisor and node logs")
+    node_logs_p.add_argument("-n", "--lines", type=_positive_int, default=50)
+
+
+def _add_brain_parser(sub: Any) -> None:
+    """brain vps|pc [--when-idle|--now] (C-123 steps 4, 6): the only writer of JARVIS_BRAIN."""
+    brain = sub.add_parser("brain", help="switch the brain: vps|pc [--when-idle|--now]")
+    brain.add_argument("target", choices=BRAINS, help="the brain to switch to")
+    brain.add_argument("--by", choices=WHO, default="user", help="who asks (logged)")
+    brain.add_argument("--reason", default="", help="task ID or why (logged)")
+    gate = brain.add_mutually_exclusive_group()
+    gate.add_argument("--when-idle", action="store_true",
+                      help="only switch once there was no activity for 10 min (the default)")
+    gate.add_argument("--now", action="store_true",
+                      help=f"switch now, after a 60 s notice (printed; spoken only once the bridge serves "
+                           f"{SAY_ROUTE}, which it does not yet)")
+    brain.epilog = (f"PREFLIGHT refuses (exit 4, nothing changed) until the VPS is provisioned ({VPS_PROVISIONED_BY}): "
+                    "the helper scripts in the VPS checkout and the jarvis-agent/jarvis-agent-svc compose services; "
+                    "and until the PC-signed /vortex/status shows the current brain with its running agent "
+                    "(lk.agent.name, jarvis.session), which VERIFY and the restore check need. FLIP_ENV writes "
+                    "JARVIS_BRAIN in the VPS .env and in this laptop's root .env (only that line); a failure "
+                    "writes the previous brain back to both. When the VPS already says <target> but this laptop does "
+                    "not, only the laptop's JARVIS_BRAIN line is repaired (no VPS command, nothing stopped). "
+                    "run/brain.lock refuses a second 'brain' run while one is running. Ctrl+C leaves "
+                    "run/brain_switch.json: run the same 'brain <target>' again to finish the switch or restore the "
+                    "previous brain.")
 
 
 COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
     "status": cmd_status, "start": cmd_start, "stop": cmd_stop, "restart": cmd_restart,
-    "wait": cmd_wait, "logs": cmd_logs,
+    "wait": cmd_wait, "logs": cmd_logs, "node": cmd_node, "brain": cmd_brain,
 }
 
 
@@ -1285,7 +2749,7 @@ def main(argv: list[str] | None = None) -> int:
         return COMMANDS[args.command](args)
     except KeyboardInterrupt:
         print("[agent_ctl] Interrupted.", file=sys.stderr)
-        return 130
+        return EXIT_INTERRUPTED
 
 
 if __name__ == "__main__":

@@ -8,6 +8,10 @@ echo  Bridge/LiveKit/UI = VPS via https://jarvis.srv1802669.hstgr.cloud
 echo ============================================
 echo.
 
+REM C-123 (VPS brain): this is the pc-mode launcher. While JARVIS_BRAIN=vps the laptop runs the Desktop
+REM Node instead, and agent_ctl refuses this worker start; switch with 'agent_ctl brain pc' or run the node
+REM with 'agent_ctl node start'. The VPS is reached only through the domain (checked below), never raw IPs.
+
 if not exist ".venv_312\Scripts\activate.bat" (
   echo [ERROR] Run deploy\windows-local\setup.bat first.
   pause
