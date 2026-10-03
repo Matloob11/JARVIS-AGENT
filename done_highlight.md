@@ -1452,3 +1452,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Commit:** pending · **Deploy:** no
 - **Doosre agent ke liye:** **REQ-DEPLOY frontend** (P0 layout). Live 1536×760 @125% check.
 
+
+### ✅ 🔁 [claude] C-63: PC vitals loop + no-markdown prompt rule · Agent worker restart (agent_ctl) · 2026-10-04 01:15 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 33760) band, naya pid 22520; health 200 (34.6 s me), ensure_room.py: OK, an agent of the current worker is in the room.
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** `b06f9ea` (+ prompt rule `0d9dcbd`) · **Deploy:** PC agent restart 01:15 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ [claude] C-63 (hissa) · Laptop ke vitals PC brain me dashboard tak (vitals_pc har 10 s, vitals_vps, init_state) · 2026-10-04 01:17 PKT
+- **Kya kiya:** PC brain me laptop ke CPU/RAM/disk ka koi source nahi tha (Quick Stats aur Agents › Machines me 0% / stale). Ab PC agent har 10 s `vitals_pc` bhejta hai; bridge use (aur legacy 'vitals' ko) validate karke UI ko `vitals_pc` + legacy `vitals_update{source:'pc'}` deta hai; heartbeat har 12 s `vitals_vps` bhejta hai; init_state me `vitals_pc` aur `vitals_vps` (K-40 jaisa). Saath me Cursor ke `bb3c29a` ka review: layout theek, lekin nayi regressions, is liye frontend deploy roka (section 11, 01:25).
+- **Files:** `src/core/ui_bridge.py`, `src/core/agent_runner.py`, `services/utils/jarvis_bridge.py`, `tests/infrastructure/test_bridge_desktop.py`, `tests/infrastructure/test_bridge_socket_rooms.py`, `tests/core/test_role_gating.py`, `tests/unit/test_pc_vitals_loop.py`
+- **Verify:** full suite 3500 passed, 39 skipped, 0 failed; deploy health gates ok, other apps identical; live (legacy socket, read-only): init_state.vitals_pc + vitals_vps present, `vitals_pc` events every ~10 s, `vitals_vps` every 12 s
+- **Commit:** `b06f9ea`, `5f46672` · **Deploy:** VPS bridge 01:14 PKT (rollback: `bash /root/jarvis-backups/tools/rollback.sh 2026-10-03_2014Z-pre-deploy-5f46672`) + PC restart 01:15
+- **Doosre agent ke liye:** Quick Stats ka guard (vitalsPc sirf fresh ho to) ab bhi lagao (section 11, A7); ab pc mode me vitals_pc asal me aata hai.
