@@ -10,6 +10,9 @@ import asyncio
 import functools
 import logging
 import os
+import socket
+import sys
+import time
 import traceback
 from collections.abc import Awaitable, Callable, Coroutine
 from typing import Any
@@ -445,6 +448,31 @@ async def _location_loop(notify_location: Callable[[Any], Awaitable[Any]]) -> No
         await asyncio.sleep(60) # Location doesn't change often
 
 
+PC_VITALS_INTERVAL_S = 10.0
+
+
+def _pc_vitals_payload() -> dict[str, Any]:
+    """This laptop's vitals_pc for the bridge (K-40): cpu, ram, disk, cores and ram_total_gb from the Desktop
+    Node's reader, plus disk_label ('C:'), host and ts. Blocking (about 0.3 s), so it runs in a thread."""
+    from src.core.desktop.sensors import collect_vitals  # pylint: disable=import-outside-toplevel
+
+    drive = (os.environ.get("SystemDrive") or "C:").strip()[:1].upper()
+    label = f"{drive if drive.isalpha() else 'C'}:" if sys.platform == "win32" else "/"
+    return {**collect_vitals(), "disk_label": label, "host": socket.gethostname(), "ts": round(time.time(), 3)}
+
+
+async def _pc_vitals_loop(notify_pc_vitals: Callable[[dict[str, Any]], Awaitable[Any]],
+                          interval: float = PC_VITALS_INTERVAL_S) -> None:
+    """Sends this laptop's vitals to the UI every 10 s (Quick Stats, Agents > Machines). Local mode only: in vps
+    mode the container's own figures would be the VPS's, and the Desktop Node reports the laptop's (K-74)."""
+    while True:
+        try:
+            await notify_pc_vitals(await asyncio.to_thread(_pc_vitals_payload))
+        except Exception as e:
+            logger.error("PC vitals loop error: %s", e)
+        await asyncio.sleep(interval)
+
+
 def _resolve_user_id(room: Any) -> str:
     """Memory identity: JARVIS_USER_ID in every mode (K-69 v4), so the PC and the VPS share one memory
     file. When it is unset: the old per-job identity (the first remote participant, else this agent's
@@ -746,6 +774,7 @@ async def entrypoint(ctx: agents.JobContext):
         try:
             from services.utils.jarvis_bridge import (  # pylint: disable=import-outside-toplevel
                 notify_location,
+                notify_pc_vitals,
                 notify_thinking,
                 notify_ui,
             )
@@ -839,9 +868,10 @@ async def entrypoint(ctx: agents.JobContext):
             follow_owner_reconnects(session, ctx.room)  # the owner comes back under a new identity
             assistant.attach_session(session)
 
-            # --- Location Update Loop --- (local mode only, K-72)
+            # --- Location and PC vitals loops --- (local mode only, K-72 / K-40)
             if local:
                 track(_location_loop(notify_location))
+                track(_pc_vitals_loop(notify_pc_vitals))
 
 
             # --- Speaker Identification Subscription ---

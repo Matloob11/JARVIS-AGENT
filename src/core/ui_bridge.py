@@ -556,8 +556,8 @@ async def notify_bridge(request: Request) -> Any:
     async def _handle_token(p: dict[str, Any]) -> None:
         await emit_ui("token_stream", p)
 
-    async def _handle_vitals_event(p: dict[str, Any]) -> None:
-        await emit_ui("vitals_update", p)
+    async def _handle_vitals_event(p: Any) -> None:  # vitals_pc, and the legacy 'vitals' handled as it (K-40)
+        await _accept_agent_pc_vitals(p)
 
     async def _handle_reasoning(p: dict[str, Any]) -> None:
         await emit_ui("reasoning_update", p)
@@ -571,6 +571,7 @@ async def notify_bridge(request: Request) -> Any:
         "transcription": _handle_transcription_event,
         "token": _handle_token,
         "vitals": _handle_vitals_event,
+        "vitals_pc": _handle_vitals_event,
         "reasoning": _handle_reasoning,
         "intelligence_sync": _handle_intelligence,
         "intelligence_update": _handle_intelligence,
@@ -969,8 +970,75 @@ async def record_user_feedback(data: dict[str, Any],
     return {"status": "recorded"}
 
 
+# K-40 vitals: in pc mode the PC brain's agent sends this laptop's vitals_pc over /notify every 10 s (in vps mode
+# the Desktop Node sends them, K-74); the bridge's own psutil figures are vitals_vps.
+_agent_pc_vitals: dict[str, Any] | None = None
+_agent_pc_vitals_mono = 0.0
+_latest_vps_vitals: dict[str, Any] | None = None
+_DISK_LABEL = re.compile(r"[A-Za-z0-9 :()._-]{1,16}")
+
+
+def _pc_vitals_from_agent(payload: Any) -> dict[str, Any] | None:
+    """A vitals_pc (or legacy 'vitals') notify payload as the UI gets it: cpu, ram and disk (0..100, one decimal),
+    optional cores, ram_total_gb, disk_label and host, and ts = the bridge's receive time. None when cpu, ram or
+    disk is missing or not a finite number."""
+    if not isinstance(payload, Mapping):
+        return None
+    vitals: dict[str, Any] = {}
+    for name in ("cpu", "ram", "disk"):
+        value = payload.get(name)
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            return None
+        vitals[name] = round(min(100.0, max(0.0, float(value))), 1)
+    cores = payload.get("cores")
+    if isinstance(cores, int) and not isinstance(cores, bool) and 1 <= cores <= 4096:
+        vitals["cores"] = cores
+    total = payload.get("ram_total_gb")
+    if isinstance(total, (int, float)) and not isinstance(total, bool) and math.isfinite(total) \
+            and 0 <= total <= 65536:
+        vitals["ram_total_gb"] = round(float(total), 1)
+    label = payload.get("disk_label")
+    if isinstance(label, str) and _DISK_LABEL.fullmatch(label):
+        vitals["disk_label"] = label
+    host = _short(payload.get("host"))
+    if host:
+        vitals["host"] = host
+    vitals["ts"] = round(time.time(), 3)
+    return vitals
+
+
+async def _accept_agent_pc_vitals(payload: Any) -> None:
+    """vitals_pc from the PC brain's agent (K-40): kept for init_state and the legacy vitals_update, and sent to the
+    UI as vitals_pc plus a legacy vitals_update marked source 'pc'."""
+    global _agent_pc_vitals, _agent_pc_vitals_mono  # pylint: disable=global-statement
+    vitals = _pc_vitals_from_agent(payload)
+    if vitals is None:
+        logger.debug("vitals_pc notify ignored: cpu, ram or disk is missing or not a number")
+        return
+    _agent_pc_vitals, _agent_pc_vitals_mono = vitals, time.monotonic()
+    await emit_ui("vitals_pc", vitals)
+    await emit_ui("vitals_update", {**vitals, "source": "pc"})
+
+
+def _newest(*readings: dict[str, Any] | None) -> dict[str, Any] | None:
+    present = [reading for reading in readings if reading]
+    return dict(max(present, key=lambda reading: reading.get("ts") or 0)) if present else None
+
+
+def latest_pc_vitals() -> dict[str, Any] | None:
+    """init_state.vitals_pc: the newest laptop reading, from the PC brain's agent or from the Desktop Node."""
+    return _newest(_agent_pc_vitals, desktop.latest_pc_vitals())
+
+
+def fresh_pc_vitals() -> dict[str, Any] | None:
+    """The newest laptop reading younger than 30 s, which the legacy vitals_update prefers (K-74)."""
+    agent = _agent_pc_vitals if time.monotonic() - _agent_pc_vitals_mono < bridge_desktop.VITALS_FRESH_S else None
+    return _newest(agent, desktop.fresh_pc_vitals())
+
+
 async def vitals_heartbeat() -> None:
-    """Update real system vitals via JarvisHealthMonitor."""
+    """Every 12 s: the bridge's own figures as vitals_vps (K-40), and the legacy vitals_update."""
+    global _latest_vps_vitals  # pylint: disable=global-statement
     while True:
         try:
             health_monitor.record_heartbeat("ui_bridge")
@@ -983,8 +1051,10 @@ async def vitals_heartbeat() -> None:
                 "disk": vitals.get("disk", {}).get("percent", 0),
             }
             await bridge_manager.update_state("vitals", vitals_pkg)
+            _latest_vps_vitals = {**vitals_pkg, "host": "vps", "ts": round(time.time(), 3)}
+            await emit_ui("vitals_vps", _latest_vps_vitals)
             # K-74: the legacy vitals_update prefers the laptop's own reading while it is under 30 s old.
-            await emit_ui("vitals_update", desktop.fresh_pc_vitals() or vitals_pkg)
+            await emit_ui("vitals_update", fresh_pc_vitals() or {**_latest_vps_vitals, "source": "vps"})
         except asyncio.CancelledError:
             logger.info("Vitals heartbeat task cancelled.")
             break
@@ -1127,7 +1197,9 @@ async def build_init_state() -> dict[str, Any]:
         state["settings"] = snapshot["settings"]
     state["agent_status"] = _current_agent_status()  # C-ROOM-1: a late UI must not show 'System Unknown'
     state["desktop_status"] = desktop.status()  # K-74 (C-STATE-1 v4)
-    state["vitals_pc"] = desktop.latest_pc_vitals()
+    state["vitals_pc"] = latest_pc_vitals()
+    if _latest_vps_vitals is not None:
+        state["vitals_vps"] = dict(_latest_vps_vitals)
     state["server_time"] = time.time()
     return state
 

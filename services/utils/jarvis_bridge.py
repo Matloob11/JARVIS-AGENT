@@ -541,6 +541,11 @@ async def notify_vitals(vitals: dict[str, dict[str, int | float]]) -> None:
     await notify_event("vitals", payload)
 
 
+async def notify_pc_vitals(vitals: dict[str, Any]) -> None:
+    """Sends this laptop's vitals to the UI as vitals_pc (K-40): the PC brain's agent, every 10 s."""
+    await notify_event("vitals_pc", dict(vitals))
+
+
 async def notify_location(location_data: dict[str, Any]) -> None:
     """Pushes real-time location to the UI."""
     await notify_event("location_sync", location_data)

@@ -1073,7 +1073,8 @@ async def bridge(monkeypatch, tmp_path):
     sio.link = link
     for name, value in (("store", store), ("bridge_manager", module.BridgeStateManager()), ("_clients", {}),
                         ("_notify_nonces", NonceCache()), ("_refusal_audit", TokenBucket(1.0, 30.0)),
-                        ("VORTEX_SECURITY_TOKEN", LEGACY_TOKEN), ("desktop", link)):
+                        ("VORTEX_SECURITY_TOKEN", LEGACY_TOKEN), ("desktop", link), ("_agent_pc_vitals", None),
+                        ("_agent_pc_vitals_mono", 0.0), ("_latest_vps_vitals", None)):
         monkeypatch.setattr(module, name, value)
     monkeypatch.setattr(module.sio, "emit", fake_emit)
     monkeypatch.setattr(module.app.state, "rate_limit_window", [])
@@ -1243,7 +1244,95 @@ async def test_vitals_update_prefers_a_fresh_laptop_reading(bridge, monkeypatch)
     assert (await first_update())["host"] == "laptop1"
     bridge.emitted.clear()
     link._vitals_mono = time.monotonic() - bridge_desktop.VITALS_FRESH_S - 1
-    assert "host" not in await first_update()  # the bridge's own figures again
+    own = await first_update()  # the bridge's own figures again, marked as the VPS's
+    assert (own["host"], own["source"]) == ("vps", "vps")
+
+
+async def _one_heartbeat(bridge: Any) -> None:
+    """Runs vitals_heartbeat until its first vitals_update, then stops it."""
+    task = asyncio.create_task(bridge.module.vitals_heartbeat())
+    try:
+        for _ in range(500):
+            if any(e == "vitals_update" for e, _d, _r in bridge.emitted):
+                return
+            await asyncio.sleep(0.01)
+        raise AssertionError("no vitals_update")
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+async def test_the_heartbeat_sends_vitals_vps_and_init_state_carries_it(bridge):
+    """K-40: the bridge's own figures go out as vitals_vps every 12 s, and a UI that connects later gets them in
+    init_state (it then files a legacy vitals_update without source 'vps' as the laptop's, never as the VPS's)."""
+    await _one_heartbeat(bridge)
+
+    [vps] = [d for e, d, room in bridge.emitted if e == "vitals_vps" and room == "ui"]
+    assert vps["host"] == "vps" and set(vps) == {"cpu", "ram", "disk", "host", "ts"}
+    assert abs(vps["ts"] - time.time()) < 5
+    [legacy] = [d for e, d, _room in bridge.emitted if e == "vitals_update"]
+    assert legacy == {**vps, "source": "vps"}  # no laptop reading yet
+    assert (await bridge.module.build_init_state())["vitals_vps"] == vps
+
+
+async def test_vitals_pc_from_the_pc_agent_reaches_the_ui_and_init_state(bridge, monkeypatch):
+    """K-40: the PC brain's agent sends vitals_pc (or the legacy 'vitals') over /notify; the UI gets vitals_pc and
+    a legacy vitals_update marked 'pc', init_state.vitals_pc keeps the reading, and the legacy update of the next
+    heartbeat prefers it while it is under 30 s old."""
+    reading = {"cpu": 12.345, "ram": 140, "disk": -3, "cores": 8, "ram_total_gb": 15.73, "disk_label": "C:",
+               "host": "DESKTOP-PC\n", "battery": 80, "secret": "x"}
+    async with http(bridge, internal=True) as internal:
+        raw = json.dumps({"type": "vitals_pc", "payload": reading}).encode()
+        assert (await internal.post("/notify", content=raw)).status_code == 200
+
+    [pc] = [d for e, d, room in bridge.emitted if e == "vitals_pc" and room == "ui"]
+    assert {k: v for k, v in pc.items() if k != "ts"} == {"cpu": 12.3, "ram": 100.0, "disk": 0.0, "cores": 8,
+                                                          "ram_total_gb": 15.7, "disk_label": "C:",
+                                                          "host": "DESKTOP-PC"}
+    assert abs(pc["ts"] - time.time()) < 5
+    assert ("vitals_update", {**pc, "source": "pc"}, "ui") in bridge.emitted
+    assert (await bridge.module.build_init_state())["vitals_pc"] == pc
+
+    bridge.emitted.clear()
+    await _one_heartbeat(bridge)
+    assert [d for e, d, _r in bridge.emitted if e == "vitals_update"] == [pc]
+
+    bridge.emitted.clear()
+    monkeypatch.setattr(bridge.module, "_agent_pc_vitals_mono", time.monotonic() - bridge_desktop.VITALS_FRESH_S - 1)
+    await _one_heartbeat(bridge)
+    [legacy] = [d for e, d, _r in bridge.emitted if e == "vitals_update"]
+    assert legacy["source"] == "vps"  # a stale laptop reading never stands in for the VPS's
+    assert (await bridge.module.build_init_state())["vitals_pc"] == pc  # still the last reading for init_state
+
+    bridge.emitted.clear()
+    async with http(bridge, internal=True) as internal:
+        raw = json.dumps({"type": "vitals", "payload": {"cpu": 1, "ram": 2, "disk": 3}}).encode()
+        assert (await internal.post("/notify", content=raw)).status_code == 200
+    [legacy_pc] = [d for e, d, room in bridge.emitted if e == "vitals_pc" and room == "ui"]
+    assert (legacy_pc["cpu"], legacy_pc["ram"], legacy_pc["disk"]) == (1.0, 2.0, 3.0)
+
+
+@pytest.mark.parametrize("payload", [
+    None, "cpu 5", [], {"ram": 1, "disk": 2}, {"cpu": True, "ram": 1, "disk": 2},
+    {"cpu": float("nan"), "ram": 1, "disk": 2}, {"cpu": "5", "ram": 1, "disk": 2},
+])
+async def test_a_vitals_pc_notify_without_three_numbers_changes_nothing(bridge, payload):
+    async with http(bridge, internal=True) as internal:
+        raw = json.dumps({"type": "vitals_pc", "payload": payload}).encode()
+        assert (await internal.post("/notify", content=raw)).status_code == 200
+    assert not [e for e, _d, _r in bridge.emitted if e in ("vitals_pc", "vitals_update")]
+    assert (await bridge.module.build_init_state())["vitals_pc"] is None
+
+
+async def test_init_state_takes_the_newest_laptop_reading(bridge, monkeypatch):
+    """Node (vps mode) and agent (pc mode) readings never both arrive in practice; if they do, the newest wins."""
+    node = {"cpu": 5, "ram": 6, "disk": 7, "host": "laptop1", "ts": time.time() - 100}
+    bridge.link._vitals, bridge.link._vitals_mono = node, time.monotonic() - 100
+    agent = {"cpu": 1.0, "ram": 2.0, "disk": 3.0, "ts": time.time()}
+    monkeypatch.setattr(bridge.module, "_agent_pc_vitals", agent)
+    assert (await bridge.module.build_init_state())["vitals_pc"] == agent
+    monkeypatch.setattr(bridge.module, "_agent_pc_vitals", {**agent, "ts": node["ts"] - 1})
+    assert (await bridge.module.build_init_state())["vitals_pc"] == node
 
 
 async def test_voice_activity_from_notify_events_sets_voice_active(bridge):
@@ -1408,7 +1497,8 @@ async def live(monkeypatch, tmp_path):
                        seen_path=str(tmp_path / "desktop_seen.db"))
     for name, value in (("store", store), ("bridge_manager", module.BridgeStateManager()), ("_clients", {}),
                         ("_notify_nonces", NonceCache()), ("_refusal_audit", TokenBucket(1.0, 30.0)),
-                        ("VORTEX_SECURITY_TOKEN", LEGACY_TOKEN), ("desktop", link)):
+                        ("VORTEX_SECURITY_TOKEN", LEGACY_TOKEN), ("desktop", link), ("_agent_pc_vitals", None),
+                        ("_agent_pc_vitals_mono", 0.0), ("_latest_vps_vitals", None)):
         monkeypatch.setattr(module, name, value)
     monkeypatch.setattr(module.app.state, "rate_limit_window", [])
     for name, value in (("agent_token", AGENT_TOKEN), ("bridge_hmac_secret", HMAC_SECRET),

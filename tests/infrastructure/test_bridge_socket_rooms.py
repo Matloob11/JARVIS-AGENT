@@ -58,6 +58,8 @@ async def bridge(monkeypatch, tmp_path):
     monkeypatch.setattr(module, "_clients", {})
     monkeypatch.setattr(module, "_notify_nonces", NonceCache())
     monkeypatch.setattr(module, "_refusal_audit", TokenBucket(1.0, 30.0))
+    for name, value in (("_agent_pc_vitals", None), ("_agent_pc_vitals_mono", 0.0), ("_latest_vps_vitals", None)):
+        monkeypatch.setattr(module, name, value)
     monkeypatch.setattr(module, "VORTEX_SECURITY_TOKEN", LEGACY_TOKEN)
     monkeypatch.setattr(module.app.state, "rate_limit_window", [])
     monkeypatch.setattr(config, "agent_token", AGENT_TOKEN)

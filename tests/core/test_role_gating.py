@@ -28,16 +28,17 @@ from services.utils import jarvis_adaptive, jarvis_bridge, jarvis_bug_hunter
 from services.utils.jarvis_config import RuntimeProfile, config
 from src.core import agent_core, agent_runner, vision_handler
 
-# The loops one session started before C-112 (the HEAD code gives the same list under these mocks).
+# The loops one session started before C-112 (the HEAD code gives the same list under these mocks), plus the
+# K-40 pc_vitals_loop (this laptop's vitals for the UI in the PC brain).
 TODAY_LOCAL_LOOPS = [
     "adaptation_loop", "bug_hunter_loop", "clipboard_monitor", "healing_loop", "heartbeat_loop",
-    "location_loop", "memory_loop", "memory_storage_loop", "reminder_loop", "startup_voice",
+    "location_loop", "memory_loop", "memory_storage_loop", "pc_vitals_loop", "reminder_loop", "startup_voice",
     "task_monitor", "ui_command_listener", "window_poller",
 ]
 # With the VPS brain the Desktop Node owns the PC sensors and the startup sound; agent-svc owns
 # reminders and tasks (K-72, K-77).
-REMOTE_SKIPS = {"clipboard_monitor", "location_loop", "reminder_loop", "startup_voice", "task_monitor",
-                "window_poller"}
+REMOTE_SKIPS = {"clipboard_monitor", "location_loop", "pc_vitals_loop", "reminder_loop", "startup_voice",
+                "task_monitor", "window_poller"}
 PROTECTED_ORDER = ["memory_loop", "heartbeat_loop", "ui_command_listener", "reminder_loop", "bug_hunter_loop",
                    "memory_storage_loop", "adaptation_loop", "healing_loop"]
 
@@ -81,6 +82,7 @@ async def _session_loops(monkeypatch) -> list[str]:
                         AsyncMock(side_effect=lambda name, *args: started.append(name)))
     monkeypatch.setattr(agent_runner.autonomous_protector, "_tasks", {})
     monkeypatch.setattr(jarvis_bridge, "notify_location", AsyncMock())
+    monkeypatch.setattr(jarvis_bridge, "notify_pc_vitals", AsyncMock())
     monkeypatch.setattr(jarvis_plugin_manager, "JarvisPluginManager", plugins)
 
     before = asyncio.all_tasks()
@@ -91,8 +93,9 @@ async def _session_loops(monkeypatch) -> list[str]:
             break
     else:
         pytest.fail("the session never reached its stop event")
-    started += ["location_loop" for task in asyncio.all_tasks() - before - {job}
-                if "location_loop" in task.get_coro().__qualname__]
+    for loop_name in ("location_loop", "pc_vitals_loop"):
+        started += [loop_name for task in asyncio.all_tasks() - before - {job}
+                    if loop_name in task.get_coro().__qualname__]
     if clipboard.called:
         started.append("clipboard_monitor")
     job.cancel()
