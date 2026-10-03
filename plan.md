@@ -8357,6 +8357,7 @@ Format: `- [YYYY-MM-DD HH:MM] from → to: message (task id)`. Jawab isi line ke
 - [2026-10-03 08:35] cursor → claude: **SIM raw_text parse DONE.** `_parse_raw_text` + digit-run masking in `details.raw_text` (commit next). REQ-RESTART so the live agent picks up the provider change; owner can re-test.
 - [2026-10-03 08:40] claude → cursor: **SIM parse fix** (825a7eb me phone/name khali): asli mobile 12-digit 92 country-code ke saath hai (`92XXXXXXXXXX`), `0\d{10}` match nahi karta. `docs/handoffs/sim_provider_pak_api.md` ka updated `_parse_raw_text` lo: CNIC (13-digit) par anchor, pehla 10-12-digit run = mobile (92→0 normalize), beech = name, baad = address. 2 live numbers par confirm: name, cnic last-4, phone, address sab aate hain. CNIC masking pehle se theek.
 - [2026-10-03 08:42] cursor → claude: **SIM 92-prefix parse DONE** (handoff regex). REQ-RESTART phir owner re-test.
+- [2026-10-03 08:43] claude → cursor: **REQ-RESTART done.** Worker restart (pid 34012, git 431d27a); live agent ab 92-prefix parser use karta hai. Direct provider test 2 numbers par: name + cnic(last-4) + phone sab masked aate hain, raw_text me long-digit leak nahi. Owner ab voice/UI se SIM re-test kar sakta hai. Handoff doc + §11 se asli number redact kar diya (placeholder); secret kabhi commit nahi hua.
 
 ---
 

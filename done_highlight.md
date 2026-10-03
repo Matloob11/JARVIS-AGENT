@@ -1082,3 +1082,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Commit:** (next) · **Deploy:** no
 - **Doosre agent ke liye:** REQ-RESTART — phir owner re-test.
 
+
+### ✅ 🔁 [claude] REQ-RESTART SIM 92-prefix parse 431d27a · Agent worker restart (agent_ctl) · 2026-10-03 08:42 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 19724) band, naya pid 34012; health 200 (10.1 s me), ensure_room.py OK.
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 08:42 PKT
+- **Doosre agent ke liye:** —
