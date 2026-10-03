@@ -618,6 +618,7 @@ async def test_ensure_room_prints_the_room_without_credentials(monkeypatch, caps
             "agent_dispatch=yes (1)") in out
     assert "[ROOM] create_dispatch note: unauthenticated: key *** secret ***" in out
     assert f"[ROOM] Result: {module.RESULT_NO_AGENT}" in out
+    assert out.count(module.RESULT_PREFIX) == 1  # exactly one result line per run
     fake.agent_dispatch.create_dispatch.assert_awaited_once()
     fake.room.delete_room.assert_not_awaited()  # a person is in the room: never deleted
     fake.room.create_room.assert_not_awaited()
@@ -632,14 +633,19 @@ async def test_ensure_room_without_a_dispatch_list_or_without_the_room(monkeypat
     _assert_no_credentials(out)
     assert "agent_dispatch=unknown" in out and "[ROOM] list_dispatch note: 404 not found for key ***" in out
     assert f"[ROOM] Result: {module.RESULT_NO_AGENT}" in out
+    assert out.count(module.RESULT_PREFIX) == 1  # exactly one result line per run
     fake.agent_dispatch.create_dispatch.assert_not_awaited()
     fake.room.delete_room.assert_not_awaited()
 
+    # A second run of ensure_room.py (a new process): print_result prints one line per run, so the module's
+    # "already printed" flag starts over, as it does in a fresh interpreter.
+    monkeypatch.setattr(module, "_result_printed", False)
     fake = _fake_livekit(monkeypatch, rooms=[])
     await module.ensure_room()
     out = capsys.readouterr().out
     _assert_no_credentials(out)
     assert "[ROOM] Listed: room 'c137-room' not found" in out and "[OK]" not in out
     assert f"[ROOM] Result: {module.RESULT_NO_AGENT}" in out
+    assert out.count(module.RESULT_PREFIX) == 1
     fake.room.create_room.assert_awaited_once()
     fake.room.delete_room.assert_not_awaited()

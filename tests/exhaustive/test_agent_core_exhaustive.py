@@ -92,13 +92,23 @@ async def test_attach_session(mock_agent_deps):
 @pytest.mark.asyncio
 async def test_process_with_reasoning_success(mock_agent_deps):
     assistant = BrainAssistant(chat_ctx=MagicMock())
-    # Test lines 206-208
-    with patch("src.core.agent_core.analyze_user_intent", new_callable=AsyncMock, return_value="intent"):
-        with patch.object(assistant.memory_extractor.memory, "get_recent_context", new_callable=AsyncMock, return_value="mem"):
-            with patch.object(assistant.memory_extractor.memory, "get_semantic_context", new_callable=AsyncMock, return_value="sem"):
-                with patch("src.core.agent_core.generate_smart_response", new_callable=AsyncMock, return_value="smart response"):
-                    result = await assistant.process_with_reasoning("test input")
-                    assert result == "smart response"
+    # Test lines 206-208. C-138: the telemetry singleton is patched, so this test never appends its
+    # 'test input' row to the live logs/telemetry.jsonl.
+    with patch("src.core.agent_core.telemetry") as mock_telemetry:
+        mock_telemetry.start_interaction = AsyncMock()
+        mock_telemetry.end_interaction = AsyncMock()
+        with patch("src.core.agent_core.analyze_user_intent", new_callable=AsyncMock, return_value="intent"):
+            with patch.object(assistant.memory_extractor.memory, "get_recent_context", new_callable=AsyncMock, return_value="mem"):
+                with patch.object(assistant.memory_extractor.memory, "get_semantic_context", new_callable=AsyncMock, return_value="sem"):
+                    with patch("src.core.agent_core.generate_smart_response", new_callable=AsyncMock, return_value="smart response") as mock_generate:
+                        result = await assistant.process_with_reasoning("test input")
+    assert result == "smart response"
+    mock_generate.assert_awaited_once()
+    assert mock_generate.await_args.args[:3] == ("test input", "intent", "mem")
+    assert mock_generate.await_args.kwargs["semantic_memory"] == ["sem"]
+    session_id = mock_telemetry.start_interaction.await_args.args[0]
+    mock_telemetry.start_interaction.assert_awaited_once_with(session_id, "test input")
+    mock_telemetry.end_interaction.assert_awaited_once_with(session_id, success=True)
 
 
 @pytest.mark.asyncio

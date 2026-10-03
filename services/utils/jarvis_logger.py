@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import os
 import time
 from collections.abc import Callable
 from logging.handlers import RotatingFileHandler
@@ -21,7 +22,6 @@ except ImportError:
 
     def runtime_role() -> str:
         """JARVIS_ROLE without the config module (agent when unset)."""
-        import os  # pylint: disable=import-outside-toplevel
         return (os.getenv("JARVIS_ROLE") or "").strip().lower() or ROLE_AGENT
 
 # Internal UI Bridge link for automated logging
@@ -30,6 +30,17 @@ _BRIDGE_NOTIFY_LOG: Callable[[str, str], Any] | None = None
 _bg_tasks: set[asyncio.Task[Any]] = set()
 
 _LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+
+# Folder of the fixed-name logs below (bridge.log, runner.log, and jarvis_default.log when the config module
+# is missing): LOG_DIR, default 'logs' (relative to the working directory, exactly as before). C-138: the
+# test suite points it at a temp folder, so no test writes the live logs/.
+LOG_DIR_ENV = "LOG_DIR"
+DEFAULT_LOG_DIR = "logs"
+
+
+def log_dir() -> Path:
+    """LOG_DIR, or 'logs' when it is unset or empty."""
+    return Path((os.getenv(LOG_DIR_ENV) or "").strip() or DEFAULT_LOG_DIR)
 
 
 class RedactingFormatter(logging.Formatter):
@@ -312,11 +323,9 @@ def setup_logger(name: str, log_file: str | Path | None = None,
 
     # Rest of original setup_logger logic (simplified for diff)
     if json_format is False:
-        import os
         json_format = os.getenv("LOG_STRUCTURED", "false").lower() == "true"
 
     if level is None:
-        import os
         if _HAS_CONFIG:
             level_str: str = os.getenv("LOG_LEVEL", "INFO").upper()
             level = int(getattr(logging, level_str, logging.INFO))
@@ -327,7 +336,7 @@ def setup_logger(name: str, log_file: str | Path | None = None,
         if _HAS_CONFIG:
             log_file = config.log_file
         else:
-            log_file = "logs/jarvis_default.log"
+            log_file = log_dir() / "jarvis_default.log"
 
     log_path: Path = Path(log_file)
     
@@ -384,5 +393,5 @@ def setup_logger(name: str, log_file: str | Path | None = None,
 
 # Shorthand for general use
 jarvis_log: logging.Logger = setup_logger("JARVIS")
-bridge_log: logging.Logger = setup_logger("BRIDGE", "logs/bridge.log")
-runner_log: logging.Logger = setup_logger("RUNNER", "logs/runner.log")
+bridge_log: logging.Logger = setup_logger("BRIDGE", log_dir() / "bridge.log")
+runner_log: logging.Logger = setup_logger("RUNNER", log_dir() / "runner.log")
