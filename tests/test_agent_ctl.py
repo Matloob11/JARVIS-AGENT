@@ -1609,7 +1609,7 @@ def test_brain_pc_repairs_a_laptop_left_at_vps_when_the_vps_already_says_pc(ctl,
     assert agent_ctl.main(command.split()[2:]) == 0   # exactly the command the refusal named
 
     out = capsys.readouterr().out
-    assert "already 'pc' but this laptop says 'vps'" in out and "is now 'pc'" in out
+    assert "already 'pc' but this laptop says 'vps'" in out and "is now 'pc', matching the VPS" in out
     assert ctl.env.read_text(encoding="utf-8") == "LOG_LEVEL=INFO\nJARVIS_BRAIN=pc\n"
     assert agent_ctl.current_brain() == "pc"
     assert _changing_calls(vps) == [] and len(_vps_reads(vps)) == 1   # only 'set_env.py --get'
@@ -1877,3 +1877,571 @@ def test_a_stale_brain_lock_is_replaced(ctl, monkeypatch, capsys, stale):
     assert "Removing a stale run/brain.lock (a brain switch by cursor" in out and "Nothing to switch" in out
     assert not lock.exists()
     assert audit_lines(ctl.logs)[-1]["result"] == "already"
+
+
+# =============================================================================================================
+# a restart is refused while a live run/brain.lock is held (K-53 v7), proven by mutation
+# =============================================================================================================
+
+
+def _mutant_agent_ctl(old: str, new: str) -> types.ModuleType:
+    """agent_ctl.py with exactly one source fragment replaced, loaded as its own module (the file is not
+    touched): a test that passes on agent_ctl and fails on this mutant proves it checks that fragment."""
+    source = (ROOT / "scripts" / "agent_ctl.py").read_text(encoding="utf-8")
+    assert source.count(old) == 1, f"mutation anchor not found once: {old!r}"
+    module = types.ModuleType("agent_ctl_mutant")
+    module.__file__ = str(ROOT / "scripts" / "agent_ctl.py")
+    exec(compile(source.replace(old, new), module.__file__, "exec"), module.__dict__)  # pylint: disable=exec-used
+    return module
+
+
+def _restart_while_brain_lock_held(module: types.ModuleType, ctl, monkeypatch) -> tuple[int, list]:
+    """'restart --by claude' on `module` while this live process holds run/brain.lock (a 'brain' run in
+    progress). stop_worker and start_worker only record; returns (exit code, their calls)."""
+    monkeypatch.setattr(module, "LOG_DIR", ctl.logs)
+    monkeypatch.setattr(module, "ENV_FILES", (ctl.env,))
+    for name in ("_run", "_popen"):
+        monkeypatch.setattr(module, name, getattr(agent_ctl, name))  # the ctl fixture's refusing fakes
+    calls: list = []
+    monkeypatch.setattr(module, "stop_worker", lambda timeout, force=False: calls.append("stop") or (
+        0, {"result": "stopped", "old_pid": 111, "graceful": True, "killed": [], "stop_s": 1.0}))
+    monkeypatch.setattr(module, "start_worker", lambda args, mode, **_k: calls.append("start") or (
+        0, {"result": "started", "new_pid": 222, "start_s": 1.0, "room_result": "OK"}))
+    ctl.run.mkdir(parents=True, exist_ok=True)
+    lock = ctl.run / agent_ctl.BRAIN_LOCK_FILE
+    lock.write_text(json.dumps({"pid": os.getpid(), "ts": time.time() - 5, "by": "user"}), encoding="utf-8")
+    try:
+        code = module.main(["restart", "--by", "claude", "--reason", "OPS", "--force"])
+    finally:
+        lock.unlink(missing_ok=True)
+    return code, calls
+
+
+def test_restart_is_refused_while_a_live_brain_lock_is_held(ctl, monkeypatch, capsys):
+    code, calls = _restart_while_brain_lock_held(agent_ctl, ctl, monkeypatch)
+
+    assert code == agent_ctl.EXIT_REFUSED and calls == []          # nothing stopped or started
+    err = capsys.readouterr().err
+    assert "Restart refused: a brain switch is running (run/brain.lock is held by a brain switch by user" in err
+    entry = audit_lines(ctl.logs)[-1]
+    assert (entry["action"], entry["result"], entry["exit"]) == ("restart", "refused", 4)
+    assert "a brain switch is running" in entry["error"]
+    assert not (ctl.run / "restart.lock").exists()                 # refused before run/restart.lock is taken
+
+    # Mutation: without the brain-lock gate in cmd_restart the same restart stops and starts a worker, so the
+    # assertions above fail on that mutant: this test really checks the gate.
+    mutant = _mutant_agent_ctl(
+        'refused = _vps_mode_worker_refused(args, "restart") or _brain_switch_worker_refused(args, "restart")',
+        'refused = _vps_mode_worker_refused(args, "restart")')
+    code, calls = _restart_while_brain_lock_held(mutant, ctl, monkeypatch)
+    assert code == 0 and calls == ["stop", "start"]
+
+
+def test_the_workers_own_recovery_passes_the_brain_lock_gate(ctl, monkeypatch, capsys):
+    """'restart --by worker' only replaces itself, so the brain-lock gate lets it through; here it is then
+    refused by its own rule (the worker that asked no longer runs), not by the brain lock."""
+    ctl.run.mkdir(parents=True)
+    (ctl.run / agent_ctl.BRAIN_LOCK_FILE).write_text(
+        json.dumps({"pid": os.getpid(), "ts": time.time() - 5, "by": "user"}), encoding="utf-8")
+    monkeypatch.setattr(agent_ctl.agent_lock, "is_locked", lambda: False)
+    monkeypatch.setattr(agent_ctl, "stop_worker", lambda *a, **k: pytest.fail("nothing to stop"))
+
+    code = agent_ctl.main(["restart", "--by", "worker", "--reason", "link", "--expect-pid", "4321"])
+
+    assert code == agent_ctl.EXIT_REFUSED
+    err = capsys.readouterr().err
+    assert "no worker runs any more" in err and "a brain switch is running" not in err
+
+
+def test_a_stale_brain_lock_does_not_refuse_a_restart(ctl, monkeypatch):
+    ctl.run.mkdir(parents=True)
+    (ctl.run / agent_ctl.BRAIN_LOCK_FILE).write_text(
+        json.dumps({"pid": _exited_pid(), "ts": time.time() - 5, "by": "user"}), encoding="utf-8")
+    assert agent_ctl._brain_switch_worker_refused(types.SimpleNamespace(by="claude"), "restart") is None
+
+
+# =============================================================================================================
+# _settle_laptop reads JARVIS_BRAIN again after its repair
+# =============================================================================================================
+
+
+def test_a_laptop_repair_counts_only_when_the_laptop_reads_the_target_afterwards(ctl, monkeypatch, capsys):
+    """The writer reports success but this laptop still reads vps (here the line went to another file than the
+    one current_brain() reads): the repair fails (exit 1) instead of claiming 'now pc'."""
+    ctl.run.mkdir(parents=True)
+    ctl.env.write_text("JARVIS_BRAIN=vps\n", encoding="utf-8")
+    elsewhere = ctl.tmp / "elsewhere.env"
+
+    def write_elsewhere(brain):
+        agent_ctl.set_laptop_brain(brain, elsewhere)
+
+    vps = FakeVps(brain="pc")
+    laptop = FakeLaptop()
+    code, details = _make_switch(ctl, "pc", ssh=vps, status=lambda: pytest.fail("no status read"), laptop=laptop,
+                                 laptop_env=write_elsewhere).run()
+
+    assert code == agent_ctl.EXIT_FAILED
+    assert (details["result"], details["state"], details["laptop_was"]) == ("failed", "REPAIR_LAPTOP", "vps")
+    assert details["error"] == "this laptop still reads JARVIS_BRAIN as 'vps' after the repair"
+    assert "is now 'pc'" not in capsys.readouterr().out
+    assert elsewhere.read_text(encoding="utf-8") == "JARVIS_BRAIN=pc\n" and agent_ctl.current_brain() == "vps"
+    assert _changing_calls(vps) == [] and laptop.calls == []
+    assert not (ctl.run / agent_ctl.BRAIN_JOURNAL_FILE).exists()
+
+    # Mutation: without the re-read the same repair claims success, so the assertions above fail on that mutant.
+    mutant = _mutant_agent_ctl("        now = self._laptop_brain()\n        if now != self.target:",
+                               "        now = self.target\n        if now != self.target:")
+    monkeypatch.setattr(mutant, "ENV_FILES", (ctl.env,))
+    switch = mutant.BrainSwitch("pc", journal_path=ctl.run / agent_ctl.BRAIN_JOURNAL_FILE, ssh=FakeVps(brain="pc"),
+                                status=lambda: None, laptop=FakeLaptop(), sleep=lambda _s: None,
+                                laptop_env=lambda brain: mutant.set_laptop_brain(brain, elsewhere))
+    code, details = switch.run()
+    assert code == 0 and details["result"] == "repaired"
+
+
+# =============================================================================================================
+# 'brain pc --laptop-only': the repair that works without the VPS
+# =============================================================================================================
+
+
+def _unreachable_vps(monkeypatch) -> list:
+    """Every VPS path fails the test: no ssh, no PC-signed /vortex call, no laptop stop/start."""
+    attempts: list = []
+
+    def no_ssh(cmd):
+        attempts.append(cmd)
+        raise AssertionError("--laptop-only must not reach the VPS")
+
+    monkeypatch.setattr(agent_ctl, "_default_ssh", no_ssh)
+    monkeypatch.setattr(agent_ctl, "vortex_status", lambda base=None: pytest.fail("no /vortex/status"))
+    monkeypatch.setattr(agent_ctl, "_speak_notice", lambda _m: pytest.fail("nothing is announced"))
+    monkeypatch.setattr(agent_ctl, "LaptopBrain", lambda args: NodeLaptop(fail_pc=True))
+    return attempts
+
+
+def test_laptop_only_repair_frees_the_worker_when_the_vps_cannot_be_read(ctl, monkeypatch, capsys):
+    """The laptop .env says vps and the VPS cannot be read: the start refusal names 'brain pc --laptop-only', and
+    exactly that command rewrites only the laptop's JARVIS_BRAIN (journalled, audited), with no VPS read or command
+    and nothing stopped or started; the next start goes through."""
+    ctl.run.mkdir(parents=True)
+    ctl.env.write_bytes(b"LOG_LEVEL=INFO\r\nJARVIS_BRAIN=vps\r\nOTHER=1\r\n")
+    attempts = _unreachable_vps(monkeypatch)
+    journals: list = []
+    real_set = agent_ctl.set_laptop_brain
+
+    def recording_set(brain, path=None):
+        journals.append(json.loads((ctl.run / agent_ctl.BRAIN_JOURNAL_FILE).read_text(encoding="utf-8")))
+        real_set(brain, path)
+
+    monkeypatch.setattr(agent_ctl, "set_laptop_brain", recording_set)
+    started: list = []
+    monkeypatch.setattr(agent_ctl, "start_worker", lambda args, mode, **k: started.append(mode) or
+                        (0, {"result": "started", "new_pid": 1, "start_s": 1.0, "room_result": "OK"}))
+
+    assert agent_ctl.main(["start", "--by", "user"]) == agent_ctl.EXIT_REFUSED
+    err = capsys.readouterr().err
+    command = ".venv_312/Scripts/python.exe scripts/agent_ctl.py brain pc --laptop-only --by user"
+    assert f"If the VPS cannot be read, run: {command}" in err and started == []
+
+    assert agent_ctl.main(command.split()[2:]) == 0   # exactly the command the refusal named
+
+    out = capsys.readouterr().out
+    assert "--laptop-only: this laptop says 'vps'" in out and "is now 'pc'" in out and "was not checked" in out
+    # The VPS was never read, so the repair must not claim the laptop now matches it.
+    assert "matching the VPS" not in out and "the VPS was not read" in out
+    assert ctl.env.read_bytes() == b"LOG_LEVEL=INFO\r\nJARVIS_BRAIN=pc\r\nOTHER=1\r\n"  # that line only
+    assert attempts == []
+    assert len(journals) == 1
+    assert (journals[0]["repair"], journals[0]["laptop_only"], journals[0]["laptop_was"],
+            journals[0]["target"], journals[0]["previous"]) == ("laptop", True, "vps", "pc", None)
+    assert not (ctl.run / agent_ctl.BRAIN_JOURNAL_FILE).exists()
+    assert not (ctl.run / agent_ctl.BRAIN_LOCK_FILE).exists()
+    entry = audit_lines(ctl.logs)[-1]
+    assert (entry["action"], entry["result"], entry["laptop_only"], entry["laptop_was"], entry["by"]) == (
+        "brain", "repaired", True, "vps", "user")
+
+    assert agent_ctl.main(["start", "--by", "user"]) == 0   # no longer refused
+    assert started == ["start"]
+
+
+def test_laptop_only_on_a_laptop_already_at_pc_changes_nothing(ctl, monkeypatch, capsys):
+    ctl.run.mkdir(parents=True)
+    ctl.env.write_text("JARVIS_BRAIN=pc\n", encoding="utf-8")
+    _unreachable_vps(monkeypatch)
+    monkeypatch.setattr(agent_ctl, "set_laptop_brain", lambda *a, **k: pytest.fail("nothing to write"))
+
+    assert agent_ctl.main(["brain", "pc", "--laptop-only"]) == 0
+    assert "already 'pc'. Nothing to change" in capsys.readouterr().out
+    assert audit_lines(ctl.logs)[-1]["result"] == "already"
+
+
+def test_laptop_only_is_for_brain_pc_only(ctl, monkeypatch, capsys):
+    ctl.run.mkdir(parents=True)
+    ctl.env.write_text("JARVIS_BRAIN=pc\n", encoding="utf-8")
+    _unreachable_vps(monkeypatch)
+
+    assert agent_ctl.main(["brain", "vps", "--laptop-only", "--by", "claude"]) == agent_ctl.EXIT_USAGE == 2
+    assert "--laptop-only works only with 'brain pc'" in capsys.readouterr().err
+    assert ctl.env.read_text(encoding="utf-8") == "JARVIS_BRAIN=pc\n"
+    assert not (ctl.run / agent_ctl.BRAIN_LOCK_FILE).exists()
+    entry = audit_lines(ctl.logs)[-1]
+    assert (entry["result"], entry["exit"], entry["laptop_only"]) == ("refused", 2, True)
+
+
+@pytest.mark.parametrize("journal", [
+    {"target": "vps", "previous": "pc", "state": "STOP_OLD"},
+    {"target": "pc", "previous": "vps", "state": "BACKUP"},
+    {"target": "pc", "previous": "vps", "state": "START_NEW", "restoring": True},
+])
+def test_laptop_only_never_overwrites_a_half_done_switch(ctl, monkeypatch, capsys, journal):
+    ctl.run.mkdir(parents=True)
+    ctl.env.write_text("JARVIS_BRAIN=vps\n", encoding="utf-8")
+    path = ctl.run / agent_ctl.BRAIN_JOURNAL_FILE
+    path.write_text(json.dumps(journal), encoding="utf-8")
+    _unreachable_vps(monkeypatch)
+
+    assert agent_ctl.main(["brain", "pc", "--laptop-only"]) == agent_ctl.EXIT_REFUSED
+    assert "Laptop-only repair refused: --laptop-only would overwrite the journal of an unfinished switch" in \
+        capsys.readouterr().err
+    assert json.loads(path.read_text(encoding="utf-8")) == journal
+    assert ctl.env.read_text(encoding="utf-8") == "JARVIS_BRAIN=vps\n"
+
+
+def test_a_journal_that_changed_nothing_does_not_block_laptop_only(ctl, monkeypatch):
+    """A switch to pc that stopped at PREFLIGHT changed nothing (the next run starts over), so the repair runs."""
+    ctl.run.mkdir(parents=True)
+    ctl.env.write_text("JARVIS_BRAIN=vps\n", encoding="utf-8")
+    (ctl.run / agent_ctl.BRAIN_JOURNAL_FILE).write_text(
+        json.dumps({"target": "pc", "previous": "vps", "state": "PREFLIGHT"}), encoding="utf-8")
+    _unreachable_vps(monkeypatch)
+
+    assert agent_ctl.main(["brain", "pc", "--laptop-only"]) == 0
+    assert agent_ctl.current_brain() == "pc"
+
+
+def test_a_preflight_refusal_of_brain_pc_points_a_laptop_at_vps_to_laptop_only(ctl, monkeypatch, capsys):
+    """'brain pc' with the VPS unreachable is refused at PREFLIGHT; on a laptop that still says vps the refusal
+    adds the repair that works without the VPS."""
+    ctl.run.mkdir(parents=True)
+    ctl.env.write_text("JARVIS_BRAIN=vps\n", encoding="utf-8")
+    vps = FakeVps(brain="vps", check_code=255)
+    code, details = _make_switch(ctl, "pc", ssh=vps, status=lambda: None, laptop=FakeLaptop()).run()
+    assert code == agent_ctl.EXIT_REFUSED and details["state"] == "PREFLIGHT"
+    assert "brain pc --laptop-only --by <you>' rewrites only this laptop's JARVIS_BRAIN" in capsys.readouterr().err
+    assert agent_ctl.current_brain() == "vps"   # nothing changed
+
+
+# =============================================================================================================
+# backup pull (C-122 step 4): 'agent_ctl backup pull [--dest PATH]' runs src.core.desktop.backup_pull.cli_main
+# =============================================================================================================
+
+backup_pull_mod = importlib.import_module("src.core.desktop.backup_pull")
+mirror_mod = importlib.import_module("src.core.desktop.mirror")
+
+# Not a plaintext container (SQLite, ZIP, gzip, JSON, tar), so the pull reports it encrypted.
+SNAPSHOT_BODY = bytes(range(1, 256)) * 4
+SNAPSHOT_NAME = "jarvis_snapshot_20261003-010000.enc"
+BACKUP_KEYS = ["NEW", "SIZE", "SHA256", "ENCRYPTED", "TOTAL_BYTES", "COUNT"]
+
+
+class FakeBackupHttp:
+    """Stands in for the node's PC-signed NodeHttp: stream_get serves one snapshot body in small chunks (or raises
+    the given NodeHttpError). Nothing reaches the bridge."""
+
+    def __init__(self, body: bytes = SNAPSHOT_BODY, *, name: str = SNAPSHOT_NAME,
+                 error: Exception | None = None) -> None:
+        self.body, self.name, self.error = body, name, error
+        self.paths: list[str] = []
+
+    def stream_get(self, path, _query, sink, *, max_bytes):
+        self.paths.append(path)
+        if self.error is not None:
+            raise self.error
+        assert len(self.body) <= max_bytes
+        for start in range(0, len(self.body), 97):
+            sink(self.body[start:start + 97])
+        return {"content-length": str(len(self.body)),
+                "content-disposition": f'attachment; filename="{self.name}"'}
+
+
+@pytest.fixture
+def backup(ctl, monkeypatch):
+    """'backup pull' in this process (as under .venv_312) with the node's signed client replaced by a fake: no
+    node_config.json, DPAPI key or bridge is read, and the run dir and every destination live under tmp_path. Any
+    worker start/stop, run lock or node call fails the test (the pull needs no runtime lock)."""
+    monkeypatch.setattr(agent_ctl, "_in_agent_venv", lambda: True)
+    for name in ("start_worker", "stop_worker", "take_restart_lock", "take_brain_lock", "node_start", "node_stop",
+                 "node_update", "run_ensure_room"):
+        def refuse(*_args, _name=name, **_kwargs):
+            raise AssertionError(f"backup pull must not call {_name}")
+
+        monkeypatch.setattr(agent_ctl, name, refuse)
+    default_dest = ctl.tmp / "default_vps_backups"
+    monkeypatch.setattr(backup_pull_mod, "backups_dir", lambda: default_dest)
+    state = types.SimpleNamespace(http=FakeBackupHttp(), dest=ctl.tmp / "vps_backups", default=default_dest,
+                                  run=ctl.run, logs=ctl.logs, factory_calls=0)
+
+    def factory():
+        state.factory_calls += 1
+        return state.http, ctl.run
+
+    monkeypatch.setattr(backup_pull_mod, "_cli_http", factory)
+    return state
+
+
+def _backup_lines(out: str) -> list[tuple[str, str]]:
+    return [tuple(line.split("=", 1)) for line in out.splitlines() if line.strip()]
+
+
+def _ctl_log(logs: Path) -> list[dict]:
+    path = logs / agent_ctl.CTL_LOG_NAME
+    if not path.exists():
+        return []
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
+def test_backup_pull_parses_with_and_without_dest():
+    args = agent_ctl.parse_args(["backup", "pull"])
+    assert (args.command, args.backup_command, args.dest) == ("backup", "pull", None)
+    assert agent_ctl.parse_args(["backup", "pull", "--dest", "D:/x"]).dest == "D:/x"
+    assert agent_ctl.COMMANDS["backup"] is agent_ctl.cmd_backup
+    assert agent_ctl.backup_pull_argv(agent_ctl.parse_args(["backup", "pull"])) == []
+    assert agent_ctl.backup_pull_argv(agent_ctl.parse_args(["backup", "pull", "--dest", "D:/x"])) == \
+        ["--dest", "D:/x"]
+    with pytest.raises(SystemExit) as exc:
+        agent_ctl.parse_args(["backup"])
+    assert exc.value.code == agent_ctl.EXIT_USAGE
+
+
+def test_backup_pull_writes_the_snapshot_prints_the_lines_in_order_and_records_the_state(backup, capsys):
+    import hashlib  # pylint: disable=import-outside-toplevel
+
+    assert agent_ctl.main(["backup", "pull", "--dest", str(backup.dest)]) == 0
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    lines = _backup_lines(captured.out)
+    assert [key for key, _value in lines] == ["PULLED", *BACKUP_KEYS]
+    values = dict(lines)
+    pulled = Path(values["PULLED"])
+    assert pulled == backup.dest / SNAPSHOT_NAME and pulled.read_bytes() == SNAPSHOT_BODY
+    assert values["NEW"] == "true" and values["ENCRYPTED"] == "true"
+    assert values["SIZE"] == str(len(SNAPSHOT_BODY)) and values["TOTAL_BYTES"] == str(len(SNAPSHOT_BODY))
+    assert values["SHA256"] == hashlib.sha256(SNAPSHOT_BODY).hexdigest() and values["COUNT"] == "1"
+    assert backup.http.paths == [backup_pull_mod.BACKUP_PATH]
+    # No partial download or lock file is left behind.
+    assert sorted(p.name for p in backup.dest.iterdir()) == [SNAPSHOT_NAME]
+    state = backup_pull_mod.read_state(backup.run)
+    assert state["last_size"] == len(SNAPSHOT_BODY) and isinstance(state["last_success"], float)
+    assert "last_error" not in state
+    # One agent_ctl.log line with only the outcome: no path, size or hash.
+    entries = [e for e in _ctl_log(backup.logs) if e["action"] == "backup_pull"]
+    assert len(entries) == 1
+    assert (entries[0]["exit"], entries[0]["result"], entries[0]["dest"]) == (0, "pulled", "custom")
+    assert "exit_code" not in entries[0]  # the same 'exit' key as every other agent_ctl.log line
+    raw_log = (backup.logs / agent_ctl.CTL_LOG_NAME).read_text(encoding="utf-8")
+    assert values["SHA256"] not in raw_log and SNAPSHOT_NAME not in raw_log and str(backup.dest.name) not in raw_log
+
+
+def test_backup_pull_keeps_an_identical_snapshot_once_and_keeps_every_other_one(backup, capsys):
+    assert agent_ctl.main(["backup", "pull", "--dest", str(backup.dest)]) == 0
+    first = dict(_backup_lines(capsys.readouterr().out))
+
+    assert agent_ctl.main(["backup", "pull", "--dest", str(backup.dest)]) == 0
+    lines = _backup_lines(capsys.readouterr().out)
+    assert [key for key, _value in lines] == ["KEPT", *BACKUP_KEYS]
+    second = dict(lines)
+    assert second["KEPT"] == first["PULLED"] and second["NEW"] == "false" and second["COUNT"] == "1"
+
+    # A different snapshot under the same name is kept beside the first, never over it.
+    backup.http = FakeBackupHttp(b"\x07" * 2048)
+    assert agent_ctl.main(["backup", "pull", "--dest", str(backup.dest)]) == 0
+    third = dict(_backup_lines(capsys.readouterr().out))
+    assert third["NEW"] == "true" and Path(third["PULLED"]) != Path(first["PULLED"])
+    assert Path(third["PULLED"]).parent == backup.dest and Path(third["PULLED"]).read_bytes() == b"\x07" * 2048
+    assert Path(first["PULLED"]).read_bytes() == SNAPSHOT_BODY
+    assert third["COUNT"] == "2" and third["TOTAL_BYTES"] == str(len(SNAPSHOT_BODY) + 2048)
+    assert backup_pull_mod.read_state(backup.run)["last_size"] == 2048
+
+
+def test_backup_pull_without_dest_uses_the_default_folder(backup, capsys):
+    assert agent_ctl.main(["backup", "pull"]) == 0
+    values = dict(_backup_lines(capsys.readouterr().out))
+    assert Path(values["PULLED"]) == backup.default / SNAPSHOT_NAME
+    assert [e["dest"] for e in _ctl_log(backup.logs) if e["action"] == "backup_pull"] == ["default"]
+
+
+def test_backup_pull_signature_refusal_prints_error_and_hint_and_exits_1(backup, capsys):
+    backup.http = FakeBackupHttp(error=mirror_mod.NodeHttpError("auth", 401))
+    assert agent_ctl.main(["backup", "pull", "--dest", str(backup.dest)]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    err = captured.err.splitlines()
+    assert err[0] == "ERROR=http_auth" and err[1].startswith("HINT=") and len(err) == 2
+    assert not [p for p in backup.dest.iterdir()]   # no .part and no lock left behind
+    state = backup_pull_mod.read_state(backup.run)
+    assert state["last_error"] == "http_auth" and "last_success" not in state
+    assert [(e["exit"], e["result"]) for e in _ctl_log(backup.logs) if e["action"] == "backup_pull"] == \
+        [(1, "failed")]
+
+
+def test_backup_pull_other_failures_print_only_the_error(backup, capsys):
+    backup.http = FakeBackupHttp(error=mirror_mod.NodeHttpError("unreachable"))
+    assert agent_ctl.main(["backup", "pull", "--dest", str(backup.dest)]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == "" and captured.err.splitlines() == ["ERROR=http_unreachable"]
+
+
+def test_backup_pull_configuration_problem_exits_2(backup, monkeypatch, capsys):
+    def broken():
+        raise FileNotFoundError("node_config.json")
+
+    monkeypatch.setattr(backup_pull_mod, "_cli_http", broken)
+    assert agent_ctl.main(["backup", "pull", "--dest", str(backup.dest)]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == "" and captured.err.splitlines() == ["ERROR=config_FileNotFoundError"]
+    assert "node_config" not in captured.err
+    assert not backup.dest.exists()
+    assert [(e["exit"], e["result"]) for e in _ctl_log(backup.logs) if e["action"] == "backup_pull"] == \
+        [(2, "config")]
+
+
+def test_backup_pull_unexpected_error_is_a_key_value_line_not_a_traceback(backup, monkeypatch, capsys):
+    def explode(_argv):
+        raise RuntimeError("something with a path C:/secret/place")
+
+    monkeypatch.setattr(backup_pull_mod, "cli_main", explode)
+    assert agent_ctl.main(["backup", "pull"]) == 1
+    captured = capsys.readouterr()
+    assert captured.err.splitlines() == ["ERROR=unexpected_RuntimeError"] and "secret" not in captured.err
+
+
+def test_backup_pull_in_process_disk_error_adds_a_hint_and_exits_1(backup, monkeypatch, capsys):
+    """An OSError (a full or locked disk) while writing the snapshot: ERROR plus a HINT, exit 1, no traceback and
+    no path in the output."""
+    def disk_full(_http, _dest):
+        raise OSError(28, "No space left on device", "C:/secret/place/snapshot.part")
+
+    monkeypatch.setattr(backup_pull_mod, "pull_latest", disk_full)
+    assert agent_ctl.main(["backup", "pull", "--dest", str(backup.dest)]) == 1
+    captured = capsys.readouterr()
+    assert captured.err.splitlines() == ["ERROR=unexpected_OSError", agent_ctl.BACKUP_UNEXPECTED_HINT]
+    assert "Traceback" not in captured.err and "secret" not in captured.err
+    assert [(e["exit"], e["result"]) for e in _ctl_log(backup.logs) if e["action"] == "backup_pull"] == \
+        [(1, "failed")]
+
+
+def _run_child_code(monkeypatch, capsys, argv: list[str]) -> tuple[int, str]:
+    """BACKUP_PULL_CODE executed here as the child would run it (sys.argv as '-c' sets it); its exit code and
+    stderr."""
+    monkeypatch.setattr(sys, "argv", ["-c", *argv])
+    with pytest.raises(SystemExit) as exc:
+        exec(compile(agent_ctl.BACKUP_PULL_CODE, "<backup pull child>", "exec"),  # pylint: disable=exec-used
+             {"__name__": "__main__"})
+    return exc.value.code, capsys.readouterr().err
+
+
+@pytest.mark.parametrize("error, hint", [
+    (OSError(28, "No space left on device", "C:/secret/place/x.part"), True),
+    (PermissionError(13, "locked by another program", "C:/secret/place/x.part"), True),
+    (RuntimeError("something with a path C:/secret/place"), False),
+])
+def test_backup_pull_child_code_turns_an_unexpected_error_into_a_key_value_line(monkeypatch, capsys, error, hint):
+    """In the child (agent_ctl under another python) an unexpected exception from cli_main is an ERROR (and for an
+    OSError a HINT) line and exit 1, never a traceback; the exception text (it may carry a path) is not shown."""
+    def explode(_argv):
+        raise error
+
+    monkeypatch.setattr(backup_pull_mod, "cli_main", explode)
+    code, err = _run_child_code(monkeypatch, capsys, ["--dest", "D:/x"])
+    expected = [f"ERROR=unexpected_{type(error).__name__}"] + ([agent_ctl.BACKUP_UNEXPECTED_HINT] if hint else [])
+    assert code == 1 and err.splitlines() == expected
+    assert "Traceback" not in err and "secret" not in err
+
+
+def test_backup_pull_child_code_passes_cli_main_exit_codes_through(monkeypatch, capsys):
+    seen: list = []
+    for result in (0, 1, 2):
+        monkeypatch.setattr(backup_pull_mod, "cli_main", lambda argv, _r=result: seen.append(argv) or _r)
+        assert _run_child_code(monkeypatch, capsys, ["--dest", "D:/x"]) == (result, "")
+    assert seen == [["--dest", "D:/x"]] * 3
+
+
+def test_backup_pull_child_code_reports_a_failed_import_without_a_traceback(tmp_path):
+    """A real child whose 'src' package cannot be imported (isolated mode, cwd outside the repo): an ERROR line
+    and exit 1, no traceback."""
+    env = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
+    env["PYTHONIOENCODING"] = "utf-8"
+    child = subprocess.run([sys.executable, "-I", "-c", agent_ctl.BACKUP_PULL_CODE], cwd=tmp_path, env=env,
+                           capture_output=True, text=True, timeout=120, check=False)
+    assert child.returncode == 1
+    assert child.stderr.splitlines() == ["ERROR=unexpected_ModuleNotFoundError"]
+    assert "Traceback" not in child.stderr and child.stdout == ""
+
+
+def test_backup_pull_outside_the_venv_reports_an_odd_child_exit(ctl, monkeypatch, capsys):
+    """A child killed or crashed past its own handler (an exit code cli_main never returns): one ERROR line,
+    exit 1, logged as failed."""
+    monkeypatch.setattr(agent_ctl, "_in_agent_venv", lambda: False)
+    monkeypatch.setattr(agent_ctl, "agent_python", lambda: ctl.tmp / "venv_python.exe")
+    monkeypatch.setattr(agent_ctl, "_run", lambda cmd, **_kwargs: subprocess.CompletedProcess(cmd, 3221225477))
+    assert agent_ctl.main(["backup", "pull"]) == 1
+    assert capsys.readouterr().err.splitlines() == ["ERROR=child_exit_3221225477"]
+    assert [(e["exit"], e["result"]) for e in _ctl_log(ctl.logs) if e["action"] == "backup_pull"] == \
+        [(1, "failed")]
+
+
+def test_backup_pull_outside_the_venv_runs_cli_main_in_the_venv_python(ctl, monkeypatch, tmp_path):
+    """Under another interpreter it runs BACKUP_PULL_CODE as a child of .venv_312's python (repo root on
+    PYTHONPATH, cwd the repo) and passes its exit code through; nothing runs in this process."""
+    monkeypatch.setattr(agent_ctl, "_in_agent_venv", lambda: False)
+    venv_python = tmp_path / "venv_python.exe"
+    monkeypatch.setattr(agent_ctl, "agent_python", lambda: venv_python)
+    monkeypatch.setattr(backup_pull_mod, "cli_main",
+                        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("ran in process")))
+    monkeypatch.setenv("PYTHONPATH", "elsewhere")
+    calls = []
+    for code in (0, 1, 2):
+        def child(cmd, _code=code, **kwargs):
+            calls.append((cmd, kwargs))
+            return subprocess.CompletedProcess(cmd, _code)
+
+        monkeypatch.setattr(agent_ctl, "_run", child)
+        assert agent_ctl.main(["backup", "pull", "--dest", str(tmp_path / "d")]) == code
+    cmd, kwargs = calls[0]
+    assert cmd == [str(venv_python), "-c", agent_ctl.BACKUP_PULL_CODE, "--dest", str(tmp_path / "d")]
+    assert kwargs["cwd"] == agent_ctl.ROOT
+    assert kwargs["env"]["PYTHONPATH"].split(os.pathsep) == [str(agent_ctl.ROOT), "elsewhere"]
+    assert kwargs["env"]["PYTHONIOENCODING"] == "utf-8"
+    assert [e["result"] for e in _ctl_log(ctl.logs) if e["action"] == "backup_pull"] == \
+        ["pulled", "failed", "config"]
+
+
+def test_backup_pull_outside_the_venv_reports_a_launch_failure(ctl, monkeypatch, capsys):
+    monkeypatch.setattr(agent_ctl, "_in_agent_venv", lambda: False)
+    monkeypatch.setattr(agent_ctl, "agent_python", lambda: ctl.tmp / "missing_python.exe")
+
+    def missing(cmd, **_kwargs):
+        raise FileNotFoundError(cmd[0])
+
+    monkeypatch.setattr(agent_ctl, "_run", missing)
+    assert agent_ctl.main(["backup", "pull"]) == 1
+    assert capsys.readouterr().err.splitlines() == ["ERROR=launch_FileNotFoundError"]
+
+
+def test_backup_pull_child_code_imports_cli_main_and_parses_its_arguments():
+    """BACKUP_PULL_CODE really reaches backup_pull.cli_main: --help and a bad option end in its own argparse,
+    before any configuration, key or bridge is read."""
+    env = dict(os.environ, PYTHONPATH=str(ROOT), PYTHONIOENCODING="utf-8")
+    shown = subprocess.run([sys.executable, "-c", agent_ctl.BACKUP_PULL_CODE, "--help"], cwd=ROOT, env=env,
+                           capture_output=True, text=True, timeout=120, check=False)
+    assert shown.returncode == 0 and "agent_ctl backup pull" in shown.stdout and "--dest" in shown.stdout
+    refused = subprocess.run([sys.executable, "-c", agent_ctl.BACKUP_PULL_CODE, "--bogus"], cwd=ROOT, env=env,
+                             capture_output=True, text=True, timeout=120, check=False)
+    assert refused.returncode == 2 and "--bogus" in refused.stderr
+
+
+def test_in_agent_venv_follows_sys_prefix(monkeypatch, tmp_path):
+    monkeypatch.setattr(sys, "prefix", str(agent_ctl.ROOT / ".venv_312"))
+    assert agent_ctl._in_agent_venv() is True
+    monkeypatch.setattr(sys, "prefix", str(tmp_path))
+    assert agent_ctl._in_agent_venv() is False

@@ -9,6 +9,8 @@ Usage (Git Bash in the repo root, PY=.venv_312/Scripts/python.exe):
     $PY scripts/agent_ctl.py logs    [-n 50] [--file all|stdout|stderr|ctl]
     $PY scripts/agent_ctl.py node    start|stop|status|logs|update [--sha SHA] [--canary]   (C-123, the Desktop Node)
     $PY scripts/agent_ctl.py brain   vps|pc [--when-idle|--now]                            (C-123, the brain switch)
+    $PY scripts/agent_ctl.py brain   pc --laptop-only     (only this laptop's JARVIS_BRAIN; no VPS read or command)
+    $PY scripts/agent_ctl.py backup  pull [--dest PATH]   (C-122, the newest encrypted VPS snapshot to this PC)
 
 The worker holds run/agent.lock for its whole life (src/core/agent_lock.py): the lock is the source of
 truth, run/agent.pid.json only describes the holder and stays behind after it exits. Since C-136 it also
@@ -21,7 +23,9 @@ start    Exit 3 while a worker holds the lock. Rotates logs/agent_stdout.log and
          JARVIS_START_REASON, PYTHONPATH, PYTHONIOENCODING and JARVIS_HYBRID=1. Default: hidden, output
          appended to those logs, waits until the worker is ready (health 200 on 127.0.0.1:8081 and its
          LiveKit link connected, max 60 s), then runs deploy/windows-local/ensure_room.py once, its output
-         streamed here; its '[ROOM] Result: ...' line goes into the summary, NO AGENT / UNKNOWN as a warning.
+         streamed here; its '[ROOM] Result: ...' line goes into the summary, NO AGENT / UNKNOWN / an agent of
+         an earlier worker left alone / a room ensured by the bridge without an agent check (or no result
+         line) as a warning.
          --foreground: in this console until the worker exits. Before a worker starts (also in restart) it
          checks the VPS as the worker reaches it (C-16): GET <UI_BRIDGE_URL>/health must answer 200 and
          GET <LIVEKIT_URL as http(s)>/rtc/validate 401, both on the domain since OP-13. A failed check is
@@ -39,6 +43,12 @@ wait     Waits until the worker is ready, as start does (start-agent.bat runs it
 status   pid, by, reason, mode, uptime, health code, LiveKit link state and its age, active jobs; exit 0
          when a worker runs, else 1.
 logs     Tails of the agent logs and of logs/agent_ctl.log.
+backup pull  Pulls the newest encrypted VPS snapshot now (C-122 step 4, src/core/desktop/backup_pull.cli_main, in
+         the .venv_312 interpreter) into --dest (default %LOCALAPPDATA%\\JARVIS\\vps_backups); every snapshot is
+         kept. Read-only toward the worker: no runtime lock, nothing started or stopped. stdout: PULLED|KEPT=<path>,
+         NEW, SIZE, SHA256, ENCRYPTED, TOTAL_BYTES, COUNT (exit 0); stderr: ERROR=<reason> [HINT=<text>] (exit 1)
+         or ERROR=config_<ExceptionName> (exit 2, node config, key or DPAPI). Recorded in
+         run/desktop_backup_pull.json (last_success, last_size) and as one line in logs/agent_ctl.log.
 
 start/stop/restart/wait append a JSON line to logs/agent_ctl.log; start/stop/restart by claude or cursor
 also print a ready-to-paste done_highlight.md entry (K-53: log every restart there).
@@ -48,8 +58,12 @@ worker's recovery request that no longer applies), 130 interrupted (Ctrl+C).
 JARVIS_BRAIN (environment, else the root .env): only an explicit 'vps' refuses start/restart (exit 4, the laptop
 then runs the Desktop Node); unset, empty or 'pc' changes nothing above, and any other value counts as 'pc' with
 a warning. 'brain vps|pc' is its only writer: the VPS .env and the laptop's root .env (that one line, in place);
-when the VPS already says the target it repairs only a laptop that differs. A running 'brain' holds
-run/brain.lock: a second 'brain' and a start/restart (except the worker's own recovery) are refused meanwhile.
+when the VPS already says the target it repairs only a laptop that differs. 'brain pc --laptop-only' rewrites only
+this laptop's JARVIS_BRAIN line without reading the VPS at all (for a laptop .env left at vps while the VPS cannot
+be reached), journalled like that repair. A running 'brain' holds run/brain.lock: a second 'brain' and a
+start/restart (except the worker's own recovery) are refused meanwhile. run/restart.lock and run/brain.lock are
+taken with O_EXCL; a stale one is taken over only under an OS lock on run/<name>.takeover, after judging it stale
+again there, so two processes can never both take it.
 """
 # pylint: disable=too-many-lines  # one self-contained CLI; the six commands share these helpers
 from __future__ import annotations
@@ -96,6 +110,7 @@ LOG_CHOICES = {"all": (*AGENT_LOG_NAMES, CTL_LOG_NAME), "stdout": AGENT_LOG_NAME
                "stderr": AGENT_LOG_NAMES[1:], "ctl": (CTL_LOG_NAME,)}
 EXIT_OK = 0
 EXIT_FAILED = 1
+EXIT_USAGE = 2
 EXIT_ALREADY_RUNNING = agent_lock.EXIT_ALREADY_RUNNING
 EXIT_REFUSED = 4
 EXIT_INTERRUPTED = 130   # Ctrl+C (128 + SIGINT)
@@ -577,7 +592,8 @@ _TITLES = {"start": "Agent worker start", "stop": "Agent worker stop", "restart"
 def print_highlight(action: str, args: argparse.Namespace, ok: bool, summary: str, *,
                     warning: bool = False) -> None:
     """A done_highlight.md entry (that file's template) for the agents; the user's launchers skip it. warning:
-    the worker runs but ensure_room.py reported NO AGENT / UNKNOWN (🟡 PARTIAL instead of ✅)."""
+    the worker runs but ensure_room.py reported NO AGENT / UNKNOWN / an earlier worker's agent / a bridge-ensured
+    room whose agent was not checked (🟡 PARTIAL instead of ✅)."""
     if args.by not in ("claude", "cursor"):
         return
     now = datetime.now(PKT)
@@ -729,9 +745,10 @@ def _run_streamed(cmd: list[str], *, timeout: float, **kwargs: Any) -> tuple[int
 
 
 ROOM_RESULT_PREFIX = "[ROOM] Result:"
-# ensure_room.py results that leave the room without the worker's agent (or unread): a start reports them as a
-# warning; its exit code stays as it was.
-ROOM_WARNING_RESULTS = ("NO AGENT", "UNKNOWN")
+# ensure_room.py results that leave the room without the worker's agent (or unread, or with an agent of an earlier
+# worker that was left alone and may be a ghost, or ensured by the bridge without checking for an agent): a start
+# reports them as a warning; its exit code stays as it was.
+ROOM_WARNING_RESULTS = ("NO AGENT", "UNKNOWN", "AN AGENT OF AN EARLIER WORKER", "ROOM ENSURED BY THE BRIDGE")
 
 
 def room_result(lines: list[str]) -> str:
@@ -741,14 +758,16 @@ def room_result(lines: list[str]) -> str:
 
 
 def room_result_warning(result: str) -> bool:
-    """True for a NO AGENT or UNKNOWN result, and for a run that printed no result line at all."""
-    return not result or result.upper().startswith(ROOM_WARNING_RESULTS)
+    """True for a NO AGENT, UNKNOWN, earlier-worker or bridge (agent presence not checked) result, and for a run
+    that printed no result line at all."""
+    return not result or result.strip().upper().startswith(ROOM_WARNING_RESULTS)
 
 
-def describe_room_result(result: str) -> str:
-    """ensure_room.py's result for the start/restart summary and the done_highlight.md entry (one line)."""
+def describe_room_result(result: str, *, mark: bool = True) -> str:
+    """ensure_room.py's result for the start/restart summary and the done_highlight.md entry (one line), with
+    'WARNING ' before a warning result; mark=False leaves that out (a console line that already says WARNING)."""
     shown = _one_line(result, 160) if result else "no [ROOM] Result line"
-    return f"ensure_room.py: {'WARNING ' if room_result_warning(result) else ''}{shown}"
+    return f"ensure_room.py: {'WARNING ' if mark and room_result_warning(result) else ''}{shown}"
 
 
 def ensure_room_run(env: dict[str, str]) -> tuple[int, str]:
@@ -830,9 +849,9 @@ def _start_background(cmd: list[str], env: dict[str, str], timeout: float,
               "running; run 'python deploy/windows-local/ensure_room.py' again.", file=sys.stderr)
         return EXIT_FAILED, {"result": "failed", "error": f"ensure_room.py exited {room}", **details}
     if details["room_warning"]:
-        print(f"[agent_ctl] WARNING: {describe_room_result(result)}. The worker runs, but JARVIS may stay silent "
-              "until an agent joins the room; run 'python deploy/windows-local/ensure_room.py' again or reconnect "
-              "from the UI.", file=sys.stderr, flush=True)
+        print(f"[agent_ctl] WARNING: {describe_room_result(result, mark=False)}. The worker runs, but JARVIS may "
+              "stay silent until an agent of this worker is in the room; run 'python deploy/windows-local/"
+              "ensure_room.py' again or reconnect from the UI.", file=sys.stderr, flush=True)
     else:
         print(f"[agent_ctl] {describe_room_result(result)}", flush=True)
     return EXIT_OK, {"result": "started", **details}
@@ -1085,32 +1104,82 @@ def _restart_lock_state(path: Path) -> tuple[bool, str]:
     return _run_lock_state(path, "restart", RESTART_LOCK_STALE_S)
 
 
+TAKEOVER_SUFFIX = ".takeover"
+
+
+def _takeover_guard(name: str) -> str:
+    """The run/ file whose OS lock (agent_lock.hold) serializes every removal of run/<name>. The OS drops it when
+    its holder exits, so the guard itself can never go stale; the file is kept."""
+    return name + TAKEOVER_SUFFIX
+
+
+def _create_run_lock(path: Path, payload: str) -> bool:
+    """run/<name> created with O_EXCL and the payload written; False when it already exists."""
+    try:
+        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+    except FileExistsError:
+        return False
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(payload)
+    return True
+
+
+STALE_UNLINK_TRIES = 20
+STALE_UNLINK_PAUSE_S = 0.05
+
+
+def _unlink_stale_lock(path: Path) -> str:
+    """Removes a stale run lock; '' when it is gone, else why not. On Windows another agent_ctl reading the file to
+    judge it holds it open for a moment, and the delete then fails with a sharing violation (PermissionError,
+    WinError 32): that is retried for about a second, so the takeover does not fail and leave the lock to nobody."""
+    for attempt in range(STALE_UNLINK_TRIES):
+        try:
+            path.unlink()
+            return ""
+        except FileNotFoundError:
+            return ""
+        except PermissionError as exc:
+            if attempt == STALE_UNLINK_TRIES - 1:
+                return str(exc)
+            time.sleep(STALE_UNLINK_PAUSE_S)
+        except OSError as exc:
+            return str(exc)
+    return ""
+
+
 def _take_run_lock(name: str, what: str, stale_s: float, args: argparse.Namespace) -> tuple[Path | None, str]:
     """run/<name> created with O_EXCL; (None, why) when another live <what> holds it. A stale one (older than
-    stale_s, or its process has exited) is removed and taken."""
+    stale_s, or its process has exited) is removed and taken, race-free: the removal happens only under the OS lock
+    of run/<name>.takeover and only after the lock was judged stale AGAIN under it. So when two processes both find
+    the same stale lock, the second one to get the guard sees the first one's fresh lock and is refused; it can
+    never remove that fresh lock and take run/<name> as well."""
     path = agent_lock.run_dir() / name
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps({"pid": os.getpid(), "ts": time.time(), "by": getattr(args, "by", None),
                           "reason": _one_line(getattr(args, "reason", "") or "")})
-    for _ in range(2):
-        try:
-            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
-        except FileExistsError:
-            stale, who = _run_lock_state(path, what, stale_s)
+    if _create_run_lock(path, payload):
+        return path, ""
+    stale, who = _run_lock_state(path, what, stale_s)
+    if not stale:
+        return None, f"run/{name} is held by {who}"
+    guard = _takeover_guard(name)
+    if not agent_lock.hold(guard):
+        return None, f"another {what} is taking over the stale run/{name} right now"
+    try:
+        if path.exists():
+            stale, who = _run_lock_state(path, what, stale_s)  # judged again: it may be fresh by now
             if not stale:
                 return None, f"run/{name} is held by {who}"
             print(f"[agent_ctl] Removing a stale run/{name} ({who}).")
-            try:
-                path.unlink()
-            except FileNotFoundError:
-                pass
-            except OSError as exc:
-                return None, f"cannot remove the stale run/{name}: {exc}"
-            continue
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(payload)
-        return path, ""
-    return None, f"another {what} took run/{name} first"
+            problem = _unlink_stale_lock(path)
+            if problem:
+                return None, f"cannot remove the stale run/{name}: {problem}"
+        if _create_run_lock(path, payload):
+            return path, ""
+        stale, who = _run_lock_state(path, what, stale_s)
+        return None, f"another {what} took run/{name} first ({who})"
+    finally:
+        agent_lock.release_held(guard)
 
 
 def take_restart_lock(args: argparse.Namespace) -> tuple[Path | None, str]:
@@ -1125,12 +1194,20 @@ def worker_recovery_running() -> bool:
 
 
 def release_run_lock(path: Path) -> None:
-    """Remove a run/*.lock this process took (never one another process holds)."""
-    if _read_json(path).get("pid") in (os.getpid(), None):
-        try:
-            path.unlink()
-        except OSError:
-            pass
+    """Remove a run/*.lock this process took (never one another process holds). The removal takes the same
+    takeover guard as _take_run_lock when it can, so it never removes a lock another process has just taken over
+    in its place; without the guard (held by another process for over a second) its own lock is removed anyway."""
+    guard = _takeover_guard(path.name)
+    guarded = agent_lock.hold(guard)
+    try:
+        if _read_json(path).get("pid") in (os.getpid(), None):
+            try:
+                path.unlink()
+            except OSError:
+                pass
+    finally:
+        if guarded:
+            agent_lock.release_held(guard)
 
 
 release_restart_lock = release_run_lock
@@ -1357,6 +1434,7 @@ BRAIN_LOCK_FILE = "brain.lock"
 BRAIN_LOCK_STALE_S = 2 * 3600
 # The exact command that makes this laptop pc again (named in the worker-start refusal).
 BRAIN_PC_COMMAND = ".venv_312/Scripts/python.exe scripts/agent_ctl.py brain pc"
+LAPTOP_ONLY_FLAG = "--laptop-only"
 IDLE_GATE_S = 600          # no speech, typed chat or tool call for this long (bridge last_activity_ts)
 SPOKEN_NOTICE_S = 60        # --now: the spoken notice before the switch
 VERIFY_TRIES = 30
@@ -1493,7 +1571,9 @@ def _vps_mode_worker_refused(args: argparse.Namespace, action: str) -> tuple[int
     error = (f"JARVIS_BRAIN=vps: the laptop runs the Desktop Node, not a PC worker. Use 'agent_ctl node {action}'; "
              f"to make this laptop pc again run: {BRAIN_PC_COMMAND} --by {by} (when the VPS already says pc it only "
              "rewrites this laptop's JARVIS_BRAIN; otherwise it switches the brain, add --now to skip the 10 min "
-             "idle wait)")
+             f"idle wait). If the VPS cannot be read, run: {BRAIN_PC_COMMAND} {LAPTOP_ONLY_FLAG} --by {by} (it "
+             "rewrites only this laptop's JARVIS_BRAIN, journalled; no VPS read or command, nothing stopped or "
+             "started)")
     if (os.environ.get(BRAIN_ENV) or "").strip().lower() == "vps":
         error += (f". {BRAIN_ENV}=vps is also set in this shell's environment, which wins over the .env: remove it "
                   "there too")
@@ -2309,12 +2389,52 @@ class BrainSwitch:
             print(f"[agent_ctl] JARVIS_BRAIN is already '{self.target}' on the VPS and on this laptop. Nothing to "
                   "switch.")
             return EXIT_OK, {"result": "already", "brain": self.target}
-        in_shell = bool((os.environ.get(BRAIN_ENV) or "").strip())
         print(f"[agent_ctl] JARVIS_BRAIN on the VPS is already '{self.target}' but this laptop says '{laptop}': "
               "repairing only this laptop's JARVIS_BRAIN (no VPS command; nothing is stopped or started).",
               flush=True)
-        self.journal = {"target": self.target, "previous": self.target, "state": None, "repair": "laptop",
-                        "laptop_was": laptop, "started_at": self._clock()}
+        return self._repair_laptop(laptop, previous=self.target)
+
+    def repair_laptop_only(self) -> tuple[int, dict[str, Any]]:
+        """'brain pc --laptop-only': rewrites only this laptop's JARVIS_BRAIN line, without reading the VPS (for a
+        laptop .env left at vps while the VPS cannot be reached, which would refuse the owner's worker forever). It
+        is journalled like the repair in _settle_laptop: no ssh, no /vortex call, nothing stopped or started. A
+        half-done switch in the journal is never overwritten: it is refused (exit 4) until that switch is finished
+        or restored with 'agent_ctl brain <its target>'."""
+        other = self._other_switch_in_progress()
+        unfinished = self._load_journal()
+        state = unfinished.get("state")
+        # A journal at PREFLIGHT (or none) changed nothing and starts over anyway; from BACKUP on it must be kept.
+        begun = state in BRAIN_STATES and BRAIN_STATES.index(state) >= BRAIN_STATES.index("BACKUP")
+        if not other and (unfinished.get("restoring") or begun):
+            how = "while restoring" if unfinished.get("restoring") else f"after {state}"
+            other = (f"a switch to '{self.target}' stopped half-way ({how}, run/{BRAIN_JOURNAL_FILE}); run "
+                     f"'agent_ctl brain {self.target}' to finish it")
+        if other:
+            error = f"{LAPTOP_ONLY_FLAG} would overwrite the journal of an unfinished switch: {other}"
+            print(f"[agent_ctl] Laptop-only repair refused: {error}.", file=sys.stderr)
+            return EXIT_REFUSED, {"result": "refused", "state": None, "error": error, "laptop_only": True}
+        laptop = self._laptop_brain()
+        if laptop == self.target:
+            print(f"[agent_ctl] This laptop's JARVIS_BRAIN is already '{self.target}'. Nothing to change (the VPS was "
+                  "not read).")
+            return EXIT_OK, {"result": "already", "brain": self.target, "laptop_only": True}
+        print(f"[agent_ctl] {LAPTOP_ONLY_FLAG}: this laptop says '{laptop}'; rewriting only its JARVIS_BRAIN to "
+              f"'{self.target}' (the VPS is not read; no VPS command; nothing is stopped or started).", flush=True)
+        code, details = self._repair_laptop(laptop, previous=None, laptop_only=True)
+        if code == EXIT_OK:
+            print("[agent_ctl] The VPS .env was not checked: once the VPS answers, run "
+                  f"'{BRAIN_PC_COMMAND} --by <you>' to bring both sides in line.")
+        return code, details
+
+    def _repair_laptop(self, laptop: str, *, previous: str | None,
+                       laptop_only: bool = False) -> tuple[int, dict[str, Any]]:
+        """Writes the target into this laptop's JARVIS_BRAIN (journalled), then reads it back: the repair counts
+        only when this laptop now reads the target (a JARVIS_BRAIN in this shell's environment, or a later .env
+        line, can still say otherwise)."""
+        extra: dict[str, Any] = {"laptop_only": True} if laptop_only else {}
+        in_shell = bool((os.environ.get(BRAIN_ENV) or "").strip())
+        self.journal = {"target": self.target, "previous": previous, "state": None, "repair": "laptop",
+                        "laptop_was": laptop, "started_at": self._clock(), **extra}
         self._save()
         try:
             self._laptop_env(self.target)
@@ -2324,15 +2444,19 @@ class BrainSwitch:
                   file=sys.stderr)
             self._clear()
             return EXIT_FAILED, {"result": "failed", "state": "REPAIR_LAPTOP", "error": why, "changed": False,
-                                 "brain": self.target, "laptop_was": laptop}
+                                 "brain": self.target, "laptop_was": laptop, **extra}
         self._clear()
         now = self._laptop_brain()
         if now != self.target:
             error = f"this laptop still reads JARVIS_BRAIN as '{now}' after the repair"
             print(f"[agent_ctl] {error}.", file=sys.stderr)
             return EXIT_FAILED, {"result": "failed", "state": "REPAIR_LAPTOP", "error": error, "brain": self.target,
-                                 "laptop_was": laptop}
-        print(f"[agent_ctl] This laptop's JARVIS_BRAIN is now '{self.target}', matching the VPS.")
+                                 "laptop_was": laptop, **extra}
+        if laptop_only:
+            print(f"[agent_ctl] This laptop's JARVIS_BRAIN is now '{self.target}' (the VPS was not read, so whether "
+                  "it matches the VPS is unknown).")
+        else:
+            print(f"[agent_ctl] This laptop's JARVIS_BRAIN is now '{self.target}', matching the VPS.")
         if in_shell:
             print(f"[agent_ctl] Note: {BRAIN_ENV} is also set in this shell's environment, which wins over the .env: "
                   f"set it to '{self.target}' or remove it there too.", file=sys.stderr)
@@ -2342,7 +2466,8 @@ class BrainSwitch:
         else:
             print("[agent_ctl] Next: if a PC worker still runs, stop it with 'agent_ctl stop --by <you>'; then start "
                   "the Desktop Node with 'agent_ctl node start'.")
-        return EXIT_OK, {"result": "repaired", "repaired": "laptop", "brain": self.target, "laptop_was": laptop}
+        return EXIT_OK, {"result": "repaired", "repaired": "laptop", "brain": self.target, "laptop_was": laptop,
+                         **extra}
 
     def _refuse(self, state: str, exc: BrainSwitchRefused) -> tuple[int, dict[str, Any]]:
         """PREFLIGHT said no: nothing was backed up, stopped or changed. The journal keeps the refusal as a record
@@ -2358,6 +2483,10 @@ class BrainSwitch:
         details: dict[str, Any] = {"result": "refused", "state": state, "error": message, "brain": previous}
         if exc.missing:
             details["missing"] = exc.missing
+        if self.target == "pc" and self._laptop_brain() == "vps":
+            print(f"[agent_ctl] This laptop still says JARVIS_BRAIN=vps, which refuses the PC worker. If the VPS "
+                  f"cannot be read, '{BRAIN_PC_COMMAND} {LAPTOP_ONLY_FLAG} --by <you>' rewrites only this laptop's "
+                  "JARVIS_BRAIN (no VPS read or command).", file=sys.stderr)
         return EXIT_REFUSED, details
 
     def _fail_unchanged(self, state: str, why: str) -> tuple[int, dict[str, Any]]:
@@ -2564,7 +2693,18 @@ class BrainSwitch:
 
 def cmd_brain(args: argparse.Namespace) -> int:
     """The idle gate applies unless --now (which gives the spoken 60 s notice instead). run/brain.lock keeps a
-    second 'agent_ctl brain' from running a switch at the same time (it is refused, exit 4)."""
+    second 'agent_ctl brain' from running a switch at the same time (it is refused, exit 4). --laptop-only (pc only)
+    repairs this laptop's JARVIS_BRAIN without the VPS (BrainSwitch.repair_laptop_only)."""
+    laptop_only = bool(getattr(args, "laptop_only", False))
+    if laptop_only and args.target != "pc":
+        error = (f"{LAPTOP_ONLY_FLAG} works only with 'brain pc' (it frees the PC worker from a laptop .env left at "
+                 "vps); 'brain vps' always needs the VPS")
+        print(f"[agent_ctl] {error}.", file=sys.stderr)
+        audit("brain", args, exit=EXIT_USAGE, target=args.target, result="refused", error=error, laptop_only=True)
+        return EXIT_USAGE
+    if laptop_only and (args.now or args.when_idle):
+        print(f"[agent_ctl] Note: --now/--when-idle have no effect with {LAPTOP_ONLY_FLAG} (nothing is stopped or "
+              "started).")
     lock, why = take_brain_lock(args)
     if lock is None:
         print(f"[agent_ctl] Brain switch refused: {why}.", file=sys.stderr)
@@ -2576,7 +2716,7 @@ def cmd_brain(args: argparse.Namespace) -> int:
                              status=vortex_status, laptop=laptop, notify=_speak_notice,
                              when_idle=args.when_idle or not args.now, now_force=args.now)
         try:
-            code, details = switch.run()
+            code, details = switch.repair_laptop_only() if laptop_only else switch.run()
         except KeyboardInterrupt:
             _report_interrupted_switch(args, switch.journal_path)
             return EXIT_INTERRUPTED
@@ -2620,6 +2760,92 @@ def _speak_notice(message: str) -> None:
 
 
 # --------------------------------------------------------------------------- command line
+
+
+# --------------------------------------------------------------------------- backup pull (C-122 step 4)
+
+# 'backup pull' runs src/core/desktop/backup_pull.cli_main (K-73 'Backup pull'). It only reads the node config and
+# keys and writes the snapshot folder and run/desktop_backup_pull.json, so it needs no runtime lock. In the .venv_312
+# interpreter it runs in this process; under another python it runs as this child of .venv_312's python, its
+# KEY=VALUE stdout, ERROR/HINT stderr and exit code passed through unchanged. Both ways an unexpected exception
+# (an OSError from a full or locked disk, a failed import) ends as ERROR=unexpected_<type> (plus a HINT for an
+# OSError) on stderr and exit 1, never a traceback; argparse's own exits (--help, a bad option) pass through.
+BACKUP_UNEXPECTED_HINT = ("HINT=the snapshot could not be read or written on this PC: check the free disk space "
+                          "and that the destination folder is writable and not locked by another program")
+BACKUP_PULL_CODE = (
+    "import sys\n"
+    "try:\n"
+    "    from src.core.desktop import backup_pull\n"
+    "    code = backup_pull.cli_main(sys.argv[1:])\n"
+    "except Exception as exc:\n"
+    "    print('ERROR=unexpected_' + type(exc).__name__, file=sys.stderr)\n"
+    "    if isinstance(exc, OSError):\n"
+    f"        print({BACKUP_UNEXPECTED_HINT!r}, file=sys.stderr)\n"
+    "    code = 1\n"
+    "sys.exit(code)\n"
+)
+BACKUP_EXIT_RESULTS = {0: "pulled", 1: "failed", 2: "config"}
+
+
+def backup_pull_argv(args: argparse.Namespace) -> list[str]:
+    """The cli_main arguments after 'backup pull'."""
+    dest = getattr(args, "dest", None)
+    return ["--dest", str(dest)] if dest else []
+
+
+def _in_agent_venv() -> bool:
+    """True when this python is .venv_312's (its sys.prefix is that venv)."""
+    try:
+        return Path(sys.prefix).resolve() == (ROOT / ".venv_312").resolve()
+    except OSError:
+        return False
+
+
+def _backup_pull_in_process(argv: list[str]) -> int:
+    try:
+        # pylint: disable-next=import-outside-toplevel  # only this command needs the node's modules
+        from src.core.desktop import backup_pull as backup_pull_mod
+
+        return int(backup_pull_mod.cli_main(argv))
+    except SystemExit as exc:  # argparse inside cli_main (usage error or --help)
+        code = exc.code
+        return code if isinstance(code, int) else (0 if code is None else EXIT_FAILED)
+    except Exception as exc:  # pylint: disable=broad-exception-caught  # a KEY=VALUE error, never a traceback
+        print(f"ERROR=unexpected_{type(exc).__name__}", file=sys.stderr)
+        if isinstance(exc, OSError):
+            print(BACKUP_UNEXPECTED_HINT, file=sys.stderr)
+        return EXIT_FAILED
+
+
+def _backup_pull_child(argv: list[str]) -> int:
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join(p for p in (str(ROOT), env.get("PYTHONPATH", "")) if p)
+    env["PYTHONIOENCODING"] = "utf-8"
+    sys.stdout.flush()
+    sys.stderr.flush()
+    try:
+        code = int(_run([str(agent_python()), "-c", BACKUP_PULL_CODE, *argv], cwd=ROOT, env=env).returncode)
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        print(f"ERROR=launch_{type(exc).__name__}", file=sys.stderr)
+        return EXIT_FAILED
+    if code not in BACKUP_EXIT_RESULTS:  # killed, or crashed past BACKUP_PULL_CODE's own handler
+        print(f"ERROR=child_exit_{code}", file=sys.stderr)
+        return EXIT_FAILED
+    return code
+
+
+def backup_pull(args: argparse.Namespace) -> int:
+    argv = backup_pull_argv(args)
+    code = _backup_pull_in_process(argv) if _in_agent_venv() else _backup_pull_child(argv)
+    # Only the outcome: no path, size or hash goes into the log.
+    audit("backup_pull", args, exit=code, result=BACKUP_EXIT_RESULTS.get(code, "failed"),
+          dest="custom" if argv else "default")
+    return code
+
+
+def cmd_backup(args: argparse.Namespace) -> int:
+    handler = {"pull": backup_pull}[args.backup_command]
+    return handler(args)
 
 
 def _positive(text: str) -> float:
@@ -2677,6 +2903,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     logs.add_argument("--file", choices=tuple(LOG_CHOICES), default="all")
     _add_node_parser(sub)
     _add_brain_parser(sub)
+    _add_backup_parser(sub)
     return parser.parse_args(argv)
 
 
@@ -2714,6 +2941,9 @@ def _add_brain_parser(sub: Any) -> None:
     gate.add_argument("--now", action="store_true",
                       help=f"switch now, after a 60 s notice (printed; spoken only once the bridge serves "
                            f"{SAY_ROUTE}, which it does not yet)")
+    brain.add_argument(LAPTOP_ONLY_FLAG, dest="laptop_only", action="store_true",
+                       help="pc only: rewrite only this laptop's JARVIS_BRAIN line (journalled), without reading the "
+                            "VPS; for a laptop .env left at vps while the VPS cannot be read")
     brain.epilog = (f"PREFLIGHT refuses (exit 4, nothing changed) until the VPS is provisioned ({VPS_PROVISIONED_BY}): "
                     "the helper scripts in the VPS checkout and the jarvis-agent/jarvis-agent-svc compose services; "
                     "and until the PC-signed /vortex/status shows the current brain with its running agent "
@@ -2721,14 +2951,25 @@ def _add_brain_parser(sub: Any) -> None:
                     "JARVIS_BRAIN in the VPS .env and in this laptop's root .env (only that line); a failure "
                     "writes the previous brain back to both. When the VPS already says <target> but this laptop does "
                     "not, only the laptop's JARVIS_BRAIN line is repaired (no VPS command, nothing stopped). "
+                    f"'brain pc {LAPTOP_ONLY_FLAG}' does that repair without reading the VPS at all. "
                     "run/brain.lock refuses a second 'brain' run while one is running. Ctrl+C leaves "
                     "run/brain_switch.json: run the same 'brain <target>' again to finish the switch or restore the "
                     "previous brain.")
 
 
+def _add_backup_parser(sub: Any) -> None:
+    """backup pull [--dest PATH] (C-122 step 4): the newest encrypted VPS snapshot to this PC."""
+    backup = sub.add_parser("backup", help="the encrypted VPS backup: pull [--dest PATH]")
+    backup_sub = backup.add_subparsers(dest="backup_command", required=True)
+    pull = backup_sub.add_parser("pull", help="pull the newest encrypted VPS snapshot now (no runtime lock; "
+                                              "KEY=VALUE lines, exit 0 pulled or kept, 1 failed, 2 configuration)")
+    pull.add_argument("--dest", default=None,
+                      help="target folder (default %%LOCALAPPDATA%%\\JARVIS\\vps_backups)")
+
+
 COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
     "status": cmd_status, "start": cmd_start, "stop": cmd_stop, "restart": cmd_restart,
-    "wait": cmd_wait, "logs": cmd_logs, "node": cmd_node, "brain": cmd_brain,
+    "wait": cmd_wait, "logs": cmd_logs, "node": cmd_node, "brain": cmd_brain, "backup": cmd_backup,
 }
 
 

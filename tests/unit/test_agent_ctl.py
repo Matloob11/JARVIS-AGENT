@@ -357,6 +357,139 @@ def test_stale_restart_lock_is_replaced(ctl, monkeypatch, capsys, age_s, holder_
     assert not lock.exists()  # our own lock is released after the restart
 
 
+def test_a_stale_lock_taken_over_by_another_process_meanwhile_is_never_taken_twice(ctl, monkeypatch, capsys):
+    """Two processes find the same stale run/restart.lock. The other one takes it over first (between this
+    process's first look and its takeover); this process judges it again under the takeover guard, sees the fresh
+    lock and is refused instead of removing it and taking the lock as well (the race the old code had)."""
+    ctl.run.mkdir(parents=True)
+    lock = ctl.run / "restart.lock"
+    lock.write_text(json.dumps({"pid": 4242, "ts": time.time() - 5, "by": "cursor"}), encoding="utf-8")  # exited
+    rival = {"pid": 5150, "ts": time.time(), "by": "user", "reason": "rival"}
+    ctl.psutil.procs[5150] = FakeProc(5150, ["python", "scripts/agent_ctl.py", "restart"], time.time() - 1)
+    real_state = agent_ctl._run_lock_state
+    looks: list[int] = []
+
+    def state_then_rival_takes_over(path, what="restart", stale_s=agent_ctl.RESTART_LOCK_STALE_S):
+        answer = real_state(path, what, stale_s)
+        looks.append(json.loads(path.read_text(encoding="utf-8"))["pid"])
+        if len(looks) == 1:  # the other process finishes its whole takeover right after this first look
+            path.unlink()
+            path.write_text(json.dumps(rival), encoding="utf-8")
+        return answer
+
+    monkeypatch.setattr(agent_ctl, "_run_lock_state", state_then_rival_takes_over)
+
+    taken, why = agent_ctl.take_restart_lock(types.SimpleNamespace(by="claude", reason="race"))
+
+    assert taken is None
+    assert "run/restart.lock is held by a restart by user (pid 5150)" in why
+    assert looks == [4242, 5150]  # judged again under the guard
+    assert json.loads(lock.read_text(encoding="utf-8")) == rival  # the rival's lock is left alone
+    assert "Removing a stale" not in capsys.readouterr().out
+    assert not agent_lock.holds("restart.lock" + agent_ctl.TAKEOVER_SUFFIX)  # the guard is released
+
+
+GUARD_HOLDER = (
+    "import sys\n"
+    "from src.core import agent_lock\n"
+    "assert agent_lock.hold(sys.argv[1])\n"
+    "print('held', flush=True)\n"
+    "sys.stdin.readline()\n"
+)
+
+
+def test_a_stale_lock_is_not_taken_while_another_process_holds_the_takeover_guard(ctl, monkeypatch):
+    """Another process is in the middle of taking over the stale lock (it holds the OS lock of
+    run/restart.lock.takeover): this one is refused and leaves the file alone. Once that process has exited (the
+    OS drops its guard; nothing has to clean it up) the stale lock is taken over normally."""
+    ctl.run.mkdir(parents=True)
+    lock = ctl.run / "restart.lock"
+    stale = {"pid": 4242, "ts": time.time() - 5, "by": "cursor"}
+    lock.write_text(json.dumps(stale), encoding="utf-8")
+    holder = subprocess.Popen(  # pylint: disable=consider-using-with  # ends itself when its stdin closes
+        [sys.executable, "-c", GUARD_HOLDER, "restart.lock" + agent_ctl.TAKEOVER_SUFFIX], cwd=ROOT,
+        env={**os.environ, "JARVIS_RUN_DIR": str(ctl.run)}, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        text=True)
+    try:
+        assert holder.stdout is not None and holder.stdout.readline().strip() == "held"
+        taken, why = agent_ctl.take_restart_lock(types.SimpleNamespace(by="claude", reason="guarded"))
+        assert taken is None and "taking over the stale run/restart.lock right now" in why
+        assert json.loads(lock.read_text(encoding="utf-8")) == stale
+    finally:
+        assert holder.stdin is not None
+        holder.stdin.close()
+        holder.wait(timeout=60)
+    ctl.psutil.procs[os.getpid()] = FakeProc(os.getpid(), ["python", "pytest"], time.time() - 60)
+
+    taken, why = agent_ctl.take_restart_lock(types.SimpleNamespace(by="claude", reason="guarded"))
+
+    assert taken == lock and why == ""
+    assert json.loads(lock.read_text(encoding="utf-8"))["pid"] == os.getpid()
+    agent_ctl.release_run_lock(lock)
+    assert not lock.exists()
+
+
+RACER = (
+    "import importlib.util, json, sys, time, types\n"
+    "from pathlib import Path\n"
+    "spec = importlib.util.spec_from_file_location('agent_ctl_racer', sys.argv[1])\n"
+    "ctl = importlib.util.module_from_spec(spec)\n"
+    "spec.loader.exec_module(ctl)\n"
+    "go, done, out = Path(sys.argv[2]), Path(sys.argv[3]), Path(sys.argv[4])\n"
+    "out.with_suffix('.ready').write_text('1')\n"
+    "deadline = time.monotonic() + 120\n"
+    "while not go.exists() and time.monotonic() < deadline:\n"
+    "    time.sleep(0.002)\n"
+    "path, why = ctl._take_run_lock('brain.lock', 'brain switch', ctl.BRAIN_LOCK_STALE_S,\n"
+    "                               types.SimpleNamespace(by='claude', reason='race'))\n"
+    "out.write_text(json.dumps({'won': path is not None, 'why': why}))\n"
+    "while not done.exists() and time.monotonic() < deadline:\n"  # the winner keeps its lock live meanwhile
+    "    time.sleep(0.01)\n"
+)
+
+
+def test_racing_processes_on_one_stale_lock_never_both_take_it(tmp_path):
+    """Real processes, released at the same moment on one stale run/brain.lock (its writer has exited): exactly
+    one of them takes it; every other one is refused. Each keeps running until all have answered, so the winner's
+    lock stays live (a loser that looks late sees a held lock, not a stale one)."""
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    dead = subprocess.Popen([sys.executable, "-c", "pass"])  # pylint: disable=consider-using-with
+    dead.wait(timeout=60)  # exited by itself: its pid is a dead writer
+    lock = run_dir / agent_ctl.BRAIN_LOCK_FILE
+    lock.write_text(json.dumps({"pid": dead.pid, "ts": time.time() - 5, "by": "cursor"}), encoding="utf-8")
+    go, done = tmp_path / "go", tmp_path / "done"
+    outs = [tmp_path / f"racer{index}.json" for index in range(6)]
+    env = {**os.environ, "JARVIS_RUN_DIR": str(run_dir)}
+    racers = [subprocess.Popen(  # pylint: disable=consider-using-with  # each ends itself
+        [sys.executable, "-c", RACER, str(ROOT / "scripts" / "agent_ctl.py"), str(go), str(done), str(out)],
+        cwd=ROOT, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        for out in outs]
+    try:
+        deadline = time.monotonic() + 120
+        while not all(out.with_suffix(".ready").exists() for out in outs) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        go.write_text("go", encoding="utf-8")
+        while not all(out.exists() for out in outs) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        answers = [json.loads(out.read_text(encoding="utf-8")) for out in outs]
+        winner = json.loads(lock.read_text(encoding="utf-8"))
+        import psutil  # pylint: disable=import-outside-toplevel  # the real one (the ctl fixture is not used here)
+
+        # The venv's python.exe may be a launcher that runs the interpreter as its child: either pid counts.
+        winner_pids = {winner["pid"], psutil.Process(winner["pid"]).ppid()}
+    finally:
+        done.write_text("done", encoding="utf-8")
+        errors = [racer.communicate(timeout=120)[1] for racer in racers]
+    assert all(racer.returncode == 0 for racer in racers), errors
+    assert sum(answer["won"] for answer in answers) == 1, answers
+    assert winner_pids & {racer.pid for racer in racers} and winner["pid"] != dead.pid
+    for answer in answers:
+        if not answer["won"]:
+            assert ("is held by a brain switch" in answer["why"] or "right now" in answer["why"]
+                    or "took run/brain.lock first" in answer["why"]), answer
+
+
 # --------------------------------------------------------------------------- stop: pid checks and kill path
 
 
@@ -646,7 +779,9 @@ def test_a_no_agent_or_unknown_room_result_is_a_warning_in_the_start_summary(ctl
     assert agent_ctl.main(["start", "--by", "claude", "--reason", "C-123 room"]) == 0
 
     captured = capsys.readouterr()
-    assert f"[agent_ctl] WARNING: ensure_room.py: {shown}" in captured.err
+    # The console line says WARNING once ('[agent_ctl] WARNING: ensure_room.py: <result>'), never twice.
+    assert f"[agent_ctl] WARNING: ensure_room.py: {shown.removeprefix('WARNING ')}" in captured.err
+    assert "WARNING: ensure_room.py: WARNING" not in captured.err
     highlight = captured.out[captured.out.index("done_highlight.md entry"):]
     assert "### 🟡 🔁 [claude] C-123 room · Agent worker start (agent_ctl)" in highlight
     assert f"ensure_room.py: {shown}" in highlight and "ensure_room.py OK" not in highlight
@@ -664,7 +799,8 @@ def test_a_restart_carries_the_room_result_into_its_summary(ctl, monkeypatch, ca
     assert agent_ctl.main(["restart", "--by", "cursor", "--reason", "C-123 restart"]) == 0
 
     captured = capsys.readouterr()
-    assert "[agent_ctl] WARNING: ensure_room.py: WARNING NO AGENT in the room" in captured.err
+    assert "[agent_ctl] WARNING: ensure_room.py: NO AGENT in the room" in captured.err
+    assert captured.err.count("WARNING") == 1
     highlight = captured.out[captured.out.index("done_highlight.md entry"):]
     assert "### 🟡 🔁 [cursor] C-123 restart · Agent worker restart (agent_ctl)" in highlight
     assert "naya pid 31999" in highlight and "ensure_room.py: WARNING NO AGENT in the room" in highlight
@@ -677,6 +813,89 @@ def test_a_restart_carries_the_room_result_into_its_summary(ctl, monkeypatch, ca
     assert agent_ctl.main(["restart", "--by", "cursor", "--reason", "C-123 again", "--force"]) == 0
     out = capsys.readouterr().out
     assert "### ✅ 🔁 [cursor] C-123 again" in out and "ensure_room.py: OK, an agent" in out
+
+
+ROOM_EARLIER = ("[ROOM] Result: an agent of an earlier worker is still in the room and was left alone (no second "
+                "agent was added); run ensure_room.py again if JARVIS does not answer")
+
+
+def test_an_earlier_workers_agent_result_is_a_warning_too(ctl, monkeypatch, capsys):
+    """K-53 v7 open item, now closed: ensure_room.py left an earlier worker's agent alone (it may be a ghost that
+    never answers), so the start is PARTIAL (warning) like NO AGENT; the exit code stays 0."""
+    _background_start(ctl, monkeypatch)
+    monkeypatch.setattr(agent_ctl, "_run_streamed", lambda cmd, **_kwargs: (0, ["[ROOM] Ensuring room: x",
+                                                                            ROOM_EARLIER]))
+
+    assert agent_ctl.main(["start", "--by", "claude", "--reason", "OPS earlier"]) == 0
+
+    captured = capsys.readouterr()
+    assert "[agent_ctl] WARNING: ensure_room.py: an agent of an earlier worker is still in the room" in captured.err
+    assert "WARNING: ensure_room.py: WARNING" not in captured.err
+    highlight = captured.out[captured.out.index("done_highlight.md entry"):]
+    assert "### 🟡 🔁 [claude] OPS earlier · Agent worker start (agent_ctl)" in highlight
+    assert "ensure_room.py: WARNING an agent of an earlier worker" in highlight
+    entry = audit_lines(ctl.logs)[-1]
+    assert (entry["result"], entry["exit"], entry["room_warning"]) == ("started", 0, True)
+
+
+ROOM_BRIDGE = ("[ROOM] Result: room ensured by the bridge (agent presence not checked; PC-signed "
+               "/vortex/desktop/ensure answered 200)")
+
+
+def test_a_bridge_ensured_room_is_a_warning_because_no_agent_was_checked(ctl, monkeypatch, capsys):
+    """ensure_room.py's bridge path (200 from /vortex/desktop/ensure) only makes sure the room exists; it never
+    checked for an agent, so the start is PARTIAL (warning), never ✅; the exit code stays 0."""
+    _background_start(ctl, monkeypatch)
+    monkeypatch.setattr(agent_ctl, "_run_streamed", lambda cmd, **_kwargs: (0, ["[ROOM] Room ensured through the "
+                                                                            "bridge", ROOM_BRIDGE]))
+
+    assert agent_ctl.main(["start", "--by", "claude", "--reason", "OPSFIX bridge"]) == 0
+
+    captured = capsys.readouterr()
+    assert "[agent_ctl] WARNING: ensure_room.py: room ensured by the bridge (agent presence not checked" in \
+        captured.err
+    assert "WARNING: ensure_room.py: WARNING" not in captured.err
+    highlight = captured.out[captured.out.index("done_highlight.md entry"):]
+    assert "### 🟡 🔁 [claude] OPSFIX bridge · Agent worker start (agent_ctl)" in highlight
+    assert "ensure_room.py: WARNING room ensured by the bridge (agent presence not checked" in highlight
+    assert "ensure_room warning" in highlight
+    entry = audit_lines(ctl.logs)[-1]
+    assert (entry["result"], entry["exit"], entry["room_warning"]) == ("started", 0, True)
+    assert agent_ctl.room_result_warning(ROOM_BRIDGE[len("[ROOM] Result: "):]) is True
+    # The old wording, which read as if an agent were present, would no longer be accepted by ensure_room.py's
+    # own test; an "OK, ..." bridge text is not what agent_ctl is judged against here.
+    assert _ensure_room_results()["RESULT_BRIDGE"] == ROOM_BRIDGE[len("[ROOM] Result: "):]
+
+
+def _ensure_room_results() -> dict[str, str]:
+    """ensure_room.py's RESULT_* texts, read from its source (importing it would load the real .env)."""
+    import ast  # pylint: disable=import-outside-toplevel
+
+    tree = ast.parse((ROOT / "deploy" / "windows-local" / "ensure_room.py").read_text(encoding="utf-8"))
+    results = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            name = node.targets[0].id
+            if name.startswith("RESULT_") and name != "RESULT_PREFIX":
+                results[name] = ast.literal_eval(node.value)
+    return results
+
+
+def test_every_ensure_room_result_is_judged_by_its_meaning():
+    """Each result ensure_room.py can print: the OK ones are no warning, every other one (no agent, unknown, an
+    earlier worker's agent left alone, an error) is. Keeps agent_ctl in step with ensure_room.py's texts."""
+    results = _ensure_room_results()
+    assert {"RESULT_AGENT", "RESULT_CREATED", "RESULT_NO_AGENT", "RESULT_EARLIER_AGENT", "RESULT_UNKNOWN",
+            "RESULT_VPS_MODE", "RESULT_BRIDGE", "RESULT_NO_SETTINGS", "RESULT_LIST_ROOMS_FAILED",
+            "RESULT_ERROR"} <= set(results)
+    for name, text in results.items():
+        line = f"[ROOM] Result: {text}"
+        result = agent_ctl.room_result(["[ROOM] Ensuring room: x", line])
+        assert result == text
+        assert agent_ctl.room_result_warning(result) is (not text.startswith("OK")), name
+        shown = agent_ctl.describe_room_result(result)
+        assert shown.startswith("ensure_room.py: WARNING ") is (not text.startswith("OK")), name
+        assert "WARNING" not in agent_ctl.describe_room_result(result, mark=False), name
 
 
 def test_ensure_room_output_is_streamed_and_its_result_line_captured(ctl, monkeypatch, capsys, tmp_path):
@@ -1376,3 +1595,44 @@ def test_worker_priority_is_raised_only_for_the_agent_tree(monkeypatch):
     monkeypatch.setattr(agent_ctl.sys, "platform", "win32")
     agent_ctl._raise_worker_priority([1, 2, 99])
     assert changed == [(1, above), (3, above)]  # the agent and its console; never pytest, never a gone pid
+
+
+# --------------------------------------------------------------------------- stale-lock delete on Windows
+
+
+class _FlakyPath:
+    """A path whose unlink raises the given errors in turn, then succeeds."""
+
+    def __init__(self, *errors):
+        self.errors, self.calls = list(errors), 0
+
+    def unlink(self):
+        self.calls += 1
+        if self.errors:
+            raise self.errors.pop(0)
+
+
+def test_a_stale_lock_held_open_for_a_moment_by_a_reader_is_still_removed(monkeypatch):
+    """Windows: another agent_ctl reading the stale lock makes the delete fail with a sharing violation for a moment;
+    the takeover retries instead of failing and leaving the lock to nobody."""
+    monkeypatch.setattr(agent_ctl.time, "sleep", lambda _s: None)
+    busy = PermissionError(13, "The process cannot access the file because it is being used by another process")
+    path = _FlakyPath(busy, busy)
+    assert agent_ctl._unlink_stale_lock(path) == ""
+    assert path.calls == 3
+
+
+def test_a_stale_lock_that_stays_locked_reports_why(monkeypatch):
+    monkeypatch.setattr(agent_ctl.time, "sleep", lambda _s: None)
+    busy = PermissionError(13, "in use")
+    path = _FlakyPath(*([busy] * agent_ctl.STALE_UNLINK_TRIES))
+    assert "in use" in agent_ctl._unlink_stale_lock(path)
+    assert path.calls == agent_ctl.STALE_UNLINK_TRIES
+
+
+def test_a_stale_lock_already_gone_or_another_error_is_not_retried(monkeypatch):
+    monkeypatch.setattr(agent_ctl.time, "sleep", lambda _s: None)
+    gone = _FlakyPath(FileNotFoundError())
+    assert agent_ctl._unlink_stale_lock(gone) == "" and gone.calls == 1
+    broken = _FlakyPath(OSError(5, "I/O error"))
+    assert "I/O error" in agent_ctl._unlink_stale_lock(broken) and broken.calls == 1

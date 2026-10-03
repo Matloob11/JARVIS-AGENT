@@ -689,3 +689,173 @@ def test_bridge_not_200_falls_back_to_livekit(module, monkeypatch, tmp_path, cap
     out = capsys.readouterr().out
     _assert_clean(out)
     assert "returned HTTP 404; using the LiveKit API" in out
+
+
+# --------------------------------------------------------------------------- one '[ROOM] Result' line on every exit path
+
+
+def _results(out: str) -> list[str]:
+    return [line for line in out.splitlines() if line.startswith("[ROOM] Result:")]
+
+
+def test_vps_mode_prints_its_result_line_and_exits_0(module, monkeypatch, capsys):
+    monkeypatch.setenv("JARVIS_BRAIN", "vps")
+    _no_livekit(monkeypatch)
+    module.main()  # returns: exit 0
+    assert _results(capsys.readouterr().out) == [f"[ROOM] Result: {module.RESULT_VPS_MODE}"]
+    assert module.RESULT_VPS_MODE.startswith("OK")
+
+
+def test_bridge_200_prints_its_result_line_and_exits_0(module, monkeypatch, tmp_path, capsys):
+    _bridge(monkeypatch, tmp_path, 200)
+    _no_livekit(monkeypatch)
+    module.main()
+    out = capsys.readouterr().out
+    assert _results(out) == [f"[ROOM] Result: {module.RESULT_BRIDGE}"]
+    # The bridge only ensures the room: the result never claims an agent (agent_ctl reads it as a warning).
+    assert not module.RESULT_BRIDGE.startswith("OK")
+    assert module.RESULT_BRIDGE.startswith("room ensured by the bridge (agent presence not checked")
+    assert "[OK]" not in out and "agent is in the room was not checked" in out
+
+
+def test_bridge_fallback_still_prints_exactly_one_result_line(module, monkeypatch, tmp_path, capsys):
+    _bridge(monkeypatch, tmp_path, 503)
+    _install(monkeypatch, FakeLiveKit(exists=True, participants=[[_human(), _new_agent()]]))
+    module.main()
+    assert _results(capsys.readouterr().out) == [f"[ROOM] Result: {module.RESULT_AGENT}"]
+
+
+@pytest.mark.parametrize("missing", ["LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET"])
+def test_a_missing_livekit_setting_prints_its_result_line_and_exits_1(module, monkeypatch, capsys, missing):
+    monkeypatch.delenv(missing)
+    made = _no_livekit(monkeypatch)
+    with pytest.raises(SystemExit) as info:
+        module.main()
+    assert info.value.code == 1 and not made
+    out = capsys.readouterr().out
+    assert _results(out) == [f"[ROOM] Result: {module.RESULT_NO_SETTINGS}"]
+    assert module.RESULT_NO_SETTINGS.startswith("UNKNOWN")
+    _assert_clean(out)
+
+
+def test_a_failed_list_rooms_prints_its_result_line_and_exits_1(module, monkeypatch, capsys):
+    fake = _install(monkeypatch, FakeLiveKit(exists=True, participants=[[_human()]]))
+    fake.room_svc.list_rooms = AsyncMock(side_effect=RuntimeError(f"503 key {FAKE_KEY} secret {FAKE_SECRET}"))
+    with pytest.raises(SystemExit) as info:
+        module.main()
+    assert info.value.code == 1
+    out = capsys.readouterr().out
+    assert _results(out) == [f"[ROOM] Result: {module.RESULT_LIST_ROOMS_FAILED}"]
+    assert "[ERROR] list_rooms failed: 503 key *** secret ***" in out
+    _assert_clean(out)
+    _never_cut(fake)
+    assert fake.count("create_dispatch") == 0
+    fake.aclose.assert_awaited()
+
+
+def test_an_unexpected_error_still_prints_one_result_line_and_exits_1(module, monkeypatch, capsys):
+    fake = _install(monkeypatch, FakeLiveKit(exists=True, participants=[[_human()]]))
+
+    async def broken(*_args: Any) -> str:
+        raise ValueError(f"bug with {FAKE_SECRET}")
+
+    monkeypatch.setattr(module, "_ensure_agent", broken)
+    with pytest.raises(SystemExit) as info:
+        module.main()
+    assert info.value.code == 1
+    out = capsys.readouterr().out
+    assert _results(out) == ["[ROOM] Result: UNKNOWN: ensure_room.py stopped on an unexpected ValueError; "
+                             "check the room"]
+    _assert_clean(out)
+    fake.aclose.assert_awaited()
+
+
+def test_ctrl_c_still_prints_one_result_line_and_exits_130(module, monkeypatch, capsys):
+    fake = _install(monkeypatch, FakeLiveKit(exists=True, participants=[[_human()]]))
+
+    async def interrupted(*_args: Any) -> str:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(module, "_ensure_agent", interrupted)
+    with pytest.raises(SystemExit) as info:
+        module.main()
+    assert info.value.code == module.EXIT_INTERRUPTED == 130
+    out = capsys.readouterr().out
+    assert _results(out) == [f"[ROOM] Result: {module.RESULT_INTERRUPTED}"]
+    assert module.RESULT_INTERRUPTED.startswith("UNKNOWN:")
+    _assert_clean(out)
+    fake.aclose.assert_awaited()
+
+
+def test_ctrl_c_after_the_result_line_adds_no_second_one(module, monkeypatch, capsys):
+    """The run already printed its result (here the vps-mode no-op) when Ctrl+C arrives: still one line."""
+    monkeypatch.setenv("JARVIS_BRAIN", "vps")
+
+    def late_interrupt(text: str) -> None:
+        original(text)
+        if not calls:  # Ctrl+C once, right after the first result line
+            calls.append(text)
+            raise KeyboardInterrupt
+
+    calls: list[str] = []
+    original = module.print_result
+    monkeypatch.setattr(module, "print_result", late_interrupt)
+    with pytest.raises(SystemExit) as info:
+        module.main()
+    assert info.value.code == 130
+    assert _results(capsys.readouterr().out) == [f"[ROOM] Result: {module.RESULT_VPS_MODE}"]
+
+
+@pytest.mark.parametrize("scenario", ["absent", "present", "no_agent_person"])
+def test_the_livekit_api_path_prints_exactly_one_result_line_and_exits_0(module, monkeypatch, capsys, scenario):
+    """The absent-room and present-room flows through main(): unchanged, one result line each, no exit 1."""
+    if scenario == "absent":
+        fake = _install(monkeypatch, FakeLiveKit(exists=False))
+        expected = module.RESULT_CREATED
+    elif scenario == "present":
+        fake = _install(monkeypatch, FakeLiveKit(exists=True, participants=[[_human(), _new_agent()]],
+                                                 dispatches=[_dispatch(_job("AJ_new"))]))
+        expected = module.RESULT_AGENT
+    else:
+        fake = _install(monkeypatch, FakeLiveKit(exists=True, participants=[[_human()]],
+                                                 dispatches=[_dispatch(_old_job())]))
+        expected = module.RESULT_NO_AGENT
+    module.main()
+    out = capsys.readouterr().out
+    assert _results(out) == [f"[ROOM] Result: {expected}"]
+    assert fake.count("delete_room") == 0
+
+
+def test_print_result_prints_once_per_run(module, capsys):
+    module.print_result("OK, first")
+    module.print_result("NO AGENT, second")
+    assert _results(capsys.readouterr().out) == ["[ROOM] Result: OK, first"]
+
+
+def test_the_docstring_states_the_exit_codes_as_built(module):
+    doc = module.__doc__ or ""
+    assert "exactly one \"[ROOM] Result: ...\" line, on every exit path" in doc
+    assert "- exit 0:" in doc and "- exit 1:" in doc and "- exit 130:" in doc
+    assert "So every outcome below exits 0" not in doc  # the old, untrue statement
+    flat = " ".join(doc.split())
+    # An error after the result line exits 1 with that (possibly OK) line kept, and the bridge's 200 is no
+    # claim that an agent is in the room.
+    assert "An unexpected error raised AFTER the result line was printed" in flat and "also exits 1" in flat
+    assert "room ensured by the bridge (agent presence not checked)" in flat
+    assert "OK, room ensured by the bridge" not in flat
+
+
+def test_an_error_after_the_result_line_keeps_that_line_and_exits_1(module, monkeypatch, capsys):
+    """The present-room flow prints its OK result, then closing the LiveKit client fails: still exactly that one
+    result line, and exit 1 (as the docstring says)."""
+    fake = _install(monkeypatch, FakeLiveKit(exists=True, participants=[[_human(), _new_agent()]],
+                                             dispatches=[_dispatch(_job("AJ_new"))]))
+    fake.aclose = AsyncMock(side_effect=OSError(f"socket closed {FAKE_SECRET}"))
+    with pytest.raises(SystemExit) as info:
+        module.main()
+    assert info.value.code == module.EXIT_FAILED == 1
+    out = capsys.readouterr().out
+    assert _results(out) == [f"[ROOM] Result: {module.RESULT_AGENT}"]
+    assert "[ERROR] ensure_room.py stopped on an unexpected OSError." in out
+    _assert_clean(out)
+    fake.aclose.assert_awaited()

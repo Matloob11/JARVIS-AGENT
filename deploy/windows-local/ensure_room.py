@@ -2,10 +2,26 @@
 Make sure the LiveKit room has exactly one JARVIS agent, so the local Windows worker actually gets a job.
 Without a job the worker stays idle and UI chat never reaches the agent.
 
-agent_ctl start/restart runs this once the new worker is healthy and linked. agent_ctl reports its exit
-code, and any non-zero code marks the start as failed. So every outcome below exits 0 and ends with one
-"[ROOM] Result: ..." line that says whether an agent is in the room. The worker registers with no
-agent_name (automatic dispatch).
+agent_ctl start/restart runs this once the new worker is healthy and linked (and the PC worker's room
+watchdog runs it when the room loses its agent). agent_ctl reports its exit code, and any non-zero code marks
+the start as failed. The worker registers with no agent_name (automatic dispatch).
+
+Every run prints exactly one "[ROOM] Result: ..." line, on every exit path, and exits as follows:
+- exit 0: the vps-mode no-op ("OK, nothing to do in vps mode ..."), the bridge's /vortex/desktop/ensure
+  answering 200 ("room ensured by the bridge (agent presence not checked) ...": the bridge only makes sure
+  the room exists, so this run does not know whether an agent is in it, and agent_ctl reports it as a
+  warning), and every outcome of the LiveKit API path below ("OK, ...", "NO AGENT ...", "UNKNOWN: the room
+  could not be read ..." or "an agent of an earlier worker ..."): a room left without the worker's agent is
+  reported by its result line, not by the exit code.
+- exit 1: a missing LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET, a failed list_rooms, or an
+  unexpected error, each with an "UNKNOWN: ..." result line; nothing was changed in the first two cases.
+  An unexpected error raised AFTER the result line was printed (for example while closing the LiveKit
+  client) also exits 1: the result line already printed stays the run's only one, so a run can print an
+  "OK, ..." or "NO AGENT ..." result line and still exit 1. Its "[ERROR] ... stopped on an unexpected ..."
+  line says so.
+- exit 130: Ctrl+C, with an "UNKNOWN: ensure_room.py was interrupted ..." result line (or, after the result
+  line, with that line kept). Only a hard kill (agent_ctl's or the room watchdog's timeout) ends a run
+  without a result line; both report that themselves.
 
 C-123 (VPS brain): this runs in pc mode ONLY. In vps mode the VPS dispatches its own job, so this exits as
 a no-op. When a PC signing key and JARVIS_LINK_URL are configured it asks the bridge's PC-signed
@@ -105,6 +121,31 @@ RESULT_NO_AGENT = ("NO AGENT in the room: JARVIS may stay silent until the UI re
 RESULT_EARLIER_AGENT = ("an agent of an earlier worker is still in the room and was left alone (no second "
                         "agent was added); run ensure_room.py again if JARVIS does not answer")
 RESULT_UNKNOWN = "UNKNOWN: the room could not be read, nothing was changed"
+RESULT_VPS_MODE = "OK, nothing to do in vps mode (JARVIS_BRAIN=vps: the VPS dispatches its own job)"
+# The bridge's /vortex/desktop/ensure only makes sure the room exists (it never reports an agent), so this result
+# never claims one: it does not start with "OK" and agent_ctl treats it as a warning.
+RESULT_BRIDGE = ("room ensured by the bridge (agent presence not checked; PC-signed /vortex/desktop/ensure "
+                 "answered 200)")
+RESULT_NO_SETTINGS = ("UNKNOWN: LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET missing, nothing was "
+                      "changed")
+RESULT_LIST_ROOMS_FAILED = "UNKNOWN: list_rooms failed (the room could not be read), nothing was changed"
+RESULT_ERROR = "UNKNOWN: ensure_room.py stopped on an unexpected {error}; check the room"
+RESULT_INTERRUPTED = "UNKNOWN: ensure_room.py was interrupted (Ctrl+C); check the room"
+RESULT_PREFIX = "[ROOM] Result:"
+EXIT_OK = 0
+EXIT_FAILED = 1
+EXIT_INTERRUPTED = 130  # 128 + SIGINT, as agent_ctl uses it
+
+_result_printed = False
+
+
+def print_result(text: str) -> None:
+    """Prints the run's one "[ROOM] Result: ..." line; a second call in the same run prints nothing."""
+    global _result_printed  # pylint: disable=global-statement
+    if _result_printed:
+        return
+    _result_printed = True
+    print(f"{RESULT_PREFIX} {text}", flush=True)
 
 
 def current_brain() -> str:
@@ -139,7 +180,8 @@ def ensure_via_bridge() -> bool:
         print(f"[ROOM] PC-signed /vortex/desktop/ensure note: {type(exc).__name__}")
         return False
     if response.status_code == 200:
-        print("[OK] Room ensured through the bridge (PC-signed /vortex/desktop/ensure).")
+        print("[ROOM] Room ensured through the bridge (PC-signed /vortex/desktop/ensure answered 200); whether an "
+              "agent is in the room was not checked.")
         return True
     print(f"[ROOM] /vortex/desktop/ensure returned HTTP {response.status_code}; using the LiveKit API.")
     return False
@@ -534,7 +576,8 @@ async def ensure_room() -> None:
     api_secret = os.getenv("LIVEKIT_API_SECRET", "")
     if not livekit_url or not api_key or not api_secret:
         print("[ERROR] LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET missing")
-        sys.exit(1)
+        print_result(RESULT_NO_SETTINGS)
+        sys.exit(EXIT_FAILED)
 
     http_url = _http_url(livekit_url)
     print(f"[ROOM] LiveKit API: {http_url}")
@@ -549,7 +592,8 @@ async def ensure_room() -> None:
             room = await _find_room(lk)
         except Exception as exc:  # pylint: disable=broad-exception-caught
             print(f"[ERROR] list_rooms failed: {_masked(exc, *secrets)}")
-            sys.exit(1)
+            print_result(RESULT_LIST_ROOMS_FAILED)
+            sys.exit(EXIT_FAILED)
         if room is None:
             # A fresh room: its agents= dispatch is the single dispatch path (no create_dispatch here).
             await _create_room(lk, *secrets)
@@ -557,30 +601,47 @@ async def ensure_room() -> None:
             if room is None:
                 print(f"[ROOM] Listed: room '{ROOM_NAME}' not found")
                 print("[WARN] The room is missing: the agent worker gets no job until it exists.")
-                print(f"[ROOM] Result: {RESULT_NO_AGENT}")
+                print_result(RESULT_NO_AGENT)
                 return
             dispatches = await _dispatches(lk, worker, *secrets)
             print(f"[ROOM] Listed: {describe_room(room, None if dispatches is None else dispatches.count)}")
             print("[OK] Room ready — agent worker should receive the job now.")
-            print(f"[ROOM] Result: {RESULT_CREATED}")
+            print_result(RESULT_CREATED)
             return
         dispatches = await _dispatches(lk, worker, *secrets)
         print(f"[ROOM] Listed: {describe_room(room, None if dispatches is None else dispatches.count)}")
         if dispatches is not None:
             print(f"[ROOM] {dispatches.describe()}")
         result = await _ensure_agent(lk, worker, *secrets)
-        print(f"[ROOM] Result: {result}")
+        print_result(result)
     finally:
         await lk.aclose()
 
 
 def main() -> None:
-    if current_brain() == "vps":
-        print("[ROOM] JARVIS_BRAIN=vps: the VPS dispatches its own job; ensure_room.py is a no-op in vps mode.")
-        return
-    if ensure_via_bridge():
-        return
-    asyncio.run(ensure_room())
+    """One run: the vps-mode no-op, the bridge, else the LiveKit API path. Exactly one "[ROOM] Result: ..."
+    line on every exit path (see the module docstring for the exit codes)."""
+    try:
+        if current_brain() == "vps":
+            print("[ROOM] JARVIS_BRAIN=vps: the VPS dispatches its own job; ensure_room.py is a no-op in vps "
+                  "mode.")
+            print_result(RESULT_VPS_MODE)
+            return
+        if ensure_via_bridge():
+            print_result(RESULT_BRIDGE)
+            return
+        asyncio.run(ensure_room())  # its own exit 1 (SystemExit) comes after its result line and passes through
+    except KeyboardInterrupt:  # Ctrl+C: still one result line (unless the run already printed its own)
+        print("[ROOM] Interrupted (Ctrl+C).")
+        print_result(RESULT_INTERRUPTED)
+        sys.exit(EXIT_INTERRUPTED)
+    except Exception as exc:  # pylint: disable=broad-exception-caught  # still one result line, then exit 1
+        print(f"[ERROR] ensure_room.py stopped on an unexpected {type(exc).__name__}.")
+        if not _result_printed:
+            print_result(RESULT_ERROR.format(error=type(exc).__name__))
+        sys.exit(EXIT_FAILED)
+    if not _result_printed:  # every path above prints one; this keeps that true if a path is ever added
+        print_result(RESULT_UNKNOWN)
 
 
 if __name__ == "__main__":
