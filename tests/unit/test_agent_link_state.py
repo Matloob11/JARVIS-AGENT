@@ -91,16 +91,24 @@ def lk_logger():
 
 
 def make_monitor(path: Path, **kwargs) -> tuple[livekit_link.LinkMonitor, dict]:
-    """A monitor with fakes; seen['lines'], seen['probes'], seen['restarts'] and seen['envs'] (the helper's
-    environment of each restart) record what it did."""
+    """A monitor with fakes; seen['lines'], seen['probes'], seen['presence_calls'], seen['restarts'] and
+    seen['envs'] (the helper's environment of each restart) record what it did. seen['room'] is what the
+    room presence check answers (an exception is raised): an AGENT in the room unless a test says otherwise."""
     seen: dict = {"lines": [], "probes": 0, "restarts": [], "envs": [], "reachable": True, "jobs": 0,
-                  "restart_error": None}
+                  "restart_error": None, "room": livekit_link.ROOM_PRESENT, "presence_calls": 0}
     clock = kwargs.pop("clock", FakeClock())
     wall = kwargs.pop("wall", FakeClock(time.time()))
 
     def probe() -> bool:
         seen["probes"] += 1
         return seen["reachable"]
+
+    def presence() -> str:
+        seen["presence_calls"] += 1
+        answer = seen["room"]
+        if isinstance(answer, BaseException):
+            raise answer
+        return str(answer)
 
     def restart(reason: str, env: dict) -> int:
         error = seen["restart_error"]
@@ -111,7 +119,7 @@ def make_monitor(path: Path, **kwargs) -> tuple[livekit_link.LinkMonitor, dict]:
         return 4242
 
     monitor = livekit_link.LinkMonitor(path, dict(OWNER), clock=clock, wall=wall, probe=probe,
-                                       active_jobs=lambda: seen["jobs"], restart=restart,
+                                       active_jobs=lambda: seen["jobs"], presence=presence, restart=restart,
                                        base_env=lambda: {"C136_BASE": "1"}, log=seen["lines"].append, **kwargs)
     seen["clock"], seen["wall"] = clock, wall
     return monitor, seen
@@ -541,6 +549,7 @@ def test_retrying_less_than_ten_minutes_is_left_to_livekit_agents(run_dir):
     assert not seen["restarts"]
     run_for(monitor, seen, livekit_link.CHECK_S)
     assert seen["restarts"] == ["C-136 link recovery: retrying for 600 s, the LiveKit host answers again"]
+    assert seen["presence_calls"] == 0  # no job counted: the room is never asked
 
 
 def test_failed_link_is_replaced_without_waiting_ten_minutes(run_dir):
@@ -642,13 +651,206 @@ def test_reconnecting_resets_the_ten_minutes(run_dir):
 def test_a_running_job_postpones_the_recovery(run_dir):
     monitor, seen = make_monitor(run_dir / livekit_link.LINK_FILE_NAME)
     connected_then_lost(monitor, seen, state="failed")
-    seen["jobs"] = 1
+    seen["jobs"] = 1  # and the room has an AGENT participant: the session may still be live
     run_for(monitor, seen, 30 * 60)
     assert not seen["restarts"]
     assert seen["lines"] == ["LIVEKIT LINK recovery postponed: 1 job(s) still running"]  # once
+    assert seen["presence_calls"] > 0
     seen["jobs"] = 0
+    calls = seen["presence_calls"]
     run_for(monitor, seen, livekit_link.CHECK_S)
     assert len(seen["restarts"]) == 1
+    assert seen["presence_calls"] == calls  # no job: the room is not asked
+
+
+# INCIDENT 2026-10-03: the internet dropped, the link went 'failed' after 16 attempts; when LiveKit answered
+# again hours later the job counter still held the job of the room session that had died with the network.
+
+@pytest.mark.parametrize("room", [livekit_link.ROOM_NO_AGENT, livekit_link.ROOM_MISSING])
+def test_a_counted_job_without_an_agent_in_the_room_is_a_dead_session(run_dir, room):
+    monitor, seen = make_monitor(run_dir / livekit_link.LINK_FILE_NAME)
+    connected_then_lost(monitor, seen, state="failed")
+    seen["jobs"], seen["room"] = 1, room
+    seen["reachable"] = False  # offline for hours: no probe answer, no room check
+    run_for(monitor, seen, 4 * 3600)
+    assert not seen["restarts"] and seen["presence_calls"] == 0
+    seen["reachable"] = True  # LiveKit answers again
+    run_for(monitor, seen, livekit_link.CHECK_S)
+    assert not seen["restarts"] and seen["presence_calls"] == 0  # one answer: not yet at the postpone point
+    run_for(monitor, seen, livekit_link.CHECK_S)
+    assert seen["restarts"] == ["C-136 link recovery: livekit-agents stopped retrying, the LiveKit host answers again"]
+    assert seen["presence_calls"] == 1
+    assert seen["lines"][0] == ("LIVEKIT LINK recovery: 1 job(s) still counted but no agent in the room, "
+                                "their session is gone")
+    assert seen["lines"][1].startswith("LIVEKIT LINK recovery: C-136 link recovery: livekit-agents stopped")
+    assert len(seen["lines"]) == 2 and not any("postponed" in line for line in seen["lines"])
+
+
+def test_a_job_postpones_while_an_agent_is_in_the_room_and_not_after_it_left(run_dir):
+    monitor, seen = make_monitor(run_dir / livekit_link.LINK_FILE_NAME)
+    connected_then_lost(monitor, seen, state="failed")
+    seen["jobs"] = 2
+    run_for(monitor, seen, 20 * 60)
+    assert not seen["restarts"]
+    assert seen["lines"] == ["LIVEKIT LINK recovery postponed: 2 job(s) still running"]  # once
+    seen["room"] = livekit_link.ROOM_NO_AGENT  # the session ended, the counter did not
+    run_for(monitor, seen, livekit_link.CHECK_S)
+    assert len(seen["restarts"]) == 1
+    assert seen["lines"][1] == ("LIVEKIT LINK recovery: 2 job(s) still counted but no agent in the room, "
+                                "their session is gone")
+    # the next-request throttle still holds: the room is not asked again before it
+    calls = seen["presence_calls"]
+    run_for(monitor, seen, livekit_link.REQUEST_EVERY_S - livekit_link.CHECK_S)
+    assert len(seen["restarts"]) == 1 and seen["presence_calls"] == calls
+
+
+def test_an_unreadable_room_postpones_only_for_the_grace_after_the_link_went_down(run_dir, monkeypatch):
+    url = "wss://c136-livekit.example.test:7443"
+    monkeypatch.setenv("LIVEKIT_URL", url)
+    monkeypatch.setenv("LIVEKIT_API_KEY", "c136-throwaway-key")
+    monkeypatch.setenv("LIVEKIT_API_SECRET", FAKE_SECRET)
+    monitor, seen = make_monitor(run_dir / livekit_link.LINK_FILE_NAME, redact=redact_secrets)
+    connected_then_lost(monitor, seen, state="failed")  # down since the fake clock's 1000.0
+    seen["jobs"] = 1
+    seen["room"] = RuntimeError(f"Cannot connect to host {url[6:]} key=c136-throwaway-key secret={FAKE_SECRET}")
+    run_for(monitor, seen, livekit_link.JOB_SESSION_GRACE_S - livekit_link.CHECK_S)
+    assert not seen["restarts"]
+    assert len(seen["lines"]) == 1  # one 'postponed' line for the whole wait
+    assert seen["lines"][0].startswith("LIVEKIT LINK recovery postponed: 1 job(s) still running; the room is not "
+                                       "readable (RuntimeError: Cannot connect to host <livekit>")
+    assert seen["lines"][0].endswith("at most 300 s after the link went down")
+    run_for(monitor, seen, livekit_link.CHECK_S)
+    assert seen["restarts"] == ["C-136 link recovery: livekit-agents stopped retrying, the LiveKit host answers again"]
+    assert seen["lines"][1].startswith("LIVEKIT LINK recovery: 1 job(s) still counted and the room is not readable")
+    assert seen["lines"][1].endswith("300 s after the link went down, their session is taken as gone")
+    text = "\n".join(seen["lines"])
+    for leaked in (FAKE_SECRET, "c136-throwaway-key", "c136-livekit.example.test"):
+        assert leaked not in text
+    assert "***" in text and "<livekit>" in text
+
+
+def test_an_unreadable_room_long_after_the_outage_does_not_postpone(run_dir):
+    """The incident's timing: LiveKit answered four hours after the link failed; a room that cannot be read
+    then holds nothing back."""
+    monitor, seen = make_monitor(run_dir / livekit_link.LINK_FILE_NAME)
+    connected_then_lost(monitor, seen, state="failed")
+    seen["jobs"], seen["reachable"] = 1, False
+    run_for(monitor, seen, 4 * 3600)
+    seen["reachable"], seen["room"] = True, TimeoutError()
+    run_for(monitor, seen, 2 * livekit_link.CHECK_S)
+    assert len(seen["restarts"]) == 1 and seen["presence_calls"] == 1
+    assert seen["lines"][0].startswith("LIVEKIT LINK recovery: 1 job(s) still counted and the room is not "
+                                       "readable (TimeoutError) ")
+
+
+def test_an_unreadable_room_that_becomes_readable_with_an_agent_keeps_one_postponed_line(run_dir):
+    monitor, seen = make_monitor(run_dir / livekit_link.LINK_FILE_NAME)
+    connected_then_lost(monitor, seen, state="failed")
+    seen["jobs"], seen["room"] = 1, OSError("network unreachable")
+    run_for(monitor, seen, 4 * livekit_link.CHECK_S)
+    seen["room"] = livekit_link.ROOM_PRESENT
+    run_for(monitor, seen, 30 * 60)  # past the grace: a readable room with an AGENT still postpones
+    assert not seen["restarts"] and len(seen["lines"]) == 1
+    assert seen["lines"][0].startswith("LIVEKIT LINK recovery postponed: 1 job(s) still running; the room is not")
+
+
+class FakeRoomApi:
+    """livekit.api.LiveKitAPI with a room service that answers from memory (no network)."""
+
+    instances: list = []
+
+    def __init__(self, url, key, secret, *, rooms=(), participants=(), delay=0.0):
+        self.url, self.key, self.secret = url, key, secret
+        self.rooms, self.participants, self.delay = list(rooms), list(participants), delay
+        self.calls: list = []
+        self.closed = False
+        self.room = self
+        FakeRoomApi.instances.append(self)
+
+    async def list_rooms(self, request):
+        self.calls.append(("list_rooms", list(request.names)))
+        await asyncio.sleep(self.delay)
+        return types.SimpleNamespace(rooms=[types.SimpleNamespace(name=name) for name in self.rooms])
+
+    async def list_participants(self, request):
+        self.calls.append(("list_participants", request.room))
+        return types.SimpleNamespace(participants=self.participants)
+
+    async def aclose(self):
+        self.closed = True
+
+
+@pytest.fixture
+def room_api(monkeypatch):
+    """room_presence's settings from the environment only (never the real .env files) and a fake API."""
+    from livekit import api as lk_api  # pylint: disable=import-outside-toplevel
+    monkeypatch.setattr(livekit_link, "ENV_FILES", ())
+    monkeypatch.setenv("LIVEKIT_URL", "wss://c136-livekit.example.test")
+    monkeypatch.setenv("LIVEKIT_API_KEY", "c136-throwaway-key")
+    monkeypatch.setenv("LIVEKIT_API_SECRET", FAKE_SECRET)
+    monkeypatch.delenv("JARVIS_ROOM_NAME", raising=False)
+    FakeRoomApi.instances = []
+    setup: dict = {"rooms": (), "participants": (), "delay": 0.0}
+    monkeypatch.setattr(lk_api, "LiveKitAPI", lambda url, key, secret: FakeRoomApi(url, key, secret, **setup))
+    return setup
+
+
+def agent(state: int = 1):
+    return types.SimpleNamespace(kind=livekit_link.AGENT_KIND, state=state)
+
+
+def test_room_presence_reads_the_room_and_its_agent(room_api):
+    room_api["rooms"] = ["jarvis-hybrid"]
+    room_api["participants"] = [types.SimpleNamespace(kind=0, state=1), agent()]
+    assert livekit_link.room_presence() == livekit_link.ROOM_PRESENT
+    fake = FakeRoomApi.instances[-1]
+    assert fake.url == "https://c136-livekit.example.test" and fake.closed
+    assert fake.calls == [("list_rooms", ["jarvis-hybrid"]), ("list_participants", "jarvis-hybrid")]
+
+    room_api["participants"] = [types.SimpleNamespace(kind=0, state=1), agent(livekit_link.GONE_STATE)]
+    assert livekit_link.room_presence() == livekit_link.ROOM_NO_AGENT  # a user and a departed agent
+
+    room_api["rooms"] = []
+    assert livekit_link.room_presence() == livekit_link.ROOM_MISSING
+    assert FakeRoomApi.instances[-1].calls == [("list_rooms", ["jarvis-hybrid"])] and FakeRoomApi.instances[-1].closed
+
+
+def test_room_presence_names_jarvis_room_name_and_is_bounded(room_api, monkeypatch):
+    monkeypatch.setenv("JARVIS_ROOM_NAME", "c136-room")
+    room_api["rooms"], room_api["participants"] = ["c136-room"], [agent()]
+    assert livekit_link.room_presence() == livekit_link.ROOM_PRESENT
+    assert FakeRoomApi.instances[-1].calls[0] == ("list_rooms", ["c136-room"])
+    room_api["delay"] = 5.0
+    started = time.monotonic()
+    with pytest.raises((asyncio.TimeoutError, TimeoutError)):
+        livekit_link.room_presence(timeout=0.05)
+    assert time.monotonic() - started < 3 and FakeRoomApi.instances[-1].closed
+
+
+def test_room_presence_without_its_settings_raises_without_a_call(room_api, monkeypatch):
+    monkeypatch.delenv("LIVEKIT_API_SECRET")
+    with pytest.raises(RuntimeError) as caught:
+        livekit_link.room_presence()
+    assert not FakeRoomApi.instances and FAKE_SECRET not in str(caught.value)
+
+
+def test_room_presence_is_the_monitors_default_and_runs_in_its_thread(run_dir, room_api):
+    room_api["rooms"] = ["jarvis-hybrid"]  # the room exists, no agent: the incident
+    lines: list[str] = []
+    restarts: list[str] = []
+    monitor = livekit_link.LinkMonitor(run_dir / livekit_link.LINK_FILE_NAME, dict(OWNER), probe=lambda: True,
+                                       active_jobs=lambda: 1, restart=lambda reason, env: restarts.append(reason) or 1,
+                                       log=lines.append)
+    assert monitor._presence is livekit_link.room_presence
+    monitor.note("connected", worker_id="AW_1")
+    monitor.note("failed", "failed to connect to livekit after 16 attempts")
+    result: list = []
+    thread = threading.Thread(target=lambda: result.append([monitor.recovery_reason(), monitor.recovery_reason()]))
+    thread.start()
+    thread.join(10)
+    assert result and result[0][0] is None and result[0][1].startswith("C-136 link recovery: livekit-agents")
+    assert "LIVEKIT LINK recovery: 1 job(s) still counted but no agent in the room, their session is gone" in lines
+    assert not any(FAKE_SECRET in line for line in lines)
 
 
 def test_recovery_can_be_switched_off(run_dir):

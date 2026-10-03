@@ -9,12 +9,19 @@ livekit.agents logger: connecting (start), connected, retrying, failed (livekit-
 scripts/agent_ctl.py reads for status and wait, and it asks agent_ctl for a fresh worker when the link stays
 lost while LiveKit answers again (probe_livekit).
 
+A job that livekit-agents still counts postpones that request only while its session can still be live: the
+JARVIS room has an AGENT participant (room_presence, a read-only list_rooms + list_participants). After the
+network loss of 2026-10-03 the counter kept the job of a room session that had long died, and the worker
+never asked for its replacement.
+
 Stdlib only, like agent_lock.py: agent_ctl imports it without the worker's dependencies or its .env loading;
+room_presence imports livekit.api (and python-dotenv) only when the worker's monitor calls it.
 src/core/agent_runner.py wires the monitor into the process that runs the LiveKit worker.
 """
 
 from __future__ import annotations
 
+import asyncio
 import http.client
 import json
 import logging
@@ -43,6 +50,14 @@ RECOVER_AFTER_S = 600.0  # retrying this long (while LiveKit answers) means live
 REQUEST_EVERY_S = 300.0  # between two recovery requests of one worker
 MAX_PAUSE_S = 3600.0  # longest pause_s() of a worker that never registered
 PROBE_TIMEOUT_S = 5.0
+# A running job postpones the recovery only while its session can still be live (room_presence). When the
+# room cannot be read, it postpones at most this long after the link went down.
+JOB_SESSION_GRACE_S = 300.0
+PRESENCE_TIMEOUT_S = 8.0  # room_presence: both API calls together
+DEFAULT_ROOM = "jarvis-hybrid"  # deploy/windows-local/ensure_room.py's default for JARVIS_ROOM_NAME
+AGENT_KIND = 4  # livekit.protocol.models.ParticipantInfo.Kind.AGENT
+GONE_STATE = 3  # ParticipantInfo.State.DISCONNECTED: a dropped agent that LiveKit still lists
+ROOM_PRESENT, ROOM_MISSING, ROOM_NO_AGENT = "present", "room missing", "no agent in the room"
 # Set by the recovery for the worker it starts: how many automatic restarts in a row did not register.
 RECOVERIES_ENV = "JARVIS_LINK_RECOVERIES"
 LK_LOGGER = "livekit.agents"
@@ -52,6 +67,9 @@ LK_REGISTERED = "registered worker"
 LK_RETRYING = "failed to connect to livekit, retrying in "
 LK_GAVE_UP = "failed to connect to livekit after "
 AGENT_CTL = agent_lock.PROJECT_ROOT / "scripts" / "agent_ctl.py"
+# The settings files ensure_room.py loads (the root .env wins, K-47); read only for a key that the
+# environment lacks, and never written.
+ENV_FILES = (agent_lock.PROJECT_ROOT / ".env", agent_lock.PROJECT_ROOT / "deploy" / "windows-local" / ".env")
 RECOVERY_LOG = agent_lock.PROJECT_ROOT / "logs" / "agent_recovery.log"
 
 LOG = logging.getLogger("AGENT-RUNNER")  # agent_runner's logger (stderr, secrets masked)
@@ -244,6 +262,76 @@ def worker_active_jobs() -> int:
         return 0
 
 
+def env_value(name: str) -> str:
+    """name from the environment, else from ENV_FILES (the first file that has it); '' when none has it or
+    python-dotenv is missing (agent_ctl's interpreter)."""
+    value = os.environ.get(name)
+    if value is not None:
+        return value.strip()
+    try:
+        from dotenv import dotenv_values  # pylint: disable=import-outside-toplevel
+    except ImportError:
+        return ""
+    for path in ENV_FILES:
+        try:
+            found = dotenv_values(path).get(name) if path.is_file() else None
+        except (OSError, ValueError):
+            found = None
+        if found is not None:
+            return str(found).strip()
+    return ""
+
+
+def mask_livekit(text: str) -> str:
+    """text with LiveKit's address (hide_livekit_address) and its API key and secret ('***') hidden."""
+    out = hide_livekit_address(str(text), env_value("LIVEKIT_URL"))
+    for name in ("LIVEKIT_API_KEY", "LIVEKIT_API_SECRET"):
+        value = env_value(name)
+        if value:
+            out = out.replace(value, "***")
+    return out
+
+
+def _api_url(ws_url: str) -> str:
+    url = (ws_url or "").strip()
+    for ws_scheme, http_scheme in (("ws://", "http://"), ("wss://", "https://")):
+        if url.startswith(ws_scheme):
+            return http_scheme + url[len(ws_scheme):]
+    return url
+
+
+async def _room_presence_async(room: str, url: str, key: str, secret: str) -> str:
+    # pylint: disable=import-outside-toplevel,no-member  # livekit.api re-exports the protobuf messages
+    from livekit import api
+
+    lk = api.LiveKitAPI(_api_url(url), key, secret)
+    try:
+        rooms = await lk.room.list_rooms(api.ListRoomsRequest(names=[room]))
+        if not any(r.name == room for r in rooms.rooms):
+            return ROOM_MISSING
+        response = await lk.room.list_participants(api.ListParticipantsRequest(room=room))
+        agents = [p for p in response.participants if p.kind == AGENT_KIND and p.state != GONE_STATE]
+        return ROOM_PRESENT if agents else ROOM_NO_AGENT
+    finally:
+        await lk.aclose()
+
+
+def room_presence(timeout: float = PRESENCE_TIMEOUT_S) -> str:
+    """
+    ROOM_PRESENT when the JARVIS room (JARVIS_ROOM_NAME, default DEFAULT_ROOM) has an AGENT participant that
+    has not left, ROOM_NO_AGENT when it has none, ROOM_MISSING when the room does not exist. Read only:
+    LiveKit's list_rooms and list_participants on a fresh event loop of the calling thread (the monitor's),
+    within timeout; LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET from the environment or the files
+    that ensure_room.py loads. Raises on a missing setting and on any API or network error (mask_livekit
+    hides the credentials in its text).
+    """
+    url, key, secret = (env_value(n) for n in ("LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET"))
+    if not url or not key or not secret:
+        raise RuntimeError("LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET missing")
+    room = env_value("JARVIS_ROOM_NAME") or DEFAULT_ROOM
+    return asyncio.run(asyncio.wait_for(_room_presence_async(room, url, key, secret), timeout))
+
+
 def request_worker_restart(reason: str, env: dict[str, str], owner: dict[str, Any] | None = None) -> int:
     """
     Starts 'agent_ctl restart --by worker --reason <reason>' detached with env and returns its pid (OSError
@@ -309,17 +397,20 @@ class LinkMonitor:
     The link state of this worker. note() takes the connection lines from LinkLogHandler; a daemon thread
     writes every change to run/agent_link.json (atomic), logs it in one INFO line and asks agent_ctl for a
     fresh worker when recovery_reason() says so. recoveries: inherited_recoveries() of this worker;
-    base_env: the environment of agent_ctl's helper. Clock, probe, job count and restart are injectable.
+    base_env: the environment of agent_ctl's helper. Clock, probe, job count, room presence and restart are
+    injectable.
     """
 
     def __init__(self, path: Path, owner: dict[str, Any], *, recovery: bool = True, recoveries: int = 0,
                  clock: Callable[[], float] = time.monotonic, wall: Callable[[], float] = time.time,
                  probe: Callable[[], bool] = probe_livekit, active_jobs: Callable[[], int] = worker_active_jobs,
+                 presence: Callable[[], str] = room_presence,
                  restart: Callable[[str, dict[str, str]], int] | None = None,
                  base_env: Callable[[], dict[str, str]] = lambda: dict(os.environ),
                  redact: Callable[[str], str] = str, log: Callable[[str], Any] = LOG.info) -> None:
         self.path, self.owner, self.recovery, self.recoveries = path, owner, recovery, max(recoveries, 0)
         self._clock, self._wall, self._probe, self._active_jobs = clock, wall, probe, active_jobs
+        self._presence = presence
         self._restart = restart or (lambda reason, env: request_worker_restart(reason, env, self.owner))
         self._base_env, self._redact, self._log = base_env, redact, log
         self._lock = threading.Lock()
@@ -433,8 +524,8 @@ class LinkMonitor:
         Why this worker should be replaced now, else None. Never while connected (no probe either), nor for a
         worker that self_recovers() rules out. The link is retrying for RECOVER_AFTER_S or failed
         (livekit-agents stopped retrying and never will); a worker that never registered also waits
-        pause_s() from its start. LiveKit answered probe_livekit() at two checks in a row, and no job runs
-        (its session still works). Only the monitor thread calls it.
+        pause_s() from its start. LiveKit answered probe_livekit() at two checks in a row, and no counted job
+        may still hold a live session (job_session_may_live). Only the monitor thread calls it.
         """
         with self._lock:
             doc, down_since = self.snapshot(), self._down_since
@@ -452,10 +543,8 @@ class LinkMonitor:
         if self._reachable < 2 or now < self._next_request or waited < needed:
             return None
         jobs = self._active_jobs()
-        if jobs:
-            if not self._postponed:
-                self._log(f"LIVEKIT LINK recovery postponed: {jobs} job(s) still running")
-            self._postponed = True
+        down_s = now - (down_since if down_since is not None else self._born)
+        if jobs and self.job_session_may_live(jobs, down_s):
             return None
         self._postponed = False
         if not doc["connected_once"]:
@@ -465,6 +554,38 @@ class LinkMonitor:
         else:
             lost = "livekit-agents stopped retrying"
         return f"C-136 link recovery: {lost}, the LiveKit host answers again"
+
+    def job_session_may_live(self, jobs: int, down_s: float) -> bool:
+        """
+        Whether the jobs that livekit-agents still counts may hold a live session, so the recovery waits (one
+        'postponed' line per wait). Asks room_presence only here, where a job would postpone the request: an
+        AGENT in the room may be that session; a missing room or one without an AGENT means the session is
+        gone (the counter kept a job from before the outage). While the room cannot be read, the jobs
+        postpone it only until JOB_SESSION_GRACE_S after the link went down (down_s).
+        """
+        try:
+            presence, error = self._presence(), ""
+        except Exception as exc:  # pylint: disable=broad-exception-caught  # any failure: the room is unreadable
+            presence, error = None, f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
+        if presence in (ROOM_MISSING, ROOM_NO_AGENT):
+            line = f"LIVEKIT LINK recovery: {jobs} job(s) still counted but no agent in the room, their session is gone"
+            self._log(line)
+            return False
+        if presence == ROOM_PRESENT:
+            line = f"LIVEKIT LINK recovery postponed: {jobs} job(s) still running"
+        else:
+            error = _one_line(self._redact(mask_livekit(error or f"unexpected answer {presence!r}")))
+            if down_s >= JOB_SESSION_GRACE_S:
+                line = (f"LIVEKIT LINK recovery: {jobs} job(s) still counted and the room is not readable "
+                        f"({error}) {down_s:.0f} s after the link went down, their session is taken as gone")
+                self._log(line)
+                return False
+            line = (f"LIVEKIT LINK recovery postponed: {jobs} job(s) still running; the room is not readable "
+                    f"({error}), at most {JOB_SESSION_GRACE_S:.0f} s after the link went down")
+        if not self._postponed:
+            self._log(line)
+        self._postponed = True
+        return True
 
     def _request(self, reason: str) -> None:
         """Asks agent_ctl for a fresh worker. RECOVERIES_ENV tells that worker how many automatic restarts in
