@@ -1349,3 +1349,5 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 | F111 | Still unused; socket `feedback` stays | — | spec/mapping |
 | F112 | No control today (optional Persona rows) | — | spec/mapping |
 | F113 | No UI; untouched | — | spec/mapping |
+
+- **Git SHA (X-95):** b5cf0be
