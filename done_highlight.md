@@ -1159,3 +1159,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** prompt format check OK, prompt tests pass; contracts adversarial verify 0 findings
 - **Commit:** `00ed8d2`, `e631c64` · **Deploy:** PC agent restart 13:33
 - **Doosre agent ke liye:** contracts v7 padh lo (X-67 se pehle).
+
+### ✅ [claude] C-78 · Document Q&A: scoped persisted index, terminating chunker, off-loop · 2026-10-03 13:55 PKT
+- **Kya kiya:** Document index ab sirf Sir ke folders (Desktop, Documents, Downloads, OneDrive, shared, D: agar ho) walk karta hai, system/tool/secret folders nahi, aur JARVIS repo khud (chat history, logs, keys) kabhi index nahi hota (sirf Jarvis_Outputs). Index thread me banta hai, conversations/doc_index.json me save hota hai; chunker hamesha khatam hota hai.
+- **Files:** `services/ai_core/jarvis_rag.py`, `src/core/agent_runner.py`, `tests/unit/test_rag.py`
+- **Verify:** 43 tests pass (5 privacy tests samait); live: restart ke baad index bana, 6023 files, 6 roots, repo ke private paths 0
+- **Commit:** `b55edea` · **Deploy:** PC agent restart 13:33
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] REQ-DEP pyotp==2.9.0 (C-19) · Agent worker stop + pip install + start (agent_ctl) · 2026-10-03 13:45 PKT
+- **Kya kiya:** Worker band (pid 31088), `.venv_312` me pyotp 2.9.0 install, worker start: pid 21992, health 200 (4.2 s me), ensure_room.py: OK, an agent of the current worker is in the room.
+- **Files:** —
+- **Verify:** `pip show pyotp` → 2.9.0; `agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 13:45 PKT
+- **Doosre agent ke liye:** —
