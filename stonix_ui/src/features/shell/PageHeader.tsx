@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronDown, Volume2, VolumeX } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import type { TaskNotification } from '@/features/tasks/useTasks';
 import type { CameraState } from '@/features/command-center/components/cameraState';
 import type { VoiceMatchLive } from '@/features/voice/voiceMeter';
@@ -7,6 +7,7 @@ import type { LayoutMode } from './useLayout';
 import { routePageTitle, type AppRoute } from './router';
 import { LogoRing } from '@/shared/ui/LogoRing';
 import { StatusPills } from './StatusPills';
+import { AccountMenu } from './AccountMenu';
 
 const PAGE_SUBTITLES: Record<AppRoute['page'], string> = {
   overview: 'Control, collaborate, and automate with JARVIS & ANNA.',
@@ -23,16 +24,6 @@ function greetingLine(now: Date): string {
   return 'Good evening,';
 }
 
-function formatNotifTime(tsMs: number): string {
-  return new Date(tsMs).toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  });
-}
-
 export type PageHeaderProps = {
   route: AppRoute;
   layout: LayoutMode;
@@ -41,6 +32,7 @@ export type PageHeaderProps = {
   taskUnreadCount: number;
   taskNotifications: TaskNotification[];
   onOpenTaskBell: () => void;
+  onLogout: () => void;
   onReconnect: () => void | Promise<void>;
   cameraState: CameraState;
   voiceMatchLive: VoiceMatchLive;
@@ -55,21 +47,23 @@ export function PageHeader({
   taskUnreadCount,
   taskNotifications,
   onOpenTaskBell,
+  onLogout,
   onReconnect,
   cameraState,
   voiceMatchLive,
   onOpenVoiceEnroll,
 }: PageHeaderProps) {
   const headerRef = useRef<HTMLElement>(null);
-  const bellWrapRef = useRef<HTMLDivElement>(null);
+  const accountRef = useRef<HTMLButtonElement>(null);
   const [greetOff, setGreetOff] = useState(false);
   const [compact, setCompact] = useState(false);
   const [narrow, setNarrow] = useState(false);
-  const [bellOpen, setBellOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [greeting, setGreeting] = useState(() => greetingLine(new Date()));
 
   const pageTitle = routePageTitle(route);
   const subtitle = PAGE_SUBTITLES[route.page];
+  const sheet = layout === 'ph';
 
   useEffect(() => {
     const id = window.setInterval(() => setGreeting(greetingLine(new Date())), 60_000);
@@ -90,20 +84,9 @@ export function PageHeader({
     return () => ro.disconnect();
   }, [layout]);
 
-  useEffect(() => {
-    if (!bellOpen) return undefined;
-    const onDocClick = (event: MouseEvent) => {
-      if (!bellWrapRef.current?.contains(event.target as Node)) {
-        setBellOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
-  }, [bellOpen]);
-
-  const toggleTaskBell = useCallback(() => {
+  const toggleAccount = useCallback(() => {
     onOpenTaskBell();
-    setBellOpen(open => !open);
+    setMenuOpen(open => !open);
   }, [onOpenTaskBell]);
 
   return (
@@ -138,14 +121,15 @@ export function PageHeader({
 
       <div className="page-header-div hdr-div" aria-hidden />
 
-      <div className="page-header-acct acct" ref={bellWrapRef}>
+      <div className="page-header-acct acct">
         <button
+          ref={accountRef}
           type="button"
           className="page-header-account account no-drag"
           data-testid="topbar-task-bell"
-          onClick={toggleTaskBell}
-          title="Account and reminders"
-          aria-expanded={bellOpen}
+          onClick={toggleAccount}
+          aria-haspopup="dialog"
+          aria-expanded={menuOpen}
         >
           <span className="page-header-avatar avatar" aria-hidden>
             M
@@ -159,41 +143,14 @@ export function PageHeader({
             </span>
           ) : null}
         </button>
-        {bellOpen ? (
-          <div className="task-bell-menu page-header-bell-menu" data-testid="task-bell-menu">
-            <p className="task-bell-menu__title">Recent alerts</p>
-            {taskNotifications.length === 0 ? (
-              <p className="task-bell-menu__empty">No task alerts yet</p>
-            ) : (
-              <ul className="task-bell-menu__list">
-                {taskNotifications.map(note => (
-                  <li
-                    key={`${note.id}-${note.ts}`}
-                    className="task-bell-row"
-                    data-testid="task-notif-row"
-                  >
-                    <p className="task-bell-row__text">{note.description}</p>
-                    <p className="task-bell-row__meta">
-                      {note.due_at ? `Due ${formatNotifTime(note.due_at)}` : formatNotifTime(note.ts)}
-                      {note.spoken === true ? (
-                        <span className="task-bell-row__spoken" data-testid="task-notif-spoken">
-                          <Volume2 size={12} aria-hidden />
-                          spoken
-                        </span>
-                      ) : null}
-                      {note.spoken === false ? (
-                        <span className="task-bell-row__spoken" data-testid="task-notif-screen-only">
-                          <VolumeX size={12} aria-hidden />
-                          screen only
-                        </span>
-                      ) : null}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        ) : null}
+        <AccountMenu
+          open={menuOpen}
+          onClose={() => setMenuOpen(false)}
+          triggerRef={accountRef}
+          sheet={sheet}
+          taskNotifications={taskNotifications}
+          onLogout={onLogout}
+        />
       </div>
     </header>
   );

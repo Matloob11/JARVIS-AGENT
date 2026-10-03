@@ -143,9 +143,9 @@ test('DESKTOP_BUSY tool_update shows toast', async ({ page }) => {
     details: 'Desktop input lock busy',
     ts: Math.floor(Date.now() / 1000),
   });
-  await expect(
-    page.getByRole('status').filter({ hasText: /Desktop input lock busy|DESKTOP BUSY/i }),
-  ).toBeVisible({ timeout: 8000 });
+  await expect(page.getByText(/type_text_tool: Desktop input lock busy/i).first()).toBeVisible({
+    timeout: 8000,
+  });
 });
 
 test('relay media file URL loads in intelligence panel', async ({ page }) => {

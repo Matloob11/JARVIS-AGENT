@@ -32,7 +32,6 @@ import ConfirmBar from '@/features/confirm/ConfirmBar';
 import ConfirmPhoneLayer from '@/features/confirm/ConfirmPhoneLayer';
 import { useConfirmPhoneSheet } from '@/features/confirm/useConfirmPhoneSheet';
 import { toast } from '@/toast';
-import TopBar from './components/TopBar';
 import PageHeader from '@/features/shell/PageHeader';
 import MobileTabBar, { type MobileTab } from './components/MobileTabBar';
 import { useSidebarNavMarks } from '@/features/shell/useSidebarNavMarks';
@@ -279,18 +278,14 @@ const DashboardInner = () => {
                 taskUnreadCount={command.taskUnreadCount}
                 taskNotifications={command.taskNotifications}
                 onOpenTaskBell={command.openTaskBell}
-                onReconnect={handleReconnect}
-                cameraState={cameraState}
-                voiceMatchLive={command.voiceMatchLive}
-                onOpenVoiceEnroll={openVoiceEnroll}
-              />
-            </ErrorBoundary>
-            <ErrorBoundary name="TopBar">
-              <TopBar
                 onLogout={() => {
                   void liveKit.disconnectRoom();
                   void logout();
                 }}
+                onReconnect={handleReconnect}
+                cameraState={cameraState}
+                voiceMatchLive={command.voiceMatchLive}
+                onOpenVoiceEnroll={openVoiceEnroll}
               />
             </ErrorBoundary>
           </>

@@ -46,6 +46,7 @@ test('reload keeps session after login', async ({ page }) => {
 
 test('logout returns to login and clears session', async ({ page }) => {
   await loginViaRecovery(page);
+  await page.getByTestId('topbar-task-bell').click();
   await page.getByTestId('logout').click();
   await expect(page.getByTestId('login-password')).toBeVisible();
   await page.reload();

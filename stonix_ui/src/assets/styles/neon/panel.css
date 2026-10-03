@@ -1088,6 +1088,65 @@
   font-weight: 400;
 }
 
+.neon-toaster--dk {
+  left: calc(var(--sw, 88px) + (100vw - var(--sw, 88px) - var(--pw, 380px)) / 2) !important;
+  transform: translateX(-50%);
+}
+
+.neon-toast {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 420px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--card, rgba(12, 18, 32, 0.96));
+  box-shadow: var(--shadow-toast);
+  color: var(--t1, #eef2ff);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.neon-toast::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px var(--edge, rgba(255, 255, 255, 0.08));
+}
+
+.neon-toast[data-visible='false'] {
+  display: none;
+}
+
+.neon-toast__body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.neon-toast__dismiss {
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: var(--t4, #9aa4b8);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.neon-toast__actions {
+  display: flex;
+  gap: 10px;
+  margin: 6px 0 0;
+}
+
+.neon-toast__action {
+  font-weight: 600;
+  color: var(--acc-text, #9ec5ff);
+}
+
 @media (hover: none) and (pointer: coarse) {
   .neon-composer__kbd-hint {
     visibility: hidden;
