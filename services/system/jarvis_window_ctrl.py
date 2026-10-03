@@ -273,9 +273,7 @@ async def save_notepad(filename: str = "jarvis_notes.txt") -> dict:
     Saves the content of an open Notepad window into the Jarvis_Outputs folder.
     """
     try:
-        # Set dedicated workspace folder
-        project_root = "d:\\Personal-Assistant-main"
-        folder_path = os.path.join(project_root, "Jarvis_Outputs")
+        folder_path = config.outputs_dir
         os.makedirs(folder_path, exist_ok=True)
 
         file_path = os.path.join(folder_path, os.path.basename(filename))

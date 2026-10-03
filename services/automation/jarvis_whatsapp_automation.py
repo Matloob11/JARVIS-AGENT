@@ -113,7 +113,7 @@ class WhatsAppAutomation:
         """Helper to apply Win32 focus."""
         if win32gui is not None:
             try:
-                pg.press('alt')
+                _pg_mod().press('alt')
                 hwnd = getattr(whatsapp_win, '_hwnd', None)
                 if hwnd:
                     win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)

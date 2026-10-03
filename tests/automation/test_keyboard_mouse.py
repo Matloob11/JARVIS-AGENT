@@ -21,16 +21,18 @@ def _stable_token(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def mock_pyautogui():
-    with patch("services.automation.keyboard_mouse_ctrl.pyautogui") as mock:
-        mock.size.return_value = (1920, 1080)
+    mock = MagicMock()
+    mock.size.return_value = (1920, 1080)
+    with patch("services.automation.keyboard_mouse_ctrl._load_pyautogui", return_value=mock):
         yield mock
 
 
-@pytest.fixture
-def mock_pynput():
-    with patch("services.automation.keyboard_mouse_ctrl.KeyboardController") as mock_kb:
-        with patch("services.automation.keyboard_mouse_ctrl.MouseController") as mock_mouse:
-            yield mock_kb, mock_mouse
+def _stub_controller_inputs(controller: SafeController) -> None:
+    controller._input_ready = True
+    controller.keyboard = MagicMock()
+    controller.mouse = MagicMock()
+    controller.mouse.position = (100, 100)
+    controller.special_keys = {"enter": "enter"}
 
 
 @pytest.fixture
@@ -57,8 +59,7 @@ async def test_activate_deactivate():
 async def test_move_cursor_method(mock_pyautogui):
     controller = SafeController()
     controller.active = True
-    controller.mouse = MagicMock()
-    controller.mouse.position = (100, 100)
+    _stub_controller_inputs(controller)
 
     await controller.move_cursor("up", 50)
     assert controller.mouse.position == (100, 50)
@@ -71,9 +72,13 @@ async def test_move_cursor_method(mock_pyautogui):
 async def test_mouse_click_method():
     controller = SafeController()
     controller.active = True
-    controller.mouse = MagicMock()
+    _stub_controller_inputs(controller)
+    stub_button = MagicMock()
+    stub_button.left = "left"
+    stub_button.right = "right"
 
-    await controller.mouse_click("left")
+    with patch.object(keyboard_mouse_ctrl, "Button", stub_button):
+        await controller.mouse_click("left")
     controller.mouse.click.assert_called()
 
 
@@ -81,7 +86,7 @@ async def test_mouse_click_method():
 async def test_scroll_method():
     controller = SafeController()
     controller.active = True
-    controller.mouse = MagicMock()
+    _stub_controller_inputs(controller)
 
     await controller.scroll_cursor("up", 10)
     controller.mouse.scroll.assert_called_with(0, 10)
@@ -91,9 +96,10 @@ async def test_scroll_method():
 async def test_type_text_method():
     controller = SafeController()
     controller.active = True
-    controller.keyboard = MagicMock()
+    _stub_controller_inputs(controller)
 
-    await controller.type_text("Hi")
+    with patch.object(keyboard_mouse_ctrl, "Key", MagicMock(enter="enter")):
+        await controller.type_text("Hi")
     assert controller.keyboard.press.call_count == 2
     assert controller.keyboard.release.call_count == 2
 

@@ -40,7 +40,7 @@ async def test_get_weather_auto_detect_city():
 
     with patch("os.getenv", side_effect=_api_key_getenv):
         with patch(
-            "jarvis_get_weather.get_current_city",
+            "services.info.jarvis_search.get_current_city",
             new_callable=AsyncMock,
             return_value="Karachi",
         ):
@@ -96,7 +96,7 @@ async def test_get_weather_401_invalid_key_search_fallback():
 
     with patch("os.getenv", side_effect=_api_key_getenv):
         with patch("requests.get", return_value=mock_response):
-            with patch("jarvis_get_weather.search_internet", new_callable=AsyncMock) as mock_search:
+            with patch("services.info.jarvis_search.search_internet", new_callable=AsyncMock) as mock_search:
                 mock_search.return_value = mock_search_result
                 result = await get_weather("London")
                 assert result["status"] == "success"
@@ -113,7 +113,7 @@ async def test_get_weather_api_failure_search_fallback():
 
     with patch("os.getenv", side_effect=_api_key_getenv):
         with patch("requests.get", return_value=mock_response):
-            with patch("jarvis_get_weather.search_internet", new_callable=AsyncMock) as mock_search:
+            with patch("services.info.jarvis_search.search_internet", new_callable=AsyncMock) as mock_search:
                 mock_search.return_value = mock_search_result
                 result = await get_weather("London")
                 assert result["status"] == "success"
@@ -131,7 +131,7 @@ async def test_get_weather_no_api_key():
 @pytest.mark.asyncio
 async def test_get_weather_via_search_success():
     mock_search_result = {"status": "success", "message": "Sunny 20C"}
-    with patch("jarvis_get_weather.search_internet", new_callable=AsyncMock) as mock_search:
+    with patch("services.info.jarvis_search.search_internet", new_callable=AsyncMock) as mock_search:
         mock_search.return_value = mock_search_result
         result = await get_weather_via_search("London")
         assert result["status"] == "success"

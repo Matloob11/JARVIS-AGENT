@@ -82,11 +82,12 @@ def test_type_text_preserves_newlines() -> None:
     def capture(line: str, interval: float = 0) -> None:
         lines_seen.append(line)
 
-    with patch.object(nap.pyautogui, "write", side_effect=capture):
-        with patch.object(nap.pyautogui, "press") as mock_press:
-            nap._type_text(cancel, "line1\nline2\n", visible_limit=1500)
+    mock_pg = MagicMock()
+    mock_pg.write.side_effect = capture
+    with patch.object(nap, "_pyautogui_mod", return_value=mock_pg):
+        nap._type_text(cancel, "line1\nline2\n", visible_limit=1500)
     assert lines_seen == ["line1", "line2"]
-    assert mock_press.call_args_list[0][0][0] == "enter"
+    assert mock_pg.press.call_args_list[0][0][0] == "enter"
 
 
 @pytest.mark.asyncio
@@ -103,7 +104,7 @@ async def test_edit_creates_bak(monkeypatch: pytest.MonkeyPatch) -> None:
             new_callable=AsyncMock,
             return_value=(True, None, 1),
         ):
-            with patch.object(nap.pyautogui, "hotkey"):
+            with patch.object(nap, "_pyautogui_mod", return_value=MagicMock()):
                 with patch.object(nap, "_clipboard_paste_text_sync"):
                     with patch.object(
                         nap.notepad_automation,

@@ -11,13 +11,15 @@ from jarvis_whatsapp_automation import (
 
 @pytest.fixture
 def mock_pg():
-    with patch("jarvis_whatsapp_automation.pg") as mock:
+    mock = MagicMock()
+    with patch("jarvis_whatsapp_automation._pg_mod", return_value=mock):
         yield mock
 
 
 @pytest.fixture
 def mock_gw():
-    with patch("jarvis_whatsapp_automation.gw") as mock:
+    mock = MagicMock()
+    with patch("jarvis_whatsapp_automation._gw_mod", return_value=mock):
         yield mock
 
 
@@ -35,7 +37,7 @@ def mock_type_tool():
 
 
 @pytest.mark.asyncio
-async def test_ensure_whatsapp_focus(mock_gw, mock_win32):
+async def test_ensure_whatsapp_focus(mock_gw, mock_win32, mock_pg):
     bot = WhatsAppAutomation()
 
     # Mock window object

@@ -77,7 +77,9 @@ async def test_process_notepad_automation_flow():
                 with patch.object(nap.notepad_automation, "simulate_typing", new_callable=AsyncMock, return_value=True):
                     with patch.object(nap.notepad_automation, "verify_saved_content", new_callable=AsyncMock, return_value=(True, "verified")):
                         with patch.object(nap.notepad_automation, "close_active_notepad", new_callable=AsyncMock) as mock_close:
-                            with patch("services.automation.jarvis_notepad_automation.pyautogui.hotkey") as mock_hotkey:
+                            mock_pg = MagicMock()
+                            with patch.object(nap, "_pyautogui_mod", return_value=mock_pg):
+                                mock_hotkey = mock_pg.hotkey
                                 with patch("services.automation.jarvis_notepad_automation.subprocess.Popen") as mock_popen:
                                     out = _safe_tmp_dir()
                                     fake = out / "x.py"

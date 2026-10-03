@@ -32,8 +32,10 @@ async def test_focus_window():
     mock_win.isMinimized = True
 
     with patch("pygetwindow.getAllWindows", return_value=[mock_win]):
-        with patch("asyncio.sleep"):
-            await focus_window("notepad")
+        with patch("services.system.jarvis_window_ctrl.win32gui") as mock_gui:
+            with patch("asyncio.sleep"):
+                await focus_window("notepad")
+            mock_gui.ShowWindow.assert_called()
 
     mock_win.restore.assert_called()
     mock_win.activate.assert_called()
@@ -58,12 +60,19 @@ async def test_minimize_window():
 
 @pytest.mark.asyncio
 async def test_close_window():
-    mock_win = MagicMock()
-    mock_win.title = "Chrome"
+    hwnd = 101
 
-    with patch("pygetwindow.getWindowsWithTitle", return_value=[mock_win]):
-        await close("chrome")
-        # Just verify it finishes without error for now as logic is complex
+    def _enum_windows(callback, _param):
+        callback(hwnd, None)
+
+    with patch("services.system.jarvis_window_ctrl.win32gui") as mock_gui:
+        mock_gui.IsWindowVisible.return_value = True
+        mock_gui.GetWindowText.return_value = "Google Chrome"
+        mock_gui.EnumWindows.side_effect = _enum_windows
+        mock_gui.IsWindow.return_value = False
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            await close("chrome")
+        mock_gui.PostMessage.assert_called()
 
 @pytest.mark.asyncio
 async def test_open_app_whatsapp():
@@ -82,13 +91,16 @@ async def test_open_app_whatsapp():
 @pytest.mark.asyncio
 async def test_save_notepad_success():
     mock_win = MagicMock()
+    mock_pg = MagicMock()
     with patch("services.system.jarvis_window_ctrl.get_windows", return_value=[mock_win]):
-        with patch("pyautogui.hotkey"):
-            with patch("pyautogui.typewrite"):
-                with patch("pyautogui.press"):
-                    with patch("os.path.exists", return_value=True):
-                        res = await save_notepad("D:/test_note.txt")
+        with patch("services.system.jarvis_window_ctrl._load_pg", return_value=mock_pg):
+            with patch("services.system.jarvis_window_ctrl.config") as mock_cfg:
+                mock_cfg.outputs_dir = "C:/Jarvis_Outputs_Test"
+                with patch("os.makedirs"):
+                    with patch("asyncio.sleep", new_callable=AsyncMock):
+                        res = await save_notepad("test_note.txt")
                         assert res["status"] == "success"
+                        mock_pg.hotkey.assert_called_with("ctrl", "s")
 
 @pytest.mark.asyncio
 async def test_open_notepad_file_success():

@@ -53,6 +53,47 @@ def _is_self_write(text: str) -> bool:
     return _sha256_text(text) == _last_self_write_hash
 
 
+_CLIPBOARD_RETRY_ATTEMPTS = 4
+_CLIPBOARD_RETRY_BASE_SEC = 0.05
+
+
+def _is_clipboard_contention(exc: BaseException) -> bool:
+    msg = str(exc).lower()
+    if "openclipboard" in msg or ("clipboard" in msg and "access" in msg):
+        return True
+    winerror = getattr(exc, "winerror", None)
+    return winerror in (0, 5)
+
+
+def _read_clipboard_sync() -> str:
+    last_exc: BaseException | None = None
+    for attempt in range(_CLIPBOARD_RETRY_ATTEMPTS):
+        try:
+            return pyperclip.paste()
+        except (OSError, RuntimeError) as exc:
+            last_exc = exc
+            if not _is_clipboard_contention(exc):
+                raise
+            delay = _CLIPBOARD_RETRY_BASE_SEC * (attempt + 1)
+            if attempt + 1 >= _CLIPBOARD_RETRY_ATTEMPTS:
+                logger.warning(
+                    "Clipboard read failed after %s attempts: %s",
+                    _CLIPBOARD_RETRY_ATTEMPTS,
+                    exc,
+                )
+            else:
+                logger.debug(
+                    "Clipboard contention (attempt %s/%s): %s",
+                    attempt + 1,
+                    _CLIPBOARD_RETRY_ATTEMPTS,
+                    exc,
+                )
+            time.sleep(delay)
+    if last_exc is not None:
+        raise last_exc
+    return ""
+
+
 def _last_error_line(text: str) -> str:
     lines = [ln.strip() for ln in text.strip().split("\n") if ln.strip()]
     if not lines:
@@ -181,7 +222,7 @@ class ClipboardMonitor:
             try:
                 if not self.is_running:
                     break
-                current_paste: str = await asyncio.to_thread(pyperclip.paste)
+                current_paste: str = await asyncio.to_thread(_read_clipboard_sync)
 
                 if current_paste != self.last_content:
                     self.last_content = current_paste
@@ -222,13 +263,21 @@ class ClipboardMonitor:
                     )
                     self.is_running = False
                     break
-                logger.error("Clipboard loop runtime error: %s", e)
+                if _is_clipboard_contention(e):
+                    logger.debug("Clipboard loop contention: %s", e)
+                    await asyncio.sleep(_CLIPBOARD_RETRY_BASE_SEC * 2)
+                    continue
+                logger.warning("Clipboard loop runtime error: %s", e)
                 await asyncio.sleep(5)
             except AttributeError as e:
                 logger.error("Clipboard loop attribute error: %s", e)
                 await asyncio.sleep(5)
             except OSError as e:
-                logger.error("Clipboard loop IO error: %s", e)
+                if _is_clipboard_contention(e):
+                    logger.debug("Clipboard loop IO contention: %s", e)
+                    await asyncio.sleep(_CLIPBOARD_RETRY_BASE_SEC * 2)
+                    continue
+                logger.warning("Clipboard loop IO error: %s", e)
                 await asyncio.sleep(10)
 
     def stop(self) -> None:

@@ -1173,3 +1173,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `pip show pyotp` → 2.9.0; `agent_ctl.py status` → health 200
 - **Commit:** abhi nahi · **Deploy:** PC agent restart 13:45 PKT
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] tools · save_notepad / WhatsApp focus / clipboard retry + test retarget · 2026-10-03 13:50 PKT
+- **Kya kiya:** `save_notepad` ab `config.outputs_dir` use karta hai; WhatsApp Win32 focus `_pg_mod().press('alt')`; clipboard monitor OpenClipboard contention par retry/backoff + DEBUG/WARNING logs. Automation/tools tests lazy-import mocks ke sath align (weather → `jarvis_search`, pynput/win32gui, `_pyautogui_mod` / `_pg_mod`).
+- **Files:** `services/system/jarvis_window_ctrl.py`, `services/automation/jarvis_whatsapp_automation.py`, `services/automation/jarvis_clipboard.py`, `tests/automation/test_*.py`, `tests/tools/test_notepad_tools.py`
+- **Verify:** `.venv_312\Scripts\python.exe -m pytest` (7 paths) → **59 passed** in ~15s
+- **Commit:** abhi nahi · **Deploy:** no
+- **Doosre agent ke liye:** —

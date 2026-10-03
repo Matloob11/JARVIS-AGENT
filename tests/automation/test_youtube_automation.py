@@ -76,15 +76,19 @@ async def test_open_url_in_app_config_chrome(mock_popen):
 
 
 @pytest.mark.asyncio
-async def test_open_url_in_app_fallback(mock_shutil, mock_webbrowser):
+async def test_open_url_in_app_fallback(mock_shutil):
     bot = YouTubeAutomation()
     mock_shutil.which.return_value = None
     with patch("jarvis_youtube_automation.config", MagicMock(edge_path=None, chrome_path=None)):
         with patch("jarvis_youtube_automation.os.path.isfile", return_value=False):
             with patch("os.name", "posix"):
-                res = await bot.open_url_in_app("https://youtube.com")
-                assert res is True
-                mock_webbrowser.open.assert_called_with("https://youtube.com")
+                with patch(
+                    "jarvis_youtube_automation.jarvis_delivery.open_url",
+                    return_value=None,
+                ) as mock_open:
+                    res = await bot.open_url_in_app("https://youtube.com")
+                    assert res is True
+                    mock_open.assert_called_once_with("https://youtube.com")
 
 
 @pytest.mark.asyncio
