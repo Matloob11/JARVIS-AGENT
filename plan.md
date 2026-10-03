@@ -1211,8 +1211,8 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | C-17 | claude | P0 | Rotate the LiveKit API key/secret (they sat in world-readable files); values live only in env files | C-16, C-14 | TODO |
 | C-18 | claude | P0 | Least-privilege VPS env: bridge reads only bridge.env, compose .env keeps interpolation vars, unused VPS key copies moved to backups; user rotates Google/Gmail keys | C-14, C-17, K-47 (C-ENV-1) | TODO |
 | C-19 | claude | P0 | Owner session auth backend: password + TOTP + recovery codes, JWT cookie on /vortex, session-protected endpoints, LiveKit token per C-LK-1 | C-13, C-14, C-16, K-36 (C-AUTH-1), K-37 (C-LK-1) | DOING (claude, 03 Oct 13:42) |
-| C-20 | claude | P0 | Owner credential enrollment (password + TOTP + recovery codes), run by the user | C-19, K-36 (C-AUTH-1) | TODO |
-| C-21 | claude | P0 | Deploy #0: ship the login UI to the VPS and do the first real login (precondition for the cut-over) | X-08, C-12, C-14, C-15, C-19, C-20 | TODO |
+| C-20 | claude | P0 | Owner credential enrollment (password + TOTP + recovery codes), run by the user | C-19, K-36 (C-AUTH-1) | DOING (claude, 03 Oct 22:19) |
+| C-21 | claude | P0 | Deploy #0: ship the login UI to the VPS and do the first real login (precondition for the cut-over) | X-08, C-12, C-14, C-15, C-19, C-20 | DOING (claude, 03 Oct 22:19) |
 | C-22 | claude | P0 | Cut-over: legacy token auth off, token out of the frontend build, temporary basic auth commented out, security headers + login rate limit, bundle secret check | X-08, C-21, X-09, C-18, C-20, K-48 (C-NET-1) | TODO |
 | C-24 | claude | P0 | Tool decorator v2: unified kwargs, metadata, arg policies, non-destructive output limits | C-06, K-11 (JarvisToolDecoratorV2), K-12 (ToolResult), K-28 (tool_arg_policies) | DONE (01 Oct 17:35) |
 | C-25 | claude | P0 | Secret redaction for logs and tool outputs + API keys out of URLs | C-24, K-29 (redact_secrets) | DONE (01 Oct 21:00; live restart OK; user voice check pending) |
