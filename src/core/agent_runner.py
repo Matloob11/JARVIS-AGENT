@@ -522,6 +522,26 @@ def _prewarm_vector_memory(room_name: str | None = None) -> None:
         logger.warning("VECTOR_PREWARM not started: %s", e)
 
 
+def _prewarm_voice_id(room_name: str | None = None) -> None:
+    """
+    C-72: loads the speaker-ID model (and the master embedding) in its own background thread at job
+    start and picks the faster torch thread count, so the first voice check does not pay the model load.
+    Never blocks the loop; once per process. Without the model files it logs 'VOICE_ID prewarm skipped'
+    once and verification stays lazy (denied) as before. Same gate as the vector prewarm (C-124): in
+    remote mode only the job serving JARVIS_ROOM_NAME loads it, so canary/probe jobs do not load ECAPA.
+    """
+    try:
+        if (isinstance(room_name, str) and desktop_mode() == DESKTOP_MODE_REMOTE
+                and room_name != (os.getenv("JARVIS_ROOM_NAME") or DEFAULT_ROOM_NAME)):
+            return
+        from services.ai_core.voice_fingerprint import (  # pylint: disable=import-outside-toplevel
+            voice_id_engine,
+        )
+        voice_id_engine.prewarm()
+    except Exception as e:  # verification then loads the model at its first use, still off the loop
+        logger.warning("VOICE_ID prewarm not started: %s", e)
+
+
 RAG_WARM_DELAY_DEFAULT_S = 120.0
 
 
@@ -669,6 +689,8 @@ async def entrypoint(ctx: agents.JobContext):
             logger.info("✅ Connected to room: %s", ctx.room.name)
             # C-137: loads in its own thread while the session starts (C-124: the JARVIS room's job only)
             _prewarm_vector_memory(getattr(ctx.room, "name", None))
+            # C-72: speaker-ID model loads in its own thread (C-124: the JARVIS room's job only)
+            _prewarm_voice_id(getattr(ctx.room, "name", None))
 
             # Now perform secondary initialization
             current_dt_res = await get_formatted_datetime()
