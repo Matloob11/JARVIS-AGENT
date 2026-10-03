@@ -1203,3 +1203,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** npm run build pass; playwright auth+tasks+voice-glue+memory+DESKTOP_BUSY 19 passed; testid inventory pass
 - **Commit:** 615777d · **Deploy:** no
 - **Doosre agent ke liye:** REQ-DEPLOY frontend
+
+### ✅ 🔁 [claude] recover: LiveKit link failed 3h49m after internet outage · Agent worker restart (agent_ctl) · 2026-10-03 20:14 PKT
+- **Kya kiya:** Internet 16:21 se ~20:10 tak band raha; worker ka LiveKit link 16:23 par 'failed' (library ne 16 koshishon ke baad chhod diya) aur auto-recovery ek zombie job ki wajah se ruki rahi. `agent_ctl restart`: purana worker (pid 21992) band, naya pid 7924; health 200, ensure_room.py OK. Lekin CPU 95-99% ki wajah se worker 'full' tha aur job nahi mila (agent room me nahi aaya) → agla entry.
+- **Files:** —
+- **Verify:** `agent_ctl.py status` → health 200, link connected; room probe: 0 participants
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 20:14 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] fix · PC worker kabhi 'full' nahi (load_fnc 0.0) + restart · 2026-10-03 20:25 PKT
+- **Kya kiya:** livekit-agents production me CPU load 0.7 se upar hone par worker ko 'full' maanta hai, is liye busy laptop par Sir ka job dispatch hi nahi hota tha. PC worker (Sir ka akela worker) ab hamesha load 0.0 batata hai; VPS (remote) par library ka default. Phir restart: naya pid 33408, job 10 s me mila, agent room me.
+- **Files:** `src/core/agent_runner.py`, `tests/unit/test_worker_load.py`
+- **Verify:** 3 naye tests + 78 agent_runner/entry/role tests pass; live: `jobs 1 active (load 0.00)`, room me 1 AGENT
+- **Commit:** `b8ea0c4` · **Deploy:** PC agent restart 20:25 PKT
+- **Doosre agent ke liye:** baqi: zombie job auto-recovery ko na roke (C-136 follow-up chal raha hai).
