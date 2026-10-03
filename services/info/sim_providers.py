@@ -8,11 +8,16 @@ or unofficial 'SIM database' integrations must not be added here.
 from __future__ import annotations
 
 import os
+import re
 from typing import Any, Protocol, runtime_checkable
 
 import httpx
 
 from services.utils.jarvis_security import redact_secrets
+
+_PHONE_RE = re.compile(r"\b(0\d{10})\b")
+_CNIC_RE = re.compile(r"\b(\d{13})\b")
+_DIGIT_RUN_RE = re.compile(r"\d+")
 
 # Known person fields inside each data[].fields object (pass the rest through, masked).
 FIELD_MAP: dict[str, str] = {
@@ -87,26 +92,74 @@ def _looks_like_phone_or_cnic(key: str) -> bool:
     return any(tok in k for tok in ("cnic", "nic", "phone", "mobile", "msisdn", "number"))
 
 
+def _parse_raw_text(text: str) -> dict[str, str]:
+    """pak-sim 'Mobile Name CNIC Address <mobile> <name> <cnic> <address>' -> structured fields."""
+    phone = _PHONE_RE.search(text)
+    cnic = _CNIC_RE.search(text, phone.end() if phone else 0)
+    out: dict[str, str] = {}
+    if phone:
+        out["phone"] = phone.group(1)
+    if cnic:
+        out["cnic"] = cnic.group(1)
+        if phone:
+            name = text[phone.end() : cnic.start()].strip()
+            if name:
+                out["full_name"] = name
+        address = text[cnic.end() :].strip()
+        if address:
+            out["address"] = address
+    return out
+
+
+def _mask_digit_runs(text: str) -> str:
+    """Mask every digit run in a blob (11-digit phone / 13-digit CNIC / other)."""
+
+    def _one(match: re.Match[str]) -> str:
+        digits = match.group(0)
+        if len(digits) >= 13:
+            return _mask_cnic_digits(digits)
+        if len(digits) >= 10:
+            return _mask_phone_digits(digits)
+        return "*" * len(digits)
+
+    return _DIGIT_RUN_RE.sub(_one, text)
+
+
+def _has_structured_identity(fields: dict[str, Any]) -> bool:
+    return any(
+        str(fields.get(key) or "").strip()
+        for key in ("full_name", "name", "cnic", "phone")
+    )
+
+
 def _record_from_fields(fields: dict[str, Any], *, source: str, show_address: bool) -> dict[str, Any]:
     """One UI record from a data[].fields object; sensitive values masked, the rest kept."""
+    work = dict(fields)
+    raw = work.get("raw_text")
+    if isinstance(raw, str) and raw.strip() and not _has_structured_identity(work):
+        parsed = _parse_raw_text(raw)
+        work = {**parsed, "raw_text": raw}
+
     record: dict[str, Any] = {
         "source": source,
-        "full_name": str(fields.get(FIELD_MAP["full_name"]) or fields.get("name") or "").strip(),
-        "cnic_masked": _mask_cnic_digits(str(fields.get(FIELD_MAP["cnic"]) or "")),
-        "phone_masked": _mask_phone_digits(str(fields.get(FIELD_MAP["phone"]) or "")),
+        "full_name": str(work.get(FIELD_MAP["full_name"]) or work.get("name") or "").strip(),
+        "cnic_masked": _mask_cnic_digits(str(work.get(FIELD_MAP["cnic"]) or "")),
+        "phone_masked": _mask_phone_digits(str(work.get(FIELD_MAP["phone"]) or "")),
     }
     if show_address:
-        address = str(fields.get(FIELD_MAP["address"]) or "").strip()
+        address = str(work.get(FIELD_MAP["address"]) or "").strip()
         if address:
             record["address"] = address
     # keep every other provider field, masking anything that looks like a CNIC/phone number
     extra: dict[str, Any] = {}
     known = set(FIELD_MAP.values()) | {"name"}
-    for key, value in fields.items():
+    for key, value in work.items():
         if key in known:
             continue
         text = str(value)
-        if _looks_like_phone_or_cnic(key) and any(ch.isdigit() for ch in text):
+        if key == "raw_text":
+            text = _mask_digit_runs(text)
+        elif _looks_like_phone_or_cnic(key) and any(ch.isdigit() for ch in text):
             digits = "".join(ch for ch in text if ch.isdigit())
             text = _mask_cnic_digits(digits) if len(digits) >= 13 else _mask_phone_digits(digits)
         extra[key] = text

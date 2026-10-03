@@ -1067,3 +1067,11 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** e2e 204/204
 - **Commit:** 2afca55 · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] SIM · parse pak-sim raw_text · 2026-10-03 08:35 PKT
+- **Kya kiya:** Live API ek `fields.raw_text` blob deti hai; `_parse_raw_text` se phone/name/cnic/address nikaalte hain, masks lagate hain, aur `details.raw_text` me digit runs mask.
+- **Files:** services/info/sim_providers.py, services/info/tests/test_cnic_lookup.py, plan.md
+- **Verify:** `.venv_312\Scripts\python.exe -m pytest services/info/tests/test_cnic_lookup.py -q`
+- **Commit:** (next) · **Deploy:** no
+- **Doosre agent ke liye:** REQ-RESTART — agent ko naya provider code chahiye; phir owner live number dubara test kare.
+

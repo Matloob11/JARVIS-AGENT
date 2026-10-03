@@ -140,6 +140,60 @@ async def test_cnic_lookup_posts_correct_path_and_body() -> None:
 
 
 @pytest.mark.asyncio
+async def test_raw_text_fields_are_parsed_and_masked(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Live pak-sim returns one raw_text blob; parse + mask without real PII in fixtures."""
+    monkeypatch.setenv("SIM_LOOKUP_SHOW_ADDRESS", "1")
+    # Fake digits only (not a real Pakistani number/CNIC).
+    fake_phone = "03001112233"
+    fake_cnic = "1111222233334"
+    fake_name = "Sample Holder"
+    fake_address = "Example Block Sector"
+    raw = f"Mobile Name CNIC Address {fake_phone} {fake_name} {fake_cnic} {fake_address}"
+
+    async def fake_post(
+        url: str,
+        *,
+        json: dict[str, str],
+        headers: dict[str, str],
+        timeout: float,
+    ) -> httpx.Response:
+        del url, json, headers, timeout
+        return httpx.Response(
+            200,
+            json={
+                "success": True,
+                "query_type": "phone",
+                "hits": 1,
+                "data": [
+                    {
+                        "source": "SIM / CNIC Records",
+                        "fields": {"raw_text": raw},
+                    }
+                ],
+            },
+        )
+
+    mock_client = AsyncMock()
+    mock_client.post = fake_post
+    source = AuthorizedApiSource(_FAKE_BASE, _FAKE_KEY, client=mock_client)
+
+    records, error = await source.lookup(fake_phone)
+
+    assert error is None
+    assert len(records) == 1
+    record = records[0]
+    assert record["full_name"] == fake_name
+    assert record["cnic_masked"].endswith("3334")
+    assert fake_cnic not in record["cnic_masked"]
+    assert fake_phone not in record["phone_masked"]
+    assert record["address"] == fake_address
+    details_raw = record["details"]["raw_text"]
+    assert fake_cnic not in details_raw
+    assert fake_phone not in details_raw
+    assert "Sample Holder" in details_raw
+
+
+@pytest.mark.asyncio
 async def test_invalid_length_skips_http() -> None:
     mock_client = AsyncMock()
     source = AuthorizedApiSource(_FAKE_BASE, _FAKE_KEY, client=mock_client)
