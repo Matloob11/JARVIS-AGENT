@@ -1509,3 +1509,19 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
 - **Commit:** `5529adc` · **Deploy:** PC agent restart 05:18 PKT
 - **Doosre agent ke liye:** —
+
+### ✅ [claude] C-16 + C-19 DONE (board audit) · C-64 parked · 2026-10-04 08:25 PKT
+- **Kya kiya:** Read-only audit (DOING tasks vs acceptance) ke baad C-16 aur C-19 DONE kiye. Is ke ilawa C-64 (log pipeline) raat ko implement hua, lekin us ke 3 reviews me se sirf ek chala (live-safety: 0 blocker, 0 major, 3 minor), kyun ke subagents ka weekly limit 8 Oct shaam 7 baje tak hit ho gaya. Unreviewed logging code live job processes me na jaye, is liye C-64 ko `.claude/wip/c64/` me patch bana kar rakh diya (untracked; `git apply --check` saaf) aur working tree HEAD par wapas kar diya.
+  - **C-16:** nginx /agent, /twirp aur /vortex/livekit/webhook live hain (401/404); PC ka LIVEKIT_URL domain ke wss par hai; log rotation json-file 10m×3 hai; 5101/7880 binds plan ke mutabiq C-131 me.
+  - **C-19:** auth backend live hai (bdd8932); owner enrolled hai aur login OK; telemetry/production 401/200 deta hai, 500 nahi; audit rows maujood hain.
+- **Files:** `plan.md` (C-16, C-19, C-64 status)
+- **Verify:** audit agent ki evidence (live nginx/env/LiveKit logs, bridge audit rows, tests 1353 passed); C-64 patch `git apply --check` ok
+- **Commit:** is commit me · **Deploy:** nahi
+- **Doosre agent ke liye:** C-64 restore: `.claude/wip/c64/NOTE.md`
+
+### ✅ 🔁 [claude] C-64 parked: job processes back on reviewed HEAD code · Agent worker restart (agent_ctl) · 2026-10-04 08:20 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 11320) band, naya pid 11296; health 200 (6.9 s me), ensure_room.py: OK, an agent of the current worker is in the room. Room me koi insaan nahi tha.
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** `b360178` · **Deploy:** PC agent restart 08:20 PKT
+- **Doosre agent ke liye:** —
