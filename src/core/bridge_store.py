@@ -65,6 +65,10 @@ KV_DESKTOP_LINK = "desktop_link"          # 'on' | 'off': the persisted Desktop 
 KV_ACTIVE_JOB = "active_job"              # the one agent job allowed to drive the laptop
 KV_PAUSED = "paused"                      # bool: the owner paused the agent (C-ROOM-1)
 KV_LAST_ACTIVITY_TS = "last_activity_ts"  # epoch s of the last owner activity
+# C-23 (K-42 v9): the room owner's state (src/core/bridge_rooms.py). The admin CLI writes the mode override.
+KV_ROOM_MODE = "room_dispatch_mode"       # 'always' | 'on_demand' | 'observe': overrides AGENT_DISPATCH_MODE
+KV_PC_AGENT = "pc_agent"                  # {name, worker_id, source 'report'|'observed', ts}: the PC worker
+KV_ROOM_DISPATCH = "room_dispatch"        # {id, name, reason, ts}: the newest bridge dispatch (written first)
 # C-116 (K-74 v5): a UI desktop_stop the node has not confirmed yet, and the latest node notice
 # values, overwritten in place (never a history), plus the node_id of the last verified hello.
 KV_DESKTOP_STOP = "desktop_stop"          # {ts, by} until a hello or desktop_state reports read/off

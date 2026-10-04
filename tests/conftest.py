@@ -881,6 +881,19 @@ def _vector_memory_never_loads_for_real(monkeypatch):
             monkeypatch.setitem(vars(module.jarvis_vector_db), "prewarm", lambda: failed)
 
 
+@pytest.fixture(autouse=True)
+def _fresh_ui_bridge_agent_status(monkeypatch):
+    """
+    C-23: the bridge emits agent_status only when it changed, so it remembers the last one it emitted, and it
+    remembers when the last UI socket left. Every test starts with neither, whatever an earlier test emitted (a
+    module imported for the first time inside a test starts fresh anyway).
+    """
+    module = sys.modules.get("src.core.ui_bridge")
+    if module is not None and hasattr(module, "AgentStatusTracker"):
+        monkeypatch.setattr(module, "_status_tracker", module.AgentStatusTracker())
+        monkeypatch.setattr(module, "_ui_last_seen", None)
+
+
 # Module singletons that write a fixed file under the live logs/ with open() (no logging handler).
 _LIVE_SINKS: tuple[tuple[tuple[str, ...], str, str], ...] = (
     (("services.utils.jarvis_telemetry", "jarvis_telemetry"), "telemetry", "log_path"),

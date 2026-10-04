@@ -384,6 +384,8 @@ class LinkLogHandler(logging.Handler):
         try:
             event = classify_record(record)
             if event is not None:
+                if event[0] == CONNECTED:  # C-23 (K-53 v9): the lk.agent.name this worker registered
+                    self.monitor.note_agent_name(getattr(record, "agent_name", None))
                 self.monitor.note(*event)
         except Exception:  # pylint: disable=broad-exception-caught  # LiveKit's logging must not fail here
             pass
@@ -419,6 +421,9 @@ class LinkMonitor:
         self._handler: LinkLogHandler | None = None
         self._thread: threading.Thread | None = None
         self.state, self.since, self.detail, self.worker_id, self.cause = CONNECTING, wall(), "", "", ""
+        # C-23 (K-53 v9): the lk.agent.name of the last 'registered worker' line ('' = automatic dispatch); None until
+        # the worker registered. ensure_room.py reports it to the bridge.
+        self.agent_name: str | None = None
         self.connected_once = False
         self._born = clock()
         self._down_since: float | None = None
@@ -456,12 +461,20 @@ class LinkMonitor:
             self._dirty = True
         self._wake.set()
 
+    def note_agent_name(self, name: Any) -> None:
+        """The lk.agent.name of a 'registered worker' line (livekit-agents logs it as extra agent_name)."""
+        if isinstance(name, str):
+            with self._lock:
+                if name != self.agent_name:
+                    self.agent_name, self._dirty = name[:64], True
+
     def snapshot(self) -> dict[str, Any]:
-        """run/agent_link.json: the state and who writes it; no key or token, and no LiveKit address."""
+        """run/agent_link.json: the state and who writes it; no key or token, and no LiveKit address. agent_name
+        (C-23, K-53 v9): the lk.agent.name the worker registered, null until it did."""
         return {"state": self.state, "since": round(self.since, 3), "worker_id": self.worker_id,
-                "detail": self.detail, "cause": self.cause, "connected_once": self.connected_once,
-                "recovery": self.recovery, "recoveries": self.recoveries, "pid": os.getpid(),
-                "lock_pid": self.owner.get("pid"), "lock_started_at": self.owner.get("started_at")}
+                "agent_name": self.agent_name, "detail": self.detail, "cause": self.cause,
+                "connected_once": self.connected_once, "recovery": self.recovery, "recoveries": self.recoveries,
+                "pid": os.getpid(), "lock_pid": self.owner.get("pid"), "lock_started_at": self.owner.get("started_at")}
 
     def attach(self) -> None:
         """The handler on livekit.agents, at INFO for its 'registered worker' line; safe to repeat."""

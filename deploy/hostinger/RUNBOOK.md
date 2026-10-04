@@ -11,6 +11,7 @@ How to operate the JARVIS stack on the Hostinger VPS and the Windows PC.
 | [Maintenance window checklist](#maintenance-window-checklist) | C-12 (OP-08) |
 | [Adding a JARVIS service](#adding-a-jarvis-service) | C-12 (OP-08) |
 | [Testing the deploy tooling](#testing-the-deploy-tooling) | C-12 (OP-08) |
+| [Room ops](#room-ops) | C-23 (OP-22) |
 | [Backup & Restore](#backup--restore) | C-11 (OP-07) |
 
 Shorthands used below. Run them in Git Bash on the PC.
@@ -277,6 +278,69 @@ JARVIS_DEPLOY_E2E=1 $PY -m pytest tests/unit/test_deploy_tooling.py -q -p no:cac
 ```
 
 The tests run the real scripts under Git Bash in a scratch sandbox, with fake docker, nginx, systemctl, curl, ss and ssh. Nothing reaches the VPS or the local Docker. Run the full set after any change to these scripts.
+
+## Room ops
+
+Since C-23 (contract K-44 v9) the bridge (`jarvis-bridge`, module `src/core/bridge_rooms.py`) owns the LiveKit room `jarvis-hybrid`. It creates the room when it is missing, dispatches the agent, and removes a surplus agent. It never deletes the room (only `reset-room` below does) and never deletes a dispatch.
+
+- The PC's `deploy/windows-local/ensure_room.py` (run by agent_ctl and by the room watchdog) asks the bridge first. It uses its own LiveKit path only when the bridge provably does not reconcile: no connection, HTTP 404, nginx's 502/503/504 page, HTTP 503 `livekit_unavailable`, or result `observe`/`disabled`. A bridge that says `paused` stops it in every mode.
+- Modes: `always` (keep one agent in the room; the default with the PC brain), `on_demand` (only while a person, a UI or a voice request is there; the default with the VPS brain), `observe` (report only: no loop dispatch, no removal, nothing sent to an agent; it keeps the old token route's heal without its delete: `GET /livekit/token` creates a missing room, and the owner's own Voice connect, Wake or `unpause` adds one dispatch to a room without an agent). The first C-23 deploy runs `observe` from the compose file.
+- Pause is held only in `always` and `on_demand`. In `observe` (and on the PC's local bridge) the UI's Pause is refused (`pause_unavailable`) and changes nothing; the admin CLI's `pause` is kept and stops every new dispatch, the PC's ensure_room.py included, and reaches the agent only when the mode leaves `observe`.
+- Logs: `ROOM ...` lines in `docker logs jarvis-bridge`. They contain no identity, key or worker id.
+
+```bash
+$VPS "docker exec jarvis-bridge python -m src.core.bridge_rooms status"         # mode and its source, paused, PC agent name, last dispatch, one live read
+$PY scripts/smoke/room_check.py status                                           # the same from the PC: agent + livekit blocks of /vortex/status
+$VPS "docker exec jarvis-bridge python -m src.core.bridge_rooms mode always"     # or on_demand | observe | clear (back to the env/default)
+$VPS "docker exec jarvis-bridge python -m src.core.bridge_rooms pause"           # or unpause (Wake)
+$VPS "docker logs --since 15m jarvis-bridge 2>&1 | grep -E 'ROOM |Traceback'"
+$VPS "docker logs --since 24h jarvis-livekit 2>&1 | grep -c 'RoomService.DeleteRoom'"   # 0 after C-23
+```
+
+- `mode`, `pause` and `unpause` write the bridge's kv. The running bridge applies them within 5 s, with no deploy. `mode observe` is the instant kill switch: it stops every loop dispatch and every removal (only the owner's own Voice connect, Wake or `unpause` can still add one dispatch to a room without an agent).
+- Before `mode always` (or `on_demand`): the UI's Reconnect must no longer send `start` while JARVIS is paused (Cursor request in `plan.md` section 11, C-23 item 1). Until that UI is live, a Reconnect wakes a JARVIS the owner paused, so keep `observe` or tell the owner.
+- A kv mode and the paused flag survive a rollback and a redeploy (`bridge.db` is not rolled back), and a kv mode wins over the compose `AGENT_DISPATCH_MODE` (the bridge logs a WARNING at start). After `rollback.sh`, and before a redeploy that should start from the compose mode, run `mode clear`, and `unpause` unless the owner wants the pause kept.
+- `reset-room --confirm jarvis-hybrid` deletes the room and cuts every session in it. Run it only with the owner's OK. It writes the audit row `room_reset`, and the bridge creates the room again on its next pass.
+
+Pause / Wake / Stop probe, only in `always` or `on_demand` mode (in `observe` the bridge refuses `pause_agent` and room_check exits 1 with `pause_unavailable`). JARVIS is silent for about a minute. Never echo the cookie:
+
+```bash
+export C23_COOKIE="$($VPS 'docker exec jarvis-bridge python -m src.core.bridge_auth mint-session --ttl 600 --label c23-probe')"
+$PY scripts/smoke/room_check.py command pause_agent --wait absent --timeout 40    # paused, the agent leaves ('paused_by_owner' in logs/agent_stderr.log)
+$PY scripts/smoke/room_check.py command start --wait voice_ready --timeout 45      # back within 30 s
+$PY scripts/smoke/room_check.py command stop --watch 20                            # only interrupts: voice_ready holds, no session restart
+unset C23_COOKIE
+```
+
+### LiveKit webhooks (C-23 phase 4, optional)
+
+Webhooks only wake the bridge's loop: the 5 s / 20 s loop alone keeps the room right. They need a LiveKit restart. That restart drops every call and wipes every room, so do it only in an announced idle window. Commit both parts together in phase 4. Neither is in the tree before then.
+
+1. Append to `deploy/hostinger/livekit.yaml` (the key comes only from the environment, never from this file):
+
+   ```yaml
+   webhook:
+     urls:
+       - http://jarvis-bridge:5002/internal/livekit/webhook
+     filter_params:
+       include_events: [room_started, room_finished, participant_joined, participant_left]
+   ```
+
+2. Add `LIVEKIT_WEBHOOK_API_KEY: "${LIVEKIT_API_KEY}"` to the `livekit` service's `environment` in `docker-compose.yml`. LiveKit v1.13.7 does not start when `webhook.urls` is set and that key is not one of `LIVEKIT_KEYS`.
+3. `bash deploy/hostinger/deploy_from_pc.sh --check --services livekit --allow-dirty`, then the same without `--check`. The gate needs LiveKit to answer 200 and `/rtc/validate` to answer 401 within 60 s.
+
+Check:
+
+```bash
+$VPS "docker logs --since 5m jarvis-livekit 2>&1 | grep -ci 'api_key is required'"   # 0
+$VPS "docker logs --since 5m jarvis-bridge 2>&1 | grep 'ROOM webhook'"              # room_started, participant_joined ...
+# The webhook route is /internal/livekit/webhook on :5002 only; it must answer 404 from everywhere else:
+curl -s -o /dev/null -w '%{http_code}\n' -X POST https://jarvis.srv1802669.hstgr.cloud/vortex/internal/livekit/webhook   # 404 (nginx)
+curl -s -o /dev/null -w '%{http_code}\n' -X POST https://jarvis.srv1802669.hstgr.cloud/vortex/livekit/webhook            # 404 (nginx)
+$VPS "curl -s -o /dev/null -w '%{http_code}\n' -X POST http://127.0.0.1:5101/internal/livekit/webhook"                 # 404 (InternalOnly)
+```
+
+Rollback: `$VPS /root/jarvis-backups/tools/rollback.sh --last`. That is one more short LiveKit restart.
 
 ## Backup & Restore
 

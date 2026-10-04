@@ -22,10 +22,11 @@ start    Exit 3 while a worker holds the lock. Rotates logs/agent_stdout.log and
          (5 MB, keeps .1-.5) and runs '.venv_312 python -m src.core.agent <mode>' with JARVIS_STARTED_BY,
          JARVIS_START_REASON, PYTHONPATH, PYTHONIOENCODING and JARVIS_HYBRID=1. Default: hidden, output
          appended to those logs, waits until the worker is ready (health 200 on 127.0.0.1:8081 and its
-         LiveKit link connected, max 60 s), then runs deploy/windows-local/ensure_room.py once, its output
-         streamed here; its '[ROOM] Result: ...' line goes into the summary, NO AGENT / UNKNOWN / an agent of
-         an earlier worker left alone / a room ensured by the bridge without an agent check (or no result
-         line) as a warning.
+         LiveKit link connected, max 60 s), then runs deploy/windows-local/ensure_room.py once (--reason
+         agent_ctl_start; agent_ctl_restart from restart, brain_switch from the brain switch's ENSURE; it asks the
+         bridge, the room owner, first, C-23), its output streamed here; its '[ROOM] Result: ...' line goes into
+         the summary, NO AGENT / UNKNOWN / an agent of an earlier worker left alone / a room ensured by the bridge
+         without an agent check / PAUSED by the owner (or no result line) as a warning.
          --foreground: in this console until the worker exits. Before a worker starts (also in restart) it
          checks the VPS as the worker reaches it (C-16): GET <UI_BRIDGE_URL>/health must answer 200 and
          GET <LIVEKIT_URL as http(s)>/rtc/validate 401, both on the domain since OP-13. A failed check is
@@ -746,9 +747,12 @@ def _run_streamed(cmd: list[str], *, timeout: float, **kwargs: Any) -> tuple[int
 
 ROOM_RESULT_PREFIX = "[ROOM] Result:"
 # ensure_room.py results that leave the room without the worker's agent (or unread, or with an agent of an earlier
-# worker that was left alone and may be a ghost, or ensured by the bridge without checking for an agent): a start
-# reports them as a warning; its exit code stays as it was.
-ROOM_WARNING_RESULTS = ("NO AGENT", "UNKNOWN", "AN AGENT OF AN EARLIER WORKER", "ROOM ENSURED BY THE BRIDGE")
+# worker that was left alone and may be a ghost, or ensured by the bridge without checking for an agent, or paused
+# by the owner, C-23): a start reports them as a warning; its exit code stays as it was.
+ROOM_WARNING_RESULTS = ("NO AGENT", "UNKNOWN", "AN AGENT OF AN EARLIER WORKER", "ROOM ENSURED BY THE BRIDGE",
+                        "PAUSED")
+# ensure_room.py --reason (K-53 v9): the bridge logs who asked with its dispatch.
+ROOM_REASON_START, ROOM_REASON_RESTART, ROOM_REASON_BRAIN = "agent_ctl_start", "agent_ctl_restart", "brain_switch"
 
 
 def room_result(lines: list[str]) -> str:
@@ -758,8 +762,8 @@ def room_result(lines: list[str]) -> str:
 
 
 def room_result_warning(result: str) -> bool:
-    """True for a NO AGENT, UNKNOWN, earlier-worker or bridge (agent presence not checked) result, and for a run
-    that printed no result line at all."""
+    """True for a NO AGENT, UNKNOWN, earlier-worker, bridge (agent presence not checked) or PAUSED result, and for a
+    run that printed no result line at all."""
     return not result or result.strip().upper().startswith(ROOM_WARNING_RESULTS)
 
 
@@ -770,26 +774,28 @@ def describe_room_result(result: str, *, mark: bool = True) -> str:
     return f"ensure_room.py: {'WARNING ' if mark and room_result_warning(result) else ''}{shown}"
 
 
-def ensure_room_run(env: dict[str, str]) -> tuple[int, str]:
-    """Run deploy/windows-local/ensure_room.py with its output streamed to this console; (exit code, the text of
-    its '[ROOM] Result: ...' line or '')."""
+def ensure_room_run(env: dict[str, str], reason: str = ROOM_REASON_START) -> tuple[int, str]:
+    """Run deploy/windows-local/ensure_room.py --reason <reason> with its output streamed to this console; (exit
+    code, the text of its '[ROOM] Result: ...' line or ''). It asks the bridge (the room owner, C-23) first and
+    waits up to 90 s for an agent of this worker."""
     if not ENSURE_ROOM.is_file():
         print(f"[agent_ctl] {ENSURE_ROOM} is missing: the room was not prepared.", file=sys.stderr)
         return EXIT_FAILED, ""
-    print("[agent_ctl] Running deploy/windows-local/ensure_room.py (room + agent dispatch)...", flush=True)
+    print(f"[agent_ctl] Running deploy/windows-local/ensure_room.py --reason {reason} (room + agent)...", flush=True)
     child_env = {**env, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"}  # lines arrive as printed
     try:
-        code, lines = _run_streamed([str(agent_python()), str(ENSURE_ROOM)], cwd=ROOT, env=child_env,
-                                    timeout=ENSURE_ROOM_TIMEOUT_S)
+        code, lines = _run_streamed([str(agent_python()), str(ENSURE_ROOM), "--reason", reason], cwd=ROOT,
+                                    env=child_env, timeout=ENSURE_ROOM_TIMEOUT_S)
     except (OSError, subprocess.SubprocessError) as exc:
         print(f"[agent_ctl] ensure_room.py failed: {exc}", file=sys.stderr)
         return EXIT_FAILED, ""
     return code, room_result(lines)
 
 
-def run_ensure_room(env: dict[str, str]) -> int:
-    """ensure_room_run's exit code only (the brain switch's ENSURE; its VERIFY checks the agent itself)."""
-    return ensure_room_run(env)[0]
+def run_ensure_room(env: dict[str, str], reason: str = ROOM_REASON_BRAIN) -> int:
+    """ensure_room_run's exit code only (the brain switch's ENSURE, --reason brain_switch; its VERIFY checks the
+    agent itself)."""
+    return ensure_room_run(env, reason)[0]
 
 
 def _raise_worker_priority(pids: list[int]) -> None:
@@ -811,8 +817,8 @@ def _raise_worker_priority(pids: list[int]) -> None:
             continue
 
 
-def _start_background(cmd: list[str], env: dict[str, str], timeout: float,
-                      args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+def _start_background(cmd: list[str], env: dict[str, str], timeout: float, args: argparse.Namespace,
+                      room_reason: str = ROOM_REASON_START) -> tuple[int, dict[str, Any]]:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     marker = (f"\n===== agent_ctl start {_now().isoformat(timespec='seconds')} by {args.by} "
               f"({_one_line(args.reason) or '-'}) =====\n").encode("utf-8")
@@ -842,7 +848,7 @@ def _start_background(cmd: list[str], env: dict[str, str], timeout: float,
     print(f"[agent_ctl] Worker pid {details['new_pid']} healthy (200){linked} after {details['start_s']} s.",
           flush=True)
     _raise_worker_priority([pid for pid in (proc.pid, info.get("pid")) if isinstance(pid, int)])
-    room, result = ensure_room_run(env)
+    room, result = ensure_room_run(env, room_reason)
     details.update(ensure_room=room, room_result=result, room_warning=room_result_warning(result))
     if room != 0:
         print(f"[agent_ctl] ensure_room.py exited {room}: the room may have no job. The worker keeps "
@@ -915,9 +921,10 @@ def _run_foreground(cmd: list[str], env: dict[str, str], args: argparse.Namespac
     return code if 0 <= code <= 255 else EXIT_FAILED
 
 
-def start_worker(args: argparse.Namespace, mode: str, *, foreground: bool,
-                 timeout: float = START_TIMEOUT_S) -> tuple[int, dict[str, Any]]:
-    """Start one worker unless one runs. Foreground returns only after the worker has exited."""
+def start_worker(args: argparse.Namespace, mode: str, *, foreground: bool, timeout: float = START_TIMEOUT_S,
+                 room_reason: str = ROOM_REASON_START) -> tuple[int, dict[str, Any]]:
+    """Start one worker unless one runs. Foreground returns only after the worker has exited. room_reason: the
+    --reason of the ensure_room.py run after a background start (agent_ctl_start, or agent_ctl_restart)."""
     if agent_lock.is_locked():
         info = agent_lock.read_pid_info() or {}
         print(f"[agent_ctl] Agent worker already running (pid {info.get('pid', '?')}, by {info.get('by', '?')}, "
@@ -938,7 +945,8 @@ def start_worker(args: argparse.Namespace, mode: str, *, foreground: bool,
         print(f"[agent_ctl] Rotated {', '.join(rotated)}.")
     if foreground:
         return _run_foreground(cmd, agent_env(args.by, reason, background=False), args, vps=vps), {}
-    code, details = _start_background(cmd, agent_env(args.by, reason, background=True), timeout, args)
+    code, details = _start_background(cmd, agent_env(args.by, reason, background=True), timeout, args,
+                                      room_reason)
     return code, {**details, "vps": vps}
 
 
@@ -1269,7 +1277,7 @@ def _restart(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
         error = f"worker pid {args.expect_pid} exited before this restart stopped it; no new worker is started"
         print(f"[agent_ctl] Restart refused: {error}.", file=sys.stderr)
         return EXIT_REFUSED, {"result": "refused", "error": error, **details}
-    code, details["start"] = start_worker(args, mode, foreground=False)
+    code, details["start"] = start_worker(args, mode, foreground=False, room_reason=ROOM_REASON_RESTART)
     details["restart_s"] = round(_monotonic() - started, 1)
     if code != EXIT_OK:
         return code, {"result": "failed", "error": "start: " + _problem(details["start"]), **details}
@@ -2094,7 +2102,10 @@ def _status_last_activity(status: Mapping[str, Any] | None) -> float | None:
 
 def status_shows_brain(status: Mapping[str, Any] | None, target: str) -> bool:
     """True when /vortex/status reports the target brain AND an agent participant whose lk.agent.name is the
-    target's and whose jarvis.session is running (K-72 success condition)."""
+    target's and whose jarvis.session is running (K-72 success condition). A bridge with the room owner (C-23, K-43
+    v9) lists the agents in the room as livekit.agents [{'lk.agent.name', 'jarvis.session', ...}]: then only that
+    list counts (its agent block's agent_name is the dispatch target, not a participant's name). Otherwise the agent
+    block and any participant list are read."""
     if not status:
         return False
     desktop = status.get("desktop") if isinstance(status.get("desktop"), Mapping) else {}
@@ -2104,10 +2115,15 @@ def status_shows_brain(status: Mapping[str, Any] | None, target: str) -> bool:
     want = brain_agent_name(target)
     agent = status.get("agent") if isinstance(status.get("agent"), Mapping) else {}
     livekit = status.get("livekit") if isinstance(status.get("livekit"), Mapping) else {}
-    candidates: list[Mapping[str, Any]] = [agent] if agent else []
-    for participants in (status.get("participants"), livekit.get("participants")):
-        if isinstance(participants, list):
-            candidates += [p for p in participants if isinstance(p, Mapping)]
+    candidates: list[Mapping[str, Any]] = []
+    room_agents = livekit.get("agents")
+    if isinstance(room_agents, list):
+        candidates = [p for p in room_agents if isinstance(p, Mapping)]
+    else:
+        candidates = [agent] if agent else []
+        for participants in (status.get("participants"), livekit.get("participants")):
+            if isinstance(participants, list):
+                candidates += [p for p in participants if isinstance(p, Mapping)]
     for part in candidates:
         # A participant's own fields, else its LiveKit attributes. Only an agent-name field counts: a plain
         # display name or identity is never taken for lk.agent.name.
@@ -2160,12 +2176,13 @@ class LaptopBrain:
     def ensure(self, brain: str) -> int:
         if brain != "pc":
             return EXIT_OK  # the VPS dispatches its own job; ensure_room runs in pc mode only (C-123 step 5)
-        # ensure_room.py asks the PC-signed /vortex/desktop/ensure first and falls back to the LiveKit API; it
-        # never deletes a room. It runs with the env the worker got, so it sees JARVIS_BRAIN as pc.
+        # ensure_room.py asks the bridge first (the signed /vortex/livekit/ensure, else the PC-signed
+        # /vortex/desktop/ensure, C-23) and falls back to the LiveKit API only when the bridge provably does not
+        # reconcile; it never deletes a room. It runs with the env the worker got, so it sees JARVIS_BRAIN as pc.
         env = agent_env(getattr(self._args, "by", "user"), _one_line(getattr(self._args, "reason", "") or ""),
                         background=True)
         env[BRAIN_ENV] = "pc"
-        return EXIT_OK if run_ensure_room(env) == 0 else EXIT_FAILED
+        return EXIT_OK if run_ensure_room(env, reason=ROOM_REASON_BRAIN) == 0 else EXIT_FAILED
 
 
 def _default_ssh(command: list[str]) -> subprocess.CompletedProcess[Any]:

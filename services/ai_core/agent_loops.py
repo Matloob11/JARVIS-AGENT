@@ -5,6 +5,7 @@ Background loops for reminders, bug hunting, and UI communication.
 
 import asyncio
 import functools
+import inspect
 import os
 import socket
 import uuid
@@ -177,6 +178,14 @@ def _agent_identity() -> tuple[str, str]:
 
 
 _CHAT_ID_MAX = 128
+# K-38/K-60 v9 (C-23): the bridge's own pause_agent says payload.by 'bridge' (src/core/bridge_rooms.PAUSE_COMMAND).
+PAUSE_HELD_BY = "bridge"
+
+
+def bridge_holds_pause(payload: Any) -> bool:
+    """True for the bridge's own pause_agent: its room owner holds the pause (no dispatch until Wake). A pause_agent
+    without it (the UI's command forwarded by a bridge before C-23) never ends the job."""
+    return isinstance(payload, dict) and payload.get("by") == PAUSE_HELD_BY
 
 
 def chat_input(payload: Any) -> tuple[str | None, str] | None:
@@ -229,11 +238,24 @@ class UIBridgeListener:
                 self.assistant.set_wake_word_mode(new_mode)
                 logger.info("🎤 Wake word mode set to %s via UI.", new_mode)
             elif cmd_type == "stop":
-                logger.warning("🛑 STOP command received. Shutdown sequence initiated.")
-                if hasattr(self.assistant, "_stop_event"):
-                    self.assistant._stop_event.set() # type: ignore[attr-defined]
-                else:
-                    autonomous_protector.shutdown_signal.set()
+                # K-60 v9 (C-23): 'Stop speaking' only interrupts speech; the session keeps listening. It no longer
+                # sets the job's stop event, which restarted the whole session in place.
+                await self._interrupt_speech()
+                logger.info("STOP: speech interrupted (K-60)")
+            elif cmd_type == "pause_agent":
+                if not bridge_holds_pause(payload):
+                    # K-60 v9: only a pause the bridge holds (its room owner keeps the agent out and brings it back
+                    # on Wake) ends the job; an older bridge forwards the UI's own command, which changes nothing.
+                    logger.info("PAUSE: pause_agent without the bridge's hold ignored (K-60 v9)")
+                    return
+                # K-60 v9 (C-23): the owner paused JARVIS; this job ends with ctx.shutdown('paused_by_owner') and the
+                # bridge dispatches nothing until Wake (ui_command start).
+                request_end = getattr(self.assistant, "request_end", None)
+                if callable(request_end):
+                    request_end("paused_by_owner")
+                elif isinstance(getattr(self.assistant, "_stop_event", None), asyncio.Event):
+                    self.assistant._stop_event.set()  # type: ignore[attr-defined]  # an assistant before C-23
+                logger.warning("PAUSE: the owner paused the agent; this job ends (paused_by_owner)")
             elif cmd_type == "persona_change":
                 logger.info("🎭 Switching persona to: %s", payload)
                 await self.assistant.tool_toggle_gf_mode(payload == "anna")
@@ -266,6 +288,17 @@ class UIBridgeListener:
                     swarm_task.add_done_callback(self.assistant._spawned_tasks.discard) # type: ignore[attr-defined]
         except Exception as e:
             logger.error("❌ Error processing UI command %s: %s", cmd_type, e, exc_info=True)
+
+    async def _interrupt_speech(self) -> bool:
+        """'stop': BrainAssistant.interrupt_speech (AgentSession.interrupt, waited at most 3 s); an assistant without
+        it (an old integration, a test double) is left alone."""
+        interrupt = getattr(self.assistant, "interrupt_speech", None)
+        if not callable(interrupt):
+            return False
+        result = interrupt()
+        if inspect.isawaitable(result):
+            result = await result
+        return bool(result)
 
     async def _task_wrapper(self, payload: str, msg_id: str | None = None) -> None:
         """

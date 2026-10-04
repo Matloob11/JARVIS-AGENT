@@ -897,41 +897,78 @@ async def test_status_takes_the_agents_signed_headers(bridge):
 
 
 class FakeLiveKitAPI:
-    """Stands in for livekit.api.LiveKitAPI: an empty server, so the bridge's ensure block creates the room."""
+    """Stands in for livekit.api.LiveKitAPI behind the room owner (C-23): an empty server, so ensure('token') creates
+    the room and dispatches. Nothing may delete a room or a dispatch. fail / delay make every call raise / wait."""
 
     created: list[Any] = []
+    dispatched: list[Any] = []
+    fail: Exception | None = None
+    delay: float = 0.0
 
     def __init__(self, *_args: Any, **_kwargs: Any) -> None:
         self.room = self
+        self.agent_dispatch = self
+        self.rooms: list[Any] = []
+
+    async def _gate(self) -> None:
+        if FakeLiveKitAPI.delay:
+            await asyncio.sleep(FakeLiveKitAPI.delay)
+        if FakeLiveKitAPI.fail is not None:
+            raise FakeLiveKitAPI.fail
 
     async def list_rooms(self, _req: Any) -> Any:
-        return SimpleNamespace(rooms=[])
+        await self._gate()
+        return SimpleNamespace(rooms=list(self.rooms))
 
     async def list_participants(self, _req: Any) -> Any:
+        await self._gate()
         return SimpleNamespace(participants=[])
 
+    async def list_dispatch(self, room_name: str) -> list[Any]:
+        await self._gate()
+        return []
+
     async def delete_room(self, _req: Any) -> None:
-        raise AssertionError("the token path must not delete a room that does not exist")
+        raise AssertionError("no bridge path deletes a room (K-37 v9)")
+
+    async def delete_dispatch(self, *_args: Any) -> None:
+        raise AssertionError("no bridge path deletes a dispatch (K-44 v9)")
 
     async def create_room(self, req: Any) -> Any:
+        await self._gate()
+        assert not list(req.agents), "create_room never carries an agents list (K-44 v9)"
         FakeLiveKitAPI.created.append(req)
-        return SimpleNamespace(name=req.name)
+        self.rooms = [SimpleNamespace(name=req.name, sid="RM_c23_token")]
+        return self.rooms[0]
+
+    async def create_dispatch(self, req: Any) -> Any:
+        await self._gate()
+        FakeLiveKitAPI.dispatched.append(req)
+        return SimpleNamespace(id="AD_c23_token")
 
     async def aclose(self) -> None:
         return None
 
 
 @pytest.fixture
-def livekit(monkeypatch):
+def livekit(bridge, monkeypatch):
+    """LiveKit keys and an enabled room owner (as in the VPS bridge, pc mode) on FakeLiveKitAPI."""
     from livekit import api as lk_api  # pylint: disable=import-outside-toplevel
 
-    FakeLiveKitAPI.created = []
+    from src.core import bridge_rooms  # pylint: disable=import-outside-toplevel
+
+    FakeLiveKitAPI.created, FakeLiveKitAPI.dispatched = [], []
+    FakeLiveKitAPI.fail, FakeLiveKitAPI.delay = None, 0.0
     monkeypatch.setattr(lk_api, "LiveKitAPI", FakeLiveKitAPI)
     monkeypatch.setenv("LIVEKIT_API_KEY", LK_KEY)
     monkeypatch.setenv("LIVEKIT_API_SECRET", LK_SECRET)
     monkeypatch.setenv("LIVEKIT_URL", "ws://livekit.test:7880")
     monkeypatch.setenv("LIVEKIT_PUBLIC_URL", "wss://jarvis.srv1802669.hstgr.cloud")
     monkeypatch.setenv("JARVIS_ROOM_NAME", "jarvis-hybrid")
+    settings = bridge_rooms.RoomSettings(api_url="http://livekit.test:7880", key=LK_KEY, secret=LK_SECRET,
+                                         room="jarvis-hybrid", role_ok=True)
+    monkeypatch.setattr(bridge.module, "rooms", bridge_rooms.RoomManager(settings, store=lambda: bridge.store,
+                                                                         api_factory=FakeLiveKitAPI))
     return FakeLiveKitAPI
 
 
@@ -954,7 +991,11 @@ async def test_livekit_token_with_a_session_has_a_stable_owner_identity(bridge, 
     video = claims["video"]
     assert video["roomJoin"] and video["room"] == "jarvis-hybrid"
     assert video["canPublish"] and video["canSubscribe"] and video["canPublishData"]
-    assert livekit.created, "the existing ensure block still runs"
+    # K-37 v9: the room owner's ensure('token') ran before the mint: the missing room was created (never an agents
+    # list). In pc mode with nothing reported yet the target is '' (the PC worker's name until C-23 phase 3), so the
+    # new room's implicit '' dispatch is the dispatch and nothing is added beside it.
+    assert [req.name for req in livekit.created] == ["jarvis-hybrid"]
+    assert livekit.dispatched == []
 
 
 async def test_livekit_token_is_401_without_a_session(bridge, livekit):
@@ -962,6 +1003,33 @@ async def test_livekit_token_is_401_without_a_session(bridge, livekit):
         resp = await client.get("/livekit/token", headers=cookie_header("not-a-jwt"))
     assert resp.status_code == 401
     assert not livekit.created
+
+
+async def test_livekit_token_is_minted_when_the_room_ensure_fails(bridge, livekit):
+    livekit.fail = RuntimeError("livekit unreachable")
+    async with http(bridge) as client:
+        resp = await client.get("/livekit/token", headers={"X-Vortex-Token": LEGACY_TOKEN})
+    assert resp.status_code == 200 and resp.json()["token"]
+    assert not livekit.created and not livekit.dispatched
+    assert bridge.module.rooms.snapshot()["ok"] is False  # the status says LiveKit is not readable
+
+
+async def test_livekit_token_waits_at_most_three_seconds_for_the_room_ensure(bridge, livekit, monkeypatch):
+    monkeypatch.setattr(bridge.module, "ROOM_TOKEN_WAIT_S", 0.05)
+    livekit.delay = 0.3  # every LiveKit call is slow: the whole ensure takes about 2 s
+    async with http(bridge) as client:
+        started = time.monotonic()
+        resp = await client.get("/livekit/token", headers={"X-Vortex-Token": LEGACY_TOKEN})
+        waited = time.monotonic() - started
+    assert resp.status_code == 200 and resp.json()["token"]
+    assert waited < 0.3, "the token waited for the whole ensure"
+    for _ in range(200):  # the shielded ensure finishes in the background
+        if bridge.module.rooms._last_result is not None:
+            break
+        await asyncio.sleep(0.05)
+    assert bridge.module.rooms._last_result.result == "in_flight"  # the new room's implicit '' dispatch
+    assert [req.name for req in livekit.created] == ["jarvis-hybrid"]
+    assert livekit.dispatched == []
 
 
 @pytest.mark.usefixtures("livekit")

@@ -12,6 +12,7 @@ import logging
 import os
 import socket
 import sys
+import threading
 import time
 import traceback
 from collections.abc import Awaitable, Callable, Coroutine
@@ -290,10 +291,12 @@ def session_room_options(text_input_cb: Callable[..., Any] | None = None) -> Any
     links the owner's new identity.
     C-42 (K-59): text_input_cb (the ConversationRouter's) answers 'lk.chat' instead of LiveKit's default, so
     typed text from the room takes the same path as typed text from the UI. None keeps LiveKit's default.
+    C-23 (K-60 v9): delete_room_on_close=False explicitly: closing a session never deletes the room (the bridge owns
+    it), whatever a later livekit-agents default says.
     """
     if text_input_cb is None:
-        return lk_room_io.RoomOptions(close_on_disconnect=False)
-    return lk_room_io.RoomOptions(close_on_disconnect=False,
+        return lk_room_io.RoomOptions(close_on_disconnect=False, delete_room_on_close=False)
+    return lk_room_io.RoomOptions(close_on_disconnect=False, delete_room_on_close=False,
                                   text_input=lk_room_io.TextInputOptions(text_input_cb=text_input_cb))
 
 
@@ -741,6 +744,114 @@ async def _cleanup_session_resources(session: AgentSession, tasks: list[asyncio.
             await asyncio.gather(*real_tasks, return_exceptions=True)
 
 
+# ------------------------------------------------------------------ C-23: the job's session state and its end
+# K-68 v9: the agent mirrors its session in the participant attribute jarvis.session, which the bridge's room owner
+# reads (voice_ready needs 'running'; an agent without the attribute counts as running).
+SESSION_ATTR = "jarvis.session"
+SESSION_STARTING, SESSION_RUNNING, SESSION_RESTARTING = "starting", "running", "restarting"
+SESSION_PAUSED, SESSION_CLOSED = "paused", "closed"
+SESSION_ATTR_TIMEOUT_S = 5.0
+JOB_END_NOTIFY_S = 3.0                  # notify job_end waits at most this long before ctx.shutdown
+END_PAUSED = "paused_by_owner"          # pause_agent (K-60 v9)
+END_BY_COMMAND = "ended_by_command"     # the stop event without a reason (an assistant before C-23)
+END_SESSION_FAILED = "session_failed"   # every session attempt of this job failed
+
+
+async def _write_session_attr(ctx: Any, value: str) -> bool:
+    """Sets jarvis.session on the agent's own participant (at most SESSION_ATTR_TIMEOUT_S); never raises."""
+    try:
+        local = ctx.room.local_participant
+        await asyncio.wait_for(local.set_attributes({SESSION_ATTR: value}), SESSION_ATTR_TIMEOUT_S)
+    except Exception as e:  # pylint: disable=broad-exception-caught  # best effort: the room may be gone (a cancel
+        # is a BaseException and passes)
+        logger.debug("SESSION attribute %s not set: %s", value, type(e).__name__)
+        return False
+    return True
+
+
+# Strong references until each write is done. On Windows every job runs in its own thread and event loop
+# (livekit-agents' THREAD executor), so the set is shared under a lock and each job only ever waits on its own
+# loop's writes.
+_session_attr_tasks: set[asyncio.Task[bool]] = set()
+_session_attr_lock = threading.Lock()
+
+
+def _forget_session_attr_task(task: asyncio.Task[bool]) -> None:
+    with _session_attr_lock:
+        _session_attr_tasks.discard(task)
+
+
+def _set_session_attr(ctx: Any, value: str) -> asyncio.Task[bool] | None:
+    """jarvis.session, best effort and never blocking: a task of its own (None outside a running loop)."""
+    try:
+        task = asyncio.ensure_future(_write_session_attr(ctx, value))
+    except RuntimeError:
+        return None
+    with _session_attr_lock:
+        _session_attr_tasks.add(task)
+    task.add_done_callback(_forget_session_attr_task)
+    return task
+
+
+def _pending_session_attr_tasks() -> list[asyncio.Task[bool]]:
+    """This job's attribute writes still running: only the running loop's (another job's belong to another loop)."""
+    loop = asyncio.get_running_loop()
+    with _session_attr_lock:
+        return [task for task in _session_attr_tasks if not task.done() and task.get_loop() is loop]
+
+
+def _job_id_of(ctx: Any) -> str:
+    try:
+        job_id = ctx.job.id
+    except Exception:  # pylint: disable=broad-exception-caught  # a stand-in context without a job
+        return ""
+    return job_id if isinstance(job_id, str) else ""
+
+
+async def _report_job_end(ctx: Any, reason: str) -> None:
+    """notify job_end {job_id, reason} (K-40/K-60 v9), best effort and at most JOB_END_NOTIFY_S: the bridge's room
+    owner then stops counting this job as in flight (LiveKit v1.13.7 never marks a job ended)."""
+    job_id = _job_id_of(ctx)
+    if not job_id:
+        return
+    try:
+        from services.utils.jarvis_bridge import notify_event  # pylint: disable=import-outside-toplevel
+        await asyncio.wait_for(notify_event("job_end", {"job_id": job_id, "reason": reason}), JOB_END_NOTIFY_S)
+    except Exception as e:  # pylint: disable=broad-exception-caught  # never delays the end beyond the timeout
+        logger.debug("JOB END: job_end not reported: %s", type(e).__name__)
+
+
+def _is_console_job(ctx: Any) -> bool:
+    """livekit-agents' console mode runs a fake job: it is never shut down from here."""
+    try:
+        return bool(ctx.is_fake_job())
+    except Exception:  # pylint: disable=broad-exception-caught
+        return False
+
+
+async def _end_job(ctx: Any, ended: str | None) -> None:
+    """
+    C-23 (K-60 v9): after the session loop ends (not on cancel, not in console mode) the job ends instead of staying
+    in the room without a session: jarvis.session 'paused' for a pause (else 'closed'), notify job_end, then
+    ctx.shutdown(reason) - 'paused_by_owner', 'ended_by_command', or 'session_failed' after the last failed attempt.
+    The bridge then dispatches a fresh job (with backoff), or none while paused. Never JobContext.delete_room.
+    """
+    reason = ended or END_SESSION_FAILED
+    if _is_console_job(ctx):
+        logger.info("JOB END (%s): console mode keeps the job", reason)
+        return
+    pending = _pending_session_attr_tasks()
+    if pending:  # an earlier 'starting'/'running' write must never land after the last one
+        await asyncio.wait(pending, timeout=SESSION_ATTR_TIMEOUT_S)
+    await _write_session_attr(ctx, SESSION_PAUSED if reason == END_PAUSED else SESSION_CLOSED)
+    await _report_job_end(ctx, reason)
+    logger.warning("JOB END: %s; ctx.shutdown", reason)
+    try:
+        ctx.shutdown(reason=reason)
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.error("JOB END: ctx.shutdown failed: %s", type(e).__name__)
+
+
 def _print_startup_banner() -> None:
     """Prints the JARVIS startup banner."""
     print("\n" + "="*50)
@@ -752,13 +863,17 @@ def _print_startup_banner() -> None:
 
 
 async def entrypoint(ctx: agents.JobContext):
-    """Main job entrypoint."""
+    """Main job entrypoint. Up to 5 session attempts; the job ends (ctx.shutdown) when the assistant's stop event is
+    set (pause_agent: 'paused_by_owner') or when every attempt failed ('session_failed'), never by starting another
+    session in place (C-23, K-60 v9)."""
     # K-29 backstop for _mask_cli_log_handler(): masks any root handler added since then.
     redact_root_handlers()
     net_guard.harden_process()  # C-124: again in the job (PR_SET_DUMPABLE does not survive an exec)
     local = desktop_mode() == DESKTOP_MODE_LOCAL
     max_retries = 5
     attempt = 0
+    ended: str | None = None
+    cancelled = False
 
     while attempt < max_retries:
         session: AgentSession | None = None
@@ -782,6 +897,7 @@ async def entrypoint(ctx: agents.JobContext):
             # INCREASED TIMEOUT: From 10s to 60s for high-load systems (Sir Matloob's Dell PC)
             await asyncio.wait_for(ctx.connect(), timeout=60.0)
             logger.info("✅ Connected to room: %s", ctx.room.name)
+            _set_session_attr(ctx, SESSION_STARTING)  # K-68 v9 (best effort, never blocking)
             # C-137: loads in its own thread while the session starts (C-124: the JARVIS room's job only)
             _prewarm_vector_memory(getattr(ctx.room, "name", None))
             # C-72: speaker-ID model loads in its own thread (C-124: the JARVIS room's job only)
@@ -831,6 +947,12 @@ async def entrypoint(ctx: agents.JobContext):
                 current_city=city,
                 user_id=user_id,
             )
+            # C-23: the stop event comes with the assistant, before the UI listener (_start_background_tasks) can
+            # receive a pause_agent; one that arrives before the wait below is never lost.
+            stop_event = getattr(assistant, "_stop_event", None)
+            if not isinstance(stop_event, asyncio.Event):
+                stop_event = asyncio.Event()
+                assistant._stop_event = stop_event  # pylint: disable=protected-access
             # C-42: typed chat (UI and lk.chat) goes into this job's session through the router, and the
             # router emits every transcript message once (conversation_item_added).
             router = ConversationRouter(assistant, spawn=track)
@@ -863,6 +985,7 @@ async def entrypoint(ctx: agents.JobContext):
             await session.start(room=ctx.room, agent=assistant,
                                 room_options=session_room_options(router.text_input_cb))
             logger.info("[AGENT] Session started successfully.")
+            _set_session_attr(ctx, SESSION_RUNNING)  # K-68 v9: the bridge's voice_ready needs it
             router.attach(session)
             harden_room_input(session, ctx.room)  # C-124: owner-only RPC and text (VPS; PC opt-in)
             follow_owner_reconnects(session, ctx.room)  # the owner comes back under a new identity
@@ -939,14 +1062,16 @@ async def entrypoint(ctx: agents.JobContext):
             if local and rag_warm_delay is not None:
                 track(_warm_document_index(rag_warm_delay))
 
-            # Wait until session ends, room disconnects, or UI stop command
-            stop_event = asyncio.Event()
-            assistant._stop_event = stop_event # Store on assistant for access
-
+            # C-23 (K-60 v9): wait until the job is asked to end (pause_agent, or C-62's shutdown_agent); 'stop'
+            # only interrupts speech and never sets this. The job then ends: no other session in this job.
             await stop_event.wait()
+            ended = getattr(assistant, "end_reason", None) or END_BY_COMMAND
+            logger.info("SESSION ending: %s", ended)
+            break
 
         except (asyncio.CancelledError, KeyboardInterrupt):
             logger.info("🛑 Shutdown signal received.")
+            cancelled = True
             break
         except Exception as exc:
             # Categorize the error for better visibility
@@ -959,6 +1084,7 @@ async def entrypoint(ctx: agents.JobContext):
 
             attempt += 1
             if attempt < max_retries:
+                _set_session_attr(ctx, SESSION_RESTARTING)
                 retry_delay = 5 * attempt
                 logger.info("🔄 Retrying in %ds...", retry_delay)
                 await asyncio.sleep(retry_delay)
@@ -966,6 +1092,11 @@ async def entrypoint(ctx: agents.JobContext):
             if router is not None:
                 router.detach()  # typed chat gets the offline answer until the next session attaches
             await _cleanup_session_resources(session, list(active_tasks))
+
+    if not cancelled:
+        # C-23: a paused, ended or failed job leaves the room (ctx.shutdown) instead of staying without a session,
+        # which kept LiveKit from dispatching a fresh one.
+        await _end_job(ctx, ended)
 
 
 # --------------------------------------------------------------------------- C-136: LiveKit link state
@@ -1069,19 +1200,33 @@ def build_worker_options(
 
     Shared by both start paths: src.core.agent imports it from here, so this module never has to
     import src.core.agent (that would be an import cycle). The explicit port also replaces dev
-    mode's random one. JARVIS_AGENT_NAME='' keeps automatic dispatch until OP-22 sets 'jarvis'
-    (explicit dispatch, K-44). check_runtime_profile() runs first.
+    mode's random one. agent_name (K-69/K-72 v9, worker_agent_name): JARVIS_AGENT_NAME, else '' (automatic
+    dispatch) in local mode and 'jarvis' in remote mode; the PC root .env says jarvis-pc from C-23 phase 3.
+    check_runtime_profile() runs first.
     """
     check_runtime_profile()
     options: dict[str, Any] = {
         "entrypoint_fnc": entrypoint if entrypoint_fnc is None else entrypoint_fnc,
         "host": os.getenv("JARVIS_WORKER_HOST") or "127.0.0.1",
         "port": int(os.getenv("JARVIS_WORKER_PORT") or "8081"),
-        "agent_name": os.getenv("JARVIS_AGENT_NAME", "").strip(),
+        "agent_name": worker_agent_name(),
     }
     if desktop_mode() != DESKTOP_MODE_REMOTE:
         options["load_fnc"] = pc_worker_load
     return agents.WorkerOptions(**options)
+
+
+REMOTE_AGENT_NAME = "jarvis"  # K-72: the VPS brain's lk.agent.name
+
+
+def worker_agent_name() -> str:
+    """The lk.agent.name this worker registers (C-23, K-69 v9): JARVIS_AGENT_NAME, else '' (automatic dispatch, the
+    PC worker until C-23 phase 3) in local mode and 'jarvis' in remote mode, so a missing line never breaks the
+    dispatch."""
+    name = (os.getenv("JARVIS_AGENT_NAME") or "").strip()
+    if name:
+        return name
+    return REMOTE_AGENT_NAME if desktop_mode() == DESKTOP_MODE_REMOTE else ""
 
 
 def pc_worker_load() -> float:

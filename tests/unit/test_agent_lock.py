@@ -282,6 +282,25 @@ def test_build_worker_options_with_installed_livekit(monkeypatch):
     opts = agent_module.build_worker_options(sentinel)
     assert (opts.host, opts.port, opts.agent_name) == ("127.0.0.2", 18081, "jarvis")
     assert opts.entrypoint_fnc is sentinel
+    monkeypatch.setenv("JARVIS_AGENT_NAME", "jarvis-pc")  # C-23 phase 3: the PC root .env's explicit name
+    assert agent_module.build_worker_options(sentinel).agent_name == "jarvis-pc"
+
+
+def test_the_worker_agent_name_defaults_by_desktop_mode(monkeypatch):
+    """C-23 (K-69 v9): JARVIS_AGENT_NAME wins; unset, the PC brain (local mode) keeps '' (automatic dispatch, so a
+    missing line never breaks today's dispatch) and the VPS brain (remote mode) registers 'jarvis'."""
+    runner_module = importlib.import_module("src.core.agent_runner")
+    monkeypatch.delenv("JARVIS_AGENT_NAME", raising=False)
+    monkeypatch.delenv("JARVIS_DESKTOP_MODE", raising=False)
+    assert runner_module.worker_agent_name() == ""
+    monkeypatch.setenv("JARVIS_DESKTOP_MODE", "local")
+    assert runner_module.worker_agent_name() == ""
+    monkeypatch.setenv("JARVIS_DESKTOP_MODE", "remote")
+    assert runner_module.worker_agent_name() == "jarvis"
+    monkeypatch.setenv("JARVIS_AGENT_NAME", "  jarvis-canary  ")
+    assert runner_module.worker_agent_name() == "jarvis-canary"
+    monkeypatch.setenv("JARVIS_AGENT_NAME", "   ")  # blank counts as unset
+    assert runner_module.worker_agent_name() == "jarvis"
 
 
 def test_agent_runner_main_takes_the_lock_then_uses_the_shared_builder(monkeypatch):

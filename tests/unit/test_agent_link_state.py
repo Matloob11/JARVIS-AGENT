@@ -274,6 +274,27 @@ async def test_real_connection_task_reconnects_by_itself(monkeypatch, lk_logger,
     assert seen["probes"] == 0 and not seen["restarts"]
 
 
+def test_the_registered_agent_name_goes_into_the_link_file(run_dir):
+    """C-23 (K-53 v9): run/agent_link.json agent_name is the lk.agent.name of the last 'registered worker' line;
+    '' (automatic dispatch) stays '', and a line without the field changes nothing."""
+    monitor = livekit_link.LinkMonitor(run_dir / livekit_link.LINK_FILE_NAME, dict(OWNER), probe=lambda: False,
+                                       active_jobs=lambda: 0, restart=lambda *_args: pytest.fail("no restart"),
+                                       log=lambda _line: None)
+    handler = livekit_link.LinkLogHandler(monitor)
+
+    def registered(**extra):
+        handler.emit(logging.makeLogRecord({"name": "livekit.agents", "msg": "registered worker",
+                                            "levelno": logging.INFO, "id": "AW_name", **extra}))
+
+    assert monitor.snapshot()["agent_name"] is None
+    registered(agent_name="")
+    assert monitor.snapshot()["agent_name"] == ""
+    registered(agent_name="jarvis-pc")
+    assert monitor.snapshot()["agent_name"] == "jarvis-pc"
+    registered()  # no agent_name field: kept
+    assert monitor.snapshot()["agent_name"] == "jarvis-pc" and monitor.snapshot()["worker_id"] == "AW_name"
+
+
 def test_other_livekit_agents_lines_are_not_connection_lines():
     def record(msg, *, level=logging.INFO, exc=None, **extra):
         return logging.makeLogRecord({"name": "livekit.agents", "msg": msg, "levelno": level,
@@ -335,6 +356,7 @@ def test_start_writes_connecting_before_anything_else_and_the_thread_follows(lk_
     try:
         doc = read_doc(path)
         assert (doc["state"], doc["worker_id"], doc["connected_once"]) == ("connecting", "", False)
+        assert doc["agent_name"] is None  # C-23: unknown until the worker registered
         assert lk_logger.level == logging.INFO and any(isinstance(h, livekit_link.LinkLogHandler)
                                                        for h in lk_logger.handlers)
         lk_logger.info("registered worker", extra={"id": "AW_thread", "agent_name": "jarvis-pc"})
@@ -342,6 +364,8 @@ def test_start_writes_connecting_before_anything_else_and_the_thread_follows(lk_
         while read_doc(path)["state"] != "connected" and time.monotonic() < deadline:
             time.sleep(0.05)
         assert read_doc(path)["worker_id"] == "AW_thread"
+        # C-23 (K-53 v9): the lk.agent.name of the 'registered worker' line, which ensure_room.py reports
+        assert read_doc(path)["agent_name"] == "jarvis-pc"
     finally:
         monitor.stop()
     assert not any(isinstance(h, livekit_link.LinkLogHandler) for h in lk_logger.handlers)
@@ -397,8 +421,9 @@ async def test_the_link_file_and_lines_hold_no_secret_and_no_livekit_address(mon
     assert "(WSServerHandshakeError: 401, message='Invalid response status', url='<livekit>')" in written
     # connected, the disconnect, 401, refused, then livekit-agents gives up (its last error is not logged)
     assert [json.loads(doc)["cause"] for doc in docs] == ["", "", "rejected", "network", "network"]
-    assert sorted(json.loads(docs[-1])) == ["cause", "connected_once", "detail", "lock_pid", "lock_started_at", "pid",
-                                            "recoveries", "recovery", "since", "state", "worker_id"]
+    assert sorted(json.loads(docs[-1])) == ["agent_name", "cause", "connected_once", "detail", "lock_pid",
+                                            "lock_started_at", "pid", "recoveries", "recovery", "since", "state",
+                                            "worker_id"]
 
 
 @pytest.mark.parametrize(("text", "url", "expected"), [
@@ -1293,8 +1318,9 @@ def test_restart_by_the_worker_uses_the_normal_path_and_prints_no_highlight(ctl,
         calls.append(("stop", timeout, force))
         return 0, {"result": "stopped", "old_pid": 31500, "graceful": True, "killed": [], "stop_s": 1.0}
 
-    def start(args, mode, *, foreground, timeout=60):
+    def start(args, mode, *, foreground, timeout=60, room_reason="agent_ctl_start"):
         calls.append(("start", mode, foreground, args.by))
+        assert room_reason == "agent_ctl_restart"  # C-23: a restart's ensure_room.py --reason
         return 0, {"result": "started", "new_pid": 31600, "health": 200, "start_s": 9.0, "ensure_room": 0}
 
     monkeypatch.setattr(agent_ctl, "stop_worker", stop)
@@ -1363,7 +1389,7 @@ def test_a_recovery_request_still_valid_replaces_the_worker(ctl, monkeypatch):
     calls: list = []
     monkeypatch.setattr(agent_ctl, "stop_worker", lambda timeout, force=False: calls.append("stop") or (
         0, {"result": "stopped", "old_pid": 31500, "graceful": True, "killed": [], "stop_s": 1.0}))
-    monkeypatch.setattr(agent_ctl, "start_worker", lambda args, mode, *, foreground, timeout=60: calls.append(
+    monkeypatch.setattr(agent_ctl, "start_worker", lambda args, mode, *, foreground, timeout=60, **_k: calls.append(
         "start") or (0, {"result": "started", "new_pid": 31600, "health": 200, "start_s": 9.0, "ensure_room": 0}))
     assert agent_ctl.main(RECOVERY_RESTART) == 0
     assert calls == ["stop", "start"] and audit_lines(ctl.logs)[-1]["result"] == "restarted"

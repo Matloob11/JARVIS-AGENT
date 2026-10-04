@@ -193,6 +193,8 @@ def module(monkeypatch, tmp_path) -> Any:
     monkeypatch.setenv("JARVIS_RUN_DIR", str(tmp_path / "run"))  # never the live worker's run/
     monkeypatch.delenv("JARVIS_BRAIN", raising=False)
     monkeypatch.delenv("JARVIS_LINK_URL", raising=False)
+    for name in ("AGENT_TOKEN", "BRIDGE_HMAC_SECRET", "JARVIS_AGENT_NAME"):  # no bridge route unless a test sets it
+        monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(dotenv, "load_dotenv", lambda *args, **kwargs: False)
     spec = importlib.util.spec_from_file_location("wave_h_ensure_room", ENSURE_ROOM)
     loaded = importlib.util.module_from_spec(spec)
@@ -320,7 +322,7 @@ async def test_a_stale_running_job_and_no_agent_joining_warns_and_never_deletes(
     _never_cut(fake)
     out = capsys.readouterr().out
     _assert_clean(out)
-    assert "[WARN] No agent joined" in out and "never deleted under a live session" in out
+    assert "[WARN] No agent joined" in out and "a person is in it" in out and "the room is never deleted" in out
     assert f"[ROOM] Result: {module.RESULT_NO_AGENT}" in out
 
 
@@ -464,16 +466,19 @@ async def test_a_ghost_judged_only_by_its_join_time_gets_no_extra_check(module, 
 
 
 async def test_the_longest_path_stays_inside_agent_ctls_budget(module, monkeypatch, capsys):
-    """A dead worker's ghost that leaves on the last extra check, then a dispatch and a recreated room that
-    bring no agent: every wait runs in full, and agent_ctl's timeout still leaves room for the API calls."""
+    """A dead worker's ghost that leaves on the last extra check, then a dispatch that brings no agent: every
+    wait runs in full, and agent_ctl's timeout still leaves room for the API calls. The bridge path's longest
+    wait (one call, then the 90 s follow-up) fits too."""
     ghost_polls = round(module.OTHER_WORKER_GHOST_WAIT_S / module.POLL_S) - 1
     fake = _install(monkeypatch, FakeLiveKit(exists=True, participants=_ghost_polls(module, ghost_polls, []),
-                                             dispatches=[_dispatch(_old_job())], after_recreate=[]))
+                                             dispatches=[_dispatch(_old_job())]))
     await module.ensure_room()
 
-    assert fake.count("create_dispatch") == 1 and fake.count("delete_room") == 1
-    worst = (module.OTHER_WORKER_GHOST_WAIT_S + module.SELF_REDISPATCH_WAIT_S + 2 * module.AGENT_JOIN_WAIT_S)
+    assert fake.count("create_dispatch") == 1
+    _never_cut(fake)
+    worst = module.OTHER_WORKER_GHOST_WAIT_S + module.SELF_REDISPATCH_WAIT_S + module.AGENT_JOIN_WAIT_S
     assert _slept(module) == pytest.approx(worst)
+    assert module.BRIDGE_TIMEOUT_S + module.BRIDGE_WAIT_S + 10 <= 120
     ctl = (ROOT / "scripts" / "agent_ctl.py").read_text(encoding="utf-8")
     budget = float(re.search(r"^ENSURE_ROOM_TIMEOUT_S = (\d+)", ctl, re.MULTILINE).group(1))
     assert worst + 20 <= budget
@@ -490,44 +495,30 @@ async def test_the_new_agent_replacing_a_ghost_ends_the_wait(module, monkeypatch
     assert f"[ROOM] Result: {module.RESULT_AGENT}" in capsys.readouterr().out
 
 
-# --------------------------------------------------------------------------- empty room: last resort
+# --------------------------------------------------------------------------- empty room: never deleted (C-23)
 
 
-async def test_empty_room_without_agent_after_dispatch_is_deleted_and_recreated(module, monkeypatch, capsys):
-    fake = _install(monkeypatch, FakeLiveKit(exists=True, participants=[[]], dispatches=[_dispatch(_old_job())],
-                                             after_recreate=[_new_agent()]))
+async def test_an_empty_room_without_agent_after_dispatch_is_never_deleted(module, monkeypatch, capsys):
+    """C-23 (K-53 v9): the v7/v8 last-resort delete is gone. A room still without an agent stays as it is, whoever
+    is in it, and the run says NO AGENT."""
+    fake = _install(monkeypatch, FakeLiveKit(exists=True, participants=[[]], dispatches=[_dispatch(_old_job())]))
     await module.ensure_room()
 
     _assert_one_empty_name_dispatch(fake)
-    assert fake.count("delete_room") == 1 and fake.count("create_room") == 1
-    assert fake.calls.index("create_dispatch") < fake.calls.index("delete_room") < fake.calls.index("create_room")
-    request = fake.room_svc.create_room.await_args.args[0]
-    assert [d.agent_name for d in request.agents] == [""]
+    _never_cut(fake)
     out = capsys.readouterr().out
     _assert_clean(out)
-    assert "deleting and recreating it with agents=" in out and "[OK] Agent joined the recreated room" in out
-    assert f"[ROOM] Result: {module.RESULT_AGENT}" in out
+    assert "nobody is in it" in out and "the room is never deleted" in out
+    assert "deleting" not in out and "recreat" not in out
+    assert f"[ROOM] Result: {module.RESULT_NO_AGENT}" in out
 
 
-async def test_a_person_joining_before_the_last_resort_stops_the_delete(module, monkeypatch, capsys):
-    polls = [[]] * (1 + round(module.SELF_REDISPATCH_WAIT_S / module.POLL_S))
-    fake = _install(monkeypatch, FakeLiveKit(exists=True, participants=polls))
-    fake.after_dispatch = []  # the dispatch brings no agent: every poll after it sees an empty room...
-    original = fake.room_svc.list_participants.side_effect
-    joins_at = 1 + round(module.SELF_REDISPATCH_WAIT_S / module.POLL_S) + \
-        round(module.AGENT_JOIN_WAIT_S / module.POLL_S)
-
-    async def list_participants(req: Any) -> Any:
-        if fake.count("list_participants") >= joins_at:  # ...until the owner joins just before the delete
-            fake.calls.append("list_participants")
-            return livekit_room.ListParticipantsResponse(participants=[_human()])
-        return await original(req)
-
-    fake.room_svc.list_participants.side_effect = list_participants
-    await module.ensure_room()
-    assert fake.count("delete_room") == 0 and fake.count("create_dispatch") == 1
-    out = capsys.readouterr().out
-    assert "is no longer empty" in out and f"[ROOM] Result: {module.RESULT_NO_AGENT}" in out
+def test_the_file_has_no_delete_path_any_more(module):
+    """No delete_room call and no recreate helper are left in ensure_room.py (tests/infrastructure/
+    test_no_room_delete.py checks every file)."""
+    source = ENSURE_ROOM.read_text(encoding="utf-8")
+    assert "delete_room(" not in source and "DeleteRoomRequest" not in source
+    assert not hasattr(module, "_recreate_empty_room")
 
 
 # --------------------------------------------------------------------------- unreadable lists, console
@@ -555,22 +546,19 @@ async def test_unreadable_dispatches_add_no_dispatch_and_keep_a_person(module, m
     assert "agent_dispatch=unknown" in out and "[ROOM] list_dispatch note: 404 key ***" in out
 
 
-async def test_unreadable_dispatches_in_an_empty_room_still_recreate_it(module, monkeypatch, capsys):
-    """Nobody in the room and no dispatch list: no dispatch is added (it could double a job), but the empty
-    room is recreated with agents= (that cuts nobody); the new agent counts by its join time."""
+async def test_unreadable_dispatches_in_an_empty_room_add_nothing_and_delete_nothing(module, monkeypatch, capsys):
+    """Nobody in the room and no dispatch list: no dispatch is added (it could double a job), and the room is
+    never deleted or recreated (C-23)."""
     fake = _install(monkeypatch, FakeLiveKit(exists=True, participants=[[]],
-                                             dispatch_list_error=RuntimeError(f"503 key {FAKE_KEY}"),
-                                             after_recreate=[_new_agent()]))
+                                             dispatch_list_error=RuntimeError(f"503 key {FAKE_KEY}")))
     await module.ensure_room()
 
     assert fake.count("create_dispatch") == 0
-    assert fake.count("delete_room") == 1 and fake.count("create_room") == 1
-    assert fake.calls.index("delete_room") < fake.calls.index("create_room")
+    _never_cut(fake)
     out = capsys.readouterr().out
     _assert_clean(out)
     assert "agent_dispatch=unknown" in out and "The dispatches could not be listed" in out
-    assert "deleting and recreating it with agents=" in out and "[OK] Agent joined the recreated room" in out
-    assert f"[ROOM] Result: {module.RESULT_AGENT}" in out
+    assert f"[ROOM] Result: {module.RESULT_NO_AGENT}" in out
 
 
 async def test_console_never_shows_credentials_or_the_turn_password(module, monkeypatch, capsys):
@@ -610,6 +598,14 @@ def test_current_worker_reads_the_lock_holder_and_its_link(monkeypatch, tmp_path
     assert worker.started_at == pytest.approx(
         datetime.fromisoformat(info["started_at"]).timestamp())
     assert "yes" in worker.describe() and WORKER_ID not in worker.describe()
+    # C-23: no agent_name in the link file (a worker before C-23): JARVIS_AGENT_NAME, else ''
+    assert worker.agent_name == ""
+    monkeypatch.setenv("JARVIS_AGENT_NAME", "jarvis-pc")
+    assert fresh.current_worker().agent_name == "jarvis-pc"
+    link["agent_name"] = ""  # what the running worker registered wins over the setting
+    (run / "agent_link.json").write_text(json.dumps(link), encoding="utf-8")
+    assert fresh.current_worker().agent_name == ""
+    monkeypatch.delenv("JARVIS_AGENT_NAME")
 
     link["lock_pid"] = 1  # written by an earlier worker: its id is not the current one
     (run / "agent_link.json").write_text(json.dumps(link), encoding="utf-8")
@@ -859,3 +855,303 @@ def test_an_error_after_the_result_line_keeps_that_line_and_exits_1(module, monk
     assert "[ERROR] ensure_room.py stopped on an unexpected OSError." in out
     _assert_clean(out)
     fake.aclose.assert_awaited()
+
+
+# --------------------------------------------------------------------------- C-23: the bridge path (K-53 v9)
+
+BRIDGE_URL = "https://bridge.c23.invalid/vortex"
+
+
+class FakeResponse:
+    def __init__(self, status: int, data: Any = None, headers: dict[str, str] | None = None) -> None:
+        self.status_code = status
+        self._data = data
+        self.headers = headers or {}
+
+    def json(self) -> Any:
+        if self._data is None:
+            raise ValueError("not JSON")  # an nginx error page
+        return self._data
+
+
+def _answer(result: str, *, in_room: bool = False, current: bool | None = False, paused: bool = False,
+            voice_ready: bool | None = None) -> dict[str, Any]:
+    return {"room": ROOM, "room_sid": "RM_c23", "brain": "pc", "mode": "always", "paused": paused,
+            "target_agent_name": "", "result": result, "agent_in_room": in_room,
+            "voice_ready": in_room if voice_ready is None else voice_ready, "agent_current_worker": current,
+            "dispatch_id": None, "retry_in_s": None, "created": {"room": False, "dispatch": False}}
+
+
+@pytest.fixture
+def bridge(module, monkeypatch):
+    """The signed /livekit/ensure route configured (throwaway values), its headers faked, httpx.post scripted and
+    the bridge path's clock fake (no real sleep). answers: what each call returns (the last one repeats); an
+    Exception is raised instead."""
+    import httpx  # pylint: disable=import-outside-toplevel
+
+    monkeypatch.setenv("AGENT_TOKEN", "c23-test-agent-token")
+    monkeypatch.setenv("BRIDGE_HMAC_SECRET", "c23-test-hmac-secret")
+    monkeypatch.setenv("UI_BRIDGE_URL", BRIDGE_URL + "/")
+    state = SimpleNamespace(answers=[], posts=[], signed=[], now=1000.0, slept=[])
+
+    def signed(body: bytes) -> dict[str, str]:
+        state.signed.append(body)
+        return {"X-Agent-Token": "fake", "X-Agent-Nonce": f"{len(state.signed):032x}"}
+
+    def post(url: str, **kwargs: Any) -> Any:
+        state.posts.append((url, kwargs))
+        answer = state.answers.pop(0) if len(state.answers) > 1 else state.answers[0]
+        if isinstance(answer, BaseException):
+            raise answer
+        return answer
+
+    def sleep(seconds: float) -> None:
+        state.slept.append(seconds)
+        state.now += seconds
+
+    monkeypatch.setattr(module, "_signed_headers", signed)
+    monkeypatch.setattr(httpx, "post", post)
+    monkeypatch.setattr(module, "_sleep", sleep)
+    monkeypatch.setattr(module, "_monotonic", lambda: state.now)
+    monkeypatch.setattr(module, "current_worker", lambda: module.Worker(time.time() - 60, WORKER_ID, ""))
+    return state
+
+
+def _bodies(state: Any) -> list[dict[str, Any]]:
+    return [json.loads(kwargs["content"]) for _url, kwargs in state.posts]
+
+
+def test_a_bridge_answer_with_the_current_workers_agent_is_ok_without_livekit(module, monkeypatch, bridge, capsys):
+    bridge.answers = [FakeResponse(200, _answer("present", in_room=True, current=True))]
+    made = _no_livekit(monkeypatch)
+    module.main(["--reason", "agent_ctl_restart"])
+    out = capsys.readouterr().out
+    assert _results(out) == [f"[ROOM] Result: {module.RESULT_BRIDGE_AGENT}"] and not made
+    assert module.RESULT_BRIDGE_AGENT.startswith("OK")
+    [(url, kwargs)] = bridge.posts
+    assert url == BRIDGE_URL + "/livekit/ensure"
+    # the exact signed bytes are the body sent: {reason, agent_name, worker_id}
+    assert bridge.signed == [kwargs["content"]]
+    assert json.loads(kwargs["content"]) == {"reason": "agent_ctl_restart", "agent_name": "", "worker_id": WORKER_ID}
+    assert kwargs["headers"]["X-Agent-Token"] == "fake"
+    _assert_clean(out)  # the worker id is sent, never printed
+    assert "[ROOM] Bridge: result=present agent_in_room=yes voice_ready=yes current_worker=yes" in out
+
+
+def test_the_signed_body_carries_the_registered_agent_name(module, monkeypatch, bridge):
+    monkeypatch.setattr(module, "current_worker", lambda: module.Worker(None, "", "jarvis-pc"))
+    bridge.answers = [FakeResponse(200, _answer("present", in_room=True, current=None))]
+    _no_livekit(monkeypatch)
+    module.main()
+    assert _bodies(bridge) == [{"reason": "manual", "agent_name": "jarvis-pc"}]  # no worker id known: none sent
+
+
+def test_real_signed_headers_verify_on_the_bridge_side(module, monkeypatch, bridge):
+    """The real jarvis_bridge.signed_headers over the exact body: the bridge's C-NOTIFY-1 check accepts them."""
+    from services.utils import jarvis_bridge, jarvis_security  # pylint: disable=import-outside-toplevel
+
+    monkeypatch.setattr(jarvis_bridge.config, "agent_token", "c23-test-agent-token")
+    monkeypatch.setattr(jarvis_bridge.config, "bridge_hmac_secret", "c23-test-hmac-secret")
+    monkeypatch.setattr(jarvis_bridge.config, "env", "development")
+    monkeypatch.setattr(module, "_signed_headers", jarvis_bridge.signed_headers)
+    bridge.answers = [FakeResponse(200, _answer("present", in_room=True, current=True))]
+    _no_livekit(monkeypatch)
+    module.main()
+    [(_url, kwargs)] = bridge.posts
+    headers, raw = kwargs["headers"], kwargs["content"]
+    assert headers["X-Agent-Token"] == "c23-test-agent-token"
+    assert jarvis_security.verify_notify(headers["X-Agent-Timestamp"], headers["X-Agent-Nonce"], raw,
+                                         headers["X-Agent-Signature"])
+
+
+def test_paused_by_the_owner_is_reported_at_once(module, monkeypatch, bridge, capsys):
+    bridge.answers = [FakeResponse(200, _answer("paused", paused=True))]
+    made = _no_livekit(monkeypatch)
+    module.main(["--reason", "watchdog"])
+    out = capsys.readouterr().out
+    assert _results(out) == [f"[ROOM] Result: {module.RESULT_PAUSED}"] and not made
+    assert len(bridge.posts) == 1 and not bridge.slept
+    assert module.RESULT_PAUSED.startswith("PAUSED")
+
+
+def test_the_run_follows_the_bridge_until_an_agent_of_the_current_worker(module, monkeypatch, bridge, capsys):
+    """A restart: the old worker's ghost is still listed (agent_in_room, but not the current worker's), then the
+    bridge dispatches and the new agent arrives. Every follow-up call is reason 'wait' with fresh headers."""
+    bridge.answers = [FakeResponse(200, _answer("present", in_room=True, current=False)),
+                      FakeResponse(200, _answer("confirming")),
+                      FakeResponse(200, _answer("dispatched")),
+                      FakeResponse(200, _answer("present", in_room=True, current=True))]
+    made = _no_livekit(monkeypatch)
+    module.main(["--reason", "agent_ctl_restart"])
+    out = capsys.readouterr().out
+    assert _results(out) == [f"[ROOM] Result: {module.RESULT_BRIDGE_AGENT}"] and not made
+    assert [body["reason"] for body in _bodies(bridge)] == ["agent_ctl_restart", "wait", "wait", "wait"]
+    assert len(set(bridge.signed)) == 2 and len(bridge.signed) == 4  # new headers for every call
+    assert bridge.slept == [module.BRIDGE_POLL_S] * 3
+    assert "[ROOM] Bridge: result=dispatched" in out
+
+
+def test_after_ninety_seconds_without_an_agent_the_run_says_no_agent(module, monkeypatch, bridge, capsys):
+    bridge.answers = [FakeResponse(200, _answer("in_flight"))]
+    made = _no_livekit(monkeypatch)
+    module.main()
+    out = capsys.readouterr().out
+    assert _results(out) == ["[ROOM] Result: " + module.RESULT_BRIDGE_NO_AGENT.format(result="in_flight")] and not made
+    assert sum(bridge.slept) == pytest.approx(module.BRIDGE_WAIT_S)
+    assert module.RESULT_BRIDGE_NO_AGENT.startswith("NO AGENT")
+
+
+@pytest.mark.parametrize("answer", ["observe", "disabled", 404, "html502", "html503", "html504", "refused",
+                                    "livekit_unavailable"])
+def test_a_bridge_that_does_not_reconcile_falls_back_to_the_livekit_path(module, monkeypatch, bridge, capsys,
+                                                                         answer):
+    import httpx  # pylint: disable=import-outside-toplevel
+
+    if answer in ("observe", "disabled"):
+        bridge.answers = [FakeResponse(200, _answer(answer))]
+    elif answer == 404:
+        bridge.answers = [FakeResponse(404, {"detail": "Not Found"})]  # a bridge before C-23
+    elif answer == "refused":
+        bridge.answers = [httpx.ConnectError("connection refused")]
+    elif answer == "livekit_unavailable":  # LS-3: the bridge could not use LiveKit, so it dispatched nothing
+        bridge.answers = [FakeResponse(503, {"error": "livekit_unavailable"})]
+    else:
+        bridge.answers = [FakeResponse(int(answer[4:]))]  # nginx's own page: no JSON body
+    fake = _install(monkeypatch, FakeLiveKit(exists=True, participants=[[_human(), _new_agent()]]))
+    module.main()
+    out = capsys.readouterr().out
+    assert fake.instances == 1 and len(bridge.posts) == 1
+    assert _results(out) == [f"[ROOM] Result: {module.RESULT_AGENT}"]
+    assert "using the LiveKit API" in out
+    _never_cut(fake)
+
+
+@pytest.mark.parametrize("status, error", [(401, "auth_required"), (403, "forbidden"), (429, "rate_limited"),
+                                           (400, "bad_agent_name"), (503, "link_unconfigured")])
+def test_a_refusal_changes_nothing(module, monkeypatch, bridge, capsys, status, error):
+    bridge.answers = [FakeResponse(status, {"error": error})]
+    made = _no_livekit(monkeypatch)
+    module.main()
+    out = capsys.readouterr().out
+    expected = module.RESULT_BRIDGE_REFUSED.format(route="/livekit/ensure", code=status, error=error)
+    assert _results(out) == [f"[ROOM] Result: {expected}"] and not made
+    assert expected.startswith("UNKNOWN") and "nothing was changed" in expected
+    assert len(bridge.posts) == (2 if status == 429 else 1)  # a 429 is asked once more, then it is a refusal
+
+
+def test_a_429_is_asked_once_more_after_its_retry_after(module, monkeypatch, bridge, capsys):
+    """SEC-6: a busy bridge (429) is asked again after its Retry-After (at most 5 s), with fresh headers."""
+    bridge.answers = [FakeResponse(429, {"error": "rate_limited"}, {"Retry-After": "2"}),
+                      FakeResponse(200, _answer("present", in_room=True, current=True))]
+    made = _no_livekit(monkeypatch)
+    module.main(["--reason", "watchdog"])
+    out = capsys.readouterr().out
+    assert _results(out) == [f"[ROOM] Result: {module.RESULT_BRIDGE_AGENT}"] and not made
+    assert bridge.slept == [2.0] and len(bridge.posts) == 2 and len(bridge.signed) == 2  # signed anew
+    assert [body["reason"] for body in _bodies(bridge)] == ["watchdog", "watchdog"]
+
+
+def test_a_long_retry_after_is_capped(module, monkeypatch, bridge, capsys):
+    bridge.answers = [FakeResponse(429, {"error": "rate_limited"}, {"Retry-After": "3600"})]
+    made = _no_livekit(monkeypatch)
+    module.main()
+    assert bridge.slept == [module.BRIDGE_RETRY_MAX_S] and not made  # never longer than the cap
+    expected = module.RESULT_BRIDGE_REFUSED.format(route="/livekit/ensure", code=429, error="rate_limited")
+    assert _results(capsys.readouterr().out) == [f"[ROOM] Result: {expected}"]
+
+
+def test_paused_holds_in_observe_mode_too(module, monkeypatch, bridge, capsys):
+    """SEC-2: the owner's pause (here set with the admin CLI while the bridge observes) stops this run's LiveKit
+    path too: nothing is dispatched while JARVIS is paused."""
+    observing = _answer("observe", paused=True)
+    observing["mode"] = "observe"
+    bridge.answers = [FakeResponse(200, observing)]
+    made = _no_livekit(monkeypatch)
+    module.main(["--reason", "watchdog"])
+    out = capsys.readouterr().out
+    assert _results(out) == [f"[ROOM] Result: {module.RESULT_PAUSED}"] and not made
+    assert "using the LiveKit API" not in out
+
+
+def test_a_bridge_timeout_changes_nothing(module, monkeypatch, bridge, capsys):
+    import httpx  # pylint: disable=import-outside-toplevel
+
+    bridge.answers = [httpx.ReadTimeout("timed out")]
+    made = _no_livekit(monkeypatch)
+    module.main()
+    out = capsys.readouterr().out
+    assert _results(out) == [f"[ROOM] Result: {module.RESULT_BRIDGE_TIMEOUT}"] and not made
+
+
+def test_a_200_without_agent_fields_claims_no_agent(module, monkeypatch, bridge, capsys):
+    bridge.answers = [FakeResponse(200, {"status": "ok"})]
+    made = _no_livekit(monkeypatch)
+    module.main()
+    out = capsys.readouterr().out
+    assert _results(out) == [f"[ROOM] Result: {module.RESULT_BRIDGE_UNCHECKED}"] and not made
+    assert module.RESULT_BRIDGE_UNCHECKED.startswith("room ensured by the bridge (agent presence not checked")
+
+
+def test_without_the_hmac_keys_the_pc_signed_route_is_used(module, monkeypatch, tmp_path, capsys):
+    """No AGENT_TOKEN / BRIDGE_HMAC_SECRET: the PC-signed /vortex/desktop/ensure with an empty body; its answer
+    is followed like the signed route's (no worker id: agent_in_room decides)."""
+    posted = _bridge(monkeypatch, tmp_path, 200)
+    import httpx  # pylint: disable=import-outside-toplevel
+
+    answers = [FakeResponse(200, _answer("dispatched", current=None)),
+               FakeResponse(200, _answer("present", in_room=True, current=None))]
+    calls: list[dict[str, Any]] = []
+
+    def post(url: str, **kwargs: Any) -> Any:
+        posted.append(url)
+        calls.append(kwargs)
+        return answers.pop(0) if len(answers) > 1 else answers[0]
+
+    monkeypatch.setattr(httpx, "post", post)
+    monkeypatch.setattr(module, "_sleep", lambda _s: None)
+    made = _no_livekit(monkeypatch)
+    module.main()
+    out = capsys.readouterr().out
+    assert posted == ["https://bridge.wave-h.invalid/vortex/desktop/ensure"] * 2 and not made
+    assert all(kwargs["content"] == b"" for kwargs in calls)
+    assert _results(out) == [f"[ROOM] Result: {module.RESULT_BRIDGE_AGENT}"]
+
+
+def test_bad_arguments_print_one_result_line_and_exit_2(module, monkeypatch, capsys):
+    made = _no_livekit(monkeypatch)
+    with pytest.raises(SystemExit) as info:
+        module.main(["--reason", "because"])
+    assert info.value.code == module.EXIT_USAGE == 2 and not made
+    assert _results(capsys.readouterr().out) == [f"[ROOM] Result: {module.RESULT_BAD_ARGS}"]
+
+
+def test_the_livekit_path_uses_the_workers_registered_name(module, monkeypatch, capsys):
+    """C-23 (K-53 v9): the LiveKit API path creates the room and dispatches with the name the worker registered
+    (jarvis-pc from phase 3), never only ''."""
+    monkeypatch.setattr(module, "current_worker", lambda: module.Worker(time.time() - 60, WORKER_ID, "jarvis-pc"))
+    fake = _install(monkeypatch, FakeLiveKit(exists=False))
+    await_run = asyncio.run(module.ensure_room())
+    assert await_run is None
+    request = fake.room_svc.create_room.await_args.args[0]
+    assert [d.agent_name for d in request.agents] == ["jarvis-pc"]
+
+    module._result_printed = False  # a second run, as in a fresh process
+    fake = _install(monkeypatch, FakeLiveKit(exists=True, participants=[[_human()]],
+                                             dispatches=[_dispatch(_old_job())],
+                                             after_dispatch=[_human(), _new_agent()]))
+    asyncio.run(module.ensure_room())
+    request = fake.dispatch_svc.create_dispatch.await_args.args[0]
+    assert (request.agent_name, request.room) == ("jarvis-pc", ROOM)
+    _never_cut(fake)
+    capsys.readouterr()
+
+
+def test_every_new_result_is_judged_by_agent_ctl(module):
+    """The bridge results keep agent_ctl's rule: only an 'OK' result is no warning (PAUSED is one, C-23)."""
+    spec = importlib.util.spec_from_file_location("c23_agent_ctl", ROOT / "scripts" / "agent_ctl.py")
+    agent_ctl = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(agent_ctl)
+    for text in (module.RESULT_BRIDGE_AGENT, module.RESULT_PAUSED, module.RESULT_BRIDGE_NO_AGENT,
+                 module.RESULT_BRIDGE_REFUSED, module.RESULT_BRIDGE_TIMEOUT, module.RESULT_BRIDGE_UNCHECKED,
+                 module.RESULT_BAD_ARGS):
+        assert agent_ctl.room_result_warning(text) is (not text.startswith("OK")), text

@@ -281,6 +281,100 @@ async def test_a_failing_query_still_answers_the_same_turn(chat):
     assert "issue" in reply.args[1]
 
 
+# ================================================================ C-23 (K-60 v9): stop interrupts, pause_agent ends the job
+
+
+class _EndingAssistant:
+    """The parts of BrainAssistant the listener uses for stop and pause_agent (the real methods, bound here)."""
+
+    def __init__(self) -> None:
+        from src.core.agent_core import BrainAssistant  # pylint: disable=import-outside-toplevel
+
+        self._stop_event = asyncio.Event()
+        self.end_reason = None
+        self._active_session = None
+        self.request_end = BrainAssistant.request_end.__get__(self)
+        self.interrupt_speech = BrainAssistant.interrupt_speech.__get__(self)
+
+
+@pytest.mark.asyncio
+async def test_stop_only_interrupts_speech_and_never_ends_the_session(monkeypatch):
+    assistant = _EndingAssistant()
+    session = MagicMock()
+    interrupted = asyncio.get_running_loop().create_future()
+    interrupted.set_result(None)
+    session.interrupt = MagicMock(return_value=interrupted)
+    assistant._active_session = session
+    shutdown_signal = MagicMock()
+    monkeypatch.setattr(agent_loops.autonomous_protector, "shutdown_signal", shutdown_signal)
+    listener = _listener(monkeypatch, assistant=assistant)
+
+    await listener._handle_command({"type": "stop", "payload": {}})
+
+    session.interrupt.assert_called_once_with()
+    assert not assistant._stop_event.is_set() and assistant.end_reason is None  # no session restart, no job end
+    shutdown_signal.set.assert_not_called()
+
+
+BRIDGE_PAUSE = {"type": "pause_agent", "payload": {"reason": "paused", "by": "bridge"}}  # bridge_rooms.PAUSE_COMMAND
+
+
+@pytest.mark.asyncio
+async def test_pause_agent_ends_the_job_as_paused_by_the_owner(monkeypatch):
+    from src.core import bridge_rooms  # pylint: disable=import-outside-toplevel
+
+    assert BRIDGE_PAUSE == bridge_rooms.PAUSE_COMMAND  # the agent and the bridge agree on the hold marker
+    assistant = _EndingAssistant()
+    listener = _listener(monkeypatch, assistant=assistant)
+    await listener._handle_command(dict(BRIDGE_PAUSE))
+    assert assistant._stop_event.is_set() and assistant.end_reason == "paused_by_owner"
+    # a later request keeps the first reason
+    assistant.request_end("terminated_by_owner")
+    assert assistant.end_reason == "paused_by_owner"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("payload", [{}, {"reason": "paused"}, {"by": "ui"}, None, "bridge"])
+async def test_a_pause_agent_the_bridge_does_not_hold_changes_nothing(monkeypatch, payload):
+    """K-60 v9 (SEC-2/LS-1): a bridge before C-23 forwards the UI's own pause_agent; nothing would keep the agent out
+    or bring it back on Wake, so only the bridge's own command (payload.by 'bridge') ends the job."""
+    assistant = _EndingAssistant()
+    listener = _listener(monkeypatch, assistant=assistant)
+    await listener._handle_command({"type": "pause_agent", "payload": payload})
+    assert not assistant._stop_event.is_set() and assistant.end_reason is None
+
+
+@pytest.mark.asyncio
+async def test_pause_agent_on_an_assistant_before_c23_sets_its_stop_event(monkeypatch):
+    old = SimpleNamespace(_stop_event=asyncio.Event())
+    listener = _listener(monkeypatch, assistant=old)
+    await listener._handle_command(dict(BRIDGE_PAUSE))
+    assert old._stop_event.is_set()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("command", ["start", "shutdown_agent"])
+async def test_start_and_shutdown_agent_change_nothing_here(monkeypatch, command):
+    assistant = _EndingAssistant()
+    listener = _listener(monkeypatch, assistant=assistant)
+    await listener._handle_command({"type": command, "payload": {}})
+    assert not assistant._stop_event.is_set() and assistant.end_reason is None
+
+
+@pytest.mark.asyncio
+async def test_interrupt_speech_without_a_session_or_with_a_closed_one_reports_false():
+    assistant = _EndingAssistant()
+    assert await assistant.interrupt_speech() is False
+    session = MagicMock()
+    session.interrupt = MagicMock(side_effect=RuntimeError("AgentSession isn't running"))
+    assistant._active_session = session
+    assert await assistant.interrupt_speech() is False
+    never_done = asyncio.get_running_loop().create_future()  # a playout that never finishes: waited at most wait_s
+    session.interrupt = MagicMock(return_value=never_done)
+    assert await assistant.interrupt_speech(wait_s=0.01) is True
+    never_done.cancel()
+
+
 # ---------------------------------------------------------------- end to end with the real bridge
 
 

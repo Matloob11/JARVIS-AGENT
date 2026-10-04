@@ -9,7 +9,9 @@ deploy/windows-local/ensure_room.py runs. This daemon thread checks the room eve
 LiveKit link is connected (run/agent_link.json, C-136): a missing room or a room without an AGENT participant
 is a miss, and after MISSES_NEEDED misses in a row it runs ensure_room.py once (at most every
 ENSURE_EVERY_S). ensure_room.py owns every room decision (never a second agent, never a deleted live session);
-this module only lists rooms and participants.
+this module only lists rooms and participants. C-23 (K-53 v9): it runs 'ensure_room.py --reason watchdog' (which asks
+the bridge, the room owner, first) and stays as the safety net; after a 'PAUSED by the owner' result the next run
+waits PAUSED_ENSURE_EVERY_S (1800 s) instead, since the bridge dispatches nothing until Wake.
 
 Started only by the worker's main process (src/core/agent.py, the one holding run/agent.lock) in pc mode,
 never in a job process, never under pytest or on import, and not with JARVIS_ROOM_WATCHDOG=0. Nothing here may
@@ -53,6 +55,11 @@ SWITCH_ENV = "JARVIS_ROOM_WATCHDOG"
 CHECK_S = 60.0
 MISSES_NEEDED = 2
 ENSURE_EVERY_S = 300.0
+# C-23 (K-53 v9): after a 'PAUSED by the owner' result the bridge dispatches nothing until Wake, so the next run
+# waits this long instead.
+PAUSED_ENSURE_EVERY_S = 1800.0
+ENSURE_REASON = "watchdog"  # ensure_room.py --reason (the bridge logs it with its dispatch)
+PAUSED_PREFIX = "PAUSED"
 ENSURE_TIMEOUT_S = 150.0
 API_TIMEOUT_S = 20.0
 WARN_EVERY_S = 600.0
@@ -296,7 +303,7 @@ def run_ensure_room() -> str:
     windows = sys.platform == "win32"
     if windows:
         kwargs["creationflags"] = CREATE_NO_WINDOW | CREATE_SUSPENDED
-    proc = _popen([sys.executable, str(ENSURE_ROOM)], **kwargs)
+    proc = _popen([sys.executable, str(ENSURE_ROOM), "--reason", ENSURE_REASON], **kwargs)
     with _child_lock:
         _child = proc
     try:
@@ -341,6 +348,7 @@ class RoomWatchdog:
         self.misses = 0
         self.ensure_runs = 0
         self._last_ensure: float | None = None
+        self._ensure_every = ENSURE_EVERY_S  # PAUSED_ENSURE_EVERY_S after a PAUSED result (C-23)
         self._last_warn: float | None = None
         self._failing = False
         self._stopped = threading.Event()
@@ -410,7 +418,7 @@ class RoomWatchdog:
         if self.misses < MISSES_NEEDED:
             return
         now = self._clock()
-        if self._last_ensure is None or now - self._last_ensure >= ENSURE_EVERY_S:
+        if self._last_ensure is None or now - self._last_ensure >= self._ensure_every:
             self._last_ensure = now
             self._run_ensure()
 
@@ -431,6 +439,11 @@ class RoomWatchdog:
             return
         self._log.info("ROOM WATCHDOG ran ensure_room.py (no agent in room %s for %d checks): %s",
                        self.room, MISSES_NEEDED, masked(result))
+        paused = str(result).strip().removeprefix(RESULT_PREFIX).strip().upper().startswith(PAUSED_PREFIX)
+        if paused and self._ensure_every != PAUSED_ENSURE_EVERY_S:
+            self._log.info("ROOM WATCHDOG: the owner paused JARVIS; the next ensure_room.py run waits %.0f s",
+                           PAUSED_ENSURE_EVERY_S)
+        self._ensure_every = PAUSED_ENSURE_EVERY_S if paused else ENSURE_EVERY_S
 
 
 def start_room_watchdog(**kwargs: Any) -> RoomWatchdog | None:

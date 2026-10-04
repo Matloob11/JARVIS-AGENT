@@ -266,8 +266,9 @@ def _fake_restart_steps(monkeypatch, calls: list) -> None:
         calls.append(("stop", timeout, force))
         return 0, {"result": "stopped", "old_pid": 111, "graceful": True, "killed": [], "stop_s": 2.0}
 
-    def start(args, mode, *, foreground, timeout=60):
+    def start(args, mode, *, foreground, timeout=60, room_reason="agent_ctl_start"):
         calls.append(("start", mode, foreground))
+        assert room_reason == "agent_ctl_restart"  # C-23: ensure_room.py --reason agent_ctl_restart
         return 0, {"result": "started", "new_pid": 222, "health": 200, "start_s": 20.0, "ensure_room": 0}
 
     monkeypatch.setattr(agent_ctl, "stop_worker", stop)
@@ -742,7 +743,8 @@ def test_start_runs_a_hidden_worker_waits_for_health_then_ensures_the_room(ctl, 
         assert flags & subprocess.ABOVE_NORMAL_PRIORITY_CLASS
     for name in ("agent_stdout.log", "agent_stderr.log"):
         assert "===== agent_ctl start " in (ctl.logs / name).read_text(encoding="utf-8")
-    assert [cmd[-1] for cmd, _kwargs in runs] == [str(agent_ctl.ENSURE_ROOM)]  # once, after health 200
+    # once, after health 200, with --reason agent_ctl_start (C-23, K-53 v9)
+    assert [cmd[1:] for cmd, _kwargs in runs] == [[str(agent_ctl.ENSURE_ROOM), "--reason", "agent_ctl_start"]]
     assert ctl.clock.slept >= agent_ctl.REGISTER_SETTLE_S
     entry = audit_lines(ctl.logs)[-1]
     assert (entry["action"], entry["result"], entry["new_pid"], entry["health"], entry["ensure_room"]) == \

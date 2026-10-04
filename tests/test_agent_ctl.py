@@ -1032,7 +1032,10 @@ def _real_laptop(ctl, monkeypatch, *, node_up: bool, live: LiveStatus, vps: Fake
     monkeypatch.setattr(agent_ctl, "_schtasks", schtasks)
     monkeypatch.setattr(agent_ctl, "start_worker", start_worker)
     monkeypatch.setattr(agent_ctl, "stop_worker", stop_worker)
-    monkeypatch.setattr(agent_ctl, "run_ensure_room", lambda env: events.append(("ensure_room",)) or 0)
+    # C-23 (K-53 v9): the brain switch's ENSURE runs ensure_room.py --reason brain_switch
+    monkeypatch.setattr(agent_ctl, "run_ensure_room",
+                        lambda env, reason="": events.append(("ensure_room",)) or (
+                            0 if reason == agent_ctl.ROOM_REASON_BRAIN else pytest.fail(reason)))
     monkeypatch.setattr(agent_ctl, "_sleep", lambda _s: None)
     monkeypatch.setattr(agent_ctl, "_default_ssh", vps)
     monkeypatch.setattr(agent_ctl, "vortex_status", lambda base=None: live())
@@ -1172,6 +1175,21 @@ def test_status_shows_brain_reads_livekit_participant_attributes(ctl):
                                                                         "jarvis.session": session}}, "vps") is False
     assert agent_ctl.status_shows_brain({"brain": "pc", "agent": {"worker_agent_name": "jarvis-pc",
                                                                    "session": "running"}}, "pc") is True
+
+
+def test_status_shows_brain_reads_the_room_owners_agent_list(ctl):
+    """C-23 (K-43/K-53 v9): a bridge with the room owner lists the room's agents as livekit.agents; then only that
+    list counts, because its agent block's agent_name is the dispatch target, not a participant's name."""
+    def status(*agents, agent_block=None):
+        return {"brain": "vps", "agent": agent_block or {}, "livekit": {"participants": 1, "agents": list(agents)}}
+
+    running = {"lk.agent.name": "jarvis", "jarvis.session": "running", "state": "active", "job_id": "AJ_1"}
+    assert agent_ctl.status_shows_brain(status(running), "vps") is True
+    assert agent_ctl.status_shows_brain(status({**running, "jarvis.session": "starting"}), "vps") is False
+    assert agent_ctl.status_shows_brain(status({**running, "lk.agent.name": "jarvis-pc"}), "vps") is False
+    # the dispatch target and the kept agent's session in the agent block never stand in for a participant
+    target_only = status(agent_block={"agent_name": "jarvis", "session": "running", "online": True})
+    assert agent_ctl.status_shows_brain(target_only, "vps") is False
 
 
 # =============================================================================================================

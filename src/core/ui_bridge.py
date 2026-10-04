@@ -24,6 +24,16 @@ unsigned agent notifies and /internal/* are accepted, and the legacy token never
 peers never get ui_command. The Desktop Link relay, namespace '/desktop', lives in src/core/bridge_desktop.py;
 desktop_status reaches the UI as an event, in init_state and in GET /status. The public GET /health answers only
 {status, version, uptime_s}.
+
+Room owner (C-23, K-44 v9, src/core/bridge_rooms.py): in the VPS bridge (JARVIS_ROLE=bridge) the RoomManager is the
+only room owner and dispatcher; no route here deletes a room. GET /livekit/token awaits a shielded ensure('token')
+for at most 3 s; POST /livekit/ensure (C-NOTIFY-1 agent headers), POST /internal/livekit/ensure (:5002 only) and the
+PC-signed POST /desktop/ensure are explicit ensures (each with its own rate bucket); LiveKit's webhooks reach POST
+/internal/livekit/webhook on :5002 only. ui_command pause_agent and start own the paused flag where the room owner
+holds pauses (always, on_demand): pause_agent then sends the bridge's own pause_agent and is never forwarded, and is
+refused elsewhere (observe mode, the PC's local bridge); stop is only forwarded. The agent's notify job_end tells the
+room owner a job is over. agent_status is always the whole K-02 v9 object, built in one place (build_agent_status)
+for the event, init_state and GET /status.
 """
 # pylint: disable=too-many-lines  # the bridge app: every HTTP endpoint and Socket.IO handler of one process
 
@@ -57,7 +67,7 @@ from services.utils.jarvis_config import ROLE_BRIDGE, active_brain, config, runt
 from services.utils.jarvis_health import health_monitor
 from services.utils.jarvis_logger import setup_logger
 from services.utils.jarvis_telemetry import telemetry
-from src.core import bridge_auth, bridge_desktop, bridge_media, bridge_security
+from src.core import bridge_auth, bridge_desktop, bridge_media, bridge_rooms, bridge_security
 from src.core.bridge_security import NOTIFY_MAX_BYTES, NonceCache, NotifyAuthError, TokenBucket, same_secret
 from src.core.bridge_store import (
     EVENT_LOG,
@@ -120,6 +130,10 @@ UI_COMMAND_TYPES = frozenset({
 })
 UI_COMMANDS_PER_S = 10.0
 VISION_FRAMES_PER_S = 1.0
+# agent_hello wakes the room owner's loop: one a second per socket (burst 5), so a looping sender cannot drive
+# LiveKit calls (C-23).
+AGENT_HELLOS_PER_S = 1.0
+AGENT_HELLO_BURST = 5.0
 VISION_FRAME_MAX_CHARS = 600 * 1024
 _SHORT_TEXT = 64
 _ROOM_NAME = re.compile(r"[A-Za-z0-9._:-]{1,64}")  # a LiveKit room as K-70 writes it
@@ -148,6 +162,8 @@ async def lifespan(_app_instance: FastAPI) -> AsyncGenerator[None, None]:
     session_task = asyncio.create_task(session_watch_loop())
     # In the background, like the store: a long integrity check of bridge.db must never delay /health.
     desktop_task = asyncio.create_task(desktop.start())
+    # C-23: the room owner's loop (it waits for the store itself; off unless JARVIS_ROLE=bridge with LiveKit keys)
+    rooms_task = asyncio.create_task(rooms.run())
     yield
     # Shutdown tasks
     vitals_task.cancel()
@@ -155,6 +171,12 @@ async def lifespan(_app_instance: FastAPI) -> AsyncGenerator[None, None]:
     speaking_task.cancel()
     retention_task.cancel()
     session_task.cancel()
+    rooms_task.cancel()
+    await asyncio.gather(rooms_task, return_exceptions=True)
+    try:
+        await rooms.close()  # the LiveKit API session
+    except Exception:  # pylint: disable=broad-exception-caught
+        logger.warning("Room owner did not close cleanly", exc_info=True)
     # start() is short (one kv read, the seen store's open): let it finish, so no store call outlives the close
     await asyncio.wait({desktop_task}, timeout=10.0)
     desktop_task.cancel()
@@ -295,6 +317,20 @@ store: BridgeStore = BridgeStore(bridge_db_path())
 # store and emit_ui up on every call, so a replaced store is used.
 desktop: bridge_desktop.DesktopLink = bridge_desktop.DesktopLink(
     sio=sio, store=lambda: store, emit_ui=lambda event, data: emit_ui(event, data))
+
+# The room owner (C-23, K-44 v9): on only in the VPS bridge (JARVIS_ROLE=bridge, LiveKit keys set); elsewhere every
+# ensure answers 'disabled' and nothing touches LiveKit. The lambdas look the helpers up on every call (the tests
+# replace the store and the socket table).
+# pylint: disable=unnecessary-lambda
+rooms: bridge_rooms.RoomManager = bridge_rooms.RoomManager(
+    bridge_rooms.RoomSettings.from_env(), store=lambda: store,
+    emit_ui=lambda event, data: emit_ui(event, data),
+    send_agent_command=lambda data, sid=None: _send_agent_command(data, sid),
+    agent_job_sockets=lambda: _agent_job_sockets(),
+    ui_presence=lambda: _ui_presence(),
+    on_status=lambda: _publish_agent_status(),
+    desktop=lambda: desktop)
+# pylint: enable=unnecessary-lambda
 
 # The single media path (C-117, K-73 / DASH-C21): the index and files from the read-only jarvis_shared and
 # jarvis_outputs mounts, the in-RAM blob inbox, and the newest backup snapshot from jarvis_agent_snapshots. The
@@ -565,6 +601,14 @@ async def notify_bridge(request: Request) -> Any:
     async def _handle_intelligence(p: dict[str, Any]) -> None:
         await emit_ui("intelligence_update", p)
 
+    async def _handle_job_end(p: Any) -> None:
+        # C-23 (K-40/K-60 v9): the agent's job ended (paused, failed, ended): the room owner stops counting it as
+        # in flight. Never emitted to the UI.
+        job_id = p.get("job_id") if isinstance(p, dict) else None
+        if rooms.note_job_end(job_id):
+            reason = p.get("reason") if isinstance(p.get("reason"), str) else ""
+            logger.info("ROOM job %s ended (%s)", job_id, _short(reason) or "-")
+
     handlers: dict[str, Any] = {
         "status": _handle_status_event,
         "thinking": _handle_thinking_event,
@@ -575,6 +619,7 @@ async def notify_bridge(request: Request) -> Any:
         "reasoning": _handle_reasoning,
         "intelligence_sync": _handle_intelligence,
         "intelligence_update": _handle_intelligence,
+        "job_end": _handle_job_end,
     }
 
     handler: Any | None = handlers.get(event_type)
@@ -681,29 +726,37 @@ async def _db_ok() -> bool:
 @app.get("/status")
 async def get_status(request: Request) -> Any:
     """
-    C-STATUS-1 (K-43) as far as the bridge knows it today, with the K-74 'desktop' block (C-116); C-63 adds LiveKit
-    and the agent heartbeats. Auth: the internal listener (agent role), K-70 PC-signed HTTP (agent_ctl brain and
-    node checks), the owner session (C-19), the agent's signed headers, or the legacy header while
-    LEGACY_TOKEN_AUTH=1.
+    C-STATUS-1 (K-43 v9) with the K-74 'desktop' block (C-116) and the room owner's 'livekit' block (C-23: its last
+    observation, never an extra LiveKit call per request); C-63 adds the agent heartbeats. status: 'down' when the DB
+    is unusable, 'degraded' when LiveKit is not ok or the agent is neither paused nor online and voice-ready, else
+    'ok'; a bridge without the room owner (the PC's local bridge) keeps the v8 rule: 'ok' while an owner-room agent
+    socket is connected, and its livekit block says enabled false with ok null. Auth: the internal listener (agent
+    role), K-70 PC-signed HTTP (agent_ctl brain and node checks), the owner session (C-19), the agent's signed
+    headers, or the legacy header while LEGACY_TOKEN_AUTH=1.
     """
     if not (bridge_desktop.is_internal_scope(request.scope) or _legacy_header_ok(request)
             or await owner_auth.session_from_request(request) is not None
             or await _agent_request_ok(request) or await _pc_signed(request)):
         return JSONResponse({"error": "auth_required"}, status_code=401)
     db_ok = await stored("status check", _db_ok(), False)
-    agents = [client for client in _clients.values() if _is_owner_agent(client)]
     try:
         db_size = sum(os.path.getsize(store.path + suffix) for suffix in ("", "-wal")
                       if os.path.exists(store.path + suffix))
     except OSError:
         db_size = 0
+    livekit = rooms.snapshot()
+    agent = build_agent_status()
+    if rooms.enabled:
+        healthy = bool(livekit["ok"]) and (agent["paused"] or (agent["online"] and bool(agent["voice_ready"])))
+    else:  # no room owner here (the PC's local bridge): it never reads LiveKit, so the v8 rule stays
+        healthy = agent["online"]
     return {
-        "status": "down" if not db_ok else ("ok" if agents else "degraded"),
+        "status": "down" if not db_ok else ("ok" if healthy else "degraded"),
         "ts": round(time.time(), 3),
         "bridge": {"ok": True, "version": GIT_SHA, "uptime_s": _uptime_s()},
         "db": {"ok": db_ok, "size_bytes": db_size},
-        "agent": {"online": bool(agents), "since": agents[0].since if agents else None,
-                  "host": agents[0].host if agents else "", "version": agents[0].version if agents else ""},
+        "agent": agent,
+        "livekit": livekit,
         "ui_clients": sum(1 for client in _clients.values() if client.role in (ROLE_UI, ROLE_LEGACY)),
         "brain": active_brain(),
         "desktop": desktop.status(),
@@ -847,6 +900,9 @@ async def livekit_token(owner: bridge_auth.Principal = Depends(owner_auth.requir
     single fixed identity would make LiveKit drop the other tab, so today's per-token identity and 6 h TTL stay
     until the cut-over C-22, which ends legacy mode.) 503 {error: 'livekit_unavailable'} when no token can be
     minted.
+    K-37 v9 (C-23): before minting, the route awaits the room owner's ensure('token') for at most 3 s (shielded, so a
+    slow one finishes in the background; an error is only logged) and never deletes a room. The token is minted
+    either way.
     """
 
     api_key = os.getenv("LIVEKIT_API_KEY", "")
@@ -869,50 +925,10 @@ async def livekit_token(owner: bridge_auth.Principal = Depends(owner_auth.requir
         identity, ttl_s = f"owner-{owner.session_id[:8]}", LIVEKIT_TOKEN_TTL_S
     else:
         identity, ttl_s = f"owner-{secrets.token_hex(4)}", LIVEKIT_LEGACY_TOKEN_TTL_S
+    # K-37 v9: the room owner makes sure the room (and, outside observe mode, its agent) is there; never a delete.
+    await _ensure_before_token()
     try:
         from livekit import api as lk_api  # pylint: disable=import-outside-toplevel
-
-        # Ensure room exists with an agent job before the browser joins.
-        # Without this, Voice can show CONNECTED while the agent is gone
-        # (empty room after idle/departure timeout) — chat + speech both fail.
-        internal_ws = os.getenv("LIVEKIT_URL", "")
-        api_http = internal_ws.replace("ws://", "http://").replace("wss://", "https://")
-        if api_http:
-            try:
-                lk = lk_api.LiveKitAPI(api_http, api_key, api_secret)
-                try:
-                    rooms = await lk.room.list_rooms(lk_api.ListRoomsRequest(names=[room_name]))
-                    need_dispatch = True
-                    if rooms.rooms:
-                        parts = await lk.room.list_participants(
-                            lk_api.ListParticipantsRequest(room=room_name)
-                        )
-                        has_agent = any(
-                            (getattr(p, "kind", None) and str(p.kind).endswith("AGENT"))
-                            or str(getattr(p, "identity", "")).startswith("agent-")
-                            for p in parts.participants
-                        )
-                        need_dispatch = not has_agent
-                    if need_dispatch:
-                        if rooms.rooms:
-                            try:
-                                await lk.room.delete_room(lk_api.DeleteRoomRequest(room=room_name))
-                            except Exception:  # pylint: disable=broad-exception-caught
-                                pass
-                        await lk.room.create_room(
-                            lk_api.CreateRoomRequest(
-                                name=room_name,
-                                empty_timeout=3600,
-                                departure_timeout=3600,
-                                max_participants=10,
-                                agents=[lk_api.RoomAgentDispatch(agent_name="")],
-                            )
-                        )
-                        logger.info("LiveKit room '%s' ensured with agent dispatch", room_name)
-                finally:
-                    await lk.aclose()
-            except Exception as ensure_exc:  # pylint: disable=broad-exception-caught
-                logger.warning("LiveKit room ensure skipped: %s", ensure_exc)
 
         access = (
             lk_api.AccessToken(api_key, api_secret)
@@ -943,6 +959,118 @@ async def livekit_token(owner: bridge_auth.Principal = Depends(owner_auth.requir
         "identity": identity,
         "expires_at": int(issued_at) + ttl_s,
     }
+
+
+# ---------------------------------------------------------------- the room owner's routes (C-23, K-39 v9)
+
+ROOM_TOKEN_WAIT_S = 3.0      # K-37 v9: the token route waits this long for its ensure
+ENSURE_MAX_BYTES = 1024      # K-39 v9: an ensure body is a JSON object of at most 1 KiB
+# Ensure calls: at most 2 a second (burst 10) per route, so one trust class never starves another (the internal
+# route's only credential is the network; the public routes are taken only after their signature checked out);
+# above it 429 with Retry-After.
+ENSURE_INTERNAL, ENSURE_AGENT, ENSURE_PC = "internal", "agent", "pc"
+_ensure_buckets: dict[str, TokenBucket] = {name: TokenBucket(2.0, 10.0)
+                                           for name in (ENSURE_INTERNAL, ENSURE_AGENT, ENSURE_PC)}
+
+
+def _retrieve_ensure_outcome(task: "asyncio.Future[Any]") -> None:
+    """A token ensure that finished after its 3 s: its error is taken here, so asyncio never logs it as lost."""
+    error = None if task.cancelled() else task.exception()
+    if error is not None:
+        logger.debug("Room ensure (token) failed: %s", type(error).__name__)
+
+
+async def _ensure_before_token() -> None:
+    """GET /livekit/token's ensure (K-37 v9): shielded and awaited for at most ROOM_TOKEN_WAIT_S; a timeout or an
+    error never stops the token."""
+    task = asyncio.ensure_future(rooms.ensure("token", reuse=True))  # a result under 2 s old is enough
+    task.add_done_callback(_retrieve_ensure_outcome)
+    try:
+        await asyncio.wait_for(asyncio.shield(task), ROOM_TOKEN_WAIT_S)
+    except Exception:  # pylint: disable=broad-exception-caught  # timeout or LiveKit unavailable
+        logger.debug("Room ensure before the token: not finished or failed", exc_info=True)
+
+
+def _ensure_refused(error: str, status: int, headers: Mapping[str, str] | None = None) -> JSONResponse:
+    return JSONResponse({"error": error}, status_code=status, headers=dict(headers or {}))
+
+
+async def _run_room_ensure(reason: str, *, bucket: str, report: bridge_rooms.Report | None = None,
+                           want_voice: bool = False) -> Any:
+    """An explicit ensure for one of the three routes: 429 above 2 a second on that route, 503 livekit_unavailable
+    without LiveKit keys or when LiveKit cannot be read, else the K-39 v9 answer (observe mode: from memory, with no
+    LiveKit call)."""
+    limiter = _ensure_buckets[bucket]
+    if not limiter.take():
+        return _ensure_refused("rate_limited", 429, bridge_security.retry_after_header(limiter.retry_after()))
+    if not rooms.enabled and rooms.disabled_reason == bridge_rooms.DISABLED_NO_KEYS:
+        return _ensure_refused("livekit_unavailable", 503)
+    try:
+        result = await rooms.ensure(reason, explicit=True, report=report, want_voice=want_voice, route=True)
+    except bridge_rooms.LiveKitUnavailable:
+        return _ensure_refused("livekit_unavailable", 503)
+    return result.as_dict()
+
+
+async def _ensure_from_body(request: Request, *, internal: bool) -> Any:
+    """POST /livekit/ensure (C-NOTIFY-1 agent headers over the exact raw body, read once) and POST
+    /internal/livekit/ensure (:5002, no headers; want_voice)."""
+    try:
+        raw = await bridge_security.read_body(request, limit=ENSURE_MAX_BYTES)
+    except NotifyAuthError as exc:
+        return _ensure_refused(exc.error, exc.status)
+    if raw is None:
+        return _ensure_refused("too_large", 413)
+    if not internal and not await bridge_auth.verify_agent_headers(
+            request.headers, raw, agent_token=config.agent_token, nonces=_notify_nonces, mark_seen=_mark_nonce_seen):
+        return _ensure_refused("auth_required", 401)
+    try:
+        reason, report, want_voice = bridge_rooms.parse_ensure_body(raw, rooms.settings, internal=internal)
+    except bridge_rooms.EnsureBodyError as exc:
+        return _ensure_refused(exc.error, 400)
+    return await _run_room_ensure(reason, bucket=ENSURE_INTERNAL if internal else ENSURE_AGENT, report=report,
+                                  want_voice=want_voice)
+
+
+@app.post("/livekit/ensure")
+async def livekit_ensure(request: Request) -> Any:
+    """POST /vortex/livekit/ensure (K-39 v9): the PC's ensure_room.py and agent_ctl. The C-NOTIFY-1 agent headers over
+    the exact body {} or {reason?, agent_name?, worker_id?}; an explicit ensure (K-44 v9)."""
+    return await _ensure_from_body(request, internal=False)
+
+
+@app.post("/internal/livekit/ensure")
+async def internal_livekit_ensure(request: Request) -> Any:
+    """POST /internal/livekit/ensure (K-39 v9): the VPS containers on :5002 only (InternalOnly answers 404
+    elsewhere); no headers; want_voice asks for a voice session in on_demand mode."""
+    if not bridge_desktop.is_internal_scope(request.scope):
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
+    return await _ensure_from_body(request, internal=True)
+
+
+@app.post("/desktop/ensure")
+async def desktop_ensure(request: Request) -> Any:
+    """POST /vortex/desktop/ensure (K-39 v9): the laptop's K-70 PC-signed HTTP with an empty body; an explicit
+    ensure. 503 link_unconfigured while the Desktop Link relay is off."""
+    if not (desktop.active and desktop.keys is not None and desktop.seen is not None):
+        return _ensure_refused("link_unconfigured", 503)
+    if not await _pc_signed(request):
+        return _ensure_refused("auth_required", 401)
+    return await _run_room_ensure("desktop_ensure", bucket=ENSURE_PC)
+
+
+@app.post("/internal/livekit/webhook")
+async def internal_livekit_webhook(request: Request) -> Any:
+    """LiveKit's webhooks (K-44/K-48 v9): :5002 only (jarvis-network, never published), JWT-verified over the raw
+    body by the room owner; an event only wakes its loop."""
+    if not bridge_desktop.is_internal_scope(request.scope):
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
+    try:
+        raw = await bridge_security.read_body(request, limit=bridge_rooms.WEBHOOK_MAX_BYTES)
+    except NotifyAuthError as exc:
+        return _ensure_refused(exc.error, exc.status)
+    status = await rooms.handle_webhook(raw, request.headers.get("authorization"))
+    return JSONResponse({}, status_code=status)
 
 
 @app.get("/telemetry/production")
@@ -1195,7 +1323,7 @@ async def build_init_state() -> dict[str, Any]:
     if snapshot["settings"]:
         # Only a stored object: an empty one would hide persona/muted from the settings panel.
         state["settings"] = snapshot["settings"]
-    state["agent_status"] = _current_agent_status()  # C-ROOM-1: a late UI must not show 'System Unknown'
+    state["agent_status"] = build_agent_status()  # K-02/K-42 v9: the whole object; a late UI never shows 'Unknown'
     state["desktop_status"] = desktop.status()  # K-74 (C-STATE-1 v4)
     state["vitals_pc"] = latest_pc_vitals()
     if _latest_vps_vitals is not None:
@@ -1219,14 +1347,27 @@ class SocketClient:
     session_id: str = ""    # role 'ui': the owner session of the jarvis_session cookie (C-19)
     commands: TokenBucket = field(default_factory=lambda: TokenBucket(UI_COMMANDS_PER_S))
     frames: TokenBucket = field(default_factory=lambda: TokenBucket(VISION_FRAMES_PER_S))
+    hellos: TokenBucket = field(default_factory=lambda: TokenBucket(AGENT_HELLOS_PER_S, AGENT_HELLO_BURST))
 
 
 _clients: dict[str, SocketClient] = {}
 # Audit rows for refused sockets: a steady trickle, so a flood of bad connects cannot fill the disk.
 _refusal_audit = TokenBucket(1.0, 30.0)
-# When the last agent socket serving the owner's room left (bridge start until one has): agent_status.since
-# while offline, in the event and in init_state.
-_agent_offline_since = time.time()
+
+
+class AgentStatusTracker:  # pylint: disable=too-few-public-methods
+    """agent_status (K-02 v9) as the bridge last built and emitted it. since: when the tuple (online, in_room,
+    voice_ready, paused, restarting) last changed (bridge start until then)."""
+
+    def __init__(self) -> None:
+        self.key: tuple[Any, ...] | None = None
+        self.since: float = time.time()
+        self.emitted: tuple[Any, ...] | None = None
+
+
+_status_tracker = AgentStatusTracker()
+# When the last UI socket left (epoch s): the room owner's on_demand demand window (K-44 v9).
+_ui_last_seen: float | None = None
 
 
 def _short(value: Any) -> str:
@@ -1306,27 +1447,64 @@ def _agent_room(auth: Mapping[str, Any], internal: bool) -> str:
 async def _join_rooms(sid: str, client: SocketClient) -> None:
     """Puts the socket in its role's rooms and records the role in its Socket.IO session. An agent socket that
     serves another room than JARVIS_ROOM_NAME joins none, so it never receives a ui_command or a camera frame."""
-    rooms = ROLE_ROOMS[client.role] if client.role != ROLE_AGENT or _is_owner_agent(client) else ()
+    socket_rooms = ROLE_ROOMS[client.role] if client.role != ROLE_AGENT or _is_owner_agent(client) else ()
     try:
-        for room in rooms:
+        for room in socket_rooms:
             await sio.enter_room(sid, room)
         await sio.save_session(sid, {"role": client.role, "ip": client.ip, "since": client.since})
     except (KeyError, ValueError):  # no such live socket (it has already gone)
         logger.debug("Socket %s left before joining its rooms", sid)
 
 
-def _agent_status(client: SocketClient) -> dict[str, Any]:
-    """agent_status for room 'ui' while an agent socket is connected (C-SOCK-1); C-23 adds voice_ready,
-    paused and heartbeats."""
-    return {"online": True, "since": client.since, "host": client.host, "version": client.version}
-
-
-def _current_agent_status() -> dict[str, Any]:
-    """agent_status as the UI should see it right now (init_state, C-ROOM-1): the first agent socket serving the
-    owner's room, else offline since the last one left. Without it a UI that connects after the agent shows
-    'System Unknown' until the agent reconnects."""
+def build_agent_status() -> dict[str, Any]:
+    """agent_status as the UI should see it right now (K-02 v9): always the whole object, for the event, init_state
+    (C-STATE-1) and GET /status. online: an agent socket of the owner's room is connected; in_room / voice_ready /
+    session / restarting: the room owner's last observation (LiveKit presence); paused: the owner's flag;
+    last_heartbeat: the agent's last authenticated contact; agent_name: the dispatch target."""
     agent = next((client for client in _clients.values() if _is_owner_agent(client)), None)
-    return _agent_status(agent) if agent is not None else {"online": False, "since": _agent_offline_since}
+    presence = rooms.presence()
+    paused = rooms.paused
+    online = agent is not None
+    key = (online, presence["in_room"], presence["voice_ready"], paused, presence["restarting"])
+    tracker = _status_tracker
+    if key != tracker.key:
+        tracker.key, tracker.since = key, time.time()
+    heartbeat = bridge_manager.state.get("last_runner_contact")
+    return {
+        "online": online, "in_room": presence["in_room"], "voice_ready": presence["voice_ready"], "paused": paused,
+        "restarting": presence["restarting"], "since": tracker.since,
+        "last_heartbeat": heartbeat if isinstance(heartbeat, (int, float)) else None,
+        "host": agent.host if agent is not None else "", "version": agent.version if agent is not None else "",
+        "brain": rooms.settings.brain, "agent_name": rooms.target_agent_name, "session": presence["session"],
+    }
+
+
+async def _publish_agent_status() -> None:
+    """Emits agent_status to room 'ui' when its tuple (online, in_room, voice_ready, paused, restarting), the host or
+    the version changed since the last emit (the room owner's on_status, agent connects, hellos and leaves)."""
+    status = build_agent_status()
+    key = (status["online"], status["in_room"], status["voice_ready"], status["paused"], status["restarting"],
+           status["host"], status["version"])
+    if key == _status_tracker.emitted:
+        return
+    _status_tracker.emitted = key
+    await emit_ui("agent_status", status)
+
+
+async def _send_agent_command(data: Any, sid: str | None = None) -> None:
+    """The room owner's agent_command (pause_agent): to one socket, else to room 'agent' (owner-room agents)."""
+    await sio.emit("agent_command", data, to=sid or ROOM_AGENT)
+
+
+def _agent_job_sockets() -> dict[str, float]:
+    """{job_id: since} of the connected agent sockets serving the owner's room (the room owner's bridge_link)."""
+    return {client.job_id: client.since for client in _clients.values() if _is_owner_agent(client) and client.job_id}
+
+
+def _ui_presence() -> tuple[int, float | None]:
+    """(UI sockets now, epoch s of the last UI socket): the room owner's on_demand demand (K-44 v9)."""
+    count = sum(1 for client in _clients.values() if client.role in (ROLE_UI, ROLE_LEGACY))
+    return count, (time.time() if count else _ui_last_seen)
 
 
 @sio.on("connect") # type: ignore[untyped-decorator]
@@ -1366,8 +1544,12 @@ async def handle_connect(sid: str, environ: dict[str, Any], auth: dict[str, Any]
                 f" host={client.host}" if client.host else "",
                 f" room={client.room or '-'}{' (internal)' if internal else ''}" if role == ROLE_AGENT else "")
     if role == ROLE_AGENT:
-        if _is_owner_agent(client) and sum(1 for c in _clients.values() if _is_owner_agent(c)) == 1:
-            await emit_ui("agent_status", _agent_status(client))
+        if _is_owner_agent(client):
+            if rooms.paused and rooms.mode != bridge_rooms.MODE_OBSERVE:
+                # K-38 v9: a job that starts while the owner paused JARVIS ends at once
+                await sio.emit("agent_command", dict(bridge_rooms.PAUSE_COMMAND), to=sid)
+            rooms.kick("agent_connect")
+            await _publish_agent_status()
         return True
     if role == ROLE_UI:  # a legacy socket may be an old agent, so only a real UI session counts as the owner
         await desktop.note_owner_activity()
@@ -1378,15 +1560,15 @@ async def handle_connect(sid: str, environ: dict[str, Any], auth: dict[str, Any]
 
 @sio.on("disconnect") # type: ignore[untyped-decorator]
 async def handle_disconnect(sid: str, *_reason: Any) -> None:
-    """Forgets the socket; when the last agent socket serving the owner's room leaves, agent_status goes offline
-    in room 'ui'."""
-    global _agent_offline_since  # pylint: disable=global-statement
+    """Forgets the socket; when an agent socket serving the owner's room leaves, agent_status is recomputed and goes
+    to room 'ui' if it changed (the last one leaving turns it offline)."""
+    global _ui_last_seen  # pylint: disable=global-statement
     client = _clients.pop(sid, None)
     logger.info("Socket disconnected: role=%s sid=%s", client.role if client else "unknown", sid)
-    if client is not None and _is_owner_agent(client) and not any(
-            _is_owner_agent(c) for c in _clients.values()):
-        _agent_offline_since = time.time()
-        await emit_ui("agent_status", _current_agent_status())
+    if client is not None and client.role in (ROLE_UI, ROLE_LEGACY):
+        _ui_last_seen = time.time()
+    if client is not None and _is_owner_agent(client):
+        await _publish_agent_status()
 
 
 @sio.on("agent_hello") # type: ignore[untyped-decorator]
@@ -1396,12 +1578,15 @@ async def handle_agent_hello(sid: str, data: Any) -> dict[str, str]:
     client = _clients.get(sid)
     if client is None or client.role != ROLE_AGENT:
         return _rejected("not_allowed")
+    if not client.hellos.take():
+        return _rejected("rate_limited")
     if isinstance(data, dict):
         client.version = _short(data.get("version")) or client.version
         client.host = _short(data.get("host")) or client.host
     logger.info("Agent hello: host=%s version=%s sid=%s", client.host or "-", client.version or "-", sid)
     if _is_owner_agent(client):
-        await emit_ui("agent_status", _agent_status(client))
+        rooms.kick("agent_hello")
+        await _publish_agent_status()
     return {"status": "ok"}
 
 
@@ -1437,6 +1622,25 @@ async def handle_ui_command(sid: str, data: Any) -> dict[str, str]:
         await desktop.ui_desktop_stop(by=client.role)
     elif cmd_type == "notification_ack":
         await _ack_notification(data.get("payload"))
+    elif cmd_type == "pause_agent":
+        # K-03/K-44 v9: only the room owner (always or on_demand mode) can hold a pause. It sets the flag and sends
+        # its own pause_agent (payload.by 'bridge', the only one that ends the agent's job, K-60 v9); the UI's
+        # command itself is never forwarded. Elsewhere (observe mode, the PC's local bridge) nothing would keep
+        # the agent out or bring it back on Wake, so the command is refused and changes nothing.
+        if not (rooms.enabled and rooms.mode != bridge_rooms.MODE_OBSERVE):
+            logger.info("ui_command pause_agent refused: this bridge holds no pause (room owner %s)",
+                        rooms.mode if rooms.enabled else "off")
+            return _rejected(bridge_rooms.PAUSE_UNAVAILABLE)
+        await rooms.set_paused(True, by=client.role)
+        return {"status": "sent"}
+    elif cmd_type == "start" and rooms.enabled:
+        # K-03/K-44 v9: Wake clears the paused flag and runs an explicit ensure; in observe mode the flag is left
+        # alone and Wake may only heal a room without an agent (the old token route's heal, never a delete). It is
+        # still forwarded below. stop is only forwarded: it interrupts speech, never pauses.
+        if rooms.mode != bridge_rooms.MODE_OBSERVE:
+            await rooms.set_paused(False, by=client.role)
+        else:
+            rooms.kick(bridge_rooms.REASON_START, explicit=True, skip_confirm=True)
     await sio.emit('agent_command', data, to=ROOM_AGENT)
     return {"status": "sent"}
 

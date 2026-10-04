@@ -2,33 +2,50 @@
 Make sure the LiveKit room has exactly one JARVIS agent, so the local Windows worker actually gets a job.
 Without a job the worker stays idle and UI chat never reaches the agent.
 
-agent_ctl start/restart runs this once the new worker is healthy and linked (and the PC worker's room
-watchdog runs it when the room loses its agent). agent_ctl reports its exit code, and any non-zero code marks
-the start as failed. The worker registers with no agent_name (automatic dispatch).
+agent_ctl start/restart runs this once the new worker is healthy and linked (--reason agent_ctl_start /
+agent_ctl_restart, or brain_switch from 'agent_ctl brain pc'), and the PC worker's room watchdog runs it when the
+room loses its agent (--reason watchdog). agent_ctl reports its exit code, and any non-zero code marks the start as
+failed. It never deletes a room (C-23, K-53 v9).
 
 Every run prints exactly one "[ROOM] Result: ..." line, on every exit path, and exits as follows:
-- exit 0: the vps-mode no-op ("OK, nothing to do in vps mode ..."), the bridge's /vortex/desktop/ensure
-  answering 200 ("room ensured by the bridge (agent presence not checked) ...": the bridge only makes sure
-  the room exists, so this run does not know whether an agent is in it, and agent_ctl reports it as a
-  warning), and every outcome of the LiveKit API path below ("OK, ...", "NO AGENT ...", "UNKNOWN: the room
-  could not be read ..." or "an agent of an earlier worker ..."): a room left without the worker's agent is
-  reported by its result line, not by the exit code.
+- exit 0: the vps-mode no-op ("OK, nothing to do in vps mode ..."); every answer of the bridge path below ("OK, an
+  agent of the current worker is in the room (bridge)", "PAUSED by the owner ...", "NO AGENT ...", or an
+  "UNKNOWN: the bridge refused ... / did not answer in time, nothing was changed"); a bridge that answers 200
+  without agent fields ("room ensured by the bridge (agent presence not checked) ...": this run does not know
+  whether an agent is in the room, and agent_ctl reports it as a warning); and every outcome of the LiveKit API
+  path below ("OK, ...", "NO AGENT ...", "UNKNOWN: the room could not be read ..." or "an agent of an earlier
+  worker ..."): a room left without the worker's agent is reported by its result line, not by the exit code.
 - exit 1: a missing LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET, a failed list_rooms, or an
   unexpected error, each with an "UNKNOWN: ..." result line; nothing was changed in the first two cases.
   An unexpected error raised AFTER the result line was printed (for example while closing the LiveKit
   client) also exits 1: the result line already printed stays the run's only one, so a run can print an
   "OK, ..." or "NO AGENT ..." result line and still exit 1. Its "[ERROR] ... stopped on an unexpected ..."
   line says so.
+- exit 2: bad arguments ("UNKNOWN: ensure_room.py was started with bad arguments ..."; nothing was changed).
 - exit 130: Ctrl+C, with an "UNKNOWN: ensure_room.py was interrupted ..." result line (or, after the result
   line, with that line kept). Only a hard kill (agent_ctl's or the room watchdog's timeout) ends a run
   without a result line; both report that themselves.
 
-C-123 (VPS brain): this runs in pc mode ONLY. In vps mode the VPS dispatches its own job, so this exits as
-a no-op. When a PC signing key and JARVIS_LINK_URL are configured it asks the bridge's PC-signed
-/vortex/desktop/ensure first and falls back to the LiveKit API below when that does not answer 200.
+C-123 (VPS brain): this runs in pc mode ONLY. In vps mode the VPS dispatches its own job, so this exits as a no-op.
+
+The bridge path (C-23, K-39/K-53 v9): the bridge in the VPS container owns the room and dispatches its agent, so
+this asks it first.
+1. With AGENT_TOKEN and BRIDGE_HMAC_SECRET: POST <UI_BRIDGE_URL>/livekit/ensure with jarvis_bridge.signed_headers
+   over the exact body {reason, agent_name, worker_id?}: agent_name is the name the running worker registered
+   (run/agent_link.json agent_name, else JARVIS_AGENT_NAME, else ''), worker_id its LiveKit worker id when known.
+2. Else, with JARVIS_LINK_URL and the node's PC key: the PC-signed POST /vortex/desktop/ensure with an empty body.
+3. Else the LiveKit API path below.
+A 200 that shows the bridge reconciles is followed by the same call every 3 s (reason 'wait', fresh headers) for
+up to 90 s, until it shows paused, or an agent of the current worker (agent_current_worker true; agent_in_room
+when that is null). A 200 that says paused is "PAUSED by the owner" in every mode: the LiveKit path never runs
+while the owner paused JARVIS. The LiveKit API path runs only when the bridge provably does not reconcile: no
+connection at all (refused, DNS), HTTP 404, HTTP 502/503/504 without a JSON body (nginx: the bridge is down), HTTP
+503 {error: 'livekit_unavailable'} (the bridge could not use LiveKit, so it dispatched nothing), or a 200 with
+result 'observe' or 'disabled'. A 429 is asked once more after its Retry-After (at most 5 s). A timeout, any other
+4xx or a JSON error answer changes nothing ("UNKNOWN: ...").
 
 What the self-hosted LiveKit server v1.13.7 does (read in its source at that tag: pkg/rtc/room.go,
-pkg/agent/worker.go, pkg/service/agentservice.go). This file is built around it:
+pkg/agent/worker.go, pkg/service/agentservice.go). The LiveKit API path is built around it:
 - A room's agents= dispatch is launched only when CreateRoom creates the room. A CreateRoom on an existing
   room changes nothing.
 - Nothing re-dispatches a job when its agent or its worker goes away; the room only terminates the job.
@@ -42,9 +59,9 @@ pkg/agent/worker.go, pkg/service/agentservice.go). This file is built around it:
 - agent_ctl stops a worker with Ctrl+Break, so its agent leaves without a leave message and stays listed
   as a participant until the server notices the dropped connection (about 15 s).
 
-The LiveKit API path. It never deletes a live room: a delete cuts live voice/chat sessions (plan section 3).
-1. Room absent: CreateRoom with the single agents=[RoomAgentDispatch(agent_name="")] dispatch. No
-   create_dispatch is added, because that would launch a second job.
+The LiveKit API path. It never deletes a room: a delete cuts live voice/chat sessions (plan section 3).
+1. Room absent: CreateRoom with the single agents=[RoomAgentDispatch(agent_name=<the worker's name>)] dispatch.
+   No create_dispatch is added, because that would launch a second job.
 2. Room present with an agent of the current worker: done, nothing changes. An agent belongs to the
    current worker when its identity is a job of that worker; when the jobs cannot tell, when it joined
    after the worker started. When neither can be checked, any agent counts (never a second agent).
@@ -55,31 +72,29 @@ The LiveKit API path. It never deletes a live room: a delete cuts live voice/cha
    is treated as live: nothing is added, and a warning says so.
 4. Room present without an agent: a short safety wait (SELF_REDISPATCH_WAIT_S; nothing on this server
    re-dispatches by itself). Then, unless a live job is pending/running (it only gets the join wait),
-   ONE create_dispatch(agent_name="", room) and a wait of up to AGENT_JOIN_WAIT_S for its agent. The empty
-   agent_name is the one the room's own default dispatch uses, and it reaches automatic-dispatch workers.
-5. Still no agent and nobody else in the room: delete and recreate the room with agents= (the known-good
-   path; nobody is cut off). A person in the room: never delete. The warning and the result line say that
-   JARVIS may stay silent until the UI reconnects (the bridge's token mint recreates the room).
-A participant list that cannot be read never leads to an added dispatch or a delete. A dispatch list that
-cannot be read never leads to an added dispatch, and never to a delete while anyone is in the room: with
-nobody in it, step 5 may still recreate the room (that cuts nobody).
-Worst case, the waits add up to OTHER_WORKER_GHOST_WAIT_S + SELF_REDISPATCH_WAIT_S + 2 * AGENT_JOIN_WAIT_S
-(92 s), inside agent_ctl's ENSURE_ROOM_TIMEOUT_S (120 s) with room for the API calls and the start-up.
+   ONE create_dispatch(agent_name=<the worker's name>, room) and a wait of up to AGENT_JOIN_WAIT_S for its agent.
+5. Still no agent: the room is left as it is, whoever is in it (NO AGENT). The v7/v8 last-resort delete is gone.
+A participant or dispatch list that cannot be read never leads to an added dispatch.
+Worst case, the waits add up to OTHER_WORKER_GHOST_WAIT_S + SELF_REDISPATCH_WAIT_S + AGENT_JOIN_WAIT_S (72 s); the
+bridge path waits at most BRIDGE_RETRY_MAX_S + BRIDGE_TIMEOUT_S + BRIDGE_WAIT_S (105 s; a 429 answers at once).
+Both fit agent_ctl's ENSURE_ROOM_TIMEOUT_S (120 s) with room for the start-up.
 
 C-137: the console (agent_ctl start/restart shows it) gets only the room's name, sid, empty and departure
-timeouts, whether an agent dispatch exists and counts/states. It never gets the Room protobuf, which
-carries turn_password, nor participant identities, worker ids, the API key or secret (exception text goes
-through _masked).
+timeouts, whether an agent dispatch exists and counts/states, and the bridge's result, flags, mode and target. It
+never gets the Room protobuf, which carries turn_password, nor participant identities, worker ids, the API key or
+secret (exception text goes through _masked).
 """
 
 from __future__ import annotations
 
+import argparse
 import asyncio
+import json
 import os
 import sys
 import time
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -114,29 +129,53 @@ ACTIVE_JOB_STATUSES = (api.JobStatus.JS_PENDING, api.JobStatus.JS_RUNNING)
 AGENT_KIND = api.ParticipantInfo.Kind.AGENT
 GONE_STATE = api.ParticipantInfo.State.DISCONNECTED
 
+# The bridge path (C-23, K-53 v9)
+REASONS = ("agent_ctl_start", "agent_ctl_restart", "watchdog", "brain_switch", "manual")
+BRIDGE_TIMEOUT_S = 10.0   # one bridge call
+BRIDGE_WAIT_S = 90.0      # how long the bridge's answer is followed for an agent of the current worker
+BRIDGE_POLL_S = 3.0
+BRIDGE_DOWN_STATUSES = (502, 503, 504)   # without a JSON body: nginx's own page, the bridge is down
+BRIDGE_NO_LIVEKIT = "livekit_unavailable"  # a 503 with this error: the bridge could not use LiveKit at all
+BRIDGE_RETRY_MAX_S = 5.0  # a 429 is asked once more after its Retry-After, at most this long
+ROUTE_LIVEKIT, ROUTE_DESKTOP = "/livekit/ensure", "/desktop/ensure"
+NO_RECONCILE_RESULTS = ("observe", "disabled")
+
 RESULT_AGENT = "OK, an agent of the current worker is in the room"
 RESULT_CREATED = "OK, room created with its agent dispatch (the worker gets the job)"
-RESULT_NO_AGENT = ("NO AGENT in the room: JARVIS may stay silent until the UI reconnects or ensure_room.py "
-                   "runs again")
+RESULT_NO_AGENT = ("NO AGENT in the room: JARVIS may stay silent until ensure_room.py runs again (the room "
+                   "watchdog) or Voice reconnects through the bridge")
 RESULT_EARLIER_AGENT = ("an agent of an earlier worker is still in the room and was left alone (no second "
                         "agent was added); run ensure_room.py again if JARVIS does not answer")
 RESULT_UNKNOWN = "UNKNOWN: the room could not be read, nothing was changed"
 RESULT_VPS_MODE = "OK, nothing to do in vps mode (JARVIS_BRAIN=vps: the VPS dispatches its own job)"
-# The bridge's /vortex/desktop/ensure only makes sure the room exists (it never reports an agent), so this result
-# never claims one: it does not start with "OK" and agent_ctl treats it as a warning.
+# A bridge that answers 200 without agent fields only made sure the room exists, so this result never claims an
+# agent: it does not start with "OK" and agent_ctl treats it as a warning.
 RESULT_BRIDGE = ("room ensured by the bridge (agent presence not checked; PC-signed /vortex/desktop/ensure "
                  "answered 200)")
+RESULT_BRIDGE_UNCHECKED = ("room ensured by the bridge (agent presence not checked; signed /vortex/livekit/ensure "
+                           "answered 200)")
+RESULT_BRIDGE_AGENT = "OK, an agent of the current worker is in the room (bridge)"
+RESULT_PAUSED = "PAUSED by the owner: the bridge dispatches no agent until Wake (ui_command start)"
+RESULT_BRIDGE_NO_AGENT = ("NO AGENT in the room: the bridge reports {result} after 90 s; it keeps retrying "
+                          "(backoff)")
+RESULT_BRIDGE_REFUSED = "UNKNOWN: the bridge refused {route} (HTTP {code} {error}), nothing was changed"
+RESULT_BRIDGE_TIMEOUT = "UNKNOWN: the bridge did not answer in time, nothing was changed"
 RESULT_NO_SETTINGS = ("UNKNOWN: LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET missing, nothing was "
                       "changed")
 RESULT_LIST_ROOMS_FAILED = "UNKNOWN: list_rooms failed (the room could not be read), nothing was changed"
 RESULT_ERROR = "UNKNOWN: ensure_room.py stopped on an unexpected {error}; check the room"
 RESULT_INTERRUPTED = "UNKNOWN: ensure_room.py was interrupted (Ctrl+C); check the room"
+RESULT_BAD_ARGS = "UNKNOWN: ensure_room.py was started with bad arguments, nothing was changed"
 RESULT_PREFIX = "[ROOM] Result:"
 EXIT_OK = 0
 EXIT_FAILED = 1
+EXIT_USAGE = 2
 EXIT_INTERRUPTED = 130  # 128 + SIGINT, as agent_ctl uses it
 
 _result_printed = False
+# Clocks of the bridge path (synchronous); the tests replace them.
+_sleep: Callable[[float], None] = time.sleep
+_monotonic: Callable[[], float] = time.monotonic
 
 
 def print_result(text: str) -> None:
@@ -152,39 +191,6 @@ def current_brain() -> str:
     """'vps' or 'pc' (default pc); only agent_ctl brain writes JARVIS_BRAIN (K-72)."""
     value = (os.getenv("JARVIS_BRAIN") or "pc").strip().lower()
     return value if value in ("vps", "pc") else "pc"
-
-
-def ensure_via_bridge() -> bool:
-    """Ask the bridge's PC-signed /vortex/desktop/ensure to create the room (never delete). True when the
-    bridge handled it; False when no PC key is configured or the call did not succeed, so the caller falls
-    back to the LiveKit API path."""
-    link_url = (os.getenv("JARVIS_LINK_URL") or "").strip()
-    if not link_url:
-        return False
-    try:
-        import httpx  # pylint: disable=import-outside-toplevel
-        from services.utils import desktop_protocol as dp  # pylint: disable=import-outside-toplevel
-        from src.core.desktop import settings as node_settings  # pylint: disable=import-outside-toplevel
-    except ImportError:
-        return False
-    key_file = node_settings.node_home() / node_settings.KEYS_FILE
-    if not key_file.is_file():
-        return False
-    try:
-        key = dp.load_pc_key_file(key_file)
-        headers = {**dp.sign_http_request(key, method="POST", path="/vortex/desktop/ensure", body=b""),
-                   "Content-Type": "application/json"}
-        response = httpx.post(f"{link_url.rstrip('/')}/vortex/desktop/ensure", headers=headers, content=b"",
-                              timeout=httpx.Timeout(10.0))
-    except Exception as exc:  # pylint: disable=broad-exception-caught  # fall back to the LiveKit path
-        print(f"[ROOM] PC-signed /vortex/desktop/ensure note: {type(exc).__name__}")
-        return False
-    if response.status_code == 200:
-        print("[ROOM] Room ensured through the bridge (PC-signed /vortex/desktop/ensure answered 200); whether an "
-              "agent is in the room was not checked.")
-        return True
-    print(f"[ROOM] /vortex/desktop/ensure returned HTTP {response.status_code}; using the LiveKit API.")
-    return False
 
 
 def _http_url(ws_url: str) -> str:
@@ -210,38 +216,246 @@ def _now() -> float:
 
 
 class Worker:
-    """The PC worker that holds run/agent.lock now: its start time (epoch seconds, PC clock) and its LiveKit
-    worker id from run/agent_link.json. Either is None/"" when unknown (no worker, or an older worker)."""
+    """The PC worker that holds run/agent.lock now: its start time (epoch seconds, PC clock), its LiveKit worker id
+    from run/agent_link.json and the lk.agent.name it registered (C-23: link file, else JARVIS_AGENT_NAME, else '').
+    started_at/worker_id are None/"" when unknown (no worker, or an older worker)."""
 
-    def __init__(self, started_at: float | None = None, worker_id: str = "") -> None:
+    def __init__(self, started_at: float | None = None, worker_id: str = "", agent_name: str = "") -> None:
         self.started_at = started_at
         self.worker_id = worker_id
+        self.agent_name = agent_name
 
     def describe(self) -> str:
         known = {True: "yes", False: "no"}
+        name = self.agent_name or "''"
         return (f"start time known={known[self.started_at is not None]} "
-                f"LiveKit worker id known={known[bool(self.worker_id)]}")
+                f"LiveKit worker id known={known[bool(self.worker_id)]} agent name={name}")
+
+
+def configured_agent_name() -> str:
+    """JARVIS_AGENT_NAME as this PC's worker reads it ('' = automatic dispatch, K-69 v9)."""
+    return (os.getenv("JARVIS_AGENT_NAME") or "").strip()
 
 
 def current_worker() -> Worker:
-    """The running worker as run/ describes it; an empty Worker when no worker holds the lock or run/ cannot
-    be read. Both modules are stdlib only (agent_ctl imports them the same way)."""
+    """The running worker as run/ describes it; a Worker with only the configured agent name when no worker holds
+    the lock or run/ cannot be read. Both modules are stdlib only (agent_ctl imports them the same way)."""
+    fallback = Worker(agent_name=configured_agent_name())
     try:
         from src.core import agent_lock, livekit_link  # pylint: disable=import-outside-toplevel
     except ImportError:
-        return Worker()
+        return fallback
     try:
         if not agent_lock.is_locked():
-            return Worker()
+            return fallback
         info = agent_lock.read_pid_info() or {}
         try:
             started: float | None = datetime.fromisoformat(str(info.get("started_at"))).timestamp()
         except (TypeError, ValueError):
             started = None
         link = livekit_link.read_link(info) or {}
-        return Worker(started, str(link.get("worker_id") or ""))
+        name = link.get("agent_name")
+        return Worker(started, str(link.get("worker_id") or ""),
+                      name if isinstance(name, str) else configured_agent_name())
     except OSError:
-        return Worker()
+        return fallback
+
+
+# --------------------------------------------------------------------------- the bridge path (C-23, K-53 v9)
+
+
+def _signed_headers(body: bytes) -> dict[str, str]:
+    """C-NOTIFY-1 headers over exactly body (services/utils/jarvis_bridge.signed_headers), imported when needed."""
+    from services.utils.jarvis_bridge import signed_headers  # pylint: disable=import-outside-toplevel
+    return signed_headers(body)
+
+
+def ensure_body(reason: str, worker: Worker) -> bytes:
+    """The exact bytes of a POST /livekit/ensure body: {reason, agent_name, worker_id when known}."""
+    body: dict[str, Any] = {"reason": reason, "agent_name": worker.agent_name}
+    if worker.worker_id:
+        body["worker_id"] = worker.worker_id
+    return json.dumps(body, separators=(",", ":")).encode("utf-8")
+
+
+def bridge_route(worker: Worker) -> tuple[str, str, Callable[[str], tuple[bytes, dict[str, str]]]] | None:
+    """(route, URL, request builder) of the first configured bridge route, else None. The builder makes a new body
+    and new signed headers for every call (the bridge refuses a nonce it has seen)."""
+    base = (os.getenv("UI_BRIDGE_URL") or "").strip().rstrip("/")
+    if base and (os.getenv("AGENT_TOKEN") or "").strip() and (os.getenv("BRIDGE_HMAC_SECRET") or "").strip():
+        def signed(reason: str) -> tuple[bytes, dict[str, str]]:
+            body = ensure_body(reason, worker)
+            return body, _signed_headers(body)
+
+        return ROUTE_LIVEKIT, f"{base}/livekit/ensure", signed
+    link_url = (os.getenv("JARVIS_LINK_URL") or "").strip().rstrip("/")
+    if not link_url:
+        return None
+    try:
+        from services.utils import desktop_protocol as dp  # pylint: disable=import-outside-toplevel
+        from src.core.desktop import settings as node_settings  # pylint: disable=import-outside-toplevel
+    except ImportError:
+        return None
+    key_file = node_settings.node_home() / node_settings.KEYS_FILE
+    if not key_file.is_file():
+        return None
+
+    def pc_signed(_reason: str) -> tuple[bytes, dict[str, str]]:
+        key = dp.load_pc_key_file(key_file)
+        return b"", {**dp.sign_http_request(key, method="POST", path="/vortex/desktop/ensure", body=b""),
+                     "Content-Type": "application/json"}
+
+    return ROUTE_DESKTOP, f"{link_url}/vortex/desktop/ensure", pc_signed
+
+
+class BridgeAnswer:
+    """One call's outcome: kind 'http' (status, data = the JSON object or None, retry_after = a 429's Retry-After in
+    seconds), 'unreachable' (no connection at all: refused, DNS), 'timeout' or 'error' (any other failure: the bridge
+    may have acted)."""
+
+    def __init__(self, kind: str, status: int = 0, data: dict[str, Any] | None = None, note: str = "",
+                 retry_after: float | None = None) -> None:
+        self.kind, self.status, self.data, self.note, self.retry_after = kind, status, data, note, retry_after
+
+
+def _retry_after_s(value: Any) -> float | None:
+    """A Retry-After header in seconds (the bridge sends whole seconds), else None; the caller caps it."""
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        return None
+    return seconds if seconds >= 0 and seconds != float("inf") else None
+
+
+def _call_bridge(url: str, request: tuple[bytes, dict[str, str]], timeout: float) -> BridgeAnswer:
+    import httpx  # pylint: disable=import-outside-toplevel
+
+    body, headers = request
+    try:
+        response = httpx.post(url, headers=headers, content=body, timeout=httpx.Timeout(timeout))
+    except httpx.ConnectError as exc:  # refused, DNS: the bridge was never reached
+        return BridgeAnswer("unreachable", note=type(exc).__name__)
+    except httpx.TimeoutException as exc:
+        return BridgeAnswer("timeout", note=type(exc).__name__)
+    except Exception as exc:  # pylint: disable=broad-exception-caught  # a dropped answer: it may have acted
+        return BridgeAnswer("error", note=type(exc).__name__)
+    try:
+        data = response.json()
+    except Exception:  # pylint: disable=broad-exception-caught  # no JSON body (nginx's own page)
+        data = None
+    headers_in = getattr(response, "headers", None) or {}
+    return BridgeAnswer("http", int(response.status_code), data if isinstance(data, dict) else None,
+                        retry_after=_retry_after_s(headers_in.get("Retry-After")))
+
+
+def _flag(value: Any) -> str:
+    return "unknown" if value is None else ("yes" if value is True else "no")
+
+
+def describe_bridge(data: dict[str, Any]) -> str:
+    """The bridge's answer for the console: result, flags, mode and target; never an identity or a worker id."""
+    target = data.get("target_agent_name")
+    return (f"result={data.get('result')} agent_in_room={_flag(data.get('agent_in_room'))} "
+            f"voice_ready={_flag(data.get('voice_ready'))} current_worker={_flag(data.get('agent_current_worker'))} "
+            f"mode={data.get('mode')} paused={_flag(data.get('paused'))} "
+            f"target={target if target else repr('') if target == '' else '?'}")
+
+
+def _bridge_done(data: dict[str, Any]) -> str | None:
+    """The result once the answer shows paused or an agent of the current worker, else None."""
+    if data.get("paused") is True:
+        return RESULT_PAUSED
+    current = data.get("agent_current_worker")
+    if current is True or (current is None and data.get("agent_in_room") is True):
+        return RESULT_BRIDGE_AGENT
+    return None
+
+
+def _wait_for_agent(url: str, build: Callable[[str], tuple[bytes, dict[str, str]]],
+                    first: dict[str, Any]) -> str:
+    """Follows the bridge every BRIDGE_POLL_S (reason 'wait', fresh headers) for up to BRIDGE_WAIT_S."""
+    deadline = _monotonic() + BRIDGE_WAIT_S
+    last, shown, noted = first, describe_bridge(first), set()
+    while True:
+        done = _bridge_done(last)
+        if done is not None:
+            return done
+        remaining = deadline - _monotonic()
+        if remaining <= 0:
+            return RESULT_BRIDGE_NO_AGENT.format(result=last.get("result"))
+        _sleep(min(BRIDGE_POLL_S, remaining))
+        timeout = max(1.0, min(BRIDGE_TIMEOUT_S, deadline - _monotonic()))
+        answer = _call_bridge(url, build("wait"), timeout)
+        if answer.kind == "http" and answer.status == 200 and answer.data is not None and "result" in answer.data:
+            last = answer.data
+            line = describe_bridge(last)
+            if line != shown:
+                shown = line
+                print(f"[ROOM] Bridge: {line}", flush=True)
+        elif answer.kind + str(answer.status) not in noted:
+            noted.add(answer.kind + str(answer.status))
+            what = f"HTTP {answer.status}" if answer.kind == "http" else f"{answer.kind} ({answer.note})"
+            print(f"[ROOM] Bridge poll: {what}; still waiting", flush=True)
+
+
+# pylint: disable-next=too-many-return-statements  # one answer per bridge outcome (K-53 v9)
+def ask_bridge(reason: str, worker: Worker) -> str | None:
+    """The bridge path (K-53 v9). The result text when the bridge reconciles, refused or did not answer in time;
+    None when it provably does not reconcile, and the LiveKit API path follows."""
+    route = bridge_route(worker)
+    if route is None:
+        return None
+    name, url, build = route
+    try:
+        request = build(reason)
+    except Exception as exc:  # pylint: disable=broad-exception-caught  # a key that cannot sign: no bridge call
+        print(f"[ROOM] {name} could not be signed ({type(exc).__name__}); using the LiveKit API.")
+        return None
+    print(f"[ROOM] Asking the bridge: POST {name} (reason {reason})", flush=True)
+    answer = _call_bridge(url, request, BRIDGE_TIMEOUT_S)
+    if answer.kind == "http" and answer.status == 429:
+        wait = min(BRIDGE_RETRY_MAX_S, answer.retry_after if answer.retry_after is not None else BRIDGE_POLL_S)
+        print(f"[ROOM] {name} is busy (HTTP 429); asking once more in {wait:.0f} s.", flush=True)
+        _sleep(wait)
+        try:
+            request = build(reason)  # new headers: the bridge spends a nonce per call
+        except Exception as exc:  # pylint: disable=broad-exception-caught  # a key that cannot sign any more
+            return RESULT_BRIDGE_REFUSED.format(route=name, code=429, error=type(exc).__name__)
+        answer = _call_bridge(url, request, BRIDGE_TIMEOUT_S)
+    if answer.kind == "unreachable":
+        print(f"[ROOM] The bridge cannot be reached ({answer.note}); using the LiveKit API.")
+        return None
+    if answer.kind == "timeout":
+        print(f"[ROOM] {name} did not answer within {BRIDGE_TIMEOUT_S:.0f} s ({answer.note}).")
+        return RESULT_BRIDGE_TIMEOUT
+    if answer.kind == "error":
+        return RESULT_BRIDGE_REFUSED.format(route=name, code="-", error=answer.note)
+    status, data = answer.status, answer.data
+    if status == 404 or (status in BRIDGE_DOWN_STATUSES and data is None):
+        print(f"[ROOM] {name} returned HTTP {status}; using the LiveKit API.")
+        return None
+    if status == 503 and (data or {}).get("error") == BRIDGE_NO_LIVEKIT:
+        # it read nothing and dispatched nothing in this call; the LiveKit path checks agents and live jobs itself
+        print(f"[ROOM] {name}: the bridge cannot use LiveKit ({BRIDGE_NO_LIVEKIT}); using the LiveKit API.")
+        return None
+    if status != 200:
+        error = str((data or {}).get("error") or "-")[:40]
+        return RESULT_BRIDGE_REFUSED.format(route=name, code=status, error=error)
+    if data is None or "result" not in data or "agent_in_room" not in data:
+        signed = "PC-signed" if name == ROUTE_DESKTOP else "signed"
+        print(f"[ROOM] Room ensured through the bridge ({signed} /vortex{name} answered 200); whether an agent is "
+              "in the room was not checked.")
+        return RESULT_BRIDGE if name == ROUTE_DESKTOP else RESULT_BRIDGE_UNCHECKED
+    print(f"[ROOM] Bridge: {describe_bridge(data)}", flush=True)
+    if data.get("paused") is True:  # the owner's pause holds in every mode: nothing is dispatched, here neither
+        return RESULT_PAUSED
+    if data.get("result") in NO_RECONCILE_RESULTS:
+        print(f"[ROOM] The bridge does not dispatch (result {data.get('result')}); using the LiveKit API.")
+        return None
+    return _wait_for_agent(url, build, data)
+
+
+# --------------------------------------------------------------------------- the LiveKit API path
 
 
 def _epoch_s(value: int | float) -> float:
@@ -414,8 +628,9 @@ async def _find_room(lk: api.LiveKitAPI) -> Any:
     return next((r for r in rooms.rooms if r.name == ROOM_NAME), None)
 
 
-async def _create_room(lk: api.LiveKitAPI, *secrets: str) -> bool:
-    """CreateRoom with the single agents= dispatch (LiveKit launches it only for a room it creates)."""
+async def _create_room(lk: api.LiveKitAPI, agent_name: str, *secrets: str) -> bool:
+    """CreateRoom with the single agents= dispatch to the worker's name (LiveKit launches it only for a room it
+    creates)."""
     try:
         # departure_timeout default is ~20s — if the browser briefly drops,
         # LiveKit closes the room and kills the agent job (chat+voice die).
@@ -425,7 +640,7 @@ async def _create_room(lk: api.LiveKitAPI, *secrets: str) -> bool:
                 empty_timeout=3600,
                 departure_timeout=3600,
                 max_participants=10,
-                agents=[api.RoomAgentDispatch(agent_name="")],
+                agents=[api.RoomAgentDispatch(agent_name=agent_name)],
             )
         )
     except Exception as exc:  # pylint: disable=broad-exception-caught
@@ -479,35 +694,10 @@ def _no_agent_end(people: People | None) -> str | None:
     return None
 
 
-async def _recreate_empty_room(lk: api.LiveKitAPI, worker: Worker, *secrets: str) -> str:
-    """Last resort for a room with nobody in it: delete it and create it again with agents=."""
-    people, _ = await _look(lk, worker, *secrets)  # re-checked right before the delete
-    if people is None or people.agents or people.others:
-        state = "unknown" if people is None else people.describe()
-        print(f"[WARN] Room '{ROOM_NAME}' is no longer empty ({state}); it was not recreated.")
-        return RESULT_AGENT if people is not None and people.current else RESULT_NO_AGENT
-    print(f"[ROOM] Room '{ROOM_NAME}' is empty and has no agent: deleting and recreating it with agents=.")
-    try:
-        await lk.room.delete_room(api.DeleteRoomRequest(room=ROOM_NAME))
-    except Exception as exc:  # pylint: disable=broad-exception-caught
-        print(f"[ROOM] delete_room note: {_masked(exc, *secrets)}")
-        print("[WARN] The empty room could not be recreated: the agent worker may get no job.")
-        return RESULT_NO_AGENT
-    if not await _create_room(lk, *secrets):
-        print("[WARN] The room was deleted but not recreated: the agent worker gets no job until it exists.")
-        return RESULT_NO_AGENT
-    people = await _wait(lk, worker, AGENT_JOIN_WAIT_S, _any_agent, *secrets)
-    if people is not None and people.current:
-        print(f"[OK] Agent joined the recreated room ({people.describe()}).")
-        return RESULT_AGENT
-    print("[WARN] The room was recreated but no agent joined yet: check logs/agent_stderr.log.")
-    return RESULT_NO_AGENT
-
-
 # pylint: disable-next=too-many-return-statements
 async def _ensure_agent(lk: api.LiveKitAPI, worker: Worker, *secrets: str) -> str:
-    """An existing room: add a job only when it has no agent, never a second agent, and never cut a live
-    session. Returns the result line's text."""
+    """An existing room: add a job only when it has no agent, never a second agent, and never delete the room.
+    Returns the result line's text."""
     people, _ = await _look(lk, worker, *secrets)
     if people is None:
         print("[WARN] The room's participants could not be listed: the room was left unchanged.")
@@ -551,7 +741,7 @@ async def _ensure_agent(lk: api.LiveKitAPI, worker: Worker, *secrets: str) -> st
               "job as running), so one agent dispatch is added.")
         try:
             await lk.agent_dispatch.create_dispatch(
-                api.CreateAgentDispatchRequest(agent_name="", room=ROOM_NAME))
+                api.CreateAgentDispatchRequest(agent_name=worker.agent_name, room=ROOM_NAME))
             print("[ROOM] Agent dispatch created; waiting for the agent to join.")
         except Exception as exc:  # pylint: disable=broad-exception-caught
             print(f"[ROOM] create_dispatch note: {_masked(exc, *secrets)}")
@@ -562,15 +752,14 @@ async def _ensure_agent(lk: api.LiveKitAPI, worker: Worker, *secrets: str) -> st
 
     if people is None:  # _no_agent_end already answered None; this keeps the type narrow
         return RESULT_UNKNOWN
-    if people.others:
-        print(f"[WARN] No agent joined room '{ROOM_NAME}' and a person is in it ({people.describe()}): "
-              "the room is never deleted under a live session. Reconnect from the UI, or run "
-              "ensure_room.py again once the room is empty.")
-        return RESULT_NO_AGENT
-    return await _recreate_empty_room(lk, worker, *secrets)
+    who = "a person is in it" if people.others else "nobody is in it"
+    print(f"[WARN] No agent joined room '{ROOM_NAME}' and {who} ({people.describe()}): the room is never deleted "
+          "(C-23). Reconnect from the UI, or run ensure_room.py again.")
+    return RESULT_NO_AGENT
 
 
 async def ensure_room() -> None:
+    """The LiveKit API path (also used when the bridge provably does not reconcile)."""
     livekit_url = os.getenv("LIVEKIT_URL", "")
     api_key = os.getenv("LIVEKIT_API_KEY", "")
     api_secret = os.getenv("LIVEKIT_API_SECRET", "")
@@ -596,7 +785,7 @@ async def ensure_room() -> None:
             sys.exit(EXIT_FAILED)
         if room is None:
             # A fresh room: its agents= dispatch is the single dispatch path (no create_dispatch here).
-            await _create_room(lk, *secrets)
+            await _create_room(lk, worker.agent_name, *secrets)
             room = await _find_room(lk)
             if room is None:
                 print(f"[ROOM] Listed: room '{ROOM_NAME}' not found")
@@ -618,17 +807,34 @@ async def ensure_room() -> None:
         await lk.aclose()
 
 
-def main() -> None:
+def parse_args(argv: Sequence[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(prog="ensure_room.py",
+                                     description="Make sure the JARVIS room has one agent of this PC's worker.")
+    parser.add_argument("--reason", choices=REASONS, default="manual",
+                        help="who asks (the bridge logs it with its dispatch); default manual")
+    return parser.parse_args(list(argv))
+
+
+def main(argv: Sequence[str] | None = None) -> None:
     """One run: the vps-mode no-op, the bridge, else the LiveKit API path. Exactly one "[ROOM] Result: ..."
-    line on every exit path (see the module docstring for the exit codes)."""
+    line on every exit path (see the module docstring for the exit codes). argv: the arguments after the
+    script name (none: --reason manual)."""
     try:
+        try:
+            args = parse_args([] if argv is None else argv)
+        except SystemExit as exc:  # argparse: a usage error (2) or --help (0)
+            if exc.code not in (0, None):
+                print_result(RESULT_BAD_ARGS)
+                sys.exit(EXIT_USAGE)
+            raise
         if current_brain() == "vps":
             print("[ROOM] JARVIS_BRAIN=vps: the VPS dispatches its own job; ensure_room.py is a no-op in vps "
                   "mode.")
             print_result(RESULT_VPS_MODE)
             return
-        if ensure_via_bridge():
-            print_result(RESULT_BRIDGE)
+        bridge_result = ask_bridge(args.reason, current_worker())
+        if bridge_result is not None:
+            print_result(bridge_result)
             return
         asyncio.run(ensure_room())  # its own exit 1 (SystemExit) comes after its result line and passes through
     except KeyboardInterrupt:  # Ctrl+C: still one result line (unless the run already printed its own)
@@ -645,4 +851,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])

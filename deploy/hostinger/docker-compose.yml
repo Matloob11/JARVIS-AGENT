@@ -54,6 +54,12 @@ services:
       LIVEKIT_URL: ws://jarvis-livekit:7880
       LIVEKIT_PUBLIC_URL: wss://jarvis.srv1802669.hstgr.cloud
       JARVIS_ROOM_NAME: jarvis-hybrid
+      # C-23 (K-44/K-47 v9): the room owner. JARVIS_AGENT_NAME is the VPS brain's lk.agent.name; JARVIS_BRAIN and
+      # JARVIS_PC_AGENT_NAME (default jarvis-pc) come from the .env above and are read when the bridge starts. The
+      # first C-23 deploy only observes: 'python -m src.core.bridge_rooms mode always' (or observe) switches it
+      # within 5 s without a deploy, and the C-23 phase-5 cleanup removes the AGENT_DISPATCH_MODE line.
+      JARVIS_AGENT_NAME: jarvis
+      AGENT_DISPATCH_MODE: observe
       # Env only (K-49): the domain and the Vite dev origins; no raw-IP or Vercel origins
       ALLOWED_ORIGINS: https://jarvis.srv1802669.hstgr.cloud,http://127.0.0.1:5173,http://localhost:5173
       COOKIE_PATH: /vortex

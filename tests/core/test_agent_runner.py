@@ -3,6 +3,10 @@ import asyncio
 import hashlib
 import hmac
 import json
+import threading
+import types
+from typing import Any
+
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
 from services.utils.jarvis_bridge import notify_ui
@@ -308,3 +312,293 @@ def test_only_files_the_running_worker_writes_are_excused_at_session_end():
     assert conftest._failing_growth(changed, strict=False, worker_running=True) == failing_with_worker
     assert conftest._failing_growth(changed, strict=False, worker_running=False) == [line for _n, line in changed]
     assert conftest._failing_growth(changed, strict=True, worker_running=True) == [line for _n, line in changed]
+
+
+# ------------------------------------------------------------------ C-23 (K-60/K-68 v9): how a job ends
+
+
+class _FakeLocal:
+    def __init__(self) -> None:
+        self.attributes: list[str] = []
+
+    async def set_attributes(self, attributes):
+        self.attributes.append(attributes["jarvis.session"])
+
+
+class _FakeRoom:
+    name = "jarvis-hybrid"
+
+    def __init__(self) -> None:
+        self.local_participant = _FakeLocal()
+        self.remote_participants = {}
+
+    def on(self, _event):
+        return lambda fn: fn
+
+
+class _FakeJobContext:
+    def __init__(self, *, connect_error=None, fake_job=False) -> None:
+        self.room = _FakeRoom()
+        self.connects = 0
+        self.connect_error = connect_error
+        self.shutdowns: list[str] = []
+        self.fake_job = fake_job
+
+    async def connect(self):
+        self.connects += 1
+        if self.connect_error is not None:
+            raise self.connect_error
+
+    def shutdown(self, reason=""):
+        self.shutdowns.append(reason)
+
+    def is_fake_job(self):
+        return self.fake_job
+
+    def delete_room(self, *_args, **_kwargs):
+        raise AssertionError("the agent never deletes the room (K-60 v9)")
+
+    def add_shutdown_callback(self, _callback):
+        return None
+
+
+@pytest.fixture
+def job(monkeypatch):
+    """agent_runner.entrypoint with light stand-ins for everything it builds (no LiveKit, Gemini, plugins or
+    loops); the assistant is a stand-in with the real C-23 stop event and request_end."""
+    import types
+
+    from src.core import agent_core, agent_runner as ar
+
+    state = types.SimpleNamespace(sessions=[], assistants=[], room_options=[], on_start=None, cleanups=0)
+
+    class FakeAssistant:
+        def __init__(self, **_kwargs):
+            self._stop_event = asyncio.Event()
+            self.end_reason = None
+            self.request_end = agent_core.BrainAssistant.request_end.__get__(self)
+            state.assistants.append(self)
+
+        def attach_router(self, _router):
+            return None
+
+        def attach_session(self, _session):
+            return None
+
+    class FakeSession:
+        def __init__(self, **_kwargs):
+            state.sessions.append(self)
+
+        def on(self, _event):
+            return lambda fn: fn
+
+        async def start(self, room, agent, room_options):
+            state.room_options.append(room_options)
+            if state.on_start is not None:
+                state.on_start(agent)
+
+    class FakeRouter:
+        text_input_cb = None
+
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def attach(self, _session):
+            return None
+
+        def detach(self):
+            return None
+
+    class FakePlugins:
+        running_tools = staticmethod(set)
+
+        def discover_plugins(self, _path):
+            return None
+
+        def get_livekit_tools(self):
+            return []
+
+    async def nothing(*_args, **_kwargs):
+        return None
+
+    async def no_tasks(*_args, **_kwargs):
+        return []
+
+    async def returning(result):
+        return result
+
+    async def cleanup(*_args, **_kwargs):
+        state.cleanups += 1
+
+    real_sleep = asyncio.sleep
+
+    async def fast_sleep(_delay, result=None):
+        await real_sleep(0)
+        return result
+
+    from services.ai_core import jarvis_plugin_manager
+
+    for name, value in (("_prewarm_vector_memory", lambda *_a: None), ("_prewarm_voice_id", lambda *_a: None),
+                        ("get_formatted_datetime", lambda: returning({"formatted": "c23-day"})),
+                        ("get_current_city", lambda: returning("Lahore")),
+                        ("silero", types.SimpleNamespace(VAD=types.SimpleNamespace(load=lambda **_k: object()))),
+                        ("google", types.SimpleNamespace(realtime=types.SimpleNamespace(
+                            RealtimeModel=lambda **_k: types.SimpleNamespace(voice="Charon")))),
+                        ("_resolve_user_id", lambda _room: "c23-user"), ("BrainAssistant", FakeAssistant),
+                        ("ConversationRouter", FakeRouter), ("AgentSession", FakeSession),
+                        ("harden_room_input", lambda *_a, **_k: []), ("follow_owner_reconnects", lambda *_a: None),
+                        ("_location_loop", nothing), ("_pc_vitals_loop", nothing),
+                        ("_print_startup_banner", lambda: None), ("_start_loop_watchdog", lambda *_a: None),
+                        ("_start_background_tasks", no_tasks), ("_rag_warm_delay", lambda: None),
+                        ("_cleanup_session_resources", cleanup), ("_quiet_livekit_agents_logger", lambda: None)):
+        monkeypatch.setattr(ar, name, value)
+    monkeypatch.setattr(jarvis_plugin_manager, "JarvisPluginManager", FakePlugins)
+    monkeypatch.setattr(ar.asyncio, "sleep", fast_sleep)  # the retry waits (5, 10, 15, 20 s) take no time
+    monkeypatch.delenv("JARVIS_DESKTOP_MODE", raising=False)
+    state.ar = ar
+    return state
+
+
+async def _run_entrypoint(job, ctx):
+    await asyncio.wait_for(job.ar.entrypoint(ctx), 10)
+    for _ in range(5):  # let the best-effort attribute tasks finish
+        await asyncio.sleep(0)
+
+
+@pytest.mark.asyncio
+async def test_pause_agent_ends_the_job_with_paused_by_owner(job):
+    job.on_start = lambda agent: asyncio.get_running_loop().call_later(0.05, agent.request_end, "paused_by_owner")
+    ctx = _FakeJobContext()
+    await _run_entrypoint(job, ctx)
+    assert len(job.sessions) == 1  # no second session in this job
+    assert ctx.shutdowns == ["paused_by_owner"]
+    assert ctx.room.local_participant.attributes == ["starting", "running", "paused"]
+    assert job.cleanups == 1
+
+
+@pytest.mark.asyncio
+async def test_a_pause_that_arrives_before_the_wait_is_not_lost(job):
+    """The stop event comes with the assistant: a pause_agent during session start (before the entrypoint waits)
+    still ends the job."""
+    job.on_start = lambda agent: agent.request_end("paused_by_owner")
+    ctx = _FakeJobContext()
+    await _run_entrypoint(job, ctx)
+    assert len(job.sessions) == 1 and ctx.shutdowns == ["paused_by_owner"]
+
+
+@pytest.mark.asyncio
+async def test_a_stop_event_without_a_reason_ends_the_job_too(job):
+    job.on_start = lambda agent: agent._stop_event.set()  # an older sender that sets the event itself
+    ctx = _FakeJobContext()
+    await _run_entrypoint(job, ctx)
+    assert ctx.shutdowns == ["ended_by_command"] and ctx.room.local_participant.attributes[-1] == "closed"
+
+
+@pytest.mark.asyncio
+async def test_five_failed_attempts_end_the_job_as_session_failed(job):
+    ctx = _FakeJobContext(connect_error=RuntimeError("room connect failed"))
+    await _run_entrypoint(job, ctx)
+    assert ctx.connects == 5
+    assert ctx.shutdowns == ["session_failed"]  # the bridge can dispatch a fresh job instead of a session-less one
+    assert ctx.room.local_participant.attributes == ["restarting"] * 4 + ["closed"]
+
+
+@pytest.mark.asyncio
+async def test_a_cancelled_job_is_not_shut_down_again(job):
+    ctx = _FakeJobContext()
+    task = asyncio.ensure_future(job.ar.entrypoint(ctx))
+    for _ in range(50):
+        if job.sessions:
+            break
+        await asyncio.sleep(0.01)
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+    assert ctx.shutdowns == []
+
+
+@pytest.mark.asyncio
+async def test_a_job_end_is_reported_to_the_bridge_before_the_shutdown(job, monkeypatch):
+    """notify job_end {job_id, reason} (K-40/K-60 v9): the bridge's room owner stops counting the job as in flight
+    (LiveKit v1.13.7 never marks a job ended); a failing notify never delays the end beyond its timeout."""
+    from services.utils import jarvis_bridge
+
+    events: list[tuple[str, Any]] = []
+
+    async def notify_event(event_type, payload):
+        events.append((event_type, payload))
+
+    monkeypatch.setattr(jarvis_bridge, "notify_event", notify_event)
+    job.on_start = lambda agent: agent.request_end("paused_by_owner")
+    ctx = _FakeJobContext()
+    ctx.job = types.SimpleNamespace(id="AJ_c23job")
+    await _run_entrypoint(job, ctx)
+    assert [event for event in events if event[0] == "job_end"] == [
+        ("job_end", {"job_id": "AJ_c23job", "reason": "paused_by_owner"})]  # (log lines may travel too)
+    assert ctx.shutdowns == ["paused_by_owner"]
+
+    async def unreachable(event_type, _payload):
+        if event_type == "job_end":  # (log lines forwarded meanwhile are not this test's business)
+            raise ConnectionError("bridge down")
+
+    monkeypatch.setattr(jarvis_bridge, "notify_event", unreachable)
+    failed = _FakeJobContext(connect_error=RuntimeError("room connect failed"))
+    failed.job = types.SimpleNamespace(id="AJ_c23failed")
+    await _run_entrypoint(job, failed)
+    assert failed.shutdowns == ["session_failed"]
+
+
+@pytest.mark.asyncio
+async def test_a_job_waits_only_on_its_own_attribute_writes():
+    """R7: livekit-agents runs each Windows job in its own thread and loop; ending one job never waits on another
+    job's jarvis.session write (another loop's task)."""
+    from src.core import agent_runner as ar
+
+    other_loop = asyncio.new_event_loop()
+    started = threading.Event()
+
+    class SlowParticipant:
+        async def set_attributes(self, _attributes):
+            started.set()
+            await asyncio.sleep(30)  # another job's write that hangs
+
+    slow_ctx = types.SimpleNamespace(room=types.SimpleNamespace(local_participant=SlowParticipant()))
+    thread = threading.Thread(target=other_loop.run_forever, daemon=True)
+    thread.start()
+    try:
+        other_loop.call_soon_threadsafe(ar._set_session_attr, slow_ctx, "running")
+        assert started.wait(5)
+        assert ar._pending_session_attr_tasks() == []  # this loop has none of its own
+        own = ar._set_session_attr(_FakeJobContext(), "starting")
+        assert ar._pending_session_attr_tasks() == [own]
+        await asyncio.wait_for(own, 5)
+        loop_started = asyncio.get_running_loop().time()
+        await ar._end_job(_FakeJobContext(), "paused_by_owner")
+        assert asyncio.get_running_loop().time() - loop_started < ar.SESSION_ATTR_TIMEOUT_S
+    finally:
+        async def cancel_all() -> None:
+            tasks = [task for task in asyncio.all_tasks() if task is not asyncio.current_task()]
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+        asyncio.run_coroutine_threadsafe(cancel_all(), other_loop).result(5)
+        other_loop.call_soon_threadsafe(other_loop.stop)
+        thread.join(5)
+        other_loop.close()
+
+
+@pytest.mark.asyncio
+async def test_console_mode_keeps_its_fake_job(job):
+    job.on_start = lambda agent: agent.request_end("paused_by_owner")
+    ctx = _FakeJobContext(fake_job=True)
+    await _run_entrypoint(job, ctx)
+    assert ctx.shutdowns == []
+
+
+def test_session_room_options_never_delete_the_room():
+    from src.core import agent_runner as ar
+
+    assert ar.session_room_options().delete_room_on_close is False
+    assert ar.session_room_options(lambda *_a: None).delete_room_on_close is False
+    source = __import__("pathlib").Path(ar.__file__).read_text(encoding="utf-8")
+    assert "delete_room(" not in source

@@ -122,6 +122,36 @@ def test_rate_limit_holds_for_five_minutes() -> None:
     assert h.ensure_calls == 2
 
 
+PAUSED_RESULT = ("[ROOM] Result: PAUSED by the owner: the bridge dispatches no agent until Wake "
+                 "(ui_command start)")
+
+
+def test_a_paused_result_makes_the_next_run_wait_thirty_minutes(caplog: pytest.LogCaptureFixture) -> None:
+    """C-23 (K-53 v9): while the owner paused JARVIS the bridge dispatches nothing, so the watchdog's next
+    ensure_room.py run waits PAUSED_ENSURE_EVERY_S (1800 s) instead of 300 s, with one INFO line."""
+    h = Harness([rw.NO_AGENT], ensure=lambda: PAUSED_RESULT)
+    with caplog.at_level(logging.INFO, logger=rw.LOG.name):
+        h.ticks(2)  # t=0, 60: run at 60 -> PAUSED
+    assert h.ensure_calls == 1
+    waits = [r for r in caplog.records if "next ensure_room.py run waits 1800 s" in r.getMessage()]
+    assert len(waits) == 1 and waits[0].levelno == logging.INFO
+    h.ticks(int(rw.ENSURE_EVERY_S / rw.CHECK_S) + 1)  # 300 s later: still waiting
+    assert h.ensure_calls == 1
+    h.ticks(int((rw.PAUSED_ENSURE_EVERY_S - rw.ENSURE_EVERY_S) / rw.CHECK_S))  # 1800 s after the run
+    assert h.ensure_calls == 2
+
+
+def test_an_ok_result_after_a_pause_brings_back_the_five_minute_cadence() -> None:
+    results = [PAUSED_RESULT, "[ROOM] Result: OK, an agent of the current worker is in the room (bridge)"]
+    h = Harness([rw.NO_AGENT], ensure=lambda: results.pop(0) if len(results) > 1 else results[0])
+    h.ticks(2)
+    assert h.ensure_calls == 1
+    h.ticks(int(rw.PAUSED_ENSURE_EVERY_S / rw.CHECK_S))  # the second run, after the paused wait: OK
+    assert h.ensure_calls == 2
+    h.ticks(int(rw.ENSURE_EVERY_S / rw.CHECK_S))  # 300 s again
+    assert h.ensure_calls == 3
+
+
 def test_link_not_connected_makes_no_api_call() -> None:
     h = Harness([rw.MISSING_ROOM], connected=False)
     h.ticks(10)
@@ -257,7 +287,7 @@ def test_run_ensure_room_captures_output_and_returns_the_result_line(monkeypatch
     child = FakeChild(output)
     seen = _fake_popen(monkeypatch, child)
     assert rw.run_ensure_room() == "[ROOM] Result: OK, an agent of the current worker is in the room"
-    assert seen["cmd"] == [sys.executable, str(rw.ENSURE_ROOM)]
+    assert seen["cmd"] == [sys.executable, str(rw.ENSURE_ROOM), "--reason", "watchdog"]  # C-23 (K-53 v9)
     assert seen["kwargs"]["cwd"] == str(rw.ROOT)
     assert seen["kwargs"]["stdout"] is subprocess.PIPE and seen["kwargs"]["stdin"] is subprocess.DEVNULL
     assert child.timeouts == [rw.ENSURE_TIMEOUT_S]

@@ -184,6 +184,10 @@ class BrainAssistant(Agent):
         self._wake_word_mode: bool = True
         self._active_session: AgentSession | None = None
         self._conversation_router: Any = None  # C-42: typed chat goes into the session through it
+        # C-23 (K-60 v9): set by request_end; the job's entrypoint waits on it and then ends the job. Made with the
+        # assistant, so a pause_agent that arrives before the entrypoint waits is never lost.
+        self._stop_event: asyncio.Event = asyncio.Event()
+        self.end_reason: str | None = None
         self._muted: bool = False
         self._audio_buffer: deque[int] = deque(maxlen=96000)
         self._audio_sample_rate: int = 16000 # Default
@@ -490,6 +494,35 @@ class BrainAssistant(Agent):
     def attach_router(self, router: Any) -> None:
         """C-42: typed questions (handle_user_query, UI chat) go through this router into the live session."""
         self._conversation_router = router
+
+    def request_end(self, reason: str) -> None:
+        """C-23 (K-60 v9): ends this job ('paused_by_owner' from pause_agent; C-62's shutdown_agent may use
+        'terminated_by_owner'). The first reason wins; the entrypoint then closes the session and calls
+        ctx.shutdown(reason) instead of starting another session."""
+        if self.end_reason is None:
+            self.end_reason = reason
+        self._stop_event.set()
+
+    async def interrupt_speech(self, wait_s: float = 3.0) -> bool:
+        """C-23 (K-60 v9) 'stop': interrupts the current and queued speech of the live session (AgentSession.interrupt)
+        and waits for it at most wait_s; the session keeps listening. False when no session is attached or the
+        interrupt failed."""
+        session = self._active_session
+        if session is None:
+            return False
+        try:
+            result = session.interrupt()
+        except Exception as e:  # pylint: disable=broad-exception-caught  # RuntimeError: not running
+            logger.debug("STOP: interrupt unavailable (%s)", type(e).__name__)
+            return False
+        if asyncio.isfuture(result) or asyncio.iscoroutine(result):
+            try:
+                await asyncio.wait_for(asyncio.shield(asyncio.ensure_future(result)), wait_s)
+            except asyncio.TimeoutError:
+                logger.debug("STOP: interrupt still finishing after %.0f s", wait_s)
+            except Exception as e:  # pylint: disable=broad-exception-caught  # (a cancel is a BaseException)
+                logger.debug("STOP: interrupt failed (%s)", type(e).__name__)
+        return True
 
     def attach_session(self, session: AgentSession) -> None:
         """
