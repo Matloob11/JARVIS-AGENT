@@ -436,4 +436,59 @@ test('settings page fills main column', async ({ page }) => {
   expect(geo.settingsWidth).toBeGreaterThan(geo.mainWidth * 0.72);
 });
 
+test('phone 390 chat: panel below header, tabs spaced, feed and composer visible', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByTestId('mobile-tab-chat').click();
+  await expect(page.getByTestId('chat-panel')).toBeVisible();
+  await expect(page.getByTestId('chat-msg').first()).toBeVisible();
+
+  const geo = await page.evaluate(() => {
+    const box = (sel: string) => {
+      const el = document.querySelector(sel) as HTMLElement | null;
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, height: r.height };
+    };
+    const overlap = (
+      a: { top: number; left: number; right: number; bottom: number } | null,
+      b: { top: number; left: number; right: number; bottom: number } | null,
+    ) => {
+      if (!a || !b) return false;
+      return !(a.right <= b.left + 1 || a.left >= b.right - 1 || a.bottom <= b.top + 1 || a.top >= b.bottom + 1);
+    };
+    const header = box('.page-header');
+    const panel = box('[data-testid="chat-panel"]');
+    const tabs = [...document.querySelectorAll('.panel-tab')].map(el => {
+      const r = el.getBoundingClientRect();
+      return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, text: el.textContent || '' };
+    });
+    const feed = box('.panel-feed');
+    const composer = box('.neon-composer');
+    const tabBar = box('[data-testid="mobile-tab-bar"]');
+    let tabOverlap = false;
+    for (let i = 0; i < tabs.length; i += 1) {
+      for (let j = i + 1; j < tabs.length; j += 1) {
+        if (overlap(tabs[i], tabs[j])) tabOverlap = true;
+      }
+    }
+    return {
+      panelBelowHeader: Boolean(header && panel && panel.top >= header.bottom - 1),
+      tabOverlap,
+      feedHeight: feed?.height ?? 0,
+      composerAboveTabs: Boolean(
+        composer && tabBar && composer.bottom <= tabBar.top + 1,
+      ),
+      msgVisible: Boolean(document.querySelector('[data-testid="chat-msg"]')),
+    };
+  });
+
+  expect(geo.panelBelowHeader).toBe(true);
+  expect(geo.tabOverlap).toBe(false);
+  expect(geo.feedHeight).toBeGreaterThan(80);
+  expect(geo.composerAboveTabs).toBe(true);
+  expect(geo.msgVisible).toBe(true);
+});
+
 

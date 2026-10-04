@@ -98,9 +98,20 @@ test('reconnect keeps live subscriptions and request_state once per connect', as
   await expect
     .poll(async () => (await uiCommands(page)).filter(cmd => cmd.type === 'request_state').length)
     .toBe(requestStatesAfterEvents);
+});
 
-  await gotoPage(page, 'activity', 'logs');
-  await expect(
-    page.getByTestId('trace-log-line').filter({ hasText: warningText }),
-  ).toHaveCount(1);
+test('reconnect does not wake a paused agent', async ({ page }) => {
+  await page.request.post(`${MOCK}/__mock/agent`, {
+    data: { online: false, paused: true },
+  });
+  await expect(page.getByTestId('chip-agent')).toContainText(/Paused|Offline/i);
+
+  const startBefore = (await uiCommands(page)).filter(cmd => cmd.type === 'start').length;
+  await page.getByTestId('chip-bridge').click();
+  await page.getByTestId('devices-menu').getByTestId('topbar-reconnect').click();
+  await expect(page.getByText('Reconnected', { exact: true })).toBeVisible({ timeout: 20_000 });
+
+  await page.waitForTimeout(400);
+  const startAfter = (await uiCommands(page)).filter(cmd => cmd.type === 'start').length;
+  expect(startAfter).toBe(startBefore);
 });

@@ -170,7 +170,10 @@ const DashboardInner = () => {
   };
 
   const handleReconnect = () =>
-    command.reconnectBridge(liveKit, agentStatus.online);
+    command.reconnectBridge(liveKit, {
+      online: agentStatus.online,
+      paused: agentStatus.paused,
+    });
 
   useEffect(() => {
     setPersonaSwitchBridge({
@@ -248,6 +251,7 @@ const DashboardInner = () => {
                   laptopOnline={laptopOnline}
                   deviceCount={deviceCount}
                   brain={desktopStatus.brain}
+                  agentOnline={agentStatus.online}
                 />
               </ErrorBoundary>
             }

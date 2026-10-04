@@ -125,15 +125,29 @@ body {
 
   .app-shell.route-chat .app-shell-panel,
   .app-shell[data-mobile-tab='chat'] .app-shell-panel {
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: var(--ph-main-top, 0);
-    bottom: calc(64px + env(safe-area-inset-bottom));
+    grid-area: main;
+    position: relative;
     z-index: 2;
     display: flex;
+    flex-direction: column;
     min-height: 0;
+    margin: 0;
     overflow: hidden;
+  }
+
+  .app-shell.route-chat .app-shell-panel .chat-panel,
+  .app-shell[data-mobile-tab='chat'] .app-shell-panel .chat-panel {
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    border-radius: 0;
+    box-shadow: none;
+    background: transparent;
+  }
+
+  .app-shell.route-chat .app-shell-panel .chat-panel::before,
+  .app-shell[data-mobile-tab='chat'] .app-shell-panel .chat-panel::before {
+    display: none;
   }
 
   .app-shell.route-chat .shell-page--overview,

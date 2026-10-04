@@ -21,6 +21,8 @@ const uiSockets = [];
 /** @type {{ ts: number, type?: string, payload?: unknown, raw: unknown }[]} */
 const receivedUiCommands = [];
 let agentOnline = true;
+let agentPaused = false;
+let agentRestarting = false;
 /** @type {string | null} */
 let pendingShutdownConfirmId = null;
 let suppressSettingsSync = false;
@@ -192,6 +194,8 @@ function applyReferenceScenario() {
   }
   const serverTime = Math.floor(Date.parse('2026-10-02T21:42:10+05:00') / 1000);
   agentOnline = true;
+  agentPaused = false;
+  agentRestarting = false;
   mockDesktopOnline = true;
   persistedChatMessages.length = 0;
 
@@ -466,8 +470,6 @@ function handleUiCommand(socket, cmd, cb) {
       break;
     }
     case 'stop':
-    case 'start':
-    case 'pause_agent':
     case 'tasks_refresh':
     case 'feedback':
     case 'sim_lookup':
@@ -479,6 +481,52 @@ function handleUiCommand(socket, cmd, cb) {
     case 'wake_word_toggle':
       ackUi(socket, cb, 'sent');
       break;
+    case 'pause_agent': {
+      ackUi(socket, cb, 'sent');
+      agentOnline = false;
+      agentPaused = true;
+      agentRestarting = false;
+      emitToUi('agent_status', {
+        ...loadFixture('agent_status'),
+        online: false,
+        paused: true,
+        restarting: false,
+        in_room: false,
+        voice_ready: false,
+        since: Math.floor(Date.now() / 1000),
+      });
+      break;
+    }
+    case 'start': {
+      ackUi(socket, cb, 'sent');
+      agentPaused = false;
+      agentRestarting = true;
+      agentOnline = false;
+      emitToUi('agent_status', {
+        ...loadFixture('agent_status'),
+        online: false,
+        paused: false,
+        restarting: true,
+        in_room: false,
+        voice_ready: false,
+        since: Math.floor(Date.now() / 1000),
+      });
+      setTimeout(() => {
+        agentOnline = true;
+        agentRestarting = false;
+        emitToUi('agent_status', {
+          ...loadFixture('agent_status'),
+          online: true,
+          paused: false,
+          restarting: false,
+          in_room: true,
+          voice_ready: true,
+          since: Math.floor(Date.now() / 1000),
+          last_heartbeat: Math.floor(Date.now() / 1000),
+        });
+      }, 200);
+      break;
+    }
     case 'desktop_stop': {
       ackUi(socket, cb, 'sent');
       mockDesktopOnline = true;
@@ -521,14 +569,21 @@ async function handleMockControl(req, res, pathname, method) {
   if (pathname === '/__mock/agent' && method === 'POST') {
     const body = await readBody(req);
     agentOnline = body?.online !== false;
+    if (typeof body?.paused === 'boolean') agentPaused = body.paused;
+    else if (!agentOnline) agentPaused = Boolean(body?.paused);
+    else agentPaused = false;
+    if (typeof body?.restarting === 'boolean') agentRestarting = body.restarting;
+    else agentRestarting = false;
     const statusPayload = {
       ...loadFixture('agent_status'),
       online: agentOnline,
-      voice_ready: agentOnline,
-      in_room: agentOnline,
+      paused: agentPaused,
+      restarting: agentRestarting,
+      voice_ready: agentOnline && !agentPaused,
+      in_room: agentOnline && !agentPaused,
     };
     emitToUi('agent_status', statusPayload);
-    json(res, 200, { ok: true, online: agentOnline });
+    json(res, 200, { ok: true, online: agentOnline, paused: agentPaused });
     return true;
   }
 

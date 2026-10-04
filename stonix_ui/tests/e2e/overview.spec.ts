@@ -61,10 +61,20 @@ test('pc brain without vitals_pc falls back to VPS numbers', async ({ page }) =>
   await mockEmit(page, 'agent_status', { online: true, voice_ready: true });
   await mockEmit(page, 'desktop_status', { online: false, state: 'offline', brain: 'pc' });
 
-  await expect(page.getByTestId('qs-card')).toContainText('Agent offline: showing VPS');
+  await expect(page.getByTestId('qs-card')).toContainText('Laptop vitals purane: showing VPS');
   await expect(page.getByTestId('qs-cpu')).toContainText('77%');
   await expect(page.getByTestId('qs-cpu')).not.toContainText('0%');
   await expect(page.getByTestId('qs-stale')).toHaveCount(0);
+});
+
+test('pc brain agent offline copy when no vitals_pc', async ({ page }) => {
+  const baseSec = Math.floor(Date.now() / 1000);
+  await mockEmit(page, 'vitals_vps', { cpu: 71, ram: 52, disk: 61, ts: baseSec });
+  await mockEmit(page, 'agent_status', { online: false, voice_ready: false });
+  await mockEmit(page, 'desktop_status', { online: false, state: 'offline', brain: 'pc' });
+
+  await expect(page.getByTestId('qs-card')).toContainText('Agent offline: showing VPS');
+  await expect(page.getByTestId('qs-cpu')).toContainText('71%');
 });
 
 test('pc brain uses agent online and PC vitals, not Laptop offline', async ({ page }) => {

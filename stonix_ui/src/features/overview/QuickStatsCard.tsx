@@ -12,6 +12,7 @@ type QuickStatsCardProps = {
   laptopOnline: boolean;
   deviceCount: number;
   brain?: string | null;
+  agentOnline?: boolean;
 };
 
 function metricPercent(value: number): number {
@@ -35,6 +36,7 @@ const QuickStatsCard = ({
   laptopOnline,
   deviceCount,
   brain,
+  agentOnline = false,
 }: QuickStatsCardProps) => {
   const [nowMs, setNowMs] = useState(() => Date.now());
 
@@ -58,7 +60,9 @@ const QuickStatsCard = ({
     brain === 'pc'
       ? usePc
         ? 'Live system status'
-        : 'Agent offline: showing VPS'
+        : agentOnline
+          ? 'Laptop vitals purane: showing VPS'
+          : 'Agent offline: showing VPS'
       : laptopOnline
         ? 'Live system status'
         : 'Laptop offline: showing Agent (VPS)';

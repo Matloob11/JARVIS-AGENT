@@ -1525,3 +1525,11 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
 - **Commit:** `b360178` · **Deploy:** PC agent restart 08:20 PKT
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] MSG · Phone chat P1 + C-23 reconnect + QS copy · 2026-10-04 08:30 PKT
+- **Kya kiya:** 390 chat panel header ke neeche, tabs alag, feed/composer theek; QS stale-PC copy; short-height cards; Reconnect paused agent ko nahi jagata; mock pause/start full agent_status; v2-390-chat baseline.
+- **Files:** neon shell/panel/overview CSS, useCommandCenter, Dashboard, QuickStatsCard, mock-bridge, e2e layout/overview/reconnect, visual snapshot
+- **Verify:** phone 390 chat + product layout + overview QS + reconnect paused + visual 390 chat gate pass
+- **Commit:** pending · **Deploy:** no
+- **Doosre agent ke liye:** **REQ-DEPLOY frontend**
+

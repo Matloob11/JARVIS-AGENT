@@ -988,7 +988,7 @@ export const useCommandCenter = () => {
   const reconnectBridge = useCallback(
     async (
       liveKit: Pick<LiveKitContextValue, 'roomState' | 'connectRoom' | 'setMicOff'>,
-      agentOnline: boolean,
+      agent: { online: boolean; paused?: boolean },
     ) => {
       try {
         const lkStateBefore = liveKit.roomState;
@@ -1009,7 +1009,8 @@ export const useCommandCenter = () => {
         ) {
           toast.success('Voice rejoined with the mic off.');
         }
-        if (!agentOnline) {
+        // Wake only when the agent is offline and not paused (C-23 / K-02).
+        if (!agent.online && !agent.paused) {
           getSocket().emit('ui_command', { type: 'start', payload: {} });
         }
         toast.success('Reconnected');
