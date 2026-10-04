@@ -1481,3 +1481,31 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Commit:** local (this commit) · **Deploy:** no
 - **Doosre agent ke liye:** **REQ-DEPLOY frontend**. A1–A7, B1–B5, P2 complete (`23d1489` + this snapshot).
 
+
+### ✅ [claude] Frontend deploy · Cursor ke P0 UI fixes live (review ke baad) · 2026-10-04 05:15 PKT
+- **Kya kiya:** Cursor ka layout fix (`bb3c29a`) aur review ki regressions ke fixes (`23d1489`, `1b96bef`) verify karke VPS par deploy. Overview ab main column bharta hai, cards saath aur barabar, composer 2 rows, Settings full page; chat me file names aur math hu-ba-hu, bold/lists/indentation, voice icon line ke andar; reminder badge 22×22; Quick Stats PC brain me laptop ke asli numbers.
+- **Files:** — (deploy; Cursor ke commits)
+- **Verify:** tsc pass; e2e chromium 135/135 (chat, layout, overview, laptop, composer, settings, responsive, header-layout, status, tasks); visual gates 15/16 (`v2-390-chat` baseline purana: A2 ka intended 24px shift); Playwright MCP (private mock) 1536×760, 1672×941, 1366×657, 960×800, 390×844; live bundle me fix markers
+- **Commit:** `bb3c29a`, `23d1489`, `1b96bef`, `fb6eb90` · **Deploy:** VPS frontend 05:15 PKT (rollback: `bash /root/jarvis-backups/tools/rollback.sh 2026-10-04_0015Z-pre-deploy-fb6eb90`)
+- **Doosre agent ke liye:** phone ka chat view toota hai (pehle se) + 390 chat baseline + chhoti height ka legacy strip overlap + stale copy: section 11 (05:30).
+
+### ✅ [claude] C-23 (phase 1+2) · Room lifecycle live, bridge observe mode me · 2026-10-04 05:20 PKT
+- **Kya kiya:** Bridge me RoomManager aa gaya: room ka akela owner, abhi observe mode me sirf dekhta hai. Signed `/livekit/ensure` routes bane, agent_status ab poora object hai, aur token route room delete ya recreate nahi karta. `ensure_room.py` pehle bridge se poochta hai aur kabhi room delete nahi karta. Agent: 'stop' sirf bolna rokta hai; bridge ka pause job khatam karta hai. Worker naye code par chal raha hai.
+- **Files:** commit `5529adc` ke 30 paths (`src/core/bridge_rooms.py` naya, `src/core/ui_bridge.py`, `src/core/agent_runner.py`, `deploy/windows-local/ensure_room.py`, `scripts/agent_ctl.py`, `docs/CONTRACTS.md` v9, tests …)
+- **Verify:**
+  - full suite 3654 passed, 0 failed; C-23 targeted 171 passed
+  - deploy gates ok, other apps identical; bridge: mode observe, room owner on, 0 Traceback
+  - room_check: agent online/in_room/voice_ready, session running; restart ke baad room ka SID wahi raha
+  - LiveKit 'assigned job' agentName ""; deploy ke baad DeleteRoom 0
+  - `/vortex/livekit/ensure` 401; webhooks public par 404
+  - typed-chat probe: router ne accept kiya, lekin room me browser na hone se jawab nahi aaya (C-41 ka maaloom gap)
+  - hourly IDLE_TIMEOUT room close ke baad watchdog ne 05:22 par room dobara banaya (yeh pattern pehle se hai)
+- **Commit:** `5529adc` · **Deploy:** VPS bridge 05:17 PKT (rollback: `bash /root/jarvis-backups/tools/rollback.sh 2026-10-04_0017Z-pre-deploy-5529adc`) + PC restart 05:18
+- **Doosre agent ke liye:** section 11 (02:50) ke UI requests, khaas taur par Reconnect wala fix; C-23 DOING rahega jab tak owner ka live call test na ho jaye.
+
+### ✅ 🔁 [claude] C-23 · Agent worker restart (agent_ctl) · 2026-10-04 05:18 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 22520) band, naya pid 11320; health 200 (33.5 s me), ensure_room.py: OK, an agent of the current worker is in the room.
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** `5529adc` · **Deploy:** PC agent restart 05:18 PKT
+- **Doosre agent ke liye:** —
