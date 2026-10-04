@@ -1533,3 +1533,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Commit:** pending · **Deploy:** no
 - **Doosre agent ke liye:** **REQ-DEPLOY frontend**
 
+
+### ✅ [claude] C-29 (hissa 1) · Approvals ka Allow dialog ab asal me kaam karta hai · 2026-10-04 09:07 PKT
+- **Kya kiya:** Bridge ab agent ka `confirm_request` store karke sirf dashboard ko bhejta hai aur jawab me `ui_clients` deta hai. Allow/Deny sirf owner ke login wale dashboard se maana jata hai, aur har faisla audit hota hai. Reload par pending dialog wapas aata hai. Agent ka listener dashboard ke faisle par broker resolve karta hai. Pehle bridge `confirm_request` ko unknown event samajhta tha, is liye voice se SIM lookup jaise kaam 60 s baad chupchaap cancel ho jate thay.
+- **Files:** `src/core/ui_bridge.py`, `services/utils/jarvis_bridge.py`, `services/ai_core/agent_loops.py`, `tests/infrastructure/test_bridge_confirm.py` (naya), `tests/infrastructure/test_bridge_notify.py`, `tests/unit/test_notify_signing.py`, `tests/core/test_agent_loops.py`, `docs/CONTRACTS.md` v10, `plan.md`
+- **Verify:** naye 25 bridge tests; full suite 3681 passed, 0 failed (2 purane placeholder tests C-29 ke mutabiq update kiye); deploy gates ok, other apps identical; restart ke baad agent online, in_room, voice_ready, session running; owner ka browser room me raha (room SID wahi)
+- **Commit:** `89ccc3d` · **Deploy:** VPS bridge 08:42 PKT (rollback: `bash /root/jarvis-backups/tools/rollback.sh 2026-10-04_0342Z-pre-deploy-89ccc3d`) + PC restart 09:07 PKT
+- **Doosre agent ke liye:** owner ka live Allow test baaqi hai; hissa 2 (K-45 static risk list, confirm_selftest tool) us ke baad.
+
+### ✅ 🔁 [claude] C-29: agent resolves the broker on the dashboard's Allow/Deny · Agent worker restart (agent_ctl) · 2026-10-04 09:07 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 29288) band, naya pid 32588; health 200 (6.4 s me), ensure_room.py: OK, an agent of the current worker is in the room.
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** `89ccc3d` · **Deploy:** PC agent restart 09:07 PKT
+- **Doosre agent ke liye:** —
