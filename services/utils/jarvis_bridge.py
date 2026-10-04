@@ -36,6 +36,7 @@ _TELEMETRY_SEMAPHORE: asyncio.Semaphore | None = None
 _LAST_LOOP: asyncio.AbstractEventLoop | None = None
 
 NOTIFY_TIMEOUT_S = 2.0
+CONFIRM_NOTIFY_TIMEOUT_S = 5.0  # K-14: each ConfirmFlow try takes at most 5 s
 # K-39: these types are retried (up to RETRY_MAX times, backoff 1 -> 30 s) from a queue of at most
 # RETRY_QUEUE_MAX events; every other type is sent once and a failure is logged at DEBUG.
 CRITICAL_TYPES = frozenset({"transcription", "confirm_request", "settings_sync", "tool_sync",
@@ -507,6 +508,38 @@ async def _notify_legacy(event_type: str, payload: Any) -> None:
             await client.post(url, json=payload_data, headers=headers, timeout=2.0)
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger.debug("Bridge Notification failed for %s: %s", event_type, e)
+
+
+async def _notify_with_answer(event_type: str, payload: Any, timeout: float = CONFIRM_NOTIFY_TIMEOUT_S) -> Any:
+    """One POST /notify that returns the bridge's parsed answer and raises on any failure (no retry queue: the
+    ConfirmFlow broker does its own tries and reads the answer, K-14). Signed with the agent link v2 keys,
+    else with the legacy headers, like notify_event."""
+    if agent_link_v2():
+        raw = encode_event(event_type, payload)
+        headers = signed_headers(raw)
+        async with _get_semaphore():
+            client = await get_http_client()
+            response = await client.post(_notify_url(), content=raw, headers=headers, timeout=timeout)
+    else:
+        body = {"type": event_type, "payload": payload}
+        headers = _get_headers(security_manager.generate_signature(json.dumps(body, sort_keys=True)))
+        async with _get_semaphore():
+            client = await get_http_client()
+            response = await client.post(f"{config.bridge_url}/notify", json=body, headers=headers,
+                                         timeout=timeout)
+    response.raise_for_status()
+    return response.json()
+
+
+async def notify_confirm_request(payload: dict[str, Any]) -> Any:
+    """confirm_request for the dashboard's Allow dialog (K-14, C-29); returns the bridge's answer
+    {status, ui_clients}. jarvis_confirm's broker uses it once it exists."""
+    return await _notify_with_answer("confirm_request", payload)
+
+
+async def notify_confirm_resolved(payload: dict[str, Any]) -> Any:
+    """confirm_resolved {id, allow, reason, result_status?} (K-14, C-29): closes the dialog on every UI."""
+    return await _notify_with_answer("confirm_resolved", payload)
 
 
 async def notify_event(event_type: str, payload: Any) -> None:

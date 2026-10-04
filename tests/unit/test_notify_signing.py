@@ -747,6 +747,30 @@ async def real_bridge(monkeypatch, tmp_path, link):
     await store.close()
 
 
+async def test_confirm_request_and_resolved_reach_the_real_bridge_and_return_its_answer(real_bridge, monkeypatch):
+    """C-29 (K-14): the broker's helpers sign the request, and the answer carries ui_clients (owner UI sockets)."""
+    from services.ai_core import jarvis_confirm  # pylint: disable=import-outside-toplevel
+
+    module = real_bridge.module
+    monkeypatch.setattr(module, "_clients", {"sid-ui": module.SocketClient(role="ui", ip="203.0.113.7")})
+    request = {"id": "a1" * 16, "tool": "run_cmd_command", "summary": "Get-Process", "risk": "high",
+               "voice_allowed": False, "expires_at": time.time() + 60, "ttl_s": 60}
+
+    answer = await jarvis_confirm._post_to_bridge("confirm_request", request)  # the broker's own path
+
+    assert answer == {"status": "ok", "ui_clients": 1}
+    assert [e for e, _d, room in real_bridge.emitted if room == "ui"] == ["confirm_request"]
+    assert (await real_bridge.store.get_confirmation(request["id"]))["status"] == "pending"
+    resolved = await jarvis_bridge.notify_confirm_resolved({"id": request["id"], "allow": False, "reason": "denied"})
+    assert resolved == {"status": "ok"}
+    assert ("confirm_resolved", {"id": request["id"], "allow": False, "reason": "denied", "by": "owner"}, "ui") \
+        in real_bridge.emitted
+
+    real_bridge.state.up = False
+    with pytest.raises(httpx.ConnectError):  # the broker's tries see the failure and refuse the action
+        await jarvis_bridge.notify_confirm_request({**request, "id": "b2" * 16})
+
+
 async def test_the_real_bridge_accepts_the_signed_notifies(real_bridge):
     await jarvis_bridge.notify_transcription("user", "سلام Sir", msg_id="u-1", source="text")
     await jarvis_bridge.notify_transcription("assistant", "Ji Sir", msg_id="a-1", source="text", turn_id="u-1")

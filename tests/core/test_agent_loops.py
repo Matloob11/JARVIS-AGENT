@@ -298,6 +298,24 @@ class _EndingAssistant:
 
 
 @pytest.mark.asyncio
+async def test_a_confirm_response_from_the_dashboard_resolves_the_broker(monkeypatch):
+    """C-29 (K-14): the owner's Allow/Deny reaches the broker as a 'ui' decision; a bad payload never does."""
+    from services.ai_core import jarvis_confirm  # pylint: disable=import-outside-toplevel
+
+    resolve = AsyncMock(return_value={"status": "started"})
+    monkeypatch.setattr(jarvis_confirm.confirmation_broker, "resolve", resolve)
+    listener = _listener(monkeypatch)
+
+    await listener._handle_command({"type": "confirm_response", "payload": {"id": "c" * 32, "allow": True}})
+    await listener._handle_command({"type": "confirm_response", "payload": {"id": "d" * 32, "allow": False}})
+    for bad in ({"id": "e" * 32, "allow": "yes"}, {"allow": True}, "allow", None):
+        await listener._handle_command({"type": "confirm_response", "payload": bad})
+
+    assert [call.args + tuple(sorted(call.kwargs.items())) for call in resolve.await_args_list] == [
+        ("c" * 32, True, ("source", "ui")), ("d" * 32, False, ("source", "ui"))]
+
+
+@pytest.mark.asyncio
 async def test_stop_only_interrupts_speech_and_never_ends_the_session(monkeypatch):
     assistant = _EndingAssistant()
     session = MagicMock()

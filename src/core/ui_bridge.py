@@ -620,8 +620,11 @@ async def notify_bridge(request: Request) -> Any:
         "intelligence_sync": _handle_intelligence,
         "intelligence_update": _handle_intelligence,
         "job_end": _handle_job_end,
+        "confirm_resolved": _handle_confirm_resolved,
     }
 
+    if event_type == "confirm_request":  # K-14: the agent's broker reads the answer (ui_clients)
+        return await _handle_confirm_request(payload)
     handler: Any | None = handlers.get(event_type)
     if handler:
         await handler(payload)
@@ -663,6 +666,11 @@ async def notify_bridge(request: Request) -> Any:
     elif event_type == "tool_sync":
         await stored("tool log", store.append_event(EVENT_TOOL, payload), 0)
         await emit_ui("tool_update", payload)
+        if isinstance(payload, Mapping) and payload.get("phase") == "progress":  # C-29 step 4 (K-31 job rows)
+            await emit_ui("tool_progress", {
+                "job_id": payload.get("id"), "tool": payload.get("tool"), "title": payload.get("details"),
+                "status": payload.get("status"), "percent": payload.get("progress"),
+                "message": payload.get("message") or payload.get("details"), "ts": payload.get("ts")})
     elif event_type == "sim_data_result":
         records: list[Any] = payload.get("records", []) if isinstance(payload, dict) else []
         query_masked: str = payload.get("phone", "") if isinstance(payload, dict) else ""
@@ -695,6 +703,116 @@ async def notify_bridge(request: Request) -> Any:
         logger.warning("⚠️ UNKNOWN EVENT: %s", event_type)
 
     return {"status": "ok"}
+
+
+# ---------------------------------------------------------------- ConfirmFlow routing (C-29, K-14 / K-45)
+
+CONFIRM_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
+CONFIRM_RISKS = ("medium", "high")
+CONFIRM_SUMMARY_MAX = 300
+CONFIRM_PREVIEW_MAX = 500
+CONFIRM_TTL_DEFAULT_S = 60.0
+CONFIRM_TTL_MAX_S = 600.0
+# confirm_resolved reasons (K-14) that mean the owner decided; the UI also reads 'by' (K-45).
+_OWNER_REASONS = {"approved", "denied", "voice"}
+
+
+def _text(value: Any, limit: int) -> str:
+    """Printable characters of a client-supplied text, cut to limit."""
+    return "".join(ch for ch in str(value or "") if ch.isprintable())[:limit]
+
+
+def _confirm_request_from(payload: Any) -> dict[str, Any] | None:
+    """A confirm_request as stored and shown (K-14): id, tool, summary, risk, voice_allowed, expires_at (also as
+    expires_ts), ttl_s and an optional args_preview. None when the id, tool or risk is unusable. The expiry comes
+    from expires_at/expires_ts, else ttl_s, else 60 s, and is never more than 10 min away."""
+    if not isinstance(payload, Mapping):
+        return None
+    confirm_id, tool, risk = payload.get("id"), payload.get("tool"), payload.get("risk")
+    if not (isinstance(confirm_id, str) and CONFIRM_ID.fullmatch(confirm_id)) \
+            or not isinstance(tool, str) or not _short(tool) or risk not in CONFIRM_RISKS:
+        return None
+    now = time.time()
+    expires = payload.get("expires_at", payload.get("expires_ts"))
+    if isinstance(expires, bool) or not isinstance(expires, (int, float)) or not math.isfinite(expires):
+        ttl = payload.get("ttl_s")
+        valid_ttl = isinstance(ttl, (int, float)) and not isinstance(ttl, bool) and math.isfinite(ttl) and ttl > 0
+        expires = now + (float(ttl) if valid_ttl else CONFIRM_TTL_DEFAULT_S)
+    expires = round(min(float(expires), now + CONFIRM_TTL_MAX_S), 3)
+    request: dict[str, Any] = {
+        "id": confirm_id, "tool": _short(tool), "summary": _text(payload.get("summary"), CONFIRM_SUMMARY_MAX),
+        "risk": risk, "voice_allowed": payload.get("voice_allowed") is True, "expires_at": expires,
+        "expires_ts": expires, "ttl_s": round(max(0.0, expires - now), 1)}
+    preview = payload.get("args_preview")
+    if isinstance(preview, (dict, list)):
+        preview = json.dumps(preview, ensure_ascii=False, default=str)
+    if isinstance(preview, str) and preview:
+        request["args_preview"] = preview[:CONFIRM_PREVIEW_MAX]
+    return request
+
+
+async def _handle_confirm_request(payload: Any) -> dict[str, Any]:
+    """confirm_request from the agent's broker (K-14): stored as pending and sent only to room 'ui'. The answer says
+    how many owner UI sockets could approve it; with none the broker refuses an action only the screen may allow."""
+    request = _confirm_request_from(payload)
+    if request is None:
+        logger.warning("confirm_request ignored: its id, tool or risk is unusable")
+        return {"status": "ignored", "reason": "bad_payload"}
+    await stored("confirm expiry", store.expire_confirmations(), 0)
+    await stored("confirm request", store.add_confirmation(request), None)
+    ui_clients = sum(1 for client in _clients.values() if client.role == ROLE_UI)
+    await emit_ui("confirm_request", request)
+    logger.info("confirm_request %s for %s (%s): %d owner UI socket(s)", request["id"], request["tool"],
+                request["risk"], ui_clients)
+    return {"status": "ok", "ui_clients": ui_clients}
+
+
+async def _handle_confirm_resolved(payload: Any) -> None:
+    """confirm_resolved from the agent (K-14): a still-pending row is closed and every UI closes its dialog. 'by' is
+    added for the K-45 readers: owner, timeout, or the reason itself (no_ui, cancelled)."""
+    confirm_id = payload.get("id") if isinstance(payload, Mapping) else None
+    if not (isinstance(confirm_id, str) and CONFIRM_ID.fullmatch(confirm_id)):
+        return
+    allow = payload.get("allow", payload.get("allowed")) is True
+    reason = _short(payload.get("reason")) or ("approved" if allow else "denied")
+    await stored("confirm resolved", store.resolve_confirmation(confirm_id, allow, by=f"agent:{reason}"), None)
+    event: dict[str, Any] = {"id": confirm_id, "allow": allow, "reason": reason,
+                             "by": "owner" if reason in _OWNER_REASONS else
+                             "timeout" if reason == "expired" else reason}
+    if payload.get("result_status") is not None:
+        event["result_status"] = _short(payload.get("result_status"))
+    await emit_ui("confirm_resolved", event)
+
+
+async def _confirm_response(client: "SocketClient", payload: Any) -> dict[str, str]:
+    """ui_command confirm_response (K-14/K-45, C-29). Only the owner's authenticated UI socket decides, only a
+    pending, unexpired request, and only {id, allow: bool}. The decision is audited, forwarded to room 'agent'
+    alone, and closes the dialog on every UI at once; refusals are audited too."""
+    confirm_id = payload.get("id") if isinstance(payload, Mapping) else None
+    allow = payload.get("allow") if isinstance(payload, Mapping) else None
+    if client.role != ROLE_UI:
+        await stored("audit", store.audit(client.role, "confirm_response_refused",
+                                          {"id": _short(confirm_id), "reason": "not_owner_ui"}, client.ip), 0)
+        logger.warning("confirm_response refused from role=%s: only the owner's UI decides", client.role)
+        return _rejected("not_allowed")
+    if not (isinstance(confirm_id, str) and CONFIRM_ID.fullmatch(confirm_id)) or not isinstance(allow, bool):
+        return _rejected("bad_payload")
+    record = await stored("confirm decision", store.resolve_confirmation(confirm_id, allow, by="owner"), None)
+    if record is None:
+        await stored("audit", store.audit("owner", "confirm_response_refused",
+                                          {"id": confirm_id, "reason": "not_pending"}, client.ip), 0)
+        logger.info("confirm_response %s refused: not pending (decided, expired or unknown)", confirm_id)
+        return _rejected("not_pending")
+    await stored("audit", store.audit("owner", "confirm_decision", {"id": confirm_id, "tool": record["tool"],
+                                                                     "risk": record["risk"], "allow": allow},
+                                      client.ip), 0)
+    logger.info("confirm_response %s for %s: %s by the owner", confirm_id, record["tool"],
+                "allowed" if allow else "denied")
+    await sio.emit("agent_command", {"type": "confirm_response", "payload": {"id": confirm_id, "allow": allow}},
+                   to=ROOM_AGENT)
+    await emit_ui("confirm_resolved", {"id": confirm_id, "allow": allow, "by": "owner",
+                                       "reason": "approved" if allow else "denied"})
+    return {"status": "sent"}
 
 
 def _uptime_s() -> int:
@@ -1324,6 +1442,9 @@ async def build_init_state() -> dict[str, Any]:
         # Only a stored object: an empty one would hide persona/muted from the settings panel.
         state["settings"] = snapshot["settings"]
     state["agent_status"] = build_agent_status()  # K-02/K-42 v9: the whole object; a late UI never shows 'Unknown'
+    # C-29: a reloaded UI shows a still-pending confirmation again (the requests as they were sent).
+    state["confirmations"] = [record["payload"] for record in
+                              await stored("confirmations", store.list_confirmations(), [])]
     state["desktop_status"] = desktop.status()  # K-74 (C-STATE-1 v4)
     state["vitals_pc"] = latest_pc_vitals()
     if _latest_vps_vitals is not None:
@@ -1622,6 +1743,8 @@ async def handle_ui_command(sid: str, data: Any) -> dict[str, str]:
         await desktop.ui_desktop_stop(by=client.role)
     elif cmd_type == "notification_ack":
         await _ack_notification(data.get("payload"))
+    elif cmd_type == "confirm_response":  # C-29: checked, audited and forwarded there, never as received
+        return await _confirm_response(client, data.get("payload"))
     elif cmd_type == "pause_agent":
         # K-03/K-44 v9: only the room owner (always or on_demand mode) can hold a pause. It sets the flag and sends
         # its own pause_agent (payload.by 'bridge', the only one that ends the agent's job, K-60 v9); the UI's

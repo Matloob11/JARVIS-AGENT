@@ -271,9 +271,11 @@ async def test_bad_json_after_auth_is_400(bridge):
 
 
 async def test_an_unknown_type_still_answers_ok_and_a_missing_type_is_ignored(bridge):
-    # ConfirmFlow (C-28) posts confirm_request and needs status 'ok' until C-29 routes it.
-    raw = _body("confirm_request", {"id": "c1"})
+    raw = _body("made_up_event", {"id": "c1"})
     assert (await _post(bridge, raw, _agent_headers(raw))).json() == {"status": "ok"}
+    # C-29 routes confirm_request: an unusable one (no tool, no risk) is ignored, never shown as a dialog.
+    raw = _body("confirm_request", {"id": "c1"})
+    assert (await _post(bridge, raw, _agent_headers(raw))).json() == {"status": "ignored", "reason": "bad_payload"}
     raw = json.dumps({"payload": 1}).encode()
     assert (await _post(bridge, raw, _agent_headers(raw))).json() == {"status": "ignored",
                                                                       "reason": "missing_type"}
@@ -348,11 +350,16 @@ async def test_todays_pc_agent_notify_code_still_works(bridge, agent_code):
     assert (await bridge.store.list_messages())[0][0]["text"] == "Ji Sir"
 
 
-async def test_todays_confirm_flow_poster_still_gets_status_ok(bridge, agent_code):
+async def test_the_confirm_flow_poster_gets_ok_and_the_owner_ui_count(bridge, agent_code):
+    """C-29 (K-14): the broker's signed confirm_request is stored and answered with ui_clients; one without a risk
+    is ignored, so the broker's tries fail and it refuses the action instead of waiting for a dialog that never
+    shows."""
     from services.ai_core import jarvis_confirm  # pylint: disable=import-outside-toplevel
 
+    request = {"id": "c" * 32, "tool": "t", "summary": "s", "risk": "high", "expires_at": time.time() + 60}
+    assert await jarvis_confirm._post_to_bridge("confirm_request", request) == {"status": "ok", "ui_clients": 0}
     answer = await jarvis_confirm._post_to_bridge("confirm_request", {"id": "c-1", "tool": "t", "summary": "s"})
-    assert answer == {"status": "ok"}
+    assert answer == {"status": "ignored", "reason": "bad_payload"}
 
 
 async def test_no_headers_at_all_is_401(bridge):

@@ -280,6 +280,17 @@ class UIBridgeListener:
                     new_task = asyncio.create_task(self._task_wrapper(text, msg_id))
                     self.assistant._spawned_tasks.add(new_task) # type: ignore[attr-defined]
                     new_task.add_done_callback(self.assistant._spawned_tasks.discard) # type: ignore[attr-defined]
+            elif cmd_type == "confirm_response":
+                # C-29 (K-14): the owner's Allow/Deny from the dashboard. The bridge already checked that it came from
+                # the owner's UI for a pending, unexpired request; the broker decides the action once.
+                if isinstance(payload, dict) and isinstance(payload.get("id"), str) \
+                        and isinstance(payload.get("allow"), bool):
+                    from services.ai_core.jarvis_confirm import (  # pylint: disable=import-outside-toplevel
+                        confirmation_broker,
+                    )
+                    await confirmation_broker.resolve(payload["id"], payload["allow"], source="ui")
+                else:
+                    logger.warning("confirm_response ignored: payload needs {id, allow: bool}")
             elif cmd_type == "swarm":
                 if payload:
                     logger.info("🌀 Swarm Mode triggered with: %s", payload)
