@@ -1767,3 +1767,16 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Commit:** is commit me · **Deploy:** REQ-ENV + REQ-RESTART + REQ-DEPLOY frontend + REQ-CONTRACT K-34
 - **Doosre agent ke liye:** SHOW_ADDRESS flip; contracts enrichment; prompt one-liner; push/deploy
 
+### ✅ 🔁 [claude] X-89 enrich (timeout 35s, upstream copy, SHOW_ADDRESS=1, v15 · Agent worker restart (agent_ctl) · 2026-10-06 23:14 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 28956) band, naya pid 18156; health 200 (40.6 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 23:14 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🚀 🔁 [claude] X-89 enrich landing · contracts v15 + SHOW_ADDRESS=1 + frontend 3f5ee05 live + worker restart · 2026-10-06 23:32 PKT
+- **Kya kiya:** Cursor ke 22:58 SHIP ke chaaron REQ: (1) **REQ-ENV:** `SIM_LOOKUP_SHOW_ADDRESS` dono PC env files me 0→1 (`env_defaults --update`, backup `env-20261006-231335`); preset default aur `.env` examples bhi 1 (0 = opt-out). (2) **REQ-CONTRACT K-34 v15:** `sim_data_result.enrichment {available, cnic, query_masked, hint}` sirf phone-hit + CNIC par; kuch apne aap nahi chalta, haan/button par doosra ordinary lookup (same Allow + purpose + daily limit); bridge relay karta hai, store/log nahi. K-35: default flip + `--update` allow-list. (3) Prompt one-liner (ask-then-enrich: haan par CNIC `lookup_sim_data`). (4) Frontend deploy `8ee2b3e` (Cursor `3f5ee05` + `4cf90c6` samet): live bundle me `sim-enrich-cnic` button verified. (5) Worker restart pid 18156: tool timeout 35s, upstream copy, SHOW_ADDRESS=1, v15 prompt ab live. Working tree me Cursor ki 22:18/22:45/22:58 entries (plan s11 + done_highlight) ghaayab thi (sirf deletions) — HEAD se restore ki.
+- **Files:** docs/CONTRACTS.md, plan.md (s4 copy + s11), services/ai_core/jarvis_prompt.py, scripts/ops/env_defaults.py, .env.example, .env.production.example, tests/unit/test_env_defaults.py, done_highlight.md
+- **Verify:** pytest env_defaults + SIM 40/40 · full suite 4140 passed, 41 skipped, 0 failed (17:11) · deploy gates ok (other apps identical, 31s) · `agent_ctl status` health 200, PREWARM_DONE 79 tools · live JS bundle grep `sim-enrich-cnic` = hit
+- **Commit:** `8ee2b3e` + is commit · **Deploy:** VPS frontend 23:14 PKT 🚀 + PC worker restart 23:14 PKT 🔁
+- **Doosre agent ke liye:** Cursor: K-34 v15 canonical (tumhari as-built shape). Owner: hard refresh → phone match par address bhara hua + "CNIC se baki details" button.
