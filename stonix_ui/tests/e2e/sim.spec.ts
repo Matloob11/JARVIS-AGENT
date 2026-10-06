@@ -25,14 +25,19 @@ const SIM_PANEL_OPEN = {
 const SIM_DATA_RESULT_SUCCESS = {
   records: [
     {
-      full_name: 'A*** K***',
-      cnic_masked: '*****1234',
-      phone_masked: '03********1',
+      full_name: 'M FIAZ',
+      cnic: '3310012345678',
+      phone: '03001234567',
+      address: 'Chak 12, Example Block, District',
+      cnic_masked: '*********5678',
+      phone_masked: '03********7',
+      source: 'SIM / CNIC Records',
+      details: { operator: 'ExampleTel' },
     },
   ],
-  phone: '03********1',
+  phone: '03001234567',
   status: 'success',
-  message: 'Authorized masked match',
+  message: '1 record(s) milay.',
   provider: 'authorized_api',
   configured: true,
 };
@@ -128,14 +133,17 @@ test('lookup timeout shows timed-out copy after 20s', async ({ page }) => {
   await expect(page.getByTestId('sim-result-message')).not.toContainText('Agent offline');
 });
 
-test('masked success fixture renders masked identity fields', async ({ page }) => {
+test('success fixture renders full lead fields', async ({ page }) => {
   await openSimDialog(page);
   await mockEmit(page, 'sim_data_result', SIM_DATA_RESULT_SUCCESS);
 
   await expect(page.getByTestId('sim-status-chip')).toHaveAttribute('data-status', 'success');
-  await expect(page.getByTestId('sim-identity-title')).toHaveText('A*** K***');
-  await expect(page.getByTestId('sim-cnic-masked')).toHaveText('*****1234');
-  await expect(page.getByTestId('sim-phone-masked')).toHaveText('03********1');
+  await expect(page.getByTestId('sim-identity-title')).toHaveText('M FIAZ');
+  await expect(page.getByTestId('sim-cnic-masked')).toHaveText('3310012345678');
+  await expect(page.getByTestId('sim-phone-masked')).toHaveText('03001234567');
+  await expect(page.getByTestId('sim-address')).toHaveText('Chak 12, Example Block, District');
+  await expect(page.getByTestId('sim-lead-card')).toContainText('ExampleTel');
+  await expect(page.getByTestId('sim-result-message')).toContainText('1 record(s) milay');
   await expect(page.getByTestId('sim-provider-banner')).toContainText('authorized_api');
 });
 
@@ -204,7 +212,7 @@ test('denied expired cancelled error show identity titles', async ({ page }) => 
 test('fresh open clears stale identity after a prior result', async ({ page }) => {
   await openSimDialog(page);
   await mockEmit(page, 'sim_data_result', SIM_DATA_RESULT_SUCCESS);
-  await expect(page.getByTestId('sim-phone-masked')).toHaveText('03********1');
+  await expect(page.getByTestId('sim-phone-masked')).toHaveText('03001234567');
   await page.getByTitle('Close SIM access').click();
   await expect(page.getByTestId('sim-dialog')).toBeHidden();
 
@@ -212,7 +220,7 @@ test('fresh open clears stale identity after a prior result', async ({ page }) =
   await expect(page.getByTestId('sim-status-chip')).toBeHidden();
   await expect(page.getByTestId('sim-phone-masked')).toHaveText('—');
   await expect(page.getByTestId('sim-cnic-masked')).toHaveText('—');
-  await expect(page.getByTestId('sim-identity-title')).not.toHaveText('A*** K***');
+  await expect(page.getByTestId('sim-identity-title')).not.toHaveText('M FIAZ');
 });
 
 test('query input keeps digits only up to 13', async ({ page }) => {

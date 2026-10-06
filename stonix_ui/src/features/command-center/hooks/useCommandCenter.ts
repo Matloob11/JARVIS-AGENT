@@ -346,6 +346,8 @@ export interface SimRecord {
   address?: string;
   phone?: string;
   phone_masked?: string;
+  source?: string;
+  details?: Record<string, unknown>;
 }
 
 export const SIM_LOOKUP_TIMEOUT_MS = 20_000;

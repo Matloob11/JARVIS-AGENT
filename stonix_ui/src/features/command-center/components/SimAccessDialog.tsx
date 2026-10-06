@@ -48,7 +48,7 @@ const TERMINAL_TITLES: Record<string, string> = {
 };
 
 const PRIVACY_NOTE =
-  'No personal records are shown without authorized backend data. Results stay masked.';
+  'Owner-only authorized lookup. Results show full lead fields after Allow. Audits keep the query masked.';
 
 const QUERY_MAX_LEN = 13;
 
@@ -62,20 +62,83 @@ function digitsOnly(value: string): string {
   return value.replace(/\D/g, '').slice(0, QUERY_MAX_LEN);
 }
 
-function maskedCnic(record?: SimRecord): string {
+function displayCnic(record?: SimRecord): string {
   if (!record) return '—';
-  return record.cnic_masked || record.cnic || '—';
+  const full = (record.cnic || '').replace(/\D/g, '');
+  if (full) return full;
+  return record.cnic_masked || '—';
 }
 
-function maskedPhone(
+function displayPhone(
   record: SimRecord | undefined,
   queryMasked: string,
   showResult: boolean,
 ): string {
   if (!showResult) return '—';
+  const full = (record?.phone || '').replace(/\D/g, '');
+  if (full) return full;
   if (record?.phone_masked) return record.phone_masked;
-  if (record?.phone) return record.phone;
   return queryMasked || '—';
+}
+
+function detailEntries(record?: SimRecord): [string, string][] {
+  if (!record?.details || typeof record.details !== 'object') return [];
+  return Object.entries(record.details)
+    .filter(([key, value]) => {
+      if (key === 'raw_text') return false;
+      const text = value == null ? '' : String(value).trim();
+      return Boolean(text);
+    })
+    .map(([key, value]) => [key.replace(/_/g, ' '), String(value)]);
+}
+
+function LeadCard({
+  record,
+  queryMasked,
+  index,
+}: {
+  record: SimRecord;
+  queryMasked: string;
+  index: number;
+}) {
+  const name = (record.full_name || '').trim() || 'Name not provided';
+  const cnic = displayCnic(record);
+  const phone = displayPhone(record, queryMasked, true);
+  const address = (record.address || '').trim();
+  const extras = detailEntries(record);
+  const source = (record.source || '').trim();
+
+  return (
+    <div className="sim-result" data-testid={index === 0 ? 'sim-lead-card' : `sim-lead-card-${index}`}>
+      <div className="sim-avatar">
+        <User size={18} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <span className="panel-kicker">Identity{source ? ` · ${source}` : ''}</span>
+        <h3 data-testid={index === 0 ? 'sim-identity-title' : undefined}>{name}</h3>
+        <dl className="sim-lead-fields">
+          <div>
+            <dt>CNIC / ID</dt>
+            <dd data-testid={index === 0 ? 'sim-cnic-masked' : undefined}>{cnic}</dd>
+          </div>
+          <div>
+            <dt>Phone</dt>
+            <dd data-testid={index === 0 ? 'sim-phone-masked' : undefined}>{phone}</dd>
+          </div>
+          <div className="sim-lead-fields__wide">
+            <dt>Address</dt>
+            <dd data-testid={index === 0 ? 'sim-address' : undefined}>{address || '—'}</dd>
+          </div>
+          {extras.map(([label, value]) => (
+            <div key={label} className="sim-lead-fields__wide">
+              <dt>{label}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    </div>
+  );
 }
 
 const SimAccessDialog = ({
@@ -131,7 +194,7 @@ const SimAccessDialog = ({
   }, [agentOnline, isLoading, purposeLen, query, requiresPurpose]);
 
   const identityTitle = useMemo(() => {
-    if (isLoading) return queryMasked ? `Query ${queryMasked}` : 'Awaiting masked result';
+    if (isLoading) return queryMasked ? `Query ${queryMasked}` : 'Awaiting result';
     if (record?.full_name) return record.full_name;
     if (statusKey === 'offline' && !agentOnline) return 'Agent offline';
     if (statusKey === 'timeout' || (statusKey === 'offline' && agentOnline)) {
@@ -143,15 +206,15 @@ const SimAccessDialog = ({
     if (statusKey in TERMINAL_TITLES) {
       return TERMINAL_TITLES[statusKey];
     }
-    if (statusKey === 'success' && !record) return 'No masked match';
-    if (statusKey === 'empty') return message || 'No masked match';
+    if (statusKey === 'success' && !record) return 'No match';
+    if (statusKey === 'empty') return message || 'No match';
     if (!configured) return 'Authorized source required';
     return 'Ready for lookup';
   }, [agentOnline, configured, isLoading, message, queryMasked, record, statusKey]);
 
   const resultMessage = useMemo(() => {
     if (message) return message;
-    if (isLoading) return 'Waiting for a masked result…';
+    if (isLoading) return 'Waiting for authorized result…';
     if (statusKey === 'timeout') return 'No reply in time — try again.';
     if (statusKey === 'offline' && agentOnline) return 'No reply in time — try again.';
     if (statusKey === 'offline' && !agentOnline) {
@@ -287,26 +350,42 @@ const SimAccessDialog = ({
           </p>
         )}
 
-        <div className="sim-result" data-empty={showResult ? 'false' : 'true'}>
-          <div className="sim-avatar">
-            <User size={18} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <span className="panel-kicker">Identity</span>
-            <h3 data-testid="sim-identity-title">{identityTitle}</h3>
-            <div className="sim-meta">
-              <span data-testid="sim-cnic-masked">{maskedCnic(record)}</span>
-              <span data-testid="sim-phone-masked">
-                {maskedPhone(record, queryMasked, showResult)}
-              </span>
-            </div>
+        {records.length > 0 ? (
+          <div className="sim-leads" data-testid="sim-leads">
+            {records.map((row, index) => (
+              <LeadCard
+                key={`${row.cnic || row.cnic_masked || 'lead'}-${index}`}
+                record={row}
+                queryMasked={queryMasked}
+                index={index}
+              />
+            ))}
             {resultMessage ? (
-              <p data-testid="sim-result-message">{resultMessage}</p>
-            ) : (
-              <p data-testid="sim-result-message" className="sim-result-message--empty" />
-            )}
+              <p className="sim-result-footer" data-testid="sim-result-message">
+                {resultMessage}
+              </p>
+            ) : null}
           </div>
-        </div>
+        ) : (
+          <div className="sim-result" data-empty={showResult ? 'false' : 'true'}>
+            <div className="sim-avatar">
+              <User size={18} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <span className="panel-kicker">Identity</span>
+              <h3 data-testid="sim-identity-title">{identityTitle}</h3>
+              <div className="sim-meta">
+                <span data-testid="sim-cnic-masked">—</span>
+                <span data-testid="sim-phone-masked">—</span>
+              </div>
+              {resultMessage ? (
+                <p data-testid="sim-result-message">{resultMessage}</p>
+              ) : (
+                <p data-testid="sim-result-message" className="sim-result-message--empty" />
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </Dialog>
   );

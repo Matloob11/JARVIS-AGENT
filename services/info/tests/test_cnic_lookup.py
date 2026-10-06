@@ -26,6 +26,47 @@ def _clear_sim_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("SIM_LOOKUP_SHOW_ADDRESS", raising=False)
 
 
+@pytest.mark.asyncio
+async def test_address_hidden_when_env_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SIM_LOOKUP_SHOW_ADDRESS", "0")
+
+    async def fake_post(
+        url: str,
+        *,
+        json: dict[str, str],
+        headers: dict[str, str],
+        timeout: float,
+    ) -> httpx.Response:
+        del url, json, headers, timeout
+        return httpx.Response(
+            200,
+            json={
+                "success": True,
+                "query_type": "phone",
+                "hits": 1,
+                "data": [
+                    {
+                        "source": "Test Registry",
+                        "fields": {
+                            "full_name": "Test User",
+                            "cnic": "3310012345678",
+                            "phone": _PHONE,
+                            "address": "Secret Street",
+                        },
+                    }
+                ],
+            },
+        )
+
+    mock_client = AsyncMock()
+    mock_client.post = fake_post
+    source = AuthorizedApiSource(_FAKE_BASE, _FAKE_KEY, client=mock_client)
+    records, error = await source.lookup(_PHONE)
+    assert error is None
+    assert records[0]["cnic"] == "3310012345678"
+    assert "address" not in records[0]
+
+
 def test_sim_source_types_returns_exactly_two() -> None:
     assert sim_source_types() == (NotConfiguredSource, AuthorizedApiSource)
 
@@ -85,10 +126,12 @@ async def test_phone_lookup_posts_correct_path_and_body() -> None:
     record = records[0]
     assert record["full_name"] == "Test User"
     assert record["source"] == "Test Registry"
+    assert record["cnic"] == "3310012345678"
+    assert record["phone"] == _PHONE
+    assert record["address"] == "Secret Street"
     assert record["cnic_masked"].endswith("5678")
     assert "3310012345678" not in record["cnic_masked"]
     assert _PHONE not in record["phone_masked"]
-    assert "address" not in record
     assert record["details"] == {"operator": "ExampleTel"}
 
 
@@ -136,13 +179,15 @@ async def test_cnic_lookup_posts_correct_path_and_body() -> None:
     assert captured["json"] == {"cnic": _CNIC}
     assert len(records) == 1
     assert records[0]["full_name"] == "CNIC Holder"
+    assert records[0]["cnic"] == _CNIC
+    assert records[0]["phone"] == "03009998877"
     assert records[0]["cnic_masked"].endswith("0123")
 
 
 @pytest.mark.asyncio
-async def test_raw_text_fields_are_parsed_and_masked(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_raw_text_fields_are_parsed_for_owner_leads(monkeypatch: pytest.MonkeyPatch) -> None:
     """Live pak-sim returns one raw_text blob; 92… mobile normalizes to 03…; fake digits only."""
-    monkeypatch.setenv("SIM_LOOKUP_SHOW_ADDRESS", "1")
+    del monkeypatch
     # Fake digits only (not a real Pakistani number/CNIC). Live API uses 12-digit 92… mobiles.
     fake_mobile_cc = "921111222333"
     fake_phone_local = "01111222333"
@@ -184,15 +229,12 @@ async def test_raw_text_fields_are_parsed_and_masked(monkeypatch: pytest.MonkeyP
     assert len(records) == 1
     record = records[0]
     assert record["full_name"] == fake_name
+    assert record["cnic"] == fake_cnic
+    assert record["phone"] == fake_phone_local
+    assert record["address"] == fake_address
     assert record["cnic_masked"].endswith("3334")
     assert fake_cnic not in record["cnic_masked"]
-    assert fake_mobile_cc not in record["phone_masked"]
-    assert fake_phone_local not in record["phone_masked"]
-    assert record["address"] == fake_address
-    details_raw = record["details"]["raw_text"]
-    assert fake_cnic not in details_raw
-    assert fake_mobile_cc not in details_raw
-    assert "Sample Holder" in details_raw
+    assert record["details"]["raw_text"] == raw
 
 
 @pytest.mark.asyncio

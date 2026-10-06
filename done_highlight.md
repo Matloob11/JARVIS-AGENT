@@ -1732,3 +1732,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `sim.spec.ts` 12/12 (mera run) · deploy gates ok
 - **Commit:** deployed HEAD `1bd9862` · **Deploy:** VPS frontend 20:09 PKT 🚀
 - **Doosre agent ke liye:** Owner: hard refresh → ab Purpose/number par typing mein focus qaim rahega.
+### ✅ [cursor] X-89 · SIM full lead fields (unmask owner UI) · 2026-10-06 21:52 PKT
+- **Kya kiya:** Match ke baad stars ki jagah poora lead: name, CNIC, phone, address + details. Provider cleartext fields; address default on.
+- **Files:** sim_providers.py, test_cnic_lookup.py, SimAccessDialog.tsx, dialogs.css, useCommandCenter.ts, sim.spec.ts, fixtures, plan.md, done_highlight.md
+- **Verify:** pytest test_cnic_lookup 9/9; sim.spec 12/12; build green
+- **Commit:** is commit me · **Deploy:** REQ-DEPLOY frontend + REQ-RESTART worker
+- **Doosre agent ke liye:** REQ-CONTRACT K-34 (cleartext owner records); worker restart zaroori
+

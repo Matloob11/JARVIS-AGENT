@@ -18,9 +18,7 @@ from services.utils.jarvis_security import redact_secrets
 _CNIC_RE = re.compile(r"\b(\d{13})\b")
 _PHONE_RE = re.compile(r"\b(\d{10,12})\b")  # 92XXXXXXXXXX (12) or 03XXXXXXXXX (11)
 _HEADER_RE = re.compile(r"^(?:\s*(?:Mobile|Name|CNIC|Address))+\s*", re.I)
-_DIGIT_RUN_RE = re.compile(r"\d+")
-
-# Known person fields inside each data[].fields object (pass the rest through, masked).
+# Known person fields inside each data[].fields object.
 FIELD_MAP: dict[str, str] = {
     "full_name": "full_name",
     "cnic": "cnic",
@@ -119,20 +117,6 @@ def _parse_raw_text(text: str) -> dict[str, str]:
     return out
 
 
-def _mask_digit_runs(text: str) -> str:
-    """Mask every digit run in a blob (11-digit phone / 13-digit CNIC / other)."""
-
-    def _one(match: re.Match[str]) -> str:
-        digits = match.group(0)
-        if len(digits) >= 13:
-            return _mask_cnic_digits(digits)
-        if len(digits) >= 10:
-            return _mask_phone_digits(digits)
-        return "*" * len(digits)
-
-    return _DIGIT_RUN_RE.sub(_one, text)
-
-
 def _has_structured_identity(fields: dict[str, Any]) -> bool:
     return any(
         str(fields.get(key) or "").strip()
@@ -140,25 +124,43 @@ def _has_structured_identity(fields: dict[str, Any]) -> bool:
     )
 
 
+def _show_address_enabled() -> bool:
+    """Address on by default for the owner dashboard; set SIM_LOOKUP_SHOW_ADDRESS=0 to hide."""
+    raw = _env_str("SIM_LOOKUP_SHOW_ADDRESS").lower()
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    return True
+
+
 def _record_from_fields(fields: dict[str, Any], *, source: str, show_address: bool) -> dict[str, Any]:
-    """One UI record from a data[].fields object; sensitive values masked, the rest kept."""
+    """One UI lead record: cleartext identity for the owner dashboard + masked compat fields."""
     work = dict(fields)
     raw = work.get("raw_text")
     if isinstance(raw, str) and raw.strip() and not _has_structured_identity(work):
         parsed = _parse_raw_text(raw)
         work = {**parsed, "raw_text": raw}
 
+    cnic = "".join(ch for ch in str(work.get(FIELD_MAP["cnic"]) or "") if ch.isdigit())
+    phone_raw = str(work.get(FIELD_MAP["phone"]) or "").strip()
+    phone_digits = "".join(ch for ch in phone_raw if ch.isdigit())
+    phone = _normalize_phone(phone_digits) if phone_digits else ""
+    address = str(work.get(FIELD_MAP["address"]) or "").strip()
+
     record: dict[str, Any] = {
         "source": source,
         "full_name": str(work.get(FIELD_MAP["full_name"]) or work.get("name") or "").strip(),
-        "cnic_masked": _mask_cnic_digits(str(work.get(FIELD_MAP["cnic"]) or "")),
-        "phone_masked": _mask_phone_digits(str(work.get(FIELD_MAP["phone"]) or "")),
+        # Owner-authenticated SIM panel (after K-45 Allow): full lead fields.
+        "cnic": cnic,
+        "phone": phone,
+        # Compat / audit-friendly redactions (UI prefers cleartext when present).
+        "cnic_masked": _mask_cnic_digits(cnic),
+        "phone_masked": _mask_phone_digits(phone),
     }
-    if show_address:
-        address = str(work.get(FIELD_MAP["address"]) or "").strip()
-        if address:
-            record["address"] = address
-    # keep every other provider field, masking anything that looks like a CNIC/phone number
+    if show_address and address:
+        record["address"] = address
+    # Pass through remaining provider fields; keep raw_text readable for owner leads.
     extra: dict[str, Any] = {}
     known = set(FIELD_MAP.values()) | {"name"}
     for key, value in work.items():
@@ -166,11 +168,13 @@ def _record_from_fields(fields: dict[str, Any], *, source: str, show_address: bo
             continue
         text = str(value)
         if key == "raw_text":
-            text = _mask_digit_runs(text)
+            # Prefer structured fields above; still keep a readable blob for odd providers.
+            text = text.strip()
         elif _looks_like_phone_or_cnic(key) and any(ch.isdigit() for ch in text):
             digits = "".join(ch for ch in text if ch.isdigit())
-            text = _mask_cnic_digits(digits) if len(digits) >= 13 else _mask_phone_digits(digits)
-        extra[key] = text
+            text = digits if digits else text
+        if text:
+            extra[key] = text
     if extra:
         record["details"] = extra
     return record
@@ -204,7 +208,7 @@ class AuthorizedApiSource:
         path, body = _route(digits)
         if path is None:
             return [], _PATTERN_HINT
-        show_address = _env_str("SIM_LOOKUP_SHOW_ADDRESS") in {"1", "true", "yes", "on"}
+        show_address = _show_address_enabled()
         headers = {"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"}
         url = self._base + path
         try:
