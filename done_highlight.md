@@ -1561,3 +1561,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** product overview layout 1672/1536/1366/1920/1100/960/390 pass; `test:refdiff` still fail: MAE 9.98 SSIM 0.7927 (thresholds 7 / 0.875); ink 25/96 ≤2px max 227; orb MAE 10.81. No re-baseline.
 - **Commit:** pending · **Deploy:** REQ-DEPLOY frontend
 - **Doosre agent ke liye:** V-1 green nahi — baqi orb glow + chat wrap vs owner PNG; C-29 hissa 2 + C-30 ke baad X-29 chain.
+
+### ✅ [cursor] X-109 follow-up · commit note · 2026-10-06 12:26 PKT
+- **Kya kiya:** Local commit for hero/confirm/legacy polish.
+- **Files:** (see prior X-109 follow-up entry)
+- **Verify:** pre-commit guard clean
+- **Commit:** `581b181` · **Deploy:** REQ-DEPLOY frontend
+- **Doosre agent ke liye:** —
