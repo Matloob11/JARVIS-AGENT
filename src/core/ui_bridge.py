@@ -370,10 +370,99 @@ PERSISTED_DEFAULTS: dict[str, Any] = {
     "sim_query_masked": "",
     "sim_status": "idle",
     "sim_message": "",
+    # C-79: the provider state of the last sim_panel_open / sim_data_result (K-34 fields; never a number),
+    # so a freshly loaded standalone dialog can read it from init_state instead of defaulting blind.
+    "sim_provider": "",
+    "sim_provider_configured": False,
+    "sim_requires_purpose": False,
 }
 # A SIM lookup answers within the provider's 10 s timeout. A stored loading state that this process
 # did not see start, or that is older than this, lost its sim_data_result.
 SIM_LOADING_MAX_S = 30.0
+
+# ---------------------------------------------------------------- SIM lookup ui_command (C-79, K-03 / K-34)
+
+SIM_QUERY_MAX_CHARS = 20     # K-34: the legacy string and the dict query
+SIM_PURPOSE_MAX_CHARS = 200  # K-34: {query (<= 20 chars), purpose (<= 200 chars)}
+SIM_PURPOSE_MIN_CHARS = 5    # jarvis_sim_lookup asks for >= 5 chars with a configured source
+SIM_BAD_QUERY_MESSAGE = ("Query 11-digit mobile number (03XXXXXXXXX) ya 13-digit CNIC jaisi honi "
+                         "chahiye. Number check kar ke dobara try karein.")
+SIM_PURPOSE_LONG_MESSAGE = "Purpose 200 characters ya is se chhota rakhein."
+SIM_PURPOSE_REQUIRED_MESSAGE = ("Authorized SIM lookup ke liye purpose kam az kam "
+                                "5 characters ka hona chahiye.")
+SIM_LOGIN_REQUIRED_MESSAGE = ("Login required: SIM lookup sirf owner ke signed-in dashboard se "
+                              "hota hai. Login kar ke dobara try karein.")
+# Provider names that mean "no authorized source" (the dialog's own rule); used only when a
+# sim_data_result names its provider without a configured flag (the real emitter sends provider
+# only), so the stored pair can never go stale after a provider flip (C-79 fix F3).
+SIM_UNCONFIGURED_PROVIDERS = frozenset({"", "none", "not_configured", "disabled"})
+
+
+def _sim_digits(query: str) -> str:
+    return "".join(ch for ch in query if ch.isdigit())
+
+
+def mask_sim_query(query: str) -> str:
+    """K-34 masking, the same rule as services/info/jarvis_sim_lookup: the raw number or CNIC never
+    reaches a log, an audit row or an emitted refusal."""
+    digits = _sim_digits(str(query or ""))
+    if len(digits) <= 4:
+        return "*" * len(digits)
+    return f"{digits[:3]}{'*' * max(len(digits) - 6, 3)}{digits[-3:]}"
+
+
+def _sim_query_ok(query: str) -> bool:
+    """C-79 / K-34: after normalization an 11-digit 03x mobile number or a 13-digit CNIC."""
+    digits = _sim_digits(query)
+    return (len(digits) == 11 and digits.startswith("03")) or len(digits) == 13
+
+
+def parse_sim_lookup(payload: Any, requires_purpose: bool) -> tuple[Any, str, str, str]:
+    """(clean payload, query_masked, reason, message) of a ui_command sim_lookup (K-03/K-34): the
+    legacy string (<= 20 chars) or {query <= 20 chars, purpose <= 200 chars}, the query an 11-digit
+    03x number or a 13-digit CNIC after normalization, and the purpose >= 5 chars when the dialog
+    was told the source requires one (sim_panel_open requires_purpose). The clean payload keeps the
+    sender's shape; reason '' means valid. The query leaves this function only masked or inside the
+    clean payload (which goes to room 'agent' alone)."""
+    if isinstance(payload, str):
+        query, purpose, legacy = payload.strip(), "", True
+    elif isinstance(payload, Mapping):
+        raw_query, raw_purpose = payload.get("query"), payload.get("purpose", "")
+        if not isinstance(raw_query, str) or not isinstance(raw_purpose, (str, type(None))):
+            return None, "", "bad_payload", SIM_BAD_QUERY_MESSAGE
+        query, purpose, legacy = raw_query.strip(), (raw_purpose or "").strip(), False
+    else:
+        return None, "", "bad_payload", SIM_BAD_QUERY_MESSAGE
+    masked = mask_sim_query(query)
+    if not query or len(query) > SIM_QUERY_MAX_CHARS or not _sim_query_ok(query):
+        return None, masked, "bad_payload", SIM_BAD_QUERY_MESSAGE
+    if len(purpose) > SIM_PURPOSE_MAX_CHARS:
+        return None, masked, "bad_payload", SIM_PURPOSE_LONG_MESSAGE
+    if requires_purpose and len(purpose) < SIM_PURPOSE_MIN_CHARS:
+        return None, masked, "purpose_required", SIM_PURPOSE_REQUIRED_MESSAGE
+    return (query if legacy else {"query": query, "purpose": purpose}), masked, "", ""
+
+
+def sim_provider_updates(payload: Any) -> dict[str, Any]:
+    """The persisted provider state of a sim_panel_open / sim_data_result payload (C-79): provider
+    name, configured and requires_purpose, so the standalone dialog gets them from init_state after
+    a reload. Only these non-sensitive fields are stored; K-34 masking is untouched."""
+    if not isinstance(payload, Mapping):
+        return {}
+    updates: dict[str, Any] = {}
+    provider = payload.get("provider")
+    if isinstance(provider, str):
+        updates["sim_provider"] = _short(provider)
+        # F3: the tool's own sim_data_result carries only 'provider', so configured is derived
+        # from the name; an explicit configured bool below wins.
+        updates["sim_provider_configured"] = \
+            provider.strip().lower() not in SIM_UNCONFIGURED_PROVIDERS
+    for name, key in (("configured", "sim_provider_configured"),
+                      ("requires_purpose", "sim_requires_purpose")):
+        value = payload.get(name)
+        if isinstance(value, bool):
+            updates[key] = value
+    return updates
 
 T = TypeVar("T")
 _STORE_ERROR_LOG_INTERVAL_S = 60.0
@@ -766,6 +855,8 @@ async def notify_bridge(request: Request) -> Any:
             "sim_query_masked": query_masked,
             "sim_status": status,
             "sim_message": message,
+            # C-79: a result that names its provider also refreshes the stored provider state
+            **sim_provider_updates(payload),
         }), None)
         await emit_ui("sim_data_result", payload)
     elif event_type == "sim_data_loading":
@@ -781,6 +872,9 @@ async def notify_bridge(request: Request) -> Any:
         await emit_ui("sim_data_loading", payload)
     elif event_type == "sim_panel_open":
         await bridge_manager.update_state("sim_panel_open", True)
+        updates = sim_provider_updates(payload)
+        if updates:  # C-79: init_state hands the provider state to a freshly loaded dialog
+            await stored("sim provider", store.kv_set_many(updates), None)
         await emit_ui("sim_panel_open", payload)
     else:
         logger.warning("⚠️ UNKNOWN EVENT: %s", event_type)
@@ -1833,6 +1927,45 @@ async def _ack_notification(payload: Any) -> None:
         await stored("notification ack", store.ack_notification(notification_id, "ui"), False)
 
 
+async def _sim_lookup_command(client: SocketClient, payload: Any) -> dict[str, str]:
+    """ui_command sim_lookup (C-79, K-03/K-34): only the owner's authenticated UI socket searches, the
+    payload is validated (legacy string or {query, purpose}; the query an 11-digit 03x number or a
+    13-digit CNIC after normalization, the purpose required when the dialog was told so), the accepted
+    command is audited masked and forwarded only to room 'agent'. Junk is answered with the
+    sim_data_result shape the dialog reads (status validation_error), so it never spins into its 20 s
+    timeout. The raw number and the purpose text are never logged or audited."""
+    if client.role != ROLE_UI:
+        await stored("audit", store.audit(client.role, "sim_lookup_refused",
+                                          {"reason": "not_owner_ui"}, client.ip), 0)
+        logger.warning("sim_lookup refused from role=%s: only the owner's UI searches", client.role)
+        # F2: a legacy-token dashboard drops acks, so it also gets the shaped refusal the dialog
+        # reads (else it spins into its 20 s timeout and blames the agent).
+        await emit_ui("sim_data_result", {
+            "records": [], "phone": "", "status": "validation_error",
+            "message": SIM_LOGIN_REQUIRED_MESSAGE, "timestamp": time.time(),
+            "ts": round(time.time(), 3)})
+        return _rejected("not_allowed")
+    requires_purpose = bool(await stored(
+        "sim purpose flag", store.kv_get("sim_requires_purpose", False), False))
+    clean, masked, reason, message = parse_sim_lookup(payload, requires_purpose)
+    if reason:
+        await stored("audit", store.audit("owner", "sim_lookup_refused",
+                                          {"reason": reason, "query_masked": masked}, client.ip), 0)
+        logger.info("sim_lookup rejected (%s) for %s", reason, masked or "-")
+        # C79-R5/F5: 'timestamp' matches _emit_sim_data's shape; 'ts' stays for anything that read it.
+        await emit_ui("sim_data_result", {"records": [], "phone": masked, "status": "validation_error",
+                                          "message": message, "timestamp": time.time(),
+                                          "ts": round(time.time(), 3)})
+        return _rejected(reason)
+    purpose_chars = len(clean["purpose"]) if isinstance(clean, dict) else 0
+    await stored("audit", store.audit("owner", "sim_lookup",
+                                      {"query_masked": masked, "purpose_chars": purpose_chars},
+                                      client.ip), 0)
+    logger.info("sim_lookup forwarded for %s (purpose %s)", masked, "set" if purpose_chars else "none")
+    await sio.emit("agent_command", {"type": "sim_lookup", "payload": clean}, to=ROOM_AGENT)
+    return {"status": "sent"}
+
+
 @sio.on('ui_command') # type: ignore[untyped-decorator]
 async def handle_ui_command(sid: str, data: Any) -> dict[str, str]:
     """
@@ -1860,6 +1993,8 @@ async def handle_ui_command(sid: str, data: Any) -> dict[str, str]:
         await _ack_notification(data.get("payload"))
     elif cmd_type == "confirm_response":  # C-29: checked, audited and forwarded there, never as received
         return await _confirm_response(client, data.get("payload"))
+    elif cmd_type == "sim_lookup":  # C-79: validated, audited and forwarded there, never as received
+        return await _sim_lookup_command(client, data.get("payload"))
     elif cmd_type == "pause_agent":
         # K-03/K-44 v9: only the room owner (always or on_demand mode) can hold a pause. It sets the flag and sends
         # its own pause_agent (payload.by 'bridge', the only one that ends the agent's job, K-60 v9); the UI's

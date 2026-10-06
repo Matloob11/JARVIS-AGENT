@@ -560,3 +560,59 @@ async def test_injection_in_output_is_filtered_not_replaced():
 
     assert await _call_like_livekit("c24_poisoned", {}) == {
         "status": "success", "message": "Page says: [filtered]. Sunny."}
+
+
+# ---------------------------------------------------------------- C-79: sensitive-args masking (K-34)
+
+
+def test_sensitive_masked_applies_the_k34_rule_only_to_listed_tools():
+    arguments = {"phone_number": "03001234567", "purpose": "mera secret reason"}
+    masked = pm_module._sensitive_masked("lookup_sim_data", arguments)  # pylint: disable=protected-access
+    assert masked == {"phone_number": "030*****567", "purpose": "<18 chars>"}
+    assert arguments["phone_number"] == "03001234567"  # the call's own arguments stay untouched
+    # a tool without a row comes back unchanged (same object: zero cost on the common path)
+    assert pm_module._sensitive_masked("c24_other", arguments) is arguments  # pylint: disable=protected-access
+    # empty/None values stay as they are, so an omitted optional still reads as its default
+    assert pm_module._sensitive_masked("lookup_sim_data",  # pylint: disable=protected-access
+                                       {"phone_number": "", "purpose": None}) == \
+        {"phone_number": "", "purpose": None}
+    assert pm_module.mask_sensitive_digits("0300-123 4567") == "030*****567"
+    assert pm_module.mask_sensitive_digits("042") == "***"
+
+
+async def test_a_sensitive_tools_confirm_request_and_tool_sync_never_carry_the_raw_values(monkeypatch):
+    """C79-R3 end to end: a HIGH call of a SENSITIVE_TOOL_ARGS tool reaches the broker
+    (confirm_request summary + args_preview) and the tool_sync events with the phone digits
+    masked and the purpose as a length only. Fake digits only."""
+    import importlib as _importlib  # pylint: disable=import-outside-toplevel
+
+    fake_phone, purpose = "03001234567", "mera secret reason"
+    monkeypatch.setitem(pm_module.SENSITIVE_TOOL_ARGS,
+                        "c24_sim_sensitive", {"phone_number": "digits", "purpose": "length"})
+    broker = _importlib.import_module("services.ai_core.jarvis_confirm").confirmation_broker
+    asked: dict[str, Any] = {}
+
+    async def fake_create_pending(tool: str, summary: str, risk: str, **kwargs: Any) -> dict[str, Any]:
+        asked.update(tool=tool, summary=summary, risk=risk, **kwargs)
+        return {"status": "needs_confirmation", "tool": tool, "confirm_id": "cid-1",
+                "message": f"Sir, confirm karein: {summary}."}
+
+    monkeypatch.setattr(broker, "create_pending", fake_create_pending)
+    synced: list[dict[str, Any]] = []
+    monkeypatch.setattr(pm_module, "_emit_tool_sync",
+                        lambda payload, after=None: synced.append(payload))
+
+    @jarvis_tool(risk="high")
+    async def c24_sim_sensitive(phone_number: str, purpose: str = "") -> dict:
+        """Sensitive lookup stand-in."""
+        return {"status": "success", "records": [], "message": f"ran {phone_number}"}
+
+    result = await _call_like_livekit("c24_sim_sensitive",
+                                      {"phone_number": fake_phone, "purpose": purpose})
+
+    assert result["status"] == "needs_confirmation"
+    blob = json.dumps([asked["summary"], asked["args_preview"], result["message"], synced])
+    assert fake_phone not in blob and purpose not in blob
+    assert "030*****567" in asked["summary"] and "030*****567" in asked["args_preview"]
+    assert "<18 chars>" in asked["args_preview"]
+    assert synced and any("030*****567" in event.get("details", "") for event in synced)

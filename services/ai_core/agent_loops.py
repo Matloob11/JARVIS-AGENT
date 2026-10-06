@@ -7,9 +7,11 @@ import asyncio
 import functools
 import inspect
 import os
+import re
 import socket
+import time
 import uuid
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 from urllib.parse import urlsplit, urlunsplit
 
 import socketio
@@ -17,10 +19,16 @@ import socketio
 from services.ai_core.swarm_manager import swarm_coordinator
 from services.automation.jarvis_reminders import check_due_reminders
 from services.ai_core.jarvis_vector_memory import jarvis_vector_db
-from services.info.jarvis_sim_lookup import lookup_sim_data, open_sim_lookup_panel
+from services.info.jarvis_sim_lookup import open_sim_lookup_panel
 from services.utils.jarvis_adaptive import adaptive_engine
 from services.utils.jarvis_autonomous import autonomous_protector
-from services.utils.jarvis_bridge import agent_link_v2, notify_transcription, wake_retry_queue
+from services.utils.jarvis_bridge import (
+    agent_link_v2,
+    notify_event,
+    notify_sim_loading,
+    notify_transcription,
+    wake_retry_queue,
+)
 from services.utils.jarvis_bug_hunter import monitor_logs
 from services.utils.jarvis_config import config
 from services.utils.jarvis_logger import setup_logger
@@ -208,6 +216,71 @@ def bridge_holds_pause(payload: Any) -> bool:
     return isinstance(payload, dict) and payload.get("by") == PAUSE_HELD_BY
 
 
+def sim_lookup_input(payload: Any) -> tuple[str, str] | None:
+    """
+    (query, purpose) of a ui_command sim_lookup (C-79, K-34): the dialog's {query, purpose} or the
+    legacy plain string (purpose ''). None when there is no usable query. The values are returned as
+    sent; lookup_sim_data itself normalizes and masks them.
+    """
+    if isinstance(payload, dict):
+        query, purpose = payload.get("query"), payload.get("purpose")
+    else:
+        query, purpose = payload, ""
+    if not isinstance(query, str) or not query.strip():
+        return None
+    return query.strip(), (purpose.strip() if isinstance(purpose, str) else "")
+
+
+def _mask_sim_query(query: str) -> str:
+    """K-34 masking (the same rule as services/info/jarvis_sim_lookup): logs and the refusal event
+    carry only the masked query, never the raw number or CNIC."""
+    digits = "".join(ch for ch in str(query or "") if ch.isdigit())
+    if len(digits) <= 4:
+        return "*" * len(digits)
+    return f"{digits[:3]}{'*' * max(len(digits) - 6, 3)}{digits[-3:]}"
+
+
+# A run of 7+ digits (separators allowed) inside a message bound for the UI: a phone number or
+# CNIC that slipped into someone else's text (K-34 last line of defense).
+_SIM_DIGIT_RUN = re.compile(r"\d(?:[\s\-()./]*\d){6,}")
+
+# C-79: fixed Roman-Urdu answers for the SIM dialog; never the broker's or a provider's own text.
+_SIM_REFUSAL_MESSAGES = {
+    "denied": "Lookup allow nahi hua, is liye nahi chala.",
+    "expired": "Allow ka waqt khatam ho gaya, lookup nahi chala. Dobara try karein.",
+    "cancelled": "Lookup ki confirmation band ho gayi, lookup nahi chala. Dobara try karein.",
+}
+_SIM_NO_WRAPPER_MESSAGE = ("SIM lookup tool register nahi hai, is liye lookup nahi chala. "
+                           "Agent restart kar ke dobara try karein.")
+_SIM_FAILED_MESSAGE = "SIM lookup fail ho gayi. Dobara try karein."
+
+
+def _mask_sim_message(text: Any) -> str:
+    """K-34: every 7+ digit run in a UI-bound sim message is masked (first 3 + stars + last 3),
+    whoever wrote the message."""
+    return _SIM_DIGIT_RUN.sub(lambda match: _mask_sim_query(match.group()), str(text or ""))
+
+
+async def _emit_sim_refusal(masked: str, status: str, message: str) -> None:
+    """One sim_data_result refusal in the exact shape the dialog reads (C-79, K-34): records
+    empty, only the MASKED query, a fixed or digit-masked message, 'timestamp' like
+    jarvis_sim_lookup._emit_sim_data."""
+    await notify_event("sim_data_result", {
+        "records": [], "phone": masked, "status": status, "message": message,
+        "timestamp": time.time()})
+
+
+def _sim_lookup_tool() -> Callable[..., Any] | None:
+    """The plugin-manager wrapper of lookup_sim_data (K-11): the SAME guarded path a voice/LLM call
+    takes, so the K-45 HIGH ConfirmFlow gate applies to the dashboard search too (C-79). None when no
+    wrapper is registered (a stripped test build)."""
+    from services.ai_core.jarvis_plugin_manager import plugin_manager  # pylint: disable=import-outside-toplevel
+    for tool in plugin_manager.get_tools():
+        if getattr(tool, "__name__", "") == "lookup_sim_data":
+            return tool
+    return None
+
+
 def chat_input(payload: Any) -> tuple[str | None, str] | None:
     """
     (id, text) of a ui_command 'chat' (K-41, K-59): the UI's {id|client_msg_id, text} keeps its id; a legacy
@@ -286,9 +359,17 @@ class UIBridgeListener:
                 logger.info("Opening SIM lookup panel via UI command.")
                 await open_sim_lookup_panel()
             elif cmd_type == "sim_lookup":
-                if payload:
-                    logger.info("SIM lookup workflow requested from UI.")
-                    await lookup_sim_data(str(payload))
+                parsed = sim_lookup_input(payload)
+                if parsed is None:
+                    logger.debug("sim_lookup without a usable query ignored (%s)",
+                                 type(payload).__name__)
+                else:
+                    # C-79: its own task, because the K-45 gate waits for the owner's Allow and this
+                    # handler must stay free to receive that confirm_response.
+                    query, purpose = parsed
+                    sim_task = asyncio.create_task(self._run_sim_lookup(query, purpose))
+                    self.assistant._spawned_tasks.add(sim_task) # type: ignore[attr-defined]
+                    sim_task.add_done_callback(self.assistant._spawned_tasks.discard) # type: ignore[attr-defined]
             elif cmd_type == "chat":
                 chat = chat_input(payload)
                 if chat is None:
@@ -319,6 +400,71 @@ class UIBridgeListener:
                     swarm_task.add_done_callback(self.assistant._spawned_tasks.discard) # type: ignore[attr-defined]
         except Exception as e:
             logger.error("❌ Error processing UI command %s: %s", cmd_type, e, exc_info=True)
+
+    async def _run_sim_lookup(self, query: str, purpose: str) -> None:
+        """
+        C-79: the dashboard's SIM search runs through the SAME guarded lookup path voice uses — the
+        plugin-manager wrapper of lookup_sim_data (K-11) — so the K-45 HIGH ConfirmFlow gate raises
+        the Allow dialog with a configured source instead of being bypassed; without a registered
+        wrapper nothing runs (fail closed, never the raw function). Only the masked query is ever
+        logged (K-34); the purpose text never is. A needs_confirmation answer is never relayed to
+        the dialog (its message could carry argument text): the owner's decision is awaited
+        (wait_outcome, K-45 v11) — an Allow re-runs the tool body, which emits its own
+        sim_data_loading / sim_data_result, while a Deny or expiry is answered here as a masked
+        sim_data_result with a fixed message, so the dialog always gets a real answer.
+        """
+        masked = _mask_sim_query(query)
+        logger.info("SIM lookup workflow requested from UI for %s (purpose %s)",
+                    masked, "set" if purpose else "none")
+        await notify_sim_loading({"query_masked": masked})
+        tool = _sim_lookup_tool()
+        if tool is None:
+            # C79-R4: no raw-tool fallback — the K-45 gate must not silently vanish.
+            logger.warning("lookup_sim_data wrapper not registered; the dashboard lookup is "
+                           "refused (the K-45 gate never falls open)")
+            await _emit_sim_refusal(masked, "error", _SIM_NO_WRAPPER_MESSAGE)
+            return
+        try:
+            result: Any = await tool(query, purpose=purpose)
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            # Only the exception type: its text could carry the raw number (K-34).
+            logger.error("SIM lookup for %s failed: %s", masked, type(e).__name__)
+            await _emit_sim_refusal(masked, "error", _SIM_FAILED_MESSAGE)
+            return
+        if isinstance(result, dict) and result.get("status") == "needs_confirmation":
+            # C79-R1/R2: the broker answers needs_confirmation AT ONCE (the Allow dialog is now
+            # on screen); its message is never relayed. Wait for the owner's real decision.
+            await self._answer_sim_confirmation(masked, result)
+            return
+        if isinstance(result, str):
+            result = {"status": "error", "message": result[:300]}
+        if isinstance(result, dict) and "records" not in result:
+            # The tool body never ran (no UI / broker error / blocked before execution): answer
+            # the dialog with the shape it reads, masked per K-34 — digit runs in the carried
+            # message masked too, never a raw number.
+            await _emit_sim_refusal(masked, str(result.get("status") or "error"),
+                                    _mask_sim_message(result.get("message")))
+
+    async def _answer_sim_confirmation(self, masked: str, asked: dict[str, Any]) -> None:
+        """
+        C-79 (K-45 v11): holds this spawned task on confirmation_broker.wait_outcome(confirm_id)
+        until the owner decides (Allow/Deny on the dashboard, a spoken answer, or expiry). An
+        approval needs nothing here — the broker re-runs the tool through the wrapper and the tool
+        body emits its own events. Everything else is answered to the dialog as a masked
+        sim_data_result with a fixed message (status 'denied' | 'expired' | 'cancelled').
+        """
+        # Imported at call time: jarvis_confirm imports the plugin manager at module load.
+        from services.ai_core.jarvis_confirm import confirmation_broker  # pylint: disable=import-outside-toplevel
+        confirm_id = str(asked.get("confirm_id") or "")
+        outcome = await confirmation_broker.wait_outcome(confirm_id) if confirm_id else None
+        if isinstance(outcome, dict) and outcome.get("status") == "started":
+            return  # approved: the re-run emits sim_data_loading / sim_data_result itself
+        reason = str(outcome.get("reason") or "") if isinstance(outcome, dict) else ""
+        status = {"denied": "denied", "voice": "denied", "expired": "expired"}.get(reason,
+                                                                                   "cancelled")
+        logger.info("SIM lookup for %s not approved (%s)", masked, reason or "no outcome")
+        await _emit_sim_refusal(masked, status, _SIM_REFUSAL_MESSAGES.get(
+            status, _SIM_REFUSAL_MESSAGES["cancelled"]))
 
     async def _interrupt_speech(self) -> bool:
         """'stop': BrainAssistant.interrupt_speech (AgentSession.interrupt, waited at most 3 s); an assistant without

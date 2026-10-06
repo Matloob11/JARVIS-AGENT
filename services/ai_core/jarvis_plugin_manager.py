@@ -351,6 +351,44 @@ def _args_preview(arguments: dict[str, Any], policies: dict[str, str],
     return text if len(text) <= SYNC_DETAILS_MAX else text[:SYNC_DETAILS_MAX - 1] + "…"
 
 
+# C-79 (K-34): UI-facing argument masking for sensitive tools, keyed by registered tool name.
+# The confirm_request summary/args_preview and the tool_sync details reach the bridge store,
+# init_state and every UI socket, so for these tools the listed argument values never travel
+# raw: mode 'digits' shows the K-34 mask (first 3 + stars + last 3 of the digits), mode 'length'
+# only '<N chars>'. Other sensitive tools join by adding a row here (Claude lane); the real
+# argument values still reach the tool body, the risk callable and the sha256-only audit.
+SENSITIVE_TOOL_ARGS: dict[str, dict[str, str]] = {
+    "lookup_sim_data": {"phone_number": "digits", "purpose": "length"},
+}
+
+
+def mask_sensitive_digits(value: str) -> str:
+    """The K-34 mask rule (same as services/info/jarvis_sim_lookup._mask_query): only the first 3
+    and last 3 digits stay visible; 4 digits or fewer are all stars."""
+    digits = "".join(ch for ch in str(value or "") if ch.isdigit())
+    if len(digits) <= 4:
+        return "*" * len(digits)
+    return f"{digits[:3]}{'*' * max(len(digits) - 6, 3)}{digits[-3:]}"
+
+
+def _sensitive_masked(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    """A copy of arguments with the SENSITIVE_TOOL_ARGS values masked for UI-facing strings
+    (confirm summary, args preview, tool_sync details). Empty/None values stay as they are, so
+    an omitted optional argument still reads as its default. Tools without a row are returned
+    unchanged."""
+    spec = SENSITIVE_TOOL_ARGS.get(tool_name)
+    if not spec:
+        return arguments
+    masked = dict(arguments)
+    for name, mode in spec.items():
+        value = masked.get(name)
+        if name in masked and value not in (None, ""):
+            text = value if isinstance(value, str) else repr(value)
+            masked[name] = mask_sensitive_digits(text) if mode == "digits" \
+                else f"<{len(text)} chars>"
+    return masked
+
+
 def _result_summary(result: Any) -> str:
     """K-13 result_summary: the result's message (or the result itself), one line, redacted."""
     try:
@@ -711,7 +749,10 @@ class JarvisPluginManager:
                                     arguments: dict[str, Any], details: str,
                                     call_risk: str) -> tuple[Any, str]:
             # K-14: the call becomes a pending action; the tool runs only after Sir approves it.
-            summary = await _confirm_summary(meta["confirm_summary"], arguments, tool_name,
+            # C-79 (K-34): a sensitive tool's summary is built from the masked arguments, so a
+            # confirm_summary template can never print a raw value either.
+            summary = await _confirm_summary(meta["confirm_summary"],
+                                             _sensitive_masked(tool_name, arguments), tool_name,
                                              details, label)
             try:
                 # Loaded at call time: jarvis_confirm itself imports this module.
@@ -778,7 +819,10 @@ class JarvisPluginManager:
             call_id = uuid.uuid4().hex
             started = time.monotonic()
             arguments = _bind_arguments(sig, positional_names, args, kwargs)
-            details = _args_preview(arguments, policies, param_defaults)
+            # C-79 (K-34): the details string reaches tool_sync, confirm_request args_preview,
+            # the bridge store and the UI, so sensitive argument values go in masked only.
+            details = _args_preview(_sensitive_masked(tool_name, arguments), policies,
+                                    param_defaults)
             call_risk = level if isinstance(level, str) else "high"
             start_task: asyncio.Task[None] | None = None
             start_sent = False
