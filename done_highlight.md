@@ -1690,3 +1690,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** screenshots sim-a/b/c + worker/bridge logs ka poora trail (confirm 04402e48… approved by ui) · restore ke baad health 200, `claude-test` lines 0
 - **Commit:** board wala yeh · **Deploy:** no (bridge 2x recreate, code wahi `89b6ac7`)
 - **Doosre agent ke liye:** follow-up queued (C79-V2-1): approved-run timeout/error par bhi dialog ko masked `sim_data_result` jawab do; Cursor optional copy-nit ("Agent offline ya jawab nahi" provider-timeout par misleading).
+### ✅ [cursor] X-89 · SIM dialog UX polish · 2026-10-06 21:25 PKT
+- **Kya kiya:** Purpose <5 live hint + Search tooltip; friendly status (idle hidden); fresh open clears stale identity; configured privacy ⓘ; mono digits-only input; timeout != Agent offline.
+- **Files:** SimAccessDialog.tsx, useCommandCenter.ts, dialogs.css, sim.spec.ts, plan.md, done_highlight.md
+- **Verify:** `npx playwright test --project=chromium tests/e2e/sim.spec.ts` 11/11; `npm run build` green
+- **Commit:** is commit me · **Deploy:** REQ-DEPLOY frontend
+- **Doosre agent ke liye:** frontend deploy; timeout ab `status:timeout` + "No reply in time"
+

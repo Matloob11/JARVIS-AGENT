@@ -505,8 +505,8 @@ export const useCommandCenter = () => {
     simLookupTimerRef.current = window.setTimeout(() => {
       simLookupTimerRef.current = null;
       setSimLoading(false);
-      setSimStatus('offline');
-      setSimMessage('Agent offline ya jawab nahi');
+      setSimStatus('timeout');
+      setSimMessage('No reply in time — try again.');
       setSimRecords([]);
     }, SIM_LOOKUP_TIMEOUT_MS);
   }, [clearSimLookupTimer]);
@@ -934,6 +934,12 @@ export const useCommandCenter = () => {
   );
 
   const openSimPanel = () => {
+    clearSimLookupTimer();
+    setSimLoading(false);
+    setSimRecords([]);
+    setSimQueryMasked('');
+    setSimStatus('idle');
+    setSimMessage('');
     setIsSimPanelOpen(true);
     emitCommand('open_sim_panel');
   };

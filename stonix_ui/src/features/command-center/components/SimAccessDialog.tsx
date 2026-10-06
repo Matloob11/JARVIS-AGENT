@@ -1,5 +1,5 @@
-import { FormEvent, useMemo, useState } from 'react';
-import { Search, ShieldCheck, User, X } from 'lucide-react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { Info, Search, ShieldCheck, User, X } from 'lucide-react';
 import { Dialog } from '@/shared/ui/Dialog';
 import {
   SimRecord,
@@ -23,17 +23,19 @@ interface SimAccessDialogProps {
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  idle: 'Idle',
-  loading: 'Loading',
+  loading: 'Looking up…',
   blocked: 'Blocked',
-  validation_error: 'Validation error',
-  rate_limited: 'Rate limited',
-  success: 'Success',
-  offline: 'Offline',
+  validation_error: 'Check your input',
+  rate_limited: 'Slow down — try again soon',
+  success: 'Match found',
+  empty: 'No match',
+  offline: 'Agent offline',
+  timeout: 'Timed out',
   denied: 'Denied',
   expired: 'Expired',
   cancelled: 'Cancelled',
   error: 'Error',
+  provider_error: 'Provider error',
 };
 
 const TERMINAL_TITLES: Record<string, string> = {
@@ -41,18 +43,36 @@ const TERMINAL_TITLES: Record<string, string> = {
   expired: 'Lookup expired',
   cancelled: 'Lookup cancelled',
   error: 'Lookup failed',
+  timeout: 'Lookup timed out',
+  offline: 'Agent offline',
 };
 
+const PRIVACY_NOTE =
+  'No personal records are shown without authorized backend data. Results stay masked.';
+
+const QUERY_MAX_LEN = 13;
+
 function statusChipLabel(status: string): string {
-  return STATUS_LABELS[status] ?? status.replace(/_/g, ' ');
+  const key = status.trim().toLowerCase();
+  if (!key || key === 'idle') return '';
+  return STATUS_LABELS[key] ?? key.replace(/_/g, ' ');
+}
+
+function digitsOnly(value: string): string {
+  return value.replace(/\D/g, '').slice(0, QUERY_MAX_LEN);
 }
 
 function maskedCnic(record?: SimRecord): string {
-  if (!record) return 'CNIC masked';
-  return record.cnic_masked || record.cnic || 'CNIC masked';
+  if (!record) return '—';
+  return record.cnic_masked || record.cnic || '—';
 }
 
-function maskedPhone(record: SimRecord | undefined, queryMasked: string): string {
+function maskedPhone(
+  record: SimRecord | undefined,
+  queryMasked: string,
+  showResult: boolean,
+): string {
+  if (!showResult) return '—';
   if (record?.phone_masked) return record.phone_masked;
   if (record?.phone) return record.phone;
   return queryMasked || '—';
@@ -75,29 +95,75 @@ const SimAccessDialog = ({
   const [query, setQuery] = useState('');
   const [purpose, setPurpose] = useState('');
   const record = records[0];
+  const configured = isSimProviderConfigured(provider, providerConfigured);
+  const statusKey = status.trim().toLowerCase();
+  const chipLabel = statusChipLabel(status);
+  const showStatusChip = Boolean(chipLabel) && statusKey !== 'idle';
+  const showResult =
+    isLoading ||
+    Boolean(record) ||
+    (statusKey !== '' && statusKey !== 'idle');
 
   const providerBanner = useMemo(
     () => simProviderBannerText(provider, providerConfigured),
     [provider, providerConfigured],
   );
 
-  const purposeValid = !requiresPurpose || purpose.trim().length >= 5;
+  const purposeLen = purpose.trim().length;
+  const purposeValid = !requiresPurpose || purposeLen >= 5;
   const canSubmit =
-    agentOnline && query.trim().length > 0 && purposeValid && !isLoading && status !== 'offline';
+    agentOnline && query.trim().length > 0 && purposeValid && !isLoading;
+
+  useEffect(() => {
+    if (!open) return;
+    setQuery('');
+    setPurpose('');
+  }, [open]);
+
+  const searchDisableReason = useMemo(() => {
+    if (!agentOnline) return 'Agent offline — lookup disabled';
+    if (isLoading) return 'Lookup in progress';
+    if (!query.trim()) return 'Enter a phone (11 digits) or CNIC (13 digits)';
+    if (requiresPurpose && purposeLen < 5) {
+      return `Purpose kam az kam 5 harf — ${purposeLen}/5`;
+    }
+    return 'Start lookup';
+  }, [agentOnline, isLoading, purposeLen, query, requiresPurpose]);
 
   const identityTitle = useMemo(() => {
     if (isLoading) return queryMasked ? `Query ${queryMasked}` : 'Awaiting masked result';
     if (record?.full_name) return record.full_name;
-    if (status === 'offline') return 'Lookup timed out';
-    if (status === 'blocked' || status === 'validation_error' || status === 'rate_limited') {
+    if (statusKey === 'offline' && !agentOnline) return 'Agent offline';
+    if (statusKey === 'timeout' || (statusKey === 'offline' && agentOnline)) {
+      return 'Lookup timed out';
+    }
+    if (statusKey === 'blocked' || statusKey === 'validation_error' || statusKey === 'rate_limited') {
       return message || 'Lookup blocked';
     }
-    if (status in TERMINAL_TITLES) {
-      return message || TERMINAL_TITLES[status];
+    if (statusKey in TERMINAL_TITLES) {
+      return TERMINAL_TITLES[statusKey];
     }
-    if (status === 'success' && !record) return 'No masked match';
-    return 'Authorized source required';
-  }, [isLoading, message, queryMasked, record, status]);
+    if (statusKey === 'success' && !record) return 'No masked match';
+    if (statusKey === 'empty') return message || 'No masked match';
+    if (!configured) return 'Authorized source required';
+    return 'Ready for lookup';
+  }, [agentOnline, configured, isLoading, message, queryMasked, record, statusKey]);
+
+  const resultMessage = useMemo(() => {
+    if (message) return message;
+    if (isLoading) return 'Waiting for a masked result…';
+    if (statusKey === 'timeout') return 'No reply in time — try again.';
+    if (statusKey === 'offline' && agentOnline) return 'No reply in time — try again.';
+    if (statusKey === 'offline' && !agentOnline) {
+      return 'Agent offline — lookup disabled until the agent is online again.';
+    }
+    if (statusKey in TERMINAL_TITLES) {
+      return TERMINAL_TITLES[statusKey];
+    }
+    if (statusKey === 'success' || statusKey === 'empty' || record) return '';
+    if (!configured) return PRIVACY_NOTE;
+    return '';
+  }, [agentOnline, configured, isLoading, message, record, statusKey]);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -136,16 +202,35 @@ const SimAccessDialog = ({
         <div
           className="sim-provider-banner"
           data-testid="sim-provider-banner"
-          data-configured={
-            isSimProviderConfigured(provider, providerConfigured) ? 'true' : 'false'
-          }
+          data-configured={configured ? 'true' : 'false'}
         >
-          {providerBanner}
+          <span className="sim-provider-banner__text">{providerBanner}</span>
+          {configured && (
+            <button
+              type="button"
+              className="sim-privacy-tip"
+              title={PRIVACY_NOTE}
+              aria-label={PRIVACY_NOTE}
+              data-testid="sim-privacy-tip"
+            >
+              <Info size={14} aria-hidden="true" />
+            </button>
+          )}
         </div>
 
-        <div className="sim-status-chip" data-testid="sim-status-chip" data-status={status}>
-          {statusChipLabel(status)}
-        </div>
+        {showStatusChip && (
+          <div className="sim-status-chip" data-testid="sim-status-chip" data-status={statusKey}>
+            {chipLabel}
+          </div>
+        )}
+        {!showStatusChip && (
+          <div
+            className="sim-status-chip sim-status-chip--hidden"
+            data-testid="sim-status-chip"
+            data-status={statusKey || 'idle'}
+            hidden
+          />
+        )}
 
         {requiresPurpose && (
           <label className="sim-purpose">
@@ -156,7 +241,13 @@ const SimAccessDialog = ({
               onChange={event => setPurpose(event.target.value)}
               placeholder="Why is this lookup needed?"
               minLength={5}
+              maxLength={200}
             />
+            {purposeLen < 5 && (
+              <p className="sim-purpose-hint" data-testid="sim-purpose-hint">
+                kam az kam 5 harf — {purposeLen}/5
+              </p>
+            )}
           </label>
         )}
 
@@ -164,16 +255,24 @@ const SimAccessDialog = ({
           <input
             data-testid="sim-query-input"
             aria-label="Authorized number"
+            inputMode="numeric"
+            autoComplete="off"
+            spellCheck={false}
             value={query}
-            onChange={event => setQuery(event.target.value)}
-            placeholder="Enter authorized number..."
+            onChange={event => setQuery(digitsOnly(event.target.value))}
+            onPaste={event => {
+              event.preventDefault();
+              const text = event.clipboardData.getData('text');
+              setQuery(digitsOnly(`${query}${text}`));
+            }}
+            placeholder="03XXXXXXXXX or 13-digit CNIC"
             disabled={!agentOnline}
           />
           <button
             type="submit"
             disabled={!canSubmit}
-            title={agentOnline ? 'Start lookup' : 'Agent offline — lookup disabled'}
-            aria-label={agentOnline ? 'Start lookup' : 'Agent offline — lookup disabled'}
+            title={searchDisableReason}
+            aria-label={searchDisableReason}
           >
             <Search size={15} />
           </button>
@@ -185,7 +284,7 @@ const SimAccessDialog = ({
           </p>
         )}
 
-        <div className="sim-result">
+        <div className="sim-result" data-empty={showResult ? 'false' : 'true'}>
           <div className="sim-avatar">
             <User size={18} />
           </div>
@@ -194,11 +293,15 @@ const SimAccessDialog = ({
             <h3 data-testid="sim-identity-title">{identityTitle}</h3>
             <div className="sim-meta">
               <span data-testid="sim-cnic-masked">{maskedCnic(record)}</span>
-              <span data-testid="sim-phone-masked">{maskedPhone(record, queryMasked)}</span>
+              <span data-testid="sim-phone-masked">
+                {maskedPhone(record, queryMasked, showResult)}
+              </span>
             </div>
-            <p data-testid="sim-result-message">
-              {message || 'No personal records are shown without authorized backend data.'}
-            </p>
+            {resultMessage ? (
+              <p data-testid="sim-result-message">{resultMessage}</p>
+            ) : (
+              <p data-testid="sim-result-message" className="sim-result-message--empty" />
+            )}
           </div>
         </div>
       </div>
