@@ -1339,7 +1339,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-16 | cursor | P2 | Agent controls: Stop speaking, Pause/Start (Wake), separate Mic vs 'Agent listening', offline message queue | X-14, X-15, K-03 (DASH-UI-COMMANDS), K-60 (CT-VC-CONTROL), K-62 (CT-VC-TURN-GATE) | DONE (01 Oct 13:50) |
 | C-47 | claude | P3 | Media toolchain deps in .venv_312: yt-dlp[default] (yt-dlp-ejs) + pylint (+ imageio-ffmpeg only if chosen) | C-26, C-09, K-15 (DesktopConfigKeys) | DONE (01 Oct 12:30) |
 | C-78 | claude | P3 | Document Q&A: scoped persistent index, terminating chunker, work off the event loop | C-24 | DONE (claude, 03 Oct 13:55) |
-| C-79 | claude | P3 | SIM ui_command payload {query, purpose}: agent handler + bridge validator | X-38, C-13, C-14, C-19, K-34 (sim_authorized_source) | TODO |
+| C-79 | claude | P3 | SIM ui_command payload {query, purpose}: agent handler + bridge validator | X-38, C-13, C-14, C-19, K-34 (sim_authorized_source) | DONE (claude, 06 Oct 18:08 PKT) |
 | C-80 | claude | P3 | Scheduled action runner: execute due tool actions safely (forbidden list, confirmations, results) | X-32, C-56, C-62, C-24, C-28, C-55, K-32 (scheduled_action_runner), K-33 (task_store_v2) | TODO |
 | C-81 | claude | P3 | Swarm: llm_text calls, voice tool start_swarm_mode as a job, spoken summary | C-25, C-45, C-58, C-43, C-55, C-57, K-30 (llm_text), K-31 (job_progress_routing) | TODO |
 | C-82 | claude | P3 | Bug hunter: grouped errors + LLM triage in tool_investigate_recent_bugs | C-45, C-64, K-30 (llm_text) | TODO |

@@ -1655,3 +1655,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** modules 222/222 · **full suite 4058 passed, 0 failed** · patch sirf nayi files (zero existing-file hunks)
 - **Commit:** `bf41f60` · **Deploy:** no (wiring tak dormant)
 - **Doosre agent ke liye:** — (Cursor par koi asar nahi jab tak step 2 wiring na ho)
+
+### ✅ 🚀 🔁 [claude] C-79 · SIM dashboard search route LIVE (masked end to end) · 2026-10-06 18:08 PKT
+- **Kya kiya:** Dashboard ke SIM dialog ka search ab asli raasta rakhta hai: bridge `sim_lookup` ko sirf owner UI se leta hai (11-digit 03x / 13-digit CNIC validation, purpose rules, junk ka foran `validation_error` jawab), agent usay `lookup_sim_data` ke wrapper se chalata hai — **wohi K-45 HIGH Allow dialog** jo voice par aata hai; Deny/expiry ka jawab bhi dialog ko masked milta hai; wrapper na ho to gate **fail-closed**. Naya `SENSITIVE_TOOL_ARGS` central masking: confirm/tool_sync previews mein raw number/CNIC/purpose ab kisi path par nahi (voice samet). `init_state` ab `sim_provider/_configured/_requires_purpose` bhi deta hai. Review: v1 par 1 PII blocker + 2 major pakre gaye, v2 par dono lenses APPROVE.
+- **Files:** `src/core/ui_bridge.py`, `services/ai_core/agent_loops.py`, `services/ai_core/jarvis_plugin_manager.py`, 2 naye + 1 test file (+42 tests), `docs/CONTRACTS.md` v13, `plan.md` (section 4)
+- **Verify:** targeted 158+202 passed · **full suite 4110 passed, 0 failed** · deploy gates ok, other apps identical
+- **Commit:** `89b6ac7` · **Deploy:** VPS bridge 18:07 PKT (rollback: `bash /root/jarvis-backups/tools/rollback.sh 2026-10-06_1307Z-pre-deploy-89b6ac7`) + PC worker restart 18:08 🚀
+- **Doosre agent ke liye:** Cursor: section 11 ka naya REQ parho (dialog `init_state` keys — chhota kaam). Owner: standalone dialog ka input Cursor ke us fix ke baad enable hoga; tab tak voice se SIM lookup test ho sakta hai.
+
+### ✅ 🔁 [claude] C-79 · Agent worker restart (agent_ctl) · 2026-10-06 18:08 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 28280) band, naya pid 24884; health 200 (37.7 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 18:08 PKT
+- **Doosre agent ke liye:** —
