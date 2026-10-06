@@ -253,6 +253,13 @@ _SIM_REFUSAL_MESSAGES = {
 _SIM_NO_WRAPPER_MESSAGE = ("SIM lookup tool register nahi hai, is liye lookup nahi chala. "
                            "Agent restart kar ke dobara try karein.")
 _SIM_FAILED_MESSAGE = "SIM lookup fail ho gayi. Dobara try karein."
+# C79-V2-1: how long an approved run is awaited after the Allow — past the wrapper's 15 s tool
+# timeout (the proven TOOL_TIMEOUT case) and inside the dialog's own 20 s timer, so the masked
+# answer lands before the dialog invents "Lookup timed out / Agent offline".
+_SIM_RESULT_WAIT_S = 18.0
+_SIM_PROVIDER_TIMEOUT_MESSAGE = ("Provider ne waqt par jawab nahi diya, is liye lookup poora "
+                                 "nahi hua. Thori der baad dobara try karein.")
+_SIM_APPROVED_FAILED_MESSAGE = "Lookup chala magar poora nahi hua. Dobara try karein."
 
 
 def _mask_sim_message(text: Any) -> str:
@@ -449,16 +456,37 @@ class UIBridgeListener:
         """
         C-79 (K-45 v11): holds this spawned task on confirmation_broker.wait_outcome(confirm_id)
         until the owner decides (Allow/Deny on the dashboard, a spoken answer, or expiry). An
-        approval needs nothing here — the broker re-runs the tool through the wrapper and the tool
-        body emits its own events. Everything else is answered to the dialog as a masked
-        sim_data_result with a fixed message (status 'denied' | 'expired' | 'cancelled').
+        approval is then watched to its end (C79-V2-1, proven live): the tool body answers the
+        dialog itself ONLY when it runs to completion (every lookup_sim_data return carries
+        'records' and the body emitted its own sim_data_result), so a run the wrapper kills
+        first — TOOL_TIMEOUT, an error, a cancel — is answered here as ONE masked
+        sim_data_result (status 'error') with a fixed message naming the provider timeout,
+        instead of leaving the dialog to its own 20 s timer and its misleading "Agent offline".
+        A records-bearing or successful run is never answered twice. Everything else is answered
+        to the dialog as a masked sim_data_result with a fixed message (status 'denied' |
+        'expired' | 'cancelled').
         """
         # Imported at call time: jarvis_confirm imports the plugin manager at module load.
         from services.ai_core.jarvis_confirm import confirmation_broker  # pylint: disable=import-outside-toplevel
         confirm_id = str(asked.get("confirm_id") or "")
         outcome = await confirmation_broker.wait_outcome(confirm_id) if confirm_id else None
         if isinstance(outcome, dict) and outcome.get("status") == "started":
-            return  # approved: the re-run emits sim_data_loading / sim_data_result itself
+            final = await confirmation_broker.wait_result_status(confirm_id, _SIM_RESULT_WAIT_S)
+            if isinstance(final, dict) and (
+                    final.get("result_records")
+                    or final.get("result_status") in ("success", "started")):
+                return  # the tool body ran: it emitted its own sim_data_result (never twice)
+            run_status = str(final.get("result_status") or "") if isinstance(final, dict) \
+                else "timeout"  # no final status past the wrapper's own timeout: the live case
+            # The dialog renders a message only for its terminal statuses, so both the wrapper
+            # timeout and an error go out as 'error' with a fixed message (K-34: never the
+            # wrapper's or a provider's own text).
+            logger.info("SIM lookup for %s approved but its run ended without records (%s); "
+                        "answering the dialog (C79-V2-1)", masked, run_status or "unknown")
+            await _emit_sim_refusal(masked, "error",
+                                    _SIM_PROVIDER_TIMEOUT_MESSAGE if run_status == "timeout"
+                                    else _SIM_APPROVED_FAILED_MESSAGE)
+            return
         reason = str(outcome.get("reason") or "") if isinstance(outcome, dict) else ""
         status = {"denied": "denied", "voice": "denied", "expired": "expired"}.get(reason,
                                                                                    "cancelled")

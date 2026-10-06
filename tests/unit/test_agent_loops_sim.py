@@ -41,6 +41,8 @@ def sim(monkeypatch):
     monkeypatch.setattr(agent_loops, "_sim_lookup_tool", lambda: wrapper)
     wait_outcome = AsyncMock(return_value=None)
     monkeypatch.setattr(jarvis_confirm.confirmation_broker, "wait_outcome", wait_outcome)
+    wait_result = AsyncMock(return_value=None)  # C79-V2-1: the approved run's final status
+    monkeypatch.setattr(jarvis_confirm.confirmation_broker, "wait_result_status", wait_result)
     loading = AsyncMock()
     monkeypatch.setattr(agent_loops, "notify_sim_loading", loading)
     event = AsyncMock()
@@ -48,7 +50,8 @@ def sim(monkeypatch):
     log = MagicMock()
     monkeypatch.setattr(agent_loops, "logger", log)
     return SimpleNamespace(listener=listener, assistant=assistant, wrapper=wrapper,
-                           wait_outcome=wait_outcome, loading=loading, event=event, log=log)
+                           wait_outcome=wait_outcome, wait_result=wait_result, loading=loading,
+                           event=event, log=log)
 
 
 async def _send(sim: Any, payload: Any) -> None:
@@ -139,6 +142,7 @@ async def test_a_denied_confirmation_is_awaited_and_answered_masked_with_a_fixed
     await _send(sim, {"query": FAKE_PHONE, "purpose": "mera secret reason"})
 
     sim.wait_outcome.assert_awaited_once_with("cid-deny")
+    sim.wait_result.assert_not_awaited()  # C79-V2-1 watches only APPROVED runs; deny unchanged
     sim.event.assert_awaited_once()
     event_name, payload = sim.event.await_args.args
     assert event_name == "sim_data_result"
@@ -167,10 +171,83 @@ async def test_an_approved_confirmation_emits_nothing_here_the_rerun_answers(sim
     sim.wrapper.return_value = _needs_confirmation("cid-ok")
     sim.wait_outcome.return_value = {"status": "started", "reason": "approved",
                                      "tool": "lookup_sim_data", "confirm_id": "cid-ok"}
+    # C79-V2-1: the tool body ran to completion (records-bearing result, it emitted itself).
+    sim.wait_result.return_value = {"result_status": "success", "result_records": True}
     await _send(sim, {"query": FAKE_PHONE, "purpose": "identity verification"})
 
     sim.wait_outcome.assert_awaited_once_with("cid-ok")
+    sim.wait_result.assert_awaited_once_with("cid-ok", agent_loops._SIM_RESULT_WAIT_S)
     sim.event.assert_not_awaited()  # the approved re-run emits its own sim_data_* events
+
+
+# -------------------------------------------- C79-V2-1: an approved run that dies answers the dialog
+
+
+@pytest.mark.asyncio
+async def test_an_approved_run_killed_by_the_tool_timeout_answers_the_dialog_masked_once(sim):
+    # Proven live: the wrapper killed the approved re-run (TOOL_TIMEOUT 15 s), the tool body
+    # never emitted, and the dialog sat on its own 20 s timer showing "Agent offline".
+    sim.wrapper.return_value = _needs_confirmation("cid-slow")
+    sim.wait_outcome.return_value = {"status": "started", "reason": "approved",
+                                     "tool": "lookup_sim_data", "confirm_id": "cid-slow"}
+    sim.wait_result.return_value = {"result_status": "timeout", "result_records": False}
+    await _send(sim, {"query": FAKE_PHONE, "purpose": "mera secret reason"})
+
+    sim.wait_result.assert_awaited_once_with("cid-slow", agent_loops._SIM_RESULT_WAIT_S)
+    sim.event.assert_awaited_once()  # exactly one answer, never a double
+    event_name, payload = sim.event.await_args.args
+    assert event_name == "sim_data_result"
+    assert payload["records"] == [] and payload["phone"] == FAKE_PHONE_MASKED
+    assert payload["status"] == "error" and "timestamp" in payload
+    # The fixed provider-timeout text, never "agent offline" and never the wrapper's own text.
+    assert payload["message"] == agent_loops._SIM_PROVIDER_TIMEOUT_MESSAGE
+    assert "offline" not in payload["message"].lower()
+    emitted = json.dumps([str(call) for call in sim.event.mock_calls])
+    assert FAKE_PHONE not in emitted and "mera secret reason" not in emitted
+
+
+@pytest.mark.asyncio
+async def test_an_approved_run_that_errors_without_records_answers_the_dialog(sim):
+    sim.wrapper.return_value = _needs_confirmation("cid-err")
+    sim.wait_outcome.return_value = {"status": "started", "reason": "approved",
+                                     "tool": "lookup_sim_data", "confirm_id": "cid-err"}
+    sim.wait_result.return_value = {"result_status": "error", "result_records": False}
+    await _send(sim, FAKE_PHONE)
+
+    sim.event.assert_awaited_once()
+    _name, payload = sim.event.await_args.args
+    assert payload["status"] == "error" and payload["records"] == []
+    assert payload["phone"] == FAKE_PHONE_MASKED
+    assert payload["message"] == agent_loops._SIM_APPROVED_FAILED_MESSAGE
+
+
+@pytest.mark.asyncio
+async def test_a_lost_run_status_after_allow_is_answered_as_a_provider_timeout(sim):
+    # wait_result_status returned None: the run is still going past the wrapper's own timeout,
+    # or the broker lost it. The dialog still gets one masked answer before its 20 s timer.
+    sim.wrapper.return_value = _needs_confirmation("cid-gone")
+    sim.wait_outcome.return_value = {"status": "started", "reason": "approved",
+                                     "tool": "lookup_sim_data", "confirm_id": "cid-gone"}
+    sim.wait_result.return_value = None
+    await _send(sim, FAKE_PHONE)
+
+    sim.event.assert_awaited_once()
+    _name, payload = sim.event.await_args.args
+    assert payload["status"] == "error"
+    assert payload["message"] == agent_loops._SIM_PROVIDER_TIMEOUT_MESSAGE
+
+
+@pytest.mark.asyncio
+async def test_a_records_bearing_failure_is_not_answered_twice_after_allow(sim):
+    # A provider_error return still carries 'records': the tool body ran and already answered
+    # the dialog itself, so nothing more is emitted even though the end status is an error.
+    sim.wrapper.return_value = _needs_confirmation("cid-prov")
+    sim.wait_outcome.return_value = {"status": "started", "reason": "approved",
+                                     "tool": "lookup_sim_data", "confirm_id": "cid-prov"}
+    sim.wait_result.return_value = {"result_status": "error", "result_records": True}
+    await _send(sim, FAKE_PHONE)
+
+    sim.event.assert_not_awaited()
 
 
 @pytest.mark.asyncio

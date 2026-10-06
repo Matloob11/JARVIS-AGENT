@@ -232,6 +232,50 @@ async def test_a_high_risk_tool_runs_only_after_approval_and_exactly_once(broker
                         f"REASON=approved | SOURCE=ui")
 
 
+async def test_wait_result_status_reports_the_approved_runs_end_without_touching_the_outcome(
+        broker, results):
+    """C79-V2-1: a waiter learns the approved run's K-13 end status and whether its result bore
+    'records' (the tool body ran to completion); the stored outcome itself stays unchanged, so a
+    repeated resolve() still returns the first outcome."""
+    @jarvis_tool(risk="high", timeout=5)
+    async def c28_sim_probe(q: str) -> dict:
+        """Probes.
+
+        Args:
+            q: what
+        """
+        return {"status": "success", "records": [], "message": "ok"}
+
+    asked = await _llm_call("c28_sim_probe", {"q": "x"})
+    confirm_id = asked["confirm_id"]
+    assert await broker.wait_result_status(confirm_id, 0.1) is None  # nothing ran yet
+
+    started = await broker.resolve(confirm_id, True, source="ui")
+    final = await broker.wait_result_status(confirm_id, 3.0)
+    assert final == {"result_status": "success", "result_records": True}
+    await _until(lambda: results)
+    # The first outcome is untouched: no result_status/result_records leaked into it.
+    assert await broker.resolve(confirm_id, True, source="ui") == started
+    assert await broker.wait_result_status("unknown-id", 0.1) is None
+
+
+async def test_wait_result_status_is_none_for_a_denied_action(broker, results):
+    @jarvis_tool(risk="high", timeout=5)
+    async def c28_sim_probe_deny(q: str) -> dict:
+        """Probes.
+
+        Args:
+            q: what
+        """
+        return {"status": "success", "records": [], "message": "ok"}
+
+    asked = await _llm_call("c28_sim_probe_deny", {"q": "x"})
+    await broker.resolve(asked["confirm_id"], False, source="ui")
+    assert await broker.wait_result_status(asked["confirm_id"], 0.2) is None
+    await asyncio.sleep(0.05)
+    assert not results  # denied: nothing ran
+
+
 async def test_concurrent_decisions_run_the_action_at_most_once(broker, results):
     ran: list[str] = []
 

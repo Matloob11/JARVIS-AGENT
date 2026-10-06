@@ -248,6 +248,11 @@ class ConfirmationBroker:
         self._unwired_warned = False
         self._sweeper: asyncio.Task[Any] | None = None
         self._posts: set[asyncio.Task[Any]] = set()  # confirm_resolved posts still going out
+        # C79-V2-1: approved runs still going, and each finished run's final status, by confirm
+        # id — what wait_result_status() reads. Kept OUT of the outcome dicts so a repeated
+        # resolve() keeps returning the first outcome unchanged.
+        self._run_tasks: dict[str, asyncio.Task[Any]] = {}
+        self._run_finals: OrderedDict[str, dict[str, Any]] = OrderedDict()
 
     # ------------------------------------------------------------ public API
 
@@ -408,6 +413,24 @@ class ConfirmationBroker:
                 self._finish(action, allow=False, reason="expired")
         return dict(action.outcome) if action.outcome is not None else None
 
+    async def wait_result_status(self, confirm_id: str,
+                                 timeout_s: float = _DEFAULT_TIMEOUT_S) -> dict[str, Any] | None:
+        """
+        C79-V2-1: waits (at most timeout_s) for the APPROVED run of confirm_id to finish and
+        returns {'result_status', 'result_records'}: result_status is the same K-13 end status
+        confirm_resolved already carries as result_status (K-14), and result_records says the
+        run's result carried a 'records' key — i.e. the tool body ran to completion (every
+        lookup_sim_data return bears 'records'; the wrapper's own timeout/error dicts never
+        do). None while the run is still going after timeout_s, or for an id that is unknown
+        or never started a run.
+        """
+        key = str(confirm_id or "").strip().lower()
+        task = self._run_tasks.get(key)
+        if task is not None and not task.done():
+            await asyncio.wait({task}, timeout=max(0.0, float(timeout_s)))
+        final = self._run_finals.get(key)
+        return dict(final) if final is not None else None
+
     async def shutdown(self) -> None:
         """
         Cancels every pending action and stops this loop's broker tasks (session end, tests).
@@ -542,7 +565,12 @@ class ConfirmationBroker:
         _audit_decision(action, allow, reason, source)
         self._emit_resolved(action, allow, reason)
         if allow and action.run is not None:
-            _spawn(self._run_approved(action, reason))
+            run_task = _spawn(self._run_approved(action, reason))
+            if run_task is not None:
+                # C79-V2-1: kept by id so wait_result_status() can await this very run.
+                self._run_tasks[action.id] = run_task
+                run_task.add_done_callback(
+                    lambda _task, key=action.id: self._run_tasks.pop(key, None))
         return dict(outcome)
 
     async def _run_approved(self, action: PendingAction, reason: str) -> None:
@@ -559,6 +587,14 @@ class ConfirmationBroker:
                       "message": f"Sir, {action.tool} nahi ho saka."}
         status = result_status(result)
         logger.info("Approved %s (%s) finished: %s", action.tool, action.id, status)
+        # C79-V2-1: the run's final status and whether its result bore 'records' (the tool body
+        # ran to completion), for wait_result_status(); recorded BEFORE anything is posted, so a
+        # waiter that sees this task done always finds it.
+        self._run_finals[action.id] = {
+            "result_status": status,
+            "result_records": isinstance(result, dict) and "records" in result}
+        while len(self._run_finals) > _RESOLVED_KEEP:
+            self._run_finals.popitem(last=False)
         self._emit_resolved(action, True, reason, status)
         text = result.get("message") if isinstance(result, dict) else result
         message = one_line(text, RESULT_MESSAGE_MAX) if isinstance(text, str) else ""
