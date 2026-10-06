@@ -1568,3 +1568,25 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** pre-commit guard clean
 - **Commit:** `581b181` · **Deploy:** REQ-DEPLOY frontend
 - **Doosre agent ke liye:** —
+
+### ✅ [claude] OPS (naya laptop) · Python 3.12 + .venv_312 rebuild, tests bahal · 2026-10-06 14:40 PKT
+- **Kya kiya:** User ke "A" faislay par: winget se Python 3.12.10 (user scope), `.venv_312` rebuild (`requirements-hybrid` + pytest stack), dono `.env` files ke 3+3 purane user-profile paths naye profile par kiye (pehle backup). Pytest ab is machine par chalta hai.
+- **Files:** koi tracked file nahi (.venv_312 + .env, dono git se bahar)
+- **Backups:** `%USERPROFILE%\JARVIS-backups\local\env-pre-hp-move-20261006\` (dono .env, badalne se pehle)
+- **Verify:** baseline full suite **3681 passed, 0 failed** (purani machine ke barabar) · pip 26.2.1 · speechbrain C-38 shims ke raaste OK
+- **Commit:** board wala agla · **Deploy:** no
+- **Doosre agent ke liye:** python-lane tests ab yahan chalte hain; "tests pending venv" wali rukawat khatam.
+
+### ✅ 🚀 [claude] C-29 (hissa 2) · K-45 risk floor ab poori tarah ENFORCED + confirm_selftest · 2026-10-06 14:46 PKT
+- **Kya kiya:** Bridge har `confirm_request` ko K-45 static floor table (contract lists + committed manifest, `src/core/confirm_policy.py`) se clamp-UP karta hai; clamped HIGH par `voice_allowed` K-14 ke mutabiq band — aur broker answer ka clamp ENFORCE karta hai, is liye bola hua "haan" clamped gate se upar approve nahi kar sakta (TOOL_CONFIRM_CLAMPED audit). `sleep_system` dono tables mein HIGH (contract text jeeta). Naya `confirm_selftest` tool (sirf `JARVIS_CONFIRM_SELFTEST=1` par register) dummy MEDIUM round trip + timings + exactly-once marker deta hai — C-30 ka selftest isi se chalega. Review: v1 mein 1 major (clamp display-only) pakra gaya, v2 par security + correctness dono APPROVE; C-64 ke 3 lens reviews bhi isi run mein poore hue (approve, minors land par).
+- **Files:** `src/core/confirm_policy.py` (naya), `src/core/ui_bridge.py`, `src/core/desktop/policy.py`, `services/ai_core/jarvis_confirm.py`, 4 test files (+27 tests), `docs/CONTRACTS.md` v11, `plan.md` (section 4 + status)
+- **Verify:** full suite **3708 passed, 0 failed** (patch ke sath) · deploy gates sab ok, other apps identical
+- **Commit:** `1819a33` · **Deploy:** VPS bridge 14:46 PKT (rollback: `bash /root/jarvis-backups/tools/rollback.sh 2026-10-06_0946Z-pre-deploy-1819a33`) 🚀
+- **Doosre agent ke liye:** owner ka live Allow test + C-30 selftest baqi; X-29/30/31/32/41 chain C-30 ke baad khulegi.
+
+### ✅ 🔁 [claude] C-29 · Agent worker start (agent_ctl) · 2026-10-06 14:47 PKT
+- **Kya kiya:** `agent_ctl start` se worker chala: pid 11068, health 200 (5.6 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent start 14:47 PKT
+- **Doosre agent ke liye:** —
