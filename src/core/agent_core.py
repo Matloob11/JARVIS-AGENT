@@ -205,10 +205,11 @@ class BrainAssistant(Agent):
         self._last_verification_score: float = 1.0 # default verified
         self._session_verification_count: int = 0
 
-        # Discovering plugins once centrally
+        # C-32: discovery runs once per worker process (agent_runner.prewarm, or the entrypoint's
+        # PREWARM_MISS fallback) before any BrainAssistant exists — never again per job here. The
+        # singleton manager stays for the tools-info paths (e.g. running_tools); the assistant
+        # itself uses the tools passed in (tools=external_tools).
         self.plugin_manager = JarvisPluginManager()
-        package_path = os.path.join(config.project_root, "services")
-        self.plugin_manager.discover_plugins(package_path)
 
         # Initialize Modular Handlers
         self.persona_manager = PersonaManager(self)

@@ -853,6 +853,72 @@ async def _end_job(ctx: Any, ended: str | None) -> None:
         logger.error("JOB END: ctx.shutdown failed: %s", type(e).__name__)
 
 
+# ------------------------------------------------------------------ C-32: worker prewarm (design §1.1)
+# The heavy singletons load ONCE per executor (WorkerOptions.prewarm_fnc), BEFORE any job: plugin
+# discovery (JarvisPluginManager is a lock-guarded singleton, so a second prewarm is a cheap
+# re-entry), the silero VAD with the exact values the entrypoint used inline, and the city (5 s cap,
+# config.user_city fallback; in remote mode get_current_city never calls ipinfo — K-72, plan 8690).
+# A job reads them from ctx.proc.userdata['tools'|'vad'|'city']; a missing key falls back to the old
+# inline path (PREWARM_MISS), so the worker stays bootable even if prewarm never ran (dev console
+# mode, tests). K-69: a worker's prewarm hook may only warm models — Chroma stays in the job
+# (_prewarm_vector_memory).
+
+PREWARM_CITY_TIMEOUT_S = 5.0
+
+
+def _prewarm_city() -> str:
+    """The city for the instructions, resolved once at prewarm. No job loop runs yet (prewarm is
+    synchronous, before the executor serves jobs), so asyncio.run; a slow or failed lookup falls
+    back to config.user_city within PREWARM_CITY_TIMEOUT_S."""
+
+    async def _city() -> str:
+        return await asyncio.wait_for(get_current_city(), PREWARM_CITY_TIMEOUT_S)
+
+    try:
+        city = asyncio.run(_city())
+    except Exception as e:  # the fallback is today's USER_CITY default; never blocks the prewarm
+        logger.warning("PREWARM city fell back to USER_CITY: %s", type(e).__name__)
+        return config.user_city
+    return city if isinstance(city, str) and city else config.user_city
+
+
+def prewarm(proc: Any) -> None:
+    """C-32: fills JobProcess.userdata['tools'|'vad'|'city'] once per executor. Each part is
+    independent: a failed one is logged and left unset, and that job boots inline (PREWARM_MISS) —
+    a broken prewarm must never keep the worker from serving jobs."""
+    started = time.monotonic()
+    userdata = proc.userdata
+    try:
+        from services.ai_core.jarvis_plugin_manager import (  # pylint: disable=import-outside-toplevel
+            JarvisPluginManager,
+        )
+        plugin_manager = JarvisPluginManager()
+        plugin_manager.discover_plugins(os.path.join(config.project_root, "services"))
+        if desktop_mode() != DESKTOP_MODE_LOCAL:
+            remote_compat.install_arg_hooks(plugin_manager)  # C-124: before the LiveKit conversion
+        userdata["tools"] = plugin_manager.get_livekit_tools()
+    except Exception as e:
+        logger.warning("PREWARM tools failed (the job discovers inline): %s", e)
+    try:
+        # Tune VAD to be less sensitive to background noise and prevent stuttering — the exact
+        # values the entrypoint loaded inline before C-32 (behavior identical).
+        userdata["vad"] = silero.VAD.load(
+            min_speech_duration=0.2,  # Sir Matloob's PC - higher threshold reduces noise jitter
+            min_silence_duration=1.0,
+        )
+    except Exception as e:
+        logger.warning("PREWARM vad failed (the job loads inline): %s", e)
+    userdata["city"] = _prewarm_city()
+    logger.info("PREWARM_DONE tools=%d in %.1fs", len(userdata.get("tools") or ()), time.monotonic() - started)
+
+
+def _proc_userdata(ctx: Any) -> dict[str, Any]:
+    """The prewarmed singletons of this job's executor (JobProcess.userdata). A context without
+    them (console/dev mode, tests, a stand-in) yields {} and the entrypoint boots inline."""
+    userdata = getattr(getattr(ctx, "proc", None), "userdata", None)
+    return userdata if isinstance(userdata, dict) else {}
+
+
 def _print_startup_banner() -> None:
     """Prints the JARVIS startup banner."""
     print("\n" + "="*50)
@@ -907,28 +973,43 @@ async def entrypoint(ctx: agents.JobContext):
             # C-72: speaker-ID model loads in its own thread (C-124: the JARVIS room's job only)
             _prewarm_voice_id(getattr(ctx.room, "name", None))
 
-            # Now perform secondary initialization
+            # Now perform secondary initialization (the date is computed locally — no network call)
             current_dt_res = await get_formatted_datetime()
-            city = await get_current_city()
-            
-            # --- Plugin & Tool Discovery (Centralized) ---
+
+            # --- C-32: the prewarmed singletons of this executor (prewarm()). A missing key boots
+            # inline exactly as before C-32 and logs PREWARM_MISS (dev console mode, tests, or a
+            # job that arrived before/without prewarm).
+            userdata = _proc_userdata(ctx)
+
+            # --- Plugin & Tool Discovery (Centralized; once per process since C-32) ---
             from services.ai_core.jarvis_plugin_manager import JarvisPluginManager
             plugin_manager = JarvisPluginManager()
-            # Root-level services directory
-            package_path = os.path.join(config.project_root, "services")
-            plugin_manager.discover_plugins(package_path)
-            if not local:
-                remote_compat.install_arg_hooks(plugin_manager)  # C-124: VPS argument hooks
-            external_tools = plugin_manager.get_livekit_tools()
-            logger.info("🛠️ Discovered %d external tools from plugins.", len(external_tools))
+            external_tools = userdata.get("tools")
+            if external_tools is None:
+                logger.warning("PREWARM_MISS key=%s", "tools")
+                # Root-level services directory
+                package_path = os.path.join(config.project_root, "services")
+                plugin_manager.discover_plugins(package_path)
+                if not local:
+                    remote_compat.install_arg_hooks(plugin_manager)  # C-124: VPS argument hooks
+                external_tools = plugin_manager.get_livekit_tools()
+                logger.info("🛠️ Discovered %d external tools from plugins.", len(external_tools))
             if not local:
                 remote_compat.self_test()  # K-72: every shim still bound once discovery imported the tools
 
-            # Tune VAD to be less sensitive to background noise and prevent stuttering
-            vad = silero.VAD.load(
-                min_speech_duration=0.2, # Sir Matloob's PC - higher threshold reduces noise jitter
-                min_silence_duration=1.0,
-            )
+            vad = userdata.get("vad")
+            if vad is None:
+                logger.warning("PREWARM_MISS key=%s", "vad")
+                # Tune VAD to be less sensitive to background noise and prevent stuttering
+                vad = silero.VAD.load(
+                    min_speech_duration=0.2, # Sir Matloob's PC - higher threshold reduces noise jitter
+                    min_silence_duration=1.0,
+                )
+
+            city = userdata.get("city")
+            if not isinstance(city, str) or not city:
+                logger.warning("PREWARM_MISS key=%s", "city")
+                city = await get_current_city()
 
             # USER PREFERRED EXPERIMENTAL MODEL: models/gemini-2.5-flash-native-audio-latest
             llm_model = google.realtime.RealtimeModel(
@@ -1202,6 +1283,19 @@ def check_runtime_profile() -> RuntimeProfile:
     return profile
 
 
+def _env_number(name: str, default: Any, cast: Callable[[str], Any]) -> Any:
+    """An env knob as a number (K-69 names); empty or malformed keeps the default and logs the
+    variable's name, never a value that could be a secret."""
+    raw = (os.getenv(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        return cast(raw)
+    except ValueError:
+        logger.warning("%s is not a number; using %s", name, default)
+        return default
+
+
 def build_worker_options(
     entrypoint_fnc: Callable[[agents.JobContext], Awaitable[None]] | None = None,
 ) -> agents.WorkerOptions:
@@ -1212,6 +1306,12 @@ def build_worker_options(
     mode's random one. agent_name (K-69/K-72 v9, worker_agent_name): JARVIS_AGENT_NAME, else '' (automatic
     dispatch) in local mode and 'jarvis' in remote mode; the PC root .env says jarvis-pc from C-23 phase 3.
     check_runtime_profile() runs first.
+
+    C-32 (K-69): prewarm_fnc warms the executor before any job; JARVIS_PREWARM_TIMEOUT (120),
+    JARVIS_IDLE_PROCS (1 on the PC; the VPS compose says 2 — K-75) and JARVIS_LOAD_THRESHOLD
+    ('inf': the production default 0.7 would mark the owner's only worker full; the one LiveKit
+    warning 'inf' logs in production is accepted, design §1.1). The K-44 PC guard stays byte for
+    byte: load_fnc = pc_worker_load (always 0.0) in every mode but remote.
     """
     check_runtime_profile()
     options: dict[str, Any] = {
@@ -1219,9 +1319,21 @@ def build_worker_options(
         "host": os.getenv("JARVIS_WORKER_HOST") or "127.0.0.1",
         "port": int(os.getenv("JARVIS_WORKER_PORT") or "8081"),
         "agent_name": worker_agent_name(),
+        "prewarm_fnc": prewarm,
+        "initialize_process_timeout": _env_number("JARVIS_PREWARM_TIMEOUT", 120.0, float),
+        "num_idle_processes": _env_number("JARVIS_IDLE_PROCS", 1, int),
+        "load_threshold": _env_number("JARVIS_LOAD_THRESHOLD", float("inf"), float),
     }
     if desktop_mode() != DESKTOP_MODE_REMOTE:
         options["load_fnc"] = pc_worker_load
+    else:
+        # Remote-mode extras (K-75, plan 8690), env-driven, so local behavior does not change:
+        # JARVIS_SHUTDOWN_PROC_TIMEOUT (20) and JARVIS_JOB_MEMORY_WARN_MB (only when set; the VPS
+        # compose says 3000).
+        options["shutdown_process_timeout"] = _env_number("JARVIS_SHUTDOWN_PROC_TIMEOUT", 20.0, float)
+        job_memory_warn_mb = _env_number("JARVIS_JOB_MEMORY_WARN_MB", 0, int)
+        if job_memory_warn_mb > 0:
+            options["job_memory_warn_mb"] = job_memory_warn_mb
     return agents.WorkerOptions(**options)
 
 
