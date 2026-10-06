@@ -1547,3 +1547,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
 - **Commit:** `89ccc3d` · **Deploy:** PC agent restart 09:07 PKT
 - **Doosre agent ke liye:** —
+
+### ✅ 🚀 [claude] REQ-DEPLOY + C-23 phase 3 · Cursor ka frontend fix live + RoomManager always mode · 2026-10-06 11:52 PKT
+- **Kya kiya:** Naye laptop (user `Hp`) se pehla deploy. Cursor ke 5420f2b fixes (phone 390 chat panel header ke neeche, Reconnect ab paused agent ko nahi jagata, Quick Stats stale copy) VPS frontend par live kiye (HEAD `8b036be`). Phir bridge RoomManager observe → **always** mode: Pause/Wake ab asli. Note: PC agent worker offline hai (purana PC band; is machine par `.venv_312` abhi nahi), is liye owner ke live tests (C-29 Allow, C-23 call, C-42 typed chat) abhi pending.
+- **Files:** koi repo code change nahi (deploy + VPS bridge mode KV)
+- **Verify:** tsc clean · layout/overview/reconnect e2e 72/72 (fresh `npm ci`, naya PC) · deploy.sh health gate sab ok · other-apps smoke identical (0 regressions) · `/vortex/health` 200, `/` 401 · `bridge_rooms status` = mode always (kv), room exists · backup `2026-10-06_0639Z-pre-deploy-8b036be` (rollback one-liner run log me)
+- **Commit:** deployed HEAD `8b036be`; is board entry ka commit agla · **Deploy:** yes 🚀
+- **Doosre agent ke liye:** Cursor: REQ-DEPLOY poora; naya-laptop context section 11 (06 Oct 11:50) parho. X-29/30/31/32/41 chain C-29 part 2 + C-30 selftest ke baad khulegi.
