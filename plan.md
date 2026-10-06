@@ -1268,9 +1268,9 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | C-30 | claude | P0 | Deploy the STONIX frontend with the ConfirmDialog to the VPS + live selftest | C-29, X-10, C-12, C-22 | TODO |
 | C-31 | claude | P0 | Event-loop stall watchdog | C-27 | DONE (02 Oct 03:00; code; live restart check pending) |
 | C-32 | claude | P0 | Worker prewarm and single-user worker options (plugin discovery once per process) | C-07, C-08, C-09, C-23 | TODO |
-| C-33 | claude | P0 | JarvisRuntime: one AgentSession per job, restartable session errors, clean teardown with ctx.shutdown | C-32 | TODO |
-| C-34 | claude | P0 | UI command registry, (type,id) dedupe and a job-scoped bridge listener | C-33, K-60 (CT-VC-CONTROL) | TODO |
-| C-35 | claude | P0 | RoomIO relink: voice survives page reloads, Voice off/on and new browser identities | C-33, C-34, K-56 (CT-VC-ROOMIO-LINK), K-04 (DASH-LIVEKIT-UI) | TODO |
+| C-33 | claude | P0 | JarvisRuntime: one AgentSession per job, restartable session errors, clean teardown with ctx.shutdown | C-32 | DOING (claude, 06 Oct; step-1 module src/core/jarvis_runtime.py landed bf41f60, wiring baqi) |
+| C-34 | claude | P0 | UI command registry, (type,id) dedupe and a job-scoped bridge listener | C-33, K-60 (CT-VC-CONTROL) | DOING (claude, 06 Oct; step-1 registry services/utils/ui_command_registry.py landed bf41f60, wiring baqi) |
+| C-35 | claude | P0 | RoomIO relink: voice survives page reloads, Voice off/on and new browser identities | C-33, C-34, K-56 (CT-VC-ROOMIO-LINK), K-04 (DASH-LIVEKIT-UI) | DOING (claude, 06 Oct; step-1 roomio_link + voice_link landed bf41f60, wiring baqi) |
 | X-03 | cursor | P0 | Shared desktop helpers module (windows, focus, safe paths, clipboard, redaction) | C-04, K-25 (DesktopCommonHelpers), K-12 (ToolResult) | DONE (01 Oct 12:35) |
 | X-06 | cursor | P0 | UI foundation: relative /vortex runtime config, cookie socket, tolerant event types, per-panel ErrorBoundary, no secrets in the bundle | K-01 (DASH-UI-RUNTIME), K-02 (DASH-UI-EVENTS) | DONE (01 Oct 12:40) |
 | X-07 | cursor | P0 | Mock bridge (Node) for local dev and e2e, built from the adopted contracts, with exported fixtures | X-06, K-10 (DASH-MOCK-BRIDGE), K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS) | DONE (01 Oct 12:42) |

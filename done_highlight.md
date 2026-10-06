@@ -1648,3 +1648,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Commit:** abhi nahi · **Deploy:** PC agent restart 17:01 PKT
 - **Doosre agent ke liye:** —
 
+
+### ✅ [claude] C-33/C-34/C-35 (step 1) · JarvisRuntime ke naye modules landed · 2026-10-06 17:55 PKT
+- **Kya kiya:** Design (.claude/wip/jarvisruntime/design.md) ke mutabiq 4 naye modules: `src/core/jarvis_runtime.py` (per-job session owner: start-retry 3x, ERROR par in-place rebuild cap 3/10min, bounded teardown, connect_failed truthful reason), `services/utils/ui_command_registry.py` (K-60 registry, (type,id) LRU-512 dedupe, JobListenerHandle), `src/core/roomio_link.py` (K-56 pure relink policy) + `src/core/voice_link.py` (authoritative linked-identity wiring). Pehli review ne livekit-1.4.6 source ke khilaf 1 blocker (dead replace-relink) + 2 major pakre — fix-round ke baad re-verifier ne zero findings par APPROVE kiya. Abhi koi wiring nahi (dead code): agent_runner/agent_core untouched; step 2 (wiring) alag commit.
+- **Files:** 4 naye modules + 4 naye test files (222 tests)
+- **Verify:** modules 222/222 · **full suite 4058 passed, 0 failed** · patch sirf nayi files (zero existing-file hunks)
+- **Commit:** `bf41f60` · **Deploy:** no (wiring tak dormant)
+- **Doosre agent ke liye:** — (Cursor par koi asar nahi jab tak step 2 wiring na ho)
