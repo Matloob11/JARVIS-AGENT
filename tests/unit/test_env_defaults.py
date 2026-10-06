@@ -161,6 +161,16 @@ def test_update_of_secret_like_name_is_refused(env_files, tmp_path, capsys, item
     _assert_no_values(out + err, item.partition("=")[2])
 
 
+def test_update_sim_switches_allowed(env_files, tmp_path, capsys):
+    """K-35 v15: SIM_LOOKUP_SHOW_ADDRESS / SIM_LOOKUP_DAILY_LIMIT are non-secret switches."""
+    code, out, _err = _run(capsys, tmp_path, env_files, "--update", "SIM_LOOKUP_SHOW_ADDRESS=1",
+                           "SIM_LOOKUP_DAILY_LIMIT=20")
+    assert code == 0
+    assert "SIM_LOOKUP_SHOW_ADDRESS" in out and "SIM_LOOKUP_DAILY_LIMIT" in out
+    for p in env_files:
+        assert b"SIM_LOOKUP_SHOW_ADDRESS=1" in p.read_bytes()
+
+
 def test_update_outside_allow_list_is_refused(env_files, tmp_path, capsys):
     code, _out, err = _run(capsys, tmp_path, env_files, "--update", "USER_CITY=Karachi")
     assert code == 2 and "only JARVIS_SELF_REPAIR_APPLY" in err

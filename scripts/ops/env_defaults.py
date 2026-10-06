@@ -17,7 +17,8 @@ the latter over .env until EXT C-ENV-1 changes that, so both get the same lines)
 --tools-info      adds the contract K-35 (tools_info_env) names with their defaults, as --add would.
 --update KEY=VALUE  sets a non-secret switch in place (every 'KEY=' line of it, keeping its 'KEY=' part and line
                   ending; an inline comment on that line is dropped) or appends it when missing. Allowed only for
-                  JARVIS_SELF_REPAIR_APPLY, TAVILY_SEARCH_DEPTH, SIM_SOURCE and JARVIS_*_MODEL; a name containing
+                  JARVIS_SELF_REPAIR_APPLY, TAVILY_SEARCH_DEPTH, SIM_SOURCE, SIM_LOOKUP_SHOW_ADDRESS,
+                  SIM_LOOKUP_DAILY_LIMIT and JARVIS_*_MODEL; a name containing
                   KEY, TOKEN, SECRET or PASSWORD is always refused.
 --check KEY ...   prints 'present' / 'missing' per key (never a value); exit 1 when a key is missing in a file.
 --comment TEXT    writes '# TEXT' above the keys this run appends to a file.
@@ -59,7 +60,8 @@ EnvError = env_set.EnvError
 ROOT = env_set.ROOT
 DEFAULT_FILES = (ROOT / ".env", ROOT / "deploy" / "windows-local" / ".env")
 SECRET_MARKERS = ("KEY", "TOKEN", "SECRET", "PASSWORD")
-UPDATE_ALLOWED = re.compile(r"JARVIS_SELF_REPAIR_APPLY|TAVILY_SEARCH_DEPTH|SIM_SOURCE|JARVIS_[A-Z0-9_]+_MODEL")
+UPDATE_ALLOWED = re.compile(r"JARVIS_SELF_REPAIR_APPLY|TAVILY_SEARCH_DEPTH|SIM_SOURCE|SIM_LOOKUP_SHOW_ADDRESS"
+                            r"|SIM_LOOKUP_DAILY_LIMIT|JARVIS_[A-Z0-9_]+_MODEL")
 TOOLS_INFO_COMMENT = "Tools-info keys (C-46, contract K-35): scripts/ops/env_defaults.py"
 
 # Contract K-35 (tools_info_env), docs/CONTRACTS.md. Secrets stay empty; the user fills them.
@@ -83,7 +85,7 @@ TOOLS_INFO_DEFAULTS: tuple[tuple[str, str], ...] = (
     ("SIM_LOOKUP_API_URL", ""),
     ("SIM_LOOKUP_API_KEY", ""),
     ("SIM_LOOKUP_DAILY_LIMIT", "20"),
-    ("SIM_LOOKUP_SHOW_ADDRESS", "0"),
+    ("SIM_LOOKUP_SHOW_ADDRESS", "1"),  # K-34 v14/v15: address on by default, 0 = opt-out
 )
 
 
@@ -170,7 +172,8 @@ def update_keys(files: list, wanted: list[tuple[str, str]]) -> list[str]:
                            f"(contains {', '.join(m for m in SECRET_MARKERS if m in key.upper())})")
         if not UPDATE_ALLOWED.fullmatch(key):
             raise EnvError(f"--update refused for {key}: only JARVIS_SELF_REPAIR_APPLY, TAVILY_SEARCH_DEPTH, "
-                           "SIM_SOURCE and JARVIS_*_MODEL may be updated")
+                           "SIM_SOURCE, SIM_LOOKUP_SHOW_ADDRESS, SIM_LOOKUP_DAILY_LIMIT and JARVIS_*_MODEL "
+                           "may be updated")
     report = []
     for key, value in wanted:
         token = _token(key, value)
