@@ -183,7 +183,7 @@ async def open_sim_lookup_panel() -> dict[str, str]:
     }
 
 
-@jarvis_tool(risk=_lookup_sim_risk)
+@jarvis_tool(risk=_lookup_sim_risk, timeout=35)
 async def lookup_sim_data(phone_number: str, purpose: str = "") -> dict[str, Any]:
     """
     Starts the SIM lookup workflow and records a privacy-preserving audit event.

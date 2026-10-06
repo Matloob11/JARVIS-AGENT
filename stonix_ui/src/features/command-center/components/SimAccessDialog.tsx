@@ -35,8 +35,11 @@ const STATUS_LABELS: Record<string, string> = {
   expired: 'Expired',
   cancelled: 'Cancelled',
   error: 'Error',
-  provider_error: 'Provider error',
+  provider_error: 'Provider unavailable',
 };
+
+const UPSTREAM_UNAVAILABLE_COPY =
+  'Provider ka data source abhi band hai — thori der baad dobara try karein';
 
 const TERMINAL_TITLES: Record<string, string> = {
   denied: 'Lookup denied',
@@ -203,6 +206,9 @@ const SimAccessDialog = ({
     if (statusKey === 'blocked' || statusKey === 'validation_error' || statusKey === 'rate_limited') {
       return message || 'Lookup blocked';
     }
+    if (statusKey === 'provider_error') {
+      return message || UPSTREAM_UNAVAILABLE_COPY;
+    }
     if (statusKey in TERMINAL_TITLES) {
       return TERMINAL_TITLES[statusKey];
     }
@@ -220,6 +226,7 @@ const SimAccessDialog = ({
     if (statusKey === 'offline' && !agentOnline) {
       return 'Agent offline — lookup disabled until the agent is online again.';
     }
+    if (statusKey === 'provider_error') return UPSTREAM_UNAVAILABLE_COPY;
     if (statusKey in TERMINAL_TITLES) {
       return TERMINAL_TITLES[statusKey];
     }

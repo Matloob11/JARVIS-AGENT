@@ -41,7 +41,9 @@ _ERROR_MESSAGES: dict[str, str] = {
     "unauthorized": "provider ne key reject ki",
     "invalid_input": "Number/CNIC format sahi nahi lag raha.",
     "rate_limited": "Provider rate-limited hai. Thodi der baad try karein.",
-    "upstream_unavailable": "SIM provider abhi unavailable hai.",
+    "upstream_unavailable": (
+        "Provider ka data source abhi band hai — thori der baad dobara try karein"
+    ),
 }
 
 _PATTERN_HINT = "Number 11-digit (03xxxxxxxxx) ya CNIC 13-digit hona chahiye."

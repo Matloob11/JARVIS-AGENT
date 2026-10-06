@@ -255,7 +255,11 @@ async def test_invalid_length_skips_http() -> None:
     [
         (401, "unauthorized", "provider ne key reject ki"),
         (429, "rate_limited", "Provider rate-limited hai. Thodi der baad try karein."),
-        (502, "upstream_unavailable", "SIM provider abhi unavailable hai."),
+        (
+            502,
+            "upstream_unavailable",
+            "Provider ka data source abhi band hai — thori der baad dobara try karein",
+        ),
     ],
 )
 @pytest.mark.asyncio

@@ -350,7 +350,7 @@ export interface SimRecord {
   details?: Record<string, unknown>;
 }
 
-export const SIM_LOOKUP_TIMEOUT_MS = 20_000;
+export const SIM_LOOKUP_TIMEOUT_MS = 45_000;
 
 export const SIM_PROVIDER_NOT_CONFIGURED =
   'Authorized source configure nahi hua (SIM_LOOKUP_API_URL / SIM_LOOKUP_API_KEY)';

@@ -1746,3 +1746,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** combined suite 4125 passed, **1 failed = sirf stale Cursor test** (`tests/tools/test_sim_providers.py::test_configured_lookup_masks_record` — purani masking assert karta hai; REQ section 11) · PREWARM_DONE live · frontend deploy gates ok
 - **Commit:** `e54b4be` (+ contracts commit isi push me) · **Deploy:** VPS frontend 22:03 + PC restart 22:05 PKT 🚀
 - **Doosre agent ke liye:** Cursor: section 11 ka test-align REQ foran (suite is wajah se red hai). Owner: SIM match par ab poora lead dikhega.
+### ✅ [cursor] X-89 · SIM test v14 + budgets/copy · 2026-10-06 22:18 PKT
+- **Kya kiya:** Stale mask assert K-34 v14 cleartext par; tool timeout 35s; UI wait 45s; upstream_unavailable Roman Urdu copy (timeout se alag).
+- **Files:** test_sim_providers.py, jarvis_sim_lookup.py, sim_providers.py, test_cnic_lookup.py, useCommandCenter.ts, SimAccessDialog.tsx, sim.spec.ts, plan.md, done_highlight.md
+- **Verify:** pytest SIM 15/15; sim.spec 13/13
+- **Commit:** is commit me · **Deploy:** REQ-DEPLOY frontend + REQ-RESTART worker
+- **Doosre agent ke liye:** worker restart (timeout=35 + upstream copy); frontend deploy
+

@@ -117,7 +117,7 @@ test('purpose required before sim_lookup emits object payload', async ({ page })
   await page.getByTitle('Close SIM access').click();
 });
 
-test('lookup timeout shows timed-out copy after 20s', async ({ page }) => {
+test('lookup timeout shows timed-out copy after 45s', async ({ page }) => {
   await page.clock.install({ time: new Date('2026-10-01T12:00:00Z') });
   await openSimDialog(page);
 
@@ -125,12 +125,32 @@ test('lookup timeout shows timed-out copy after 20s', async ({ page }) => {
   await page.getByTestId('sim-dialog').locator('.sim-search button').click();
   await expect(page.getByTestId('sim-status-chip')).toHaveAttribute('data-status', 'loading');
 
-  await page.clock.fastForward(20_000);
+  await page.clock.fastForward(44_000);
+  await expect(page.getByTestId('sim-status-chip')).toHaveAttribute('data-status', 'loading');
+  await page.clock.fastForward(2_000);
   await expect(page.getByTestId('sim-status-chip')).toHaveAttribute('data-status', 'timeout');
   await expect(page.getByTestId('sim-status-chip')).toContainText('Timed out');
   await expect(page.getByTestId('sim-identity-title')).toHaveText('Lookup timed out');
   await expect(page.getByTestId('sim-result-message')).toContainText('No reply in time');
   await expect(page.getByTestId('sim-result-message')).not.toContainText('Agent offline');
+});
+
+test('upstream_unavailable shows provider data-source copy', async ({ page }) => {
+  await openSimDialog(page);
+  await mockEmit(page, 'sim_data_result', {
+    records: [],
+    phone: '03*******67',
+    status: 'provider_error',
+    message: 'Provider ka data source abhi band hai — thori der baad dobara try karein',
+    provider: 'authorized_api',
+    configured: true,
+  });
+  await expect(page.getByTestId('sim-status-chip')).toHaveAttribute('data-status', 'provider_error');
+  await expect(page.getByTestId('sim-status-chip')).toContainText('Provider unavailable');
+  await expect(page.getByTestId('sim-result-message')).toContainText(
+    'Provider ka data source abhi band hai',
+  );
+  await expect(page.getByTestId('sim-result-message')).not.toContainText('No reply in time');
 });
 
 test('success fixture renders full lead fields', async ({ page }) => {

@@ -108,11 +108,14 @@ async def test_configured_lookup_masks_record(
     assert result["status"] == "success"
     assert len(result["records"]) == 1
     record = result["records"][0]
+    # K-34 v14: owner UI records carry cleartext + masked compat; audit stays masked.
     assert record["full_name"] == "Test User"
+    assert record["cnic"] == "3310012345678"
+    assert record["phone"] == "03336678955"
+    assert record["address"] == "Secret Street"
     assert record["cnic_masked"].endswith("5678")
     assert "3310012345678" not in record["cnic_masked"]
     assert "03336678955" not in record["phone_masked"]
-    assert "address" not in record
 
     row = json.loads(audit_path.read_text(encoding="utf-8").strip().splitlines()[-1])
     assert row["provider"] == providers_mod.PROVIDER_AUTHORIZED_API
