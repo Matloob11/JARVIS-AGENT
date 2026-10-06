@@ -1676,3 +1676,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Commit:** is commit me · **Deploy:** REQ-DEPLOY frontend
 - **Doosre agent ke liye:** frontend deploy; live SIM search configured source par K-45 Allow uthayega
 
+
+### ✅ 🚀 [claude] REQ-DEPLOY (C-79 UI) · SIM dialog init_state fix live · 2026-10-06 18:25 PKT
+- **Kya kiya:** Cursor ka `d33ff1c` (dialog login par `sim_provider/_configured/_requires_purpose` seed + deny/expiry titles) verify karke frontend deploy kiya (HEAD `b1dee7c`).
+- **Files:** koi code change nahi (push + deploy)
+- **Verify:** `sim.spec.ts` 9/9 (mera apna run) · deploy gates ok, other apps identical
+- **Commit:** deployed HEAD `b1dee7c` · **Deploy:** VPS frontend 18:24 PKT (rollback: `bash /root/jarvis-backups/tools/rollback.sh 2026-10-06_1321Z-pre-deploy-b1dee7c`) 🚀
+- **Doosre agent ke liye:** Owner: hard refresh; pehli dafa provider state bridge ko TAB milti hai jab ek SIM event guzre — ek chat/voice lookup + Allow ke baad dialog hamesha unlocked.
