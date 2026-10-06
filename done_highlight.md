@@ -1739,3 +1739,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Commit:** is commit me · **Deploy:** REQ-DEPLOY frontend + REQ-RESTART worker
 - **Doosre agent ke liye:** REQ-CONTRACT K-34 (cleartext owner records); worker restart zaroori
 
+
+### ✅ 🚀 🔁 [claude] X-89 unmask + contracts v14 + C-32 prewarm · ek restart mein teeno live · 2026-10-06 22:05 PKT
+- **Kya kiya:** (1) Cursor ke `e774610` (match ke baad poora lead: name/CNIC/phone/address — owner ka faisla) ke liye **K-34 v14** amend kiya (sirf owner-UI records cleartext; query/logs/audits/previews ki v13 masking jun-ki-tun) aur frontend deploy kiya. (2) **C-32 step 2a landed:** worker prewarm — plugin discovery ab executor-start par ek dafa (`PREWARM_DONE tools=79 in 1.0s` live log), job ke andar koi discovery nahi, PREWARM_MISS fallback, K-69 env knobs; K-44 load-0.0 byte-identical. (3) Worker restart pid 28956 (7.3s healthy — restart bhi tez ho gaya).
+- **Files:** docs/CONTRACTS.md + plan.md (v14) · src/core/agent_runner.py, agent_core.py, .env.example, 2 test files (C-32)
+- **Verify:** combined suite 4125 passed, **1 failed = sirf stale Cursor test** (`tests/tools/test_sim_providers.py::test_configured_lookup_masks_record` — purani masking assert karta hai; REQ section 11) · PREWARM_DONE live · frontend deploy gates ok
+- **Commit:** `e54b4be` (+ contracts commit isi push me) · **Deploy:** VPS frontend 22:03 + PC restart 22:05 PKT 🚀
+- **Doosre agent ke liye:** Cursor: section 11 ka test-align REQ foran (suite is wajah se red hai). Owner: SIM match par ab poora lead dikhega.
