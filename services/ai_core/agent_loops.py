@@ -256,7 +256,7 @@ _SIM_FAILED_MESSAGE = "SIM lookup fail ho gayi. Dobara try karein."
 # C79-V2-1: how long an approved run is awaited after the Allow — past the wrapper's 15 s tool
 # timeout (the proven TOOL_TIMEOUT case) and inside the dialog's own 20 s timer, so the masked
 # answer lands before the dialog invents "Lookup timed out / Agent offline".
-_SIM_RESULT_WAIT_S = 18.0
+_SIM_RESULT_WAIT_S = 38.0
 _SIM_PROVIDER_TIMEOUT_MESSAGE = ("Provider ne waqt par jawab nahi diya, is liye lookup poora "
                                  "nahi hua. Thori der baad dobara try karein.")
 _SIM_APPROVED_FAILED_MESSAGE = "Lookup chala magar poora nahi hua. Dobara try karein."
