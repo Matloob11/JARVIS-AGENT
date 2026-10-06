@@ -1725,3 +1725,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Commit:** is commit me · **Deploy:** REQ-DEPLOY frontend
 - **Doosre agent ke liye:** VoiceEnroll bhi isi Dialog ko use karta hai — same fix apply
 
+
+### ✅ 🚀 [claude] REQ-DEPLOY (X-89 focus fix) · SIM input ka "cursor udd jata tha" bug live-fix · 2026-10-06 20:10 PKT
+- **Kya kiya:** Cursor ne owner ke type-nahi-hota masle ki asal jad pakri: har ~1s parent re-render par dialog ka autofocus dobara chal kar focus Close (×) par le jata tha. Fix `54e9d35`: autofocus sirf open par, input ke andar se focus kabhi nahi chheenta. Maine `sim.spec` 12/12 verify karke (2.5s focus-hold test samet) frontend deploy kiya.
+- **Files:** koi code change nahi (push + deploy)
+- **Verify:** `sim.spec.ts` 12/12 (mera run) · deploy gates ok
+- **Commit:** deployed HEAD `1bd9862` · **Deploy:** VPS frontend 20:09 PKT 🚀
+- **Doosre agent ke liye:** Owner: hard refresh → ab Purpose/number par typing mein focus qaim rahega.
