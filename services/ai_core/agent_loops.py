@@ -37,12 +37,20 @@ logger.info("AGENT_LOOPS_MODULE_V2 loaded from %s", __file__)
 
 # Module-level state for adaptation loop
 _throttled_tasks: set[str] = set()
+# 2026-10-06 (dashboard test): a single CPU spike (the first vision call plus a model load) fired the
+# CRITICAL 'SYSTEM OVERLOAD' throttle at once and cancelled services that were not the problem. The
+# overload must now hold for OVERLOAD_CONSECUTIVE_SAMPLES consecutive readings before anything is
+# throttled; a single spike logs one WARNING only. Recovery behaviour is unchanged.
+OVERLOAD_CONSECUTIVE_SAMPLES = 2
+_overload_streak = 0  # consecutive CRITICAL/STRESSED readings so far
 
 async def start_adaptation_loop() -> None:
     """
-    Autonomous Load Adaptation: Throttles non-essential services during stress.
+    Autonomous Load Adaptation: Throttles non-essential services during sustained stress
+    (OVERLOAD_CONSECUTIVE_SAMPLES consecutive high readings; a single spike only warns).
     Self-Monitoring + Self-Healing synergy.
     """
+    global _overload_streak  # pylint: disable=global-statement
     # Track which tasks were throttled to allow self-healing recovery later
     if not hasattr(start_adaptation_loop, "_throttled_tasks"):
         start_adaptation_loop._throttled_tasks = set()
@@ -53,27 +61,36 @@ async def start_adaptation_loop() -> None:
 
             # In a container the engine only observes its cgroup (K-72): nothing is cancelled for load.
             if stress in ["CRITICAL", "STRESSED"] and not adaptive_engine.observe_only:
-                # Throttling non-essential high-load tasks
-                logger.critical("🚨 SYSTEM OVERLOAD: Throttling high-load services...")
-                for task_name in ["reminder_loop", "bug_hunter_loop", "memory_loop"]:
-                    task = autonomous_protector.get_task(task_name)
-                    if task and not task.done():
-                        logger.warning("📉 Suspending non-essential task: %s", task_name)
-                        task.cancel()
-                        _throttled_tasks.add(task_name)
+                _overload_streak += 1
+                if _overload_streak < OVERLOAD_CONSECUTIVE_SAMPLES:
+                    # A single spike passes with one WARNING; only sustained load throttles.
+                    logger.warning("⚠️ High system load (%s), reading %d/%d: waiting for a consecutive "
+                                   "reading before throttling.", stress, _overload_streak,
+                                   OVERLOAD_CONSECUTIVE_SAMPLES)
+                else:
+                    # Throttling non-essential high-load tasks (sustained overload only)
+                    logger.critical("🚨 SYSTEM OVERLOAD: Throttling high-load services...")
+                    for task_name in ["reminder_loop", "bug_hunter_loop", "memory_loop"]:
+                        task = autonomous_protector.get_task(task_name)
+                        if task and not task.done():
+                            logger.warning("📉 Suspending non-essential task: %s", task_name)
+                            task.cancel()
+                            _throttled_tasks.add(task_name)
 
-            elif stress == "NORMAL" and _throttled_tasks:
-                # Self-Healing: Bring back suspended tasks once resource pressure is gone
-                logger.info("🌤️ SYSTEM RECOVERED: Restoring previously throttled services...")
-                for task_name in list(_throttled_tasks):
-                    logger.info("🚀 Self-Healing: Restarting %s", task_name)
-                    if autonomous_protector.restart_task(task_name):
-                        _throttled_tasks.remove(task_name)
-                
-                # Predictive Optimization: Pre-load heavy AI models during idle time
-                if jarvis_vector_db.client is None:
-                    logger.info("🧠 Idle time detected: Pre-loading Vector Memory models...")
-                    await jarvis_vector_db._ensure_initialized()
+            elif stress == "NORMAL":
+                _overload_streak = 0
+                if _throttled_tasks:
+                    # Self-Healing: Bring back suspended tasks once resource pressure is gone
+                    logger.info("🌤️ SYSTEM RECOVERED: Restoring previously throttled services...")
+                    for task_name in list(_throttled_tasks):
+                        logger.info("🚀 Self-Healing: Restarting %s", task_name)
+                        if autonomous_protector.restart_task(task_name):
+                            _throttled_tasks.remove(task_name)
+
+                    # Predictive Optimization: Pre-load heavy AI models during idle time
+                    if jarvis_vector_db.client is None:
+                        logger.info("🧠 Idle time detected: Pre-loading Vector Memory models...")
+                        await jarvis_vector_db._ensure_initialized()
 
             # Re-evaluation interval (Dynamic based on load)
             sleep_time = 30 if stress != "NORMAL" else 90

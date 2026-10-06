@@ -133,6 +133,86 @@ async def test_start_ui_command_listener():
             pass
 
 
+# ================================================================ 2026-10-06: overload debounce (adaptation loop)
+# A single CPU spike (first vision call + model load) used to fire the CRITICAL 'SYSTEM OVERLOAD'
+# throttle at once; now it takes OVERLOAD_CONSECUTIVE_SAMPLES consecutive high readings.
+
+
+def _adaptation_run(monkeypatch, readings, throttled=None):
+    """Runs start_adaptation_loop over the given stress readings, then cancels it on the next sleep.
+    Returns (logger mock, autonomous_protector task mock, restart_task mock)."""
+    monkeypatch.setattr(agent_loops, "_overload_streak", 0)
+    monkeypatch.setattr(agent_loops, "_throttled_tasks", set(throttled or ()))
+    monkeypatch.setattr(agent_loops.adaptive_engine, "observe_only", False)
+    remaining = list(readings)
+    monkeypatch.setattr(agent_loops.adaptive_engine, "analyze_system_load", lambda: remaining.pop(0))
+    task = MagicMock()
+    task.done.return_value = False
+    monkeypatch.setattr(agent_loops.autonomous_protector, "get_task", MagicMock(return_value=task))
+    restart = MagicMock(return_value=True)
+    monkeypatch.setattr(agent_loops.autonomous_protector, "restart_task", restart)
+    # recovery must never trigger the heavy vector preload in a test
+    monkeypatch.setattr(agent_loops, "jarvis_vector_db", SimpleNamespace(client=object()))
+    log = MagicMock()
+    monkeypatch.setattr(agent_loops, "logger", log)
+
+    async def fake_sleep(_delay):
+        if not remaining:
+            raise asyncio.CancelledError
+
+    return log, task, restart, fake_sleep
+
+
+@pytest.mark.asyncio
+async def test_a_single_cpu_spike_only_warns_and_cancels_nothing(monkeypatch):
+    log, task, _restart, fake_sleep = _adaptation_run(monkeypatch, ["CRITICAL", "NORMAL"])
+    with patch.object(agent_loops.asyncio, "sleep", fake_sleep), pytest.raises(asyncio.CancelledError):
+        await agent_loops.start_adaptation_loop()
+
+    task.cancel.assert_not_called()
+    log.critical.assert_not_called()
+    assert log.warning.call_count == 1  # exactly one WARNING for the spike
+    assert "High system load" in log.warning.call_args_list[0].args[0]
+    assert agent_loops._overload_streak == 0  # the NORMAL reading reset the streak
+
+
+@pytest.mark.asyncio
+async def test_sustained_overload_still_throttles_exactly_as_before(monkeypatch):
+    assert agent_loops.OVERLOAD_CONSECUTIVE_SAMPLES == 2
+    log, task, _restart, fake_sleep = _adaptation_run(monkeypatch, ["CRITICAL", "CRITICAL"])
+    with patch.object(agent_loops.asyncio, "sleep", fake_sleep), pytest.raises(asyncio.CancelledError):
+        await agent_loops.start_adaptation_loop()
+
+    log.critical.assert_called_once_with("🚨 SYSTEM OVERLOAD: Throttling high-load services...")
+    assert task.cancel.call_count == 3  # reminder_loop, bug_hunter_loop, memory_loop as before
+    assert agent_loops._throttled_tasks == {"reminder_loop", "bug_hunter_loop", "memory_loop"}
+
+
+@pytest.mark.asyncio
+async def test_recovery_after_sustained_overload_restores_the_throttled_tasks(monkeypatch):
+    log, task, restart, fake_sleep = _adaptation_run(monkeypatch, ["CRITICAL", "CRITICAL", "NORMAL"])
+    with patch.object(agent_loops.asyncio, "sleep", fake_sleep), pytest.raises(asyncio.CancelledError):
+        await agent_loops.start_adaptation_loop()
+
+    log.critical.assert_called_once()  # the sustained overload throttled once
+    assert restart.call_count == 3  # ... and the NORMAL reading restored every task
+    assert agent_loops._throttled_tasks == set()
+    assert agent_loops._overload_streak == 0
+
+
+@pytest.mark.asyncio
+async def test_observe_only_mode_never_counts_toward_the_overload_streak(monkeypatch):
+    log, task, _restart, fake_sleep = _adaptation_run(monkeypatch, ["CRITICAL", "CRITICAL"])
+    monkeypatch.setattr(agent_loops.adaptive_engine, "observe_only", True)
+    with patch.object(agent_loops.asyncio, "sleep", fake_sleep), pytest.raises(asyncio.CancelledError):
+        await agent_loops.start_adaptation_loop()
+
+    task.cancel.assert_not_called()
+    log.critical.assert_not_called()
+    log.warning.assert_not_called()
+    assert agent_loops._overload_streak == 0
+
+
 # ================================================================ plan task C-15: agent link v2 on the listener
 # Throwaway credentials only; the end-to-end tests run the real bridge (src/core/ui_bridge.py) under uvicorn on a
 # free 127.0.0.1 port with a temporary bridge.db, so nothing reaches the live bridge or a real env file.

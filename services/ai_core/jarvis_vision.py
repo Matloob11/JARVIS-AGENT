@@ -47,11 +47,25 @@ cv2: Any = None
 
 DEFAULT_VISION_MODEL = llm_text.DEFAULT_VISION_MODEL  # gemini-3.8-flash (K-30 / K-35)
 DEFAULT_FRAME_MAX_AGE_S = 10.0
-MAX_IMAGE_WIDTH = 1600
+MAX_IMAGE_WIDTH = 1600  # the pre-2026-10-06 width cap, kept for older importers; the cap is VISION_MAX_SIDE
+# 2026-10-06 (dashboard test): frames are capped by their LONGEST side before any provider call, so a
+# portrait camera frame (1080x1920 slipped through the old 1600 px width cap) also shrinks and Groq's
+# 429 'Request too large for model' stays away; a smaller JPEG also uploads to Gemini faster.
+VISION_MAX_SIDE = 1024
 VISION_JPEG_QUALITY = 80
 # Per provider attempt. The tools get 60 s in total (C-48 step 7), so three tiers that each hang
 # (3 x 18 s = 54 s) still end in a fallback answer or "Vision providers failed", not a tool timeout.
 VISION_TIMEOUT_S = 18.0
+# 2026-10-06: one short Gemini retry after a timeout or a transient network error (a DNS blip took all
+# three tiers down at once). Budget: 3 x 18 s + 4 s = 58 s, inside the 60 s tool timeout (K-11)
+# with ~2 s real headroom for capture/encode around the provider calls.
+VISION_RETRY_TIMEOUT_S = 4.0
+# Substrings (lowercase) of an llm_text failure reason that mean 'transient: worth one short retry'.
+_TRANSIENT_REASON_MARKERS = (
+    "timeout", "timed out", "getaddrinfo", "cannot connect", "connection reset",
+    "connection refused", "connection aborted", "network is unreachable", "temporary failure",
+    "name or service not known", "server disconnected", "econnreset",
+)
 CAMERA_OFF_MESSAGE = "Camera frame purana hai ya camera off hai"
 PROVIDERS_FAILED_PREFIX = "Vision providers failed: "
 # Error strings of the public analyze_via_groq / analyze_via_openrouter wrappers (and older stand-ins)
@@ -130,31 +144,36 @@ def is_fresh(ts: float | None, max_age: float | None = None, now: float | None =
     return current - ts <= limit
 
 
-def prepare_image(image: Image.Image | bytes, max_width: int = MAX_IMAGE_WIDTH,
+def prepare_image(image: Image.Image | bytes, max_side: int = VISION_MAX_SIDE,
                   quality: int = VISION_JPEG_QUALITY) -> bytes:
     """
-    JPEG bytes for a vision request: an image wider than max_width is scaled down (aspect kept) and
-    anything that is not already JPEG is re-encoded as RGB JPEG at quality; a JPEG within the width
-    passes unchanged. Raises ValueError, TypeError or PIL's OSError for unusable input.
+    JPEG bytes for a vision request: an image whose longest side exceeds max_side is scaled down
+    (aspect kept) and anything that is not already JPEG is re-encoded as RGB JPEG at quality; a JPEG
+    within the limit passes unchanged. The caller's bytes are never modified (a new buffer comes
+    back when anything changes). Raises ValueError, TypeError or PIL's OSError for unusable input.
+    2026-10-06: the cap moved from width 1600 to longest side 1024 (see VISION_MAX_SIDE).
     """
     if isinstance(image, (bytes, bytearray, memoryview)):
         data = bytes(image)
         if not data:
             raise ValueError("image is empty")
         with Image.open(BytesIO(data)) as opened:
-            if data.startswith(_JPEG_MAGIC) and opened.width <= max_width:
+            if data.startswith(_JPEG_MAGIC) and max(opened.size) <= max_side:
                 return data
-            return _encode_vision_jpeg(opened, max_width, quality)
+            return _encode_vision_jpeg(opened, max_side, quality)
     if isinstance(image, Image.Image):
-        return _encode_vision_jpeg(image, max_width, quality)
+        return _encode_vision_jpeg(image, max_side, quality)
     raise TypeError(f"image must be a PIL image or image bytes, not {type(image).__name__}")
 
 
-def _encode_vision_jpeg(image: Image.Image, max_width: int, quality: int) -> bytes:
+def _encode_vision_jpeg(image: Image.Image, max_side: int, quality: int) -> bytes:
     rgb = image if image.mode == "RGB" else image.convert("RGB")
-    if rgb.width > max_width:
-        height = max(1, round(rgb.height * max_width / rgb.width))
-        rgb = rgb.resize((max_width, height), Image.Resampling.LANCZOS)
+    longest = max(rgb.size)
+    if longest > max_side:
+        scale = max_side / longest
+        width = max(1, round(rgb.width * scale))
+        height = max(1, round(rgb.height * scale))
+        rgb = rgb.resize((width, height), Image.Resampling.LANCZOS)
     buffer = BytesIO()
     rgb.save(buffer, format="JPEG", quality=quality)
     return buffer.getvalue()
@@ -163,6 +182,13 @@ def _encode_vision_jpeg(image: Image.Image, max_width: int, quality: int) -> byt
 def providers_failed_message(error: LLMUnavailableError) -> str:
     """'Vision providers failed: <reasons>' (llm_text has already masked every reason)."""
     return PROVIDERS_FAILED_PREFIX + ("; ".join(error.reasons) or "no vision provider available")
+
+
+def _is_transient_failure(error: LLMUnavailableError) -> bool:
+    """True when a tier failed on a timeout or a transient network error (DNS, dropped connection):
+    the only failures the Gemini tier retries once (2026-10-06). A 4xx/5xx answer is not transient."""
+    text = " ".join(error.reasons).lower()
+    return any(marker in text for marker in _TRANSIENT_REASON_MARKERS)
 
 
 class CaptureUnavailable(ImportError):
@@ -337,19 +363,41 @@ class ScreenPerceiver:
             )
         return data
 
-    async def _vision_tier(self, provider: str, prompt: str, image: Image.Image | bytes) -> LLMResult:
+    async def _vision_tier(self, provider: str, prompt: str, image: Image.Image | bytes,
+                           timeout: float = VISION_TIMEOUT_S) -> LLMResult:
         """One K-30 tier (llm_text.generate_vision limited to provider); records the result for logging."""
         result = await llm_text.generate_vision(
             prompt, image, model=self.model_name if provider == "gemini" else None,
-            timeout=VISION_TIMEOUT_S, providers=(provider,))
+            timeout=timeout, providers=(provider,))
         _last_vision_result.set(result)
         return result
 
     async def analyze_via_google(self, prompt: str, image: Image.Image | bytes) -> str:
-        """Gemini tier of llm_text (self.model_name first, then the Gemini fallbacks); raises on failure."""
+        """
+        Gemini tier of llm_text (self.model_name first, then the Gemini fallbacks); raises on failure.
+        2026-10-06: a timeout or transient network error (a DNS blip) gets exactly one more attempt
+        with a short VISION_RETRY_TIMEOUT_S budget, so a momentary blip no longer costs the whole tier
+        while the 60 s tool budget still holds; any other failure raises at once, as before.
+        """
         logger.info("Sending image to Gemini (%s)", self.model_name)
         try:
             return (await self._vision_tier("gemini", prompt, image)).text
+        except LLMUnavailableError as e:
+            if not _is_transient_failure(e):
+                logger.error("Google Vision API error: %s", e)
+                raise
+            logger.warning("Gemini vision hit a transient error (%s); retrying once with a %.0f s budget",
+                           e, VISION_RETRY_TIMEOUT_S)
+            try:
+                return (await self._vision_tier("gemini", prompt, image,
+                                                timeout=VISION_RETRY_TIMEOUT_S)).text
+            except LLMUnavailableError as retry_error:
+                merged = LLMUnavailableError(e.reasons + retry_error.reasons)
+                logger.error("Google Vision API error: %s", merged)
+                raise merged from retry_error
+            except Exception as retry_error:
+                logger.error("Google Vision API error: %s", retry_error)
+                raise
         except Exception as e:
             logger.error("Google Vision API error: %s", e)
             raise
@@ -383,8 +431,9 @@ class ScreenPerceiver:
     async def analyze_image(self, prompt: str, image: Image.Image | bytes) -> str:
         """
         Answers prompt about image with the first K-30 tier that works: Gemini, then Groq, then
-        OpenRouter (each through llm_text.generate_vision). The image is first downscaled to a JPEG at
-        most 1600 px wide. Logs 'provider=<name> model=<id>' for the answer. Raises LLMUnavailableError,
+        OpenRouter (each through llm_text.generate_vision). The image is first downscaled once to a
+        JPEG whose longest side is at most VISION_MAX_SIDE (1024) px; the caller's bytes stay
+        untouched. Logs 'provider=<name> model=<id>' for the answer. Raises LLMUnavailableError,
         with one masked reason per failed attempt, when every tier fails.
         """
         jpeg = await asyncio.to_thread(prepare_image, image)
@@ -422,8 +471,9 @@ class ScreenPerceiver:
 
     async def analyze_content(self, prompt: str = "What is on my screen?") -> str:
         """
-        Captures the screen, downscales it (at most 1600 px wide, JPEG quality 80) and analyzes it with
-        analyze_image. Failures come back as a string starting with 'Error'; CaptureUnavailable passes.
+        Captures the screen, downscales it (longest side at most VISION_MAX_SIDE px, JPEG quality 80)
+        and analyzes it with analyze_image. Failures come back as a string starting with 'Error';
+        CaptureUnavailable passes.
         """
         try:
             logger.info("Capturing screen for analysis...")

@@ -151,6 +151,7 @@ try:
 except (ImportError, ValueError):
     from agent_core import BrainAssistant  # type: ignore
 
+from src.core import gemini_resume_guard
 from src.core.conversation_router import ConversationRouter, preview
 from src.core.vision_handler import append_chat_message, desktop_data_message
 
@@ -934,6 +935,11 @@ async def entrypoint(ctx: agents.JobContext):
                 voice="Charon", # Standardized Capitalized ID
                 model="models/gemini-2.5-flash-native-audio-latest",
             )
+            # 2026-10-06: after a network blip the plugin replayed a stale session-resumption handle on
+            # every reconnect (APIError/close 1008 'Requested entity was not found') until the session
+            # died. The guard drops the stale handle so the plugin's own retry reconnects fresh; no new
+            # restart loop, and the 5-attempt session cap of this entrypoint still applies (K-60 v9).
+            gemini_resume_guard.guard_realtime_model(llm_model)
 
             # Memory identity: JARVIS_USER_ID, else the participant identity as before
             user_id = _resolve_user_id(ctx.room)

@@ -428,7 +428,9 @@ async def test_only_the_pc_cancels_loops_under_load(monkeypatch, observe_only, c
     monkeypatch.setattr(agent_loops.adaptive_engine, "analyze_system_load", MagicMock(return_value="CRITICAL"))
     monkeypatch.setattr(agent_loops.autonomous_protector, "get_task", MagicMock(return_value=victim))
     monkeypatch.setattr(agent_loops, "_throttled_tasks", set())
-    with patch.object(agent_loops.asyncio, "sleep", AsyncMock(side_effect=asyncio.CancelledError)), \
+    monkeypatch.setattr(agent_loops, "_overload_streak", 0)
+    # two CRITICAL readings: the debounce (OVERLOAD_CONSECUTIVE_SAMPLES=2) only warns on the first
+    with patch.object(agent_loops.asyncio, "sleep", AsyncMock(side_effect=[None, asyncio.CancelledError])), \
             pytest.raises(asyncio.CancelledError):
         await agent_loops.start_adaptation_loop()
     assert victim.cancel.call_count == cancelled

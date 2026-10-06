@@ -1,9 +1,11 @@
 """C-48: vision tools on current models, the K-30 provider chain and fresh camera frames only.
 
 Covered: analyze_screen / analyze_camera through llm_text (Gemini 3.x, then Groq qwen3.8, then OpenRouter),
-an openai.APIError that no longer escapes the Groq tier, the 'Vision providers failed' error, the 1600 px
-downscale, the 60 s tool timeouts, frame timestamps from the UI, stale frames that are never sent (the cv2
-camera or 'camera off' instead), VisionHandler.analyze_current_frame and analyze_surroundings' error status.
+an openai.APIError that no longer escapes the Groq tier, the 'Vision providers failed' error, the longest-side
+1024 px downscale (2026-10-06: portrait frames shrink too, so Groq's 'Request too large' 429 stays away), the
+single short Gemini retry on a timeout or network blip, the 60 s tool timeouts, frame timestamps from the UI,
+stale frames that are never sent (the cv2 camera or 'camera off' instead), VisionHandler.analyze_current_frame
+and analyze_surroundings' error status.
 
 Nothing real runs: the Gemini and OpenAI-compatible clients, the TLS context, cv2 and pyautogui are fakes;
 no key, model download or network call is used.
@@ -47,9 +49,9 @@ def _data_url(data: bytes) -> str:
     return "data:image/jpeg;base64," + base64.b64encode(data).decode("ascii")
 
 
-def _width(data: bytes) -> int:
+def _size(data: bytes) -> tuple[int, int]:
     with Image.open(BytesIO(data)) as image:
-        return image.width
+        return image.size
 
 
 # ---------------------------------------------------------------- fakes for the llm_text tiers
@@ -197,8 +199,9 @@ async def test_gemini_fails_and_groq_answers_the_screen(providers, vision_log, s
     assert providers.calls == [("gemini", "gemini-3.8-flash"), ("groq", GROQ_VISION)]
     vision_log.info.assert_any_call("Vision answered: provider=%s model=%s in %.1fs", "groq", GROQ_VISION,
                                     pytest.approx(0, abs=30))
-    # Step 3: the 2400 px screenshot reached the providers as a JPEG at most 1600 px wide.
-    assert all(image.startswith(b"\xff\xd8\xff") and _width(image) == 1600 for image in providers.images)
+    # Step 3 (2026-10-06): the 2400x1200 screenshot reached the providers as a JPEG whose longest
+    # side is capped at VISION_MAX_SIDE (1024) px.
+    assert all(image.startswith(b"\xff\xd8\xff") and max(_size(image)) == 1024 for image in providers.images)
 
 
 async def test_a_404_tries_the_next_gemini_model_and_logs_it(providers, vision_log, screen):
@@ -289,17 +292,22 @@ def test_the_vision_tools_get_60_seconds():
 
 
 async def test_three_hanging_tiers_still_fit_the_60_second_tool_budget(monkeypatch):
-    # Each tier is bounded by VISION_TIMEOUT_S, so Gemini, Groq and OpenRouter all hanging still ends
-    # in 'Vision providers failed' before the 60 s plugin timeout turns it into TOOL_TIMEOUT.
-    assert 3 * jarvis_vision.VISION_TIMEOUT_S < 60.0
+    # Each tier is bounded by VISION_TIMEOUT_S and a hanging Gemini gets exactly one extra short
+    # retry (2026-10-06), so the worst case still ends in 'Vision providers failed' before the 60 s
+    # plugin timeout turns it into TOOL_TIMEOUT.
+    assert 3 * jarvis_vision.VISION_TIMEOUT_S + jarvis_vision.VISION_RETRY_TIMEOUT_S < 60.0
     monkeypatch.setenv("GROQ_API_KEY", "test-groq-key")
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-openrouter-key")
-    spy = AsyncMock(side_effect=LLMUnavailableError(["x: timeout"]))
+    spy = AsyncMock(side_effect=LLMUnavailableError(["gemini[gemini-3.8-flash]: timeout after 18s"]))
     monkeypatch.setattr(llm_text, "generate_vision", spy)
     with pytest.raises(LLMUnavailableError):
         await jarvis_vision.ScreenPerceiver("gemini-3.8-flash").analyze_image("q", _jpeg())
-    assert [call.kwargs["providers"] for call in spy.await_args_list] == [("gemini",), ("groq",), ("openrouter",)]
-    assert {call.kwargs["timeout"] for call in spy.await_args_list} == {jarvis_vision.VISION_TIMEOUT_S}
+    # The Gemini tier retried exactly once (short budget); the provider order is unchanged.
+    assert [call.kwargs["providers"] for call in spy.await_args_list] == [
+        ("gemini",), ("gemini",), ("groq",), ("openrouter",)]
+    assert [call.kwargs["timeout"] for call in spy.await_args_list] == [
+        jarvis_vision.VISION_TIMEOUT_S, jarvis_vision.VISION_RETRY_TIMEOUT_S,
+        jarvis_vision.VISION_TIMEOUT_S, jarvis_vision.VISION_TIMEOUT_S]
 
 
 async def test_a_gemini_answer_that_starts_with_error_is_kept(providers, screen):
@@ -329,13 +337,78 @@ async def test_a_groq_wrapper_error_string_still_moves_on_to_openrouter(provider
 
 def test_prepare_image_downscales_and_keeps_small_jpegs():
     small = _jpeg(800, 600)
-    assert jarvis_vision.prepare_image(small) == small  # a JPEG within 1600 px passes unchanged
+    assert jarvis_vision.prepare_image(small) == small  # a JPEG within 1024 px passes unchanged
     big = jarvis_vision.prepare_image(Image.new("RGBA", (3200, 1000)))
     with Image.open(BytesIO(big)) as image:
-        assert image.format == "JPEG" and image.size == (1600, 500)
+        assert image.format == "JPEG" and image.size == (1024, 320)
     png = BytesIO()
     Image.new("RGB", (100, 50)).save(png, format="PNG")
     assert jarvis_vision.prepare_image(png.getvalue()).startswith(b"\xff\xd8\xff")
+
+
+def test_prepare_image_caps_the_longest_side_of_a_portrait_frame():
+    # 2026-10-06: a 1080x1920 portrait camera frame slipped through the old 1600 px WIDTH cap and hit
+    # Groq's 'Request too large for model' 429; the cap is the LONGEST side now.
+    portrait = _jpeg(1080, 1920)
+    prepared = jarvis_vision.prepare_image(portrait)
+    assert prepared != portrait
+    assert _size(prepared) == (576, 1024)
+
+
+def test_a_large_noisy_frame_shrinks_well_under_the_groq_request_limit():
+    # A noisy full-HD JPEG (least compressible content) must come out far below the request size
+    # that drew Groq's 'Request too large for model' 429 during the dashboard test.
+    rng = np.random.default_rng(42)
+    noise = Image.fromarray(rng.integers(0, 256, size=(1080, 1920, 3), dtype=np.uint8))
+    buffer = BytesIO()
+    noise.save(buffer, format="JPEG", quality=95)
+    source = buffer.getvalue()
+
+    prepared = jarvis_vision.prepare_image(source)
+
+    assert max(_size(prepared)) == 1024
+    assert len(prepared) < len(source)
+    assert len(prepared) < 1_000_000  # ~250 KB base64-encodes to well under Groq's request cap
+
+
+# ---------------------------------------------------------------- Gemini transient retry (2026-10-06)
+
+
+@pytest.mark.parametrize("blip", [
+    TimeoutError(),
+    ConnectionError("Cannot connect to host generativelanguage.googleapis.com:443 ssl:default "
+                    "[getaddrinfo failed]"),
+])
+async def test_a_gemini_timeout_or_dns_blip_is_retried_once_and_succeeds(providers, screen, blip):
+    providers.gemini = [blip, "Gemini sees the desk after the retry."]
+
+    result = await jarvis_vision.analyze_screen("kya hai?")
+
+    assert result["status"] == "success" and "Gemini sees the desk after the retry." in result["message"]
+    # Exactly one retry, still on the Gemini tier; Groq was never needed.
+    assert providers.calls == [("gemini", "gemini-3.8-flash"), ("gemini", "gemini-3.8-flash")]
+
+
+async def test_the_gemini_retry_fires_only_once_then_the_chain_moves_on(providers, screen):
+    providers.gemini = [TimeoutError(), TimeoutError(), "never reached"]
+    providers.groq = "Groq answers after two Gemini timeouts."
+
+    result = await jarvis_vision.analyze_screen()
+
+    assert result["status"] == "success" and "Groq answers after two Gemini timeouts." in result["message"]
+    assert providers.calls == [("gemini", "gemini-3.8-flash"), ("gemini", "gemini-3.8-flash"),
+                               ("groq", GROQ_VISION)]
+    assert providers.gemini == ["never reached"]  # no second retry
+
+
+async def test_a_non_transient_gemini_failure_is_not_retried(providers, screen):
+    providers.gemini = [RuntimeError("400 INVALID_ARGUMENT"), "never reached"]
+    providers.groq = "Groq takes over at once."
+
+    result = await jarvis_vision.analyze_screen()
+
+    assert result["status"] == "success" and "Groq takes over at once." in result["message"]
+    assert providers.calls == [("gemini", "gemini-3.8-flash"), ("groq", GROQ_VISION)]
 
 
 # ---------------------------------------------------------------- fresh frames only (step 4)
