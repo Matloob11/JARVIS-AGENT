@@ -238,6 +238,94 @@ async def test_raw_text_fields_are_parsed_for_owner_leads(monkeypatch: pytest.Mo
 
 
 @pytest.mark.asyncio
+async def test_structured_fields_still_enrich_address_from_raw_text() -> None:
+    """Live API may send name/cnic/phone keys and leave address only inside raw_text."""
+    fake_mobile = "03001112233"
+    fake_cnic = "1111222233334"
+    fake_name = "Sample Holder"
+    fake_address = "Example Block Chak 12 Sector"
+    raw = f"Mobile Name CNIC Address {fake_mobile} {fake_name} {fake_cnic} {fake_address}"
+
+    async def fake_post(
+        url: str,
+        *,
+        json: dict[str, str],
+        headers: dict[str, str],
+        timeout: float,
+    ) -> httpx.Response:
+        del url, json, headers, timeout
+        return httpx.Response(
+            200,
+            json={
+                "success": True,
+                "query_type": "phone",
+                "hits": 1,
+                "data": [
+                    {
+                        "source": "SIM / CNIC Records",
+                        "fields": {
+                            "full_name": fake_name,
+                            "cnic": fake_cnic,
+                            "phone": fake_mobile,
+                            "raw_text": raw,
+                        },
+                    }
+                ],
+            },
+        )
+
+    mock_client = AsyncMock()
+    mock_client.post = fake_post
+    source = AuthorizedApiSource(_FAKE_BASE, _FAKE_KEY, client=mock_client)
+
+    records, error = await source.lookup(fake_mobile)
+
+    assert error is None
+    assert records[0]["full_name"] == fake_name
+    assert records[0]["cnic"] == fake_cnic
+    assert records[0]["phone"] == fake_mobile
+    assert records[0]["address"] == fake_address
+
+
+@pytest.mark.asyncio
+async def test_address_alias_keys_are_accepted() -> None:
+    async def fake_post(
+        url: str,
+        *,
+        json: dict[str, str],
+        headers: dict[str, str],
+        timeout: float,
+    ) -> httpx.Response:
+        del url, json, headers, timeout
+        return httpx.Response(
+            200,
+            json={
+                "success": True,
+                "query_type": "phone",
+                "hits": 1,
+                "data": [
+                    {
+                        "source": "Test Registry",
+                        "fields": {
+                            "full_name": "Alias User",
+                            "cnic": "3310012345678",
+                            "phone": _PHONE,
+                            "residential_address": "House 9 Example Street",
+                        },
+                    }
+                ],
+            },
+        )
+
+    mock_client = AsyncMock()
+    mock_client.post = fake_post
+    source = AuthorizedApiSource(_FAKE_BASE, _FAKE_KEY, client=mock_client)
+    records, error = await source.lookup(_PHONE)
+    assert error is None
+    assert records[0]["address"] == "House 9 Example Street"
+
+
+@pytest.mark.asyncio
 async def test_invalid_length_skips_http() -> None:
     mock_client = AsyncMock()
     source = AuthorizedApiSource(_FAKE_BASE, _FAKE_KEY, client=mock_client)

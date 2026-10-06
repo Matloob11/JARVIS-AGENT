@@ -119,11 +119,57 @@ def _parse_raw_text(text: str) -> dict[str, str]:
     return out
 
 
-def _has_structured_identity(fields: dict[str, Any]) -> bool:
-    return any(
-        str(fields.get(key) or "").strip()
-        for key in ("full_name", "name", "cnic", "phone")
-    )
+_ADDRESS_KEYS = (
+    "address",
+    "addr",
+    "Address",
+    "residential_address",
+    "permanent_address",
+    "location",
+)
+_EMPTY_ADDRESS_MARKERS = {"", "-", "—", "–", "n/a", "na", "null", "none", "nil"}
+
+
+def _is_blank(value: Any) -> bool:
+    return not str(value or "").strip()
+
+
+def _is_empty_address(value: Any) -> bool:
+    return str(value or "").strip().lower() in _EMPTY_ADDRESS_MARKERS
+
+
+def _pick_address(fields: dict[str, Any]) -> str:
+    """First non-empty address-like key (providers vary the field name)."""
+    for key in _ADDRESS_KEYS:
+        if key not in fields:
+            continue
+        text = str(fields.get(key) or "").strip()
+        if not _is_empty_address(text):
+            return text
+    return ""
+
+
+def _enrich_from_raw_text(fields: dict[str, Any]) -> dict[str, Any]:
+    """Fill missing identity fields from pak-sim raw_text (structured keys may omit address)."""
+    raw = fields.get("raw_text")
+    if not isinstance(raw, str) or not raw.strip():
+        return fields
+    parsed = _parse_raw_text(raw)
+    if not parsed:
+        return fields
+    merged = dict(fields)
+    for key, value in parsed.items():
+        if key == "full_name":
+            if _is_blank(merged.get("full_name")) and _is_blank(merged.get("name")):
+                merged["full_name"] = value
+            continue
+        if key == "address":
+            if _is_empty_address(_pick_address(merged)):
+                merged["address"] = value
+            continue
+        if _is_blank(merged.get(key)):
+            merged[key] = value
+    return merged
 
 
 def _show_address_enabled() -> bool:
@@ -138,17 +184,13 @@ def _show_address_enabled() -> bool:
 
 def _record_from_fields(fields: dict[str, Any], *, source: str, show_address: bool) -> dict[str, Any]:
     """One UI lead record: cleartext identity for the owner dashboard + masked compat fields."""
-    work = dict(fields)
-    raw = work.get("raw_text")
-    if isinstance(raw, str) and raw.strip() and not _has_structured_identity(work):
-        parsed = _parse_raw_text(raw)
-        work = {**parsed, "raw_text": raw}
+    work = _enrich_from_raw_text(dict(fields))
 
     cnic = "".join(ch for ch in str(work.get(FIELD_MAP["cnic"]) or "") if ch.isdigit())
-    phone_raw = str(work.get(FIELD_MAP["phone"]) or "").strip()
+    phone_raw = str(work.get(FIELD_MAP["phone"]) or work.get("mobile") or "").strip()
     phone_digits = "".join(ch for ch in phone_raw if ch.isdigit())
     phone = _normalize_phone(phone_digits) if phone_digits else ""
-    address = str(work.get(FIELD_MAP["address"]) or "").strip()
+    address = _pick_address(work)
 
     record: dict[str, Any] = {
         "source": source,
@@ -164,7 +206,7 @@ def _record_from_fields(fields: dict[str, Any], *, source: str, show_address: bo
         record["address"] = address
     # Pass through remaining provider fields; keep raw_text readable for owner leads.
     extra: dict[str, Any] = {}
-    known = set(FIELD_MAP.values()) | {"name"}
+    known = set(FIELD_MAP.values()) | {"name", "mobile", *_ADDRESS_KEYS}
     for key, value in work.items():
         if key in known:
             continue

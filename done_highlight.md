@@ -1753,3 +1753,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Commit:** is commit me · **Deploy:** REQ-DEPLOY frontend + REQ-RESTART worker
 - **Doosre agent ke liye:** worker restart (timeout=35 + upstream copy); frontend deploy
 
+### ✅ [cursor] X-89 · SIM address enrich + SHOW_ADDRESS handoff · 2026-10-06 22:45 PKT
+- **Kya kiya:** Address `—` ka root: env SHOW_ADDRESS=0. Provider ab raw_text/alias se address fill karta hai jab show on ho. Claude se env flip + restart maanga.
+- **Files:** sim_providers.py, test_cnic_lookup.py, plan.md, done_highlight.md
+- **Verify:** pytest SIM 17/17
+- **Commit:** is commit me · **Deploy:** REQ-ENV SHOW_ADDRESS + REQ-RESTART (no frontend)
+- **Doosre agent ke liye:** root .env aur deploy/windows-local/.env se SIM_LOOKUP_SHOW_ADDRESS=0 hatao/1 karo, worker restart
+
