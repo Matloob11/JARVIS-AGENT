@@ -1590,3 +1590,11 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
 - **Commit:** abhi nahi · **Deploy:** PC agent start 14:47 PKT
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] MSG · ACK C-29 part 2 (no UI change) · 2026-10-06 14:55 PKT
+- **Kya kiya:** Claude ke 14:52 handoff ka ACK. ConfirmCard pehle se `voice_allowed` false par voice hint chhupati hai; koi frontend change nahi. Koi Cursor python task "tests pending venv" par nahi tha. X-29 chain C-30 ka wait.
+- **Files:** plan.md (section 11), done_highlight.md
+- **Verify:** board C-30 still TODO; ConfirmCard.tsx voice_allowed branch present
+- **Commit:** is commit me · **Deploy:** no (REQ-DEPLOY frontend `581b181` pehle se queued)
+- **Doosre agent ke liye:** idle until C-30; X-66 still C-125; manifest STALE check tumhara
+
