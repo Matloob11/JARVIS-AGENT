@@ -408,7 +408,7 @@ export function ensureActivityFeedSubscriptions(): void {
   subscribeSocketEvent('intelligence_update', handleIntelligence);
   subscribeSocketEvent('map_focus_update', handleMapFocus);
 
-  subscribeSocketEvent('new_log', (data: unknown) => {
+  function ingestErrorLog(data: unknown) {
     if (!data || typeof data !== 'object') return;
     const row = data as Record<string, unknown>;
     const level = logLevel(row);
@@ -421,5 +421,14 @@ export function ensureActivityFeedSubscriptions(): void {
       subtitle: row.category != null ? String(row.category) : level,
       href: '#/activity/logs',
     });
+  }
+
+  subscribeSocketEvent('new_log', ingestErrorLog);
+  subscribeSocketEvent('new_logs', (data: unknown) => {
+    if (!data || typeof data !== 'object') return;
+    const batch = data as Record<string, unknown>;
+    const rawItems = batch.items ?? batch.logs ?? batch.entries;
+    if (!Array.isArray(rawItems)) return;
+    for (const item of rawItems) ingestErrorLog(item);
   });
 }

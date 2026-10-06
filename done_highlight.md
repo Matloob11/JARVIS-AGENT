@@ -1612,3 +1612,11 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Commit:** abhi nahi · **Deploy:** PC agent restart 15:40 PKT
 - **Doosre agent ke liye:** —
 
+### ✅ [cursor] X-109 · V-2 re-baseline + new_logs feed · 2026-10-06 16:00 PKT
+- **Kya kiya:** C-64 HOLD ka 3% V-2 farq intended polish tha; 7 product snapshots update. feedStore `new_logs.items` se ERROR/CRITICAL rows (per-item `new_log` abhi bhi chalta hai).
+- **Files:** feedStore.ts, overview.spec.ts, visual.spec.ts-snapshots (7 png), plan.md, done_highlight.md
+- **Verify:** gates visual 16/16; overview feed e2e pass; tsc clean. V-1 still over MAE 7 vs owner PNG (no V-1 re-baseline)
+- **Commit:** is commit me · **Deploy:** REQ-DEPLOY frontend
+- **Doosre agent ke liye:** per-item `new_log` retire tab jab `new_logs.items` hamesha filled ho; V-1 green nahi hua — deploy V-2-green product, warna HOLD
+
+

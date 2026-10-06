@@ -163,6 +163,23 @@ test('feed rows from allowed events; excluded events stay out of Recent Activity
     0,
   );
 
+  await mockEmit(page, 'new_logs', {
+    items: [
+      {
+        text: 'Batch disk error from new_logs',
+        category: 'ERROR',
+        level: 'ERROR',
+        ts: baseSec(),
+      },
+    ],
+    dropped: 0,
+    source: 'agent',
+    ts: baseSec(),
+  });
+  await expect(
+    page.getByTestId('activity-row').filter({ hasText: 'Batch disk error from new_logs' }),
+  ).toHaveCount(1);
+
   await mockEmit(page, 'telemetry_update', {
     success_rate: 0.99,
     avg_latency: 100,
