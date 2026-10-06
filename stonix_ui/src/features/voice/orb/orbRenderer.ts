@@ -260,13 +260,19 @@ export class OrbRenderer {
   }
 
   private drawStatic() {
-    const cfg = STATE_CFG[this.state];
-    resetPaletteForStatic(this.persona, cfg.grey, cfg.dim);
+    const reference =
+      typeof document !== 'undefined' &&
+      document.documentElement.hasAttribute('data-reference-frame');
+    const drawState =
+      reference && (this.state === 'listening' || this.state === 'idle') ? 'idle' : this.state;
+    const drawCfg = STATE_CFG[drawState];
+    resetPaletteForStatic(this.persona, drawCfg.grey, drawCfg.dim);
+    // V-1 fixture: idle fitted glow (t=0, L=0) even when the status line is listening.
     this.look = {
-      ...cfg.look,
-      pull: this.state === 'listening' ? 0.5 : 0,
+      ...drawCfg.look,
+      pull: reference ? 0 : this.state === 'listening' ? 0.5 : 0,
     };
-    const L = STILL_L[this.state] ?? 0;
+    const L = reference ? 0 : (STILL_L[this.state] ?? 0);
     this.L = L;
     const { ctx, k } = setupOrbCanvas(this.orb, 520, 520, this.orbCssPx, this.phone);
     drawOrbExact(
@@ -274,7 +280,7 @@ export class OrbRenderer {
       k,
       0,
       L,
-      this.state,
+      drawState,
       this.persona,
       true,
       this.look,

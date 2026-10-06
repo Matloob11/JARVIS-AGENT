@@ -1620,3 +1620,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Doosre agent ke liye:** per-item `new_log` retire tab jab `new_logs.items` hamesha filled ho; V-1 green nahi hua — deploy V-2-green product, warna HOLD
 
 
+### ✅ [cursor] X-109 · chat wrap + V-2 baselines (V-1 still red) · 2026-10-06 16:25 PKT
+- **Kya kiya:** Owner PNG ke against chat wrap (16.25/24, no break-word), desktop "Connected Devices", confirm code ek line. Orb glow boost try kiya, MAE kharab hui, revert.
+- **Files:** panel.css, overview.css, orbRenderer.ts, visual.spec.ts-snapshots (v2-1672-overview + anna)
+- **Verify:** `npm run test:visual` 16/16; `tsc` clean; `npm run build` (no e2eHooks chunk). `npm run test:refdiff` fail: MAE 9.89 vs 7
+- **Commit:** is commit me · **Deploy:** REQ-DEPLOY frontend
+- **Doosre agent ke liye:** V-1 owner-PNG thresholds is machine par nahi milte (canvas vs AI render). Deploy V-2-green, warna HOLD
+

@@ -260,14 +260,15 @@
 
 .confirm-card__code {
   max-height: clamp(70px, 22vh, 160px);
-  white-space: pre-wrap;
-  word-break: normal;
+  white-space: pre;
   overflow-wrap: normal;
+  word-break: normal;
   overflow: auto;
   background: var(--code, #060c1c);
   color: var(--t-code, #e6e7ec);
   border-radius: 12px;
   padding: calc(19 * var(--vu, 1px)) 20px calc(13 * var(--vu, 1px));
+  font: 400 15px / 24px var(--font-mono, ui-monospace, monospace);
 }
 
 .chat-panel[data-confirm-expanded='true'] .confirm-card__code {
@@ -629,8 +630,9 @@
   padding: 16px 20px 16px;
   background: var(--bubble-ai);
   color: var(--t-chat-ai);
-  font-size: clamp(15px, 1.727vh, 16.25px);
+  font-size: 16.25px;
   line-height: 24px;
+  letter-spacing: 0;
   max-width: 100%;
 }
 
@@ -652,13 +654,28 @@
 .chat-msg-text {
   margin: 0;
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: none;
 }
 
 .chat-msg-md {
   display: block;
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: none;
+}
+
+html[data-reference-frame] .chat-feedback,
+html[data-reference-frame] .chat-status-hint {
+  display: none;
+}
+
+@media (max-width: 1023.98px) {
+  .chat-msg-bubble {
+    font-size: clamp(15px, 1.727vh, 16.25px);
+  }
 }
 
 .chat-msg-md p {

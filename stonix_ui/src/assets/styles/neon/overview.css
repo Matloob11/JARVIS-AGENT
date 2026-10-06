@@ -192,6 +192,16 @@
   }
 }
 
+@media (min-width: 1180px) {
+  .overview-qs-tile__lab-long {
+    display: inline;
+  }
+
+  .overview-qs-tile__lab-short {
+    display: none;
+  }
+}
+
 .overview-qs-tile__warn {
   position: absolute;
   top: 10px;
