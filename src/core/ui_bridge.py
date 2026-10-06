@@ -34,6 +34,12 @@ holds pauses (always, on_demand): pause_agent then sends the bridge's own pause_
 refused elsewhere (observe mode, the PC's local bridge); stop is only forwarded. The agent's notify job_end tells the
 room owner a job is over. agent_status is always the whole K-02 v9 object, built in one place (build_agent_status)
 for the event, init_state and GET /status.
+
+Log pipeline (C-64, K-39/K-40 v10): an authenticated /notify passes one of three global rate buckets (critical 50/s,
+logs 10/s, others 20/s; over it 429 {error: 'rate_limited', class} with Retry-After), so a log flood never throttles a
+transcript. vortex_log_batch items are normalized (bridge_store.normalize_log_batch), stored in one transaction and
+emitted as new_log each, with new_logs {items: [], dropped} for the UI's dropped counter; audit_event becomes
+audit_update (not stored).
 """
 # pylint: disable=too-many-lines  # the bridge app: every HTTP endpoint and Socket.IO handler of one process
 
@@ -68,7 +74,14 @@ from services.utils.jarvis_health import health_monitor
 from services.utils.jarvis_logger import setup_logger
 from services.utils.jarvis_telemetry import telemetry
 from src.core import bridge_auth, bridge_desktop, bridge_media, bridge_rooms, bridge_security, confirm_policy
-from src.core.bridge_security import NOTIFY_MAX_BYTES, NonceCache, NotifyAuthError, TokenBucket, same_secret
+from src.core.bridge_security import (
+    NOTIFY_MAX_BYTES,
+    NonceCache,
+    NotifyAuthError,
+    NotifyRateLimiter,
+    TokenBucket,
+    same_secret,
+)
 from src.core.bridge_store import (
     EVENT_LOG,
     EVENT_MEMORY,
@@ -78,7 +91,10 @@ from src.core.bridge_store import (
     SEEN_NOTIFY,
     BridgeStore,
     bridge_db_path,
+    epoch_seconds,
     event_retention_days,
+    log_max_rows,
+    normalize_log_batch,
     normalize_message,
     parse_message_cursor,
     ui_message,
@@ -220,8 +236,8 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization", "X-Vortex-Token", "X-Vortex-Signature"],
 )
 
-# Proper initialization for rate limit window
-app.state.rate_limit_window = []
+# POST /notify's rate buckets (K-39 v10, C-64): critical 50/s, logs 10/s, others 20/s, for the whole bridge.
+app.state.notify_limiter = NotifyRateLimiter()
 
 app_asgi = socketio.ASGIApp(sio, other_asgi_app=app)
 
@@ -476,21 +492,81 @@ owner_auth: bridge_auth.OwnerAuth = bridge_auth.OwnerAuth(
 owner_auth.install(app)
 
 
-def update_rate_limit(request: Request) -> None:
-    """Simple rate limit check for notify endpoint using app state."""
-    now: float = time.time()
-    window: list[float] = cast(list[float], getattr(request.app.state, "rate_limit_window", []))
+def _report_notify_refusals(limiter: NotifyRateLimiter) -> None:
+    """One WARNING per class with unreported 429s, at most once a minute per class (K-39). Called on every
+    refused notify and from the vitals loop, so a flood's last window is reported even when no later notify
+    arrives (C-64 review COR-2/LS-5)."""
+    for refused, count in limiter.refusal_report():
+        logger.warning("⚠️ /notify rate limit: %d '%s' notify(s) answered 429 since the last report", count, refused)
 
-    # Filter for last 60 seconds
-    window = [ts for ts in window if now - ts < 60]
 
-    if len(window) > 500:
-        logger.warning("⚠️ RATE LIMIT TRIGGERED on /notify")
-        raise HTTPException(status_code=429, detail="Throttling",
-                            headers=bridge_security.retry_after_header(60 - (now - window[0])))
+def _notify_rate_limited(request: Request, event_type: Any, payload: Any) -> JSONResponse | None:
+    """K-39 v10: the notify's class bucket (critical, logs, others); over it 429 {error: 'rate_limited', class} with
+    Retry-After. A vortex_log_batch is charged per item it carries (C-64 review SP-3), every other notify costs
+    one token. Refusals are logged at most once a minute per class, with their count."""
+    limiter: NotifyRateLimiter = request.app.state.notify_limiter
+    name, retry_after = limiter.check(event_type, bridge_security.notify_cost(event_type, payload))
+    _report_notify_refusals(limiter)
+    if retry_after is None:
+        return None
+    return JSONResponse({"error": "rate_limited", "class": name}, status_code=429,
+                        headers=bridge_security.retry_after_header(retry_after))
 
-    window.append(now)
-    request.app.state.rate_limit_window = window
+
+def _printable(value: Any, limit: int) -> str:
+    return "".join(ch for ch in str(value) if ch.isprintable())[:limit]
+
+
+# The in-flight log-batch broadcast tasks (strong references so none is garbage-collected mid-emit).
+_log_broadcasts: set[asyncio.Task[None]] = set()
+
+
+async def _broadcast_log_batch(items: list[dict[str, Any]], dropped: int, source: str, now: float) -> None:
+    """The socket side of one vortex_log_batch: new_log per item, then the dropped counter. Runs as its own
+    task (C-64 review LS-3), so POST /notify never waits for up to 50 serialized emits per UI socket and a log
+    flood adds no latency to the voice path's notifies."""
+    try:
+        for item in items:
+            await emit_ui("new_log", item)
+        if dropped > 0:
+            await emit_ui("new_logs", {"items": [], "dropped": dropped, "source": source, "ts": round(now, 3)})
+    except Exception:  # pylint: disable=broad-exception-caught  # a lost broadcast is never worth a traceback
+        logger.debug("log batch broadcast failed", exc_info=True)
+
+
+async def _handle_log_batch(payload: Any) -> dict[str, Any]:
+    """vortex_log_batch (K-40 v10): the normalized items stored in one transaction (init_state's logs) and emitted as
+    one new_log each; a dropped count above 0 also goes out as new_logs {items: [], dropped, source, ts}, which only
+    feeds the UI's dropped counter. The emits run after the HTTP answer (one background task per batch, LS-3)."""
+    if not isinstance(payload, Mapping):
+        return {"status": "ignored", "reason": "bad_payload"}
+    now = time.time()
+    items, dropped, source = normalize_log_batch(payload, now)
+    if items:
+        await stored("log batch", store.append_events(EVENT_LOG, items), 0)
+    if items or dropped > 0:
+        task = asyncio.create_task(_broadcast_log_batch(items, dropped, source, now))
+        _log_broadcasts.add(task)
+        task.add_done_callback(_log_broadcasts.discard)
+    return {"status": "ok"}
+
+
+_AUDIT_SEVERITIES = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
+
+
+async def _handle_audit_event(payload: Any) -> None:
+    """audit_event (K-40 v10): the agent's mirrored CRITICAL security events, emitted as audit_update {action (<= 64
+    chars), detail (<= 300), severity, ts} to room 'ui'; never stored (security.log keeps them)."""
+    if not isinstance(payload, Mapping):
+        return
+    action = _printable(payload.get("action") or "", 64)
+    if not action:
+        return
+    severity = str(payload.get("severity") or "").strip().upper()
+    ts = epoch_seconds(payload.get("ts")) or time.time()
+    await emit_ui("audit_update", {
+        "action": action, "detail": _printable(payload.get("detail") or "", 300),
+        "severity": severity if severity in _AUDIT_SEVERITIES else "INFO", "ts": round(ts, 3)})
 
 
 async def _handle_status_event(payload: Any) -> None:
@@ -582,10 +658,13 @@ async def notify_bridge(request: Request) -> Any:
 
     health_monitor.record_heartbeat("ui_bridge")
     await bridge_manager.update_state("last_runner_contact", time.time())
-    update_rate_limit(request) # Corrected to pass request context
 
-    event_type: str | None = data.get("type")
-    if not isinstance(event_type, str):
+    raw_type: Any = data.get("type")
+    event_type: str | None = raw_type if isinstance(raw_type, str) else None
+    refused = _notify_rate_limited(request, event_type, data.get("payload"))
+    if refused is not None:
+        return refused
+    if event_type is None:
         return {"status": "ignored", "reason": "missing_type"}
     payload: Any = data.get("payload")
 
@@ -640,6 +719,10 @@ async def notify_bridge(request: Request) -> Any:
     elif event_type == "vortex_log":
         await stored("log", store.append_event(EVENT_LOG, payload), 0)
         await emit_ui("new_log", payload)
+    elif event_type == "vortex_log_batch":
+        return await _handle_log_batch(payload)
+    elif event_type == "audit_event":
+        await _handle_audit_event(payload)
     elif event_type == "user_speaking_sync":
         await bridge_manager.update_state("user_speaking", payload)
         if payload:
@@ -1310,6 +1393,8 @@ async def vitals_heartbeat() -> None:
     global _latest_vps_vitals  # pylint: disable=global-statement
     while True:
         try:
+            # C-64 review COR-2: a notify flood that stops abruptly still gets its last refusal window logged.
+            _report_notify_refusals(app.state.notify_limiter)
             health_monitor.record_heartbeat("ui_bridge")
             report: dict[str, Any] = health_monitor.generate_health_report()
             vitals: dict[str, Any] = report["vitals"]
@@ -1387,17 +1472,24 @@ async def open_store() -> None:
 
 
 async def store_retention_loop() -> None:
-    """Hourly: deletes event/log rows older than BRIDGE_EVENT_RETENTION_DAYS (0, the default,
-    keeps them forever) and expired seen ids. Chat messages are never pruned."""
+    """Hourly: deletes event/log rows older than BRIDGE_EVENT_RETENTION_DAYS (0, the default, keeps them
+    forever), caps the log feed at BRIDGE_LOG_MAX_ROWS newest rows (C-64 review LS-2: bridge.db stays bounded
+    even with retention 0; 0 removes the cap) and drops expired seen ids. Chat messages are never pruned."""
     retention_days = event_retention_days()
-    logger.info("Event/log retention: %s", f"{retention_days:g} days" if retention_days
-                else "kept forever (BRIDGE_EVENT_RETENTION_DAYS=0)")
+    log_cap = log_max_rows()
+    logger.info("Event/log retention: %s; log feed capped at %s rows",
+                f"{retention_days:g} days" if retention_days else "kept forever (BRIDGE_EVENT_RETENTION_DAYS=0)",
+                log_cap if log_cap else "no cap (BRIDGE_LOG_MAX_ROWS=0)")
     while True:
         try:
             deleted = await store.prune_events(retention_days)
             if deleted:
                 logger.info("Retention: deleted %d event rows older than %g days",
                             deleted, retention_days)
+            capped = await store.cap_events(EVENT_LOG, log_cap)
+            if capped:
+                logger.info("Retention: deleted %d log rows beyond the newest %d (BRIDGE_LOG_MAX_ROWS)",
+                            capped, log_cap)
             await store.prune_seen()
         except asyncio.CancelledError:
             logger.info("Store retention task cancelled.")

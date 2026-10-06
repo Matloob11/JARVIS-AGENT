@@ -131,7 +131,7 @@ from services.utils.jarvis_config import (
     desktop_mode,
     runtime_profile,
 )
-from services.utils.jarvis_logger import setup_logger
+from services.utils.jarvis_logger import setup_logger, start_ui_log_shipping
 from services.utils.jarvis_loopwatch import LoopWatchdog
 from services.utils.jarvis_security import redact_secrets
 from dotenv import dotenv_values
@@ -868,6 +868,9 @@ async def entrypoint(ctx: agents.JobContext):
     session in place (C-23, K-60 v9)."""
     # K-29 backstop for _mask_cli_log_handler(): masks any root handler added since then.
     redact_root_handlers()
+    # C-64: the UI log shipper of this process (once per process: a Windows job thread finds it running, a Linux
+    # job process starts its own).
+    start_ui_log_shipping()
     net_guard.harden_process()  # C-124: again in the job (PR_SET_DUMPABLE does not survive an exec)
     local = desktop_mode() == DESKTOP_MODE_LOCAL
     max_retries = 5

@@ -100,6 +100,8 @@ AGENT_LOG_NAMES = ("agent_stdout.log", "agent_stderr.log")
 CTL_LOG_NAME = "agent_ctl.log"
 ROTATE_BYTES = 5 * 1024 * 1024
 ROTATE_KEEP = 5
+WORKER_LOG_BYTES = 10 * 1024 * 1024  # jarvis_logger's LOG_FILE handler (K-29 v10); security.log keeps ROTATE_BYTES
+SECURITY_LOG_NAME = "security.log"
 ENSURE_ROOM = ROOT / "deploy" / "windows-local" / "ensure_room.py"
 # Same order as services/utils/jarvis_config.py (K-47): the root .env wins, the hybrid file fills gaps.
 ENV_FILES = (ROOT / ".env", ROOT / "deploy" / "windows-local" / ".env")
@@ -548,6 +550,26 @@ def rotate_agent_logs() -> list[str]:
     return [name for name in AGENT_LOG_NAMES if rotate_log(LOG_DIR / name)]
 
 
+def worker_log_file() -> Path:
+    """The worker's LOG_FILE (K-47) as services/utils/jarvis_config resolves it: relative to the project root,
+    default logs/jarvis.log."""
+    path = Path(_env_setting("LOG_FILE") or os.path.join("logs", "jarvis.log"))
+    return path if path.is_absolute() else ROOT / path
+
+
+def rotate_worker_logs() -> list[str]:
+    """C-64 backstop, run while no worker runs: the worker's LOG_FILE at WORKER_LOG_BYTES and security.log at
+    ROTATE_BYTES, ROTATE_KEEP kept each. The running worker rotates both itself; this catches up a rollover it had to
+    postpone because another process or a reader held the file."""
+    rotated = []
+    main_log = worker_log_file()
+    if rotate_log(main_log, WORKER_LOG_BYTES):
+        rotated.append(main_log.name)
+    if rotate_log(LOG_DIR / SECURITY_LOG_NAME):
+        rotated.append(SECURITY_LOG_NAME)
+    return rotated
+
+
 def tail_lines(path: Path, count: int, block: int = 65536) -> list[str]:
     """The last count lines of a text file, read from the end."""
     with path.open("rb") as handle:
@@ -940,7 +962,7 @@ def start_worker(args: argparse.Namespace, mode: str, *, foreground: bool, timeo
     vps = report_vps()
     cmd = [str(agent_python()), "-m", "src.core.agent", mode]
     reason = _one_line(args.reason)
-    rotated = rotate_agent_logs()
+    rotated = rotate_agent_logs() + rotate_worker_logs()
     if rotated:
         print(f"[agent_ctl] Rotated {', '.join(rotated)}.")
     if foreground:

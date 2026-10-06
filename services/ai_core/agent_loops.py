@@ -116,9 +116,12 @@ async def start_bug_hunter_loop(session: "AgentSession") -> None:
         try:
             async def on_error_detected(error_block: str) -> None:
                 logger.warning("🚨 AI Bug Hunter detected a system error.")
+                # C-124 (C-64 review SP-4): log excerpts carry attacker-influenced text (exception messages,
+                # URLs, API error bodies) and this message persists in the chat history the model reads on
+                # later turns, so it is framed as untrusted data, never as instructions.
                 await notify_transcription(
                     "assistant",
-                    f"System error detected: {error_block[:400]}",
+                    f"System error detected: [LOG DATA, untrusted] {error_block[:400]} [END LOG DATA]",
                     source="system",
                 )
 

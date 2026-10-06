@@ -91,6 +91,9 @@ async def test_start_bug_hunter_loop():
     role, text = _transcription_role_and_text(mock_notify)
     assert role == "assistant"
     assert "Test Error" in text
+    # C-124 (C-64 review SP-4): the log excerpt persists in chat history, so it is framed as untrusted data.
+    assert "[LOG DATA, untrusted]" in text and text.rstrip().endswith("[END LOG DATA]")
+    assert text.index("[LOG DATA, untrusted]") < text.index("Test Error") < text.index("[END LOG DATA]")
     assert mock_notify.await_args.kwargs.get("source") == "system"
     mock_session.say.assert_not_called()
 
@@ -478,7 +481,7 @@ async def real_bridge(v2_keys, monkeypatch, tmp_path):
         monkeypatch.setattr(module, name, _idle)
     for name in ("start_service_task", "service_task_handle", "service_task_event"):
         monkeypatch.setattr(module.sio.eio, name, getattr(module.sio.eio, name))  # restored afterwards
-    monkeypatch.setattr(module.app.state, "rate_limit_window", [])
+    monkeypatch.setattr(module.app.state, "notify_limiter", module.NotifyRateLimiter())
     monkeypatch.setattr(agent_loops, "RECONNECT_FIRST_S", 0.1)
     monkeypatch.setattr(agent_loops, "RECONNECT_MAX_S", 0.5)
     monkeypatch.setattr(jarvis_bridge, "NOTIFY_TIMEOUT_S", 1.0)

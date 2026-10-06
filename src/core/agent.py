@@ -163,4 +163,8 @@ if __name__ == "__main__":
     # W-room-watchdog: re-runs ensure_room.py when the room loses its agent (pc mode, this process only).
     from src.core.room_watchdog import start_room_watchdog
     start_room_watchdog()
+    # C-64: this process's UI log lines go out as vortex_log_batch from their own thread (a Linux job process
+    # starts its own in agent_runner.entrypoint).
+    from services.utils.jarvis_logger import start_ui_log_shipping
+    start_ui_log_shipping()
     agents.cli.run_app(OPTS)

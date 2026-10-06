@@ -61,7 +61,7 @@ async def bridge(monkeypatch, tmp_path):
     for name, value in (("_agent_pc_vitals", None), ("_agent_pc_vitals_mono", 0.0), ("_latest_vps_vitals", None)):
         monkeypatch.setattr(module, name, value)
     monkeypatch.setattr(module, "VORTEX_SECURITY_TOKEN", LEGACY_TOKEN)
-    monkeypatch.setattr(module.app.state, "rate_limit_window", [])
+    monkeypatch.setattr(module.app.state, "notify_limiter", module.NotifyRateLimiter())
     monkeypatch.setattr(config, "agent_token", AGENT_TOKEN)
     monkeypatch.setattr(config, "bridge_hmac_secret", HMAC_SECRET)
     monkeypatch.setattr(config, "security_token", LEGACY_TOKEN)

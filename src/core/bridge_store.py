@@ -26,6 +26,7 @@ import json
 import logging
 import math
 import os
+import re
 import secrets
 import sqlite3
 import sys
@@ -55,7 +56,7 @@ INIT_MEMORIES = 10
 INIT_TOOL_LOGS = 20
 INIT_NOTIFICATIONS = 50
 
-EVENT_LOG = "log"        # notify vortex_log    -> init_state vortex_logs / logs
+EVENT_LOG = "log"        # notify vortex_log / vortex_log_batch items -> init_state vortex_logs / logs
 EVENT_MEMORY = "memory"  # notify memory_update -> init_state memories
 EVENT_TOOL = "tool"      # notify tool_sync     -> init_state tool_logs
 
@@ -222,6 +223,27 @@ def event_retention_days() -> float:
     return days if math.isfinite(days) and days > 0 else 0.0
 
 
+# C-64 review LS-2: even with BRIDGE_EVENT_RETENTION_DAYS=0 the log feed must not grow bridge.db without
+# bound (init_state only ever shows the last 30 lines). Only EVENT_LOG rows are capped; memories, tools and
+# chat messages keep the user's retention decision.
+DEFAULT_LOG_MAX_ROWS = 20_000
+
+
+def log_max_rows() -> int:
+    """BRIDGE_LOG_MAX_ROWS: the most EVENT_LOG rows kept (the hourly retention loop deletes the oldest beyond
+    it). Default DEFAULT_LOG_MAX_ROWS; 0 removes the cap; an invalid value keeps the default."""
+    raw = (os.environ.get("BRIDGE_LOG_MAX_ROWS") or "").strip()
+    if not raw:
+        return DEFAULT_LOG_MAX_ROWS
+    try:
+        rows = int(float(raw))
+    except ValueError:
+        logger.warning("BRIDGE_LOG_MAX_ROWS=%r is not a number; the default %d is used", raw,
+                       DEFAULT_LOG_MAX_ROWS)
+        return DEFAULT_LOG_MAX_ROWS
+    return rows if rows > 0 else 0
+
+
 def _as_bool(value: Any, default: bool) -> bool:
     if isinstance(value, bool):
         return value
@@ -241,7 +263,10 @@ def _epoch_seconds(value: Any) -> float | None:
     if isinstance(value, bool):
         return None
     if isinstance(value, (int, float)):
-        seconds = float(value)
+        try:
+            seconds = float(value)
+        except OverflowError:  # an int no float can hold (JSON numbers have no limit)
+            return None
     elif isinstance(value, str):
         try:
             seconds = float(value.strip())
@@ -252,6 +277,11 @@ def _epoch_seconds(value: Any) -> float | None:
     if not math.isfinite(seconds) or seconds <= 0:
         return None
     return seconds / 1000.0 if seconds > _MS_EPOCH_MIN else seconds
+
+
+def epoch_seconds(value: Any) -> float | None:
+    """A client-sent time as epoch seconds (seconds or milliseconds, a number or numeric string); None if unusable."""
+    return _epoch_seconds(value)
 
 
 def _message_fields(payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -333,6 +363,65 @@ def parse_message_cursor(cursor: str) -> tuple[float, int | None]:
     if not math.isfinite(ts):
         raise ValueError(f"not a message cursor: {cursor!r}")
     return ts, int(seq_text) if sep else None
+
+
+# vortex_log_batch (K-40 v10, C-64)
+LOG_BATCH_MAX = 50
+LOG_TEXT_MAX = 2000
+LOG_CATEGORY_MAX = 40
+LOG_DROPPED_MAX = 1_000_000_000
+LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+LOG_SOURCES = ("agent", "svc", "desktop")
+
+
+# C-64 review SP-2: control characters (newlines, ANSI escapes) collapse to one space before storage, the way
+# jarvis_audit._CONTROL_RUN and ui_bridge._printable treat their text, so a crafted multi-line log message can
+# never render as extra, fake entries in the UI log panel or pollute bridge.db.
+_CONTROL_RUN = re.compile(r"[\x00-\x1f\x7f]+")
+
+
+def _log_item(raw: Mapping[str, Any], source: str, now: float) -> dict[str, Any]:
+    text = raw.get("text")
+    text = text if isinstance(text, str) else ("" if text is None else str(text))
+    text = _CONTROL_RUN.sub(" ", text)
+    category = raw.get("category")
+    category = _CONTROL_RUN.sub(" ", category).strip()[:LOG_CATEGORY_MAX] if isinstance(category, str) else ""
+    level = raw.get("level")
+    level = level.strip().upper() if isinstance(level, str) else ""
+    ts = _epoch_seconds(raw.get("ts"))
+    if ts is None:
+        ts = now
+    item: dict[str, Any] = {"text": text[:LOG_TEXT_MAX], "category": category or "SYSTEM"}
+    if level in LOG_LEVELS:
+        item["level"] = level
+    item.update(ts=ts, timestamp=ts, source=source)
+    return item
+
+
+def normalize_log_batch(payload: Mapping[str, Any], now: float) -> tuple[list[dict[str, Any]], int, str]:
+    """
+    A vortex_log_batch payload as the bridge keeps and emits it (K-40 v10): (items, dropped, source). source is
+    'agent', 'svc' or 'desktop' (default 'agent'). Each of the first LOG_BATCH_MAX object items becomes {text (cut at
+    LOG_TEXT_MAX), category (at most LOG_CATEGORY_MAX chars, default 'SYSTEM'), level (DEBUG..CRITICAL, else left
+    out), ts (epoch s; ms accepted; else now), timestamp (= ts), source}; other fields are dropped. dropped is the
+    payload's count (a whole number >= 0) plus the items that were not objects or came after the cap.
+    """
+    source = payload.get("source")
+    source = source if isinstance(source, str) and source in LOG_SOURCES else "agent"
+    raw_dropped = payload.get("dropped")
+    dropped = 0
+    if isinstance(raw_dropped, int) and not isinstance(raw_dropped, bool):
+        dropped = min(max(raw_dropped, 0), LOG_DROPPED_MAX)  # an int of any size (JSON has no limit)
+    elif isinstance(raw_dropped, float) and math.isfinite(raw_dropped):
+        dropped = min(max(int(raw_dropped), 0), LOG_DROPPED_MAX)
+    raw_items = payload.get("items")
+    items: list[dict[str, Any]] = []
+    for index, raw in enumerate(raw_items if isinstance(raw_items, list) else []):
+        if index >= LOG_BATCH_MAX or not isinstance(raw, Mapping):
+            dropped += 1
+            continue
+        items.append(_log_item(raw, source, now))
+    return items, min(dropped, LOG_DROPPED_MAX), source
 
 
 def _dumps(value: Any) -> str:
@@ -674,6 +763,13 @@ class BridgeStore:  # pylint: disable=too-many-public-methods  # one flat facade
         """Stores one UI event (EVENT_LOG, EVENT_MEMORY, EVENT_TOOL) exactly as received."""
         return await self._run(self._append_event, kind, data)
 
+    async def append_events(self, kind: str, items: Sequence[Any]) -> int:
+        """Stores several UI events of one kind in one transaction, in order (a vortex_log_batch's items, C-64).
+        Returns how many were stored."""
+        if not items:
+            return 0
+        return await self._run(self._append_events, kind, list(items))
+
     async def recent_events(self, kind: str, limit: int = INIT_LOGS) -> list[Any]:
         """The newest `limit` events of a kind, oldest first."""
         return await self._run(self._recent_events, kind, limit)
@@ -694,10 +790,29 @@ class BridgeStore:  # pylint: disable=too-many-public-methods  # one flat facade
             if deleted < _PRUNE_BATCH:
                 return total
 
+    async def cap_events(self, kind: str, keep: int) -> int:
+        """Deletes the oldest rows of one kind beyond the newest keep (<= 0 keeps everything), in batches
+        (C-64 review LS-2: EVENT_LOG stays bounded even with retention 0). Returns the rows deleted."""
+        if keep <= 0:
+            return 0
+        total = 0
+        while True:
+            deleted = await self._run(self._cap_events_batch, kind, int(keep))
+            total += deleted
+            if deleted < _PRUNE_BATCH:
+                return total
+
     def _append_event(self, conn: sqlite3.Connection, kind: str, data: Any) -> int:
         cur = conn.execute("INSERT INTO events (kind, ts, data) VALUES (?, ?, ?)",
                            (str(kind), self._clock(), _dumps(data)))
         return int(cur.lastrowid or 0)
+
+    def _append_events(self, conn: sqlite3.Connection, kind: str, items: list[Any]) -> int:
+        now = self._clock()
+        with _transaction(conn):
+            conn.executemany("INSERT INTO events (kind, ts, data) VALUES (?, ?, ?)",
+                             [(str(kind), now, _dumps(item)) for item in items])
+        return len(items)
 
     def _recent_events(self, conn: sqlite3.Connection, kind: str, limit: int) -> list[Any]:
         rows = conn.execute("SELECT data FROM events WHERE kind = ? ORDER BY seq DESC LIMIT ?",
@@ -711,6 +826,14 @@ class BridgeStore:  # pylint: disable=too-many-public-methods  # one flat facade
         return int(conn.execute(
             "DELETE FROM events WHERE seq IN (SELECT seq FROM events WHERE ts < ? LIMIT ?)",
             (cutoff, _PRUNE_BATCH)).rowcount)
+
+    def _cap_events_batch(self, conn: sqlite3.Connection, kind: str, keep: int) -> int:
+        # The cutoff is the oldest seq among the newest `keep` rows of the kind; everything of that kind below
+        # it goes, _PRUNE_BATCH rows at a time. Fewer rows than keep: the subselect is empty and nothing goes.
+        return int(conn.execute(
+            "DELETE FROM events WHERE seq IN (SELECT seq FROM events WHERE kind = ? AND seq < ("
+            " SELECT MIN(seq) FROM (SELECT seq FROM events WHERE kind = ? ORDER BY seq DESC LIMIT ?)"
+            ") LIMIT ?)", (str(kind), str(kind), keep, _PRUNE_BATCH)).rowcount)
 
     # ------------------------------------------------------------------ settings (C-SETTINGS-1)
 

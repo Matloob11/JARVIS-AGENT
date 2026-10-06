@@ -721,8 +721,14 @@ for d in service_dirs:
     if full_path not in sys.path and os.path.exists(full_path):
         sys.path.append(full_path)
 
+from services.utils import jarvis_logger as _jarvis_logger  # noqa: E402
 from services.utils.jarvis_logger import setup_logger
 from services.utils.jarvis_secure_config import SecureConfigManager
+
+# C-64: the process's UI log shipper never starts in a test process (agent_runner.entrypoint calls
+# start_ui_log_shipping): log lines only buffer, and no test thread posts to a bridge. Shipper tests build their own
+# jarvis_logger.UiLogShipper.
+_jarvis_logger.ui_log_shipper.start = lambda *args, **kwargs: False  # type: ignore[method-assign]
 
 # Test logger
 logger = setup_logger("JARVIS-TESTS")
@@ -892,6 +898,10 @@ def _fresh_ui_bridge_agent_status(monkeypatch):
     if module is not None and hasattr(module, "AgentStatusTracker"):
         monkeypatch.setattr(module, "_status_tracker", module.AgentStatusTracker())
         monkeypatch.setattr(module, "_ui_last_seen", None)
+    # C-64: /notify's rate buckets are global to the bridge; every test starts with full ones.
+    limiter_cls = getattr(getattr(module, "bridge_security", None), "NotifyRateLimiter", None)
+    if module is not None and limiter_cls is not None:
+        monkeypatch.setattr(module.app.state, "notify_limiter", limiter_cls())
 
 
 # Module singletons that write a fixed file under the live logs/ with open() (no logging handler).

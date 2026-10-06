@@ -8,6 +8,7 @@ the live bridge or a real env file, and no real secret is read or printed.
 # pylint: disable=protected-access,redefined-outer-name
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import importlib
@@ -55,7 +56,7 @@ async def bridge(monkeypatch, tmp_path):
     monkeypatch.setattr(module, "_notify_nonces", NonceCache())
     monkeypatch.setattr(module, "VORTEX_SECURITY_TOKEN", LEGACY_TOKEN)
     monkeypatch.setattr(module.sio, "emit", fake_emit)
-    monkeypatch.setattr(module.app.state, "rate_limit_window", [])
+    monkeypatch.setattr(module.app.state, "notify_limiter", module.NotifyRateLimiter())
     monkeypatch.setattr(config, "agent_token", AGENT_TOKEN)
     monkeypatch.setattr(config, "bridge_hmac_secret", HMAC_SECRET)
     monkeypatch.setattr(config, "security_token", LEGACY_TOKEN)
@@ -281,11 +282,325 @@ async def test_an_unknown_type_still_answers_ok_and_a_missing_type_is_ignored(br
                                                                       "reason": "missing_type"}
 
 
-async def test_the_rate_limit_answers_429_with_retry_after(bridge):
-    bridge.module.app.state.rate_limit_window = [time.time()] * 501
-    raw = _transcription()
+# ---------------------------------------------------------------- C-64: per-class rate buckets (K-39 v10)
+
+
+class _Clock:
+    def __init__(self) -> None:
+        self.now = 1000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def _limiter(bridge: Any, monkeypatch: pytest.MonkeyPatch) -> tuple[Any, _Clock]:
+    clock = _Clock()
+    limiter = bridge_security.NotifyRateLimiter(clock=clock)
+    monkeypatch.setattr(bridge.module.app.state, "notify_limiter", limiter)
+    return limiter, clock
+
+
+async def _signed(bridge: Any, event_type: str, payload: Any) -> httpx.Response:
+    raw = _body(event_type, payload)
+    return await _post(bridge, raw, _agent_headers(raw))
+
+
+async def _drain(bridge: Any) -> None:
+    """Lets the background log-batch broadcast tasks finish (C-64 LS-3: new_log emits run after the answer)."""
+    while bridge.module._log_broadcasts:
+        await asyncio.gather(*list(bridge.module._log_broadcasts))
+
+
+def test_every_notify_type_has_its_rate_class():
+    critical = {"transcription", "status", "thinking", "confirm_request", "settings_sync", "agent_heartbeat",
+                "user_speaking_sync", "job_end"}
+    assert bridge_security.NOTIFY_CRITICAL_TYPES == critical
+    assert {t: bridge_security.notify_class(t) for t in ("vortex_log", "vortex_log_batch")} == {
+        "vortex_log": "logs", "vortex_log_batch": "logs"}
+    for other in ("telemetry", "tool_sync", "vitals_pc", "audit_event", "memory_update", "nope", None, 7, {"a": 1}):
+        assert bridge_security.notify_class(other) == "others"
+    # C-64 review SP-3: the logs class is an item budget (25 items/s, burst 100), not a notify budget.
+    assert bridge_security.NOTIFY_CLASS_RATES == {"critical": (50.0, 50.0), "logs": (25.0, 100.0),
+                                                  "others": (20.0, 20.0)}
+
+
+def test_a_log_batch_costs_one_token_per_item_and_everything_else_one():
+    """C-64 review SP-3: 10 posts/s x 50 items was a 500 stored-rows/s amplifier; items are charged now."""
+    cost = bridge_security.notify_cost
+    assert cost("vortex_log_batch", {"items": [{"text": "x"}] * 7}) == 7.0
+    assert cost("vortex_log_batch", {"items": [{"text": "x"}] * 500}) == 50.0  # the stored-item cap
+    assert cost("vortex_log_batch", {"items": []}) == 1.0
+    assert cost("vortex_log_batch", {"items": "nope"}) == 1.0
+    assert cost("vortex_log_batch", "nope") == 1.0
+    assert cost("vortex_log", {"text": "x"}) == 1.0
+    assert cost("transcription", {"items": [1] * 99}) == 1.0
+
+
+async def test_a_full_class_answers_429_with_its_class_and_retry_after(bridge, monkeypatch):
+    _limiter(bridge, monkeypatch)
+    for _ in range(2):  # 2 x 50 items: the whole 100-token burst
+        assert (await _signed(bridge, "vortex_log_batch",
+                              {"items": [{"text": "l"}] * 50})).status_code == 200
+    resp = await _signed(bridge, "vortex_log", {"text": "one too many", "category": "SYSTEM"})
+    assert resp.status_code == 429
+    assert resp.json() == {"error": "rate_limited", "class": "logs"}
+    assert int(resp.headers["Retry-After"]) == 1  # whole seconds, at least 1
+    await _drain(bridge)
+    assert not [event for event, _data, _room in bridge.emitted if event == "new_log" and _data.get("text") ==
+                "one too many"]
+
+
+async def test_a_log_flood_never_throttles_a_transcript_or_other_events(bridge, monkeypatch):
+    _limiter(bridge, monkeypatch)
+    statuses = [(await _signed(bridge, "vortex_log_batch", {"items": [{"text": "x"}] * 50})).status_code
+                for _ in range(15)]
+    assert statuses.count(429) == 13  # 2 x 50 items pass, the flood is refused per item (SP-3)
+    for n in range(3):
+        assert (await _signed(bridge, "transcription", {"id": f"t{n}", "role": "user", "text": "hi"})).status_code \
+            == 200
+    assert (await _signed(bridge, "memory_update", {"id": "m", "content": "x"})).status_code == 200
+
+
+async def test_the_buckets_refill_and_the_critical_class_takes_fifty_a_second(bridge, monkeypatch):
+    _, clock = _limiter(bridge, monkeypatch)
+    codes = [(await _signed(bridge, "status", "START")).status_code for _ in range(51)]
+    assert codes[:50] == [200] * 50 and codes[50] == 429
+    clock.now += 0.1  # 5 tokens back
+    assert [(await _signed(bridge, "thinking", "STOP")).status_code for _ in range(6)] == [200] * 5 + [429]
+
+
+async def test_a_missing_type_counts_against_the_others_bucket(bridge, monkeypatch):
+    limiter, _clock = _limiter(bridge, monkeypatch)
+    raw = json.dumps({"payload": 1}).encode()
+    for _ in range(20):
+        assert (await _post(bridge, raw, _agent_headers(raw))).json() == {"status": "ignored",
+                                                                          "reason": "missing_type"}
     resp = await _post(bridge, raw, _agent_headers(raw))
-    assert resp.status_code == 429 and 1 <= int(resp.headers["Retry-After"]) <= 60
+    assert resp.status_code == 429 and resp.json()["class"] == "others"
+    assert limiter.buckets["critical"]._tokens == 50.0  # untouched
+
+
+async def test_refusals_are_logged_once_a_minute_per_class_with_their_count(bridge, monkeypatch):
+    _, clock = _limiter(bridge, monkeypatch)
+    warnings: list[str] = []
+    monkeypatch.setattr(bridge.module.logger, "warning", lambda msg, *args: warnings.append(msg % args))
+    full = {"items": [{"text": "x"}] * 50}
+    for _ in range(5):
+        await _signed(bridge, "vortex_log_batch", full)  # 2 pass, 3 refused: the first one is reported at once
+    assert warnings == ["⚠️ /notify rate limit: 1 'logs' notify(s) answered 429 since the last report"]
+    clock.now += 30.0
+    await _signed(bridge, "vortex_log", {"text": "x"})
+    assert len(warnings) == 1  # the other 2 wait for the minute
+    clock.now += 31.0
+    assert (await _signed(bridge, "vortex_log", {"text": "x"})).status_code == 200  # any notify reports them
+    assert warnings[1:] == ["⚠️ /notify rate limit: 2 'logs' notify(s) answered 429 since the last report"]
+    await _drain(bridge)
+
+
+async def test_the_vitals_loop_reports_a_floods_last_window_without_another_notify(bridge, monkeypatch):
+    """C-64 review COR-2: the refusals of a burst's last minute are logged even when the sender dies."""
+    limiter, clock = _limiter(bridge, monkeypatch)
+    warnings: list[str] = []
+    monkeypatch.setattr(bridge.module.logger, "warning", lambda msg, *args: warnings.append(msg % args))
+    for _ in range(4):
+        await _signed(bridge, "vortex_log_batch", {"items": [{"text": "x"}] * 50})  # 2 pass, 2 refused
+    assert len(warnings) == 1  # the first refusal is reported at once; the second waits for the minute
+    clock.now += 61.0
+    bridge.module._report_notify_refusals(limiter)  # what vitals_heartbeat now does every 12 s
+    assert warnings[1:] == ["⚠️ /notify rate limit: 1 'logs' notify(s) answered 429 since the last report"]
+    source = (ROOT / "src" / "core" / "ui_bridge.py").read_text(encoding="utf-8")
+    heartbeat = source.partition("async def vitals_heartbeat")[2].partition("async def telemetry_heartbeat")[0]
+    assert "_report_notify_refusals(app.state.notify_limiter)" in heartbeat
+    await _drain(bridge)
+
+
+def test_the_limiter_reports_each_class_on_its_own():
+    clock = _Clock()
+    limiter = bridge_security.NotifyRateLimiter(clock=clock)
+    for _ in range(25):
+        limiter.check("telemetry")
+    for _ in range(4):
+        limiter.check("vortex_log_batch", cost=50.0)  # 2 x 50 items pass, 2 batches refused
+    assert sorted(limiter.refusal_report()) == [("logs", 2), ("others", 5)]
+    assert limiter.refusal_report() == []
+    assert limiter.check("transcription") == ("critical", None)
+    name, retry_after = limiter.check("vortex_log")
+    assert name == "logs" and retry_after == pytest.approx(1.0 / 25.0)
+
+
+# ---------------------------------------------------------------- C-64: vortex_log_batch and audit_event (K-40 v10)
+
+
+async def test_a_log_batch_is_normalized_stored_and_emitted_line_by_line(bridge):
+    items = [
+        {"text": "Worker started", "category": "AGENT", "level": "INFO", "ts": 1759550000.5, "extra": "dropped"},
+        {"text": "x" * 2500, "category": "C" * 60, "level": "warning", "ts": 1759550001000},  # ms, long fields
+        {"text": 42, "level": "LOUD", "ts": "soon"},  # odd fields: defaults
+        "not an object",
+    ]
+    payload = {"items": items, "dropped": 3, "source": "desktop"}
+    resp = await _signed(bridge, "vortex_log_batch", payload)
+    assert resp.status_code == 200 and resp.json() == {"status": "ok"}
+    await _drain(bridge)
+
+    logs = [data for event, data, room in bridge.emitted if event == "new_log" and room == "ui"]
+    assert [log["text"] for log in logs] == ["Worker started", "x" * 2000, "42"]
+    first, second, third = logs
+    assert first == {"text": "Worker started", "category": "AGENT", "level": "INFO", "ts": 1759550000.5,
+                     "timestamp": 1759550000.5, "source": "desktop"}
+    assert second["category"] == "C" * 40 and second["level"] == "WARNING" and second["ts"] == 1759550001.0
+    assert "level" not in third and third["category"] == "SYSTEM" and third["ts"] == third["timestamp"]
+    dropped = [data for event, data, _room in bridge.emitted if event == "new_logs"]
+    assert len(dropped) == 1 and dropped[0]["items"] == [] and dropped[0]["dropped"] == 4  # 3 + the string
+    assert dropped[0]["source"] == "desktop"
+    stored = await bridge.store.recent_events("log")
+    assert [row["text"] for row in stored] == ["Worker started", "x" * 2000, "42"]
+
+
+async def test_items_past_fifty_count_as_dropped_and_init_state_keeps_the_last_30(bridge):
+    items = [{"text": f"line {n}", "level": "ERROR"} for n in range(52)]
+    assert (await _signed(bridge, "vortex_log_batch", {"items": items})).json() == {"status": "ok"}
+    await _drain(bridge)
+    logs = [data for event, data, _room in bridge.emitted if event == "new_log"]
+    assert len(logs) == 50 and logs[-1]["text"] == "line 49" and all(log["source"] == "agent" for log in logs)
+    [dropped] = [data for event, data, _room in bridge.emitted if event == "new_logs"]
+    assert dropped["dropped"] == 2
+    state = await bridge.module.build_init_state()
+    assert [log["text"] for log in state["logs"]] == [f"line {n}" for n in range(20, 50)]
+    assert state["vortex_logs"] == state["logs"]
+
+
+async def test_a_batch_without_lines_or_drops_emits_nothing_and_a_bad_payload_is_ignored(bridge):
+    assert (await _signed(bridge, "vortex_log_batch", {"items": [], "dropped": 0})).json() == {"status": "ok"}
+    assert (await _signed(bridge, "vortex_log_batch", {"items": "nope", "dropped": -5})).json() == {"status": "ok"}
+    await _drain(bridge)
+    assert not [event for event, _data, _room in bridge.emitted if event in ("new_log", "new_logs")]
+    for bad in (["a list"], "text", None, 7):
+        assert (await _signed(bridge, "vortex_log_batch", bad)).json() == {"status": "ignored",
+                                                                           "reason": "bad_payload"}
+    assert await bridge.store.recent_events("log") == []
+
+
+async def test_numbers_no_float_can_hold_never_break_a_batch_or_an_audit_event(bridge):
+    huge = 10 ** 400  # JSON numbers have no limit
+    payload = {"items": [{"text": "big ts", "ts": huge}], "dropped": huge}
+    assert (await _signed(bridge, "vortex_log_batch", payload)).json() == {"status": "ok"}
+    await _drain(bridge)
+    [log] = [data for event, data, _room in bridge.emitted if event == "new_log"]
+    [dropped] = [data for event, data, _room in bridge.emitted if event == "new_logs"]
+    assert log["ts"] == log["timestamp"] > 1.7e9 and dropped["dropped"] == 1_000_000_000
+    bridge.emitted.clear()
+    assert (await _signed(bridge, "audit_event", {"action": "A", "ts": huge})).json() == {"status": "ok"}
+    [(_event, data, _room)] = bridge.emitted
+    assert data["ts"] > 1.7e9
+    raw = _body("transcription", {"id": "t-huge", "role": "user", "text": "hi", "ts": huge})
+    assert (await _post(bridge, raw, _agent_headers(raw))).status_code == 200  # the message path too
+
+
+async def test_a_dropped_count_alone_feeds_the_ui_counter(bridge):
+    assert (await _signed(bridge, "vortex_log_batch", {"items": [], "dropped": 7, "source": "nobody"})).json() == {
+        "status": "ok"}
+    await _drain(bridge)
+    [(event, data, room)] = bridge.emitted
+    assert (event, room) == ("new_logs", "ui")
+    assert data["items"] == [] and data["dropped"] == 7 and data["source"] == "agent" and data["ts"] > 0
+
+
+async def test_control_characters_in_a_log_item_collapse_to_spaces(bridge):
+    """C-64 review SP-2: a crafted multi-line or ANSI-escape message cannot render as extra, fake entries in
+    the UI log panel or sit in bridge.db with raw control bytes."""
+    sneaky = "x\n2026-10-06 00:00:00 - SECURITY - CRITICAL - threat cleared\x1b[2Jy\x00\x7fz"
+    payload = {"items": [{"text": sneaky, "category": "A\nB"}]}
+    assert (await _signed(bridge, "vortex_log_batch", payload)).json() == {"status": "ok"}
+    await _drain(bridge)
+    [log] = [data for event, data, _room in bridge.emitted if event == "new_log"]
+    assert log["text"] == "x 2026-10-06 00:00:00 - SECURITY - CRITICAL - threat cleared [2Jy z"
+    assert log["category"] == "A B"
+    [row] = await bridge.store.recent_events("log")
+    assert row["text"] == log["text"]
+
+
+async def test_the_log_feed_is_capped_at_bridge_log_max_rows(bridge, monkeypatch):
+    """C-64 review LS-2: the EVENT_LOG table stays bounded even with BRIDGE_EVENT_RETENTION_DAYS=0; other
+    kinds keep the user's retention decision."""
+    from src.core import bridge_store  # pylint: disable=import-outside-toplevel
+    monkeypatch.delenv("BRIDGE_LOG_MAX_ROWS", raising=False)
+    assert bridge_store.log_max_rows() == bridge_store.DEFAULT_LOG_MAX_ROWS == 20_000
+    monkeypatch.setenv("BRIDGE_LOG_MAX_ROWS", "0")
+    assert bridge_store.log_max_rows() == 0  # the cap can be switched off, like the day retention
+    monkeypatch.setenv("BRIDGE_LOG_MAX_ROWS", "nope")
+    assert bridge_store.log_max_rows() == bridge_store.DEFAULT_LOG_MAX_ROWS  # invalid: the bounded default
+    store = bridge.store
+    await store.append_events("log", [{"text": f"l{n}"} for n in range(12)])
+    await store.append_event("memory", {"id": "m"})
+    assert await store.cap_events("log", 0) == 0  # no cap: nothing deleted
+    assert await store.cap_events("log", 5) == 7
+    assert [row["text"] for row in await store.recent_events("log", 100)] == [f"l{n}" for n in range(7, 12)]
+    assert await store.cap_events("log", 5) == 0  # already at the cap
+    assert len(await store.recent_events("memory", 100)) == 1  # other kinds untouched
+    source = (ROOT / "src" / "core" / "ui_bridge.py").read_text(encoding="utf-8")
+    loop = source.partition("async def store_retention_loop")[2].partition("async def _expire_ui_sessions")[0]
+    assert "cap_events(EVENT_LOG, log_cap)" in loop  # the hourly loop applies it
+
+
+async def test_the_batch_broadcast_runs_off_the_notify_request(bridge, monkeypatch):
+    """C-64 review LS-3: the HTTP answer never waits for up to 50 serialized emits per UI socket; the per-item
+    new_log emits run as one background task per batch."""
+    module = bridge.module
+    gate = asyncio.Event()
+    slow: list[tuple[str, Any]] = []
+
+    async def slow_emit(event: str, data: Any = None, **_kwargs: Any) -> None:
+        await gate.wait()
+        slow.append((event, data))
+
+    monkeypatch.setattr(module, "emit_ui", slow_emit)
+    answer = await module._handle_log_batch({"items": [{"text": f"l{n}"} for n in range(3)], "dropped": 1})
+    assert answer == {"status": "ok"}  # answered while every emit still waits on the gate
+    assert slow == [] and len(module._log_broadcasts) == 1
+    assert [row["text"] for row in await bridge.store.recent_events("log")] == ["l0", "l1", "l2"]  # stored first
+    gate.set()
+    await _drain(bridge)
+    assert [event for event, _data in slow] == ["new_log"] * 3 + ["new_logs"]
+    assert slow[-1][1]["dropped"] == 1 and module._log_broadcasts == set()
+
+
+async def test_the_single_vortex_log_is_kept_as_before(bridge):
+    payload = {"text": "worker ready", "category": "SYSTEM", "timestamp": 1759550000.0}
+    assert (await _signed(bridge, "vortex_log", payload)).json() == {"status": "ok"}
+    assert [(event, data) for event, data, _room in bridge.emitted] == [("new_log", payload)]
+    assert await bridge.store.recent_events("log") == [payload]
+
+
+async def test_an_audit_event_becomes_audit_update_and_is_not_stored(bridge):
+    payload = {"action": "THREAT_DETECTED" + "!" * 80, "detail": "SOURCE=TypedChat:ui | DESC=" + "d" * 400,
+               "severity": "critical", "ts": 1759550000.25, "extra": "dropped"}
+    assert (await _signed(bridge, "audit_event", payload)).json() == {"status": "ok"}
+    [(event, data, room)] = bridge.emitted
+    assert (event, room) == ("audit_update", "ui")
+    assert data == {"action": ("THREAT_DETECTED" + "!" * 80)[:64], "detail": payload["detail"][:300],
+                    "severity": "CRITICAL", "ts": 1759550000.25}
+    bridge.emitted.clear()
+    assert (await _signed(bridge, "audit_event", {"action": "X\u0000Y", "severity": "LOUD"})).json() == {
+        "status": "ok"}
+    [(_event, data, _room)] = bridge.emitted
+    assert data["action"] == "XY" and data["detail"] == "" and data["severity"] == "INFO" and data["ts"] > 0
+    bridge.emitted.clear()
+    for bad in ({"detail": "no action"}, "text", None):
+        assert (await _signed(bridge, "audit_event", bad)).json() == {"status": "ok"}
+    assert not bridge.emitted
+    assert await bridge.store.recent_events("log") == []
+    assert await bridge.store.recent_audit() == []
+
+
+async def test_the_agent_batch_helper_caps_items_and_counts_the_rest(bridge, agent_code):
+    await agent_code.notify_log_batch([{"text": f"n{n}", "level": "INFO", "category": "AGENT", "ts": 1.0e9}
+                                       for n in range(55)], dropped=2, source="svc")
+    await _drain(bridge)
+    logs = [data for event, data, _room in bridge.emitted if event == "new_log"]
+    assert len(logs) == 50 and {log["source"] for log in logs} == {"svc"}
+    [dropped] = [data for event, data, _room in bridge.emitted if event == "new_logs"]
+    assert dropped["dropped"] == 7
 
 
 # ---------------------------------------------------------------- legacy headers (LEGACY_TOKEN_AUTH)

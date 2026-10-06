@@ -7,6 +7,10 @@ Agent link v2 checks for the UI bridge (plan task C-14).
   headers are accepted only while LEGACY_TOKEN_AUTH=1.
 - NonceCache: the notify nonces of the last 300 s; the store's seen_ids keep them across a restart.
 - TokenBucket: per-socket and per-class rate limits (C-SOCK-1).
+- NotifyRateLimiter: POST /notify's three buckets (K-39 v10, C-64): critical 50/s, others 20/s per notify, and
+  logs 25 items/s burst 100 charged per vortex_log_batch item (SP-3; K-39 v12 draft in the C-64 NOTE.md), one
+  bucket per class for the whole bridge (both listeners, every credential), so a log flood never throttles a
+  transcript.
 - check_origin(): the Origin (or Referer) of a cookie-authenticated POST must be in ALLOWED_ORIGINS
   (C-AUTH-1; used by the session endpoints of C-19).
 
@@ -19,6 +23,7 @@ import hmac
 import json
 import math
 import re
+import threading
 import time
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable, Iterable, Mapping
@@ -130,6 +135,97 @@ class TokenBucket:
         """Seconds until take(tokens) can succeed."""
         self._refill()
         return max(0.0, tokens - self._tokens) / self.rate
+
+
+# POST /notify rate classes (K-39 v10): the voice path and the agent's control events; the log lines; everything
+# else (a missing or unknown type included). user_speaking_sync and job_end are low-volume voice/lifecycle events.
+NOTIFY_CLASS_CRITICAL, NOTIFY_CLASS_LOGS, NOTIFY_CLASS_OTHERS = "critical", "logs", "others"
+NOTIFY_CRITICAL_TYPES = frozenset({"transcription", "status", "thinking", "confirm_request", "settings_sync",
+                                   "agent_heartbeat", "user_speaking_sync", "job_end"})
+NOTIFY_LOG_TYPES = frozenset({"vortex_log", "vortex_log_batch"})
+# class: (tokens a second, burst). critical and others charge one token per notify. The logs class charges one
+# token per item a vortex_log_batch will store (C-64 review SP-3: 10 posts/s x 50 items was a 500 stored-rows/s
+# amplifier), so its numbers are item budgets: 25 items/s, burst 100 (two full batches; the agent shipper's
+# steady rate is 5 lines/s and svc and desktop share the class). Draft contract wording: K-39 v12 in the C-64
+# NOTE.md handoff.
+NOTIFY_CLASS_RATES: Mapping[str, tuple[float, float]] = {
+    NOTIFY_CLASS_CRITICAL: (50.0, 50.0),
+    NOTIFY_CLASS_LOGS: (25.0, 100.0),
+    NOTIFY_CLASS_OTHERS: (20.0, 20.0),
+}
+NOTIFY_REFUSAL_REPORT_S = 60.0
+# One vortex_log_batch is charged min(items, NOTIFY_LOG_COST_MAX) tokens, at least 1 (the stored-item cap in
+# bridge_store.LOG_BATCH_MAX; items past it are dropped by normalization and cost nothing more).
+NOTIFY_LOG_COST_MAX = 50
+
+
+def notify_class(event_type: Any) -> str:
+    """The rate class of a notify type (K-39 v10); a missing or non-string type is 'others'."""
+    if not isinstance(event_type, str):
+        return NOTIFY_CLASS_OTHERS
+    if event_type in NOTIFY_CRITICAL_TYPES:
+        return NOTIFY_CLASS_CRITICAL
+    if event_type in NOTIFY_LOG_TYPES:
+        return NOTIFY_CLASS_LOGS
+    return NOTIFY_CLASS_OTHERS
+
+
+def notify_cost(event_type: Any, payload: Any) -> float:
+    """The tokens one notify spends (C-64 review SP-3): a vortex_log_batch costs one per item it carries (at
+    least 1, at most NOTIFY_LOG_COST_MAX, the stored-item cap), so the logs bucket counts items, not posts;
+    every other notify costs 1."""
+    if event_type != "vortex_log_batch" or not isinstance(payload, Mapping):
+        return 1.0
+    items = payload.get("items")
+    if not isinstance(items, list) or not items:
+        return 1.0
+    return float(min(len(items), NOTIFY_LOG_COST_MAX))
+
+
+class NotifyRateLimiter:
+    """
+    POST /notify's rate buckets (K-39 v10, C-64): one global bucket per class (NOTIFY_CLASS_RATES), checked after
+    authentication, so the nonce of a refused notify is spent and a retry is signed anew. check() counts refusals;
+    refusal_report() hands each class's count to the caller at most once a minute.
+    """
+
+    def __init__(self, clock: Callable[[], float] = time.monotonic,
+                 rates: Mapping[str, tuple[float, float]] | None = None) -> None:
+        self._clock = clock
+        self.buckets = {name: TokenBucket(rate, burst, clock=clock)
+                        for name, (rate, burst) in (rates or NOTIFY_CLASS_RATES).items()}
+        self._refused = dict.fromkeys(self.buckets, 0)
+        self._reported = dict.fromkeys(self.buckets, float("-inf"))
+        # C-64 review LS-5: today both bridge listeners share one asyncio loop, so the counters and buckets
+        # see one thread; the lock keeps them right if a listener ever gets a thread of its own.
+        self._lock = threading.Lock()
+
+    def check(self, event_type: Any, cost: float = 1.0) -> tuple[str, float | None]:
+        """(class, None) when the notify may pass, else (class, seconds until its bucket holds cost tokens).
+        cost is notify_cost(): one per stored item for a vortex_log_batch, 1 for everything else (SP-3)."""
+        name = notify_class(event_type)
+        cost = max(1.0, float(cost))
+        with self._lock:
+            bucket = self.buckets[name]
+            if bucket.take(cost):
+                return name, None
+            self._refused[name] += 1
+            return name, bucket.retry_after(cost)
+
+    def refusal_report(self) -> list[tuple[str, int]]:
+        """[(class, refusals not reported yet)] for each class with refusals whose last report is at least
+        NOTIFY_REFUSAL_REPORT_S old; the caller logs one WARNING for each. Called on every refused notify and
+        from the bridge's 12 s vitals loop, so the last window of a flood that stops abruptly is still
+        reported (COR-2/LS-5)."""
+        now = self._clock()
+        due: list[tuple[str, int]] = []
+        with self._lock:
+            for name, count in self._refused.items():
+                if count and now - self._reported[name] >= NOTIFY_REFUSAL_REPORT_S:
+                    due.append((name, count))
+                    self._refused[name] = 0
+                    self._reported[name] = now
+        return due
 
 
 async def read_body(request: Request, limit: int = NOTIFY_READ_LIMIT) -> bytes | None:

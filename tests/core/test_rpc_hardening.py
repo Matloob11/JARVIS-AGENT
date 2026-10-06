@@ -337,8 +337,8 @@ def test_titles_clipboard_and_tool_arguments_never_reach_info(monkeypatch):
     log.addHandler(info)
     log.addHandler(debug)
     log.setLevel(logging.DEBUG)
-    forwarded: list[str] = []
-    monkeypatch.setattr(jarvis_logger, "_BRIDGE_NOTIFY_LOG", lambda message, category: forwarded.append(message))
+    shipper = jarvis_logger.UiLogShipper()  # C-64: what the UI handler queued for the UI log panel
+    monkeypatch.setattr(jarvis_logger, "ui_log_shipper", shipper)
     try:
         log.info("Focused window: %s", "Bank - Chrome")
         log.info("Generating Stylish QR (Dots) for: %s", "wifi:secret")
@@ -356,10 +356,15 @@ def test_titles_clipboard_and_tool_arguments_never_reach_info(monkeypatch):
                                                       "Focused window: kept at WARNING"]
     assert [r.levelname for r in debug.records][:7] == ["DEBUG"] * 7
     assert not any("PIN" in r.getMessage() or "Home street" in r.getMessage() for r in info.records)
-    ui = jarvis_logger.UIBridgeHandler()
-    private = logging.LogRecord("JARVIS-WINDOW", logging.INFO, __file__, 1, "Focused window: %s", ("x",), None)
-    ui.emit(private)
-    assert forwarded == []
+    # Only the WARNING line reached the UI buffer (the INFO ones are private or not allow-listed).
+    assert [item["text"] for item in shipper.snapshot()] == ["Focused window: kept at WARNING"]
+    for min_level in (logging.DEBUG, logging.INFO):  # also with UI_LOG_LEVEL=INFO or DEBUG
+        ui = jarvis_logger.UIBridgeHandler(shipper=shipper, min_level=min_level, info_allow={"JARVIS-WINDOW"})
+        for private in (
+                logging.LogRecord("JARVIS-WINDOW", logging.INFO, __file__, 1, "Focused window: %s", ("x",), None),
+                logging.LogRecord("JARVIS-WINDOW", logging.DEBUG, __file__, 1, "Focused window: %s", ("x",), None)):
+            ui.emit(private)
+    assert len(shipper.snapshot()) == 1
 
 
 def test_every_private_template_is_a_real_log_line():

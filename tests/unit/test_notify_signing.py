@@ -436,6 +436,103 @@ async def test_updates_of_one_message_sent_together_arrive_in_the_order_they_wer
     await bridge.client.aclose()
 
 
+async def test_different_ids_go_out_side_by_side_while_one_id_waits_its_turn(link, monkeypatch):
+    """C-64 (K-39 v10): order is kept per key, not per loop. A slow answer for one message never holds up another
+    message, while two updates of one message never overlap and keep their order."""
+    b_arrived = asyncio.Event()
+    in_flight: dict[str, int] = {}
+    overlap: list[str] = []
+    order: list[tuple[str, bool]] = []
+
+    async def answer(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)["payload"]
+        msg_id = payload["id"]
+        in_flight[msg_id] = in_flight.get(msg_id, 0) + 1
+        if in_flight[msg_id] > 1:
+            overlap.append(msg_id)
+        order.append((msg_id, payload["is_final"]))
+        try:
+            if msg_id == "b":
+                b_arrived.set()
+            elif msg_id == "a" and not payload["is_final"]:
+                await asyncio.wait_for(b_arrived.wait(), 5)  # 'a' answers only once 'b' got through
+            await asyncio.sleep(0.01)
+            return httpx.Response(200, json={"status": "ok"})
+        finally:
+            in_flight[msg_id] -= 1
+
+    bridge = Bridge(monkeypatch, default=answer)
+    await asyncio.wait_for(asyncio.gather(
+        jarvis_bridge.notify_transcription("assistant", "a1", msg_id="a", is_final=False),
+        jarvis_bridge.notify_transcription("assistant", "a2", msg_id="a"),
+        jarvis_bridge.notify_transcription("user", "b", msg_id="b")), 10)
+    assert overlap == [] and len(bridge.requests) == 3
+    assert [entry for entry in order if entry[0] == "a"] == [("a", False), ("a", True)]
+    assert order.index(("b", True)) < order.index(("a", True))  # b did not wait for a's turn
+    assert jarvis_bridge.retry_queue_size() == 0
+    await bridge.client.aclose()
+
+
+async def test_the_order_lock_of_a_key_is_dropped_once_nothing_uses_it():
+    queue = jarvis_bridge._RetryQueue()
+    entered: list[str] = []
+
+    async def send(name: str) -> None:
+        async with jarvis_bridge._in_order(queue, "transcription:x"):
+            entered.append(name)
+            assert queue.locks["transcription:x"].users >= 1
+            await asyncio.sleep(0.01)
+
+    await asyncio.gather(send("one"), send("two"))
+    async with jarvis_bridge._in_order(queue, None):  # no key: no lock at all
+        assert queue.locks == {}
+    assert entered == ["one", "two"] and queue.locks == {}
+
+
+def test_order_keys_are_per_id_for_messages_and_per_type_for_snapshots():
+    key = jarvis_bridge._order_key
+    assert key("transcription", {"id": "m1"}) == "transcription:m1"
+    assert key("confirm_request", {"id": "c1"}) == "confirm_request:c1"
+    assert key("tool_sync", {"id": 7}) == "tool_sync:7"
+    assert key("settings_sync", {"x": 1}) == "settings_sync" and key("agent_heartbeat", None) == "agent_heartbeat"
+    for event_type, payload in (("transcription", {"text": "no id"}), ("tool_sync", {"id": ""}),
+                                ("tool_sync", {"id": True}), ("transcription", "text"), ("status", "START")):
+        assert key(event_type, payload) is None
+
+
+async def test_a_429_retry_after_is_the_next_wait_and_holds_new_events_back(link, monkeypatch):
+    async def throttled(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(429, json={"error": "rate_limited", "class": "critical"}, headers={"Retry-After": "7"})
+
+    bridge = Bridge(monkeypatch, [throttled])
+    await jarvis_bridge.notify_transcription("user", "a", msg_id="a")
+    await _drained()
+    assert link.waits == [pytest.approx(7.0, abs=0.5)]  # not the 1 s backoff step
+    assert [body["payload"]["id"] for body in bridge.bodies()] == ["a", "a"]
+
+    # A window that is still open holds a new event back even with nothing queued.
+    queue = jarvis_bridge._queue_for(asyncio.get_running_loop())
+    queue.hold_until = time.monotonic() + 20.0
+    await jarvis_bridge.notify_transcription("user", "b", msg_id="b")
+    assert len(bridge.requests) == 2  # not sent yet: it waits out the window
+    await _drained()
+    assert link.waits[-1] == pytest.approx(20.0, abs=1.0)
+    assert [body["payload"]["id"] for body in bridge.bodies()] == ["a", "a", "b"]
+    await bridge.client.aclose()
+
+
+async def test_a_429_with_a_long_retry_after_waits_at_most_30_s(link, monkeypatch):
+    async def throttled(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(429, json={"error": "rate_limited"}, headers={"Retry-After": "600"})
+
+    bridge = Bridge(monkeypatch, [throttled, throttled])
+    await jarvis_bridge.notify_event("settings_sync", {"persona": "jarvis"})
+    await _drained()
+    assert link.waits == [pytest.approx(30.0, abs=0.5), 30.0]  # the queue's retry got a 429 too
+    assert len(bridge.requests) == 3
+    await bridge.client.aclose()
+
+
 @pytest.mark.parametrize(("failure", "event_type", "queued"), [
     (httpx.ReadTimeout("slow"), "transcription", True),          # the bridge keeps one copy per id
     (httpx.RemoteProtocolError("cut"), "settings_sync", True),   # a snapshot
@@ -718,7 +815,7 @@ async def real_bridge(monkeypatch, tmp_path, link):
     monkeypatch.setattr(module, "_notify_nonces", NonceCache())
     monkeypatch.setattr(module, "VORTEX_SECURITY_TOKEN", LEGACY_TOKEN)
     monkeypatch.setattr(module.sio, "emit", fake_emit)
-    monkeypatch.setattr(module.app.state, "rate_limit_window", [])
+    monkeypatch.setattr(module.app.state, "notify_limiter", module.NotifyRateLimiter())
     monkeypatch.setattr(config, "legacy_token_auth", True)
     monkeypatch.setattr(config, "bridge_url", "http://bridge.test")  # the app itself; nginx strips /vortex
     asgi = httpx.ASGITransport(app=module.app)

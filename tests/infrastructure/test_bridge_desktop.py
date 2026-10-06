@@ -1077,7 +1077,7 @@ async def bridge(monkeypatch, tmp_path):
                         ("_agent_pc_vitals_mono", 0.0), ("_latest_vps_vitals", None)):
         monkeypatch.setattr(module, name, value)
     monkeypatch.setattr(module.sio, "emit", fake_emit)
-    monkeypatch.setattr(module.app.state, "rate_limit_window", [])
+    monkeypatch.setattr(module.app.state, "notify_limiter", module.NotifyRateLimiter())
     for name, value in (("agent_token", AGENT_TOKEN), ("bridge_hmac_secret", HMAC_SECRET),
                         ("security_token", LEGACY_TOKEN), ("legacy_token_auth", True), ("env", "development")):
         monkeypatch.setattr(config, name, value)
@@ -1500,7 +1500,7 @@ async def live(monkeypatch, tmp_path):
                         ("VORTEX_SECURITY_TOKEN", LEGACY_TOKEN), ("desktop", link), ("_agent_pc_vitals", None),
                         ("_agent_pc_vitals_mono", 0.0), ("_latest_vps_vitals", None)):
         monkeypatch.setattr(module, name, value)
-    monkeypatch.setattr(module.app.state, "rate_limit_window", [])
+    monkeypatch.setattr(module.app.state, "notify_limiter", module.NotifyRateLimiter())
     for name, value in (("agent_token", AGENT_TOKEN), ("bridge_hmac_secret", HMAC_SECRET),
                         ("security_token", LEGACY_TOKEN), ("legacy_token_auth", True), ("env", "development")):
         monkeypatch.setattr(config, name, value)

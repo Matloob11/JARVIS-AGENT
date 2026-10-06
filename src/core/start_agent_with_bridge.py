@@ -31,9 +31,10 @@ def main() -> None:
         root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
         env["PYTHONPATH"] = root_dir + os.pathsep + env.get("PYTHONPATH", "")
 
-        # Start bridge in the background
+        # Start bridge in the background, with its own log file (C-64: never the agent's main LOG_FILE)
         # pylint: disable=consider-using-with
-        bridge_process = subprocess.Popen([sys.executable, "-m", "src.core.ui_bridge"], env=env)
+        bridge_env = dict(env, LOG_FILE=os.path.join("logs", "ui_bridge_local.log"))
+        bridge_process = subprocess.Popen([sys.executable, "-m", "src.core.ui_bridge"], env=bridge_env)
         time.sleep(3) # Give bridge time to bind to port
 
         if bridge_process.poll() is not None:

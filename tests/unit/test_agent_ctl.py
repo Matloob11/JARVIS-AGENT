@@ -258,6 +258,29 @@ def test_rotation_starts_at_5_mb(ctl):
     assert not log.exists() and (ctl.logs / "agent_stderr.log.1").stat().st_size == agent_ctl.ROTATE_BYTES
 
 
+def test_a_start_catches_up_the_worker_log_and_security_log_rotation(ctl, monkeypatch, tmp_path):
+    """C-64 backstop: the worker's LOG_FILE (10 MB) and security.log (5 MB), 5 kept, rotated while no worker runs."""
+    ctl.logs.mkdir()
+    main_log = tmp_path / "worker" / "jarvis_main.log"
+    main_log.parent.mkdir()
+    monkeypatch.setenv("LOG_FILE", str(main_log))
+    assert agent_ctl.worker_log_file() == main_log
+    monkeypatch.setenv("LOG_FILE", "logs/jarvis_hybrid_local.log")
+    assert agent_ctl.worker_log_file() == agent_ctl.ROOT / "logs" / "jarvis_hybrid_local.log"  # project-relative
+    monkeypatch.setenv("LOG_FILE", str(main_log))
+    assert agent_ctl.WORKER_LOG_BYTES == 10 * 1024 * 1024
+    monkeypatch.setattr(agent_ctl, "WORKER_LOG_BYTES", 20)
+    monkeypatch.setattr(agent_ctl, "ROTATE_BYTES", 10)
+    main_log.write_text("x" * 19, encoding="utf-8")
+    security = ctl.logs / "security.log"
+    security.write_text("y" * 10, encoding="utf-8")
+    assert agent_ctl.rotate_worker_logs() == ["security.log"]  # the main log is under its own limit
+    main_log.write_text("x" * 20, encoding="utf-8")
+    assert agent_ctl.rotate_worker_logs() == ["jarvis_main.log"]
+    assert not main_log.exists() and Path(f"{main_log}.1").read_text(encoding="utf-8") == "x" * 20
+    assert (ctl.logs / "security.log.1").read_text(encoding="utf-8") == "y" * 10
+
+
 # --------------------------------------------------------------------------- restart: cooldown and lock
 
 

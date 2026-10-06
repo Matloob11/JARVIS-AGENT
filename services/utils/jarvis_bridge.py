@@ -4,19 +4,26 @@ Agent -> UI bridge notifications (POST /notify, contract C-NOTIFY-1 / K-39).
 
 Agent link v2 (AGENT_TOKEN and BRIDGE_HMAC_SECRET both set): every event is serialized once and exactly
 those bytes are sent and signed (X-Agent-Token, -Timestamp, -Nonce, -Signature; signed_headers()).
-Critical types (CRITICAL_TYPES) that fail are retried from a bounded per-event-loop queue, and they reach
-the bridge in the order they were sent: while older ones wait for a retry, a new one queues behind them.
+Retried types (CRITICAL_TYPES) that fail are retried from a bounded per-event-loop queue. Order is kept per key
+(K-39 v10, C-64): updates of one message, confirmation or tool call (and each settings or heartbeat snapshot) go out
+one at a time in the order they were sent, while different keys go out side by side; and while older events wait
+for a retry, or a 429's Retry-After window is open, a new one queues behind them.
 Without those keys the legacy X-Vortex headers are sent as before, with one WARNING per process.
+UI log lines do not come through here: jarvis_logger's shipper thread posts them as vortex_log_batch with
+post_notify_blocking() (C-64).
 """
 import asyncio
+import contextlib
 import functools
 import json
+import math
 import secrets
 import threading
 import time
 import uuid
 import weakref
 from collections import deque
+from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -47,6 +54,7 @@ RETRY_FIRST_S = 1.0
 RETRY_MAX_S = 30.0
 NOTIFY_MAX_BYTES = 256 * 1024  # the bridge answers 413 above this, so a larger body is never queued
 _WARN_EVERY_S = 60.0
+LOG_BATCH_MAX = 50  # K-40 v10: items in one vortex_log_batch
 
 
 class BridgePayload(TypedDict):
@@ -217,32 +225,103 @@ def _notify_url() -> str:
     return f"{config.bridge_url.rstrip('/')}/notify"
 
 
-async def _post_signed(raw: bytes) -> tuple[str, str]:
-    """One signed POST /notify of raw (new headers every time). Returns (outcome, short reason); never
+def _retry_after_s(response: Any) -> float | None:
+    """A 429 (or 503) answer's Retry-After in seconds, at most RETRY_MAX_S; None without a usable one."""
+    try:
+        seconds = float(response.headers.get("retry-after"))
+    except (AttributeError, TypeError, ValueError):
+        return None
+    if not math.isfinite(seconds) or seconds < 0:
+        return None
+    return min(seconds, RETRY_MAX_S)
+
+
+def _response_outcome(response: Any) -> tuple[str, str, float | None]:
+    """(outcome, short reason, Retry-After) of one /notify answer. The reason holds a status and the C-NOTIFY-1 error
+    code, never a header or the body."""
+    status = getattr(response, "status_code", None)
+    if not isinstance(status, int):
+        return _DELIVERED, "", None  # a stand-in client that reports no status
+    outcome = _status_outcome(status)
+    if outcome == _DELIVERED:
+        return outcome, "", None
+    try:
+        error = response.json().get("error") or ""
+    except Exception:  # pylint: disable=broad-exception-caught
+        error = ""
+    retry_after = _retry_after_s(response) if status in (429, 503) else None
+    return outcome, f"HTTP {status} {str(error)[:40]}".strip(), retry_after
+
+
+async def _post_signed(raw: bytes) -> tuple[str, str, float | None]:
+    """One signed POST /notify of raw (new headers every time). Returns (outcome, short reason, Retry-After); never
     raises except CancelledError. The reason holds a status, a C-NOTIFY-1 error code or an exception name,
     never a header or the body."""
     try:
         headers = signed_headers(raw)
     except RuntimeError as exc:
-        return _FAILED, str(exc)
+        return _FAILED, str(exc), None
     try:
         async with _get_semaphore():  # first, as on the legacy path
             client = await get_http_client()
             response = await client.post(_notify_url(), content=raw, headers=headers,
                                          timeout=NOTIFY_TIMEOUT_S)
     except Exception as exc:  # pylint: disable=broad-exception-caught
-        return _error_outcome(exc), f"{type(exc).__name__}: {str(exc)[:160]}"
-    status = getattr(response, "status_code", None)
-    if not isinstance(status, int):
-        return _DELIVERED, ""  # a stand-in client that reports no status
-    outcome = _status_outcome(status)
-    if outcome == _DELIVERED:
-        return outcome, ""
+        return _error_outcome(exc), f"{type(exc).__name__}: {str(exc)[:160]}", None
+    return _response_outcome(response)
+
+
+def _request_parts(raw: bytes) -> tuple[str, dict[str, str]]:
+    """The URL and headers of one POST /notify of exactly raw, with the credential notify_event would use: the
+    C-NOTIFY-1 v2 headers (built anew for every attempt) with the agent link v2 keys, else the legacy X-Vortex
+    headers (HMAC over the sorted JSON, as the bridge checks it). Raises RuntimeError when v2 headers cannot be
+    built."""
+    if agent_link_v2():
+        return _notify_url(), signed_headers(raw)
+    signature = security_manager.generate_signature(json.dumps(json.loads(raw), sort_keys=True))
+    return _notify_url(), {"Content-Type": "application/json", **_get_headers(signature)}
+
+
+def post_notify_blocking(event_type: str, payload: Any, *, client: httpx.Client,
+                         timeout: float = NOTIFY_TIMEOUT_S) -> tuple[str, str, float | None]:
+    """
+    One POST /notify from a plain thread (jarvis_logger's UI log shipper, C-64) with its own httpx.Client: the same
+    body (encode_event) and credentials as notify_event, sent once. Returns (outcome, short reason, Retry-After);
+    outcome is 'delivered', 'retry' (the bridge cannot have it: connect error, 429, 502, 503), 'uncertain' (it may
+    have it: read timeout, 500, 504) or 'failed' (400, 401, 403, 413, a payload JSON cannot hold, missing keys).
+    Never raises.
+    """
     try:
-        error = response.json().get("error") or ""
-    except Exception:  # pylint: disable=broad-exception-caught
-        error = ""
-    return outcome, f"HTTP {status} {str(error)[:40]}".strip()
+        raw = encode_event(event_type, payload)
+    except Exception as exc:  # pylint: disable=broad-exception-caught  # NaN, RecursionError ...
+        return _FAILED, type(exc).__name__, None
+    if len(raw) > NOTIFY_MAX_BYTES:
+        return _FAILED, "body over the bridge limit", None
+    try:
+        url, headers = _request_parts(raw)
+    except Exception as exc:  # pylint: disable=broad-exception-caught  # missing keys, a signer that refuses
+        return _FAILED, f"{type(exc).__name__}: {str(exc)[:160]}", None
+    try:
+        response = client.post(url, content=raw, headers=headers, timeout=timeout)
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        return _error_outcome(exc), f"{type(exc).__name__}: {str(exc)[:160]}", None
+    return _response_outcome(response)
+
+
+# K-39 v10: the retried types whose order matters per key: updates of one message, confirmation or tool call by id,
+# and the settings and heartbeat snapshots by type. Everything else has no key and is never held back by another.
+_ORDER_BY_ID = frozenset({"transcription", "confirm_request", "tool_sync"})
+_ORDER_BY_TYPE = frozenset({"settings_sync", "agent_heartbeat"})
+
+
+def _order_key(event_type: str, payload: Any) -> str | None:
+    if event_type in _ORDER_BY_TYPE:
+        return event_type
+    if event_type in _ORDER_BY_ID and isinstance(payload, dict):
+        item_id = payload.get("id")
+        if isinstance(item_id, (str, int)) and not isinstance(item_id, bool) and item_id != "":
+            return f"{event_type}:{item_id}"
+    return None
 
 
 @dataclass(eq=False)
@@ -255,15 +334,24 @@ class _Queued:
 
 
 @dataclass(eq=False)
+class _KeyLock:
+    """The lock of one order key and how many sends use it (the entry goes once none does)."""
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    users: int = 0
+
+
+@dataclass(eq=False)
 class _RetryQueue:
-    """The critical events of one event loop: the retry queue (oldest first, at most RETRY_QUEUE_MAX
-    events) and the lock that sends them one at a time, so a retry never lands after a newer event."""
+    """The critical events of one event loop: the retry queue (oldest first, at most RETRY_QUEUE_MAX events), the
+    per-key locks that send the events of one key one at a time (asyncio.Lock is FIFO), and the end of an open
+    Retry-After window."""
     items: deque[_Queued] = field(default_factory=deque)
     task: "asyncio.Task[None] | None" = None
     wake: asyncio.Event = field(default_factory=asyncio.Event)
     wait_s: float = RETRY_FIRST_S  # before the next attempt; 0 right after a delivery
     in_flight: _Queued | None = None
-    order: asyncio.Lock = field(default_factory=asyncio.Lock)
+    locks: dict[str, _KeyLock] = field(default_factory=dict)
+    hold_until: float = float("-inf")  # time.monotonic() until which new critical events queue unsent (429)
     users: int = 0  # critical sends of this loop in progress
 
 
@@ -378,6 +466,39 @@ def _discard(queue: _RetryQueue, item: _Queued) -> None:
         pass
 
 
+def _hold(queue: _RetryQueue, retry_after: float | None) -> None:
+    """A 429 with Retry-After: new critical events queue behind until it passes, and it is the flusher's next
+    wait (at most RETRY_MAX_S)."""
+    if retry_after is None:
+        return
+    wait = min(max(retry_after, 1.0), RETRY_MAX_S)  # the bridge sends whole seconds >= 1
+    queue.hold_until = max(queue.hold_until, time.monotonic() + wait)
+    queue.wait_s = wait
+
+
+def _holding(queue: _RetryQueue) -> bool:
+    return time.monotonic() < queue.hold_until
+
+
+@contextlib.asynccontextmanager
+async def _in_order(queue: _RetryQueue, key: str | None) -> AsyncIterator[None]:
+    """Holds the order lock of key (none for None): events of one key go out one at a time, in the order they came."""
+    if key is None:
+        yield
+        return
+    entry = queue.locks.get(key)
+    if entry is None:
+        entry = queue.locks[key] = _KeyLock()
+    entry.users += 1
+    try:
+        async with entry.lock:
+            yield
+    finally:
+        entry.users -= 1
+        if not entry.users and queue.locks.get(key) is entry:
+            del queue.locks[key]
+
+
 def _enqueue(queue: _RetryQueue, item: _Queued, reason: str | None) -> None:
     """Puts a critical event at the end of its loop's queue: after its send failed (reason), or unsent
     behind older waiting events (reason None). When the queue is full the oldest waiting event makes room
@@ -397,7 +518,8 @@ def _enqueue(queue: _RetryQueue, item: _Queued, reason: str | None) -> None:
         logger.debug("Bridge notify: %s waits behind %d older critical event(s)", item.event_type,
                      len(queue.items) - 1)
     if queue.task is None or queue.task.done():
-        queue.wait_s = RETRY_FIRST_S
+        # The first wait: an open Retry-After window's rest, else the backoff's first step.
+        queue.wait_s = max(RETRY_FIRST_S, min(queue.hold_until - time.monotonic(), RETRY_MAX_S))
         queue.task = asyncio.get_running_loop().create_task(_flush(queue), name="bridge-notify-retry")
         queue.task.add_done_callback(functools.partial(_flusher_done, queue))
 
@@ -412,8 +534,8 @@ async def _wait_before_retry(queue: _RetryQueue) -> None:
 
 async def _flush(queue: _RetryQueue) -> None:
     """Sends the queued events oldest first, one at a time, until none is left. The wait between failed
-    attempts grows 1, 2, 4, 8, 16, 30, 30 ... s and goes back to 0 after a delivery; each event gets its
-    first send and at most RETRY_MAX retries."""
+    attempts grows 1, 2, 4, 8, 16, 30, 30 ... s and goes back to 0 after a delivery; a 429's Retry-After (at most
+    30 s) is the next wait instead. Each event gets its first send and at most RETRY_MAX retries."""
     delivered = 0
     try:
         while queue.items:
@@ -424,7 +546,7 @@ async def _flush(queue: _RetryQueue) -> None:
             item = queue.items[0]
             queue.in_flight = item
             try:
-                outcome, reason = await _post_signed(item.raw)
+                outcome, reason, retry_after = await _post_signed(item.raw)
             finally:
                 queue.in_flight = None
                 queue.wake.clear()
@@ -439,31 +561,36 @@ async def _flush(queue: _RetryQueue) -> None:
                 _report_failure(item.event_type, reason, len(queue.items), 1)
             else:
                 _report_failure(item.event_type, reason, len(queue.items))
-            queue.wait_s = min(max(queue.wait_s * 2, RETRY_FIRST_S), RETRY_MAX_S)
+            if retry_after is not None:
+                _hold(queue, retry_after)
+            else:
+                queue.wait_s = min(max(queue.wait_s * 2, RETRY_FIRST_S), RETRY_MAX_S)
     finally:
         if delivered:
             logger.info("Bridge notify: %d queued critical event(s) delivered after a retry", delivered)
 
 
 async def _notify_critical(event_type: str, payload: Any, raw: bytes) -> None:
-    """Sends a critical event in order: the loop's critical events go out one at a time, and while older
-    ones wait for a retry a new one queues behind them instead of overtaking them (the bridge and the UI
-    keep the last event per id, so a late retry would roll the state back)."""
+    """Sends a critical event in order (K-39 v10): events of one key (_order_key: a message, confirmation or tool
+    call id, or a snapshot type) go out one at a time, while other keys go out side by side; and while older events
+    wait for a retry, or a 429's Retry-After window is open, a new one queues behind them instead of overtaking them
+    (the bridge and the UI keep the last event per id, so a late retry would roll the state back)."""
     loop = asyncio.get_running_loop()
     queue = _queue_for(loop)
     queue.users += 1
     try:
         idempotent = _idempotent(event_type, payload)
-        async with queue.order:
-            if queue.items:
+        async with _in_order(queue, _order_key(event_type, payload)):
+            if queue.items or _holding(queue):
                 if len(raw) > NOTIFY_MAX_BYTES:
                     _report_failure(event_type, "body over the bridge limit", len(queue.items), 1)
                 else:
                     _enqueue(queue, _Queued(event_type, raw, idempotent, attempts=0), None)
                 return
-            outcome, reason = await _post_signed(raw)
+            outcome, reason, retry_after = await _post_signed(raw)
             if outcome == _DELIVERED:
                 return
+            _hold(queue, retry_after)
             if len(raw) <= NOTIFY_MAX_BYTES and _retryable(outcome, idempotent):
                 _enqueue(queue, _Queued(event_type, raw, idempotent), reason)
             else:
@@ -482,7 +609,7 @@ async def _notify_signed(event_type: str, payload: Any) -> None:
     if event_type in CRITICAL_TYPES:
         await _notify_critical(event_type, payload, raw)
         return
-    outcome, reason = await _post_signed(raw)
+    outcome, reason, _ = await _post_signed(raw)
     if outcome == _DELIVERED:
         wake_retry_queue()  # the bridge answers again: no need to wait out the backoff
     else:
@@ -585,12 +712,26 @@ async def notify_location(location_data: dict[str, Any]) -> None:
 
 
 async def notify_log(message: str, category: str = "SYSTEM") -> None:
-    """Sends a system activity log to the UI."""
+    """Sends one system activity line to the UI (vortex_log): for single one-off notices only. The agent's log lines
+    reach the UI as vortex_log_batch from jarvis_logger's shipper (C-64)."""
     await notify_event("vortex_log", {
         "text": message,
         "category": category,
         "timestamp": time.time(),
     })
+
+
+async def notify_log_batch(items: Sequence[Mapping[str, Any]], dropped: int = 0, source: str = "agent") -> None:
+    """
+    One vortex_log_batch (K-40 v10): at most LOG_BATCH_MAX items {text, category, level, ts}, the lines dropped
+    before it (items past the cap count as dropped too) and source ('agent', 'svc' or 'desktop'). Sent once and
+    never retried, as every log type. For relays (agent-svc's desktop lines, C-125) and tests; the agent's own lines
+    go through jarvis_logger's shipper.
+    """
+    rows = [dict(item) for item in list(items)[:LOG_BATCH_MAX] if isinstance(item, Mapping)]
+    extra = len(items) - len(rows)
+    await notify_event("vortex_log_batch", {"items": rows, "dropped": max(0, int(dropped)) + extra,
+                                            "source": source})
 
 
 async def notify_voice_match(confidence: float) -> None:

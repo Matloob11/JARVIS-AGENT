@@ -9,6 +9,7 @@ import asyncio
 import io
 import json
 import logging
+import logging.handlers
 import os
 import subprocess
 import sys
@@ -314,29 +315,26 @@ def test_every_setup_logger_handler_uses_redacting_formatter(tmp_path, monkeypat
     monkeypatch.setenv("LOG_STRUCTURED", structured)
     logger = setup_logger(f"JARVIS-TEST-C25-HANDLERS-{structured}", tmp_path / "h.log")
     try:
-        kinds = {type(h).__name__ for h in logger.handlers}
-        assert {"StreamHandler", "RotatingFileHandler", "UIBridgeHandler"} <= kinds
+        handlers = logger.handlers
+        assert any(type(h) is logging.StreamHandler for h in handlers)  # pylint: disable=unidiomatic-typecheck
+        assert any(isinstance(h, logging.handlers.RotatingFileHandler) for h in handlers)  # the shared one (C-64)
+        assert any(isinstance(h, UIBridgeHandler) for h in handlers)
         assert all(isinstance(h.formatter, RedactingFormatter) for h in logger.handlers)
         assert any(isinstance(h.formatter, JSONFormatter) for h in logger.handlers) is (structured == "true")
     finally:
         _close(logger)
 
 
-async def test_ui_bridge_handler_sends_only_the_masked_message(monkeypatch):
-    sent: list[tuple[str, str]] = []
-
-    async def fake_notify_log(message: str, category: str) -> None:
-        sent.append((message, category))
-
-    monkeypatch.setattr(jarvis_logger, "_BRIDGE_NOTIFY_LOG", fake_notify_log)
-    handler = UIBridgeHandler()
+def test_ui_bridge_handler_sends_only_the_masked_message():
+    shipper = jarvis_logger.UiLogShipper()  # C-64: the handler only queues; the shipper's thread posts
+    handler = UIBridgeHandler(shipper=shipper, min_level=logging.INFO)
     assert isinstance(handler.formatter, UIMessageFormatter)
     record = logging.LogRecord("JARVIS-SWARM", logging.INFO, __file__, 1, "Bearer %s for %s",
                                ("abcDEF123456xyz", FAKE_GOOGLE_KEY), _exc_info("boom"))
-    pending = set(jarvis_logger._bg_tasks)  # pylint: disable=protected-access
     handler.emit(record)
-    await asyncio.gather(*(jarvis_logger._bg_tasks - pending))  # pylint: disable=protected-access
-    assert sent == [("Bearer *** for ***", "SWARM")]
+    [item] = shipper.snapshot()
+    assert (item["text"], item["category"], item["level"]) == ("Bearer *** for ***", "SWARM", "INFO")
+    assert FAKE_GOOGLE_KEY not in json.dumps(item) and "Traceback" not in item["text"]
 
 
 def test_wrapping_formatter_keeps_layout_and_caches_a_masked_traceback():

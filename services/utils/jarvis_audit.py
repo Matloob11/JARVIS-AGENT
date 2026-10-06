@@ -2,20 +2,30 @@
 # services/utils/jarvis_audit.py
 Enterprise Audit Trail and Security Monitoring.
 Logs security events, threat detections and risky tool runs (TOOL_EXEC) to a dedicated audit
-trail in <project_root>/logs/security.log.
+trail in <project_root>/logs/security.log: one shared rotating handler, 5 MiB x 5 (K-29, C-64).
+In the agent role a CRITICAL event (a detected threat included) is also mirrored to the UI as audit_event, at most
+AUDIT_MIRROR_PER_MIN a minute, with its detail masked and cut short (K-40 v10); the rest stay in security.log only.
 """
 
 import logging
 import os
 import re
+import threading
+import time
+from collections import deque
 
 from services.utils.jarvis_config import config
 
 SECURITY_LOG_PATH = os.path.join(config.project_root, "logs", "security.log")
+SECURITY_LOG_MAX_BYTES = 5 * 1024 * 1024
+SECURITY_LOG_BACKUPS = 5
 _FORMAT = '%(asctime)s - [%(levelname)s] - %(message)s'
 # Marks the security.log handler on the logger, which outlives a re-import of this module.
 _HANDLER_MARK = "jarvis_security_log"
 _CONTROL_RUN = re.compile(r"[\x00-\x1f\x7f]+")
+AUDIT_MIRROR_PER_MIN = 6
+AUDIT_DETAIL_MAX = 300
+AUDIT_ACTION_MAX = 64
 
 # Setup dedicated security logger
 security_logger = logging.getLogger("JARVIS-AUDIT")
@@ -35,9 +45,12 @@ def _formatter() -> logging.Formatter:
 
 
 def security_log_handler(path: str = SECURITY_LOG_PATH) -> logging.FileHandler:
-    """A security.log file handler; the file is opened on the first record."""
-    handler = logging.FileHandler(path, encoding="utf-8", delay=True)
-    handler.setFormatter(_formatter())
+    """The security.log handler: the process's one shared rotating handler of path (5 MiB x 5, INFO), opened on
+    the first record."""
+    from services.utils import jarvis_logger  # pylint: disable=import-outside-toplevel
+    handler = jarvis_logger.shared_file_handler(path, max_bytes=SECURITY_LOG_MAX_BYTES,
+                                                backup_count=SECURITY_LOG_BACKUPS, level=logging.INFO,
+                                                formatter=_formatter())
     setattr(handler, _HANDLER_MARK, True)
     return handler
 
@@ -69,6 +82,38 @@ def _one_line(text: object) -> str:
     return clean
 
 
+_mirror_lock = threading.Lock()
+_mirrored: deque[float] = deque()
+
+
+def _mirror_allowed(now: float) -> bool:
+    """At most AUDIT_MIRROR_PER_MIN mirrored events in any 60 s."""
+    with _mirror_lock:
+        while _mirrored and now - _mirrored[0] >= 60.0:
+            _mirrored.popleft()
+        if len(_mirrored) >= AUDIT_MIRROR_PER_MIN:
+            return False
+        _mirrored.append(now)
+        return True
+
+
+def _mirror_to_ui(event_type: str, details: str) -> None:
+    """K-40 v10: a CRITICAL event as audit_event {action, detail, severity, ts} through the UI log shipper (agent
+    role only, rate-capped); never raises."""
+    try:
+        from services.utils import jarvis_logger  # pylint: disable=import-outside-toplevel
+        if jarvis_logger.runtime_role() != jarvis_logger.ROLE_AGENT or not _mirror_allowed(time.monotonic()):
+            return
+        jarvis_logger.ui_log_shipper.offer_event("audit_event", {
+            "action": _one_line(event_type)[:AUDIT_ACTION_MAX],
+            "detail": _one_line(details)[:AUDIT_DETAIL_MAX],
+            "severity": "CRITICAL",
+            "ts": round(time.time(), 3),
+        })
+    except Exception:  # pylint: disable=broad-exception-caught  # the audit line is what counts
+        pass
+
+
 class JarvisAudit:
     """
     Enterprise Audit Trail and Security Monitoring.
@@ -76,10 +121,11 @@ class JarvisAudit:
 
     @classmethod
     def log_event(cls, event_type: str, details: str, severity: str = "INFO") -> None:
-        """Log a security event to the audit trail."""
+        """Log a security event to the audit trail; a CRITICAL one is also mirrored to the UI (agent role)."""
         message = f"EVENT={event_type} | DETAILS={details}"
         if severity == "CRITICAL":
             security_logger.critical(message)
+            _mirror_to_ui(event_type, details)
         elif severity == "WARNING":
             security_logger.warning(message)
         else:

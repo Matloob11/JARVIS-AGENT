@@ -26,6 +26,8 @@ logging.basicConfig(level=logging.INFO, format="[VORTEX] %(message)s")
 logger = logging.getLogger("VORTEX")
 
 SKIP_AGENT_MESSAGE = "agent worker is managed by scripts/agent_ctl.py - not starting a second one"
+# C-64 (K-29): the local bridge never shares the agent's main log file (one rotating handler per file and process).
+BRIDGE_LOCAL_LOG_FILE = os.path.join("logs", "ui_bridge_local.log")
 
 
 def _env_value(name: str) -> str | None:
@@ -121,8 +123,9 @@ def main() -> None:
             print("[VORTEX] JARVIS_HYBRID=1: the UI bridge runs on the VPS, nothing to start here.")
             return
 
-    # Start UI Bridge
-    bridge_proc = start_process(f"{python_cmd} -m src.core.ui_bridge", "UI-BRIDGE")
+    # Start UI Bridge (its own LOG_FILE, C-64)
+    bridge_proc = start_process(f"{python_cmd} -m src.core.ui_bridge", "UI-BRIDGE",
+                                extra_env={"LOG_FILE": BRIDGE_LOCAL_LOG_FILE})
     processes: list[dict[str, Any]] = [{"proc": bridge_proc, "name": "UI-BRIDGE"}]
 
     if start_agent:
