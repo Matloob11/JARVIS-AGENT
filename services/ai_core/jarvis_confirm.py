@@ -11,23 +11,30 @@ result reaches Sir through on_result. Denied and expired actions never run.
 """
 
 import asyncio
+import functools
 import hashlib
 import inspect
 import json
+import os
 import re
 import time
 import uuid
 from collections import OrderedDict, deque
 from collections.abc import Awaitable, Callable, Coroutine
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
+# _run_confirmed is the exact seam every real approved call re-enters the tool wrapper through
+# (K-14: timeout, lock, tool_sync, audit); the selftest's approved leg uses the same one.
 from services.ai_core.jarvis_plugin_manager import (
     CONFIRM_RISKS,
     CONFIRM_SUMMARY_MAX,
     SYNC_DETAILS_MAX,
+    _run_confirmed,
     jarvis_tool,
     one_line,
+    plugin_manager,
     result_status,
 )
 from services.utils import jarvis_audit
@@ -156,6 +163,18 @@ def _audit_decision(action: "PendingAction", allow: bool, reason: str, source: s
         logger.warning("Audit of confirmation %s failed: %s", action.id, e)
 
 
+def _audit_clamp(action: "PendingAction", what: str) -> None:
+    """TOOL_CONFIRM_CLAMPED line in logs/security.log: the broker honored the bridge's K-45 clamp
+    (risk raised to the static floor) — at clamp time when it closed the voice path, and again
+    when a spoken haan was refused because of it."""
+    try:
+        jarvis_audit.JarvisAudit.log_event(
+            "TOOL_CONFIRM_CLAMPED",
+            f"TOOL={action.tool} | RISK={action.risk} | ID={action.id} | {what}")
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.warning("Audit of clamp %s failed: %s", action.id, e)
+
+
 async def _post_to_bridge(event_type: str, payload: dict[str, Any]) -> Any:
     """
     Sends one ConfirmFlow event to the bridge and returns its parsed answer; raises on failure.
@@ -196,6 +215,7 @@ class PendingAction:
     run: Callable[[], Awaitable[Any]] | None = None
     key: str = ""
     ttl_s: int = 60
+    clamped: bool = False  # the bridge raised the risk to its K-45 floor (C-29 part 2)
     created_at: float = field(default_factory=time.time)
     loop: asyncio.AbstractEventLoop | None = None
     delivered: "asyncio.Future[dict[str, Any]] | None" = None
@@ -334,6 +354,11 @@ class ConfirmationBroker:
             return await self.resolve(key, False, source="voice")
         high_blocked = action.risk == "high" and not getattr(config, "voice_confirm_high", False)
         if high_blocked or not action.voice_allowed:
+            if action.clamped:
+                # K-45: the trail shows the clamp (not Sir) refused this haan; the action stays
+                # pending, so the dashboard Allow can still decide it.
+                _audit_clamp(action, "VOICE_APPROVAL=blocked (spoken haan refused above the "
+                                     "clamped gate)")
             return _refusal(TOOL_NAME, "UI_CONFIRM_REQUIRED", _UI_ONLY_MESSAGE, confirm_id=key)
         if not self._user_affirmed(action):
             return _refusal(TOOL_NAME, "NO_USER_AFFIRMATION", _NO_AFFIRMATION_MESSAGE,
@@ -360,6 +385,28 @@ class ConfirmationBroker:
         except asyncio.CancelledError:
             self._finish(action, allow=False, reason="cancelled")
             raise
+
+    async def wait_outcome(self, confirm_id: str) -> dict[str, Any] | None:
+        """
+        Waits until the pending action confirm_id is decided (UI, voice or expiry) and returns
+        its final outcome, the same dict a repeated resolve() returns: status 'started' only for
+        an approval, else 'cancelled' — or the stored refusal (status 'error', e.g.
+        CONFIRM_UI_UNREACHABLE / UI_CONFIRM_REQUIRED) when delivery itself was refused — each
+        with the K-14 reason. None for an unknown id. The wait never outlives the action's own
+        expiry by more than a second (C-29 confirm_selftest).
+        """
+        key = str(confirm_id or "").strip().lower()
+        action = self._pending.get(key)
+        if action is None:
+            done = self._resolved.get(key)
+            return dict(done) if done is not None else None
+        if action.outcome is None and action.decision is not None:
+            try:
+                await asyncio.wait_for(asyncio.shield(action.decision),
+                                       max(0.0, action.expires_at - time.time()) + 1.0)
+            except TimeoutError:
+                self._finish(action, allow=False, reason="expired")
+        return dict(action.outcome) if action.outcome is not None else None
 
     async def shutdown(self) -> None:
         """
@@ -417,6 +464,25 @@ class ConfirmationBroker:
                            "(CONFIRM_UI_UNREACHABLE)", action.id, action.tool)
             return self._finish(action, allow=False, reason="cancelled", outcome=_refusal(
                 action.tool, "CONFIRM_UI_UNREACHABLE", _UNREACHABLE_MESSAGE))
+        # C-29 part 2 (K-45): the bridge may have clamped the risk UP to the tool's static floor;
+        # the broker honors the stricter gate it answered with, so the level enforced here is the
+        # level the dialog shows and a spoken haan can never approve above it (K-14: high is
+        # screen-only unless config.voice_confirm_high). Never loosened: a lower or unknown
+        # answer risk changes nothing.
+        clamped_risk = answer.get("risk")
+        if clamped_risk in CONFIRM_RISKS and \
+                CONFIRM_RISKS.index(clamped_risk) > CONFIRM_RISKS.index(action.risk):
+            was_voice = action.voice_allowed
+            action.risk = clamped_risk
+            action.clamped = True
+            action.voice_allowed = (action.voice_allowed and voice_allowed_for(clamped_risk)
+                                    and answer.get("voice_allowed") is not False)
+            logger.warning("confirm_request %s for %s: the bridge clamped the risk to %s (K-45 "
+                           "floor); voice approval %s", action.id, action.tool, clamped_risk,
+                           "stays open" if action.voice_allowed else "is closed")
+            if was_voice and not action.voice_allowed:
+                _audit_clamp(action, "VOICE=closed (K-45 floor; high is UI-only unless "
+                                     "JARVIS_VOICE_CONFIRM_HIGH=1)")
         ui_clients = answer.get("ui_clients")
         no_ui = isinstance(ui_clients, int) and not isinstance(ui_clients, bool) and ui_clients <= 0
         if no_ui and not action.voice_allowed:  # nobody could approve it
@@ -464,6 +530,9 @@ class ConfirmationBroker:
                 outcome = {"status": "cancelled",
                            "message": _EXPIRED_MESSAGE if reason == "expired" else _DENIED_MESSAGE}
             outcome.update(tool=action.tool, confirm_id=action.id)
+        # C-29 part 2: the K-14 reason travels with the outcome, so a waiter (wait_outcome,
+        # confirm_selftest) can tell denied from expired; refusal outcomes keep their own fields.
+        outcome.setdefault("reason", reason)
         action.outcome = outcome
         self._resolved[action.id] = outcome
         while len(self._resolved) > _RESOLVED_KEEP:
@@ -564,3 +633,197 @@ async def confirm_action(confirm_id: str, allow: bool = True) -> dict[str, Any]:
         allow: true when Sir said haan/yes, false when he said nahi/no.
     """
     return await confirmation_broker.confirm_by_voice(confirm_id, allow)
+
+
+# ---------------------------------------------------------------- confirm_selftest (C-29 part 2, for C-30)
+
+SELFTEST_ENV = "JARVIS_CONFIRM_SELFTEST"
+SELFTEST_TOOL = "confirm_selftest"
+SELFTEST_MARKER_TOOL = "confirm_selftest_marker"
+# The dummy pending action is MEDIUM, so the dashboard Allow AND a spoken haan both close the loop.
+SELFTEST_RISK = "medium"
+SELFTEST_MARKER_NAME = "confirm_selftest.marker"
+SELFTEST_RUN_WAIT_S = 10.0
+# The tool body waits for Sir's decision, so its own timeout outlives the 60 s confirm window.
+SELFTEST_TOOL_TIMEOUT_S = 90
+SELFTEST_MARKER_TIMEOUT_S = 15
+_SELFTEST_SUMMARY = ("ConfirmFlow selftest: sirf logs/confirm_selftest.marker file likhni hai, "
+                     "Allow ya Deny dono se test poora hota hai")
+_SELFTEST_BUSY_MESSAGE = ("Sir, aik confirm selftest pehle se chal raha hai, pehle us ka faisla "
+                          "karein.")
+
+
+def selftest_enabled() -> bool:
+    """K-45: the confirm_selftest tools are registered only while JARVIS_CONFIRM_SELFTEST=1 —
+    exactly '1', matching the contract line (C-30 sets it for one agent run and removes it)."""
+    return os.getenv(SELFTEST_ENV, "").strip() == "1"
+
+
+def selftest_marker_path() -> Path:
+    """<project_root>/logs/confirm_selftest.marker: Allow creates it exactly once, Deny never (C-30)."""
+    return Path(getattr(config, "project_root", ".")) / "logs" / SELFTEST_MARKER_NAME
+
+
+@dataclass
+class _SelftestRun:
+    """The one in-flight selftest: where its marker goes and whether the approved leg ran."""
+    marker: Path
+    nonce: str
+    ran: asyncio.Event = field(default_factory=asyncio.Event)
+
+
+# One selftest at a time (SEC-6): a second call is refused while one is in flight, so its
+# stale-marker cleanup can never delete the marker a just-approved first run wrote. The
+# single-threaded event loop makes the check-and-set race-free; the finally in
+# run_confirm_selftest always clears the slot.
+_selftest_run: _SelftestRun | None = None
+
+
+def _marker_wrapper() -> Callable[..., Awaitable[Any]] | None:
+    """The registered tool wrapper of confirm_selftest_marker (the plugin manager keeps only the
+    wrapper; the decorator hands back the plain function)."""
+    for tool in plugin_manager.get_tools():
+        if getattr(tool, "__name__", "") == SELFTEST_MARKER_TOOL:
+            return tool
+    return None
+
+
+async def _write_selftest_marker(nonce: str) -> dict[str, Any]:
+    """The approved leg's body: writes the marker (no secrets, just the nonce and a time)."""
+    run = _selftest_run
+    marker = run.marker if run is not None and run.nonce == nonce else selftest_marker_path()
+    try:
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(json.dumps({"nonce": nonce, "ts": round(time.time(), 3)}) + "\n",
+                          encoding="utf-8")
+        return {"status": "success", "tool": SELFTEST_MARKER_TOOL,
+                "message": "Sir, confirm selftest poora hua: marker likh diya."}
+    except OSError as e:
+        return _refusal(SELFTEST_MARKER_TOOL, "SELFTEST_MARKER_FAILED",
+                        "Sir, selftest marker likha nahi ja saka.", marker_error=type(e).__name__)
+    finally:
+        if run is not None and run.nonce == nonce:
+            run.ran.set()
+
+
+async def run_confirm_selftest(broker: "ConfirmationBroker | None" = None,
+                               marker_path: Path | None = None,
+                               ttl_s: float | None = None) -> dict[str, Any]:
+    """
+    One dummy medium-risk ConfirmFlow round trip, end to end (C-29 part 2): confirm_request to
+    the bridge -> Sir's decision on the dashboard (Allow/Deny) or by voice -> broker resolve ->
+    only an approval runs the confirm_selftest_marker tool through the normal wrapper (K-14:
+    timeout, semaphore, tool_sync and the K-45 execution audit), which writes the marker exactly
+    once. Returns a clear ToolResult with the decision, the marker state and the timings
+    (request_ms: delivery of the dialog, decision_ms: Sir's answer, total_ms), so the C-30 live
+    selftest reads one result. Only the marker file is written; no other tool runs, and only one
+    selftest runs at a time (SELFTEST_ALREADY_RUNNING for a second call).
+    """
+    global _selftest_run  # pylint: disable=global-statement
+    broker = broker if broker is not None else confirmation_broker
+    marker = marker_path if marker_path is not None else selftest_marker_path()
+    if _selftest_run is not None:
+        return _refusal(SELFTEST_TOOL, "SELFTEST_ALREADY_RUNNING", _SELFTEST_BUSY_MESSAGE)
+    wrapper = _marker_wrapper()
+    if wrapper is None:
+        return _refusal(SELFTEST_TOOL, "SELFTEST_NOT_REGISTERED",
+                        "Sir, selftest ka marker tool register nahi hai; JARVIS_CONFIRM_SELFTEST=1 "
+                        "ke saath agent dobara start karein.")
+    stale_removed = False
+    try:
+        if marker.exists():
+            marker.unlink()
+            stale_removed = True
+    except OSError as e:
+        return _refusal(SELFTEST_TOOL, "SELFTEST_MARKER_LOCKED",
+                        "Sir, purana selftest marker hat nahi saka, pehle use hata dein.",
+                        marker_error=type(e).__name__)
+    run = _SelftestRun(marker=marker, nonce=uuid.uuid4().hex[:8])
+    _selftest_run = run
+    try:
+        t0 = time.monotonic()
+        asked = await broker.create_pending(
+            SELFTEST_TOOL, _SELFTEST_SUMMARY, SELFTEST_RISK,
+            args_preview=f"marker={SELFTEST_MARKER_NAME} nonce={run.nonce}",
+            arguments={"nonce": run.nonce},
+            run=functools.partial(_run_confirmed, wrapper, (run.nonce,), {}), ttl_s=ttl_s)
+        request_ms = round((time.monotonic() - t0) * 1000, 1)
+        if asked.get("status") != "needs_confirmation":
+            # CONFIRM_UI_UNREACHABLE or UI_CONFIRM_REQUIRED (no_ui): the refusal itself is the finding.
+            return {**asked, "tool": SELFTEST_TOOL, "request_ms": request_ms,
+                    "total_ms": round((time.monotonic() - t0) * 1000, 1),
+                    "marker": "absent", "stale_marker_removed": stale_removed}
+        confirm_id = str(asked.get("confirm_id") or "")
+        outcome = await broker.wait_outcome(confirm_id)
+        decision_ms = round((time.monotonic() - t0) * 1000 - request_ms, 1)
+        approved = isinstance(outcome, dict) and outcome.get("status") == "started"
+        reason = str(outcome.get("reason", "")) if isinstance(outcome, dict) else ""
+        if approved:  # give the spawned wrapper run a moment to write the marker before reporting it
+            try:
+                async with asyncio.timeout(SELFTEST_RUN_WAIT_S):
+                    await run.ran.wait()
+            except TimeoutError:
+                logger.warning("confirm_selftest %s: the approved run did not finish in %.0f s",
+                               confirm_id, SELFTEST_RUN_WAIT_S)
+        total_ms = round((time.monotonic() - t0) * 1000, 1)
+        marker_state = "created" if marker.exists() else "absent"
+        result: dict[str, Any] = {
+            "tool": SELFTEST_TOOL, "confirm_id": confirm_id, "risk": SELFTEST_RISK,
+            "decision": ("allowed" if approved else "expired" if reason == "expired"
+                         else "cancelled" if reason == "cancelled" else "denied"),
+            "reason": reason, "marker": marker_state, "stale_marker_removed": stale_removed,
+            "request_ms": request_ms, "decision_ms": decision_ms, "total_ms": total_ms}
+        if approved and marker_state != "created":
+            return {**result, "status": "error", "error_code": "SELFTEST_MARKER_MISSING",
+                    "message": "Sir, Allow to mila magar selftest marker nahi bana."}
+        if reason == "expired":
+            return {**result, "status": "error", "error_code": "CONFIRM_EXPIRED",
+                    "message": "Sir, selftest ki confirmation ka waqt khatam ho gaya, koi faisla nahi aaya."}
+        if reason == "cancelled" and not approved:
+            # Broker shutdown mid-wait: nobody denied it, so it is not reported as Sir's Deny.
+            return {**result, "status": "error", "error_code": "CONFIRM_CANCELLED",
+                    "message": "Sir, selftest ki confirmation band ho gayi, koi faisla nahi aaya."}
+        if approved:
+            return {**result, "status": "success",
+                    "message": f"Sir, confirm selftest kamyab: Allow mila aur marker ban gaya "
+                               f"(request {request_ms:.0f} ms, faisla {decision_ms:.0f} ms)."}
+        return {**result, "status": "success",
+                "message": f"Sir, confirm selftest kamyab: Deny mila aur koi marker nahi bana "
+                           f"(request {request_ms:.0f} ms, faisla {decision_ms:.0f} ms)."}
+    finally:
+        # A run approved but still unfinished after SELFTEST_RUN_WAIT_S falls back to the real
+        # marker path when it finally writes; the next selftest removes that file as stale.
+        _selftest_run = None
+
+
+def _register_selftest_tools() -> None:
+    """Registers confirm_selftest and its marker tool with the plugin manager (idempotent: a
+    duplicate name is skipped there). The module gate below calls it only while
+    JARVIS_CONFIRM_SELFTEST=1; tests call it against a scratch registry."""
+
+    @jarvis_tool(timeout=SELFTEST_TOOL_TIMEOUT_S)
+    async def confirm_selftest() -> dict[str, Any]:
+        """
+        Runs the ConfirmFlow selftest: ONE dummy medium-risk confirmation round trip (dialog on
+        the dashboard, Sir's Allow/Deny or a spoken haan, broker resolve, the approved leg
+        through the normal tool wrapper) and reports the timings. Allow writes
+        logs/confirm_selftest.marker exactly once; Deny writes nothing. It is safe: only that
+        marker file is written. Use it only when Sir asks for the confirm selftest.
+        """
+        return await run_confirm_selftest()
+
+    @jarvis_tool(timeout=SELFTEST_MARKER_TIMEOUT_S, risk="medium")
+    async def confirm_selftest_marker(nonce: str) -> dict[str, Any]:
+        """
+        INTERNAL: the approved leg of the ConfirmFlow selftest; it only writes
+        logs/confirm_selftest.marker. Never call it yourself: confirm_selftest drives it
+        through ConfirmFlow.
+
+        Args:
+            nonce: The selftest run's nonce, written into the marker file.
+        """
+        return await _write_selftest_marker(nonce)
+
+
+if selftest_enabled():
+    _register_selftest_tools()

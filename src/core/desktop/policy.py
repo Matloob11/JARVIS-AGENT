@@ -183,14 +183,16 @@ KEY_MATERIAL_EXTS: frozenset[str] = frozenset({".pem", ".key", ".ppk", ".pfx", "
 
 # --- K-45 risk lists (laptop-relevant names) -------------------------------------------------------------------
 # Only HIGH makes a call confirm-class on top of the class/K-16 rule; MEDIUM input tools keep running (K-76).
+# Exactly the docs/CONTRACTS.md K-45 lists (C-29 part 2 alignment): sleep_system is HIGH per the contract text,
+# which wins over K-16's 15/medium decorator metadata (K-14: the strictest source decides).
 K45_HIGH: frozenset[str] = frozenset({
-    "shutdown_system", "restart_system", "empty_recycle_bin", "run_cmd_command", "write_custom_code",
-    "autonomous_self_repair", "send_email", "autonomous_research_and_email", "automate_whatsapp",
-    "start_file_access_server", "zip_files", "lookup_sim_data", "guard_selftest"})
+    "shutdown_system", "restart_system", "sleep_system", "empty_recycle_bin", "run_cmd_command",
+    "write_custom_code", "autonomous_self_repair", "send_email", "autonomous_research_and_email",
+    "automate_whatsapp", "start_file_access_server", "zip_files", "lookup_sim_data", "guard_selftest"})
 K45_MEDIUM: frozenset[str] = frozenset({
     "type_text_tool", "press_hotkey_tool", "press_key_tool", "mouse_click_tool",
     "chrome_browser_perform_action", "automate_chrome_browser", "download_youtube_media", "download_images",
-    "create_folder", "sleep_system"})
+    "create_folder"})
 
 # --- path argument hooks (K-76 path policy) --------------------------------------------------------------------
 # resolve_in_roots(open_roots) + the extended is_sensitive_path.

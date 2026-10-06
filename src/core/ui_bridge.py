@@ -67,7 +67,7 @@ from services.utils.jarvis_config import ROLE_BRIDGE, active_brain, config, runt
 from services.utils.jarvis_health import health_monitor
 from services.utils.jarvis_logger import setup_logger
 from services.utils.jarvis_telemetry import telemetry
-from src.core import bridge_auth, bridge_desktop, bridge_media, bridge_rooms, bridge_security
+from src.core import bridge_auth, bridge_desktop, bridge_media, bridge_rooms, bridge_security, confirm_policy
 from src.core.bridge_security import NOTIFY_MAX_BYTES, NonceCache, NotifyAuthError, TokenBucket, same_secret
 from src.core.bridge_store import (
     EVENT_LOG,
@@ -753,18 +753,41 @@ def _confirm_request_from(payload: Any) -> dict[str, Any] | None:
 
 async def _handle_confirm_request(payload: Any) -> dict[str, Any]:
     """confirm_request from the agent's broker (K-14): stored as pending and sent only to room 'ui'. The answer says
-    how many owner UI sockets could approve it; with none the broker refuses an action only the screen may allow."""
+    how many owner UI sockets could approve it; with none the broker refuses an action only the screen may allow.
+    C-29 part 2 (K-45): a risk below the tool's static K-45 floor is clamped UP to it before anything is stored or
+    shown (never lowered), voice_allowed is recomputed at the clamped level (K-14: high is screen-only unless
+    config.voice_confirm_high, the K-15 env override), the clamp is audited (confirm_risk_clamped) and the answer
+    carries the clamped risk and voice gate, so the broker enforces what the dialog shows."""
     request = _confirm_request_from(payload)
     if request is None:
         logger.warning("confirm_request ignored: its id, tool or risk is unusable")
         return {"status": "ignored", "reason": "bad_payload"}
+    sent_risk = request["risk"]
+    request["risk"], clamped = confirm_policy.clamp_risk(request["tool"], sent_risk)
+    if clamped:
+        sent_voice = request["voice_allowed"]
+        if request["risk"] == "high":
+            # K-14: the clamped dialog must never advertise a voice path the high-risk rule forbids.
+            request["voice_allowed"] = sent_voice and bool(getattr(config, "voice_confirm_high", False))
+        await stored("audit", store.audit("bridge", "confirm_risk_clamped",
+                                          {"id": request["id"], "tool": request["tool"],
+                                           "sent": sent_risk, "risk": request["risk"],
+                                           "sent_voice_allowed": sent_voice,
+                                           "voice_allowed": request["voice_allowed"]}), 0)
+        logger.warning("confirm_request %s for %s: risk %s is below the K-45 floor; clamped to %s"
+                       " (voice_allowed %s)", request["id"], request["tool"], sent_risk,
+                       request["risk"], request["voice_allowed"])
     await stored("confirm expiry", store.expire_confirmations(), 0)
     await stored("confirm request", store.add_confirmation(request), None)
     ui_clients = sum(1 for client in _clients.values() if client.role == ROLE_UI)
     await emit_ui("confirm_request", request)
     logger.info("confirm_request %s for %s (%s): %d owner UI socket(s)", request["id"], request["tool"],
                 request["risk"], ui_clients)
-    return {"status": "ok", "ui_clients": ui_clients}
+    answer: dict[str, Any] = {"status": "ok", "ui_clients": ui_clients}
+    if clamped:  # the broker sees the stricter gate the dialog shows (K-45; absent when nothing changed)
+        answer["risk"] = request["risk"]
+        answer["voice_allowed"] = request["voice_allowed"]
+    return answer
 
 
 async def _handle_confirm_resolved(payload: Any) -> None:

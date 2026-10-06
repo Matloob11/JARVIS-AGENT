@@ -235,6 +235,132 @@ async def test_a_confirm_resolved_without_a_usable_id_is_dropped(bridge):
     assert not _events(bridge, "confirm_resolved")
 
 
+# ---------------------------------------------------------------- K-45 static risk list (C-29 part 2)
+
+
+async def test_a_request_below_the_k45_floor_is_clamped_up_stored_shown_and_audited(bridge, monkeypatch):
+    monkeypatch.setattr(config, "voice_confirm_high", False, raising=False)
+    _owner_ui(bridge)
+
+    # run_cmd_command is on the K-45 HIGH list; an agent that still says 'medium' never lowers the dialog.
+    answer = await _notify(bridge, "confirm_request", _request(risk="medium"))
+
+    assert answer == {"status": "ok", "ui_clients": 1, "risk": "high", "voice_allowed": False}
+    [(shown, room)] = _events(bridge, "confirm_request")
+    assert room == "ui" and shown["risk"] == "high"
+    assert (await bridge.store.get_confirmation(shown["id"]))["risk"] == "high"
+    assert (await bridge.module.build_init_state())["confirmations"][0]["risk"] == "high"
+    [clamp] = await _audit(bridge, "confirm_risk_clamped")
+    assert clamp["detail"] == {"id": shown["id"], "tool": "run_cmd_command", "sent": "medium", "risk": "high",
+                               "sent_voice_allowed": False, "voice_allowed": False}
+
+
+async def test_a_clamp_to_high_also_closes_the_voice_path_the_dialog_shows(bridge, monkeypatch):
+    monkeypatch.setattr(config, "voice_confirm_high", False, raising=False)
+    _owner_ui(bridge)
+
+    # lookup_sim_data is K-45 HIGH; the agent sent medium with the K-14 medium voice default.
+    answer = await _notify(bridge, "confirm_request",
+                           _request("f0" * 16, tool="lookup_sim_data", risk="medium", voice_allowed=True))
+
+    assert answer == {"status": "ok", "ui_clients": 1, "risk": "high", "voice_allowed": False}
+    [(shown, _room)] = _events(bridge, "confirm_request")
+    assert shown["risk"] == "high" and shown["voice_allowed"] is False  # no 'ya haan bolein' on a HIGH dialog
+    assert (await bridge.store.get_confirmation(shown["id"]))["payload"]["voice_allowed"] is False
+    assert (await bridge.module.build_init_state())["confirmations"][0]["voice_allowed"] is False
+    [clamp] = await _audit(bridge, "confirm_risk_clamped")
+    assert clamp["detail"]["sent_voice_allowed"] is True and clamp["detail"]["voice_allowed"] is False
+
+
+async def test_the_k15_override_keeps_a_clamped_high_voice_path_open(bridge, monkeypatch):
+    # JARVIS_VOICE_CONFIRM_HIGH=1 (config.voice_confirm_high): K-14 allows voice at high, so the clamp keeps it.
+    monkeypatch.setattr(config, "voice_confirm_high", True, raising=False)
+    _owner_ui(bridge)
+
+    answer = await _notify(bridge, "confirm_request",
+                           _request("f1" * 16, tool="lookup_sim_data", risk="medium", voice_allowed=True))
+
+    assert answer == {"status": "ok", "ui_clients": 1, "risk": "high", "voice_allowed": True}
+    [(shown, _room)] = _events(bridge, "confirm_request")
+    assert shown["risk"] == "high" and shown["voice_allowed"] is True
+
+
+async def test_a_request_stricter_than_its_floor_is_never_lowered_and_not_audited(bridge):
+    # automate_chrome_browser is K-45 MEDIUM; the agent's dynamic 'high' stays high and no clamp is recorded.
+    answer = await _notify(bridge, "confirm_request",
+                           _request("d" * 32, tool="automate_chrome_browser", risk="high"))
+
+    assert answer == {"status": "ok", "ui_clients": 0}
+    [(shown, _room)] = _events(bridge, "confirm_request")
+    assert shown["risk"] == "high"
+    assert await _audit(bridge, "confirm_risk_clamped") == []
+
+
+async def test_a_tool_outside_the_static_table_keeps_the_agents_risk(bridge):
+    answer = await _notify(bridge, "confirm_request",
+                           _request("e" * 32, tool="a_future_tool", risk="medium"))
+
+    assert answer == {"status": "ok", "ui_clients": 0}
+    [(shown, _room)] = _events(bridge, "confirm_request")
+    assert shown["risk"] == "medium"
+    assert await _audit(bridge, "confirm_risk_clamped") == []
+
+
+def test_the_static_table_holds_the_contract_lists_and_every_committed_manifest_floor():
+    from src.core import confirm_policy  # pylint: disable=import-outside-toplevel
+
+    assert confirm_policy.static_risk_floor("shutdown_system") == "high"
+    assert confirm_policy.static_risk_floor("run_cmd_command") == "high"
+    assert confirm_policy.static_risk_floor("lookup_sim_data") == "high"
+    assert confirm_policy.static_risk_floor("sleep_system") == "high"  # the K-45 contract text wins over K-16
+    assert confirm_policy.static_risk_floor("type_text_tool") == "medium"
+    assert confirm_policy.static_risk_floor("analyze_camera") is None  # fixed low: the agent's level is trusted
+    assert confirm_policy.static_risk_floor(None) is None
+    manifest = json.loads(confirm_policy.MANIFEST_PATH.read_text(encoding="utf-8"))
+    for tool, risk in confirm_policy.manifest_floors(manifest).items():
+        floor = confirm_policy.static_risk_floor(tool)
+        assert floor is not None
+        assert confirm_policy.RISK_RANK[floor] >= confirm_policy.RISK_RANK[risk]
+
+
+def test_manifest_floors_take_only_fixed_medium_or_high_risks_and_the_strictest_source_wins():
+    from src.core.confirm_policy import build_static_floors, manifest_floors  # pylint: disable=import-outside-toplevel
+
+    manifest = {"tools": [
+        {"name": "a_high", "meta": {"risk": "high"}},
+        {"name": "a_medium", "meta": {"risk": "medium"}},
+        {"name": "a_low", "meta": {"risk": "low"}},
+        {"name": "a_dynamic", "meta": {"risk": "dynamic"}},
+        {"name": "", "meta": {"risk": "high"}}, {"meta": {"risk": "high"}}, "junk", {"name": "no_meta"}]}
+    assert manifest_floors(manifest) == {"a_high": "high", "a_medium": "medium"}
+    assert manifest_floors({"tools": "junk"}) == {} and manifest_floors(None) == {}
+    floors = build_static_floors(manifest_floors(manifest))
+    assert floors["a_high"] == "high" and floors["a_medium"] == "medium"
+    assert floors["shutdown_system"] == "high"  # the contract lists always apply
+    assert build_static_floors({"type_text_tool": "high"})["type_text_tool"] == "high"
+    assert build_static_floors({"run_cmd_command": "medium"})["run_cmd_command"] == "high"  # never weakened
+
+
+def test_the_bridge_table_and_the_desktop_policy_k45_lists_agree():
+    # SEC-2 (C-29 part 2): one K-45 truth — the contract lists — in both Claude-owned tables.
+    from src.core import confirm_policy  # pylint: disable=import-outside-toplevel
+    from src.core.desktop import policy as desktop_policy  # pylint: disable=import-outside-toplevel
+
+    assert desktop_policy.K45_HIGH == confirm_policy.K45_HIGH
+    assert desktop_policy.K45_MEDIUM == confirm_policy.K45_MEDIUM
+
+
+def test_clamp_risk_raises_to_the_floor_and_never_lowers():
+    from src.core.confirm_policy import clamp_risk  # pylint: disable=import-outside-toplevel
+
+    assert clamp_risk("run_cmd_command", "medium") == ("high", True)
+    assert clamp_risk("run_cmd_command", "high") == ("high", False)
+    assert clamp_risk("type_text_tool", "high") == ("high", False)
+    assert clamp_risk("type_text_tool", "medium") == ("medium", False)
+    assert clamp_risk("a_future_tool", "medium") == ("medium", False)
+    assert clamp_risk(None, "medium") == ("medium", False)
+
+
 # ---------------------------------------------------------------- tool_sync progress rows (C-29 step 4)
 
 

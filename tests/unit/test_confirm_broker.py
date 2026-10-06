@@ -911,6 +911,102 @@ async def test_shutdown_tells_the_ui_about_the_actions_it_drops(broker, bridge, 
     assert not results
 
 
+# ---------------------------------------------------------------- the bridge's K-45 clamp is enforced (C-29 part 2)
+
+
+async def test_a_bridge_clamp_to_high_is_enforced_not_just_shown(broker, bridge, rec, results):
+    # The bridge clamped a medium request to its K-45 HIGH floor and said so in its answer: the
+    # broker's own gate must match the HIGH dialog, so a spoken haan approves nothing.
+    bridge.default = {"status": "ok", "ui_clients": 1, "risk": "high", "voice_allowed": False}
+    ran: list[str] = []
+
+    @jarvis_tool(risk="medium", timeout=5)
+    async def c28_sim_lookup(number: str = "0300") -> dict:
+        """Looks a SIM number up.
+
+        Args:
+            number: the number to look up
+        """
+        ran.append(number)
+        return {"status": "success", "message": "mil gaya"}
+
+    asked = await _llm_call("c28_sim_lookup", {"number": "0300"})
+
+    assert asked["status"] == "needs_confirmation" and asked["risk"] == "high"
+    assert "ya haan bolein" not in asked["message"]  # the clamped dialog never advertises voice
+    assert asked["hint"] == jarvis_confirm._UI_HINT  # pylint: disable=protected-access
+    [pending] = broker.pending()
+    assert (pending["risk"], pending["voice_allowed"]) == ("high", False)
+
+    voiced = await _confirm(asked["confirm_id"])
+    assert (voiced["status"], voiced["error_code"]) == ("error", "UI_CONFIRM_REQUIRED")
+    assert ran == []  # the haan approved nothing above the clamped gate
+    clamp_rows = [row for row in rec.audit if row[0] == "TOOL_CONFIRM_CLAMPED"]
+    assert len(clamp_rows) == 2  # voice closed at delivery + the blocked haan (both audited)
+
+    started = await broker.resolve(asked["confirm_id"], True, source="ui")  # the dashboard Allow still works
+    assert started["status"] == "started"
+    await _until(lambda: ran)
+    assert ran == ["0300"]  # ran exactly once
+    await _until(lambda: results)  # and its result was announced
+
+
+async def test_an_answer_that_does_not_raise_the_risk_changes_nothing(broker, bridge, rec):
+    # Never loosened: a lower answer risk is ignored; so is junk.
+    bridge.default = {"status": "ok", "ui_clients": 1, "risk": "medium", "voice_allowed": True}
+
+    @jarvis_tool(risk="high", timeout=5)
+    async def c28_wipe() -> str:
+        """Wipes everything."""
+        return "ok"
+
+    asked = await _llm_call("c28_wipe", {})
+    assert asked["risk"] == "high"
+    [pending] = broker.pending()
+    assert (pending["risk"], pending["voice_allowed"]) == ("high", False)  # the K-14 high rule holds
+
+    bridge.default = {"status": "ok", "ui_clients": 1, "risk": "junk"}
+
+    @jarvis_tool(risk="medium", timeout=5)
+    async def c28_tidy() -> str:
+        """Tidies up."""
+        return "ok"
+
+    asked = await _llm_call("c28_tidy", {})
+    assert asked["risk"] == "medium" and "ya haan bolein" in asked["message"]
+    assert not [row for row in rec.audit if row[0] == "TOOL_CONFIRM_CLAMPED"]
+
+
+async def test_the_high_override_keeps_a_clamped_actions_voice_path(broker, bridge, monkeypatch):
+    # JARVIS_VOICE_CONFIRM_HIGH=1: K-14 allows voice at high, so the clamp does not close it.
+    monkeypatch.setattr(config, "voice_confirm_high", True, raising=False)
+    bridge.default = {"status": "ok", "ui_clients": 1, "risk": "high", "voice_allowed": True}
+
+    @jarvis_tool(risk="medium", timeout=5)
+    async def c28_sim_peek() -> dict:
+        """Peeks at a SIM."""
+        return {"status": "success", "message": "ok"}
+
+    asked = await _llm_call("c28_sim_peek", {})
+    assert asked["risk"] == "high" and "ya haan bolein" in asked["message"]
+    [pending] = broker.pending()
+    assert pending["voice_allowed"] is True
+
+
+async def test_a_clamped_screen_only_action_with_no_ui_is_refused_at_once(broker, bridge):
+    # SEC-1: after the clamp closes the voice path, the no_ui rule sees the truth and refuses.
+    bridge.default = {"status": "ok", "ui_clients": 0, "risk": "high", "voice_allowed": False}
+
+    @jarvis_tool(risk="medium", timeout=5)
+    async def c28_sim_offline() -> dict:
+        """Looks a SIM up offline."""
+        return {"status": "success", "message": "ok"}
+
+    asked = await _llm_call("c28_sim_offline", {})
+    assert (asked["status"], asked["error_code"]) == ("error", "UI_CONFIRM_REQUIRED")
+    assert broker.pending() == []
+
+
 # ---------------------------------------------------------------- non-LLM callers
 
 

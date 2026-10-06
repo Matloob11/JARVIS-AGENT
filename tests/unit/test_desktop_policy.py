@@ -188,15 +188,21 @@ def voice_approval(args: dict | None = None, *, risk: str = "medium", verified: 
 
 
 def test_voice_approval_is_medium_only_never_code_exec(env: Env) -> None:
-    # voice may approve a medium-risk messaging/availability call, but never code_exec: a valid spoken yes for a
+    # voice may approve a medium-risk call, but never code_exec: a valid spoken yes for a
     # call whose risk is higher is not enough, so the agent asks again (the dashboard Allow at high risk)
     args = {"keys": ["win", "r"]}
     call = make_call("press_hotkey_tool", tp.INPUT, args=args, exclusive=INPUT_LOCK, approval=voice_approval(args))
     assert env.check(call) == APPROVAL_REQUIRED  # code_exec via a launch surface: voice does not cover it
-    sleep_args: dict = {}
-    ok = make_call("sleep_system", tp.AVAILABILITY, args=sleep_args, approval=voice_approval(sleep_args),
+    folder_args = {"folder_name": "Demo"}
+    ok = make_call("create_folder", tp.INPUT, args=folder_args, approval=voice_approval(folder_args),
                    risk="medium")
-    assert env.check(ok) is None
+    assert env.check(ok) is None  # create_folder is K-45 MEDIUM: a spoken yes covers it
+    # sleep_system is K-45 HIGH per the contract text (C-29 part 2 alignment), so a spoken yes no
+    # longer covers it even when the agent asked at medium: the dashboard Allow is needed
+    sleep_args: dict = {}
+    clamped = make_call("sleep_system", tp.AVAILABILITY, args=sleep_args, approval=voice_approval(sleep_args),
+                        risk="medium")
+    assert env.check(clamped) == APPROVAL_REQUIRED
     # a high-risk call (shutdown is K-45 HIGH) is never approved by voice
     high = make_call("shutdown_system", tp.AVAILABILITY, args={}, approval=voice_approval({}), risk="high")
     assert env.check(high) == APPROVAL_REQUIRED
@@ -208,11 +214,12 @@ def test_voice_approval_is_medium_only_never_code_exec(env: Env) -> None:
 
 def test_voice_approval_needs_a_voice_id_verified_turn(env: Env) -> None:
     # D20: a spoken yes approves a laptop action only on a voice-ID-verified turn, so before enrollment it fails
+    # (create_folder: a K-45 MEDIUM call a spoken yes may cover; sleep_system is HIGH now, C-29 part 2)
     for verified in (None, False, "true", 1):
-        call = make_call("sleep_system", tp.AVAILABILITY, args={}, approval=voice_approval({}, verified=verified),
+        call = make_call("create_folder", tp.INPUT, args={}, approval=voice_approval({}, verified=verified),
                          risk="medium")
         assert env.check(call) == APPROVAL_INVALID, verified
-    ok = make_call("sleep_system", tp.AVAILABILITY, args={}, approval=voice_approval({}, verified=True), risk="medium")
+    ok = make_call("create_folder", tp.INPUT, args={}, approval=voice_approval({}, verified=True), risk="medium")
     assert env.check(ok) is None
 
 
