@@ -476,6 +476,7 @@ const DashboardInner = () => {
           queryMasked={command.simQueryMasked}
           status={command.simStatus}
           message={command.simMessage}
+          enrichment={command.simEnrichment}
           provider={command.simProvider}
           providerConfigured={command.simProviderConfigured}
           requiresPurpose={command.simRequiresPurpose}

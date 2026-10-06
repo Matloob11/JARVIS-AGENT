@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Info, Search, ShieldCheck, User, X } from 'lucide-react';
 import { Dialog } from '@/shared/ui/Dialog';
 import {
+  SimEnrichment,
   SimRecord,
   isSimProviderConfigured,
   simProviderBannerText,
@@ -14,6 +15,7 @@ interface SimAccessDialogProps {
   queryMasked: string;
   status: string;
   message: string;
+  enrichment: SimEnrichment | null;
   provider: string;
   providerConfigured?: boolean;
   requiresPurpose: boolean;
@@ -151,6 +153,7 @@ const SimAccessDialog = ({
   queryMasked,
   status,
   message,
+  enrichment,
   provider,
   providerConfigured,
   requiresPurpose,
@@ -239,6 +242,22 @@ const SimAccessDialog = ({
     event.preventDefault();
     if (!canSubmit) return;
     onSearch(query, requiresPurpose ? purpose : undefined);
+  };
+
+  const showEnrichOffer =
+    !isLoading &&
+    enrichment?.available === true &&
+    Boolean(enrichment.cnic) &&
+    agentOnline &&
+    statusKey === 'success';
+
+  const enrichViaCnic = () => {
+    if (!enrichment?.cnic || !agentOnline || isLoading) return;
+    if (requiresPurpose && purpose.trim().length < 5) {
+      return;
+    }
+    setQuery(enrichment.cnic);
+    onSearch(enrichment.cnic, requiresPurpose ? purpose : undefined);
   };
 
   return (
@@ -357,11 +376,36 @@ const SimAccessDialog = ({
           </p>
         )}
 
+        {showEnrichOffer && (
+          <div className="sim-enrich" data-testid="sim-enrich-banner">
+            <p data-testid="sim-enrich-hint">
+              {enrichment?.hint || 'CNIC se mazeed SIMs/details nikaaloon?'}
+            </p>
+            <button
+              type="button"
+              data-testid="sim-enrich-cnic"
+              disabled={
+                isLoading ||
+                !agentOnline ||
+                (requiresPurpose && purpose.trim().length < 5)
+              }
+              title={
+                requiresPurpose && purpose.trim().length < 5
+                  ? `Purpose kam az kam 5 harf — ${purpose.trim().length}/5`
+                  : 'CNIC se baki details'
+              }
+              onClick={enrichViaCnic}
+            >
+              CNIC se baki details
+            </button>
+          </div>
+        )}
+
         {records.length > 0 ? (
           <div className="sim-leads" data-testid="sim-leads">
             {records.map((row, index) => (
               <LeadCard
-                key={`${row.cnic || row.cnic_masked || 'lead'}-${index}`}
+                key={`${row.cnic || row.cnic_masked || 'lead'}-${row.phone || index}-${index}`}
                 record={row}
                 queryMasked={queryMasked}
                 index={index}

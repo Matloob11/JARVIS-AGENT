@@ -217,6 +217,43 @@
   color: var(--warn-t, #e9ab4a);
 }
 
+.sim-enrich {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(56, 145, 252, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(56, 145, 252, 0.35);
+}
+
+.sim-enrich p {
+  margin: 0;
+  font: 400 13.5px/18px var(--font-ui);
+  color: #d7e6ff;
+}
+
+.sim-enrich button {
+  justify-self: start;
+  height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  font: 600 13px/16px var(--font-ui);
+  color: #061018;
+  background: linear-gradient(180deg, #7eb6ff 0%, #3a8efc 100%);
+  cursor: pointer;
+}
+
+.sim-enrich button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.sim-enrich button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(56, 145, 252, 0.35);
+}
+
 .sim-search {
   display: flex;
   gap: 10px;

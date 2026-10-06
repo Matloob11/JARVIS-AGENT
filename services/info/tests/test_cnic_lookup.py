@@ -288,6 +288,67 @@ async def test_structured_fields_still_enrich_address_from_raw_text() -> None:
 
 
 @pytest.mark.asyncio
+async def test_cnic_lookup_returns_one_record_per_data_item() -> None:
+    """CNIC hits may list multiple SIMs — each data[] row stays its own lead card."""
+    fake_cnic = "1111222233334"
+    phone_a = "03001112233"
+    phone_b = "03009998877"
+
+    async def fake_post(
+        url: str,
+        *,
+        json: dict[str, str],
+        headers: dict[str, str],
+        timeout: float,
+    ) -> httpx.Response:
+        assert url.endswith(CNIC_PATH)
+        assert json == {"cnic": fake_cnic}
+        del headers, timeout
+        return httpx.Response(
+            200,
+            json={
+                "success": True,
+                "query_type": "cnic",
+                "hits": 2,
+                "data": [
+                    {
+                        "source": "SIM / CNIC Records",
+                        "fields": {
+                            "full_name": "Multi Holder",
+                            "cnic": fake_cnic,
+                            "phone": phone_a,
+                            "address": "Block A Example",
+                        },
+                    },
+                    {
+                        "source": "SIM / CNIC Records",
+                        "fields": {
+                            "full_name": "Multi Holder",
+                            "cnic": fake_cnic,
+                            "phone": phone_b,
+                            "address": "Block B Example",
+                        },
+                    },
+                ],
+            },
+        )
+
+    mock_client = AsyncMock()
+    mock_client.post = fake_post
+    source = AuthorizedApiSource(_FAKE_BASE, _FAKE_KEY, client=mock_client)
+
+    records, error = await source.lookup(fake_cnic)
+
+    assert error is None
+    assert len(records) == 2
+    assert records[0]["phone"] == phone_a
+    assert records[0]["address"] == "Block A Example"
+    assert records[1]["phone"] == phone_b
+    assert records[1]["address"] == "Block B Example"
+    assert records[0]["cnic"] == fake_cnic
+
+
+@pytest.mark.asyncio
 async def test_address_alias_keys_are_accepted() -> None:
     async def fake_post(
         url: str,

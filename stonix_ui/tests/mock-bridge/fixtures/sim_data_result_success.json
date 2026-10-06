@@ -13,7 +13,13 @@
   ],
   "phone": "03001234567",
   "status": "success",
-  "message": "1 record(s) milay.",
+  "message": "1 record(s) milay. Is number ka CNIC mil gaya. CNIC se mazeed SIMs/details nikaaloon?",
   "provider": "authorized_api",
-  "configured": true
+  "configured": true,
+  "enrichment": {
+    "available": true,
+    "cnic": "3310012345678",
+    "query_masked": "331*******678",
+    "hint": "CNIC se mazeed SIMs/details nikaaloon?"
+  }
 }

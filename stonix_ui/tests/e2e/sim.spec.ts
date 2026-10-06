@@ -37,9 +37,15 @@ const SIM_DATA_RESULT_SUCCESS = {
   ],
   phone: '03001234567',
   status: 'success',
-  message: '1 record(s) milay.',
+  message: '1 record(s) milay. Is number ka CNIC mil gaya. CNIC se mazeed SIMs/details nikaaloon?',
   provider: 'authorized_api',
   configured: true,
+  enrichment: {
+    available: true,
+    cnic: '3310012345678',
+    query_masked: '331*******678',
+    hint: 'CNIC se mazeed SIMs/details nikaaloon?',
+  },
 };
 
 async function simLookups(page: import('@playwright/test').Page) {
@@ -165,6 +171,64 @@ test('success fixture renders full lead fields', async ({ page }) => {
   await expect(page.getByTestId('sim-lead-card')).toContainText('ExampleTel');
   await expect(page.getByTestId('sim-result-message')).toContainText('1 record(s) milay');
   await expect(page.getByTestId('sim-provider-banner')).toContainText('authorized_api');
+  await expect(page.getByTestId('sim-enrich-banner')).toBeVisible();
+  await expect(page.getByTestId('sim-enrich-cnic')).toBeVisible();
+});
+
+test('enrich CNIC button emits second sim_lookup', async ({ page }) => {
+  await mockEmit(page, 'init_state', {
+    sim_provider: 'authorized_api',
+    sim_provider_configured: true,
+    sim_requires_purpose: true,
+  });
+  await openSimDialog(page);
+  await page.getByTestId('sim-purpose-input').fill('audit enrich');
+  await mockEmit(page, 'sim_data_result', SIM_DATA_RESULT_SUCCESS);
+
+  const before = (await simLookups(page)).length;
+  await page.getByTestId('sim-enrich-cnic').click();
+  await expect(page.getByTestId('sim-status-chip')).toHaveAttribute('data-status', 'loading');
+  await expect(page.getByTestId('sim-enrich-banner')).toHaveCount(0);
+
+  const lookups = await simLookups(page);
+  expect(lookups.length).toBeGreaterThanOrEqual(before + 1);
+  const last = lookups[lookups.length - 1];
+  expect(last.payload).toMatchObject({
+    query: '3310012345678',
+    purpose: 'audit enrich',
+  });
+});
+
+test('CNIC multi-record result shows all leads without enrich banner', async ({ page }) => {
+  await openSimDialog(page);
+  await mockEmit(page, 'sim_data_result', {
+    records: [
+      {
+        full_name: 'Multi Holder',
+        cnic: '3310012345678',
+        phone: '03001112233',
+        address: 'Block A Example',
+        source: 'SIM / CNIC Records',
+      },
+      {
+        full_name: 'Multi Holder',
+        cnic: '3310012345678',
+        phone: '03009998877',
+        address: 'Block B Example',
+        source: 'SIM / CNIC Records',
+      },
+    ],
+    phone: '331*******678',
+    status: 'success',
+    message: '2 record(s) milay.',
+    provider: 'authorized_api',
+    configured: true,
+  });
+  await expect(page.getByTestId('sim-lead-card')).toBeVisible();
+  await expect(page.getByTestId('sim-lead-card-1')).toBeVisible();
+  await expect(page.getByTestId('sim-lead-card')).toContainText('03001112233');
+  await expect(page.getByTestId('sim-lead-card-1')).toContainText('03009998877');
+  await expect(page.getByTestId('sim-enrich-banner')).toHaveCount(0);
 });
 
 test('search disabled when agent is offline', async ({ page }) => {

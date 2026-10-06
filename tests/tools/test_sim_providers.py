@@ -102,7 +102,12 @@ async def test_configured_lookup_masks_record(
         client=mock_client,
     )
 
-    with patch.object(sim_mod, "resolve_sim_source", return_value=source):
+    notify = AsyncMock()
+    with (
+        patch.object(sim_mod, "resolve_sim_source", return_value=source),
+        patch.object(sim_mod, "notify_event", notify),
+        patch.object(sim_mod, "notify_sim_loading", AsyncMock()),
+    ):
         result = await sim_mod.lookup_sim_data("03336678955", purpose="fraud check")
 
     assert result["status"] == "success"
@@ -116,6 +121,14 @@ async def test_configured_lookup_masks_record(
     assert record["cnic_masked"].endswith("5678")
     assert "3310012345678" not in record["cnic_masked"]
     assert "03336678955" not in record["phone_masked"]
+    assert result["enrichment"]["available"] is True
+    assert result["enrichment"]["cnic"] == "3310012345678"
+    assert "CNIC se mazeed" in result["message"]
+
+    emit_calls = [c for c in notify.await_args_list if c.args and c.args[0] == "sim_data_result"]
+    assert emit_calls
+    payload = emit_calls[-1].args[1]
+    assert payload["enrichment"]["cnic"] == "3310012345678"
 
     row = json.loads(audit_path.read_text(encoding="utf-8").strip().splitlines()[-1])
     assert row["provider"] == providers_mod.PROVIDER_AUTHORIZED_API
@@ -123,6 +136,63 @@ async def test_configured_lookup_masks_record(
     assert "purpose_sha256" in row
     assert "fraud check" not in json.dumps(row)
     assert "03336678955" not in json.dumps(row)
+
+
+@pytest.mark.asyncio
+async def test_cnic_lookup_has_no_enrichment_offer(
+    monkeypatch: pytest.MonkeyPatch,
+    audit_path: Path,
+) -> None:
+    del audit_path
+    monkeypatch.setenv("SIM_LOOKUP_API_URL", "https://sim.example/lookup")
+    monkeypatch.setenv("SIM_LOOKUP_API_KEY", "test-secret-key-12345")
+
+    async def fake_post(
+        url: str,
+        *,
+        json: dict[str, str],
+        headers: dict[str, str],
+        timeout: float,
+    ) -> httpx.Response:
+        del url, headers, timeout
+        assert json == {"cnic": "3310012345678"}
+        return httpx.Response(
+            200,
+            json={
+                "success": True,
+                "query_type": "cnic",
+                "hits": 1,
+                "data": [
+                    {
+                        "source": "pak-sim-api",
+                        "fields": {
+                            "full_name": "Test User",
+                            "cnic": "3310012345678",
+                            "phone": "03336678955",
+                            "address": "Secret Street",
+                        },
+                    }
+                ],
+            },
+        )
+
+    mock_client = AsyncMock()
+    mock_client.post = fake_post
+    source = AuthorizedApiSource(
+        "https://sim.example/lookup",
+        "test-secret-key-12345",
+        client=mock_client,
+    )
+
+    with (
+        patch.object(sim_mod, "resolve_sim_source", return_value=source),
+        patch.object(sim_mod, "notify_event", AsyncMock()),
+        patch.object(sim_mod, "notify_sim_loading", AsyncMock()),
+    ):
+        result = await sim_mod.lookup_sim_data("3310012345678", purpose="audit trail")
+
+    assert result["status"] == "success"
+    assert "enrichment" not in result
 
 
 @pytest.mark.asyncio

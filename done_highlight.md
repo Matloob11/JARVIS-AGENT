@@ -1760,3 +1760,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Commit:** is commit me · **Deploy:** REQ-ENV SHOW_ADDRESS + REQ-RESTART (no frontend)
 - **Doosre agent ke liye:** root .env aur deploy/windows-local/.env se SIM_LOOKUP_SHOW_ADDRESS=0 hatao/1 karo, worker restart
 
+### ✅ [cursor] X-89 · SIM full-lead + CNIC enrich ask · 2026-10-06 22:58 PKT
+- **Kya kiya:** Phone match ke baad CNIC enrich offer (UI button + tool message); multi-record CNIC leads; address enrich path; Claude se ENV/CONTRACT/RESTART/DEPLOY maanga.
+- **Files:** jarvis_sim_lookup.py, sim_providers tests, SimAccessDialog, useCommandCenter, Dashboard, dialogs.css, sim.spec, fixture, plan.md, done_highlight.md
+- **Verify:** pytest SIM 19/19; sim.spec 15/15
+- **Commit:** is commit me · **Deploy:** REQ-ENV + REQ-RESTART + REQ-DEPLOY frontend + REQ-CONTRACT K-34
+- **Doosre agent ke liye:** SHOW_ADDRESS flip; contracts enrichment; prompt one-liner; push/deploy
+

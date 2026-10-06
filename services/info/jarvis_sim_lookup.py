@@ -138,6 +138,44 @@ async def _save_lookup_audit(
     await asyncio.to_thread(_write_audit_entry, entry)
 
 
+def _first_cnic_digits(records: list[Any]) -> str:
+    for row in records:
+        if not isinstance(row, dict):
+            continue
+        digits = "".join(ch for ch in str(row.get("cnic") or "") if ch.isdigit())
+        if len(digits) == 13:
+            return digits
+    return ""
+
+
+def _is_phone_shaped_query(digits: str) -> bool:
+    """Phone-shaped (not CNIC): local 03… / 10-digit / 92… country-code forms."""
+    if len(digits) == 13:
+        return False
+    if len(digits) == 11 and digits.startswith("0"):
+        return True
+    if len(digits) == 10:
+        return True
+    if len(digits) == 12 and digits.startswith("92"):
+        return True
+    return False
+
+
+def _enrichment_offer(query_digits: str, records: list[Any]) -> dict[str, Any] | None:
+    """After a phone hit with a CNIC, offer a follow-up CNIC lookup (ask-then-enrich)."""
+    if not _is_phone_shaped_query(query_digits):
+        return None
+    cnic = _first_cnic_digits(records)
+    if not cnic:
+        return None
+    return {
+        "available": True,
+        "cnic": cnic,
+        "query_masked": _mask_query(cnic),
+        "hint": "CNIC se mazeed SIMs/details nikaaloon?",
+    }
+
+
 async def _emit_sim_data(
     records: list[Any],
     phone_masked: str,
@@ -145,18 +183,19 @@ async def _emit_sim_data(
     status: str,
     message: str,
     provider: str,
+    enrichment: dict[str, Any] | None = None,
 ) -> None:
-    await notify_event(
-        "sim_data_result",
-        {
-            "records": records,
-            "phone": phone_masked,
-            "status": status,
-            "message": message,
-            "provider": provider,
-            "timestamp": time.time(),
-        },
-    )
+    payload: dict[str, Any] = {
+        "records": records,
+        "phone": phone_masked,
+        "status": status,
+        "message": message,
+        "provider": provider,
+        "timestamp": time.time(),
+    }
+    if enrichment:
+        payload["enrichment"] = enrichment
+    await notify_event("sim_data_result", payload)
 
 
 @jarvis_tool
@@ -319,21 +358,29 @@ async def lookup_sim_data(phone_number: str, purpose: str = "") -> dict[str, Any
         result_count=len(records),
         purpose=purpose_clean,
     )
-    success_message = (
-        f"{len(records)} record(s) milay."
-        if records
-        else "Is number ke liye koi record nahi mila."
-    )
+    enrichment = _enrichment_offer(clean_number, records) if records else None
+    if records:
+        success_message = f"{len(records)} record(s) milay."
+        if enrichment:
+            success_message += (
+                " Is number ka CNIC mil gaya. CNIC se mazeed SIMs/details nikaaloon?"
+            )
+    else:
+        success_message = "Is number ke liye koi record nahi mila."
     await _emit_sim_data(
         records,
         masked_number,
         status="success",
         message=success_message,
         provider=source.provider,
+        enrichment=enrichment,
     )
-    return {
+    result: dict[str, Any] = {
         "status": "success",
         "records": records,
         "message": success_message,
         "audit_path": str(AUDIT_FILE),
     }
+    if enrichment:
+        result["enrichment"] = enrichment
+    return result

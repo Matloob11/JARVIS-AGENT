@@ -350,6 +350,27 @@ export interface SimRecord {
   details?: Record<string, unknown>;
 }
 
+export interface SimEnrichment {
+  available: boolean;
+  cnic?: string;
+  query_masked?: string;
+  hint?: string;
+}
+
+export function parseSimEnrichment(raw: unknown): SimEnrichment | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const row = raw as Record<string, unknown>;
+  if (row.available !== true) return null;
+  const cnic = String(row.cnic || '').replace(/\D/g, '');
+  if (cnic.length !== 13) return null;
+  return {
+    available: true,
+    cnic,
+    query_masked: typeof row.query_masked === 'string' ? row.query_masked : undefined,
+    hint: typeof row.hint === 'string' ? row.hint : undefined,
+  };
+}
+
 export const SIM_LOOKUP_TIMEOUT_MS = 45_000;
 
 export const SIM_PROVIDER_NOT_CONFIGURED =
@@ -423,6 +444,7 @@ export const useCommandCenter = () => {
   const [simQueryMasked, setSimQueryMasked] = useState('');
   const [simStatus, setSimStatus] = useState('idle');
   const [simMessage, setSimMessage] = useState('');
+  const [simEnrichment, setSimEnrichment] = useState<SimEnrichment | null>(null);
   const [simProvider, setSimProvider] = useState('');
   const [simProviderConfigured, setSimProviderConfigured] = useState<boolean | undefined>(
     undefined,
@@ -832,6 +854,7 @@ export const useCommandCenter = () => {
       message?: string;
       provider?: string;
       configured?: boolean;
+      enrichment?: unknown;
     };
     clearSimLookupTimer();
     setSimRecords(row.records || []);
@@ -839,6 +862,7 @@ export const useCommandCenter = () => {
     setSimQueryMasked(row.phone || '');
     setSimStatus(row.status || 'success');
     setSimMessage(row.message || '');
+    setSimEnrichment(parseSimEnrichment(row.enrichment));
     if (row.provider !== undefined) setSimProvider(row.provider);
     if (row.configured !== undefined) {
       setSimProviderConfigured(row.configured);
@@ -854,6 +878,7 @@ export const useCommandCenter = () => {
     setSimStatus('loading');
     setSimQueryMasked(row.query_masked || '');
     setSimRecords([]);
+    setSimEnrichment(null);
     startSimLookupTimer();
   });
 
@@ -942,6 +967,7 @@ export const useCommandCenter = () => {
     setSimQueryMasked('');
     setSimStatus('idle');
     setSimMessage('');
+    setSimEnrichment(null);
     setIsSimPanelOpen(true);
     emitCommand('open_sim_panel');
   }, [clearSimLookupTimer, emitCommand]);
@@ -966,6 +992,7 @@ export const useCommandCenter = () => {
       setSimLoading(true);
       setSimStatus('loading');
       setSimMessage('');
+      setSimEnrichment(null);
       startSimLookupTimer();
       if (trimmedPurpose.length >= 5) {
         emitCommand('sim_lookup', { query: normalized, purpose: trimmedPurpose });
@@ -1133,6 +1160,7 @@ export const useCommandCenter = () => {
     simQueryMasked,
     simStatus,
     simMessage,
+    simEnrichment,
     simProvider,
     simProviderConfigured,
     simRequiresPurpose,
