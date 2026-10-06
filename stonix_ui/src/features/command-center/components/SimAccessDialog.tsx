@@ -212,23 +212,24 @@ const SimAccessDialog = ({
               title={PRIVACY_NOTE}
               aria-label={PRIVACY_NOTE}
               data-testid="sim-privacy-tip"
+              tabIndex={-1}
             >
               <Info size={14} aria-hidden="true" />
             </button>
           )}
         </div>
 
-        {showStatusChip && (
+        {showStatusChip ? (
           <div className="sim-status-chip" data-testid="sim-status-chip" data-status={statusKey}>
             {chipLabel}
           </div>
-        )}
-        {!showStatusChip && (
+        ) : (
           <div
             className="sim-status-chip sim-status-chip--hidden"
             data-testid="sim-status-chip"
             data-status={statusKey || 'idle'}
             hidden
+            aria-hidden="true"
           />
         )}
 
@@ -237,6 +238,7 @@ const SimAccessDialog = ({
             <span>Purpose (authorized audit)</span>
             <input
               data-testid="sim-purpose-input"
+              data-dialog-autofocus
               value={purpose}
               onChange={event => setPurpose(event.target.value)}
               placeholder="Why is this lookup needed?"
@@ -254,6 +256,7 @@ const SimAccessDialog = ({
         <form onSubmit={submit} className="sim-search">
           <input
             data-testid="sim-query-input"
+            data-dialog-autofocus={requiresPurpose ? undefined : true}
             aria-label="Authorized number"
             inputMode="numeric"
             autoComplete="off"

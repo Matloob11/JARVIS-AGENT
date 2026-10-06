@@ -933,7 +933,7 @@ export const useCommandCenter = () => {
     [emitCommand],
   );
 
-  const openSimPanel = () => {
+  const openSimPanel = useCallback(() => {
     clearSimLookupTimer();
     setSimLoading(false);
     setSimRecords([]);
@@ -942,34 +942,37 @@ export const useCommandCenter = () => {
     setSimMessage('');
     setIsSimPanelOpen(true);
     emitCommand('open_sim_panel');
-  };
+  }, [clearSimLookupTimer, emitCommand]);
 
-  const closeSimPanel = () => {
+  const closeSimPanel = useCallback(() => {
     clearSimLookupTimer();
     setSimLoading(false);
     setIsSimPanelOpen(false);
-  };
+  }, [clearSimLookupTimer]);
 
-  const requestSimLookup = (query: string, purpose?: string) => {
-    const normalized = query.trim();
-    if (!normalized) return;
-    const trimmedPurpose = purpose?.trim() ?? '';
-    if (simRequiresPurpose && trimmedPurpose.length < 5) {
-      setSimStatus('validation_error');
-      setSimMessage('Purpose kam az kam 5 characters hona chahiye');
-      return;
-    }
-    setIsSimPanelOpen(true);
-    setSimLoading(true);
-    setSimStatus('loading');
-    setSimMessage('');
-    startSimLookupTimer();
-    if (trimmedPurpose.length >= 5) {
-      emitCommand('sim_lookup', { query: normalized, purpose: trimmedPurpose });
-    } else {
-      emitCommand('sim_lookup', normalized);
-    }
-  };
+  const requestSimLookup = useCallback(
+    (query: string, purpose?: string) => {
+      const normalized = query.trim();
+      if (!normalized) return;
+      const trimmedPurpose = purpose?.trim() ?? '';
+      if (simRequiresPurpose && trimmedPurpose.length < 5) {
+        setSimStatus('validation_error');
+        setSimMessage('Purpose kam az kam 5 characters hona chahiye');
+        return;
+      }
+      setIsSimPanelOpen(true);
+      setSimLoading(true);
+      setSimStatus('loading');
+      setSimMessage('');
+      startSimLookupTimer();
+      if (trimmedPurpose.length >= 5) {
+        emitCommand('sim_lookup', { query: normalized, purpose: trimmedPurpose });
+      } else {
+        emitCommand('sim_lookup', normalized);
+      }
+    },
+    [emitCommand, simRequiresPurpose, startSimLookupTimer],
+  );
 
   const waitForSocketConnect = useCallback(async (timeoutMs = 15_000) => {
     const socket = getSocket();

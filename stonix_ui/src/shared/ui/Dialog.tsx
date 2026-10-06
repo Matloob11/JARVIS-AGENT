@@ -39,7 +39,13 @@ export function Dialog({
 }: DialogProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
+  // Autofocus + Esc/Tab trap only when `open` flips true.
+  // Do NOT depend on onClose / triggerRef identity — parent re-renders (1s vitals,
+  // confirm purge, etc.) were re-running this effect and stealing focus back to
+  // the first button (Close) while the user typed in SIM / enroll inputs.
   useEffect(() => {
     if (!open) return undefined;
 
@@ -48,8 +54,10 @@ export function Dialog({
       (document.activeElement instanceof HTMLElement ? document.activeElement : null);
 
     const panel = panelRef.current;
-    requestAnimationFrame(() => {
+    const focusInitial = () => {
       if (!panel) return;
+      // User already clicked an input — never yank focus away.
+      if (panel.contains(document.activeElement)) return;
       const autofocus = panel.querySelector<HTMLElement>('[data-dialog-autofocus]');
       if (autofocus && !autofocus.hasAttribute('disabled')) {
         autofocus.focus({ preventScroll: true });
@@ -61,12 +69,13 @@ export function Dialog({
       } else {
         panel.focus({ preventScroll: true });
       }
-    });
+    };
+    const raf = requestAnimationFrame(focusInitial);
 
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (event.key !== 'Tab' || !panel) return;
@@ -85,13 +94,16 @@ export function Dialog({
 
     document.addEventListener('keydown', onKey);
     return () => {
+      cancelAnimationFrame(raf);
       document.removeEventListener('keydown', onKey);
       const target = triggerRef?.current ?? returnFocusRef.current;
       requestAnimationFrame(() => {
         target?.focus({ preventScroll: true });
       });
     };
-  }, [open, onClose, triggerRef]);
+    // triggerRef is a ref object (stable); intentionally omit onClose.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- open-only autofocus
+  }, [open]);
 
   if (!open) return null;
 
@@ -110,7 +122,7 @@ export function Dialog({
           className="neon-dlg-scrim-hit"
           aria-label="Close dialog"
           tabIndex={-1}
-          onClick={onClose}
+          onClick={() => onCloseRef.current()}
         />
         <motion.div
           ref={panelRef}

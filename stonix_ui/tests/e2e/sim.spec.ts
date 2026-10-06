@@ -221,3 +221,30 @@ test('query input keeps digits only up to 13', async ({ page }) => {
   await input.pressSequentially('03a00-12345678999', { delay: 15 });
   await expect(input).toHaveValue('0300123456789');
 });
+
+test('purpose and query keep focus across parent re-renders', async ({ page }) => {
+  await mockEmit(page, 'init_state', {
+    sim_provider: 'authorized_api',
+    sim_provider_configured: true,
+    sim_requires_purpose: true,
+  });
+  await openSimDialog(page);
+
+  const purpose = page.getByTestId('sim-purpose-input');
+  await purpose.click();
+  await expect(purpose).toBeFocused();
+  await purpose.pressSequentially('audit', { delay: 40 });
+  // Vitals / agent-status / confirm timers re-render the shell every ~1s;
+  // Dialog must not yank focus back to Close.
+  await page.waitForTimeout(2500);
+  await expect(purpose).toBeFocused();
+  await expect(purpose).toHaveValue('audit');
+
+  const query = page.getByTestId('sim-query-input');
+  await query.click();
+  await expect(query).toBeFocused();
+  await query.pressSequentially('03001234567', { delay: 30 });
+  await page.waitForTimeout(2500);
+  await expect(query).toBeFocused();
+  await expect(query).toHaveValue('03001234567');
+});

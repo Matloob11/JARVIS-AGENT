@@ -1718,3 +1718,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
 - **Commit:** `dc38c54` · **Deploy:** PC agent restart 19:54 PKT
 - **Doosre agent ke liye:** —
+### ✅ [cursor] X-89 · SIM dialog focus steal fix · 2026-10-06 21:41 PKT
+- **Kya kiya:** Owner: input click pe focus 1–3s me udd jata tha. Dialog autofocus `onClose` deps se har re-render pe Close pe wapas ja raha tha — open-only + in-panel guard.
+- **Files:** Dialog.tsx, useCommandCenter.ts, SimAccessDialog.tsx, sim.spec.ts, plan.md, done_highlight.md
+- **Verify:** `npx playwright test --project=chromium tests/e2e/sim.spec.ts` 12/12 (focus retention); `npm run build` green
+- **Commit:** is commit me · **Deploy:** REQ-DEPLOY frontend
+- **Doosre agent ke liye:** VoiceEnroll bhi isi Dialog ko use karta hai — same fix apply
+
