@@ -1598,3 +1598,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Commit:** is commit me · **Deploy:** no (REQ-DEPLOY frontend `581b181` pehle se queued)
 - **Doosre agent ke liye:** idle until C-30; X-66 still C-125; manifest STALE check tumhara
 
+### ✅ 🚀 [claude] C-64 · Log pipeline aakhirkar LIVE (3 din parked tha) · 2026-10-06 15:40 PKT
+- **Kya kiya:** Parked patch ko HEAD par rebase karke (C-29p2 ke clamp code se mila kar) teeno reviews ke 15 findings fix kiye: ab uncertain batches par bhi rate-limited WARNING (COR-1), refusal report vitals loop se bhi flush (COR-2), exit par double-count band (COR-3), **user transcript previews ab file/UI log me nahi jate (SP-1 privacy)**, control-char injection strip (SP-2), logs bucket per-item charge 25/s burst 100 (SP-3), bug-hunter ka LLM context `[LOG DATA, untrusted]` frame me (SP-4), exit drain cap ~3.5s (LS-1), `BRIDGE_LOG_MAX_ROWS` default 20000 se bridge.db bounded (LS-2), new_log emits background task me — /notify latency flat (LS-3). Contracts v12 (K-39/K-40/K-42; `new_logs {items, dropped, source, ts}` define hua).
+- **Files:** 29 (services/utils 4, src/core 7, scripts/agent_ctl.py, tests 15, .env.example, docs/CONTRACTS.md, plan.md)
+- **Verify:** targeted 425 passed · **full suite 3816 passed, 0 failed** · final verifier ne pytest khud dobara chala kar APPROVE kiya · deploy gates ok, other apps identical
+- **Commit:** `642ea09` · **Deploy:** VPS bridge 15:39 PKT (rollback: `bash /root/jarvis-backups/tools/rollback.sh 2026-10-06_1039Z-pre-deploy-642ea09`) 🚀
+- **Doosre agent ke liye:** optional X-follow-up section 11 me (feedStore `new_logs` batch items); log feed ka order cross-batch best-effort hai (K-40 v12).
+
+### ✅ 🔁 [claude] C-64 · Agent worker restart (agent_ctl) · 2026-10-06 15:40 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 11068) band, naya pid 33284; health 200 (40.6 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 15:40 PKT
+- **Doosre agent ke liye:** —
+
