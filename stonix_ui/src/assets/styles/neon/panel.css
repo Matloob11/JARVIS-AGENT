@@ -206,6 +206,12 @@
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .confirm-card {
+    animation: none;
+  }
+}
+
 .confirm-card__header {
   display: flex;
   align-items: flex-start;
@@ -319,6 +325,25 @@
   height: clamp(40px, 5.2vh, 49px);
   width: 100%;
   justify-content: center;
+  border: 0;
+  border-radius: 12px;
+  font: 500 15.25px / 20px var(--font-med);
+  color: #fff;
+}
+
+.confirm-card__actions .confirm-dialog__deny {
+  background: #131b30;
+  box-shadow: inset 0 0 0 1px #2e364f;
+}
+
+.confirm-card__actions .confirm-dialog__allow {
+  background: var(--acc-approve);
+  box-shadow: 0 4px 16px rgba(var(--acc-glow), 0.28), inset 0 -1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.confirm-card__actions .confirm-dialog__allow[aria-disabled='true'] {
+  filter: saturate(0.35) brightness(0.8);
+  cursor: not-allowed;
 }
 
 .confirm-card__actions--phone {
@@ -601,7 +626,7 @@
 .chat-msg-bubble {
   position: relative;
   border-radius: 14px;
-  padding: 13px 16px 19px;
+  padding: 16px 20px 16px;
   background: var(--bubble-ai);
   color: var(--t-chat-ai);
   font-size: clamp(15px, 1.727vh, 16.25px);

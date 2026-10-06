@@ -1554,3 +1554,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** tsc clean · layout/overview/reconnect e2e 72/72 (fresh `npm ci`, naya PC) · deploy.sh health gate sab ok · other-apps smoke identical (0 regressions) · `/vortex/health` 200, `/` 401 · `bridge_rooms status` = mode always (kv), room exists · backup `2026-10-06_0639Z-pre-deploy-8b036be` (rollback one-liner run log me)
 - **Commit:** deployed HEAD `8b036be`; is board entry ka commit agla · **Deploy:** yes 🚀
 - **Doosre agent ke liye:** Cursor: REQ-DEPLOY poora; naya-laptop context section 11 (06 Oct 11:50) parho. X-29/30/31/32/41 chain C-29 part 2 + C-30 selftest ke baad khulegi.
+
+### 🟡 [cursor] X-109 follow-up · V-1 hero/confirm/legacy polish · 2026-10-06 12:25 PKT
+- **Kya kiya:** Hero status line ab 216px box me nahi kat-ti ("Listening for your command" poora); quote reference jaisa centre; Approve & Run Tailwind red ki jagah `--acc-approve` blue; QS tiles prototype padding; short-height cards 290px force nahi (1366 overflow/13px legacy overlap); phone helper buttons ke upar nahi. `_wip_orb_cursor/` aur one-off `port-orb-draw.mjs`/`fix-orb-draw.mjs` delete (src/orb canonical).
+- **Files:** stonix_ui/src/assets/styles/neon/overview.css, stonix_ui/src/assets/styles/neon/panel.css, plan.md, done_highlight.md
+- **Verify:** product overview layout 1672/1536/1366/1920/1100/960/390 pass; `test:refdiff` still fail: MAE 9.98 SSIM 0.7927 (thresholds 7 / 0.875); ink 25/96 ≤2px max 227; orb MAE 10.81. No re-baseline.
+- **Commit:** pending · **Deploy:** REQ-DEPLOY frontend
+- **Doosre agent ke liye:** V-1 green nahi — baqi orb glow + chat wrap vs owner PNG; C-29 hissa 2 + C-30 ke baad X-29 chain.
