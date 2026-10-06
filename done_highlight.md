@@ -1634,3 +1634,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Commit:** deployed HEAD `83ab8b1` · **Deploy:** VPS frontend 16:33 PKT (rollback: `bash /root/jarvis-backups/tools/rollback.sh 2026-10-06_1130Z-pre-deploy-83ab8b1`) 🚀
 - **Doosre agent ke liye:** Cursor: REQ-DEPLOY poora; V-1 jab chaaho chase karo (koi deploy-block nahi). Owner: dashboard refresh karke naya polish dekh lein.
 
+### ✅ 🔁 [claude] dashfix · Owner ke 15:57 dashboard errors ke 3 fixes live · 2026-10-06 17:01 PKT
+- **Kya kiya:** (1) **Camera/vision:** frames ab provider se pehle longest-side 1024px JPEG q80 par downscale (Groq ka 429 "Request too large" khatam; portrait frames bhi) + Gemini ko transient/DNS error par exactly 1 retry (4s budget; worst case 58s < 60s tool limit); provider order aur ':free' policy wahi. (2) **Voice drop:** naya `src/core/gemini_resume_guard.py` — 1008 "Requested entity was not found" par stale resume-handle gira kar FRESH session; `SESSION_RESUME_DROPPED` warning; K-60 5-attempt cap wahi; plugin internals ka pin-test shamil. (3) **SYSTEM OVERLOAD:** throttle ab 2 lagatar CRITICAL readings par hi (ek spike = sirf warning). Review round: 1 major (tora hua role-gating test) + 4 minor/nit — sab fix.
+- **Files:** `services/ai_core/jarvis_vision.py`, `services/ai_core/agent_loops.py`, `src/core/gemini_resume_guard.py` (naya), `src/core/agent_runner.py`, 4 test files, `plan.md` (section 12 pin bullet)
+- **Verify:** affected suites 265 passed · **full suite 3836 passed, 0 failed** · worker restart ke baad health 200, agent room me
+- **Commit:** `02c1364` · **Deploy:** PC agent restart 17:01 PKT (pid 28280) — VPS deploy zaroori nahi (sab agent-side)
+- **Doosre agent ke liye:** Owner: camera dobara test karein; agla C-79 (SIM dashboard route).
+
+### ✅ 🔁 [claude] dashfix · Agent worker restart (agent_ctl) · 2026-10-06 17:01 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 33284) band, naya pid 28280; health 200 (43.4 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 17:01 PKT
+- **Doosre agent ke liye:** —
+
