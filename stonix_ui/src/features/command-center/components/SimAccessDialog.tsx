@@ -30,6 +30,17 @@ const STATUS_LABELS: Record<string, string> = {
   rate_limited: 'Rate limited',
   success: 'Success',
   offline: 'Offline',
+  denied: 'Denied',
+  expired: 'Expired',
+  cancelled: 'Cancelled',
+  error: 'Error',
+};
+
+const TERMINAL_TITLES: Record<string, string> = {
+  denied: 'Lookup denied',
+  expired: 'Lookup expired',
+  cancelled: 'Lookup cancelled',
+  error: 'Lookup failed',
 };
 
 function statusChipLabel(status: string): string {
@@ -80,6 +91,9 @@ const SimAccessDialog = ({
     if (status === 'offline') return 'Lookup timed out';
     if (status === 'blocked' || status === 'validation_error' || status === 'rate_limited') {
       return message || 'Lookup blocked';
+    }
+    if (status in TERMINAL_TITLES) {
+      return message || TERMINAL_TITLES[status];
     }
     if (status === 'success' && !record) return 'No masked match';
     return 'Authorized source required';

@@ -84,6 +84,9 @@
   "sim_loading": false,
   "sim_status": "idle",
   "sim_message": "",
+  "sim_provider": "",
+  "sim_provider_configured": false,
+  "sim_requires_purpose": false,
   "sim_panel_open": false,
   "confirmations": [],
   "module_health": {

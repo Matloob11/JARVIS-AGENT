@@ -580,6 +580,15 @@ export const useCommandCenter = () => {
       if (state.sim_query_masked) setSimQueryMasked(String(state.sim_query_masked));
       if (state.sim_status) setSimStatus(String(state.sim_status));
       if (state.sim_message) setSimMessage(String(state.sim_message));
+      if (typeof state.sim_provider === 'string') setSimProvider(state.sim_provider);
+      if (typeof state.sim_provider_configured === 'boolean') {
+        setSimProviderConfigured(state.sim_provider_configured);
+      } else if (typeof state.sim_provider === 'string') {
+        setSimProviderConfigured(isSimProviderConfigured(state.sim_provider));
+      }
+      if (typeof state.sim_requires_purpose === 'boolean') {
+        setSimRequiresPurpose(state.sim_requires_purpose);
+      }
       if (state.sim_panel_open !== undefined) setIsSimPanelOpen(state.sim_panel_open === true);
       if (state.intelligence !== undefined) {
         const seeded = seedIntelligenceHistory(state.intelligence);

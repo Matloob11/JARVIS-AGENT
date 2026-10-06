@@ -144,3 +144,46 @@ test('search disabled when agent is offline', async ({ page }) => {
 
   await page.request.post(`${MOCK}/__mock/agent`, { data: { online: true } });
 });
+
+test('login init_state seeds SIM banner before sim_panel_open', async ({ page }) => {
+  await openSimDialog(page);
+  const banner = page.getByTestId('sim-provider-banner');
+  await expect(banner).toHaveAttribute('data-configured', 'false');
+  await expect(banner).toContainText('SIM_LOOKUP_API_URL');
+  await expect(page.getByTestId('sim-purpose-input')).toHaveCount(0);
+});
+
+test('init_state SIM keys enable configured banner and purpose', async ({ page }) => {
+  await mockEmit(page, 'init_state', {
+    sim_provider: 'authorized_api',
+    sim_provider_configured: true,
+    sim_requires_purpose: true,
+  });
+  await openSimDialog(page);
+  const banner = page.getByTestId('sim-provider-banner');
+  await expect(banner).toHaveAttribute('data-configured', 'true');
+  await expect(banner).toContainText('authorized_api');
+  await expect(page.getByTestId('sim-purpose-input')).toBeVisible();
+});
+
+test('denied expired cancelled error show identity titles', async ({ page }) => {
+  await openSimDialog(page);
+  const cases: [string, string][] = [
+    ['denied', 'Lookup denied'],
+    ['expired', 'Lookup expired'],
+    ['cancelled', 'Lookup cancelled'],
+    ['error', 'Lookup failed'],
+  ];
+  for (const [status, title] of cases) {
+    await mockEmit(page, 'sim_data_result', {
+      records: [],
+      phone: '03********1',
+      status,
+      message: '',
+      provider: 'authorized_api',
+      configured: true,
+    });
+    await expect(page.getByTestId('sim-status-chip')).toHaveAttribute('data-status', status);
+    await expect(page.getByTestId('sim-identity-title')).toHaveText(title);
+  }
+});

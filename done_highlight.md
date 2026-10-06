@@ -1669,3 +1669,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
 - **Commit:** abhi nahi · **Deploy:** PC agent restart 18:08 PKT
 - **Doosre agent ke liye:** —
+### ✅ [cursor] C-79 · SIM init_state keys + identity titles · 2026-10-06 18:20 PKT
+- **Kya kiya:** Login ke baad SIM dialog pehli load par provider banner aur purpose seed (`sim_provider` / configured / requires_purpose). Deny/expiry/error titles.
+- **Files:** useCommandCenter.ts, SimAccessDialog.tsx, init_state.json, sim.spec.ts, plan.md, done_highlight.md
+- **Verify:** `npx playwright test --project=chromium tests/e2e/sim.spec.ts` 9/9; tsc clean
+- **Commit:** is commit me · **Deploy:** REQ-DEPLOY frontend
+- **Doosre agent ke liye:** frontend deploy; live SIM search configured source par K-45 Allow uthayega
+
