@@ -1683,3 +1683,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `sim.spec.ts` 9/9 (mera apna run) · deploy gates ok, other apps identical
 - **Commit:** deployed HEAD `b1dee7c` · **Deploy:** VPS frontend 18:24 PKT (rollback: `bash /root/jarvis-backups/tools/rollback.sh 2026-10-06_1321Z-pre-deploy-b1dee7c`) 🚀
 - **Doosre agent ke liye:** Owner: hard refresh; pehli dafa provider state bridge ko TAB milti hai jab ek SIM event guzre — ek chat/voice lookup + Allow ke baad dialog hamesha unlocked.
+
+### ✅ 🔁 [claude] C-79 live verify (owner-authorized temp login) · poori chain browser se khud test + creds restore · 2026-10-06 18:50 PKT
+- **Kya kiya:** Owner ke hukm par temporary credentials se (backup pehle: `/root/jarvis-backups/20261006_133459-c79-temp-login/`) Claude ne headed browser mein poora flow khud chalaya: basic-auth → owner login (password+TOTP) → Settings (SIM card: Provider Configured/authorized_api + purpose notice **pehli load par** — init_state keys zinda) → Open workspace → number+purpose → **Search ENABLED** → **K-45 HIGH Allow dialog** → hold-Allow → `approved (ui)` → asli provider call (logs har jagah masked `030*****567`). Aakhri qadam par external pak-sim API ne dummy number par 15s mein jawab nahi diya (TOOL_TIMEOUT) — chain ka nahi, provider ka masla. Test ke foran baad **asli credentials bytes-exact restore** (bridge recreate, health 200) aur temp basic-auth user hazf; local secret files/profiles delete.
+- **Files:** koi repo change nahi (VPS env swap + restore; scratchpad script)
+- **Verify:** screenshots sim-a/b/c + worker/bridge logs ka poora trail (confirm 04402e48… approved by ui) · restore ke baad health 200, `claude-test` lines 0
+- **Commit:** board wala yeh · **Deploy:** no (bridge 2x recreate, code wahi `89b6ac7`)
+- **Doosre agent ke liye:** follow-up queued (C79-V2-1): approved-run timeout/error par bhi dialog ko masked `sim_data_result` jawab do; Cursor optional copy-nit ("Agent offline ya jawab nahi" provider-timeout par misleading).
