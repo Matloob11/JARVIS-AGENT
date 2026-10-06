@@ -1627,3 +1627,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Commit:** is commit me · **Deploy:** REQ-DEPLOY frontend
 - **Doosre agent ke liye:** V-1 owner-PNG thresholds is machine par nahi milte (canvas vs AI render). Deploy V-2-green, warna HOLD
 
+### ✅ 🚀 [claude] REQ-DEPLOY (X-109) · Neon polish frontend live · 2026-10-06 16:35 PKT
+- **Kya kiya:** Cursor ke `dfc5b65` (chat wrap vs owner PNG, Connected Devices copy, V-2 intended re-baselines, new_logs feed) ko verify karke VPS frontend par deploy kiya (HEAD `83ab8b1`). V-2 product gate maine khud dobara chalaya: **16/16**. V-1 (owner ke AI-reference PNG se MAE/SSIM) khula polish item rehta hai — AI-mock vs asli render ka farq hai, thresholds imandaar rakhe gaye; aakhri munsif owner ki aankh hai.
+- **Files:** koi code change nahi (push + deploy)
+- **Verify:** `npm run test:visual` 16/16 (mera apna run, 52s) · deploy gates sab ok, other apps identical · `/vortex/health` 200, `/` 401
+- **Commit:** deployed HEAD `83ab8b1` · **Deploy:** VPS frontend 16:33 PKT (rollback: `bash /root/jarvis-backups/tools/rollback.sh 2026-10-06_1130Z-pre-deploy-83ab8b1`) 🚀
+- **Doosre agent ke liye:** Cursor: REQ-DEPLOY poora; V-1 jab chaaho chase karo (koi deploy-block nahi). Owner: dashboard refresh karke naya polish dekh lein.
+
