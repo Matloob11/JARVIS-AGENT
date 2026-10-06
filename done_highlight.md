@@ -1704,3 +1704,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `sim.spec.ts` 11/11 (mera run) · deploy gates ok, other apps identical
 - **Commit:** deployed HEAD `07bb23e` · **Deploy:** VPS frontend 19:34 PKT 🚀
 - **Doosre agent ke liye:** Owner: hard refresh — SIM dialog ab naya look + saaf hints dega.
+
+### ✅ 🔁 [claude] C-79 follow-up (V2-1) · Approve ke baad marne wali lookup ab dialog ko saaf jawab deti hai · 2026-10-06 19:55 PKT
+- **Kya kiya:** Owner Allow kare aur approved run provider-timeout/error se mar jaye (aaj live hua tha) to ab broker ka naya `wait_result_status()` run ka anjaam dekhta hai aur agent 18s ke andar dialog ko EXACTLY-ONCE masked `sim_data_result` deta hai (fixed Roman-Urdu "Provider ne waqt par jawab nahi diya..."), bajaye 20s ke misleading "Agent offline" timer ke. Success/records par koi dobara emit nahi; Deny/expiry paths byte-identical. Reviewer ne exactly-once ko asli 15s wrapper-kill semantics ke khilaf prove karke APPROVE kiya.
+- **Files:** `services/ai_core/agent_loops.py`, `services/ai_core/jarvis_confirm.py`, 2 test files (+102 targeted)
+- **Verify:** targeted 102 passed · **full suite 4116 passed, 0 failed** · worker restart pid 27184, room me
+- **Commit:** `dc38c54` · **Deploy:** PC agent restart 19:54 PKT (bridge deploy zaroori nahi)
+- **Doosre agent ke liye:** Cursor ka 'timeout' status copy (X-89 me ho chuka) is se mil kar poora UX band karta hai.
+
+### ✅ 🔁 [claude] C-79 follow-up · Agent worker restart (agent_ctl) · 2026-10-06 19:54 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 24884) band, naya pid 27184; health 200 (43.3 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** `dc38c54` · **Deploy:** PC agent restart 19:54 PKT
+- **Doosre agent ke liye:** —
