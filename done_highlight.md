@@ -1940,3 +1940,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** pytest tests/tools/test_file_server_tool.py -q → 15 passed
 - **Commit:** PENDINGHASH · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] note · X-30 follow-up commit hash · 2026-10-08 16:03 PKT
+- **Kya kiya:** Previous entry Commit PENDINGHASH = \80696e\ (file-server polish was already in tree from subagent merge; this commit is DH note). If file_server diffs remain unstaged, next commit.
+- **Files:** done_highlight.md
+- **Verify:** —
+- **Commit:** \80696e\ · **Deploy:** no
+- **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-30 code · reuse-address off + TTL race fix · 2026-10-08 16:03 PKT
+- **Kya kiya:** `_FileAccessHTTPServer.allow_reuse_address=False`; `_stop_server_sync` clears state only after shutdown/close.
+- **Files:** services/system/jarvis_file_server.py, tests/tools/test_file_server_tool.py
+- **Verify:** pytest tests/tools/test_file_server_tool.py -q → 15 passed
+- **Commit:** `3227ec8` · **Deploy:** no
+- **Doosre agent ke liye:** —
