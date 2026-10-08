@@ -1595,6 +1595,19 @@ def test_the_chat_probe_passes_only_on_exactly_one_reply_to_its_message():
     assert probe.chat_payload("t")["id"].startswith("probe-")
 
 
+def test_the_voice_link_probe_reads_the_agents_linked_identity():
+    """C-35: the live two-tab check reads jarvis.linked_identity from the agent participant only."""
+    import types  # pylint: disable=import-outside-toplevel
+
+    live = _load_windows_local("test_voice_link_live")
+    room = types.SimpleNamespace(remote_participants={
+        "owner-a": types.SimpleNamespace(identity="owner-a", attributes={live.LINKED_ATTR: "spoof"}),
+        "agent-AJ_1": types.SimpleNamespace(identity="agent-AJ_1", attributes={live.LINKED_ATTR: "owner-a"}),
+    })
+    assert live.agent_linked(room) == "owner-a"
+    assert live.agent_linked(types.SimpleNamespace(remote_participants={})) is None
+
+
 def test_worker_priority_is_raised_only_for_the_agent_tree(monkeypatch):
     """The venv launcher hides the real interpreter behind a child process, so agent_ctl lifts the tree."""
     normal, below, above = 32, 16384, 32768  # Windows priority class values, as psutil exposes them
