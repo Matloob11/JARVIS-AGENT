@@ -102,7 +102,7 @@ def test_committed_manifest_is_intact(manifest):
 
 def test_manifest_agrees_with_the_placement_table(tools):
     assert set(tools) == set(tp.PLACEMENTS) - set(tp.INTERNAL_TOOLS)
-    assert len(tools) == 82  # C-57: list_background_jobs, cancel_background_job; X-29: cancel_shutdown
+    assert len(tools) == 83  # C-57: 2 job tools; X-29: cancel_shutdown; X-32: cancel_scheduled_task
     for name, tool in tools.items():
         entry = tp.PLACEMENTS[name]
         assert (tool["placement"], tool["cls"], tool["idempotent"]) == (

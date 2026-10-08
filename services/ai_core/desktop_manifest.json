@@ -1,12 +1,12 @@
 {
-  "git_sha": "f44a1984e21405505ff8dc5ff4c632e495c57b92",
+  "git_sha": "b68df5ca55c8ef27d4d32f69d25158572f2cdf0e",
   "lk_schema_libs": {
     "docstring-parser": "0.18.0",
     "livekit-agents": "1.4.6",
     "pydantic": "2.12.5",
     "pydantic-core": "2.41.5"
   },
-  "manifest_sha256": "ec681d0d9dc8ab4edecb75a09297cb8428581caadf2d235f8e19c10de6c3cc65",
+  "manifest_sha256": "7ed9c06a6852bf09d5efccc784be86de96342e24b080889ffad42c3f40a41703",
   "pc_operations": [
     {
       "arg_hooks": [],
@@ -515,6 +515,34 @@
           "default": null,
           "kind": "POSITIONAL_OR_KEYWORD",
           "name": "job_id",
+          "required": true
+        }
+      ],
+      "placement": "vps"
+    },
+    {
+      "cls": null,
+      "doc": "Cancel a pending scheduled task by id.",
+      "idempotent": true,
+      "lk_schema_sha256": "769cb7c538acd988be4d33638744150362ce89a910879ced47cd8f886ec1644f",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 10.0,
+        "voice_confirm": null
+      },
+      "module": "services.automation.jarvis_task_manager",
+      "name": "cancel_scheduled_task",
+      "param_schema_sha256": "5a8a5e5bc9506451fe0a5cebbd65d7440035db1900f16e06103048123d1b471b",
+      "params": [
+        {
+          "annotation": "int",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "task_id",
           "required": true
         }
       ],
@@ -1274,9 +1302,9 @@
     },
     {
       "cls": null,
-      "doc": "Lists all pending tasks and scheduled actions.",
+      "doc": "Lists all pending tasks and scheduled actions (kind, status, short result).",
       "idempotent": true,
-      "lk_schema_sha256": "33f9f72aa7cfca6d08a6b575ed5542fed69ecfdd267ec1e4dfd19ed543f7425a",
+      "lk_schema_sha256": "e3ba874d0c46559d377299a50cf2e2b6a04a1893fc3348482fcbd046cf590c1c",
       "meta": {
         "arg_policies": {},
         "exclusive": null,
@@ -1853,21 +1881,24 @@
     },
     {
       "cls": null,
-      "doc": "\n    Schedules an advanced task or reminder.\n    time_str: e.g., '2026-04-04 09:00' or 'in 10 minutes'.\n    description: What needs to be done.\n    action: Optional specific tool/action to trigger (e.g., 'check_email', 'summary').\n    ",
+      "doc": "\n    Schedule a task or tool action.\n    time_str: e.g. 'in 10 minutes', 'das minute baad', '14:30', ISO.\n    action_args_json: JSON object of tool kwargs (optional).\n    ",
       "idempotent": false,
-      "lk_schema_sha256": "586e6708e25ff1e8df9ee505132b88b2a6a8547aa365bae4f466eb0990878ef5",
+      "lk_schema_sha256": "aebc6d38c5941397d698db24dd721fac98856d631b3512fc9639de883fb477e5",
       "meta": {
-        "arg_policies": {},
+        "arg_policies": {
+          "action_args_json": "raw",
+          "description": "multiline"
+        },
         "exclusive": null,
         "long_running": false,
         "max_output_chars": 12000,
-        "risk": "low",
-        "timeout": 15.0,
+        "risk": "dynamic",
+        "timeout": 20.0,
         "voice_confirm": null
       },
       "module": "services.automation.jarvis_task_manager",
       "name": "schedule_task",
-      "param_schema_sha256": "7af0d5eca819c03ca682d0555d10d5b23918f6f758fbd35f40ebd0a4d587bbb8",
+      "param_schema_sha256": "81207e978f7a2cc856884ddcd0e19589f712b3f7270c361bd6d30ce4843333c2",
       "params": [
         {
           "annotation": "str",
@@ -1885,9 +1916,16 @@
         },
         {
           "annotation": "str",
-          "default": null,
+          "default": "",
           "kind": "POSITIONAL_OR_KEYWORD",
           "name": "action",
+          "required": false
+        },
+        {
+          "annotation": "str",
+          "default": "",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "action_args_json",
           "required": false
         }
       ],

@@ -167,10 +167,10 @@ def _laptop(name: str, cls: str, idempotent: bool = False, **extra: Any) -> Tool
 
 
 # Grouped as in docs/ARCHITECTURE_VPS_BRAIN.md section 4.2. Planned K-17 tools get their entry when
-# they are registered: close_window on the laptop; cancel_scheduled_task and confirm_selftest on the
-# VPS (list_background_jobs and cancel_background_job landed with C-57, cancel_shutdown with X-29).
+# they are registered: close_window on the laptop, confirm_selftest on the VPS (list_background_jobs
+# and cancel_background_job landed with C-57, cancel_shutdown with X-29, cancel_scheduled_task with X-32).
 _TABLE: tuple[ToolPlacement, ...] = (
-    # ---------------------------------------------------------------- VPS (34)
+    # ---------------------------------------------------------------- VPS (35)
     _vps("tool_report_plan_progress", True),
     _vps("tool_update_user_background"),
     _vps("tool_update_sir_background"),
@@ -190,6 +190,7 @@ _TABLE: tuple[ToolPlacement, ...] = (
     _vps("list_reminders", True),
     _vps("schedule_task"),
     _vps("list_tasks", True),
+    _vps("cancel_scheduled_task", True),  # X-32: the task store lives with the agent
     _vps("get_weather", True),
     _vps("show_location_on_map", True),
     _vps("perform_web_research", True),
