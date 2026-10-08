@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -150,6 +151,96 @@ def _write_custom_code_summary(arguments: dict[str, Any]) -> str:
 
 def _close_notepad_risk(arguments: dict[str, Any]) -> str:
     return "medium" if arguments.get("force", False) else "low"
+
+
+# --- X-31: run_cmd_command risk + capture helpers ------------------------------------------
+
+# Any of these characters (or a control character) in the raw command disqualifies it from the
+# READ_ONLY allow-list, even if the tokens otherwise look safe (e.g. 'echo %GOOGLE_API_KEY%').
+_RUN_CMD_FORBIDDEN_CHARS: frozenset[str] = frozenset("%!^&|<>()")
+
+# READ_ONLY allow-list (X-31 Step 2): matched against the *normalized* command (tokens rejoined
+# with single spaces), case-insensitively. Only these ever get risk='low' (no confirmation).
+_RUN_CMD_READ_ONLY_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"^ipconfig(\s+/all)?$", re.IGNORECASE),
+    re.compile(r"^ping\s+\S+$", re.IGNORECASE),
+    re.compile(r"^tracert\s+\S+$", re.IGNORECASE),
+    re.compile(r"^nslookup\s+\S+$", re.IGNORECASE),
+    re.compile(r"^systeminfo$", re.IGNORECASE),
+    re.compile(r"^tasklist$", re.IGNORECASE),
+    re.compile(r"^whoami$", re.IGNORECASE),
+    re.compile(r"^hostname$", re.IGNORECASE),
+    re.compile(r"^ver$", re.IGNORECASE),
+    re.compile(r"^getmac$", re.IGNORECASE),
+    re.compile(r"^netstat\s+-ano$", re.IGNORECASE),
+    re.compile(r"^dir\s+\S+$", re.IGNORECASE),
+    re.compile(r"^where\s+\S+$", re.IGNORECASE),
+    re.compile(r"^python\s+--version$", re.IGNORECASE),
+    re.compile(r"^node\s+--version$", re.IGNORECASE),
+    # git status|log|diff|branch, optionally with safe (dash-prefixed) flags only.
+    re.compile(r"^git\s+(status|log|diff|branch)(\s+-{1,2}\S+)*$", re.IGNORECASE),
+)
+
+# Env vars kept for a captured low-risk run; everything else (API keys, tokens, ...) is scrubbed
+# so no captured output can ever echo a secret from the agent's own environment.
+_RUN_CMD_ENV_KEYS: tuple[str, ...] = ("PATH", "SystemRoot", "COMSPEC", "USERPROFILE", "TEMP", "TMP")
+
+_RUN_CMD_OUTPUT_LIMIT = 4000
+
+
+def _run_cmd_has_forbidden_chars(command: str) -> bool:
+    return any(ch in _RUN_CMD_FORBIDDEN_CHARS or ord(ch) < 32 for ch in command)
+
+
+def _run_cmd_is_read_only(command: str) -> bool:
+    try:
+        tokens = shlex.split(command, posix=False)
+    except ValueError:
+        return False
+    normalized = " ".join(tokens)
+    return any(pattern.match(normalized) for pattern in _RUN_CMD_READ_ONLY_PATTERNS)
+
+
+def _run_cmd_risk(arguments: dict[str, Any]) -> str:
+    """X-31 Step 2: 'low' only for an exact READ_ONLY allow-list match with no shell metachars."""
+    command = str(arguments.get("command") or "").strip()
+    if not command:
+        return "high"
+    if _run_cmd_has_forbidden_chars(command):
+        return "high"
+    if _run_cmd_is_read_only(command):
+        return "low"
+    return "high"
+
+
+def _run_cmd_summary(arguments: dict[str, Any]) -> str:
+    """X-31 Step 2: the confirmation summary carries the exact command, nothing paraphrased."""
+    return str(arguments.get("command") or "")
+
+
+def _scrubbed_cmd_env() -> dict[str, str]:
+    return {key: os.environ[key] for key in _RUN_CMD_ENV_KEYS if key in os.environ}
+
+
+def _run_cmd_sync(command: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(  # noqa: S603 - fixed argv, cmd.exe does its own parsing
+        ["cmd", "/c", command],
+        capture_output=True,
+        text=True,
+        timeout=20,
+        cwd=str(Path.home()),
+        env=_scrubbed_cmd_env(),
+        check=False,
+    )
+
+
+async def _run_cmd_captured(command: str) -> dict[str, Any]:
+    """X-31 Step 3: run in a thread with a scrubbed env; stdout+stderr capped at 4000 chars."""
+    completed = await asyncio.to_thread(_run_cmd_sync, command)
+    output = completed.stdout or ""
+    if completed.stderr:
+        output = f"{output}\n{completed.stderr}" if output else completed.stderr
+    return {"output": output[:_RUN_CMD_OUTPUT_LIMIT], "returncode": completed.returncode}
 
 
 async def _safe_notify(notify_func: Callable[..., Any], *args: Any, **kwargs: Any) -> None:
@@ -508,13 +599,51 @@ async def write_custom_code(content: str, filename: str, auto_run: bool = True) 
     return await _process_notepad_automation(content, filename, auto_run)
 
 
-@jarvis_tool
-async def run_cmd_command(command: str) -> dict[str, Any]:
-    """Execute a CMD command (Non-interactive) safely."""
+@jarvis_tool(
+    timeout=30,
+    raw_args=("command",),
+    risk=_run_cmd_risk,
+    confirm_summary=_run_cmd_summary,
+)
+async def run_cmd_command(command: str, capture: bool = False) -> dict[str, Any]:
+    """Sir, main CMD command chalata hoon: READ_ONLY allow-list bina confirmation ke, baaqi sab
+    sirf Sir ke Allow ke baad (K-45 ConfirmFlow). Captured output ka environment scrub kiya jaata
+    hai taake agent ke .env ki koi value kabhi wapas na aaye."""
+    if not command or not command.strip():
+        return tool_result("error", "Command khali nahi ho sakta.", error_code="EMPTY_COMMAND")
+
+    risk_level = _run_cmd_risk({"command": command})
     try:
-        cmd_list = ["cmd", "/c", "start", "cmd", "/k"] + shlex.split(command)
-        await asyncio.to_thread(subprocess.Popen, cmd_list)
-        return tool_result("success", f"Command sent to CMD: {command}", data={"command": command})
+        if risk_level == "low" or capture:
+            captured = await _run_cmd_captured(command)
+            data: dict[str, Any] = {
+                "command": command,
+                "output": captured["output"],
+                "returncode": captured["returncode"],
+            }
+            if risk_level != "low":
+                # Confirmed high-risk command: still open the visible 'cmd /k' window as today,
+                # in addition to the captured copy (X-31 Step 4).
+                await asyncio.to_thread(
+                    subprocess.Popen, ["cmd", "/c", "start", "cmd", "/k", command]
+                )
+                return tool_result(
+                    "success",
+                    f"Command CMD window mein chal gaya aur output capture ho gaya: {command}",
+                    data=data,
+                )
+            return tool_result("success", f"Command run ho gaya: {command}", data=data)
+
+        # High risk, capture not requested: open the visible interactive window (today's
+        # behaviour). The confirmation itself already happened via ConfirmFlow before this
+        # function runs.
+        await asyncio.to_thread(subprocess.Popen, ["cmd", "/c", "start", "cmd", "/k", command])
+        return tool_result(
+            "success", f"Command CMD window mein chal gaya: {command}", data={"command": command}
+        )
+    except subprocess.TimeoutExpired:
+        logger.warning("run_cmd_command timed out: %s", command)
+        return tool_result("error", "Command 20 seconds mein complete nahi hua (timeout).", error_code="TIMEOUT")
     except (subprocess.SubprocessError, OSError, ValueError) as e:
         logger.exception("run_cmd_command error: %s", e)
         return tool_result("error", f"Error running command: {e}")
