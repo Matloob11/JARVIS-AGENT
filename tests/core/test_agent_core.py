@@ -306,7 +306,7 @@ async def test_the_wake_word_tool_recomposes_the_instructions(mock_agent_deps):
 async def test_the_dashboard_wake_toggle_recomposes_too(mock_agent_deps):
     """The UI's wake_word_toggle runs the sync set_wake_word_mode (agent_loops): the refresh runs in the background."""
     assistant, _ = create_test_assistant(mock_agent_deps)
-    assistant.bridge_notifier = MagicMock(notify_wake_word=AsyncMock())
+    assistant.bridge_notifier = MagicMock(notify_wake_word=AsyncMock(), notify_persona=AsyncMock())
 
     async def toggle(active: bool) -> str:
         before = set(assistant._background_tasks)  # the assistant's own long-running loops are in there too
