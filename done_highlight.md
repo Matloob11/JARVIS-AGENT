@@ -2003,3 +2003,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Commit:** `8fca9dc` · **Deploy:** no
 - **Doosre agent ke liye:** —
 
+### ✅ [cursor] X-57 · deep research + research-email job · 2026-10-08 16:13 PKT
+- **Kya kiya:** search_urls + bounded scrape + Tavily fallback; llm_text Roman-Urdu synthesis; perform_web_research 120s; autonomous_research_and_email HIGH+confirm → research_email job; no [INSTRUCTION] in body.
+- **Files:** services/info/jarvis_researcher.py, tests/tools/test_researcher.py
+- **Verify:** pytest tests/tools/test_researcher.py -q -p no:cacheprovider → 4 passed
+- **Commit:** `e046001` · **Deploy:** no
+- **Doosre agent ke liye:** REQ-RESTART; regen manifest if research tool meta changed
+
