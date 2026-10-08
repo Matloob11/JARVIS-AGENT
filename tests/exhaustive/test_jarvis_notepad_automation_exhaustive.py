@@ -640,12 +640,14 @@ async def test_edit_and_append_refuse_unsafe_or_missing_files(gui: Any) -> None:
 
 
 async def test_run_cmd_command(gui: Any) -> None:
+    """X-31: a command outside the READ_ONLY allow-list (approved first, K-45) opens one visible 'cmd /k' window
+    with the command as ONE argument, as typed; a launch failure and an empty command are errors."""
     assert (await nap.run_cmd_command('echo "hi there"'))["status"] == "success"
-    gui.popen.assert_called_once_with(["cmd", "/c", "start", "cmd", "/k", "echo", "hi there"])
+    gui.popen.assert_called_once_with(["cmd", "/c", "start", "cmd", "/k", 'echo "hi there"'])
     gui.popen.side_effect = OSError("Boom")
     assert (await nap.run_cmd_command("dir"))["status"] == "error"
     gui.popen.side_effect = None
-    assert (await nap.run_cmd_command('echo "unterminated'))["status"] == "error"
+    assert (await nap.run_cmd_command("   "))["status"] == "error"
 
 
 async def test_open_notepad_simple(gui: Any) -> None:
