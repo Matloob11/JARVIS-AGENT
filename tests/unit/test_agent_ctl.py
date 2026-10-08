@@ -1595,6 +1595,24 @@ def test_the_chat_probe_passes_only_on_exactly_one_reply_to_its_message():
     assert probe.chat_payload("t")["id"].startswith("probe-")
 
 
+def test_the_chat_probe_reports_the_reply_time_and_fails_a_slow_one(capsys):
+    """C-42: the reply time is printed; --max-reply fails a slower reply; --voice-on needs an owner session."""
+    probe = _load_windows_local("test_chat_once")
+    got = [{"id": "probe-1", "role": "user", "text": "Jarvis, 7 times 8?"},
+           {"id": "r1", "role": "assistant", "turn_id": "probe-1", "text": "Sir, 56."}]
+    assert probe.report(got, {"id": "probe-1"}, "56", reply_s=4.2, max_reply_s=5) == 0
+    assert "PASS user messages 1, assistant replies 1, '56' found in the reply, reply after 4.2 s" in \
+        capsys.readouterr().out
+    assert probe.report(got, {"id": "probe-1"}, "56", reply_s=5.6, max_reply_s=5) == 2
+    assert "reply after 5.6 s (over 5 s)" in capsys.readouterr().out
+    with pytest.raises(SystemExit):
+        probe.main(["--voice-on"])
+    room = types.SimpleNamespace(remote_participants={
+        "owner-1": types.SimpleNamespace(identity="owner-1", attributes={"jarvis.linked_identity": "x"}),
+        "agent-AJ_1": types.SimpleNamespace(identity="agent-AJ_1", attributes={"jarvis.linked_identity": "owner-1"})})
+    assert probe.agent_linked(room) == "owner-1"
+
+
 def test_the_voice_link_probe_reads_the_agents_linked_identity():
     """C-35: the live two-tab check reads jarvis.linked_identity from the agent participant only."""
     import types  # pylint: disable=import-outside-toplevel

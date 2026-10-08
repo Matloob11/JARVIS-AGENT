@@ -84,6 +84,7 @@ async def test_typed_text_reaches_generate_reply_once_with_the_prefix_after_inte
     router.attach(session)
 
     assert await router.handle_text("Jarvis, 7 times 8?", "u-1") == "accepted"
+    await router.drain()  # the user echo is a chained send beside the reply
 
     assert session.calls == ["interrupt", "generate_reply:[typed] Jarvis, 7 times 8?"]
     session.generate_reply.assert_called_once_with(user_input="[typed] Jarvis, 7 times 8?")
@@ -95,6 +96,7 @@ async def test_a_repeated_id_is_dropped(router):
     router.attach(session)
     assert await router.handle_text("salam", "u-1") == "accepted"
     assert await router.handle_text("salam", "u-1") == "duplicate"
+    await router.drain()
     assert session.generate_reply.call_count == 1
     assert len(_sent(router)) == 1
 
@@ -111,6 +113,7 @@ async def test_a_message_without_an_id_gets_a_new_one_each_time(router):
     router.attach(_session())
     assert await router.handle_text("hi") == "accepted"
     assert await router.handle_text("hi") == "accepted"  # legacy strings: no id, so never a duplicate
+    await router.drain()
     ids = [kwargs["msg_id"] for _role, _text, kwargs in _sent(router)]
     assert len(set(ids)) == 2 and all(str(uuid.UUID(i)) == i for i in ids)
 
@@ -186,6 +189,51 @@ async def test_empty_text_is_ignored(router, text):
 def test_the_text_is_nfkc_without_control_characters_and_capped():
     assert cr.normalize_text("ｊａｒｖｉｓ\x00 hi\r\nthere\tok\x7f") == "jarvis hi\nthere\tok"
     assert len(cr.normalize_text("a" * 5000)) == cr.MAX_CHARS
+
+
+async def test_the_user_echo_never_holds_the_typed_reply(router):
+    """C-42: generate_reply runs while the user echo is still on its way to the bridge (a round trip of ~0.4 s
+    measured live), and the reply's message goes out only after the echo."""
+    release = asyncio.Event()
+    order: list[str] = []
+
+    async def slow_notify(role: str, text: str, **_kwargs: Any) -> None:
+        if role == "user":
+            await release.wait()
+        order.append(role)
+
+    router._notify = slow_notify
+    session = _session()
+    router.attach(session)
+    assert await asyncio.wait_for(router.handle_text("Jarvis, 7 times 8?", "u-40"), 1) == "accepted"
+    session.generate_reply.assert_called_once()  # the echo has not been sent yet
+    assert order == []
+    router.on_conversation_item_added(_item("user", "[typed] Jarvis, 7 times 8?", "i40"))
+    router.on_conversation_item_added(_item("assistant", "56", "r40"))
+    await asyncio.sleep(0.01)
+    assert order == []  # the reply waits for the echo
+    release.set()
+    await router.drain()
+    assert order == ["user", "assistant"]
+
+
+async def test_a_stuck_send_holds_the_next_one_only_briefly(router, monkeypatch):
+    monkeypatch.setattr(cr, "EMIT_ORDER_WAIT_S", 0.01)
+    sent: list[str] = []
+
+    async def notify(role: str, text: str, **_kwargs: Any) -> None:
+        if role == "user":
+            await asyncio.Event().wait()  # never returns
+        sent.append(role)
+
+    router._notify = notify
+    router.attach(_session())
+    await router.handle_text("hi", "u-41")
+    task = router.on_conversation_item_added(_item("assistant", "Ji Sir", "r41"))
+    await asyncio.wait_for(task, 1)
+    assert sent == ["assistant"]
+    for pending in list(router._tasks):
+        pending.cancel()
 
 
 # ---------------------------------------------------------------- conversation_item_added: one bubble each
@@ -282,6 +330,7 @@ async def test_lk_chat_uses_the_client_id_from_the_stream_attributes(router):
     await router.text_input_cb(None, event)
     event2 = SimpleNamespace(text="again", participant=participant, info=SimpleNamespace(attributes={}, stream_id="s-2"))
     await router.text_input_cb(None, event2)
+    await router.drain()
     assert [kwargs["msg_id"] for _r, _t, kwargs in _sent(router)] == ["c-1", "s-2"]
 
 

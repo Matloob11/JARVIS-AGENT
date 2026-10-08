@@ -143,3 +143,103 @@ def test_a_probe_identity_counts_only_in_a_probe_job():
     assert roomio_link.pick_target(room, None, allow_probe=True) == "probe-1791460000"
     agent = _person("agent-AJ_1", _pub())
     assert roomio_link.eligible(agent, allow_probe=True) is False  # an agent never counts
+
+
+# ---------------------------------------------------------------- C-42: the agent state after a text-only reply
+
+
+class _Speech:
+    def __init__(self) -> None:
+        self._done, self._callbacks = False, []
+
+    def done(self) -> bool:
+        return self._done
+
+    def add_done_callback(self, callback) -> None:
+        self._callbacks.append(callback)
+
+    def finish(self) -> None:
+        self._done = True
+        for callback in self._callbacks:
+            callback(self)
+
+
+class _StateSession(_Session):
+    """A _Session with livekit-agents' agent_state, current_speech, _update_agent_state and event handlers."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.agent_state, self.current_speech = "listening", None
+        self.states: list[str] = []
+        self.handlers: dict[str, Any] = {}
+
+    def on(self, event: str, handler: Any) -> None:
+        self.handlers[event] = handler
+
+    def _update_agent_state(self, state: str) -> None:
+        self.agent_state = state
+        self.states.append(state)
+
+    def speak(self, speech: _Speech) -> None:
+        """livekit: the first text (or audio frame) of a speech makes the state 'speaking'."""
+        self.current_speech, self.agent_state = speech, "speaking"
+        self.handlers["agent_state_changed"](SimpleNamespace(new_state="speaking"))
+
+
+def _attached() -> tuple[VoiceLink, _StateSession]:
+    session = _StateSession()
+    link = VoiceLink(SimpleNamespace(room=_Room()), speak_typed="auto")
+    link.attach(session)
+    return link, session
+
+
+def test_a_text_only_reply_ends_in_listening():
+    _link, session = _attached()
+    speech = _Speech()
+    session.speak(speech)
+    assert session.states == []
+    speech.finish()
+    assert session.states == ["listening"]
+
+
+def test_a_spoken_reply_is_left_to_livekit():
+    _link, session = _attached()
+    speech = _Speech()
+    session.speak(speech)
+    session.agent_state = "listening"  # livekit-agents did it after the playout
+    speech.finish()
+    assert session.states == []
+
+
+def test_a_reply_after_a_tool_settles_when_it_ends():
+    _link, session = _attached()
+    first, follow_up = _Speech(), _Speech()
+    session.speak(first)
+    session.current_speech = follow_up  # the tool reply is speaking when the first speech ends
+    first.finish()
+    assert session.states == []
+    follow_up.finish()
+    assert session.states == ["listening"]
+
+
+def test_a_replaced_session_is_never_touched():
+    link, old = _attached()
+    speech = _Speech()
+    old.speak(speech)
+    link.attach(_StateSession())  # a C-33 rebuild
+    speech.finish()
+    assert old.states == []
+
+
+def test_the_livekit_gap_the_state_fix_covers_still_exists():
+    """livekit-agents 1.4.6 settles 'speaking' after a realtime reply only with audio output on; an upgrade that fixes
+    it (or renames the state setter) fails here, so the C-42 workaround can go."""
+    import inspect
+
+    from livekit.agents.voice import agent_activity, agent_session
+
+    source = inspect.getsource(agent_activity.AgentActivity._realtime_generation_task_impl)
+    assert 'elif self._session.agent_state == "speaking"' not in source
+    assert "audio_output.wait_for_playout()" in source
+    assert callable(getattr(agent_session.AgentSession, "_update_agent_state", None))
+    assert isinstance(getattr(agent_session.AgentSession, "current_speech", None), property)

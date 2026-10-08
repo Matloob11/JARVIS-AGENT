@@ -15,6 +15,10 @@ Typed text arrives from the UI (Socket.IO ui_command 'chat', origin 'ui'), from 
 on_conversation_item_added() is the single source of transcript messages from the session: a user item that
 is a pending typed message is not emitted again; any other user item is a voice message (id = item.id); an
 assistant item is emitted with id = item.id, turn_id = the user message it answers and that message's source.
+
+Every message goes out through one ordered chain (each send waits for the one before it, at most
+EMIT_ORDER_WAIT_S): the typed user echo is sent beside the reply instead of before it, so its bridge round trip
+never delays generate_reply, and the reply still reaches the UI after the echo.
 """
 
 from __future__ import annotations
@@ -53,6 +57,7 @@ PENDING_KEEP_S = 120.0   # a prefixed item still finds its typed id this long (t
 TURN_LOG_MAX = 200
 INTERRUPT_WAIT_S = 2.0   # the interrupt waits for playout; never let a stuck output hold a typed reply
 OFFLINE_TIMEOUT_S = 10.0
+EMIT_ORDER_WAIT_S = 5.0  # a send waits this long at most for the one before it (a stuck bridge never stalls all)
 PREVIEW_CHARS = 60
 
 # Control characters (C0, DEL, C1) except tab and newline; CR is folded into newline first.
@@ -122,6 +127,7 @@ class ConversationRouter:
         self._turn_id: str | None = None
         self._turn_source = "voice"
         self._tasks: set[asyncio.Task[Any]] = set()
+        self._emit_tail: asyncio.Task[Any] | None = None  # the newest send of the ordered chain
 
     # ------------------------------------------------------------------ session
 
@@ -158,9 +164,9 @@ class ConversationRouter:
 
         threat = vortex_guard.detect_threat(clean)
         if threat:
-            await self._emit("user", clean, msg_id=user_id, source="text")
-            await self._emit("assistant", BLOCKED_TEXT, msg_id=str(uuid.uuid4()), source="system",
-                             turn_id=user_id)
+            self._emit_ordered("user", clean, msg_id=user_id, source="text")
+            await self._sent(self._emit_ordered("assistant", BLOCKED_TEXT, msg_id=str(uuid.uuid4()),
+                                                source="system", turn_id=user_id))
             try:
                 jarvis_audit.log_threat(threat, source=f"TypedChat:{origin}")
             except Exception as e:  # pylint: disable=broad-exception-caught
@@ -168,7 +174,7 @@ class ConversationRouter:
             self._log("blocked", user_id, origin, clean)
             return "blocked"
 
-        await self._emit("user", clean, msg_id=user_id, source="text")
+        self._emit_ordered("user", clean, msg_id=user_id, source="text")  # beside the reply, never before it
         self._log_turn(user_id, "user", clean, "text")
 
         session = self.session
@@ -235,14 +241,14 @@ class ConversationRouter:
             self._log_turn(item_id, "user", text, "voice")
             logger.info("CHAT_ROUTER voice id=%s chars=%d: %s", item_id, len(text), preview(text))
             logger.debug("CHAT_ROUTER voice id=%s full text: %s", item_id, text)
-            return self._spawn(self._emit("user", text, msg_id=item_id, source="voice"))
+            return self._emit_ordered("user", text, msg_id=item_id, source="voice")
 
         turn_id, source = self._turn_id, self._turn_source
         self._log_turn(item_id, "assistant", text, source, turn_id)
         logger.info("CHAT_ROUTER reply id=%s turn=%s source=%s chars=%d: %s", item_id, turn_id or "-", source,
                     len(text), preview(text))
         logger.debug("CHAT_ROUTER reply id=%s full text: %s", item_id, text)
-        return self._spawn(self._emit("assistant", text, msg_id=item_id, source=source, turn_id=turn_id))
+        return self._emit_ordered("assistant", text, msg_id=item_id, source=source, turn_id=turn_id)
 
     async def drain(self) -> None:
         """Waits for the emits on_conversation_item_added started (tests, shutdown)."""
@@ -301,6 +307,26 @@ class ConversationRouter:
         logger.info("CHAT_ROUTER %s id=%s origin=%s chars=%d", status, msg_id, origin, len(text))
         if text:
             logger.debug("CHAT_ROUTER %s id=%s full text: %s", status, msg_id, text)
+
+    def _emit_ordered(self, role: str, text: str, **kwargs: Any) -> "asyncio.Task[Any] | None":
+        """Sends one message after the previous one went out (or after EMIT_ORDER_WAIT_S); returns its task."""
+        previous = self._emit_tail
+
+        async def send() -> None:
+            if previous is not None and not previous.done():
+                await asyncio.wait({previous}, timeout=EMIT_ORDER_WAIT_S)
+            await self._emit(role, text, **kwargs)
+
+        task = self._spawn(send())
+        if task is not None:
+            self._emit_tail = task
+        return task
+
+    @staticmethod
+    async def _sent(task: "asyncio.Task[Any] | None") -> None:
+        """Waits until a chained send went out (the blocked and offline answers return after their message)."""
+        if task is not None:
+            await asyncio.shield(task)
 
     async def _emit(self, role: str, text: str, **kwargs: Any) -> None:
         notify = self._notify or jarvis_bridge.notify_transcription
@@ -361,7 +387,7 @@ class ConversationRouter:
         reply = OFFLINE_PREFIX + (answer or OFFLINE_FALLBACK_TEXT)
         reply_id = str(uuid.uuid4())
         self._log_turn(reply_id, "assistant", reply, "system", user_id)
-        await self._emit("assistant", reply, msg_id=reply_id, source="system", turn_id=user_id)
+        await self._sent(self._emit_ordered("assistant", reply, msg_id=reply_id, source="system", turn_id=user_id))
 
 
 def router_of(owner: Any) -> ConversationRouter | None:

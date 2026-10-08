@@ -103,6 +103,7 @@ class VoiceLink:
         that pass, if any."""
         self.session = session
         self._ensure_room_handlers()
+        self._watch_agent_state(session)
         linked = self.relink_pass()
         self.update_audio_out("session")  # C-41: a rebuilt session starts with its audio output on
         return linked
@@ -244,6 +245,44 @@ class VoiceLink:
             logger.debug("audio output switch failed: %s", exc)
             return
         logger.info("AUDIO_OUT enabled=%s reason=%s", wanted, reason)
+
+    # ---- C-42: the agent state after a text-only reply ----------------------------------------
+    # livekit-agents 1.4.6 returns the state from 'speaking' to 'listening' after a realtime reply only while the audio
+    # output is on (agent_activity.py:2446-2450; its pipeline paths do it either way), so with the gate above off every
+    # typed reply left the agent 'speaking' for good (lk.agent.state and the UI). Each 'speaking' now waits for the
+    # speech that started it and then settles the state as the pipeline path does.
+
+    def _watch_agent_state(self, session: Any) -> None:
+        on = getattr(session, "on", None)
+        if callable(on):
+            on("agent_state_changed", lambda event, s=session: self._on_agent_state(s, event))
+
+    def _on_agent_state(self, session: Any, event: Any) -> None:
+        if getattr(event, "new_state", None) == "speaking":
+            self._settle_when_done(session)
+
+    def _settle_when_done(self, session: Any) -> None:
+        speech = getattr(session, "current_speech", None)
+        add_done = getattr(speech, "add_done_callback", None)
+        if callable(add_done) and not speech.done():
+            add_done(lambda _speech, s=session: self._settle_state(s))
+
+    def _settle_state(self, session: Any) -> None:
+        """A speech ended: a state still 'speaking' with nothing else playing becomes 'listening'. With the audio output
+        on, livekit-agents has already done it after the playout, so this changes nothing then."""
+        if session is not self.session or getattr(session, "agent_state", None) != "speaking":
+            return
+        speech = getattr(session, "current_speech", None)
+        if speech is not None and not speech.done():
+            self._settle_when_done(session)  # a follow-up reply (after a tool) is speaking now
+            return
+        update = getattr(session, "_update_agent_state", None)
+        if not callable(update):
+            return
+        try:
+            update("listening")
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            logger.debug("agent state settle failed: %s", exc)
 
     # ---- the relink itself --------------------------------------------------------------------
 
