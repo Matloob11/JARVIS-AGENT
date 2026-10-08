@@ -41,11 +41,12 @@ Priority: P0 broken or unsafe, P1 fragile or misleading, P2 clutter, P3 polish.
 - **Accept:** a deliberate `console.error` in a fixture fails one test.
 - **Verify:** `npx playwright test tests/e2e/console-guard.spec.ts --project=chromium`.
 
-### UI-H05 — Chat list cap / virtualize (P1, L)
+### UI-H05 — Chat list cap / virtualize (P1, L) — DONE
 
 - **Problem:** `useChat` trims to 300 (`MAX_MESSAGES`) but the DOM still renders the whole list (`ChatList.tsx`).
-- **Fix:** window the rendered rows; keep testids on the composer and the latest bubbles.
-- **Accept:** 300 messages do not mount 300 bubbles. Perf budget recorded after `npm run test:perf` (UNVERIFIED now).
+- **Fix:** `CHAT_RENDER_WINDOW` (80) newest messages mounted; "Show earlier in view" expands by 80. Composer/latest testids unchanged. Perf budget still UNVERIFIED (`npm run test:perf`).
+- **Accept:** 300 messages do not mount 300 bubbles.
+- **Verify:** `npm test -- src/features/panel/ChatList.test.tsx`.
 
 ### UI-H06 — Failure states per panel (P1, L)
 
@@ -101,7 +102,7 @@ Priority: P0 broken or unsafe, P1 fragile or misleading, P2 clutter, P3 polish.
 
 ## Execution order
 
-H01–H04, H07, H12 done with tests. Still TODO: H05, H06, H08–H11, H13–H15. Full section 6 gates (e2e suite ×3, visual, perf, refdiff, axe, electron, `build:prod`) are **not** claimed green in this file.
+H01–H05, H07, H12 done with tests. Still TODO: H06, H08–H11, H13–H15. Full section 6 gates (e2e suite ×3, visual, perf, refdiff, axe, electron, `build:prod`) are **not** claimed green in this file.
 
 ## Final report
 

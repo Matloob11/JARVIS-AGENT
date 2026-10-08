@@ -102,6 +102,9 @@ const SUGGESTIONS = [
   'What time is it?',
 ];
 
+/** UI-H05: mount at most this many newest messages (useChat still keeps up to 300). */
+export const CHAT_RENDER_WINDOW = 80;
+
 interface ChatListProps {
   activePersona: PersonaKey;
   messages: ChatMessage[];
@@ -131,8 +134,19 @@ const ChatList = ({
   const atBottomRef = useRef(true);
   const [feedbackByMessageId, setFeedbackByMessageId] = useState<Record<string, 1 | -1>>({});
   const [startReached, setStartReached] = useState(false);
+  const [renderLimit, setRenderLimit] = useState(CHAT_RENDER_WINDOW);
 
-  const blocks = useMemo(() => buildRenderBlocks(messages), [messages]);
+  const newestId = messages[messages.length - 1]?.id ?? '';
+  useEffect(() => {
+    setRenderLimit(CHAT_RENDER_WINDOW);
+  }, [newestId]);
+
+  const hiddenCount = Math.max(0, messages.length - renderLimit);
+  const visibleMessages = useMemo(
+    () => (hiddenCount > 0 ? messages.slice(-renderLimit) : messages),
+    [hiddenCount, messages, renderLimit],
+  );
+  const blocks = useMemo(() => buildRenderBlocks(visibleMessages), [visibleMessages]);
 
   useEffect(() => {
     if (!atBottomRef.current) return;
@@ -189,6 +203,19 @@ const ChatList = ({
             )}
           </div>
         )}
+
+        {hiddenCount > 0 ? (
+          <div className="flex justify-center pb-2">
+            <button
+              type="button"
+              className="chat-load-older"
+              data-testid="chat-show-more-mounted"
+              onClick={() => setRenderLimit(limit => Math.min(messages.length, limit + CHAT_RENDER_WINDOW))}
+            >
+              Show {Math.min(CHAT_RENDER_WINDOW, hiddenCount)} earlier in view ({hiddenCount} hidden)
+            </button>
+          </div>
+        ) : null}
 
         {empty ? (
           <div className="chat-empty" data-testid="chat-empty">
