@@ -2045,3 +2045,60 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** pytest tests/tools/test_window_ctrl_tools.py tests/automation/test_window_ctrl_extra.py -q -p no:cacheprovider → 43 passed
 - **Commit:** d5acbdc · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+
+### ✅ 🔁 [claude] C-33 step B: JarvisRuntime live · Agent worker restart (agent_ctl) · 2026-10-08 16:00 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 8996) band, naya pid 48308; health 200 (42.4 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 16:00 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] C-33 acceptance: bogus JARVIS_REALTIME_MODEL · Agent worker restart (agent_ctl) · 2026-10-08 16:05 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 48308) band, naya pid 36176; health 200 (43.0 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 16:05 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] C-33 acceptance done: normal model again · Agent worker restart (agent_ctl) · 2026-10-08 16:08 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 36176) band, naya pid 41872; health 200 (47.4 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 16:08 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] C-29 X-31: run_cmd READ_ONLY calls without the Allow · Agent worker restart (agent_ctl) · 2026-10-08 16:14 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 41872) band, naya pid 16756; health 200 (41.1 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 16:14 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] C-33 · JarvisRuntime: har job ka ek runtime, session error par wahi job mein rebuild, teardown kabhi nahi atakta · 2026-10-08 16:20 PKT
+- **Kya kiya:** Entrypoint ab JarvisRuntime par: room se connect sirf ek baar (60 s; fail ho to job 'connect_failed'), session.start 3 koshishen (har baar naya session), Gemini ka unrecoverable error job khatam nahi karta balki session wahi job mein dobara banta hai (10 min mein 3 baar, 2/4/8 s; phir 'session_error'). Rebuild sirf purane session ke apne ERROR close par hota hai: tool chal raha ho to livekit us ke khatam hone tak purani activity rakhta hai, pehle rebuild karne par us ki der se aane wali safai nayi activity mita deti (JARVIS khamosh); ab intezar hota hai, 120 s mein close na aaye to job 'session_error'. Purana session poora chhoot-ta hai (adhoori start ka lk.chat, RoomIO, assistant ki activity, room listeners, purana agent audio track unpublish). Aaj 13:51 ka zombie (laptop sleep ke baad 1.5 ghanta bina session ke agent room mein) ki jad: Bug Hunter apna cancel nigal leta tha aur teardown hamesha ke liye ruk jata tha; ab cancel aage jata hai aur har teardown qadam had mein hai. Bridge ka PC job window 360 se 150 s (agle bridge deploy ke saath).
+- **Files:** src/core/agent_runner.py, src/core/jarvis_runtime.py, src/core/bridge_rooms.py, services/utils/jarvis_autonomous.py, services/utils/jarvis_bug_hunter.py, tests (runner, lifecycle, real-livekit rebuild, prewarm, job end paths, rpc hardening, role gating, bug hunter, exhaustive, bridge rooms), docs/CONTRACTS.md v19
+- **Verify:** full suite 4231 passed (5 failures sirf Cursor ke naye tools ki placement ki thin, neeche theek); live bogus-model run: RUNTIME_SESSION_RESTART n=1..3 phir RUNTIME_CLOSED reason=session_error, LiveKit mein agent nikla, bridge ne naya job bheja; normal restart: 1 job, RUNTIME_STARTED, har job ka ek agent socket (5/5)
+- **Commit:** `5c4544c` · **Deploy:** PC worker restart 🔁 (bridge window: agle deploy ke saath)
+- **Doosre agent ke liye:** contracts v19 (K-60, K-40, K-44); handoff dekho. C-34 aur C-35 ab Claude ke paas.
+
+### ✅ [claude] K-71 · Cursor ke naye tools ki placement + desktop manifest (X-29, X-32, X-43) · 2026-10-08 16:20 PKT
+- **Kya kiya:** cancel_shutdown laptop par (de_escalation: shutdown rokne ke liye kabhi Allow nahi), cancel_scheduled_task VPS par (schedule_task ke saath), close_window laptop par (input, close jaisa). Manifest har baar HEAD se alag worktree mein bana, taake shared tree ka adhoora kaam us mein na aaye (84 tools). opens_urls wala AST test ab sirf module-level naam follow karta hai (X-55 ke andar wale 'factory' naam se 333 jhoote openers ban gaye the).
+- **Files:** services/ai_core/tool_placement.py, services/ai_core/desktop_manifest.json, tests/unit/test_tool_placement.py, tests/unit/test_desktop_manifest.py, docs/CONTRACTS.md v20, v21, v23
+- **Verify:** placement + manifest + guard 90/90 (HEAD worktree)
+- **Commit:** `93337db`, `ea5a51f`, `1c940bc` · **Deploy:** PC worker restart 16:14 🔁
+- **Doosre agent ke liye:** naya tool commit karo to section 11 mein naam + placement likho.
+
+### ✅ 🔁 [claude] C-29 (X-31 REQ) · run_cmd ki read-only commands bina Allow, guard ki apni jaanch ke saath · 2026-10-08 16:20 PKT
+- **Kya kiya:** "Jarvis mera IP batao" (ipconfig) jaisi call ab dashboard Allow ke bina chalti hai jab Cursor ka risk callable 'low' kahe aur guard ka apna check bhi maane: program list (git sirf status/log/diff/branch, python/node sirf --version), koi shell metachar nahi, koi UNC path nahi (SMB login se NTLM hash leak), kisi token mein '=' nahi (git --output file likhta). Baqi har run_cmd call HIGH; JARVIS_CONFIRM_SKIP ab bhi run_cmd nahi hata sakta; VPS brain par code_exec HIGH rahega C-119 tak.
+- **Files:** services/ai_core/jarvis_guard.py, services/ai_core/jarvis_plugin_manager.py, tests/core/test_guard.py, docs/CONTRACTS.md v22
+- **Verify:** guard + run_cmd tests 25/25 (Cursor ke asli callable ke saath: UNC aur --output HIGH rahe); worker restart 16:14
+- **Commit:** `5d94dae` · **Deploy:** PC worker restart 🔁
+- **Doosre agent ke liye:** Cursor: apni allow-list mein bhi UNC aur '=' block karo (handoff).
+\n
+### ✅ [cursor] X-61 · info/media smoke harness --dry/--live · 2026-10-08 16:19 PKT
+- **Kya kiya:** CLI smoke for datetime/weather/search/research/image/QR/vision/RAG/speech; mocked --dry; optional --yt/--email-to; README costs note; Windows-safe console.
+- **Files:** tests/tools/smoke_info_media_tools.py, tests/tools/README.md
+- **Verify:** python tests/tools/smoke_info_media_tools.py --dry → exit 0, 9/9 PASS
+- **Commit:** 4580239 (on e67b617) · **Deploy:** no
+- **Doosre agent ke liye:** --live optional; RAG may need JARVIS_SMOKE_DOC if README not indexed
