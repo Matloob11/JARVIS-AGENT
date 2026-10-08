@@ -2159,3 +2159,31 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** bridge tests 235/235; deploy b5e4a5c, RESULT=ok, other apps identical, health 200; live: live 6/6: tool_progress queued/running/done with title + artifact, turn_rejected + voice_id_status reached a UI socket, init_state.jobs + voice_id_status after a reload; 0 UNKNOWN EVENT in 10 min
 - **Commit:** `b5e4a5c` · **Deploy:** VPS ui-bridge 🚀 (backup + gate)
 - **Doosre agent ke liye:** Jobs panel aur voice events ke liye handoff dekho.
+
+### ✅ 🔁 [claude] C-39: probe isolation live · Agent worker restart (agent_ctl) · 2026-10-08 17:38 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 43348) band, naya pid 36740; health 200 (41.0 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 17:38 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] C-41: audio-output gating live · Agent worker restart (agent_ctl) · 2026-10-08 17:45 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 36740) band, naya pid 39976; health 200 (39.5 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 17:45 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] C-39 · Probe aur canary jobs ka kuch bhi asli UI, memory ya identity tak nahi pohanchta · 2026-10-08 17:50 PKT
+- **Kya kiya:** Naya services/utils/probe_context.py (bridge_suppressed ContextVar, jarvis_bridge se bhi milta hai). jarvis-probe-<epoch> ya jarvis-canary-<epoch> room ki job pehli line par suppression set karti hai: us ke notify, confirm request (jawab 'suppressed', broker deny karta hai) aur UI log lines bridge tak nahi jaate; memory aur identity writes no-op; listener, background loops, location/vitals, RAG, speaker-ID, task monitor aur vision loop nahi chalte. User ki apni job par koi asar nahi (context alag).
+- **Files:** services/utils/probe_context.py, services/utils/jarvis_bridge.py, services/utils/jarvis_logger.py, services/ai_core/agent_memory.py, services/ai_core/memory_store.py, services/ai_core/jarvis_identity.py, src/core/agent_core.py, src/core/agent_runner.py, tests (probe isolation, runner), docs/CONTRACTS.md v27
+- **Verify:** tests green; live normal job: PROBE_JOB nahi, chat probe PASS (notify suppress nahi hue)
+- **Commit:** `13259f3` · **Deploy:** PC worker restart 17:38 🔁
+- **Doosre agent ke liye:** probe script C-40 mein.
+
+### ✅ 🔁 [claude] C-41 · Typed reply browser ka intezar nahi karta (audio-output gate) · 2026-10-08 17:50 PKT
+- **Kya kiya:** Aaj live dekha ke session ke baad pehla typed message jawab ke bina reh jata tha jab room mein koi browser na ho (RoomIO ki audio subscriber ka intezar karti hai). Ab VoiceLink audio output ko JARVIS_SPEAK_TYPED ke mutabiq chalata hai (auto: linked owner ka mic khula ho to on): start se pehle aur har participant/track event par faisla, sirf farq par switch, AUDIO_OUT log.
+- **Files:** src/core/roomio_link.py, src/core/voice_link.py, src/core/agent_runner.py, tests/core/test_output_gating.py, tests (voice link, runner), docs/CONTRACTS.md v28
+- **Verify:** tests 254 green; live: AUDIO_OUT enabled=False reason=start, restart ke baad PEHLA typed message foran jawab ('Sir, 7 times 8, 56 hota hai.'), mic publish par enabled=True, mute par False
+- **Commit:** C-41 commit · **Deploy:** PC worker restart 17:45 🔁
+- **Doosre agent ke liye:** UI ko kuch nahi badalna; JARVIS_SPEAK_TYPED=always ka option handoff mein.
