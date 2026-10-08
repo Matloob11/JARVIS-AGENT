@@ -2138,3 +2138,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** 408 tests green; live: probe PASS (ek user message, ek reply '...56 hote hain'); docker restart jarvis-bridge -> agent 3 s mein ek socket ke saath wapas (pehla probe session ke foran baad, memory 93% par, jawab nahi aaya: note)
 - **Commit:** `357230f` · **Deploy:** PC worker restart 16:59 🔁
 - **Doosre agent ke liye:** naye commands `register_ui_command` se apne module mein (K-60 v24).
+
+### ✅ 🔁 [claude] C-35: VoiceLink live · Agent worker restart (agent_ctl) · 2026-10-08 17:15 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 11964) band, naya pid 43348; health 200 (42.0 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 17:15 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] C-35 · VoiceLink: reload, Voice off/on aur naye tab ke baad bhi agent sahi owner ko sunta hai · 2026-10-08 17:20 PKT
+- **Kya kiya:** Har job ka ek VoiceLink: har shuru hue session (pehla aur har C-33 rebuild) par attach, room handlers job mein ek baar, maujood logon ke liye relink pass. Pehla eligible shakhs link (connect), doosra tab kabhi link nahi churata, linked shakhs nikle to naya (replace), voice_take_over se switch; har switch par ROOMIO_RELINK log aur agent attribute jarvis.linked_identity. VPS par sirf owner-* (PC par JARVIS_RPC_OWNER_ONLY ke saath). follow_owner_reconnects_live hata (VoiceLink ne jagah li).
+- **Files:** src/core/agent_runner.py, deploy/windows-local/test_voice_link_live.py, tests (agent_runner, agent_ctl probe), docs/CONTRACTS.md v25
+- **Verify:** tests green; live do-tab check 5/5 PASS (ROOMIO_RELINK connect, replace, replace); owner ka 2-minute browser voice test baqi
+- **Commit:** `b60f3eb` + live check commit · **Deploy:** PC worker restart 17:15 🔁
+- **Doosre agent ke liye:** `jarvis.linked_identity` attribute UI ke liye maujood.
