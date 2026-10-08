@@ -1968,3 +1968,24 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Commit:** `df59734` · **Deploy:** no
 - **Doosre agent ke liye:** REQ-RESTART for new job tool; placement/manifest if tool kwargs changed
 
+### ✅ [cursor] X-54 · send_email UTF-8 + SMTP timeout + attachment allow-list · 2026-10-08 16:10 PKT
+- **Kya kiya:** HIGH-risk decorator, UTF-8 MIMEText body, attachment allow-list ≤20MB, SMTP timeout 30 + STARTTLS, Gmail auth hint + redact, EMAIL_SENT audit counts only.
+- **Files:** services/multimedia/jarvis_advanced_tools.py, tests/tools/test_send_email.py
+- **Verify:** pytest tests/tools/test_send_email.py tests/core/test_advanced_tools.py -q → 8 passed
+- **Commit:** `5956e20` · **Deploy:** no
+- **Doosre agent ke liye:** regen desktop_manifest for send_email meta
+
+### ✅ [cursor] X-56 · Maps leads scraper Chrome + jobs · 2026-10-08 16:10 PKT
+- **Kya kiya:** playwright_channel/chrome launch + bundled fallback, BROWSER_MISSING hint, count clamp, background job when count>5, resilient selectors/consent, leads under outputs_dir, headless flag.
+- **Files:** services/automation/jarvis_maps_scraper.py, tests/tools/test_maps_scraper_tools.py
+- **Verify:** pytest tests/tools/test_maps_scraper_tools.py -q -p no:cacheprovider → 9 passed
+- **Commit:** `42e9363` · **Deploy:** no
+- **Doosre agent ke liye:** C-132 placement after live test
+
+### ✅ [cursor] X-62 · PinchTab auth, lifecycle, untrusted read · 2026-10-08 16:10 PKT
+- **Kya kiya:** Bearer auth, autostart, jarvis_default profile/instance, /text+snapshot untrusted prefix, action mappings, PINCHTAB_UNAVAILABLE degraded chrome_path fallback, K-16 decorators.
+- **Files:** services/automation/jarvis_browser_pinchtab.py, tests/tools/test_pinchtab_tools.py
+- **Verify:** pytest tests/tools/test_pinchtab_tools.py -q -p no:cacheprovider → 8 passed
+- **Commit:** `5cbbfc7` · **Deploy:** no
+- **Doosre agent ke liye:** regen desktop_manifest PinchTab meta; manual curl + voice acceptance
+
