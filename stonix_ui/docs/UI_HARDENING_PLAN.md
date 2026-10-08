@@ -66,10 +66,11 @@ Priority: P0 broken or unsafe, P1 fragile or misleading, P2 clutter, P3 polish.
 - **Fix:** ran full `a11y.spec.ts` (wcag2a/aa + 2.1/2.2); 0 violations / 0 aria-prohibited incomplete. No code change needed this pass; testids kept.
 - **Verify:** `npx playwright test tests/e2e/a11y.spec.ts --project=chromium` → 11 passed.
 
-### UI-H09 — Layout 360–1920 (P1, L)
+### UI-H09 — Layout 360–1920 (P1, L) — DONE
 
 - **Problem:** phone Approvals/Tools were hard to open before the chat-sheet sticky tabs (`phone.css`). Full matrix UNVERIFIED this session.
-- **Fix:** mock-bridge screenshots at 360, 768, 1280, 1920 (untracked). No horizontal scroll.
+- **Fix:** `layout-h09.spec.ts` shots at 360/768/1280/1920 into `assets/qa-layout-h09/` (untracked); `layout.spec.ts` gains 768×1024 no-scroll case. No horizontal scroll at those widths.
+- **Verify:** `npx playwright test tests/e2e/layout-h09.spec.ts --project=chromium` → 4 passed.
 
 ### UI-H10 — Visual tokens (P2, L)
 
@@ -105,7 +106,7 @@ Priority: P0 broken or unsafe, P1 fragile or misleading, P2 clutter, P3 polish.
 
 ## Execution order
 
-H01–H08, H11–H12 done with tests. Still TODO: H09–H10, H13–H15. Full section 6 gates (e2e suite ×3, visual, perf, refdiff, electron, `build:prod`) are **not** claimed green; axe suite is green this session.
+H01–H09, H11–H12 done with tests. Still TODO: H10, H13–H15. Full section 6 gates (e2e suite ×3, visual, perf, refdiff, electron, `build:prod`) are **not** claimed green; axe suite is green this session.
 
 ## Final report
 

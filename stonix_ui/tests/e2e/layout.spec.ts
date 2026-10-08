@@ -57,6 +57,7 @@ const scrollSizes: { width: number; height: number }[] = [
   { width: 375, height: 667 },
   { width: 390, height: 844 },
   { width: 412, height: 915 },
+  { width: 768, height: 1024 }, // UI-H09 tablet
   { width: 1024, height: 768 },
   { width: 1200, height: 800 },
   { width: 1280, height: 720 },

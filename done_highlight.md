@@ -2369,3 +2369,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** playwright tools.spec.ts -g UI-H11 1 passed
 - **Commit:** (this commit) · **Deploy:** no — REQ-DEPLOY frontend
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] UI-H09 · Layout 360/768/1280/1920 no horizontal scroll · 2026-10-09 00:10 PKT
+- **Kya kiya:** Mock bridge par 4 widths; horizontal scroll nahi. Shots assets/qa-layout-h09 (untracked). layout.spec me 768x1024 add.
+- **Files:** stonix_ui/tests/e2e/layout-h09.spec.ts, layout.spec.ts, UI_HARDENING_PLAN.md
+- **Verify:** playwright layout-h09 4 passed; layout 768x1024 passed
+- **Commit:** (this commit) · **Deploy:** no
+- **Doosre agent ke liye:** —
