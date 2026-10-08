@@ -18,9 +18,14 @@ livekit-plugins-openai==1.4.6
 livekit-plugins-silero==1.4.6
 livekit-plugins-noise-cancellation==0.2.5
 livekit-protocol==1.1.2
+# Smart App Control (Windows 11; enforcing on the Hp laptop since Oct 2026) refuses native modules that have no
+# cloud reputation yet: av 19.x, pycryptodomex 3.24.0 and pybase64 1.5.1 were blocked there on 08 Oct. These are
+# pinned to the newest versions it allows; check any upgrade first with scripts/pc/sac_check.py.
+av==18.1.0  # livekit-agents needs av>=14
 
 # Database and memory
 chromadb==1.5.0
+pybase64==1.4.2  # chromadb needs >=1.4.1; Smart App Control note above
 aiosqlite==0.22.1
 SQLAlchemy==2.0.46
 pysqlite3-binary; sys_platform != "win32"
@@ -100,6 +105,7 @@ playwright==1.57.0
 
 # Media processing
 yt-dlp[default]==2026.2.4
+pycryptodomex==3.23.0  # yt-dlp[default] AES; Smart App Control note above
 pygame==2.6.1
 playsound==1.2.2
 
