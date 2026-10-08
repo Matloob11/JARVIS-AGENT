@@ -15,13 +15,22 @@ import shlex
 import subprocess
 import sys
 
-from typing import Any
+from typing import Any, Iterable
 
 # Third-party imports
 from fuzzywuzzy import process
 
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
-from services.system.jarvis_desktop_common import EXEC_EXTS
+from services.system.jarvis_desktop_common import (
+    EXEC_EXTS,
+    WindowInfo,
+    close_windows_gracefully,
+    find_windows,
+    force_foreground,
+    is_browser_window,
+    is_protected_window,
+    tool_result,
+)
 from services.utils import jarvis_delivery
 from services.automation.jarvis_whatsapp_automation import whatsapp_bot
 from services.automation.keyboard_mouse_ctrl import type_text_tool
@@ -30,6 +39,13 @@ from services.utils.jarvis_logger import setup_logger
 
 # First-party imports
 from services.utils.jarvis_win32 import WIN32_ERRORS, pywintypes, win32con, win32gui
+
+try:
+    import win32process
+except ImportError:  # pragma: no cover
+    win32process = None  # type: ignore[assignment]
+
+TASKKILL_EXE = r"C:\Windows\System32\taskkill.exe"
 
 # ===================== LOGGER ===================== #
 # Safe stdout reconfigure — only if supported (avoids crash in piped/test environments)
@@ -103,48 +119,26 @@ def normalize_command(text: str) -> str:
     return " ".join(text.split()).strip()
 
 
-async def focus_window(target_title: str):
+async def focus_window(target_title: str) -> bool:
     """
-    Activates and restores a window by its title.
-    Uses Win32 API for more aggressive focus if needed.
+    Activates and restores a window by its title via find_windows + force_foreground.
     """
-    mod = _load_gw()
-    if not mod:
+    target = (target_title or "").strip()
+    if not target:
         return False
 
-    # Wait for app to settle
     await asyncio.sleep(1.2)
 
-    target_lower = target_title.lower()
-    for w in mod.getAllWindows():
-        title_lower = w.title.lower()
-        # Specific check for Notepad to be more accurate
-        if target_lower == "notepad":
-            is_match = title_lower.endswith(
-                " - notepad") or title_lower == "notepad"
-        else:
-            is_match = target_lower in title_lower
-
-        if is_match:
-            try:
-                if w.isMinimized:
-                    w.restore()
-
-                # Try pygetwindow activation
-                w.activate()
-
-                # Aggressive Win32 focus
-                if win32gui and win32con:
-                    hwnd = w._hWnd  # pylint: disable=protected-access
-                    win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
-                    win32gui.SetForegroundWindow(hwnd)
-
+    for win in _match_windows_by_name(target):
+        if is_protected_window(win):
+            continue
+        try:
+            if await force_foreground(win.hwnd):
                 await asyncio.sleep(0.5)
-                logger.info("Focused window: %s", w.title)
+                logger.info("Focused window: %s", win.title)
                 return True
-            except (pywintypes.error, AttributeError) as e:  # pylint: disable=no-member
-                logger.warning("Focus failed for %s: %s", target_title, e)
-                continue
+        except (pywintypes.error, AttributeError, OSError) as exc:  # pylint: disable=no-member
+            logger.warning("Focus failed for %s: %s", target_title, exc)
     return False
 
 
@@ -351,170 +345,279 @@ async def open_notepad_file(file_path: str) -> dict:
 # ===================== CLOSE WINDOW ===================== #
 
 
-@jarvis_tool
-async def close(window_name: str) -> str:
-    """
-    Closes a window by its name.
-    """
-    if not win32gui:
-        return "❌ win32gui available nahi hai"
-
-    original_name = window_name
-    window_name = window_name.lower()
-
-    # Consolidate app-specific closing logic
-    resp = await _close_app_specific(window_name)
-    if resp:
-        return resp
-
-    # Fuzzy matching for common apps
-    matched_key = fuzzy_match_app(window_name)
-    search_title = FOCUS_TITLES.get(matched_key, window_name).lower()
-
-    hwnds_to_close = []
-
-    def enum_handler(hwnd, _):
-        if win32gui.IsWindowVisible(hwnd):
-            title = win32gui.GetWindowText(hwnd).lower()
-            # Specific logic for common apps to avoid broad matches
-            app_matchers = {
-                "notepad": lambda t: t.endswith(" - notepad") or t == "notepad",
-                "edge": lambda t: "edge" in t or "msedge" in t,
-                "chrome": lambda t: "google chrome" in t,
-            }
-
-            matcher = app_matchers.get(matched_key)
-            is_match = matcher(title) if matcher else search_title in title
-
-            # Safeguard: Don't close the current script or the IDE
-            if is_match:
-                if ".py" in title and search_title == "notepad":
-                    is_match = False
-
-                if is_match:
-                    hwnds_to_close.append(hwnd)
-
-    win32gui.EnumWindows(enum_handler, None)
-    result = await _finalize_close(hwnds_to_close, original_name)
-    return result["message"] if isinstance(result, dict) else result
-
-
-async def _finalize_close(hwnds_to_close: list, original_name: str) -> dict:
-    """Sends close messages and returns status."""
-    if not hwnds_to_close:
-        return {
-            "status": "error",
-            "message": f"❌ '{original_name}' naam ki koi window nahi mili.",
-        }
-
-    # Send close messages
-    for hwnd in hwnds_to_close:
-        win32gui.PostMessage(hwnd, win32con.WM_CLOSE, 0, 0)
-
-    # Verification loop
-    await asyncio.sleep(2)
-    still_open_count = 0
-
-    def verify_handler(hwnd, _):
-        nonlocal still_open_count
-        if win32gui.IsWindow(hwnd):
-            still_open_count += 1
-
-    win32gui.EnumWindows(verify_handler, None)
-
-    if still_open_count:
-        return {
-            "status": "warning",
-            "window": original_name,
-            "still_open_count": still_open_count,
-            "message": (f"⚠ {original_name} ko band karne ki command bhej di gaya hai, "
-                        f"lekin {still_open_count} window(s) open hain."),
-        }
-
-    return {
-        "status": "success",
-        "window": original_name,
-        "message": f"🗑️ {original_name} band kar diya gaya hai.",
-    }
-
-
-async def _close_app_specific(window_name: str) -> str | None:
-    """Handles logic for closing specific applications."""
-    if "whatsapp" in window_name:
-        if await whatsapp_bot.close_whatsapp():
-            return "🗑️ WhatsApp band kar diya gaya hai"
-
-    if "notepad" in window_name:
-        try:
-            subprocess.run([r"C:\Windows\System32\taskkill.exe", "/f", "/im", "notepad.exe"],
-                           check=False, capture_output=True)
-            return "🗑️ Notepad force close kar diya gaya hai."
-        except (subprocess.SubprocessError, OSError) as e:
-            logger.error("Error closing notepad: %s", e)
-            return f"❌ Notepad band karne mein error aaya: {e}"
-    return None
-
-
-@jarvis_tool
-async def minimize_window(window_name: str = "active") -> str:
-    """
-    Minimizes a window.
-    """
-    if not gw:
-        return "❌ pygetwindow available nahi hai"
-
+def _process_name_for_pid(pid: int) -> str:
     try:
-        if window_name.lower() == "active":
-            window = gw.getActiveWindow()
-            if window:
-                window.minimize()
-                return "📉 Active window minimize kar di gayi hai, Sir."
-            return "❌ Koi active window nahi mili."
+        import psutil  # pylint: disable=import-outside-toplevel
 
-        # Search for window by name
-        windows = gw.getWindowsWithTitle(window_name)
-        if windows:
-            windows[0].minimize()
-            return f"📉 '{window_name}' minimize kar di gayi hai, Sir."
-        return f"❌ '{window_name}' naam ki koi window nahi mili."
-    except (pywintypes.error, AttributeError) as e:  # pylint: disable=no-member
-        logger.error("Minimize Error: %s", e)
-        return {
-            "status": "error",
-            "message": f"❌ Window minimize nahi ho paayi: {e!s}",
-            "error": str(e),
-        }
+        return psutil.Process(pid).name() or ""
+    except Exception:
+        return ""
 
 
-@jarvis_tool
-async def maximize_window(window_name: str = "active") -> str:
-    """
-    Maximizes or restores a window.
-    """
-    if not gw:
-        return "❌ pygetwindow available nahi hai"
-
+def _hwnd_to_window_info(hwnd: int) -> WindowInfo | None:
+    if not win32gui or not win32process or not hwnd:
+        return None
     try:
-        if window_name.lower() == "active":
-            window = gw.getActiveWindow()
-            if window:
-                window.maximize()
-                return "📈 Active window maximize kar di gayi hai, Sir."
-            return "❌ Koi active window nahi mili."
+        if not win32gui.IsWindow(hwnd):
+            return None
+        title = win32gui.GetWindowText(hwnd) or ""
+        _tid, pid = win32process.GetWindowThreadProcessId(hwnd)
+        pid_i = int(pid)
+        return WindowInfo(int(hwnd), title, pid_i, _process_name_for_pid(pid_i))
+    except Exception:
+        return None
 
-        # Search for window by name
-        windows = gw.getWindowsWithTitle(window_name)
-        if windows:
-            windows[0].maximize()
-            return f"📈 '{window_name}' maximize kar di gayi hai, Sir."
-        return f"❌ '{window_name}' naam ki koi window nahi mili."
-    except (pywintypes.error, AttributeError) as e:  # pylint: disable=no-member
-        logger.error("Maximize Error: %s", e)
-        return {
-            "status": "error",
-            "message": f"❌ Window maximize nahi ho paayi: {e!s}",
-            "error": str(e),
-        }
+
+def _match_windows_by_name(window_name: str) -> list[WindowInfo]:
+    """Resolve visible windows via FOCUS_TITLES + fuzzy app keys + title substring."""
+    raw = (window_name or "").strip()
+    if not raw:
+        return []
+    needle = raw.lower()
+    matched_key = fuzzy_match_app(needle)
+    seen: dict[int, WindowInfo] = {}
+
+    def _take(windows: Iterable[WindowInfo]) -> None:
+        for win in windows:
+            seen.setdefault(win.hwnd, win)
+
+    if matched_key == "notepad":
+        for win in find_windows(title_suffix=" - notepad"):
+            if ".py" not in win.title.lower():
+                _take([win])
+        _take(find_windows("notepad"))
+    else:
+        focus_title = FOCUS_TITLES.get(matched_key)
+        if focus_title:
+            _take(find_windows(focus_title))
+        if matched_key == "edge":
+            _take(find_windows("edge"))
+
+    _take(find_windows(raw))
+    if matched_key != needle:
+        _take(find_windows(matched_key))
+    return list(seen.values())
+
+
+def _safe_window_matches(window_name: str) -> list[WindowInfo]:
+    return [w for w in _match_windows_by_name(window_name) if not is_protected_window(w)]
+
+
+def _close_window_risk(arguments: dict[str, Any]) -> str:
+    if arguments.get("force"):
+        return "medium"
+    name = str(arguments.get("window_name") or "")
+    if "whatsapp" in name.lower():
+        return "low"
+    matches = _safe_window_matches(name)
+    if len(matches) > 1:
+        return "medium"
+    if any(is_browser_window(w) for w in matches):
+        return "medium"
+    return "low"
+
+
+async def _force_kill_still_open(
+    still_hwnds: list[int],
+    by_hwnd: dict[int, WindowInfo],
+) -> list[int]:
+    """taskkill /im only for non-protected processes when force=True."""
+    remaining: list[int] = []
+    killed_im: set[str] = set()
+    for hwnd in still_hwnds:
+        info = by_hwnd.get(hwnd) or _hwnd_to_window_info(hwnd)
+        if info and is_protected_window(info):
+            if win32gui and win32gui.IsWindow(hwnd):
+                remaining.append(hwnd)
+            continue
+        exe = (info.process_name if info else "").strip()
+        if exe and exe.lower() not in killed_im:
+            im = exe if exe.lower().endswith(".exe") else f"{exe}.exe"
+            try:
+                await asyncio.to_thread(
+                    subprocess.run,
+                    [TASKKILL_EXE, "/f", "/im", im],
+                    check=False,
+                    capture_output=True,
+                )
+            except (subprocess.SubprocessError, OSError) as exc:
+                logger.error("taskkill failed for %s: %s", im, exc)
+            killed_im.add(exe.lower())
+        if win32gui and win32gui.IsWindow(hwnd):
+            remaining.append(hwnd)
+    return remaining
+
+
+@jarvis_tool(timeout=15, risk=_close_window_risk)
+async def close_window(window_name: str, force: bool = False) -> dict[str, Any]:
+    """
+    Closes an application WINDOW on the Windows desktop by name (calculator, chrome, notepad, vlc...).
+    For the JARVIS automation browser use chrome_browser_close; for Notepad-only use close_notepad_tool.
+    """
+    original = (window_name or "").strip()
+    if not original:
+        return tool_result(
+            "error",
+            "Window ka naam khali hai.",
+            tool="close_window",
+            data={"closed_titles": [], "still_open": []},
+        )
+
+    if "whatsapp" in original.lower():
+        closed = await whatsapp_bot.close_whatsapp()
+        data = {"closed_titles": ["WhatsApp"] if closed else [], "still_open": [] if closed else ["WhatsApp"]}
+        if closed:
+            return tool_result("success", "WhatsApp band kar diya gaya hai.", tool="close_window", data=data)
+        return tool_result("error", "WhatsApp band nahi ho saka.", tool="close_window", data=data)
+
+    matches = _safe_window_matches(original)
+    if not matches:
+        return tool_result(
+            "not_found",
+            f"'{original}' naam ki koi safe window nahi mili.",
+            tool="close_window",
+            data={"closed_titles": [], "still_open": []},
+        )
+
+    by_hwnd = {w.hwnd: w for w in matches}
+    close_result = await close_windows_gracefully([w.hwnd for w in matches], wait_s=2.0)
+    closed_hwnds = set(close_result.get("closed") or [])
+    still_hwnds = list(close_result.get("still_open") or [])
+
+    if force and still_hwnds:
+        still_hwnds = await _force_kill_still_open(still_hwnds, by_hwnd)
+
+    closed_titles = [by_hwnd[h].title for h in closed_hwnds if h in by_hwnd]
+    still_open = [by_hwnd[h].title for h in still_hwnds if h in by_hwnd]
+
+    data = {"closed_titles": closed_titles, "still_open": still_open}
+    if closed_titles and not still_open:
+        msg = f"🗑️ {len(closed_titles)} window(s) band kar di: {', '.join(closed_titles[:5])}"
+        return tool_result("success", msg, tool="close_window", data=data)
+    if closed_titles:
+        msg = (
+            f"⚠ {original} par close bheja; {len(still_open)} ab bhi open: "
+            f"{', '.join(still_open[:5])}"
+        )
+        return tool_result("warning", msg, tool="close_window", data=data)
+    return tool_result(
+        "error",
+        f"'{original}' ki matching window(s) band nahi ho sakin.",
+        tool="close_window",
+        data=data,
+    )
+
+
+@jarvis_tool(timeout=15, risk=_close_window_risk)
+async def close(window_name: str) -> dict[str, Any]:
+    """Same as close_window(window_name): closes a desktop application window by name."""
+    return await close_window(window_name)
+
+
+def _pygetwindow_for_hwnd(hwnd: int) -> Any:
+    mod = _load_gw()
+    if not mod:
+        return None
+    try:
+        return mod.Win32Window(int(hwnd))
+    except Exception:
+        return None
+
+
+async def _resolve_window_target(window_name: str) -> WindowInfo | None:
+    name = (window_name or "").strip()
+    if not name:
+        return None
+    if name.lower() == "active":
+        if not win32gui:
+            return None
+        return _hwnd_to_window_info(win32gui.GetForegroundWindow())
+    safe = _safe_window_matches(name)
+    return safe[0] if safe else None
+
+
+@jarvis_tool(timeout=10, risk="low")
+async def minimize_window(window_name: str = "active") -> dict[str, Any]:
+    """Minimizes a window by name, or the foreground window when window_name is 'active'."""
+    target = await _resolve_window_target(window_name)
+    if target is None:
+        return tool_result(
+            "not_found",
+            "❌ Minimize ke liye koi safe window nahi mili.",
+            tool="minimize_window",
+        )
+    if is_protected_window(target):
+        return tool_result(
+            "error",
+            "❌ Protected window minimize allowed nahi.",
+            tool="minimize_window",
+        )
+    win = _pygetwindow_for_hwnd(target.hwnd)
+    if win is None:
+        return tool_result(
+            "error",
+            "❌ pygetwindow available nahi hai.",
+            tool="minimize_window",
+        )
+    try:
+        win.minimize()
+        label = target.title or window_name
+        return tool_result(
+            "success",
+            f"📉 '{label}' minimize kar di gayi hai, Sir.",
+            tool="minimize_window",
+            data={"title": target.title, "hwnd": target.hwnd},
+        )
+    except (pywintypes.error, AttributeError, OSError) as exc:  # pylint: disable=no-member
+        logger.error("Minimize Error: %s", exc)
+        return tool_result(
+            "error",
+            f"❌ Window minimize nahi ho paayi: {exc!s}",
+            tool="minimize_window",
+            error=str(exc),
+        )
+
+
+@jarvis_tool(timeout=10, risk="low")
+async def maximize_window(window_name: str = "active") -> dict[str, Any]:
+    """Maximizes a window by name, or the foreground window when window_name is 'active'."""
+    target = await _resolve_window_target(window_name)
+    if target is None:
+        return tool_result(
+            "not_found",
+            "❌ Maximize ke liye koi safe window nahi mili.",
+            tool="maximize_window",
+        )
+    if is_protected_window(target):
+        return tool_result(
+            "error",
+            "❌ Protected window maximize allowed nahi.",
+            tool="maximize_window",
+        )
+    win = _pygetwindow_for_hwnd(target.hwnd)
+    if win is None:
+        return tool_result(
+            "error",
+            "❌ pygetwindow available nahi hai.",
+            tool="maximize_window",
+        )
+    try:
+        win.maximize()
+        label = target.title or window_name
+        return tool_result(
+            "success",
+            f"📈 '{label}' maximize kar di gayi hai, Sir.",
+            tool="maximize_window",
+            data={"title": target.title, "hwnd": target.hwnd},
+        )
+    except (pywintypes.error, AttributeError, OSError) as exc:  # pylint: disable=no-member
+        logger.error("Maximize Error: %s", exc)
+        return tool_result(
+            "error",
+            f"❌ Window maximize nahi ho paayi: {exc!s}",
+            tool="maximize_window",
+            error=str(exc),
+        )
 
 
 @jarvis_tool
@@ -625,23 +728,39 @@ async def open_outputs_folder(subfolder: str = "") -> dict:
         }
 
 
-@jarvis_tool
+@jarvis_tool(timeout=5, risk="low")
 async def get_active_window_context() -> dict:
     """
     Retrieves metadata about the currently focused window on the system.
     """
-    if not gw:
+    mod = _load_gw()
+    if not mod and not win32gui:
         return {"status": "error", "message": "pygetwindow not available"}
 
     try:
-        active_window = gw.getActiveWindow()
+        active_window = mod.getActiveWindow() if mod else None
+        info: WindowInfo | None = None
+        if win32gui:
+            info = _hwnd_to_window_info(win32gui.GetForegroundWindow())
         if active_window:
             return {
                 "status": "success",
                 "title": active_window.title,
                 "is_maximized": active_window.isMaximized,
                 "is_minimized": active_window.isMinimized,
+                "pid": info.pid if info else 0,
+                "process_name": info.process_name if info else "",
                 "message": f"User is focused on: {active_window.title}",
+            }
+        if info and info.title:
+            return {
+                "status": "success",
+                "title": info.title,
+                "is_maximized": False,
+                "is_minimized": False,
+                "pid": info.pid,
+                "process_name": info.process_name,
+                "message": f"User is focused on: {info.title}",
             }
         return {"status": "not_found", "message": "No active window detected."}
     except Exception as e:  # pylint: disable=broad-exception-caught
