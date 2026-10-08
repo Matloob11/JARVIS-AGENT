@@ -1780,3 +1780,66 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** pytest env_defaults + SIM 40/40 · full suite 4140 passed, 41 skipped, 0 failed (17:11) · deploy gates ok (other apps identical, 31s) · `agent_ctl status` health 200, PREWARM_DONE 79 tools · live JS bundle grep `sim-enrich-cnic` = hit
 - **Commit:** `8ee2b3e` + is commit · **Deploy:** VPS frontend 23:14 PKT 🚀 + PC worker restart 23:14 PKT 🔁
 - **Doosre agent ke liye:** Cursor: K-34 v15 canonical (tumhari as-built shape). Owner: hard refresh → phone match par address bhara hua + "CNIC se baki details" button.
+
+### ✅ 🔁 [claude] C-33 SAC fix: av 19.0.1 blocked by Smart App Control · Agent worker stop (agent_ctl) · 2026-10-08 11:57 PKT
+- **Kya kiya:** `agent_ctl stop` se worker band kiya: pid 18156 (Ctrl+Break, 2.1 s).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent stop 11:57 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] C-33 SAC fix: av 18.1.0 + fresh DLLs (Smart App Control) · Agent worker start (agent_ctl) · 2026-10-08 12:07 PKT
+- **Kya kiya:** `agent_ctl start` se worker chala: pid 22628, health 200 (6.0 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent start 12:07 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] OPS (SAC) · Windows Smart App Control ne venv ki DLLs rok di thin; worker restart ke qabil wapas · 2026-10-08 12:10 PKT
+- **Kya kiya:** Laptop par Smart App Control (07-08 Oct se ON) unsigned DLLs rok raha tha: `livekit_ffi.dll`, grpc, av 19.0.1 waghaira. Chalta worker bach gaya tha, magar koi bhi restart livekit import hi nahi kar sakta tha. Same-version reinstall se cached "block" faislay hate (livekit 1.1.2, grpcio, rapidfuzz...); bina reputation wale builds pin kiye: av 18.1.0, pycryptodomex 3.23.0, pybase64 1.4.2. Naya scanner `scripts/pc/sac_check.py` DLLs ko code chalaye baghair check karta hai. Restart ne 7 zombie jobs bhi saaf kin (active_jobs 8 → 1).
+- **Files:** requirements.txt, deploy/windows-local/requirements-hybrid.txt, scripts/pc/sac_check.py, tests/unit/test_sac_check.py
+- **Verify:** `sac_check.py` mapped 620, relevant blocked 0 (sirf ghair-istemal pyarrow parquet encryption) · `pip check` clean · worker health 200 in 6 s
+- **Commit:** `aacd0e2` · **Deploy:** PC venv + worker restart 12:07 PKT 🔁
+- **Doosre agent ke liye:** Cursor: `DLL load failed ... Application Control policy` aaye to `.venv_312/Scripts/python.exe scripts/pc/sac_check.py` chalao; pip upgrade se pehle bhi.
+
+### ✅ [claude] C-84 · FFmpeg + PinchTab laptop par, start/install scripts · 2026-10-08 12:35 PKT
+- **Kya kiya:** FFmpeg 9.0.2 (winget) aur PinchTab 0.15.2 install; PinchTab 127.0.0.1:9867 par, token sirf env se (bina token 401), `multiInstance.strategy explicit` (idle par Chrome nahi: ~25 MB, pehle ~500 MB). npm postinstall skip kiya (woh `~/.claude/skills` mein skill daalta), sirf checksum-verified binary. `start_pinchtab.ps1`, idempotent `install_desktop_deps.ps1`, `start-agent.bat` hook.
+- **Files:** scripts/pc/start_pinchtab.ps1, scripts/pc/install_desktop_deps.ps1, deploy/windows-local/start-agent.bat, tests/unit/test_start_pinchtab.py; env FFMPEG_DIR, PINCHTAB_BIN
+- **Verify:** /health token ke saath 200, bina token 401 · sirf 127.0.0.1:9867 · kisi command line mein token 0 · `check_desktop_prereqs.py` PinchTab OK + ffmpeg OK · pytest 13/13
+- **Commit:** `2954079` · **Deploy:** laptop installs
+- **Doosre agent ke liye:** Cursor X-62: `jarvis_browser_pinchtab.py` ko `Authorization: Bearer <config.pinchtab_token>` bhejna hai, warna har call 401; X-62 ab sirf C-75 par ruka hai.
+
+### ✅ [claude] C-118 follow-up · desktop manifest dobara bana · 2026-10-08 12:26 PKT
+- **Kya kiya:** `export_manifest.py --check` STALE tha (lookup_sim_data timeout 15 vs code 35); manifest dobara likha.
+- **Files:** services/ai_core/desktop_manifest.json
+- **Verify:** export_manifest 79 tools, written
+- **Commit:** `92f74ba` · **Deploy:** no
+- **Doosre agent ke liye:** Cursor ke manifest handoffs ka jawab.
+
+### ✅ 🔁 [claude] C-33 step A + C-129 memory merge · Agent worker stop (agent_ctl) · 2026-10-08 12:56 PKT
+- **Kya kiya:** `agent_ctl stop` se worker band kiya: pid 22628 (Ctrl+Break, 1.6 s).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent stop 12:56 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ [claude] C-129 step 1 · JARVIS ki bikhri memory ek file mein · 2026-10-08 12:56 PKT
+- **Kya kiya:** `JARVIS_USER_ID` dono env files mein missing tha (har job nayi memory file banati thi). Contract K-69 ki value `matloob` set ki, aur naya tool `migrate_agent_data.py --merge-local` banaya: 9 files ki 143 entries ek `matloob_memory.json` mein (sorted, encrypted), originals `*.pre-20261008-125646` ke naam se mehfooz.
+- **Files:** scripts/ops/migrate_agent_data.py, tests/unit/test_migrate_agent_data.py; env JARVIS_USER_ID
+- **Verify:** pytest 7/7 · merge: 9 files, 143 in, 0 duplicates, 143 out · naya job: "ConversationMemory initialized for user: matloob", JARVIS_USER_ID warning khatam · backup `backup_20261008_125646.zip` pehle
+- **Commit:** `0474e1a` · **Deploy:** PC data merge (worker band karke)
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] C-33 step A live (job end paths, job protector, per-loop cli · Agent worker start (agent_ctl) · 2026-10-08 12:57 PKT
+- **Kya kiya:** `agent_ctl start` se worker chala: pid 14408, health 200 (7.8 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent start 12:57 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] C-33 step A · zombie jobs ka asal ilaaj live + board 13 DOING se 2 · 2026-10-08 13:00 PKT
+- **Kya kiya:** Laptop sleep ya network jaane ke baad jobs kabhi band nahi hoti thin (8 active jobs, har dashboard command har zombie par chalti thi). Ab job khud band hoti hai jab session unrecoverable error se band ho, room ka disconnect aaye, ya room ~90 s jaagte waqt tak na jude; LiveKit ka apna shutdown hamara teardown poora hone deta hai. Har job ka apna TaskProtector, teardown `aclose()` se (purana `stop()` maujood hi nahi tha). Throttle ab sirf bug hunter rokta hai (reminders/memory kabhi nahi). Bridge HTTP client har event loop ka apna (98% event-loop stalls isi se the). Typed chat ka preview INFO log se hata. Contracts v16 (K-60, K-40, K-57). Board: C-72/C-117/C-121/C-122/C-123/C-84 DONE, C-23/C-34/C-35/C-42/C-124 BLOCKED, C-63 release; owner ki manzoori se C-30 ki C-22 dependency re-check bani.
+- **Files:** src/core/agent_runner.py, src/core/jarvis_runtime.py, src/core/conversation_router.py, services/ai_core/agent_loops.py, services/utils/jarvis_autonomous.py, jarvis_adaptive.py, jarvis_health.py, jarvis_bridge.py, 6 test files, docs/CONTRACTS.md, plan.md
+- **Verify:** adversarial review (3 lenses, har finding verify): 4 confirmed aur fix, 1 refuted · full suite 4186 passed, 0 failed · live: active_jobs 1, session started, memory user matloob
+- **Commit:** `d997ef3` · **Deploy:** PC worker restart 12:57 PKT 🔁
+- **Doosre agent ke liye:** Cursor: ek dashboard command ab ek hi job pakregi (duplicate Allow dialogs khatam). C-33 step B (JarvisRuntime wiring) agla.
