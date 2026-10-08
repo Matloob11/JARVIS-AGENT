@@ -27,17 +27,19 @@ Priority: P0 broken or unsafe, P1 fragile or misleading, P2 clutter, P3 polish.
 - **Verify:** `npx tsc --noEmit`. A component test of the hook is not in this commit (hook pulls socket, settings, timers). UNVERIFIED in the browser until mock e2e.
 - **Risk:** a `settings_sync` that was the only persona confirmation would no longer flip the UI. Contract path is `persona_update`.
 
-### UI-H03 — Contract event matrix (P1, L)
+### UI-H03 — Contract event matrix (P1, L) — DONE
 
 - **Problem:** `contracts.spec.ts` covers normalizers, not every socket event the UI subscribes to.
-- **Fix:** table each `useSocketEvent` name to a K-id; add Vitest cases for missing/extra fields. REQ-CONTRACT only if a field is absent from `docs/CONTRACTS.md`.
+- **Fix:** `socketEventMatrix.ts` tables every `useSocketEvent` name to a K-id; Vitest asserts the inventory matches the grep snapshot and runs missing/extra-field cases on normalizers. No BLOCKED rows this pass (no REQ-CONTRACT).
 - **Accept:** every subscribed event is either tested or listed as BLOCKED in section 11.
+- **Verify:** `npm test -- src/shared/contracts/socketEventMatrix.test.ts`.
 
-### UI-H04 — Console guard on e2e (P1, M)
+### UI-H04 — Console guard on e2e (P1, M) — DONE
 
 - **Problem:** no proof that e2e fails on `console.error` / `pageerror`.
-- **Fix:** Playwright fixture that fails the test unless the error is allow-listed.
+- **Fix:** `tests/e2e/helpers/consoleGuard.ts` + `fixtures.ts` (auto-fail unless `softConsole`); proof in `console-guard.spec.ts`.
 - **Accept:** a deliberate `console.error` in a fixture fails one test.
+- **Verify:** `npx playwright test tests/e2e/console-guard.spec.ts --project=chromium`.
 
 ### UI-H05 — Chat list cap / virtualize (P1, L)
 
@@ -50,10 +52,11 @@ Priority: P0 broken or unsafe, P1 fragile or misleading, P2 clutter, P3 polish.
 - **Problem:** empty/error/offline copy is uneven. Audit did not click every panel this session.
 - **Fix:** one empty and one offline pattern per Activity, Tools, Approvals, Agents. No control removed.
 
-### UI-H07 — Confirm card single answer (P1, M)
+### UI-H07 — Confirm card single answer (P1, M) — DONE
 
 - **Problem:** double-click Allow is UNVERIFIED against `useConfirmQueue.ts`.
-- **Fix:** disable after the first ack; test with the mock bridge.
+- **Fix:** `ConfirmCard` locks Allow/Deny after the first ack for that id; `markResponded` still guards the emit. Mock e2e double-click asserts one `confirm_response`.
+- **Verify:** `npx playwright test tests/e2e/confirm.spec.ts -g "double-click Allow" --project=chromium`.
 
 ### UI-H08 — Accessibility pass (P1, L)
 
@@ -75,10 +78,11 @@ Priority: P0 broken or unsafe, P1 fragile or misleading, P2 clutter, P3 polish.
 - **Problem:** K-31 v34 swarm is a job (`tool_progress`, `job_cancel`, system report). UI jobs panel exists (`useJobs.ts`). Whether the swarm button shows that progress is UNVERIFIED.
 - **Fix:** mock `tool_progress` for a swarm job and assert the jobs row. Do not change the `{task}` payload.
 
-### UI-H12 — Mute vs stop copy (P2, S)
+### UI-H12 — Mute vs stop copy (P2, S) — DONE
 
 - **Problem:** mission: Stop interrupts; mute only stops mic input. Labels must not say the agent is deaf to typed chat.
-- **Fix:** check `VoicePopover.tsx` / `AgentControls.tsx` strings against that sentence. Wire new fields only after a contract update (section 11 if needed).
+- **Fix:** shared EN constants on `persona.ts`; VoicePopover uses them; Vitest asserts mute/mic-off mention typed chat and stop stays interrupt-only. No contract change.
+- **Verify:** `npm test -- src/shared/persona.muteStop.test.ts`.
 
 ### UI-H13 — Electron CSP and navigation (P2, M)
 
@@ -97,8 +101,8 @@ Priority: P0 broken or unsafe, P1 fragile or misleading, P2 clutter, P3 polish.
 
 ## Execution order
 
-H01 and H02 are the first code changes. H03–H15 stay TODO until their tests exist. Full section 6 gates (e2e, visual, perf, refdiff, axe, electron, `build:prod`) are **not** claimed green in this file.
+H01–H04, H07, H12 done with tests. Still TODO: H05, H06, H08–H11, H13–H15. Full section 6 gates (e2e suite ×3, visual, perf, refdiff, axe, electron, `build:prod`) are **not** claimed green in this file.
 
 ## Final report
 
-Not started. Stop condition in the mission section 9 is **not** met.
+In progress. Stop condition in the mission section 9 is **not** met.

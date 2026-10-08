@@ -133,8 +133,11 @@ const ConfirmCard = ({
   const [codeOver, setCodeOver] = useState(false);
   const [narrowTitle, setNarrowTitle] = useState(false);
   const [holdProgress, setHoldProgress] = useState(0);
+  /** UI-H07: lock Allow/Deny after the first ack for this id. */
+  const [answeredId, setAnsweredId] = useState<string | null>(null);
 
   const open = Boolean(current);
+  const answered = Boolean(current && answeredId === current.id);
   const isHighRisk = current ? riskLevel(current.risk) === 'high' : false;
   const argsText = current?.args_preview?.trim() ?? '';
   const lines = lineCount(argsText);
@@ -163,19 +166,25 @@ const ConfirmCard = ({
     setHoldProgress(0);
   }, []);
 
+  useEffect(() => {
+    setAnsweredId(null);
+  }, [current?.id]);
+
   const deny = useCallback(() => {
-    if (!current) return;
+    if (!current || answeredId === current.id) return;
     clearHold();
     toast.dismiss();
+    setAnsweredId(current.id);
     onDeny(current.id);
-  }, [clearHold, current, onDeny]);
+  }, [answeredId, clearHold, current, onDeny]);
 
   const allow = useCallback(() => {
-    if (!current) return;
+    if (!current || answeredId === current.id) return;
     clearHold();
     toast.dismiss();
+    setAnsweredId(current.id);
     onAllow(current.id);
-  }, [clearHold, current, onAllow]);
+  }, [answeredId, clearHold, current, onAllow]);
 
   const toastHoldHint = useCallback(() => {
     toast('Keep holding for 1 second to approve', { icon: '⏳', duration: 4000 });
@@ -189,14 +198,15 @@ const ConfirmCard = ({
   }, []);
 
   const finishHold = useCallback(() => {
-    if (!current) return;
+    if (!current || answeredId === current.id) return;
     clearHold();
+    setAnsweredId(current.id);
     onAllow(current.id);
-  }, [clearHold, current, onAllow]);
+  }, [answeredId, clearHold, current, onAllow]);
 
   const startHold = useCallback(
     (event?: ReactKeyboardEvent<HTMLButtonElement> | { preventDefault?: () => void }) => {
-      if (!current) return;
+      if (!current || answeredId === current.id) return;
       if (event && 'key' in event && event.key === 'Enter') {
         event.preventDefault();
         return;
@@ -225,7 +235,7 @@ const ConfirmCard = ({
         if (progress >= 1) finishHold();
       }, 50);
     },
-    [allow, current, finishHold, gated, isHighRisk, toastReadFirst],
+    [allow, answeredId, current, finishHold, gated, isHighRisk, toastReadFirst],
   );
 
   const endHold = useCallback(() => {
@@ -564,6 +574,8 @@ const ConfirmCard = ({
           type="button"
           className="confirm-dialog__deny"
           data-testid="confirm-deny"
+          disabled={answered}
+          aria-disabled={answered ? 'true' : undefined}
           onClick={deny}
         >
           Deny
@@ -574,10 +586,11 @@ const ConfirmCard = ({
           className="confirm-dialog__allow confirm-card__allow"
           data-testid="confirm-allow"
           aria-label={allowAriaLabel}
-          aria-disabled={gated ? 'true' : undefined}
+          disabled={answered}
+          aria-disabled={answered || gated ? 'true' : undefined}
           aria-describedby={gated ? gateId : undefined}
           onClick={event => {
-            if (isHighRisk) {
+            if (answered || isHighRisk) {
               event.preventDefault();
               return;
             }

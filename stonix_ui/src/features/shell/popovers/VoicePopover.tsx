@@ -3,7 +3,13 @@ import { Loader2, Square } from 'lucide-react';
 import { getSocket } from '@/shared/realtime/socket';
 import { useLiveKit } from '@/features/voice/LiveKitProvider';
 import { useSettings } from '@/features/settings/useSettings';
-import { getPersona, stopTitle } from '@/shared/persona';
+import {
+  AGENT_LISTENING_HINT_EN,
+  getPersona,
+  MIC_OFF_TYPED_CHAT_HINT_EN,
+  MUTE_TYPED_CHAT_HINT_EN,
+  stopTitle,
+} from '@/shared/persona';
 import { deriveVoicePillCopy } from '../voicePillState';
 import { useE2EVoiceTick } from '@/features/voice/voiceState';
 import { useAgentStatusStore } from '@/features/status/agentStatusStore';
@@ -91,9 +97,7 @@ export function VoicePopover({
           <div className="neon-pop-row-label">
             <b>Microphone (this browser)</b>
             <small>
-              {liveKit.micEnabled
-                ? 'Live in the voice room'
-                : 'Off. Typed chat keeps working'}
+              {liveKit.micEnabled ? 'Live in the voice room' : MIC_OFF_TYPED_CHAT_HINT_EN}
             </small>
           </div>
           <MicToggleSwitch />
@@ -103,9 +107,7 @@ export function VoicePopover({
           <div className="neon-pop-row-label">
             <b>{persona.name} listening</b>
             <small>
-              {agentMuted
-                ? 'Muted: typed chat keeps working'
-                : 'Hears the room through your mic'}
+              {agentMuted ? MUTE_TYPED_CHAT_HINT_EN : AGENT_LISTENING_HINT_EN}
             </small>
           </div>
           <AgentListeningSwitch />

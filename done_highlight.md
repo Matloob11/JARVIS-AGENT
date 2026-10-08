@@ -2313,3 +2313,31 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** pytest test_bug_hunter + test_bug_hunter_triage + test_role_gating + test_agent_loops: 144 passed; full suite just before this patch: 4751 passed, 1 failed (Cursor-lane X-58 test leak, section 11 REQ-TEST)
 - **Commit:** (this commit) · **Deploy:** PC worker restart next (together with C-50)
 - **Doosre agent ke liye:** UI ko kuch nahi badalna; purane raw messages chat history mein reh sakte hain.
+
+### ✅ [cursor] UI-H03 · Contract event matrix Vitest · 2026-10-08 23:45 PKT
+- **Kya kiya:** Har useSocketEvent naam ab K-id matrix me hai; normalizers missing/extra fields pe Vitest chalte hain. Koi BLOCKED event nahi.
+- **Files:** stonix_ui/src/shared/contracts/socketEventMatrix.ts, socketEventMatrix.test.ts, UI_HARDENING_PLAN.md
+- **Verify:** npm test socketEventMatrix.test.ts pass (9 tests)
+- **Commit:** (this commit) · **Deploy:** no — REQ-DEPLOY frontend
+- **Doosre agent ke liye:** —
+
+### ✅ [cursor] UI-H04 · e2e console.error / pageerror guard · 2026-10-08 23:45 PKT
+- **Kya kiya:** Playwright consoleGuard + fixtures; deliberate console.error assertClean fail karta hai.
+- **Files:** stonix_ui/tests/e2e/helpers/consoleGuard.ts, fixtures.ts, console-guard.spec.ts
+- **Verify:** playwright console-guard.spec.ts 2 passed
+- **Commit:** (this commit) · **Deploy:** no
+- **Doosre agent ke liye:** —
+
+### ✅ [cursor] UI-H07 · Confirm single-answer guard · 2026-10-08 23:45 PKT
+- **Kya kiya:** ConfirmCard pehle ack ke baad Allow/Deny lock; double-click Allow se ek hi confirm_response.
+- **Files:** stonix_ui/src/features/confirm/ConfirmCard.tsx, tests/e2e/confirm.spec.ts
+- **Verify:** playwright confirm double-click Allow 1 passed
+- **Commit:** (this commit) · **Deploy:** no — REQ-DEPLOY frontend
+- **Doosre agent ke liye:** —
+
+### ✅ [cursor] UI-H12 · Mute vs stop typed-chat copy · 2026-10-08 23:45 PKT
+- **Kya kiya:** Mute/mic-off copy typed chat chalti rehti hai; Stop sirf interrupt. Shared EN constants + Vitest.
+- **Files:** stonix_ui/src/shared/persona.ts, persona.muteStop.test.ts, VoicePopover.tsx
+- **Verify:** npm test persona.muteStop.test.ts pass
+- **Commit:** (this commit) · **Deploy:** no — REQ-DEPLOY frontend
+- **Doosre agent ke liye:** contract change nahi (K-03 mute).

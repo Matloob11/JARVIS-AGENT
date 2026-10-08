@@ -62,6 +62,11 @@ export function listeningMutedTitle(key: PersonaKey): string {
   return `${p.name} mic se nahi sune${p.fut}; typed chat chalti rahegi`;
 }
 
+/** UI-H12: mute / mic-off copy must say typed chat still works (K-03 mute). */
+export const MUTE_TYPED_CHAT_HINT_EN = 'Muted: typed chat keeps working';
+export const MIC_OFF_TYPED_CHAT_HINT_EN = 'Off. Typed chat keeps working';
+export const AGENT_LISTENING_HINT_EN = 'Hears the room through your mic';
+
 export function enrollSentence1(key: PersonaKey): string {
   const p = getPersona(key);
   return `${p.name} sun ${p.g} hai? Aaj ka kaam shuru karte hain.`;

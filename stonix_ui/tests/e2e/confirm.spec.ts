@@ -39,6 +39,42 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByTestId('chip-bridge')).toHaveAttribute('data-active', 'true');
 });
 
+test('double-click Allow emits confirm_response once (UI-H07)', async ({ page }) => {
+  await emitConfirm(page, {
+    id: 'confirm-e2e-double-allow',
+    tool: 'run_shell',
+    summary: 'Double allow guard',
+    risk: 'medium',
+    args_preview: 'echo once',
+    ttl_ms: 120_000,
+  });
+
+  const dialog = page.getByTestId('confirm-dialog');
+  await expect(dialog).toBeVisible();
+  const allow = page.getByTestId('confirm-allow');
+  await expect(allow).toBeEnabled();
+
+  const before = (await confirmResponses(page)).length;
+  // Two rapid clicks before the dialog unmounts; card + markResponded must emit once.
+  await allow.click({ clickCount: 2, delay: 15 });
+
+  await expect
+    .poll(async () => {
+      const mine = (await confirmResponses(page)).filter(
+        r => r.payload?.id === 'confirm-e2e-double-allow',
+      );
+      return mine.length;
+    })
+    .toBe(1);
+
+  const after = await confirmResponses(page);
+  const mine = after.filter(r => r.payload?.id === 'confirm-e2e-double-allow');
+  expect(mine).toHaveLength(1);
+  expect(mine[0].payload?.allow).toBe(true);
+  expect(after.length).toBe(before + 1);
+  await expect(dialog).toBeHidden({ timeout: 10_000 });
+});
+
 test('confirm_request shows modal; Deny emits allow:false once', async ({ page }) => {
   await emitConfirm(page, {
     id: 'confirm-e2e-deny',
