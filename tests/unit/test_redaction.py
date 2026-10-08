@@ -410,7 +410,6 @@ async def test_failing_swarm_logs_and_returns_only_masked_errors(monkeypatch):
         raise httpx.ConnectError(f"connect failed for {GEMINI_ERROR_URL}")
 
     monkeypatch.setattr(swarm_manager, "_call_gemini", failing_call)
-    monkeypatch.setattr(swarm_manager, "notify_ui", AsyncMock())
     monkeypatch.setattr(swarm_manager, "notify_transcription", AsyncMock())
     monkeypatch.setattr(jarvis_logger, "_BRIDGE_NOTIFY_LOG", AsyncMock())
     raw = io.StringIO()

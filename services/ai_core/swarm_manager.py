@@ -5,6 +5,9 @@ Spawns parallel LLM sub-agents to achieve tasks autonomously and concurrently.
 Every LLM call goes through services/ai_core/llm_text.generate_text (K-30): Gemini with its model fallback (a
 retired id such as gemini-2.5-flash, which 404ed for every swarm call on 2026-10-08, is skipped), then Groq and
 OpenRouter. The key never appears in a URL or an error text (K-29).
+
+Status lines and the final report reach the chat as assistant messages with source 'system' (K-58). The old
+notify 'agent_message' was handled by no bridge, so every final report was lost (C-43, 2026-10-08).
 """
 
 import asyncio
@@ -12,11 +15,14 @@ import json
 import os
 
 from services.ai_core.llm_text import generate_text
-from services.utils.jarvis_bridge import notify_transcription, notify_ui
+from services.utils.jarvis_bridge import notify_transcription
 from services.utils.jarvis_logger import setup_logger
 from services.utils.jarvis_security import redact_secrets
 
 logger = setup_logger("SWARM-MANAGER")
+
+SWARM_SOURCE = "system"  # K-58: the swarm's messages are neither voice nor typed
+_status_tasks: set[asyncio.Task[None]] = set()  # status sends in flight (a bare create_task can be collected)
 
 
 def _get_api_key() -> str | None:
@@ -49,14 +55,11 @@ class SwarmCoordinator:
         return bool(_get_api_key())
 
     async def _send_ui_update(self, msg: str) -> None:
-        """Pushes a real-time status update to the UI."""
+        """Pushes a real-time status line to the chat without waiting for the bridge."""
         logger.info("Swarm UI Update: %s", msg)
-        asyncio.create_task(
-            notify_ui("agent_message", {"text": f"\U0001f916 **[SWARM]** {msg}"})
-        )
-        asyncio.create_task(
-            notify_transcription("agent", f"[SWARM] {msg}", is_final=True)
-        )
+        task = asyncio.create_task(notify_transcription("assistant", f"[SWARM] {msg}", source=SWARM_SOURCE))
+        _status_tasks.add(task)
+        task.add_done_callback(_status_tasks.discard)
 
     async def _decompose_task(self, user_intent: str) -> list[dict[str, str]]:
         """Uses the LLM to split the user request into 2-3 parallel sub-tasks."""
@@ -171,10 +174,10 @@ class SwarmCoordinator:
             # Stage 3: Aggregate
             final_report = await self._aggregate_results(user_intent, results)
 
-            # Broadcast final report to UI
-            asyncio.create_task(
-                notify_ui("agent_message", {"text": final_report})
-            )
+            # the final report is a chat message, after every status line
+            if _status_tasks:
+                await asyncio.wait(set(_status_tasks), timeout=5.0)
+            await notify_transcription("assistant", final_report, source=SWARM_SOURCE)
             return final_report
 
         except Exception as e:  # pylint: disable=broad-exception-caught
