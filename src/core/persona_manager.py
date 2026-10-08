@@ -111,6 +111,15 @@ class PersonaManager:
         instr = build_instructions(self._assistant, self.active_persona_name)
         voice = "Aoede" if self._gf_mode_active else "Charon"  # Standard Capitalized Gemini Voices
 
+        update_session = getattr(self._assistant, "update_session", None)
+        if callable(update_session):
+            # C-49: instructions and voice together at the next safe point, in one fresh reconnect (a voice switch
+            # in the middle of the toggle_persona tool call dropped the tool's reply)
+            await update_session(instructions=instr, voice=voice)
+            llm_obj = getattr(self._assistant, "llm", None) or getattr(self._assistant, "_local_llm", None)
+            if hasattr(llm_obj, "voice"):
+                llm_obj.voice = voice
+            return
         await self._assistant.update_instructions(instr)
         # Update underlying LLM model property
         llm_obj = getattr(self._assistant, "llm", None) or getattr(self._assistant, "_local_llm", None)

@@ -177,7 +177,9 @@ class BrainAssistant(Agent):
         self._wake_word_mode: bool = True
         self._active_session: AgentSession | None = None
         self._conversation_router: Any = None  # C-42: typed chat goes into the session through it
-        self._pending_instructions: str | None = None  # C-49: waits for a safe point (INSTRUCTIONS_SAFE_STATES)
+        # C-49: a session update (instructions, voice) waits for a safe point: no reply or tool call running
+        self._pending_instructions: str | None = None
+        self._pending_voice: str | None = None
         # C-23 (K-60 v9): set by request_end; the job's entrypoint waits on it and then ends the job. Made with the
         # assistant, so a pause_agent that arrives before the entrypoint waits is never lost.
         self._stop_event: asyncio.Event = asyncio.Event()
@@ -329,48 +331,110 @@ class BrainAssistant(Agent):
     async def update_instructions(self, instructions: str) -> None:
         """
         Dynamically updates the assistant's system instructions (PersonaManager: JARVIS <-> ANNA; the wake-word
-        toggle). C-49: kept at once for the next session start (a rebuilt session included). With a live session
-        they wait for a safe point (the agent listening: never inside a reply or a tool call) and then reach Gemini
-        through livekit's Agent.update_instructions plus a fresh reconnect (restart_fresh): a mid-session update is
-        only appended to the session, while a fresh connect makes it the session's system instruction.
+        toggle). C-49: kept at once for the next session start (a rebuilt session included); a live session gets
+        them at the next safe point (update_session).
         """
-        self._instructions = instructions
+        await self.update_session(instructions=instructions)
+
+    async def update_session(self, *, instructions: str | None = None, voice: str | None = None) -> None:
+        """
+        C-49: new instructions and/or a new voice for the live Gemini session, applied together at a safe point (no
+        reply and no tool call running: a persona switch arrives inside the toggle_persona tool call) in ONE fresh
+        reconnect: livekit's Agent.update_instructions, the session's own update_options(voice), then
+        restart_fresh, so the instructions become the session's system instruction (a mid-session update is only
+        appended) while the plugin replays the chat history. With no live session they are stored for the next one.
+        """
         persona = self.persona_manager.active_persona_name
+        if instructions is not None:
+            self._instructions = instructions
         if getattr(self, "_activity", None) is None:
+            await self._store_for_next_session(instructions, voice, persona)
+            return
+        if instructions is not None:
+            self._pending_instructions = instructions
+        if voice is not None:
+            self._pending_voice = voice
+        if self._session_busy():
+            self._retry_after_current_speech()
+            logger.info("INSTRUCTIONS_UPDATE persona=%s sent=deferred state=%s", persona,
+                        getattr(self._active_session, "agent_state", None))
+            return
+        await self._apply_pending_session_update()
+
+    async def _store_for_next_session(self, instructions: str | None, voice: str | None, persona: str) -> None:
+        if instructions is not None:
             try:
                 await super().update_instructions(instructions)  # no live session: livekit only stores them
             except Exception as e:  # pylint: disable=broad-exception-caught
                 logger.warning("INSTRUCTIONS_UPDATE persona=%s store failed (%s)", persona, type(e).__name__)
             logger.info("INSTRUCTIONS_UPDATE persona=%s chars=%d sent=stored", persona, len(instructions))
-            return
-        self._pending_instructions = instructions
-        state = getattr(self._active_session, "agent_state", None)
-        if state is None or state in INSTRUCTIONS_SAFE_STATES:
-            await self._apply_pending_instructions()
-        else:
-            logger.info("INSTRUCTIONS_UPDATE persona=%s chars=%d sent=deferred state=%s", persona,
-                        len(instructions), state)
+        if voice is not None:
+            update = getattr(self._local_llm, "update_options", None)  # the model's options: the next session
+            if callable(update):
+                try:
+                    update(voice=voice)
+                except Exception as e:  # pylint: disable=broad-exception-caught
+                    logger.warning("VOICE_UPDATE store failed (%s)", type(e).__name__)
+
+    def _session_busy(self) -> bool:
+        """True while a reply or a tool call runs: the agent state says so, or the current speech is not done (a
+        realtime tool call runs while the state still says 'listening')."""
+        session = self._active_session
+        state = getattr(session, "agent_state", None)
+        if state is not None and state not in INSTRUCTIONS_SAFE_STATES:
+            return True
+        speech = getattr(session, "current_speech", None)
+        done = getattr(speech, "done", None)
+        return callable(done) and not done()
+
+    def _retry_after_current_speech(self) -> None:
+        """Tries again when the running speech ends (a finished one never re-arms: the next 'listening' state does)."""
+        speech = getattr(self._active_session, "current_speech", None)
+        add_done = getattr(speech, "add_done_callback", None)
+        if callable(add_done) and not speech.done():
+            add_done(lambda _speech: self._run_back(self._apply_when_safe()))
 
     async def on_agent_state(self, state: str) -> None:
-        """The session's agent_state_changed (agent_runner): pending instructions go out once the agent listens."""
-        if state in INSTRUCTIONS_SAFE_STATES and self._pending_instructions is not None:
-            await self._apply_pending_instructions()
+        """The session's agent_state_changed (agent_runner): a pending update goes out once the agent listens."""
+        if state in INSTRUCTIONS_SAFE_STATES:
+            await self._apply_when_safe()
 
-    async def _apply_pending_instructions(self) -> None:
+    async def _apply_when_safe(self) -> None:
+        if self._pending_instructions is None and self._pending_voice is None:
+            return
+        if self._session_busy():
+            self._retry_after_current_speech()
+            return
+        await self._apply_pending_session_update()
+
+    async def _apply_pending_session_update(self) -> None:
         instructions, self._pending_instructions = self._pending_instructions, None
-        if instructions is None:
+        voice, self._pending_voice = self._pending_voice, None
+        if instructions is None and voice is None:
             return
         persona = self.persona_manager.active_persona_name
-        try:
-            await super().update_instructions(instructions)
-        except Exception as e:  # pylint: disable=broad-exception-caught  # a realtime error never breaks the switch
-            logger.warning("INSTRUCTIONS_UPDATE persona=%s not sent to the live session (%s); kept for the next",
-                           persona, type(e).__name__)
+        rt_session = getattr(getattr(self, "_activity", None), "realtime_llm_session", None)
+        if instructions is not None:
+            try:
+                await super().update_instructions(instructions)
+            except Exception as e:  # pylint: disable=broad-exception-caught  # never breaks the switch
+                logger.warning("INSTRUCTIONS_UPDATE persona=%s not sent to the live session (%s); kept for the next",
+                               persona, type(e).__name__)
+                instructions = None
+        if voice is not None:
+            update = getattr(rt_session, "update_options", None)  # the session's own options (shared with the model)
+            try:
+                if callable(update):
+                    update(voice=voice)
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                logger.warning("VOICE_UPDATE %s failed (%s)", voice, type(e).__name__)
+                voice = None
+        if instructions is None and voice is None:
             return
-        activity = getattr(self, "_activity", None)
-        restarted = restart_fresh(getattr(activity, "realtime_llm_session", None), "instructions")
-        logger.info("INSTRUCTIONS_UPDATE persona=%s chars=%d sent=live restart=%s", persona, len(instructions),
-                    "fresh" if restarted else "none")
+        reason = "+".join(name for name, value in (("instructions", instructions), ("voice", voice)) if value)
+        restarted = restart_fresh(rt_session, reason)
+        logger.info("INSTRUCTIONS_UPDATE persona=%s sent=live update=%s voice=%s restart=%s", persona, reason,
+                    voice or "-", "fresh" if restarted else "none")
 
     async def refresh_instructions(self) -> None:
         """C-49: composes the active persona's instructions again (after the wake-word mode changed) and sends them
@@ -571,7 +635,8 @@ class BrainAssistant(Agent):
         Called by AgentRunner after session start.
         """
         self._active_session = session
-        self._pending_instructions = None  # C-49: a new session starts with the current self._instructions
+        # C-49: a new session starts with the current self._instructions (a pending voice still goes out later)
+        self._pending_instructions = None
         logger.info("Live AgentSession attached to BrainAssistant (User: %s)", self.user_id)
         if getattr(self, "_probe", False):
             return  # K-57 (C-39): no vision loop in a probe or canary job

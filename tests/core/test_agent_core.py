@@ -230,8 +230,10 @@ async def test_instructions_wait_until_the_agent_listens(mock_agent_deps):
         await assistant.update_instructions("ANNA RULES")
         assert assistant._instructions == "ANNA RULES"  # kept at once for a rebuilt session
         update.assert_not_awaited()
+        assistant._active_session.agent_state = "speaking"
         await assistant.on_agent_state("speaking")
         update.assert_not_awaited()
+        assistant._active_session.agent_state = "listening"
         await assistant.on_agent_state("listening")
         await assistant.on_agent_state("listening")  # nothing pending any more
     update.assert_awaited_once_with("ANNA RULES")
@@ -343,3 +345,49 @@ def test_gated_mode_waits_for_a_gated_runtime(monkeypatch, caplog):
     assert "WAKE WORD WAITING MODE" in _pm.build_instructions(assistant, "jarvis")
     monkeypatch.setattr(_pm, "GATED_RUNTIME_AVAILABLE", True)
     assert "🌟 WAKE WORD: GATED" in _pm.build_instructions(assistant, "jarvis")
+
+
+class _Speech:
+    def __init__(self) -> None:
+        self._done, self.callbacks = False, []
+
+    def done(self) -> bool:
+        return self._done
+
+    def add_done_callback(self, callback) -> None:
+        self.callbacks.append(callback)
+
+    def finish(self) -> None:
+        self._done = True
+        for callback in self.callbacks:
+            callback(self)
+
+
+@pytest.mark.asyncio
+async def test_an_update_inside_a_tool_call_waits_for_the_speech_to_end(mock_agent_deps):
+    """Live 08 Oct: toggle_persona runs while the state still says 'listening'; a restart then dropped the tool's
+    reply. The running speech (not done) keeps the update pending until it ends."""
+    assistant, _ = create_test_assistant(mock_agent_deps)
+    update, rt = _live(assistant, state="listening")
+    speech = _Speech()
+    assistant._active_session.current_speech = speech
+    with patch("livekit.agents.Agent.update_instructions", REAL_AGENT_UPDATE_INSTRUCTIONS):
+        before = set(assistant._background_tasks)
+        await assistant.update_instructions("ANNA RULES")
+        update.assert_not_awaited()
+        speech.finish()  # the tool call and its reply are over
+        await asyncio.wait_for(asyncio.gather(*(assistant._background_tasks - before)), 5)
+    update.assert_awaited_once_with("ANNA RULES")
+    assert rt.restarts == 1
+
+
+@pytest.mark.asyncio
+async def test_a_persona_switch_applies_instructions_and_voice_in_one_fresh_reconnect(mock_agent_deps):
+    assistant, _ = create_test_assistant(mock_agent_deps)
+    update, rt = _live(assistant, state="listening")
+    rt.voices = []
+    rt.update_options = lambda **kwargs: rt.voices.append(kwargs.get("voice"))
+    with patch("livekit.agents.Agent.update_instructions", REAL_AGENT_UPDATE_INSTRUCTIONS):
+        await assistant.persona_manager.set_persona(True)
+    assert "- Persona: ANNA" in update.await_args.args[0]
+    assert rt.voices == ["Aoede"] and rt.restarts == 1  # one reconnect carries both
