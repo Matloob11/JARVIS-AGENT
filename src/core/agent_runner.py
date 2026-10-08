@@ -162,6 +162,7 @@ except (ImportError, ValueError):
 
 from src.core import gemini_resume_guard
 from src.core.jarvis_runtime import JarvisRuntime
+from src.core.voice_link import VoiceLink  # C-35; registers ui_command voice_take_over
 from src.core.conversation_router import ConversationRouter, preview
 from src.core.vision_handler import append_chat_message, desktop_data_message
 
@@ -1225,27 +1226,6 @@ def _print_startup_banner() -> None:
     print("="*50 + "\n")
 
 
-def follow_owner_reconnects_live(get_session: Callable[[], Any], room: Any) -> list[tuple[str, Any]]:
-    """C-33 step B: the owner-follow handlers of one JOB (register them once, e.g. with JarvisRuntime.room_on). Unlike
-    follow_owner_reconnects they read the CURRENT session on every event, so after an in-place session rebuild the
-    new RoomIO is relinked, never the old one. Returns [(event, handler)]; runs one relink pass now."""
-
-    def _on_connected(participant: Any) -> None:
-        session = get_session()
-        if session is not None and _may_link(participant):
-            relink_room_input(session, room)
-
-    def _on_disconnected(_participant: Any) -> None:
-        session = get_session()
-        if session is not None:
-            relink_room_input(session, room)
-
-    current = get_session()
-    if current is not None:
-        relink_room_input(current, room)  # the linked person may have left before these handlers existed
-    return [("participant_connected", _on_connected), ("participant_disconnected", _on_disconnected)]
-
-
 DEFAULT_REALTIME_MODEL = "models/gemini-2.5-flash-native-audio-latest"
 
 
@@ -1452,8 +1432,10 @@ async def entrypoint(ctx: agents.JobContext):
         def _s_error(err: Any) -> None:
             logger.error("⚠️ Session Error: %s", err)
 
+        # C-35 (K-56): the job's VoiceLink: room handlers once per job, then one relink pass now (people already in
+        # the room; a rebuilt RoomIO starts unlinked), ROOMIO_RELINK + jarvis.linked_identity on every switch
+        voice_link.attach(session)
         if rebuilt:
-            relink_room_input(session, ctx.room)  # the rebuilt RoomIO starts unlinked
             logger.info("RUNTIME session rebuilt: handlers and hand-overs re-attached")
 
     async def _end_runtime_job(reason: str) -> None:
@@ -1480,6 +1462,9 @@ async def entrypoint(ctx: agents.JobContext):
         end_job=_end_runtime_job,
         sleep=asyncio.sleep,  # read now, not at import: tests swap asyncio.sleep
     )
+    # C-35: owner-only identities where room input is owner-only (the VPS brain; the PC with JARVIS_RPC_OWNER_ONLY)
+    voice_link = VoiceLink(ctx, strict_owner=rpc_owner_only())
+    runtime.voice_link = voice_link  # the teardown closes it; voice_take_over reaches it through the listener
 
     # C-33: livekit-agents never awaits or cancels this entrypoint when IT ends the job (room 'disconnected', a worker
     # shutdown): it runs the shutdown callbacks, cancels its own tasks and stops the loop, which would cut our
@@ -1520,9 +1505,7 @@ async def entrypoint(ctx: agents.JobContext):
                     track(_process_user_audio(publication, _assistant))
             runtime.room_on("track_published", on_track_published)
 
-            # The owner comes back under a new identity: relink the CURRENT session (C-35 replaces this with VoiceLink)
-            for event_name, handler in follow_owner_reconnects_live(lambda: job["session"], ctx.room):
-                runtime.room_on(event_name, handler)
+            # The owner coming back under a new identity is relinked by the job's VoiceLink (C-35, attached above)
             track(_room_liveness_loop(ctx.room, job["request_end"]))  # C-33 step A: a dead room ends the job
 
             # Subscribe to existing tracks

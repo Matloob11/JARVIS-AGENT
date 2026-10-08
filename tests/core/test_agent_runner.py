@@ -641,6 +641,42 @@ async def test_the_job_listener_goes_to_the_loops_and_is_closed_with_the_job(job
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("owner_only", [False, True])
+async def test_the_voice_link_follows_every_session_and_closes_with_the_job(job, monkeypatch, owner_only):
+    """C-35 (K-56): one VoiceLink per job; every started session (the first and each rebuild, whose fresh RoomIO
+    starts unlinked) is attached; the runtime's teardown closes it; owner-only where room input is owner-only."""
+    links: list[Any] = []
+
+    class FakeVoiceLink:
+        def __init__(self, ctx, *, strict_owner=False):
+            self.ctx, self.strict_owner, self.attached, self.closed = ctx, strict_owner, [], 0
+            links.append(self)
+
+        def attach(self, session):
+            self.attached.append(session)
+
+        def close(self):
+            self.closed += 1
+
+    monkeypatch.setattr(job.ar, "VoiceLink", FakeVoiceLink)
+    monkeypatch.setattr(job.ar, "rpc_owner_only", lambda mode=None: owner_only)
+
+    def on_start(agent):
+        session = job.sessions[-1]
+        loop = asyncio.get_running_loop()
+        if len(job.sessions) == 1:
+            loop.call_later(0.05, lambda: session.fire("close", types.SimpleNamespace(reason="error")))
+        else:
+            loop.call_later(0.05, agent.request_end, "paused_by_owner")
+
+    job.on_start = on_start
+    await _run_entrypoint(job, _FakeJobContext())
+    (link,) = links
+    assert link.attached == job.sessions and len(job.sessions) == 2
+    assert link.closed == 1 and link.strict_owner is owner_only
+
+
+@pytest.mark.asyncio
 async def test_sessions_start_without_recording(job):
     """record=False: a rebuilt session must never trip livekit-agents' 'only one primary AgentSession' check."""
     job.on_start = lambda agent: asyncio.get_running_loop().call_later(0.02, agent.request_end, "paused_by_owner")
