@@ -109,6 +109,14 @@ def _result_ok(result: Any) -> bool:
     return result is not None
 
 
+def _console_print(text: str) -> None:
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        enc = getattr(sys.stdout, "encoding", None) or "utf-8"
+        print(text.encode(enc, errors="replace").decode(enc))
+
+
 def _print_table(rows: list[SmokeRow], *, mode: str) -> None:
     headers = ("tool", "status", "ms", "provider")
 
@@ -117,18 +125,18 @@ def _print_table(rows: list[SmokeRow], *, mode: str) -> None:
 
     widths = [max(len(h), *(len(_cell(r, h)) for r in rows)) for h in headers]
     line = "  ".join(h.ljust(w) for h, w in zip(headers, widths))
-    print(f"info/media smoke ({mode})")
-    print(line)
-    print("  ".join("-" * w for w in widths))
+    _console_print(f"info/media smoke ({mode})")
+    _console_print(line)
+    _console_print("  ".join("-" * w for w in widths))
     for row in rows:
-        print(
+        _console_print(
             f"{row.tool.ljust(widths[0])}  "
             f"{row.status.ljust(widths[1])}  "
             f"{str(row.ms).rjust(widths[2])}  "
             f"{row.provider.ljust(widths[3])}"
         )
         if row.detail and row.status == "FAIL":
-            print(f"  -> {row.detail[:240]}")
+            _console_print(f"  -> {row.detail[:240]}")
 
 
 async def _timed(
@@ -376,10 +384,12 @@ async def _run_suite(
             provider_hint="vision",
         )
     )
+    doc_name = "smoke_doc" if dry else (os.environ.get("JARVIS_SMOKE_DOC") or "README").strip()
+
     rows.append(
         await _timed(
             "ask_about_document",
-            lambda: rag_mod.ask_about_document("smoke_doc", "Summarize in one line."),
+            lambda: rag_mod.ask_about_document(doc_name, "Summarize in one line."),
             dry=dry,
             provider_hint="rag",
         )
@@ -481,9 +491,9 @@ def main(argv: list[str] | None = None) -> int:
     _print_table(rows, mode=mode)
     failed = [r for r in rows if r.status != "PASS"]
     if failed:
-        print(f"\n{len(failed)} tool(s) FAILED.")
+        _console_print(f"\n{len(failed)} tool(s) FAILED.")
         return 1
-    print(f"\nAll {len(rows)} tool(s) PASS.")
+    _console_print(f"\nAll {len(rows)} tool(s) PASS.")
     return 0
 
 

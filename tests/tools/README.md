@@ -57,4 +57,6 @@ Rough cost per default run (no `--yt` / `--email-to`):
 
 Bridge notifications are still pointed at `http://127.0.0.1:9` so the smoke run does not spam the VPS UI.
 
+For `--live`, `ask_about_document` searches **`README`** by default. Override with `JARVIS_SMOKE_DOC=<partial filename>` if you want a document you know is indexed.
+
 The harness does **not** import or run WhatsApp, shutdown, mouse, keyboard, or SIM tools.
