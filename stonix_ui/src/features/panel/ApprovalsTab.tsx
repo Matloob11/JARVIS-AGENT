@@ -1,6 +1,8 @@
 import { ShieldCheck } from 'lucide-react';
 import { formatMmSs } from '@/shared/time';
 import type { ConfirmDecision, QueuedConfirm } from '@/features/confirm/useConfirmQueue';
+import { useAgentStatusStore } from '@/features/status/agentStatusStore';
+import { PanelOfflineHint } from '@/shared/ui/PanelState';
 
 type ApprovalsTabProps = {
   queue: QueuedConfirm[];
@@ -47,11 +49,13 @@ function formatDecisionTime(ts: number): string {
 const ApprovalsTab = ({ queue, decisions }: ApprovalsTabProps) => {
   const waitingTail = queue.slice(1);
   const total = queue.length;
+  const agentOnline = useAgentStatusStore().status.online;
 
   if (total === 0 && decisions.length === 0) {
     return (
       <div className="approvals-tab-pane" data-testid="approvals-panel">
-        <div className="approvals-tab-pane__empty">
+        <PanelOfflineHint online={agentOnline} />
+        <div className="approvals-tab-pane__empty" data-testid="approvals-empty">
           <ShieldCheck size={40} className="approvals-tab-pane__icon" aria-hidden />
           <p className="approvals-tab-pane__title">No approvals waiting</p>
           <p>Guarded tools always ask first.</p>
@@ -65,6 +69,7 @@ const ApprovalsTab = ({ queue, decisions }: ApprovalsTabProps) => {
 
   return (
     <div className="approvals-tab-pane" data-testid="approvals-panel">
+      <PanelOfflineHint online={agentOnline} />
       {total > 0 ? (
         <section className="approvals-section">
           <h3 className="approvals-section__title">

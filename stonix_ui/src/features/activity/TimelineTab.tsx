@@ -70,7 +70,7 @@ export function TimelineTab({ systemAlerts, logs }: TimelineTabProps) {
   const filtered = rows.filter(row => rowMatchesTimelineFilter(row, filter));
 
   return (
-    <div className="activity-timeline">
+    <div className="activity-timeline" data-testid="activity-timeline">
       <AlertsCard systemAlerts={systemAlerts} logs={logs} />
 
       <div className="activity-timeline__filters n-chips" role="group" aria-label="Filter events">
@@ -88,7 +88,7 @@ export function TimelineTab({ systemAlerts, logs }: TimelineTabProps) {
       </div>
 
       {filtered.length === 0 ? (
-        <div className="activity-timeline__empty n-empty">
+        <div className="activity-timeline__empty n-empty" data-testid="activity-empty">
           <Icon name="activity" className="n-ic" aria-hidden />
           <b>{rows.length ? 'Nothing for this filter' : 'No events yet'}</b>
           <span>

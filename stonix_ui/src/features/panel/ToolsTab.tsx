@@ -3,6 +3,8 @@ import JobsList from '@/features/tools/JobsList';
 import ToolLogList from '@/features/tools/ToolLogList';
 import type { JobEntry } from '@/features/jobs/useJobs';
 import type { ToolLogEntry } from '@/features/tools/useToolLogs';
+import { useAgentStatusStore } from '@/features/status/agentStatusStore';
+import { PanelOfflineHint } from '@/shared/ui/PanelState';
 
 interface ToolsTabProps {
   jobs: JobEntry[];
@@ -18,8 +20,11 @@ const ToolsTab = ({
   onCancelJob,
   onOpenJobArtifact,
   onOpenSim,
-}: ToolsTabProps) => (
+}: ToolsTabProps) => {
+  const agentOnline = useAgentStatusStore().status.online;
+  return (
   <div className="panel-tab-pane tools-tab" data-testid="tools-tab-panel">
+    <PanelOfflineHint online={agentOnline} />
     <div className="tools-tab__workspaces">
       <span className="tools-tab__workspaces-label">Workspaces</span>
       <button
@@ -35,6 +40,7 @@ const ToolsTab = ({
     <JobsList jobs={jobs} onCancel={onCancelJob} onOpenArtifact={onOpenJobArtifact} />
     <ToolLogList rows={toolLogs} />
   </div>
-);
+  );
+};
 
 export default ToolsTab;

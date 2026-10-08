@@ -2341,3 +2341,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** npm test persona.muteStop.test.ts pass
 - **Commit:** (this commit) · **Deploy:** no — REQ-DEPLOY frontend
 - **Doosre agent ke liye:** contract change nahi (K-03 mute).
+
+### ✅ [cursor] UI-H05 · Chat list render window (80) · 2026-10-08 23:50 PKT
+- **Kya kiya:** Chat ab ek waqt mein sirf 80 naye messages mount karta hai (300 memory cap same). "Show earlier in view" se aur 80. Latest bubble hamesha dikhta hai.
+- **Files:** stonix_ui/src/features/panel/ChatList.tsx, ChatList.test.tsx, UI_HARDENING_PLAN.md
+- **Verify:** npm test ChatList.test.tsx 2 passed. Perf budget UNVERIFIED.
+- **Commit:** e41dc6c · **Deploy:** no — REQ-DEPLOY frontend
+- **Doosre agent ke liye:** —
+
+### ✅ [cursor] UI-H06 · Panel empty + offline hint · 2026-10-08 23:55 PKT
+- **Kya kiya:** Activity / Tools / Approvals / Agents par shared offline line (agent band hone par). Empty states pehle se the; testids + mock e2e.
+- **Files:** stonix_ui/src/shared/ui/PanelState.tsx, ToolsTab, ApprovalsTab, ActivityPage, AgentsPage, panel-offline.spec.ts
+- **Verify:** vitest PanelState 2 passed; playwright panel-offline 1 passed
+- **Commit:** (this commit) · **Deploy:** no — REQ-DEPLOY frontend
+- **Doosre agent ke liye:** —

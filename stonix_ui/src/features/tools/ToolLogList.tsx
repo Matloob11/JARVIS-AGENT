@@ -58,7 +58,9 @@ const ToolLogList = ({ rows }: ToolLogListProps) => {
     return (
       <div className="tool-panel-empty" data-testid="tool-log-empty">
         <p className="text-sm font-medium text-command-text">No tool actions yet</p>
-        <p className="mt-2 text-xs text-command-muted">Waiting for backend bridge events.</p>
+        <p className="mt-2 text-xs text-command-muted">
+          Tool runs show up here when the agent reports them.
+        </p>
       </div>
     );
   }

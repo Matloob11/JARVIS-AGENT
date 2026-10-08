@@ -17,6 +17,8 @@ import type { IntelligenceItem } from '@/features/intelligence/types';
 import { TimelineTab } from './TimelineTab';
 import { LogsTab } from './LogsTab';
 import type { AppRoute } from '@/features/shell/router';
+import { useAgentStatusStore } from '@/features/status/agentStatusStore';
+import { PanelOfflineHint } from '@/shared/ui/PanelState';
 
 export type ActivityTabId = 'timeline' | 'logs' | 'tasks' | 'notes' | 'media';
 
@@ -119,6 +121,7 @@ export function ActivityPage({
 }: ActivityPageProps) {
   const activeTab = resolveTab(route.tab);
   const tabStripRef = useRef<HTMLDivElement>(null);
+  const agentOnline = useAgentStatusStore().status.online;
 
   const selectTab = useCallback((tab: ActivityTabId) => {
     const next = tabHash(tab);
@@ -177,6 +180,7 @@ export function ActivityPage({
 
   return (
     <div className="activity-page layout-zone">
+      <PanelOfflineHint online={agentOnline} />
       <div className="n-card edge act-page">
         <div
           ref={tabStripRef}

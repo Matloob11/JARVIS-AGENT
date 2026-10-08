@@ -48,10 +48,11 @@ Priority: P0 broken or unsafe, P1 fragile or misleading, P2 clutter, P3 polish.
 - **Accept:** 300 messages do not mount 300 bubbles.
 - **Verify:** `npm test -- src/features/panel/ChatList.test.tsx`.
 
-### UI-H06 — Failure states per panel (P1, L)
+### UI-H06 — Failure states per panel (P1, L) — DONE
 
 - **Problem:** empty/error/offline copy is uneven. Audit did not click every panel this session.
-- **Fix:** one empty and one offline pattern per Activity, Tools, Approvals, Agents. No control removed.
+- **Fix:** shared `PanelOfflineHint` on Activity, Tools, Approvals, Agents; empty testids kept (`approvals-empty`, `activity-empty`, `tool-log-empty`, `jobs-empty`). Controls stay.
+- **Verify:** `npm test -- src/shared/ui/PanelState.test.tsx`; `npx playwright test tests/e2e/panel-offline.spec.ts --project=chromium`.
 
 ### UI-H07 — Confirm card single answer (P1, M) — DONE
 
@@ -102,7 +103,7 @@ Priority: P0 broken or unsafe, P1 fragile or misleading, P2 clutter, P3 polish.
 
 ## Execution order
 
-H01–H05, H07, H12 done with tests. Still TODO: H06, H08–H11, H13–H15. Full section 6 gates (e2e suite ×3, visual, perf, refdiff, axe, electron, `build:prod`) are **not** claimed green in this file.
+H01–H07, H12 done with tests. Still TODO: H08–H11, H13–H15. Full section 6 gates (e2e suite ×3, visual, perf, refdiff, axe, electron, `build:prod`) are **not** claimed green in this file.
 
 ## Final report
 

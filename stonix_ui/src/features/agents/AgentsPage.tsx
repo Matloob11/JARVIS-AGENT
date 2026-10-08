@@ -4,6 +4,8 @@ import { VoiceWakeCard } from './VoiceWakeCard';
 import { VoiceIdCard } from './VoiceIdCard';
 import { SystemFlowCard, type SystemFlowCardProps } from './SystemFlowCard';
 import type { VoiceMatchLive } from '@/features/voice/voiceMeter';
+import { useAgentStatusStore } from '@/features/status/agentStatusStore';
+import { PanelOfflineHint } from '@/shared/ui/PanelState';
 
 type AgentsPageProps = {
   anchor?: string;
@@ -18,6 +20,8 @@ export function AgentsPage({
   onOpenVoiceEnroll,
   systemFlow,
 }: AgentsPageProps) {
+  const agentOnline = useAgentStatusStore().status.online;
+
   useEffect(() => {
     if (!anchor) return;
     const target = document.querySelector(`#page-agents [data-anchor="${anchor}"]`);
@@ -25,7 +29,8 @@ export function AgentsPage({
   }, [anchor]);
 
   return (
-    <div className="agents-page layout-zone">
+    <div className="agents-page layout-zone" data-testid="page-agents-body">
+      <PanelOfflineHint online={agentOnline} />
       <h2 className="n-group agents-group-title">JARVIS &amp; ANNA</h2>
 
       <PersonasCard />
