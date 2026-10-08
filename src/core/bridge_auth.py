@@ -10,10 +10,12 @@ Owner session auth of the UI bridge (plan task C-19; contracts C-AUTH-1 / K-36 a
   checked whether the password was right or not, so the time never tells the password apart. 5 failures per 15 min
   per IP or 20 per hour in total give 429 rate_limited with retry_after; every attempt is counted before it is
   checked (so concurrent attempts cannot overrun the limits), and at most 2 checks run at once (more get 429 with a
-  short retry_after). Nothing enrolled gives 503 owner_not_enrolled.
+  short retry_after). Nothing enrolled gives 503 owner_not_enrolled and one WARNING that names the missing settings
+  (C-36: the PC's local bridge reads them from the root .env, set_owner_credentials.py --target local writes them).
 - Session: a row in the store's sessions table (12 h) and the cookie jarvis_session=<JWT HS256 with
   SESSION_JWT_SECRET, claims {sub:'owner', sid, iat, exp, v:1}>; Path=/vortex (COOKIE_PATH), HttpOnly, Secure
-  (COOKIE_SECURE 1|0|auto), SameSite=Strict, Max-Age 43200. A JWT counts only while its sid is in the table, not
+  (COOKIE_SECURE: auto, the default, only for an HTTPS request, see is_https_request; 1 always, the VPS compose;
+  0 never), SameSite=Strict, Max-Age 43200. A JWT counts only while its sid is in the table, not
   revoked and not expired. A new login with a valid cookie revokes the old session (rotation); POST /auth/logout
   revokes it and clears the cookie; 'revoke-all' ends every session. GET /auth/me reports the session.
 - Dependencies for the bridge's endpoints: require_session, require_agent, require_session_or_agent and
@@ -103,6 +105,8 @@ MINT_TTL_MAX_S = SESSION_TTL_S
 TOUCH_INTERVAL_S = 60.0          # last_seen_ts is written at most once a minute per session
 AUTH_KIND_SESSION, AUTH_KIND_LEGACY, AUTH_KIND_AGENT = "session", "legacy", "agent"
 AGENT_MAX_SKEW_S = 60
+COOKIE_SECURE_AUTO = "auto"      # COOKIE_SECURE's default (C-36, K-09); '1' and '0' force the Secure flag
+HTTPS_SCHEMES = frozenset({"https", "wss"})
 ENV_KEYS = ("SESSION_JWT_SECRET", "OWNER_PASSWORD_HASH", "OWNER_TOTP_SECRET", "OWNER_RECOVERY_HASHES")
 
 # ASCII digits only: \d also matches other scripts' digits, which the code check could not compare. A code typed
@@ -280,9 +284,10 @@ def totp_usable(secret: str | None) -> bool:
     return len(secret.strip()) >= 16
 
 
-def provisioning_uri(secret: str) -> str:
-    """The otpauth:// URI the authenticator app scans (name 'owner', issuer 'JARVIS')."""
-    return pyotp.TOTP(secret).provisioning_uri(name=USER, issuer_name="JARVIS")
+def provisioning_uri(secret: str, issuer: str = "JARVIS") -> str:
+    """The otpauth:// URI the authenticator app scans (name 'owner', issuer 'JARVIS'; the PC's local bridge uses its
+    own issuer, so the app shows its entry apart from the server's)."""
+    return pyotp.TOTP(secret).provisioning_uri(name=USER, issuer_name=issuer)
 
 
 def totp_timecode(now: float) -> int:
@@ -453,6 +458,34 @@ async def verify_agent_headers(  # pylint: disable=too-many-return-statements
     return mark_seen is None or await mark_seen(nonce)
 
 
+# ---------------------------------------------------------------- HTTPS requests (COOKIE_SECURE=auto, K-09)
+
+
+def is_https_request(request: Request, trusted_proxy: Callable[[str], bool]) -> bool:
+    """True for a request that reached the bridge over HTTPS: an https (or wss) ASGI scheme, or else exactly one
+    X-Forwarded-Proto line saying https or wss (any case, spaces stripped) while trusted_proxy accepts
+    scope['client'] (the bridge passes its TRUSTED_PROXIES check).
+
+    Both bridges are served by ui_bridge.main() (vortex.py runs it on the PC): uvicorn with proxy_headers and
+    forwarded_allow_ips=TRUSTED_PROXIES. For a TCP peer in that list uvicorn has already set the scheme from its
+    X-Forwarded-Proto (http, https, ws or wss in lower case, spaces stripped; of several lines the last one) and
+    put the X-Forwarded-For host into scope['client']. So on the served stack the scheme decides (nginx sends one
+    lowercase https), and the header rule only covers a request whose scheme uvicorn left alone: a value uvicorn
+    does not take, such as 'HTTPS', or the app served without proxy_headers. The peer that rule checks is whatever
+    scope['client'] holds, the TCP peer or the X-Forwarded-For host uvicorn put there, so 'HTTPS' with nginx's
+    X-Forwarded-For of an internet client gives no Secure. An untrusted TCP peer's header changes neither the
+    scheme nor scope['client'], so a client outside TRUSTED_PROXIES never chooses the flag. The PC's local bridge
+    is reached over plain http (the Vite dev proxy sends no X-Forwarded-Proto), so its cookie works on
+    http://localhost."""
+    if str(request.scope.get("scheme") or "").lower() in HTTPS_SCHEMES:
+        return True
+    peer = request.client.host if request.client else ""
+    if not peer or not trusted_proxy(peer):
+        return False
+    proto = request.headers.getlist("x-forwarded-proto")
+    return len(proto) == 1 and proto[0].strip().lower() in HTTPS_SCHEMES
+
+
 # ---------------------------------------------------------------- the login service
 
 
@@ -483,6 +516,7 @@ class OwnerAuth:
                  is_internal: Callable[[Any], bool] = lambda _scope: False,
                  on_revoke: Callable[[str, str], Awaitable[None]] | None = None,
                  credentials: Callable[[], OwnerCredentials] = OwnerCredentials.from_config,
+                 trusted_proxy: Callable[[str], bool] = lambda _peer: False,
                  clock: Callable[[], float] = time.time) -> None:
         self._store = store
         self._allowed_origins = allowed_origins
@@ -492,6 +526,9 @@ class OwnerAuth:
         self._is_internal = is_internal
         self._on_revoke = on_revoke
         self._credentials = credentials
+        # Whose X-Forwarded-Proto is_https_request's own rule takes for COOKIE_SECURE=auto where uvicorn's
+        # proxy_headers left the scheme alone (the bridge's TRUSTED_PROXIES check); nobody's by default.
+        self._trusted_proxy = trusted_proxy
         self.clock = clock
         self.limiter = LoginLimiter(clock=clock)
         # One second factor at a time: the TOTP replay check and the recovery bookkeeping read and then write kv.
@@ -506,6 +543,8 @@ class OwnerAuth:
         self._refusal_day = -1
         self._refusal_rows = 0
         self._refusals_skipped = 0
+        # The missing owner settings the last owner_not_enrolled WARNING named (one WARNING, not one per attempt).
+        self._not_enrolled_warned: tuple[str, ...] = ()
         self._touched: OrderedDict[str, float] = OrderedDict()
         self.router = self._build_router()
 
@@ -539,10 +578,25 @@ class OwnerAuth:
             self._refusals_skipped = 0
         await self.audit("anonymous", action, detail, ip)
 
+    def _warn_not_enrolled(self, creds: OwnerCredentials) -> None:
+        """One WARNING naming the missing or unusable owner settings (names only, never a value) when a login meets
+        owner_not_enrolled (C-AUTH-1, C-36); further attempts with the same settings missing log at DEBUG only, so
+        a stream of attempts cannot fill the log."""
+        missing = tuple(creds.problems())
+        if missing == self._not_enrolled_warned:
+            logger.debug("Owner login refused: owner_not_enrolled")
+            return
+        self._not_enrolled_warned = missing
+        logger.warning("Owner login refused: owner_not_enrolled (%s missing or unusable). Enrol with "
+                       "scripts/ops/set_owner_credentials.py (--target local for the PC's local bridge), then "
+                       "restart the bridge", ", ".join(missing))
+
     def _secure(self, request: Request) -> bool:
-        mode = (getattr(config, "cookie_secure", "1") or "1").strip().lower()
-        if mode == "auto":
-            return request.url.scheme in ("https", "wss")
+        """The cookie's Secure flag (COOKIE_SECURE, K-09): auto (the default) only for an HTTPS request
+        (is_https_request with the bridge's trusted proxies), '0' never, '1' or any other value always."""
+        mode = (getattr(config, "cookie_secure", "") or COOKIE_SECURE_AUTO).strip().lower()
+        if mode == COOKIE_SECURE_AUTO:
+            return is_https_request(request, self._trusted_proxy)
         return mode != "0"
 
     def _cookie_path(self) -> str:
@@ -793,6 +847,7 @@ class OwnerAuth:
             return _json({"ok": False, "error": "bad_origin"}, 403)
         creds = self._credentials()
         if not creds.enrolled:
+            self._warn_not_enrolled(creds)
             await self._audit_refusal("auth_login_refused", {"reason": "owner_not_enrolled"}, ip)
             return _json({"ok": False, "error": "owner_not_enrolled"}, 503)
         # The attempt is counted as a failure before anything is awaited, so concurrent attempts cannot all pass

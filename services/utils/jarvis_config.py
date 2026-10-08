@@ -189,9 +189,12 @@ def _env_list(name: str, default: list[str], paths: bool = True) -> list[str]:
 
 
 def _env_cookie_secure(name: str) -> str:
-    """COOKIE_SECURE (K-09/K-36): '1' (default: Secure on every session cookie), '0' (plain-http local bridge) or
-    'auto' (Secure only for an HTTPS request); the yes/no words of _env_bool are accepted as 1/0."""
+    """COOKIE_SECURE (K-09/K-36, C-36): 'auto' (default when unset: Secure only for an HTTPS request, so the PC's
+    plain-http local bridge can set its cookie), '1' (Secure on every session cookie; the VPS compose sets it) or
+    '0' (never); the yes/no words of _env_bool are accepted as 1/0. Any other value logs one WARNING and gives '1'."""
     value = (os.getenv(name) or "").strip().lower()
+    if not value:
+        return "auto"
     if value in _TRUE_WORDS:
         return "1"
     if value in _FALSE_WORDS:

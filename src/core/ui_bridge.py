@@ -577,7 +577,10 @@ owner_auth: bridge_auth.OwnerAuth = bridge_auth.OwnerAuth(
     legacy_ok=lambda request: _legacy_header_ok(request),
     agent_ok=lambda request: _agent_request_ok(request),
     is_internal=bridge_desktop.is_internal_scope,
-    on_revoke=lambda session_id, reason: _end_session_sockets(session_id, reason))
+    on_revoke=lambda session_id, reason: _end_session_sockets(session_id, reason),
+    # COOKIE_SECURE=auto (C-36, K-09): uvicorn's proxy_headers (main) set the scheme from a TRUSTED_PROXIES peer's
+    # X-Forwarded-Proto; is_https_request's own header rule asks this same check about scope['client']
+    trusted_proxy=lambda peer: _trusted_proxy_peer(peer))
 # pylint: enable=unnecessary-lambda
 owner_auth.install(app)
 

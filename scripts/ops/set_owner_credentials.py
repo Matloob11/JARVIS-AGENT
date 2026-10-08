@@ -1,8 +1,10 @@
 """Set the owner's dashboard login (password + authenticator app + recovery codes) on the VPS bridge (plan task C-20,
-contract C-AUTH-1 / K-36). Run by the OWNER in his own Windows PowerShell or cmd window, never by an agent:
+contract C-AUTH-1 / K-36), or with --target local on the PC's local bridge (plan task C-36, K-09). Run by the OWNER in
+his own Windows PowerShell or cmd window, never by an agent:
 
     .venv_312/Scripts/python.exe scripts/ops/set_owner_credentials.py              # enrol (about 10 minutes)
     .venv_312/Scripts/python.exe scripts/ops/set_owner_credentials.py --test-login # try one real login
+    .venv_312/Scripts/python.exe scripts/ops/set_owner_credentials.py --target local [--test-login]
 
 Enrolment: asks for a new password twice (12+ characters, not a common one), makes a new authenticator secret and
 shows it as a QR code, the otpauth:// link and the plain secret, checks one 6-digit code from the app, shows 10
@@ -12,9 +14,17 @@ line, never in a file on this PC); the VPS first copies the file to /root/jarvis
 (mode 600), replaces the OWNER_* lines (or appends them), keeps every other line and writes the file atomically with
 mode 600.
 
+--target local is the login of the bridge vortex.py starts on http://127.0.0.1:5001 (npm run dev, Electron local):
+the same password rules and code check, its own authenticator entry 'JARVIS local' and no recovery codes. It writes
+OWNER_PASSWORD_HASH, OWNER_TOTP_SECRET and SESSION_JWT_SECRET (a usable one already there is kept) into the root .env
+of this repo and nowhere else: every assignment of those keys is replaced in place, a missing key is appended, every
+other line stays byte for byte, a leftover OWNER_RECOVERY_HASHES is emptied (an older enrolment's codes stop working),
+and the file is replaced atomically (a temp file next to it, fsynced, then os.replace; mode 600 on POSIX). No value is
+printed. Restart the local bridge afterwards; --target local --test-login then tries one login against it.
+
 The formats are the bridge's own: every hash, the secret, the code check and the digit handling come from
 src/core/bridge_auth.py, so what this script writes is exactly what the bridge reads. Nothing secret is logged or put
-in an error message. Ctrl+C before the VPS write saves nothing.
+in an error message. Ctrl+C before the VPS write (or the .env write) saves nothing.
 
 Env overrides (as in deploy_from_pc.sh): JARVIS_VPS_HOST (default root@187.127.123.235), JARVIS_SSH_KEY (default
 ~/.ssh/id_ed25519_hostinger), JARVIS_DOMAIN (default jarvis.srv1802669.hstgr.cloud).
@@ -24,6 +34,7 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import importlib.util
 import io
 import json
 import os
@@ -36,13 +47,31 @@ import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:  # run as a file: make 'src' and 'services' importable
     sys.path.insert(0, str(ROOT))
 
+from services.utils import jarvis_config  # noqa: E402  pylint: disable=wrong-import-position
 from src.core import bridge_auth  # noqa: E402  pylint: disable=wrong-import-position
+
+
+def _load_sibling(name: str) -> ModuleType:
+    """scripts/ops/<name>.py as a module (scripts/ops is not a package)."""
+    spec = importlib.util.spec_from_file_location(f"jarvis_ops_{name}", Path(__file__).with_name(f"{name}.py"))
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+# The PC env file tools (C-14, C-26) for --target local: byte-exact .env parsing (env_set), the in-place replacement
+# of every assignment of a key (rotate_env_secret) and the private atomic write (gen_secrets).
+rotate_env_secret = _load_sibling("rotate_env_secret")
+gen_secrets = rotate_env_secret.gen_secrets
+env_set = rotate_env_secret.env_set
 
 DEFAULT_HOST = "root@187.127.123.235"
 DEFAULT_KEY = "~/.ssh/id_ed25519_hostinger"
@@ -57,6 +86,14 @@ CODE_TRIES = 5
 SSH_TIMEOUT_S = 120
 HTTP_TIMEOUT_S = 20
 DONE_LINE = "Owner enrolled - ask Claude to recreate the bridge"
+# --target local (C-36, K-09): the bridge vortex.py starts on this PC, its root .env and its authenticator entry.
+LOCAL_ENV_FILE = ROOT / ".env"
+LOCAL_ISSUER = "JARVIS local"
+LOCAL_BRIDGE = "http://127.0.0.1:5001"    # its routes have no /vortex prefix (the Vite dev proxy strips it)
+LOCAL_ORIGIN = "http://localhost:5173"    # the Vite dev page, one of the local bridge's default ALLOWED_ORIGINS
+JWT_KEY = "SESSION_JWT_SECRET"
+RECOVERY_KEY = "OWNER_RECOVERY_HASHES"
+LOCAL_DONE_LINE = "Owner enrolled for the local bridge - restart it (vortex.py / npm run dev) to use the login"
 # The VPS runs this loader; the program and its arguments (the values too) arrive as JSON on stdin.
 REMOTE_LOADER = ("python3 -c 'import json,sys; d=json.load(sys.stdin); "
                  "exec(compile(d[\"program\"], \"jarvis-c20\", \"exec\"), "
@@ -79,6 +116,12 @@ How to run it
   8. Then run it again with --test-login to check that the login works.
 
 Ctrl+C stops it at any time; before the last step nothing is saved anywhere.
+
+For the local bridge on this PC (npm run dev, Electron local)
+  Run it with --target local. The same steps, but the login is saved only in this PC's .env file (not on
+  the server), the app entry is called 'JARVIS local', and there are no recovery codes (if you lose the
+  phone, run it again). The same password as the server login is fine. Then restart the local bridge
+  and check it with --target local --test-login.
 """
 
 
@@ -104,6 +147,7 @@ class Deps:  # pylint: disable=too-many-instance-attributes
     ssh_run: Callable[..., Any] = subprocess.run
     http_open: Callable[..., Any] = urllib.request.urlopen
     env: dict[str, str] = field(default_factory=lambda: dict(os.environ))
+    local_env: Path = LOCAL_ENV_FILE                 # --target local writes this file only
 
     def stream(self) -> Any:
         return self.out if self.out is not None else sys.stdout
@@ -162,9 +206,9 @@ def qr_text(uri: str, stream: Any) -> str | None:
         return None
 
 
-def show_authenticator(deps: Deps, secret: str) -> None:
-    uri = bridge_auth.provisioning_uri(secret)
-    deps.say("\nStep 2: add JARVIS to your authenticator app.")
+def show_authenticator(deps: Deps, secret: str, issuer: str = "JARVIS") -> None:
+    uri = bridge_auth.provisioning_uri(secret, issuer=issuer)
+    deps.say(f"\nStep 2: add {issuer} to your authenticator app.")
     deps.say("Scan this QR code with the app (make the window bigger if the code is cut off):\n")
     picture = qr_text(uri, deps.stream())
     if picture is None:
@@ -222,17 +266,20 @@ def confirm_code(deps: Deps, secret: str) -> None:
 
 
 def make_values(password: str, secret: str, codes: list[str], cost: int) -> dict[str, str]:
-    """The three bridge.env values in the bridge's own formats; each one is checked with the bridge's verifier."""
+    """The owner's env values (OWNER_*) in the bridge's own formats; each one is checked with the bridge's verifier.
+    Without codes (--target local) there is no OWNER_RECOVERY_HASHES."""
     password_hash = bridge_auth.hash_password(password, cost=cost)
     hashes = [bridge_auth.hash_recovery_code(code, cost=cost) for code in codes]
-    values = {"OWNER_PASSWORD_HASH": password_hash, "OWNER_TOTP_SECRET": secret,
-              "OWNER_RECOVERY_HASHES": ",".join(hashes)}
-    # Self-check with the bridge's functions before anything leaves this PC.
+    values = {"OWNER_PASSWORD_HASH": password_hash, "OWNER_TOTP_SECRET": secret}
+    if codes:
+        values["OWNER_RECOVERY_HASHES"] = ",".join(hashes)
+    # Self-check with the bridge's functions before anything is written or leaves this PC.
+    recovery_ok = not codes or bridge_auth.verify_recovery_code(codes[0], hashes[0])
     if (bridge_auth.password_problem(password)
             or not bridge_auth.verify_password(password, bridge_auth.decode_bcrypt_hash(password_hash))
             or not bridge_auth.totp_usable(secret)
             or any(bridge_auth.decode_bcrypt_hash(h) is None for h in hashes)
-            or not bridge_auth.verify_recovery_code(codes[0], hashes[0])):
+            or not recovery_ok):
         raise EnrolError("internal check of the new values failed; nothing was written")
     return values
 
@@ -389,7 +436,77 @@ def write_to_vps(deps: Deps, values: dict[str, str]) -> dict[str, Any]:
     raise EnrolError(f"the server refused the write ({reason}); nothing was written")
 
 
-# ---------------------------------------------------------------- the two commands
+# ---------------------------------------------------------------- the local write (--target local, C-36)
+
+
+def _env_problem(exc: Exception) -> str:
+    """An env_set.EnvError message (it never holds a value) without its own 'no file was changed' ending."""
+    return str(exc).removesuffix("; no file was changed")
+
+
+def check_local_env(path: Path) -> None:
+    """Stops before the first question when the root .env cannot be read exactly or is read-only."""
+    try:
+        env_set.EnvFile(path)
+    except env_set.EnvError as exc:
+        raise EnrolError(f"the root .env cannot be used ({_env_problem(exc)}); nothing was written") from None
+    if not os.access(path, os.W_OK):
+        raise EnrolError("the root .env is read-only; nothing was written")
+
+
+def write_local_env(path: Path, values: dict[str, str]) -> dict[str, str]:
+    """Puts values into the root .env at path; returns {key: 'replaced'|'added'|'kept'|'cleared'} (never a value).
+    Every assignment of a key is replaced in place (its 'KEY=' part and line ending stay), a missing key is appended
+    with the file's own line ending, and every other line stays byte for byte. SESSION_JWT_SECRET: a usable one (32+
+    characters) is kept, else a new token_urlsafe(64) is written. A non-empty OWNER_RECOVERY_HASHES is emptied: the
+    local login takes no recovery codes, and an older enrolment's codes must not outlive it. The file is written once
+    through a temp file next to it (fsynced; mode 600 on POSIX) and os.replace, so it is either unchanged or fully
+    updated, and no temp copy of it is left behind. Raises EnrolError (no value in it) when nothing was written."""
+    temp = path.with_name(path.name + gen_secrets.TEMP_SUFFIX)
+    try:
+        env_file = env_set.EnvFile(path)  # read again: the file may have changed while the owner typed
+        todo = dict(values)
+        jwt_usable = len(env_file.value(JWT_KEY).strip()) >= bridge_auth.JWT_SECRET_MIN_CHARS
+        if not jwt_usable:
+            todo[JWT_KEY] = gen_secrets.generate(JWT_KEY)
+        actions = {key: rotate_env_secret.replace_in(env_file, key, env_set.render_value(key, value))
+                   for key, value in todo.items()}
+        if jwt_usable:
+            actions[JWT_KEY] = "kept"
+        if env_file.value(RECOVERY_KEY).strip():
+            rotate_env_secret.replace_in(env_file, RECOVERY_KEY, "")
+            actions[RECOVERY_KEY] = "cleared"
+        gen_secrets.write_private([env_file])
+    except env_set.EnvError as exc:
+        raise EnrolError(f"the root .env could not be updated ({_env_problem(exc)}); nothing was written") from None
+    finally:
+        # gen_secrets removes its temp file after an OSError; this also covers Ctrl+C in the middle of the write.
+        try:
+            temp.unlink(missing_ok=True)
+        except OSError:
+            pass
+    return actions
+
+
+def local_origin_note(path: Path) -> str | None:
+    """A note when the root .env's ALLOWED_ORIGINS leaves out a Vite dev origin, so the local bridge would answer the
+    dev page's login 403 bad_origin (K-49: the list comes only from the environment). None when it lists both or is
+    unset or empty there (then the dev origins are the default). Names the missing dev origins, never the value."""
+    try:
+        raw = env_set.EnvFile(path).values.get("ALLOWED_ORIGINS")
+    except env_set.EnvError:
+        return None
+    listed = {part.strip().rstrip("/") for part in (raw or "").split(",") if part.strip()}
+    dev = jarvis_config._DEV_ORIGINS  # pylint: disable=protected-access  # the bridge's own default list
+    missing = [origin for origin in dev if origin not in listed] if listed else []
+    if not missing:
+        return None
+    return (f"Note: ALLOWED_ORIGINS in the root .env does not list {' and '.join(missing)}, so the local bridge "
+            f"refuses a login from the dev page (bad_origin). Add {'it' if len(missing) == 1 else 'them'} to that "
+            "line (comma-separated, keep the entries already there), then restart the local bridge.")
+
+
+# ---------------------------------------------------------------- the commands
 
 
 def enrol(deps: Deps) -> int:
@@ -419,6 +536,37 @@ def enrol(deps: Deps) -> int:
         deps.say("Note: the server file has no SESSION_JWT_SECRET yet; tell Claude (the login needs it).")
     deps.say("Clear this window now (type cls) so the codes do not stay on screen.")
     deps.say(DONE_LINE)
+    return 0
+
+
+def enrol_local(deps: Deps) -> int:
+    """--target local (C-36, K-09): the login of the PC's local bridge. The same password rules and code check as the
+    server enrolment, its own authenticator entry and no recovery codes; the values go only into the root .env of
+    this PC (write_local_env), and none of them is printed."""
+    check_local_env(deps.local_env)
+    deps.say("This sets the login of the local bridge on this PC (npm run dev, Electron local); the same password "
+             "as the server login is fine.")
+    password = ask_password(deps)
+    secret = bridge_auth.new_totp_secret()
+    show_authenticator(deps, secret, issuer=LOCAL_ISSUER)
+    confirm_code(deps, secret)
+    deps.say("Making the hash (a few seconds)...")
+    values = make_values(password, secret, [], BCRYPT_COST)
+    deps.say("Saving in the .env file of this PC...")
+    try:
+        actions = write_local_env(deps.local_env, values)
+    except KeyboardInterrupt:
+        raise EnrolError("cancelled during the .env write: the file is either unchanged or fully updated - run "
+                         "this again") from None
+    except EnrolError as exc:
+        raise EnrolError(f"{exc}. The new {LOCAL_ISSUER} entry in the app is NOT active; delete it from the app "
+                         "and run this again") from None
+    deps.say("Saved: " + ", ".join(f"{key} {action}" for key, action in actions.items()) + ".")
+    note = local_origin_note(deps.local_env)
+    if note:
+        deps.say(note)
+    deps.say("Clear this window now (type cls) so the secret does not stay on screen.")
+    deps.say(LOCAL_DONE_LINE)
     return 0
 
 
@@ -464,11 +612,16 @@ def _session_cookie(headers: Any) -> str | None:
     return None
 
 
-def run_test_login(deps: Deps) -> int:
-    """One real login against the live bridge; prints LOGIN OK or the server's error, never the cookie."""
-    domain = (deps.env.get("JARVIS_DOMAIN") or "").strip() or DEFAULT_DOMAIN
-    origin = f"https://{domain}"
-    url = f"{origin}/vortex/auth/login"
+def run_test_login(deps: Deps, local: bool = False) -> int:
+    """One real login against the live bridge (with local, the PC's local bridge as the Vite dev page reaches it);
+    prints LOGIN OK or the server's error, never the cookie."""
+    if local:
+        origin, base = LOCAL_ORIGIN, LOCAL_BRIDGE
+    else:
+        domain = (deps.env.get("JARVIS_DOMAIN") or "").strip() or DEFAULT_DOMAIN
+        origin = f"https://{domain}"
+        base = f"{origin}/vortex"
+    url = f"{base}/auth/login"
     password = deps.ask_secret("Dashboard password: ")
     code = normalise_code(deps.ask("6-digit code from the app: "))
     if not password or len(code) != bridge_auth.TOTP_DIGITS or not code.isdigit() or not code.isascii():
@@ -483,7 +636,7 @@ def run_test_login(deps: Deps) -> int:
         cookie = _session_cookie(headers)
         if cookie:  # end the test session again so it does not stay open for 12 hours
             try:
-                out_status, _, _, _ = _post_json(deps, f"{origin}/vortex/auth/logout", {},
+                out_status, _, _, _ = _post_json(deps, f"{base}/auth/logout", {},
                                                  {"Origin": origin, "Cookie": f"{bridge_auth.COOKIE_NAME}={cookie}"})
                 deps.say("Test session closed (logged out)." if out_status == 200 else
                          f"Note: the test session could not be closed (HTTP {out_status}); it ends by itself.")
@@ -500,6 +653,10 @@ def run_test_login(deps: Deps) -> int:
         deps.say(f"LOGIN FAILED: rate_limited - retry after {retry if retry is not None else '?'} s")
     elif error:
         deps.say(f"LOGIN FAILED: {error[:80]} (HTTP {status})")
+        if local and error == "bad_origin":
+            deps.say(f"The local bridge does not accept {LOCAL_ORIGIN}: add it to ALLOWED_ORIGINS in the root .env.")
+        elif local and error == "owner_not_enrolled":
+            deps.say("Run this with --target local first, then restart the local bridge.")
     else:
         deps.say(f"LOGIN FAILED: HTTP {status}" + (f": {text}" if text else ""))
     return 1
@@ -516,6 +673,9 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
                       "and the web address.")
     parser.add_argument("--test-login", action="store_true",
                         help="do not change anything; try one real login with your password and a code")
+    parser.add_argument("--target", choices=("vps", "local"), default="vps",
+                        help="vps (default): the JARVIS server's login, saved there over ssh; local: the login of "
+                             "the local bridge on this PC (npm run dev, Electron local), saved in this PC's .env")
     return parser.parse_args(argv)
 
 
@@ -530,8 +690,10 @@ def main(argv: list[str] | None = None, deps: Deps | None = None) -> int:
         deps.say("Run this in your own PowerShell or cmd window without redirecting its output (no '>' or "
                  "Tee-Object): it shows the authenticator secret and the recovery codes once.")
         return 2
+    local = args.target == "local"
+    enrol_command = enrol_local if local else enrol
     try:
-        return run_test_login(deps) if args.test_login else enrol(deps)
+        return run_test_login(deps, local=local) if args.test_login else enrol_command(deps)
     except (KeyboardInterrupt, EOFError):
         deps.say("\nCancelled - nothing was written." if not args.test_login else "\nCancelled.")
         return 130
