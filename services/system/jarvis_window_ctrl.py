@@ -9,13 +9,23 @@ Also provides system-level controls like shutdown, restart, and sleep.
 
 import asyncio
 import io
+import json
 import os
 import re
 import shlex
 import subprocess
 import sys
+import threading
+import time
+from dataclasses import dataclass
+from pathlib import Path
 
 from typing import Any, Iterable
+
+try:
+    import winreg
+except ImportError:  # pragma: no cover
+    winreg = None  # type: ignore[assignment]
 
 # Third-party imports
 from fuzzywuzzy import process
@@ -89,11 +99,251 @@ def get_windows(title: str):
     return mod.getWindowsWithTitle(title) if mod else []
 
 
-async def _launch_target(app: str) -> None:
-    if app.startswith("http"):
-        await asyncio.to_thread(jarvis_delivery.open_url, app)
-    else:
-        await asyncio.to_thread(jarvis_delivery.open_artifact, app)
+_APP_INDEX_TTL_S = 600.0
+_FUZZY_OPEN_MIN = 75
+_OFFICE_KEYS = frozenset({"excel", "word", "powerpoint"})
+_OFFICE_WEB_SLUG = {"excel": "excel", "word": "word", "powerpoint": "powerpoint"}
+_OFFICE_EXE = {"excel": "excel.exe", "word": "winword.exe", "powerpoint": "powerpnt.exe"}
+_WHATSAPP_WEB = "https://web.whatsapp.com"
+_WHATSAPP_INSTALL_HINT = (
+    "WhatsApp Desktop install nahi mila; web.whatsapp.com khol diya. "
+    "Microsoft Store se WhatsApp install kar sakte hain."
+)
+_VLC_MISSING_HINT = "VLC install nahi mila; Windows ka default media player khol diya."
+_OFFICE_MISSING_HINT = "Office install nahi mila; browser mein Office on the web khol diya."
+
+_app_index_cache: tuple[float, list["_IndexedApp"]] | None = None
+_app_index_lock = threading.Lock()
+
+
+@dataclass(frozen=True)
+class _IndexedApp:
+    label: str
+    canonical: str
+    target: str
+    method: str
+
+
+def _start_menu_program_dirs() -> list[str]:
+    dirs: list[str] = []
+    for env_key in ("ProgramData", "APPDATA"):
+        base = os.environ.get(env_key, "")
+        if base:
+            dirs.append(os.path.join(base, "Microsoft", "Windows", "Start Menu", "Programs"))
+    return dirs
+
+
+def _read_app_paths_registry() -> list[_IndexedApp]:
+    if winreg is None:
+        return []
+    out: list[_IndexedApp] = []
+    for hive in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
+        try:
+            with winreg.OpenKey(hive, r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths") as root:
+                idx = 0
+                while True:
+                    try:
+                        sub_name = winreg.EnumKey(root, idx)
+                        idx += 1
+                    except OSError:
+                        break
+                    try:
+                        with winreg.OpenKey(root, sub_name) as sub:
+                            exe_path, _ = winreg.QueryValueEx(sub, None)
+                    except OSError:
+                        continue
+                    if not exe_path or not isinstance(exe_path, str):
+                        continue
+                    label = Path(sub_name).stem.lower()
+                    if label.endswith(".exe"):
+                        label = label[:-4]
+                    out.append(_IndexedApp(label, label, exe_path, "app_path"))
+        except OSError:
+            continue
+    return out
+
+
+def _read_start_apps_json() -> list[_IndexedApp]:
+    cmd = (
+        "[Console]::OutputEncoding=[Text.Encoding]::UTF8; "
+        "Get-StartApps | ConvertTo-Json -Compress"
+    )
+    try:
+        proc = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", cmd],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=30,
+            check=False,
+        )
+    except (subprocess.SubprocessError, OSError):
+        return []
+    raw = (proc.stdout or "").strip()
+    if proc.returncode != 0 or not raw:
+        return []
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    rows = payload if isinstance(payload, list) else [payload]
+    out: list[_IndexedApp] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get("Name") or "").strip()
+        app_id = str(row.get("AppID") or "").strip()
+        if not name or not app_id:
+            continue
+        canonical = name.lower().strip()
+        out.append(_IndexedApp(name, canonical, app_id, "uwp"))
+    return out
+
+
+def _scan_start_menu_lnks() -> list[_IndexedApp]:
+    out: list[_IndexedApp] = []
+    for root in _start_menu_program_dirs():
+        if not os.path.isdir(root):
+            continue
+        for dirpath, _, files in os.walk(root):
+            for fname in files:
+                if not fname.lower().endswith(".lnk"):
+                    continue
+                path = os.path.join(dirpath, fname)
+                label = os.path.splitext(fname)[0]
+                canonical = label.lower().strip()
+                out.append(_IndexedApp(label, canonical, path, "lnk"))
+    return out
+
+
+def _build_app_index_sync() -> list[_IndexedApp]:
+    seen: set[tuple[str, str, str]] = set()
+    entries: list[_IndexedApp] = []
+
+    def _add(entry: _IndexedApp) -> None:
+        key = (entry.label.lower(), entry.target, entry.method)
+        if key in seen:
+            return
+        seen.add(key)
+        entries.append(entry)
+
+    for map_key, target in APP_MAPPINGS.items():
+        _add(_IndexedApp(map_key, map_key, target, "mapping"))
+
+    for chunk in (
+        _scan_start_menu_lnks(),
+        _read_start_apps_json(),
+        _read_app_paths_registry(),
+    ):
+        for entry in chunk:
+            _add(entry)
+    return entries
+
+
+async def _get_app_index() -> list[_IndexedApp]:
+    global _app_index_cache
+    now = time.monotonic()
+    with _app_index_lock:
+        if _app_index_cache and now - _app_index_cache[0] < _APP_INDEX_TTL_S:
+            return list(_app_index_cache[1])
+    built = await asyncio.to_thread(_build_app_index_sync)
+    with _app_index_lock:
+        _app_index_cache = (now, built)
+    return list(built)
+
+
+def _resolve_mapping_key(clean: str) -> str | None:
+    if not clean:
+        return None
+    keys = list(APP_MAPPINGS.keys())
+    match, score = process.extractOne(clean, keys)
+    if score >= _FUZZY_OPEN_MIN:
+        return match
+    return None
+
+
+def _fuzzy_index_match(clean: str, index: list[_IndexedApp]) -> tuple[_IndexedApp | None, list[str]]:
+    if not clean:
+        return None, []
+    labels = [e.label for e in index]
+    if not labels:
+        return None, []
+    best = process.extractOne(clean, labels)
+    if not best:
+        return None, []
+    best_label, score = best[0], best[1]
+    if score < _FUZZY_OPEN_MIN:
+        suggestions = [m[0] for m in process.extract(clean, labels, limit=3)]
+        return None, suggestions
+    for entry in index:
+        if entry.label == best_label:
+            return entry, []
+    return None, []
+
+
+def _launch_sync(target: str, method: str) -> None:
+    """Non-blocking launch in a worker thread (never use 'with Popen')."""
+    if method == "uwp":
+        subprocess.Popen(  # nosec B603
+            ["explorer.exe", f"shell:AppsFolder\\{target}"],
+            close_fds=True,
+        )
+        return
+    if method == "lnk" or target.lower().endswith(".lnk"):
+        os.startfile(target)  # pylint: disable=no-member
+        return
+    if target.startswith("http://") or target.startswith("https://"):
+        os.startfile(target)  # pylint: disable=no-member
+        return
+    if os.path.isfile(target):
+        subprocess.Popen([target], close_fds=True)  # nosec B603
+        return
+    subprocess.Popen(shlex.split(target), close_fds=True)  # nosec B603
+
+
+async def _launch_entry(target: str, method: str) -> None:
+    await asyncio.to_thread(_launch_sync, target, method)
+
+
+def _office_installed(office_key: str, index: list[_IndexedApp]) -> bool:
+    want = _OFFICE_EXE.get(office_key, "").lower()
+    if not want:
+        return False
+    for entry in index:
+        if entry.method == "app_path" and want in entry.target.lower():
+            if os.path.isfile(entry.target):
+                return True
+        if entry.canonical == office_key and os.path.isfile(entry.target):
+            return True
+    return False
+
+
+def _vlc_installed(index: list[_IndexedApp]) -> bool:
+    for entry in index:
+        if entry.canonical == "vlc":
+            return True
+        if "vlc" in entry.label.lower() and entry.method in ("app_path", "lnk", "mapping"):
+            if entry.method == "mapping":
+                return True
+            if os.path.isfile(entry.target):
+                return True
+    return False
+
+
+def _parse_write_text(full_command: str) -> str | None:
+    low_cmd = full_command.lower()
+    write_text: str | None = None
+    if " write " in f" {low_cmd} ":
+        write_text = low_cmd.split(" write ", 1)[1].strip()
+    elif " likh " in f" {low_cmd} ":
+        write_text = low_cmd.split(" likh ", 1)[1].strip()
+        if write_text.startswith("do "):
+            write_text = write_text[3:].strip()
+    if write_text:
+        for w in ("kholo", "karo", "please", "zara"):
+            if write_text.endswith(f" {w}"):
+                write_text = write_text[: -len(w)].strip()
+    return write_text or None
 
 
 # ===================== UTIL ===================== #
@@ -156,8 +406,8 @@ def fuzzy_match_app(app_name: str) -> str:
 def _open_app_risk(arguments: dict[str, Any]) -> str:
     cmd = str(arguments.get("full_command") or "")
     clean = normalize_command(cmd)
-    matched_key = fuzzy_match_app(clean)
-    if matched_key not in APP_MAPPINGS:
+    matched_key = _resolve_mapping_key(clean)
+    if not matched_key or matched_key not in APP_MAPPINGS:
         return "high"
     app = str(APP_MAPPINGS.get(matched_key, matched_key))
     probe = f"{app} {clean}".lower()
@@ -170,95 +420,153 @@ def _open_app_risk(arguments: dict[str, Any]) -> str:
 # ===================== OPEN APP ===================== #
 
 
-@jarvis_tool(risk=_open_app_risk)
-async def open_app(full_command: str) -> dict:  # pylint: disable=too-many-branches
+@jarvis_tool(timeout=30, exclusive="desktop_input", risk=_open_app_risk)
+async def open_app(full_command: str) -> dict[str, Any]:  # pylint: disable=too-many-branches,too-many-return-statements
     """
     Opens a desktop application or URL based on the user's voice command.
     """
+    from services.automation.jarvis_youtube_automation import _handle_open as _youtube_handle_open  # pylint: disable=import-outside-toplevel
+
     try:
         clean = normalize_command(full_command)
-        matched_key = fuzzy_match_app(clean)
-        app = APP_MAPPINGS.get(matched_key, matched_key)
+        mapping_key = _resolve_mapping_key(clean)
+        write_text = _parse_write_text(full_command)
+        index = await _get_app_index()
+        index_entry, suggestions = _fuzzy_index_match(clean, index)
 
         logger.info(
-            "OPEN → raw='%s' clean='%s' match='%s'",
-            full_command, clean, matched_key)
+            "OPEN → raw='%s' clean='%s' map='%s' index='%s'",
+            full_command,
+            clean,
+            mapping_key,
+            index_entry.label if index_entry else None,
+        )
 
-        # Special Bot Integrations
-        if matched_key == "whatsapp":
-            await whatsapp_bot.open_whatsapp()
-            await whatsapp_bot.ensure_whatsapp_focus()
-        elif matched_key == "youtube":
-            await _launch_target(app)
-            await asyncio.sleep(3)
-            await focus_window("YouTube")
-        # 🌐 URL → browser or desktop app
-        elif app.startswith("http"):
-            await _launch_target(app)
-            await asyncio.sleep(3)  # Wait for browser to open
-        else:
-            # 🖥️ Generic Desktop App launch
-            try:
-                await _launch_target(app)
-            except OSError as e:
-                # Fallback to subprocess if startfile fails
-                cmd_list = shlex.split(app)
-                with subprocess.Popen(cmd_list) as proc:  # nosec B603
-                    logger.info("Launched app via Popen: %d", proc.pid)
-                await asyncio.sleep(2)
-                logger.warning(
-                    "startfile failed, tried subprocess fallback safely: %s", e)
+        app_key = mapping_key or (index_entry.canonical if index_entry else clean)
 
-        # ✍️ Parse writing action
-        write_text = None
-        low_cmd = full_command.lower()
+        async def _finish(status: str, message: str, launch_method: str) -> dict[str, Any]:
+            if write_text:
+                return await _handle_write_after_open(app_key, write_text, launch_method)
+            return tool_result(
+                status,
+                message,
+                tool="open_app",
+                data={"app": app_key, "method": launch_method},
+            )
 
-        # Priority parsing for "write" and "likh"
-        if " write " in f" {low_cmd} ":
-            write_text = low_cmd.split(" write ", 1)[1].strip()
-        elif " likh " in f" {low_cmd} ":
-            write_text = low_cmd.split(" likh ", 1)[1].strip()
-            if write_text.startswith("do "):
-                write_text = write_text[3:].strip()
+        if mapping_key == "chrome":
+            chrome = getattr(config, "chrome_path", None)
+            if not chrome:
+                return tool_result(
+                    "error",
+                    "❌ Chrome path set nahi hai (JARVIS_CHROME_PATH).",
+                    tool="open_app",
+                    data={"app": "chrome", "method": "chrome_path"},
+                )
+            await asyncio.to_thread(_launch_sync, chrome, "chrome_path")
+            return await _finish("success", "🚀 Google Chrome khol diya gaya hai.", "chrome_path")
 
-        # Further clean write_text to remove trailing "kholo" etc
-        if write_text:
-            remove_trail = ["kholo", "karo", "please", "zara"]
-            for w in remove_trail:
-                if write_text.endswith(f" {w}"):
-                    write_text = write_text[:-len(w)].strip()
+        if mapping_key == "youtube":
+            yt_result = await _youtube_handle_open()
+            yt_msg = yt_result.get("message", "YouTube khol diya.") if isinstance(yt_result, dict) else str(yt_result)
+            if write_text:
+                return await _handle_write_after_open("youtube", write_text, "youtube_handler")
+            return tool_result(
+                yt_result.get("status", "success") if isinstance(yt_result, dict) else "success",
+                yt_msg,
+                tool="open_app",
+                data={"app": "youtube", "method": "youtube_handler"},
+            )
 
-        if write_text:
-            return await _handle_write_after_open(matched_key, write_text)
+        if mapping_key == "whatsapp":
+            opened = await whatsapp_bot.open_whatsapp()
+            if opened:
+                await whatsapp_bot.ensure_whatsapp_focus()
+                return await _finish("success", "🚀 WhatsApp khol diya gaya hai.", "whatsapp_native")
+            await _launch_entry(_WHATSAPP_WEB, "url")
+            return tool_result(
+                "degraded",
+                f"⚠ {_WHATSAPP_INSTALL_HINT}",
+                tool="open_app",
+                hint=_WHATSAPP_INSTALL_HINT,
+                data={"app": "whatsapp", "method": "whatsapp_web"},
+            )
 
-        return {
-            "status": "success",
-            "app": matched_key,
-            "message": f"🚀 {matched_key} khol diya gaya hai",
-        }
+        if mapping_key in _OFFICE_KEYS and not _office_installed(mapping_key, index):
+            slug = _OFFICE_WEB_SLUG[mapping_key]
+            url = f"https://www.office.com/launch/{slug}"
+            await _launch_entry(url, "url")
+            msg = f"⚠ {_OFFICE_MISSING_HINT}"
+            return tool_result(
+                "degraded",
+                msg,
+                tool="open_app",
+                hint=_OFFICE_MISSING_HINT,
+                data={"app": mapping_key, "method": "office_web"},
+            )
+
+        if mapping_key == "vlc" and not _vlc_installed(index):
+            await asyncio.to_thread(
+                _launch_sync,
+                r"C:\Program Files\Windows Media Player\wmplayer.exe",
+                "exe",
+            )
+            msg = f"⚠ {_VLC_MISSING_HINT}"
+            return tool_result(
+                "degraded",
+                msg,
+                tool="open_app",
+                hint=_VLC_MISSING_HINT,
+                data={"app": "vlc", "method": "media_default"},
+            )
+
+        if index_entry:
+            await _launch_entry(index_entry.target, index_entry.method)
+            label = index_entry.label
+            return await _finish("success", f"🚀 {label} khol diya gaya hai.", index_entry.method)
+
+        if mapping_key and mapping_key in APP_MAPPINGS:
+            target = APP_MAPPINGS[mapping_key]
+            launch_method = "url" if target.startswith("http") else "mapping"
+            await _launch_entry(target, launch_method)
+            return await _finish("success", f"🚀 {mapping_key} khol diya gaya hai.", launch_method)
+
+        top3 = suggestions or [m[0] for m in process.extract(clean, [e.label for e in index], limit=3)]
+        hint = f"Shayad yeh chahiye tha: {', '.join(top3[:3])}" if top3 else None
+        return tool_result(
+            "not_found",
+            f"❌ '{clean}' ke liye koi app nahi mili.",
+            tool="open_app",
+            hint=hint,
+            data={"app": clean, "method": "none", "suggestions": top3[:3]},
+        )
 
     except WIN32_ERRORS as e:  # pylint: disable=no-member
         logger.error("App open error: %s", e)
-        return {
-            "status": "error",
-            "message": f"❌ App open nahi ho paaya: {e!s}",
-            "error": str(e),
-        }
+        return tool_result(
+            "error",
+            f"❌ App open nahi ho paaya: {e!s}",
+            tool="open_app",
+            error=str(e),
+            data={"app": full_command, "method": "error"},
+        )
 
 
-async def _handle_write_after_open(matched_key: str, write_text: str) -> dict:
-    """
-    Helper to handle typing text after opening an app.
-    """
-    await asyncio.sleep(2)  # Wait for app to open
-    # Re-focus target app before typing
-    await focus_window(matched_key)
+async def _handle_write_after_open(app_key: str, write_text: str, launch_method: str) -> dict[str, Any]:
+    """Type into the app after launch; read type_text_tool message when dict."""
+    await asyncio.sleep(2)
+    await focus_window(app_key)
     result = await type_text_tool(write_text)
-    return {
-        "status": "success",
-        "app": matched_key,
-        "message": f"🚀 {matched_key} khol diya gaya hai aur {result}",
-    }
+    if isinstance(result, dict):
+        typed = str(result.get("message") or result)
+    else:
+        typed = str(result)
+    return tool_result(
+        "success",
+        f"🚀 {app_key} khol diya gaya hai aur {typed}",
+        tool="open_app",
+        data={"app": app_key, "method": launch_method},
+    )
 
 
 @jarvis_tool
