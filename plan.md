@@ -1389,8 +1389,8 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-38 | cursor | P3 | SIM lookup: authorized-API source with a clear 'provider not configured' mode | C-25, C-24, C-28, K-34 (sim_authorized_source) | DONE (02 Oct 01:32 PKT) |
 | X-39 | cursor | P3 | QR generator: exact data (raw policy), safe filename, open_file parameter | C-24, C-28, K-28 (tool_arg_policies) | DONE (02 Oct 01:32 PKT) |
 | X-40 | cursor | P3 | Image generation: FLUX.1-schnell via HF with Pollinations fallback and clear errors | C-25, C-24 | DONE (01 Oct 21:12 PKT) |
-| X-41 | cursor | P3 | WhatsApp: install check, process-based window match, confirmed Unicode send, safe close | C-27, C-28, C-26, X-03, X-11, C-30, X-26, K-16 (DesktopToolPolicy) | DOING (cursor, 2026-10-08 16:00 PKT) |
-| X-42 | cursor | P3 | Window control 1/3: close_window (tool 'close' kept as routed alias), minimize/maximize, active-window context | C-27, X-03, X-11, X-41, K-17 (ToolNamesV2), K-21 (ActiveWindowContext), K-16 (DesktopToolPolicy) | BLOCKED (waiting C-27,X-11,X-41) |
+| X-41 | cursor | P3 | WhatsApp: install check, process-based window match, confirmed Unicode send, safe close | C-27, C-28, C-26, X-03, X-11, C-30, X-26, K-16 (DesktopToolPolicy) | DONE (cursor, 2026-10-08 16:08 PKT) |
+| X-42 | cursor | P3 | Window control 1/3: close_window (tool 'close' kept as routed alias), minimize/maximize, active-window context | C-27, X-03, X-11, X-41, K-17 (ToolNamesV2), K-21 (ActiveWindowContext), K-16 (DesktopToolPolicy) | DOING (cursor, 2026-10-08 16:08 PKT) |
 | X-43 | cursor | P3 | Window control 2/3: open_app with a universal app index and Chrome/YouTube/WhatsApp/Office/VLC routing | C-26, X-26, X-34, X-41, X-42 | BLOCKED (waiting C-26,X-26,X-34,X-41,X-42) |
 | X-44 | cursor | P3 | Window control 3/3: save_notepad, open_notepad_file, folder_file (+cv alias), create_folder, open_outputs_folder | C-26, X-03, C-30, X-27, X-43 | BLOCKED (waiting C-26,X-03,C-30,X-27,X-43) |
 | X-45 | cursor | P3 | CameraPanel: opt-in camera, LiveKit publish, honest link badges, Socket.IO fallback only while sharing | X-13, K-05 (DASH-CAMERA-VISION) | DONE (01 Oct 13:35) |

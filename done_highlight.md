@@ -1954,3 +1954,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** pytest tests/tools/test_file_server_tool.py -q → 15 passed
 - **Commit:** `3227ec8` · **Deploy:** no
 - **Doosre agent ke liye:** —
+### ✅ [cursor] X-41 · WhatsApp install check, safe send/close · 2026-10-08 16:08 PKT
+- **Kya kiya:** Store install detection (60s cache), process-based window match (no browsers), deep-link/Ctrl+F send with FOCUS_LOST guard, WM_CLOSE-only close, ConfirmFlow metadata + not-installed web fallback.
+- **Files:** services/automation/jarvis_whatsapp_automation.py, tests/automation/test_whatsapp_automation.py, tests/tools/test_whatsapp_tool.py
+- **Verify:** pytest tests/tools/test_whatsapp_tool.py tests/automation/test_whatsapp_automation.py -q -p no:cacheprovider → 18 passed
+- **Commit:** `fc71d77` · **Deploy:** no
+- **Doosre agent ke liye:** REQ-RESTART for automate_whatsapp; manual: linked Desktop + Allow then Urdu/emoji send; not-installed → web only
+
