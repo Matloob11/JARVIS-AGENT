@@ -2,26 +2,21 @@
 # swarm_manager.py
 Implements Task Swarming / Coordinator Mode (Ultraplan) for JARVIS.
 Spawns parallel LLM sub-agents to achieve tasks autonomously and concurrently.
-Uses Gemini REST API via httpx (no extra packages needed — matches existing project pattern).
+Every LLM call goes through services/ai_core/llm_text.generate_text (K-30): Gemini with its model fallback (a
+retired id such as gemini-2.5-flash, which 404ed for every swarm call on 2026-10-08, is skipped), then Groq and
+OpenRouter. The key never appears in a URL or an error text (K-29).
 """
 
 import asyncio
 import json
 import os
 
-import httpx
-
+from services.ai_core.llm_text import generate_text
 from services.utils.jarvis_bridge import notify_transcription, notify_ui
 from services.utils.jarvis_logger import setup_logger
 from services.utils.jarvis_security import redact_secrets
 
 logger = setup_logger("SWARM-MANAGER")
-
-# Gemini REST endpoint — same model used by the live voice agent
-_GEMINI_URL = (
-    "https://generativelanguage.googleapis.com/v1beta/models/"
-    "gemini-2.5-flash:generateContent"
-)
 
 
 def _get_api_key() -> str | None:
@@ -30,29 +25,10 @@ def _get_api_key() -> str | None:
 
 
 async def _call_gemini(prompt: str) -> str:
-    """
-    Calls Gemini REST API with a single user prompt.
-    Returns the text response or raises on failure.
-    """
-    api_key = _get_api_key()
-    if not api_key:
-        raise ValueError("GOOGLE_API_KEY not set in environment.")
-
-    payload = {
-        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {"maxOutputTokens": 2048, "temperature": 0.7},
-    }
-
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        # K-29: the key travels in a header; URLs end up in httpx logs and exception texts.
-        resp = await client.post(
-            _GEMINI_URL,
-            json=payload,
-            headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        return data["candidates"][0]["content"]["parts"][0]["text"]
+    """One prompt through llm_text (K-30); its text. Raises LLMUnavailableError (masked reasons) when every tier
+    fails."""
+    result = await generate_text(prompt, max_output_tokens=2048, temperature=0.7)
+    return result.text
 
 
 class SwarmCoordinator:

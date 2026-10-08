@@ -376,39 +376,31 @@ def test_redact_root_handlers_wraps_every_root_handler_once():
 # ---------------------------------------------------------------- swarm (no real Gemini call)
 
 
-def _fake_httpx(calls: list[dict[str, Any]], status: int, body: Any) -> SimpleNamespace:
-    class FakeAsyncClient:
-        def __init__(self, *_args: Any, **_kwargs: Any) -> None:
-            pass
+async def test_swarm_calls_go_through_llm_text(monkeypatch):
+    """C-43: the swarm no longer builds its own Gemini URL (its gemini-2.5-flash 404ed); K-30 llm_text picks a live
+    model and keeps the key out of URLs."""
+    from services.ai_core.llm_text import LLMResult
 
-        async def __aenter__(self) -> Any:
-            return self
+    calls: list[tuple[str, dict[str, Any]]] = []
 
-        async def __aexit__(self, *_exc: Any) -> bool:
-            return False
+    async def fake_generate_text(prompt: str, **kwargs: Any) -> LLMResult:
+        calls.append((prompt, kwargs))
+        return LLMResult("ok", "gemini", "gemini-3.5-flash")
 
-        async def post(self, url: str, json: Any = None, headers: Any = None) -> httpx.Response:  # pylint: disable=redefined-outer-name
-            calls.append({"url": url, "headers": dict(headers or {}), "json": json})
-            return httpx.Response(status, json=body, request=httpx.Request("POST", url, headers=headers))
-
-    return SimpleNamespace(AsyncClient=FakeAsyncClient)
-
-
-async def test_swarm_sends_the_key_in_a_header_not_the_url(monkeypatch):
-    calls: list[dict[str, Any]] = []
-    body = {"candidates": [{"content": {"parts": [{"text": "ok"}]}}]}
-    monkeypatch.setattr(swarm_manager, "httpx", _fake_httpx(calls, 200, body))
+    monkeypatch.setattr(swarm_manager, "generate_text", fake_generate_text)
     assert await swarm_manager._call_gemini("hi") == "ok"  # pylint: disable=protected-access
-    assert len(calls) == 1
-    call = calls[0]
-    assert call["url"] == swarm_manager._GEMINI_URL  # pylint: disable=protected-access
-    assert "key=" not in call["url"] and FAKE_GOOGLE_KEY not in call["url"]
-    assert call["headers"]["x-goog-api-key"] == FAKE_GOOGLE_KEY
+    assert calls == [("hi", {"max_output_tokens": 2048, "temperature": 0.7})]
+    assert not hasattr(swarm_manager, "_GEMINI_URL") and not hasattr(swarm_manager, "httpx")
 
 
-async def test_swarm_http_error_text_carries_no_key(monkeypatch):
-    monkeypatch.setattr(swarm_manager, "httpx", _fake_httpx([], 400, {"error": "bad"}))
-    with pytest.raises(httpx.HTTPStatusError) as caught:
+async def test_swarm_llm_error_text_carries_no_key(monkeypatch):
+    from services.ai_core.llm_text import LLMUnavailableError
+
+    async def failing(_prompt: str, **_kwargs: Any) -> Any:
+        raise LLMUnavailableError(["gemini gemini-3.5-flash: 404 NOT_FOUND", "groq: 429"])
+
+    monkeypatch.setattr(swarm_manager, "generate_text", failing)
+    with pytest.raises(LLMUnavailableError) as caught:
         await swarm_manager._call_gemini("hi")  # pylint: disable=protected-access
     assert "key=" not in str(caught.value) and FAKE_GOOGLE_KEY not in str(caught.value)
 
