@@ -415,7 +415,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   const applySettingsObject = useCallback(
     (settings: Record<string, unknown>, syncMeta?: ReturnType<typeof normalizeSettings>) => {
-      const persona = asPersona(settings.persona ?? valuesRef.current.persona);
+      const holdPersona = revertRef.current.has('persona');
+      const persona = holdPersona
+        ? valuesRef.current.persona
+        : asPersona(settings.persona ?? valuesRef.current.persona);
       setValues(prev => ({
         persona,
         voice: asVoice(settings.voice ?? prev.voice, defaultVoiceForPersona(persona)),
@@ -494,7 +497,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
           continue;
         }
         const field = fieldFromPayloadKey(key);
-        if (!field) continue;
+        if (!field || field === 'persona') continue;
         const current =
           field === 'wakeWord'
             ? confirmed.wakeWord
@@ -530,9 +533,15 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   useSocketEvent('persona_update', (data: unknown) => {
     const row = data as { persona?: Persona };
-    if (row?.persona) {
-      setValues(prev => ({ ...prev, persona: asPersona(row.persona) }));
-    }
+    if (!row?.persona) return;
+    clearRevertTimer('persona');
+    setLocalPending(prev => {
+      if (!prev.has('persona')) return prev;
+      const next = new Set(prev);
+      next.delete('persona');
+      return next;
+    });
+    setValues(prev => ({ ...prev, persona: asPersona(row.persona) }));
   });
 
   useSocketEvent('wake_word_update', (active: unknown) => {
@@ -589,7 +598,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const applyOptimistic = useCallback((partial: SettingsUpdatePayload) => {
     setValues(prev => {
       const next = { ...prev };
-      if (partial.persona != null) next.persona = asPersona(partial.persona);
+      // C-50: persona flips only on persona_update, never on the click.
       if (partial.voice != null) next.voice = asVoice(partial.voice, prev.voice);
       if (partial.language != null) next.language = String(partial.language);
       if (partial.wake_word != null) next.wakeWord = asBool(partial.wake_word, prev.wakeWord);
