@@ -79,9 +79,11 @@ def _room_io_of(session: Any) -> Any:
 class VoiceLink:
     """Keeps the session's RoomIO pointed at the right (owner) participant for the life of a job."""
 
-    def __init__(self, ctx: Any, *, strict_owner: bool = False, speak_typed: str | None = None) -> None:
+    def __init__(self, ctx: Any, *, strict_owner: bool = False, speak_typed: str | None = None,
+                 allow_probe: bool = False) -> None:
         self.ctx = ctx
         self.strict_owner = strict_owner
+        self.allow_probe = allow_probe  # C-40: a probe job serves its 'probe-*' participant
         # C-41: JARVIS_SPEAK_TYPED ('auto' | 'always' | 'never'), read once per job
         self.speak_policy = speak_policy(speak_typed if speak_typed is not None else os.getenv(SPEAK_TYPED_ENV))
         self.session: Any = None
@@ -167,7 +169,7 @@ class VoiceLink:
     # ---- events -------------------------------------------------------------------------------
 
     def _on_participant_connected(self, participant: Any) -> None:
-        if not eligible(participant, self.strict_owner):
+        if not eligible(participant, self.strict_owner, self.allow_probe):
             return
         if self.linked_identity() is None:  # an active link is never stolen (only voice_take_over switches)
             identity = getattr(participant, "identity", None)
@@ -183,7 +185,7 @@ class VoiceLink:
         # linked_participant in its own handler (registered first), so the decision comes from
         # OUR state — the K-56 replace transition must still fire.
         self._linked_identity = None
-        target = pick_target(self.room, None, strict_owner=self.strict_owner)
+        target = pick_target(self.room, None, strict_owner=self.strict_owner, allow_probe=self.allow_probe)
         if target is not None and target != identity:
             self._relink(target, RELINK_REPLACE)
         self.update_audio_out("participant_disconnected")
@@ -194,7 +196,7 @@ class VoiceLink:
         linked identity is unchanged). Also covers the linked person having left before these
         handlers existed. Returns the identity actually relinked, if any."""
         linked = self.linked_identity()
-        target = pick_target(self.room, linked, strict_owner=self.strict_owner)
+        target = pick_target(self.room, linked, strict_owner=self.strict_owner, allow_probe=self.allow_probe)
         if target is None:
             return None
         if target == linked and self._room_io_linked_identity() == target:
@@ -210,7 +212,7 @@ class VoiceLink:
             return False
         remote = dict(getattr(self.room, "remote_participants", None) or {})
         participant = remote.get(identity)
-        if participant is None or not eligible(participant, self.strict_owner):
+        if participant is None or not eligible(participant, self.strict_owner, self.allow_probe):
             logger.info("voice_take_over ignored: identity not present or not eligible")
             return False
         return self._relink(identity, RELINK_TAKE_OVER)
@@ -222,7 +224,7 @@ class VoiceLink:
 
     def audio_out_wanted_now(self) -> bool:
         return audio_out_wanted(self.room, self.linked_identity(), self.speak_policy,
-                                strict_owner=self.strict_owner)
+                                strict_owner=self.strict_owner, allow_probe=self.allow_probe)
 
     def update_audio_out(self, reason: str) -> None:
         """Turns the live session's audio output on or off when the policy's answer differs from the

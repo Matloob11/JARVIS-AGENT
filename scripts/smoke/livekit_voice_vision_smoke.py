@@ -4,7 +4,9 @@ Default mode is offline and safe for CI: it verifies imports, local audio helper
 contracts, and vision frame decoding without opening devices or calling APIs.
 Use --require-secrets when you want the script to fail if live credentials are
 not configured. Use --include-google-plugin or --include-voice-id when you
-explicitly want heavy provider/model import paths included.
+explicitly want heavy provider/model import paths included. Use --live-probe for one
+live typed turn through LiveKit and Gemini in an isolated probe room (plan task C-40,
+scripts/smoke/voice_probe.py; it uses the Gemini quota).
 """
 
 from __future__ import annotations
@@ -13,6 +15,7 @@ import argparse
 import asyncio
 import base64
 import os
+import subprocess
 import sys
 from io import BytesIO
 from pathlib import Path
@@ -149,6 +152,20 @@ def check_core_assistant_turn_flow() -> None:
     asyncio.run(_run())
 
 
+LIVE_PROBE_TEXT = "Jarvis, what is 2 plus 2?"
+LIVE_PROBE_TIMEOUT_S = 180
+
+
+def check_live_probe() -> None:
+    """C-40: one typed turn through LiveKit and Gemini in an isolated probe room (K-57); its own process, so the
+    isolation settings above never reach it."""
+    probe = PROJECT_ROOT / "scripts" / "smoke" / "voice_probe.py"
+    command = [sys.executable, str(probe), "--text", LIVE_PROBE_TEXT, "--expect-contains", "4"]
+    result = subprocess.run(command, cwd=PROJECT_ROOT, timeout=LIVE_PROBE_TIMEOUT_S, check=False)
+    if result.returncode != 0:
+        raise RuntimeError(f"voice probe failed (exit {result.returncode})")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run LiveKit/voice/vision smoke checks.")
     parser.add_argument("--require-secrets", action="store_true", help="Fail if LiveKit/Gemini env vars are missing.")
@@ -162,6 +179,11 @@ def main() -> int:
         action="store_true",
         help="Import the heavy SpeechBrain voice fingerprint path.",
     )
+    parser.add_argument(
+        "--live-probe",
+        action="store_true",
+        help="Also run one live typed turn in an isolated probe room (C-40; uses the Gemini quota).",
+    )
     args = parser.parse_args()
 
     checks: list[tuple[str, Check]] = [
@@ -174,6 +196,8 @@ def main() -> int:
         checks.append(("google plugin import", check_google_plugin_import))
     if args.include_voice_id:
         checks.append(("voice id import", check_voice_id_import))
+    if args.live_probe:
+        checks.append(("live voice probe", check_live_probe))
 
     for label, check in checks:
         check()

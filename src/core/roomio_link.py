@@ -50,14 +50,17 @@ def _kind_is_human(kind: Any) -> bool:
         return False
 
 
-def eligible(participant: Any, strict_owner: bool = False) -> bool:
+def eligible(participant: Any, strict_owner: bool = False, allow_probe: bool = False) -> bool:
     """May the voice session link this participant? (K-56.) A person (STANDARD or SIP), never an
-    'agent-*' or 'probe-*' identity; with strict_owner only an 'owner-*' identity qualifies."""
+    'agent-*' or 'probe-*' identity; with strict_owner only an 'owner-*' identity qualifies. allow_probe
+    (C-40, a probe job's own room only): the 'probe-*' identity is the person that room serves."""
     identity = getattr(participant, "identity", None)
     if not isinstance(identity, str) or not identity:
         return False
     if not _kind_is_human(getattr(participant, "kind", None)):
         return False
+    if allow_probe and identity.startswith("probe-"):
+        return True
     if identity.startswith(BLOCKED_IDENTITY_PREFIXES):
         return False
     if strict_owner and not identity.startswith(OWNER_IDENTITY_PREFIX):
@@ -106,28 +109,30 @@ def mic_live(participant: Any) -> bool:
                and not getattr(pub, "muted", False) for pub in values)
 
 
-def audio_out_wanted(room: Any, linked: str | None, policy: str = "auto", *, strict_owner: bool = False) -> bool:
+def audio_out_wanted(room: Any, linked: str | None, policy: str = "auto", *, strict_owner: bool = False,
+                     allow_probe: bool = False) -> bool:
     """Should the agent's audio output be on? (C-41.) Never with policy 'never' or nobody eligible in the room;
     'always' with an eligible person present; 'auto' when the person the RoomIO listens to (the linked one, else the
     one pick_target would link) has a live microphone."""
     if speak_policy(policy) == "never":
         return False
     remote = dict(getattr(room, "remote_participants", None) or {})
-    if not any(eligible(p, strict_owner) for p in remote.values()):
+    if not any(eligible(p, strict_owner, allow_probe) for p in remote.values()):
         return False
     if speak_policy(policy) == "always":
         return True
-    target = pick_target(room, linked, strict_owner=strict_owner)
+    target = pick_target(room, linked, strict_owner=strict_owner, allow_probe=allow_probe)
     return target is not None and mic_live(remote.get(target))
 
 
-def pick_target(room: Any, linked: str | None, *, strict_owner: bool = False) -> str | None:
+def pick_target(room: Any, linked: str | None, *, strict_owner: bool = False,
+                allow_probe: bool = False) -> str | None:
     """The identity the RoomIO should be linked to now. A linked participant still in the room wins
     (never steal); else the newest eligible participant; else None (leave the link alone)."""
     remote = dict(getattr(room, "remote_participants", None) or {})
     if isinstance(linked, str) and linked in remote:
         return linked
-    candidates = [p for p in remote.values() if eligible(p, strict_owner)]
+    candidates = [p for p in remote.values() if eligible(p, strict_owner, allow_probe)]
     if not candidates:
         return None
     identity = getattr(candidates[-1], "identity", None)  # join order: the newest one is last

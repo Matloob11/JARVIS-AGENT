@@ -6,7 +6,8 @@ An AST walk over every .py file under src/, services/, scripts/ and deploy/ (com
 - delete_dispatch( nowhere: on LiveKit v1.13.7 it terminates the dispatch's jobs, a live agent included;
 - remove_participant( only in src/core/bridge_rooms.py (the room owner's removal rules);
 - delete_room_on_close=True nowhere (livekit-agents would delete the room when a session closes);
-- a CreateRoomRequest / create_room with agents= only in deploy/windows-local/ensure_room.py (its LiveKit fallback).
+- a CreateRoomRequest / create_room with agents= only in deploy/windows-local/ensure_room.py (its LiveKit fallback)
+  and in the probe and canary scripts, for their own rooms (K-57, C-40).
 """
 from __future__ import annotations
 
@@ -16,8 +17,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 SCANNED = ("src", "services", "scripts", "deploy")
 ROOM_OWNER = "src/core/bridge_rooms.py"
-OWN_ROOM_SCRIPTS = {"scripts/smoke/voice_probe.py", "scripts/smoke/vps_agent_canary.py"}  # K-57 (later)
-AGENTS_ALLOWED = {"deploy/windows-local/ensure_room.py"}
+OWN_ROOM_SCRIPTS = {"scripts/smoke/voice_probe.py", "scripts/smoke/vps_agent_canary.py"}  # K-57
+AGENTS_ALLOWED = {"deploy/windows-local/ensure_room.py"} | OWN_ROOM_SCRIPTS
 
 
 def _python_files() -> list[Path]:

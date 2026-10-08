@@ -130,3 +130,16 @@ def test_a_joining_listener_turns_audio_on_right_away():
     room.remote_participants[owner.identity] = owner
     room.fire("participant_connected", owner)
     assert session.switches == [False, True]
+
+
+def test_a_probe_identity_counts_only_in_a_probe_job():
+    """C-40: in a probe job's own room the 'probe-*' participant is the person the session serves; anywhere else a
+    probe identity never links and never turns audio on (K-56)."""
+    probe = _person("probe-1791460000", _pub())
+    room = _Room(probe)
+    assert roomio_link.eligible(probe) is False and roomio_link.eligible(probe, allow_probe=True) is True
+    assert roomio_link.audio_out_wanted(room, None, "auto") is False
+    assert roomio_link.audio_out_wanted(room, None, "auto", allow_probe=True) is True
+    assert roomio_link.pick_target(room, None, allow_probe=True) == "probe-1791460000"
+    agent = _person("agent-AJ_1", _pub())
+    assert roomio_link.eligible(agent, allow_probe=True) is False  # an agent never counts

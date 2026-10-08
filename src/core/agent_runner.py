@@ -1407,7 +1407,8 @@ async def entrypoint(ctx: agents.JobContext):
         assistant, router = job["assistant"], job["router"]
         job["session"] = session
         router.attach(session)
-        harden_room_input(session, ctx.room)  # C-124: owner-only RPC and text (VPS; PC opt-in); idempotent
+        if not probe:  # a probe room holds only the probe (C-40): its lk.chat must reach the session
+            harden_room_input(session, ctx.room)  # C-124: owner-only RPC and text (VPS; PC opt-in); idempotent
         assistant.attach_session(session)
         _enable_voice_confirm_check()  # C-75: confirm_action needs Sir's own spoken yes from now on
         jarvis_announcer.attach(session)  # C-55 (K-18): results, jobs and tips are shown and spoken here
@@ -1484,7 +1485,8 @@ async def entrypoint(ctx: agents.JobContext):
         sleep=asyncio.sleep,  # read now, not at import: tests swap asyncio.sleep
     )
     # C-35: owner-only identities where room input is owner-only (the VPS brain; the PC with JARVIS_RPC_OWNER_ONLY)
-    voice_link = VoiceLink(ctx, strict_owner=rpc_owner_only())
+    # C-40: a probe job serves its own 'probe-*' participant (its room holds nobody else)
+    voice_link = VoiceLink(ctx, strict_owner=rpc_owner_only() and not probe, allow_probe=probe)
     runtime.voice_link = voice_link  # the teardown closes it; voice_take_over reaches it through the listener
 
     # C-33: livekit-agents never awaits or cancels this entrypoint when IT ends the job (room 'disconnected', a worker

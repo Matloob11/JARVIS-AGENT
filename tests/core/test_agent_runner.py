@@ -648,8 +648,9 @@ async def test_the_voice_link_follows_every_session_and_closes_with_the_job(job,
     links: list[Any] = []
 
     class FakeVoiceLink:
-        def __init__(self, ctx, *, strict_owner=False):
+        def __init__(self, ctx, *, strict_owner=False, allow_probe=False):
             self.ctx, self.strict_owner, self.attached, self.closed = ctx, strict_owner, [], 0
+            self.allow_probe = allow_probe
             self.prepared: list[Any] = []
             links.append(self)
 
@@ -678,15 +679,35 @@ async def test_the_voice_link_follows_every_session_and_closes_with_the_job(job,
     (link,) = links
     assert link.attached == job.sessions and len(job.sessions) == 2
     assert link.prepared == job.sessions  # C-41: the audio gate is set before each start
-    assert link.closed == 1 and link.strict_owner is owner_only
+    assert link.closed == 1 and link.strict_owner is owner_only and link.allow_probe is False
 
 
 @pytest.mark.asyncio
-async def test_a_probe_room_job_is_isolated(job):
+async def test_a_probe_room_job_is_isolated(job, monkeypatch):
     """C-39 (K-57): a jarvis-probe-<epoch> job runs no bridge listener and no background loop, and the suppression it
-    sets stays in its own context."""
+    sets stays in its own context. C-40: its VoiceLink serves the probe identity (allow_probe, never owner-only) and
+    its room input is not hardened, so the probe's lk.chat reaches the session."""
     from services.utils import probe_context
 
+    links: list[dict[str, Any]] = []
+    hardened: list[Any] = []
+
+    class FakeVoiceLink:
+        def __init__(self, ctx, *, strict_owner=False, allow_probe=False):
+            links.append({"strict_owner": strict_owner, "allow_probe": allow_probe})
+
+        def prepare(self, session):
+            pass
+
+        def attach(self, session):
+            pass
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(job.ar, "VoiceLink", FakeVoiceLink)
+    monkeypatch.setattr(job.ar, "rpc_owner_only", lambda mode=None: True)
+    monkeypatch.setattr(job.ar, "harden_room_input", lambda session, room: hardened.append(session))
     job.on_start = lambda agent: asyncio.get_running_loop().call_later(0.02, agent.request_end, "probe_done")
     ctx = _FakeJobContext()
     ctx.job = types.SimpleNamespace(id="AJ_probe1", room=types.SimpleNamespace(name="jarvis-probe-1791460000"))
@@ -695,6 +716,7 @@ async def test_a_probe_room_job_is_isolated(job):
     assert job.listeners == [] and job.bg_listeners == [] and job.protectors == []
     assert ctx.shutdowns == ["probe_done"] and len(job.sessions) == 1
     assert probe_context.is_probe_job() is False  # the test's own context was never suppressed
+    assert links == [{"strict_owner": False, "allow_probe": True}] and hardened == []
 
 
 @pytest.mark.asyncio
