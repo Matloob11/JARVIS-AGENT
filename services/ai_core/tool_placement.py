@@ -167,8 +167,8 @@ def _laptop(name: str, cls: str, idempotent: bool = False, **extra: Any) -> Tool
 
 
 # Grouped as in docs/ARCHITECTURE_VPS_BRAIN.md section 4.2. Planned K-17 tools get their entry when
-# they are registered: close_window and cancel_shutdown on the laptop; cancel_scheduled_task and
-# confirm_selftest on the VPS (list_background_jobs and cancel_background_job landed with C-57).
+# they are registered: close_window on the laptop; cancel_scheduled_task and confirm_selftest on the
+# VPS (list_background_jobs and cancel_background_job landed with C-57, cancel_shutdown with X-29).
 _TABLE: tuple[ToolPlacement, ...] = (
     # ---------------------------------------------------------------- VPS (34)
     _vps("tool_report_plan_progress", True),
@@ -222,7 +222,7 @@ _TABLE: tuple[ToolPlacement, ...] = (
                   arg_hooks=("open_roots:folder_path", "vps_media_path:folder_path",
                              "safe_name:zip_name")),
     ToolPlacement("list_generated_media_tool", MEDIA_LIST_ROUTE, cls=READ, idempotent=True),
-    # ---------------------------------------------------------------- laptop (48)
+    # ---------------------------------------------------------------- laptop (49)
     _laptop("ask_about_document", READ, True, gui=False),
     _laptop("automate_chrome_browser", INPUT),
     _laptop("chrome_browser_read_page", READ, True),
@@ -256,6 +256,7 @@ _TABLE: tuple[ToolPlacement, ...] = (
     _laptop("stop_file_access_server", DE_ESCALATION, True),
     _laptop("shutdown_system", AVAILABILITY),
     _laptop("restart_system", AVAILABILITY),
+    _laptop("cancel_shutdown", DE_ESCALATION, True),  # X-29: shutdown /a; never needs an approval
     _laptop("sleep_system", AVAILABILITY),
     _laptop("empty_recycle_bin", AVAILABILITY),
     _laptop("get_laptop_info", READ, True),

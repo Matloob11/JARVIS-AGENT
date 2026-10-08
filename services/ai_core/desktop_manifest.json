@@ -1,12 +1,12 @@
 {
-  "git_sha": "22b0bccef6920ac7352cb0b0cf2e0513c5b924ad",
+  "git_sha": "f44a1984e21405505ff8dc5ff4c632e495c57b92",
   "lk_schema_libs": {
     "docstring-parser": "0.18.0",
     "livekit-agents": "1.4.6",
     "pydantic": "2.12.5",
     "pydantic-core": "2.41.5"
   },
-  "manifest_sha256": "71d1360d97ddd51f5bf4323859f94b33f1b9e81688896af1bfffa2ab2c0ffc47",
+  "manifest_sha256": "ec681d0d9dc8ab4edecb75a09297cb8428581caadf2d235f8e19c10de6c3cc65",
   "pc_operations": [
     {
       "arg_hooks": [],
@@ -522,6 +522,26 @@
     },
     {
       "cls": "de_escalation",
+      "doc": "Abort a pending Windows shutdown or restart (shutdown /a).",
+      "idempotent": true,
+      "lk_schema_sha256": "e32eaa93e9f599dc902c017de4ee70155f189f3777f2482b40464230df3375ec",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 10.0,
+        "voice_confirm": null
+      },
+      "module": "services.system.jarvis_system_ctrl",
+      "name": "cancel_shutdown",
+      "param_schema_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "params": [],
+      "placement": "laptop"
+    },
+    {
+      "cls": "de_escalation",
       "doc": "Close the current Chrome browser instance and clean up.",
       "idempotent": true,
       "lk_schema_sha256": "0c437179e8bc4d76f4775bb10bfd383a3922b0f3a5a8c25e9119cf852f101378",
@@ -935,17 +955,17 @@
     },
     {
       "cls": "availability",
-      "doc": "Clears the Windows recycle bin.",
+      "doc": "Clears the Windows recycle bin (non-blocking, ConfirmFlow high).",
       "idempotent": false,
-      "lk_schema_sha256": "439243e77a9de27d6fdec5c880a2b37691a82869186e6c126efe869d421c6244",
+      "lk_schema_sha256": "541f07f93a543910810e0fb637a8b6063a0765b6ab32f1989b8c47274268261c",
       "meta": {
         "arg_policies": {},
         "exclusive": null,
         "long_running": false,
         "max_output_chars": 12000,
-        "risk": "low",
-        "timeout": 15.0,
-        "voice_confirm": null
+        "risk": "high",
+        "timeout": 20.0,
+        "voice_confirm": false
       },
       "module": "services.system.jarvis_system_ctrl",
       "name": "empty_recycle_bin",
@@ -1748,17 +1768,17 @@
     },
     {
       "cls": "availability",
-      "doc": "Restarts the host operating system.",
+      "doc": "Restarts the host operating system after a 30s delay.",
       "idempotent": false,
-      "lk_schema_sha256": "96402afd649995f6a5fa10e3e1c24e3c77109ddfbe183d6cbce5e3465e55856d",
+      "lk_schema_sha256": "c9c9afe4900ae3b4b8f78166c292908820c92ab228a2b0c85ba7b722a1ef494a",
       "meta": {
         "arg_policies": {},
         "exclusive": null,
         "long_running": false,
         "max_output_chars": 12000,
-        "risk": "low",
-        "timeout": 15.0,
-        "voice_confirm": null
+        "risk": "high",
+        "timeout": 20.0,
+        "voice_confirm": false
       },
       "module": "services.system.jarvis_system_ctrl",
       "name": "restart_system",
@@ -1768,21 +1788,23 @@
     },
     {
       "cls": "code_exec",
-      "doc": "Execute a CMD command (Non-interactive) safely.",
+      "doc": "Sir, main CMD command chalata hoon: READ_ONLY allow-list bina confirmation ke, baaqi sab\n    sirf Sir ke Allow ke baad (K-45 ConfirmFlow). Captured output ka environment scrub kiya jaata\n    hai taake agent ke .env ki koi value kabhi wapas na aaye.",
       "idempotent": false,
-      "lk_schema_sha256": "342c9ad2143cbee868fb494145e714d17ede14a0c9daccd92f6d83050ea6a79c",
+      "lk_schema_sha256": "9f9d923de446d87022d502df3f7a61c882f939d80a505b68be33d848609c8f41",
       "meta": {
-        "arg_policies": {},
+        "arg_policies": {
+          "command": "raw"
+        },
         "exclusive": null,
         "long_running": false,
         "max_output_chars": 12000,
-        "risk": "low",
-        "timeout": 15.0,
+        "risk": "dynamic",
+        "timeout": 30.0,
         "voice_confirm": null
       },
       "module": "services.automation.jarvis_notepad_automation",
       "name": "run_cmd_command",
-      "param_schema_sha256": "5a79b5a2be634df5c36c620378bbad27624d85aa7ee13625ad72e422c1a2a59e",
+      "param_schema_sha256": "ab064484cf8110313a868b3f15f0e7650ec2f3c77d18c19b1a73b9e3499039e1",
       "params": [
         {
           "annotation": "str",
@@ -1790,6 +1812,13 @@
           "kind": "POSITIONAL_OR_KEYWORD",
           "name": "command",
           "required": true
+        },
+        {
+          "annotation": "bool",
+          "default": false,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "capture",
+          "required": false
         }
       ],
       "placement": "laptop"
@@ -2125,17 +2154,17 @@
     },
     {
       "cls": "availability",
-      "doc": "Safely shuts down the host operating system.",
+      "doc": "Safely shuts down the host operating system after a 30s delay.",
       "idempotent": false,
-      "lk_schema_sha256": "351c08df8cf82d84288d84197211e9e31bdfa2c65cbfaf788c9816acf7215d58",
+      "lk_schema_sha256": "27c2385e36caf1240c2b91101a7949740bd62f1b49c7cf2daa7fe3c4b17c7ab5",
       "meta": {
         "arg_policies": {},
         "exclusive": null,
         "long_running": false,
         "max_output_chars": 12000,
-        "risk": "low",
-        "timeout": 15.0,
-        "voice_confirm": null
+        "risk": "high",
+        "timeout": 20.0,
+        "voice_confirm": false
       },
       "module": "services.system.jarvis_system_ctrl",
       "name": "shutdown_system",
@@ -2145,45 +2174,53 @@
     },
     {
       "cls": "availability",
-      "doc": "Puts the system to sleep/standby mode.",
+      "doc": "\n    Put the system to sleep (or hibernate).\n\n    mode='sleep' uses Modern Standby screen-off when S0 is available, else S3\n    SetSuspendState. mode='hibernate' schedules shutdown /h after 3 seconds.\n    Returns immediately so the event loop is never blocked until resume.\n    ",
       "idempotent": false,
-      "lk_schema_sha256": "45f419b3d7c63604ce27054d91367bef281f9e9c77ec5b47c5cadc848c0e549e",
+      "lk_schema_sha256": "e749775ab43b143cf70cdc28994a022492b6d6f838538f825abee0b9c101a7f1",
       "meta": {
         "arg_policies": {},
         "exclusive": null,
         "long_running": false,
         "max_output_chars": 12000,
-        "risk": "low",
-        "timeout": 15.0,
-        "voice_confirm": null
+        "risk": "medium",
+        "timeout": 20.0,
+        "voice_confirm": true
       },
       "module": "services.system.jarvis_system_ctrl",
       "name": "sleep_system",
-      "param_schema_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-      "params": [],
+      "param_schema_sha256": "72ddd0be7dbb0507c3ea2cc50bc28055fd3bb64734a4c42bf0866bd6fc6434db",
+      "params": [
+        {
+          "annotation": "str",
+          "default": "sleep",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "mode",
+          "required": false
+        }
+      ],
       "placement": "laptop"
     },
     {
       "cls": "exposure",
-      "doc": "\n    Starts a local file server and generates a QR code to access the D: drive from mobile.\n    Use this when the user wants to see their D: storage on their phone.\n    ",
+      "doc": "\n    Starts a token-protected, TTL-limited local file server that shares only the configured root\n    (D:/ when present, else the shared folder) on the LAN, and shows a QR code on this PC to open\n    it on a phone on the same Wi-Fi. Use this when the user wants to browse or grab files from\n    this PC on their phone.\n    ",
       "idempotent": false,
-      "lk_schema_sha256": "eb186cd6aaaad02347bab17554a67f1d3477c0d357df5b08dfda7ccd12581c45",
+      "lk_schema_sha256": "e19ddb090b4a25b7119229eaea3fa80faded5521c040873c84da2d6f1310c0c8",
       "meta": {
         "arg_policies": {},
         "exclusive": null,
         "long_running": false,
         "max_output_chars": 12000,
-        "risk": "low",
-        "timeout": 15.0,
-        "voice_confirm": null
+        "risk": "medium",
+        "timeout": 20.0,
+        "voice_confirm": true
       },
       "module": "services.system.jarvis_file_server",
       "name": "start_file_access_server",
-      "param_schema_sha256": "5ddc1a1e0175049639dd557b380d13aa839f1d9ecdbae8fd62d4ca495d6f6d1c",
+      "param_schema_sha256": "9ec695deac3bb706f286017a96d80cf4d2ae6c6372cb2300aa83cf2dacbe380e",
       "params": [
         {
-          "annotation": "int",
-          "default": 8000,
+          "annotation": "int | None",
+          "default": null,
           "kind": "POSITIONAL_OR_KEYWORD",
           "name": "port",
           "required": false
@@ -2193,16 +2230,16 @@
     },
     {
       "cls": "de_escalation",
-      "doc": "Stops the running file server.",
+      "doc": "Stops the running file access server (if any) and cancels its TTL timer.",
       "idempotent": true,
-      "lk_schema_sha256": "ff87a9fd558b8d942f12d46b08ead6ae42cc14899a9d4a98b6994d77a9889309",
+      "lk_schema_sha256": "02160ec3059c0dd91b56242ab7a61678a67c63c02ebbfb411d6e8b0f551d9fe5",
       "meta": {
         "arg_policies": {},
         "exclusive": null,
         "long_running": false,
         "max_output_chars": 12000,
         "risk": "low",
-        "timeout": 15.0,
+        "timeout": 10.0,
         "voice_confirm": null
       },
       "module": "services.system.jarvis_file_server",

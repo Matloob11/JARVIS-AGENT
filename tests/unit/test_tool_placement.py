@@ -101,14 +101,15 @@ def test_the_internal_tools_are_the_wrap_tools_of_brain_assistant():
 
 
 def test_the_counts_match_k71(local):
-    assert tp.placement_counts() == {"vps": 34, "split": 1, "routed": 2, "laptop": 48}  # C-57: +2 job tools
-    assert len(tp.PLACEMENTS) == len(local["tools"]) + len(tp.INTERNAL_TOOLS) == 85
+    # C-57: +2 job tools; X-29: cancel_shutdown
+    assert tp.placement_counts() == {"vps": 34, "split": 1, "routed": 2, "laptop": 49}
+    assert len(tp.PLACEMENTS) == len(local["tools"]) + len(tp.INTERNAL_TOOLS) == 86
 
 
 def test_deny_listed_modules_hold_only_gui_laptop_tools(local):
     denied = {name for name, module in local["tools"].items() if module in tp.REMOTE_DENIED_MODULES}
-    # keyboard/mouse 10, windows 10, Notepad 8, PinchTab 4, system 4, WhatsApp 1, vitals 1
-    assert len(denied) == 38
+    # keyboard/mouse 10, windows 10, Notepad 8, PinchTab 4, system 5, WhatsApp 1, vitals 1
+    assert len(denied) == 39
     for name in denied:
         assert tp.PLACEMENTS[name].kind == tp.LAPTOP and tp.PLACEMENTS[name].gui, name
 
@@ -117,7 +118,7 @@ def test_classes_follow_k76():
     by_class: dict[str | None, set[str]] = {}
     for name, entry in tp.PLACEMENTS.items():
         by_class.setdefault(entry.cls, set()).add(name)
-    assert by_class[tp.DE_ESCALATION] == {"chrome_browser_close", "stop_file_access_server"}
+    assert by_class[tp.DE_ESCALATION] == {"chrome_browser_close", "stop_file_access_server", "cancel_shutdown"}
     assert by_class[tp.AVAILABILITY] == {"shutdown_system", "restart_system", "sleep_system",
                                          "empty_recycle_bin"}
     assert by_class[tp.EXPOSURE] == {"start_file_access_server"}
@@ -310,7 +311,7 @@ def test_overrides_change_places_and_skipped_modules():
     assert "services.automation.jarvis_maps_scraper" in default_skip
     assert tp.REMOTE_DENIED_MODULES <= default_skip
     places = tp.effective_placements({"scrape_google_maps_leads": tp.VPS})
-    assert tp.placement_counts(places) == {"vps": 35, "split": 1, "routed": 2, "laptop": 47}
+    assert tp.placement_counts(places) == {"vps": 35, "split": 1, "routed": 2, "laptop": 48}
     assert "services.automation.jarvis_maps_scraper" not in tp.remote_skip_modules(manifest, places)
     # The deny-list holds even without a manifest.
     assert tp.remote_skip_modules(None, places) == tp.REMOTE_DENIED_MODULES
@@ -382,10 +383,10 @@ def test_the_import_guard_refuses_only_deny_listed_modules():
 
 
 def test_local_discovery_ignores_the_table(local):
-    assert len(local["tools"]) == 81
+    assert len(local["tools"]) == 82
     assert local["plan"] is None
     assert local["guard_installed"] is False
-    assert local["health"] == {"ok": True, "count": 81, "detail": ""}
+    assert local["health"] == {"ok": True, "count": 82, "detail": ""}
     assert set(local["denied_loaded"]) == tp.REMOTE_DENIED_MODULES  # the PC brain imports them all
 
 
@@ -411,5 +412,5 @@ def test_remote_discovery_serves_every_expected_name(local, remote):
     assert {"analyze_screen", "zip_files", "list_generated_media_tool", "send_email",
             "confirm_action"} <= set(plan["vps_local"])
     assert {"shutdown_system", "open_app", "automate_whatsapp"} <= set(plan["add_proxy"])
-    assert len(plan["vps_local"]) == 33 and len(served) == 81  # C-57: +2 VPS job tools
+    assert len(plan["vps_local"]) == 33 and len(served) == 82  # C-57: +2 VPS job tools; X-29: cancel_shutdown
     assert remote["health"] == {"ok": True, "count": len(remote["tools"]), "detail": ""}
