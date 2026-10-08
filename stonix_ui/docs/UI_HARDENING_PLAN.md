@@ -76,10 +76,11 @@ Priority: P0 broken or unsafe, P1 fragile or misleading, P2 clutter, P3 polish.
 - **Problem:** neon CSS still uses many raw colors (`assets/styles/neon/*.css`). No lint rule yet.
 - **Fix:** inventory hex outside token files; collapse only duplicates. Glow limited to active states. Do not restyle by deleting panels.
 
-### UI-H11 — Swarm job UX (P2, M)
+### UI-H11 — Swarm job UX (P2, M) — DONE
 
 - **Problem:** K-31 v34 swarm is a job (`tool_progress`, `job_cancel`, system report). UI jobs panel exists (`useJobs.ts`). Whether the swarm button shows that progress is UNVERIFIED.
-- **Fix:** mock `tool_progress` for a swarm job and assert the jobs row. Do not change the `{task}` payload.
+- **Fix:** mock e2e emits `tool_progress` with `tool: 'swarm'` and asserts the Tools jobs row (progress fill). Swarm `{task}` payload unchanged.
+- **Verify:** `npx playwright test tests/e2e/tools.spec.ts -g "UI-H11" --project=chromium`.
 
 ### UI-H12 — Mute vs stop copy (P2, S) — DONE
 
@@ -104,7 +105,7 @@ Priority: P0 broken or unsafe, P1 fragile or misleading, P2 clutter, P3 polish.
 
 ## Execution order
 
-H01–H08, H12 done with tests. Still TODO: H09–H11, H13–H15. Full section 6 gates (e2e suite ×3, visual, perf, refdiff, electron, `build:prod`) are **not** claimed green; axe suite is green this session.
+H01–H08, H11–H12 done with tests. Still TODO: H09–H10, H13–H15. Full section 6 gates (e2e suite ×3, visual, perf, refdiff, electron, `build:prod`) are **not** claimed green; axe suite is green this session.
 
 ## Final report
 

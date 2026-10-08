@@ -120,3 +120,22 @@ test('Cancel emits job_cancel once', async ({ page }) => {
   const after = (await jobCancelCommands(page)).filter(c => c.payload?.job_id === jobId);
   expect(after.length).toBe(before + 1);
 });
+
+test('UI-H11 swarm job tool_progress shows a jobs row', async ({ page }) => {
+  const jobId = 'job-e2e-swarm';
+  await mockEmit(page, 'tool_progress', {
+    job_id: jobId,
+    tool: 'swarm',
+    title: 'Swarm research',
+    status: 'running',
+    percent: 40,
+    message: 'agents working',
+    ts: Math.floor(Date.now() / 1000),
+  });
+
+  const jobRow = page.locator(`[data-testid="job-row"][data-id="${jobId}"]`);
+  await expect(jobRow).toBeVisible();
+  await expect(jobRow).toContainText('Swarm research');
+  await expect(jobRow).toHaveAttribute('data-status', 'running');
+  await expect(jobRow.getByTestId('job-progress-fill')).toHaveAttribute('data-percent', '40');
+});

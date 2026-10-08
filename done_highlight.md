@@ -2362,3 +2362,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** playwright a11y.spec.ts 11 passed (~2.1 min)
 - **Commit:** (this commit) · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] UI-H11 · Swarm job row via tool_progress · 2026-10-09 00:05 PKT
+- **Kya kiya:** Mock swarm tool_progress Tools jobs panel me row + percent dikhata hai. Swarm {task} payload same.
+- **Files:** stonix_ui/tests/e2e/tools.spec.ts, UI_HARDENING_PLAN.md
+- **Verify:** playwright tools.spec.ts -g UI-H11 1 passed
+- **Commit:** (this commit) · **Deploy:** no — REQ-DEPLOY frontend
+- **Doosre agent ke liye:** —
