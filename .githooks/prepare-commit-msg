@@ -1,0 +1,6 @@
+#!/bin/sh
+# JARVIS coordination guard (08 Oct): an agent never amends or reuses the other agent's commit.
+ROOT="$(git rev-parse --show-toplevel)"
+PY="$ROOT/.venv_312/Scripts/python.exe"
+[ -x "$PY" ] || PY="python"
+exec "$PY" "$ROOT/scripts/coord/prepare_commit_msg.py" "$@"
