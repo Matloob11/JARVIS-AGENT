@@ -2404,3 +2404,45 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** run 1 numbers above
 - **Commit:** (this commit) · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] C-50 voices + UI-CLEAN; C-81/C-82 live check · Agent worker restart (agent_ctl) · 2026-10-08 23:57 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 48436) band, naya pid 8132; health 200 (42.8 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 23:57 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] C-50 typed rescue; live checks · Agent worker restart (agent_ctl) · 2026-10-09 00:09 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 8132) band, naya pid 36788; health 200 (39.0 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 00:09 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ [claude] C-50 · Real Gemini voices, a voice switch that restarts the session, persona voices from the env · 2026-10-09 00:16 PKT
+- **Kya kiya:** 'awaaz Puck kar do' ab waqai awaaz badalta hai: confirmation purani awaaz mein, phir fresh reconnect mein Puck (30 Gemini voices + alloy/echo/... aliases; galat naam par list). ANNA/JARVIS switch par JARVIS_VOICE_ANNA / JARVIS_VOICE_JARVIS wali awaaz instructions ke saath ek hi reconnect mein. persona_change dashboard ko tab jata hai jab switch session tak pohanch jaye, naye job par ek dafa, aur active persona maangne par dobara. Live check mein ek typed turn reconnect ke 1008 error mein kho gaya; ab koi bhi typed message 12 s tak bina jawab rahe aur agent khali ho to router ek dafa dobara poochta hai.
+- **Files:** src/core/voices.py (naya), agent_core.py, persona_manager.py, agent_runner.py, conversation_router.py, tests (test_persona_voice.py naya, agent_core, agent_runner, conversation_router, exhaustive), docs/CONTRACTS.md v35 (K-40, K-59, K-69), .env.example
+- **Verify:** pytest: persona_voice 41, router 54, full suite 4763 passed (1 Cursor-lane failure, REQ-TEST X-58); live probes: Puck switch + next turn 2/2 PASS, invalid voice lists voices, ANNA switch with Aoede PASS
+- **Commit:** `6baf5a4` + `63a1102` · **Deploy:** PC worker restarts 23:57 and 00:09 PKT 🔁
+- **Doosre agent ke liye:** persona_update ab switch apply hone par aata hai (UI-H02 isi ke mutabiq); section 11 dekho.
+
+### ✅ [claude] C-81 · Swarm as a voice tool and a job (progress, cancel, spoken summary) · 2026-10-09 00:16 PKT
+- **Kya kiya:** 'Jarvis, swarm mode mein ... karo' ab start_swarm_mode tool chalata hai: job (progress 5/20/.../95, cancel), llm_text se sub-agents (purana 404 khatam), report system message, chhota spoken khulasa. Dashboard ka swarm button aur '/swarm' bhi isi raste par.
+- **Files:** services/ai_core/swarm_manager.py, agent_loops.py, tool_placement, desktop_manifest.json (85 tools), docs/ARCHITECTURE_VPS_BRAIN.md, scripts/tools/jarvis_live_test.py, tests; contracts v34
+- **Verify:** unit tests (background batch, reviewed); live probe: tool started its job and split the task into 2 sub-agents
+- **Commit:** `6e5c882` + `a1ba0b3` · **Deploy:** PC worker restart 23:57 PKT 🔁
+- **Doosre agent ke liye:** jobs panel tool_progress 'swarm' dikhata hai (UI-H11 ne prove kiya).
+
+### ✅ [claude] C-82 · Bug hunter groups errors and triages the top two · 2026-10-09 00:16 PKT
+- **Kya kiya:** 'Jarvis, recent bugs check karo' ab errors ko signature se groups banata hai (kitni baar, pehli aur aakhri dafa), aur top 2 ka ek rate-limited llm_text triage deta hai; secrets masked.
+- **Files:** services/utils/jarvis_bug_hunter.py, tests/unit/test_bug_hunter_triage.py
+- **Verify:** unit tests; live probe: 5 errors in 4 groups, top 2 samjhaye
+- **Commit:** `db4559e` · **Deploy:** PC worker restart 23:57 PKT 🔁
+- **Doosre agent ke liye:** —
+
+### ✅ [claude] C-100 · TOOLS.md for the info and media tools · 2026-10-09 00:16 PKT
+- **Kya kiya:** deploy/windows-local/TOOLS.md: har info/media tool ke env names (values nahi), providers, timeouts, approvals, outputs aur dashboard mein jagah.
+- **Files:** deploy/windows-local/TOOLS.md
+- **Verify:** docs review (background batch)
+- **Commit:** `67d4912` · **Deploy:** —
+- **Doosre agent ke liye:** —
