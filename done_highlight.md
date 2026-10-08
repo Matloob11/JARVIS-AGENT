@@ -1912,3 +1912,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** pytest tests/tools/test_system_ctrl_tools.py -q → 11 passed
 - **Commit:** `b6ee5df` · **Deploy:** no
 - **Doosre agent ke liye:** Manual with Sir: shutdown Allow then cancel; sleep wake Kernel-Power 506. C-85 may need cancel_shutdown in system prompt.
+
+### ✅ [cursor] X-31 · run_cmd allow-list + scrubbed env · 2026-10-08 15:52 PKT
+- **Kya kiya:** READ_ONLY allow-list (ipconfig/ping/git status...) low+captured with scrubbed env; shell metachar / everything else high with exact command in confirm_summary; capture=True path; visible cmd /k for confirmed high.
+- **Files:** services/automation/jarvis_notepad_automation.py, tests/tools/test_run_cmd_tool.py
+- **Verify:** pytest tests/tools/test_run_cmd_tool.py -q → 16 passed
+- **Commit:** `c79f735` · **Deploy:** no
+- **Doosre agent ke liye:** K-45/confirm_policy still floors run_cmd_command to high always (NEVER_SKIP) — so 'ipconfig bina confirm' acceptance needs Claude to exempt READ_ONLY from K45_HIGH / effective_risk, or document that Allow is always required. REQ in §11.
