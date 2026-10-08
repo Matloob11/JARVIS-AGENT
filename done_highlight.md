@@ -2102,3 +2102,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** python tests/tools/smoke_info_media_tools.py --dry → exit 0, 9/9 PASS
 - **Commit:** 4580239 (on e67b617) · **Deploy:** no
 - **Doosre agent ke liye:** --live optional; RAG may need JARVIS_SMOKE_DOC if README not indexed
+\n
+### ✅ [cursor] X-63 · tool registry/policy tests + legacy script cleanup · 2026-10-08 16:24 PKT
+- **Kya kiya:** test_tool_registry asserts 50 laptop tools + K-16 meta; WindowController removed from legacy scripts (live GUI gated); vps_safety flake fix; short docstrings for registry.
+- **Files:** tests/tools/test_tool_registry.py, tests/scripts/test_all_tools.py, tests/scripts/test_all_tools_fixed.py, tests/tools/test_vps_safety.py (+ cursor-lane docstring tweaks)
+- **Verify:** pytest tests/tools/test_tool_registry.py -q → 4 passed; tests/tools → 232 passed in ~32s
+- **Commit:** 677743a · **Deploy:** no
+- **Doosre agent ke liye:** —

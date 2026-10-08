@@ -1456,7 +1456,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-59 | cursor | P4 | Complete mock-bridge e2e suite and verify:prod | X-08, X-13, X-14, X-15, X-16, X-19, X-10, X-21, X-22, X-17, X-20, X-49, X-23, X-24, X-33, X-45, X-46, X-47, X-18, X-48, X-51, X-09 | DONE (cursor, 01 Oct 21:45 PKT) |
 | X-60 | cursor | P4 | Opt-in live smoke suite against the VPS (session-cookie storageState, no stored TOTP seed) | X-59, C-65 | BLOCKED (waiting X-59,C-65) |
 | X-61 | cursor | P4 | Info/media tools smoke harness (--dry / --live) | C-48, X-36, X-37, X-57, X-40, X-39, X-58, C-78, X-04 | DONE (cursor, 2026-10-08 16:19 PKT) |
-| X-63 | cursor | P4 | Tool registry/policy tests + legacy test-script cleanup | X-29, X-30, X-26, X-27, X-31, X-25, X-34, X-41, X-42, X-43, X-44, X-62, X-56, X-35, X-28, K-16 (DesktopToolPolicy) | DOING (cursor, 2026-10-08 16:17 PKT) |
+| X-63 | cursor | P4 | Tool registry/policy tests + legacy test-script cleanup | X-29, X-30, X-26, X-27, X-31, X-25, X-34, X-41, X-42, X-43, X-44, X-62, X-56, X-35, X-28, K-16 (DesktopToolPolicy) | DONE (cursor, 2026-10-08 16:24 PKT) |
 | X-64 | cursor | P3 | Location hook for weather and search (replaces Claude's compat patch) | C-113, C-111 | DONE (cursor, 02 Oct 20:49 PKT) |
 | X-65 | cursor | P3 | VPS-safe Cursor modules: DESKTOP_ONLY guard, lazy GUI imports, delivery helper, safe names, stricter risks | C-113, C-111 | DONE (cursor, 02 Oct 20:56 PKT) |
 | X-66 | cursor | P3 | Reminders and tasks: cross-process locking, timezone-aware times, delivery hooks for agent-svc | C-125 step 1 (jarvis_filelock, landed 08 Oct), C-111 | DONE (cursor, 2026-10-08 16:11 PKT) |
