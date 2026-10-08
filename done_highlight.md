@@ -1933,3 +1933,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** pytest test_task_store_v2 + test_reminders → 15 passed
 - **Commit:** `d10934` · **Deploy:** no
 - **Doosre agent ke liye:** C-80 scheduler_dispatcher.action_risk lazy-imported (fallback high). C-62 tasks_refresh can publish from store.
+
+### ✅ [cursor] X-30 follow-up · file-server polish · 2026-10-08 16:02 PKT
+- **Kya kiya:** allow_reuse_address=False; stop clears state after socket close; richer tool tests (15). X-32 board commit is ad10934 (prior entry Commit line has a typo).
+- **Files:** services/system/jarvis_file_server.py, tests/tools/test_file_server_tool.py
+- **Verify:** pytest tests/tools/test_file_server_tool.py -q → 15 passed
+- **Commit:** PENDINGHASH · **Deploy:** no
+- **Doosre agent ke liye:** —
