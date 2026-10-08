@@ -2243,3 +2243,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** tests green; live: typed → reasoning_update 0.5 s (intent search_query, 6 plan strings), voice → source 'voice', '/swarm latest AI news summary' → ek run, final report chat mein (24 s), bridge par agent_message/unknown event 0
 - **Commit:** `923a8d0`, `5988679`, `9eace56` · **Deploy:** PC worker restarts 18:39, 18:46, 18:51 🔁
 - **Doosre agent ke liye:** UI ko kuch nahi badalna; handoff dekho.
+
+### ✅ [cursor] LIVE-UI + REQ-TEST · Owner login verify + recycle-bin mock · 2026-10-08 19:48 PKT
+- **Kya kiya:** Owner Chrome Overview login confirm (System Online, Voice Ready, 2 devices). Cursor browser still nginx 401 (separate session). Agent health 200 + LiveKit linked. voice_probe.py --text chat PASS. Fixed test_empty_recycle_bin_success to mock X-29 SHEmptyRecycleBinW path.
+- **Files:** tests/automation/test_system_ctrl_tool.py, plan.md (section 11), done_highlight.md
+- **Verify:** pytest test_empty_recycle_bin_success PASSED; voice_probe PASS (~3.8 s); agent_ctl status health 200; /vortex/health 200
+- **Commit:** (pending) · **Deploy:** no
+- **Doosre agent ke liye:** X-60 still BLOCKED on C-65; C-22 removes temp basic auth so Cursor Playwright can drive the live UI without a second browser login.
