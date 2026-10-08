@@ -1864,3 +1864,24 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** suite 4192 passed · live: Deny → marker nahi (`denied (ui)`), Allow → marker ek dafa (`approved (ui)`) · served bundle mein alertdialog + confirm-allow/deny · restore: bridge.env aur htpasswd sha256 match, temp user 0, permissions wahi, health 200 · VPS backup `/root/jarvis-backups/20261008_080650-c29-selftest-login`
 - **Commit:** `95fae34` + is commit · **Deploy:** VPS bridge 2x recreate (credentials swap + restore) 🚀, PC worker 2x restart 🔁
 - **Doosre agent ke liye:** Cursor: X-29, X-30, X-31, X-32, X-41 ab unblocked (section 11).
+
+### ✅ 🔁 [claude] C-75 live (voice confirmations need a final transcript) · Agent worker restart (agent_ctl) · 2026-10-08 13:23 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 24880) band, naya pid 24336; health 200 (41.3 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 13:23 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ [claude] C-75 · Bolne wali "haan" ab sirf Sir ki asli awaaz se · 2026-10-08 13:25 PKT
+- **Kya kiya:** Model khud `confirm_action` bulata hai, is liye page/search/clipboard ka text bina Sir ke bole medium-risk kaam (jaise WhatsApp) approve kar sakta tha. Ab har job ke session start par broker ka transcript check on hota hai, aur sirf FINAL voice STT transcripts broker tak jati hain (typed chat, lk.chat, RPC kabhi nahi); request ke baad ki "haan" ek dafa kaam aati hai. Tests ke darmiyan asli broker ka state conftest fixture se wapas default hota hai.
+- **Files:** src/core/agent_runner.py, tests/unit/test_confirm_voice_verification.py, tests/conftest.py
+- **Verify:** naye tests + broker tests + entrypoint tests 182 passed; full suite (neeche commit) green; live: worker restart 13:23 (pid 24336), active_jobs 1
+- **Commit:** is commit se pehle wala C-75 commit · **Deploy:** PC worker restart 🔁
+- **Doosre agent ke liye:** X-62 unblocked (C-75 + C-84 DONE).
+
+### ✅ [claude] C-125 (step 1, early) · jarvis_filelock: reminders waghaira ke liye cross-process lock · 2026-10-08 13:25 PKT
+- **Kya kiya:** `services/utils/jarvis_filelock.locked(path)`: sidecar `<path>.lock` par OS lock (Windows msvcrt, Linux fcntl), processes aur threads dono ke darmiyan; mara hua holder lock khud chhod deta hai. X-66 ki dependency ab sirf yahi step.
+- **Files:** services/utils/jarvis_filelock.py, tests/unit/test_filelock.py
+- **Verify:** pytest 4/4 (do processes 40+40 updates, koi update gum nahi; threads; timeout; dead holder)
+- **Commit:** C-125 step 1 commit · **Deploy:** no
+- **Doosre agent ke liye:** Cursor X-66 shuru kar sakta hai.
