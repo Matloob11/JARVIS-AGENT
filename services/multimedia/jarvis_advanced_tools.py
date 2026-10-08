@@ -9,7 +9,9 @@ import os
 import re
 import shutil
 import smtplib
+import ssl
 from email import encoders
+from email.header import Header
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -21,18 +23,126 @@ except ImportError:
     from duckduckgo_search import DDGS
 
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
+from services.utils import jarvis_audit
+from services.utils.jarvis_config import config
 from services.utils.jarvis_logger import setup_logger
+from services.utils.jarvis_security import redact_secrets
 
 # Setup logging
 logger = setup_logger("JARVIS-ADVANCED")
 
 _UNSAFE_NAME_CHARS = re.compile(r"[^a-zA-Z0-9._-]+")
+_MAX_EMAIL_ATTACHMENT_BYTES = 20 * 1024 * 1024
+_GMAIL_AUTH_HINT = (
+    "Gmail ne app password reject kiya - myaccount.google.com/apppasswords se naya banayein "
+    "(2-Step Verification ON honi chahiye)"
+)
 
 
 def _safe_folder_basename(name: str, default: str) -> str:
     base = os.path.basename((name or default).strip() or default)
     cleaned = _UNSAFE_NAME_CHARS.sub("_", base).strip("._") or default
     return cleaned[:120]
+
+
+def _smtp_host() -> str:
+    raw = os.getenv("SMTP_HOST")
+    if raw is None:
+        return "smtp.gmail.com"
+    host = raw.strip()
+    if not host or ("." not in host and host.lower() not in ("localhost",)):
+        return "smtp.gmail.com"
+    return host
+
+
+def _smtp_port() -> int:
+    raw = os.getenv("SMTP_PORT")
+    if raw is None:
+        return 587
+    port_text = raw.strip()
+    if port_text.isdigit():
+        return int(port_text)
+    return 587
+
+
+def _email_recipient_count(recipient: str) -> int:
+    raw = (recipient or "").strip()
+    if not raw:
+        return 0
+    parts = [p.strip() for p in re.split(r"[,;]", raw) if p.strip()]
+    return len(parts) if parts else 1
+
+
+def _email_attachment_allow_roots() -> list[str]:
+    home = os.path.expanduser("~")
+    project = config.project_root
+    outputs = getattr(config, "outputs_dir", None) or os.path.join(project, "Jarvis_Outputs")
+    shared = (getattr(config, "shared_dir", None) or "").strip() or os.path.join(home, "Jarvis_Shared")
+    roots = [
+        os.path.abspath(outputs),
+        os.path.abspath(shared),
+        os.path.abspath(os.path.join(home, "Desktop")),
+        os.path.abspath(os.path.join(home, "Documents")),
+        os.path.abspath(os.path.join(home, "Downloads")),
+    ]
+    return list(dict.fromkeys(roots))
+
+
+def _path_under_allowed_root(path: str, root: str) -> bool:
+    path_abs = os.path.abspath(path)
+    root_abs = os.path.abspath(root)
+    try:
+        return os.path.commonpath([path_abs, root_abs]) == root_abs
+    except ValueError:
+        return False
+
+
+def _validate_email_attachment(attachment_path: str) -> tuple[str | None, dict | None]:
+    raw = (attachment_path or "").strip()
+    if not raw:
+        return "", None
+    expanded = os.path.expanduser(raw)
+    project = config.project_root
+    outputs = getattr(config, "outputs_dir", None) or os.path.join(project, "Jarvis_Outputs")
+    candidates = [expanded] if os.path.isabs(expanded) else [
+        os.path.join(project, expanded),
+        os.path.join(outputs, expanded),
+    ]
+    resolved = None
+    for candidate in candidates:
+        if os.path.isfile(candidate):
+            resolved = os.path.realpath(candidate)
+            break
+    if not resolved:
+        return None, {
+            "status": "error",
+            "message": f"❌ Attachment nahi mili ya readable nahi: {os.path.basename(raw)}",
+            "error_code": "ATTACHMENT_MISSING",
+        }
+    if not any(_path_under_allowed_root(resolved, root) for root in _email_attachment_allow_roots()):
+        return None, {
+            "status": "error",
+            "message": (
+                "❌ Attachment sirf Jarvis_Outputs, Jarvis_Shared ya "
+                "Desktop/Documents/Downloads se attach ho sakti hai."
+            ),
+            "error_code": "ATTACHMENT_NOT_ALLOWED",
+        }
+    try:
+        size = os.path.getsize(resolved)
+    except OSError as exc:
+        return None, {
+            "status": "error",
+            "message": f"❌ Attachment read nahi ho saki: {redact_secrets(str(exc))}",
+            "error_code": "ATTACHMENT_MISSING",
+        }
+    if size > _MAX_EMAIL_ATTACHMENT_BYTES:
+        return None, {
+            "status": "error",
+            "message": "❌ Attachment 20 MB se zyada hai.",
+            "error_code": "ATTACHMENT_TOO_LARGE",
+        }
+    return resolved, None
 
 
 def _safe_zip_basename(name: str) -> str:
@@ -195,7 +305,17 @@ async def zip_files(folder_path: str, zip_name: str = "Archive.zip") -> dict:
         }
 
 
-@jarvis_tool
+@jarvis_tool(
+    execution_timeout=60,
+    arg_policies={
+        "recipient": "email_list",
+        "subject": "plain",
+        "body": "multiline",
+        "attachment_path": "path",
+    },
+    risk="high",
+    confirm_summary="Email to {recipient}: {subject}",
+)
 async def send_email(recipient: str, subject: str, body: str,
                      attachment_path: str = "") -> dict:
     """
@@ -212,32 +332,30 @@ async def send_email(recipient: str, subject: str, body: str,
             "message": msg,
         }
 
-    try:
-        # Create message
-        email_msg = MIMEMultipart()
-        email_msg['From'] = user_email
-        email_msg['To'] = recipient
-        email_msg['Subject'] = subject
-        email_msg.attach(MIMEText(body, 'plain'))
+    resolved_attachment, attach_err = _validate_email_attachment(attachment_path)
+    if attach_err:
+        attach_err.setdefault("recipient", recipient)
+        return attach_err
 
-        attachment_path = (attachment_path or "").strip()
-        if attachment_path:
-            if not os.path.isfile(attachment_path):
-                return {
-                    "status": "error",
-                    "recipient": recipient,
-                    "message": f"❌ Attachment nahi mili ya readable nahi: {os.path.basename(attachment_path)}",
-                    "error_code": "ATTACHMENT_MISSING",
-                }
-            filename = os.path.basename(attachment_path)
+    has_attachment = bool(resolved_attachment)
+
+    try:
+        email_msg = MIMEMultipart()
+        email_msg["From"] = user_email
+        email_msg["To"] = recipient
+        email_msg["Subject"] = Header(subject, "utf-8")
+        email_msg.attach(MIMEText(body, "plain", "utf-8"))
+
+        if has_attachment:
+            filename = os.path.basename(resolved_attachment)
             try:
-                with open(attachment_path, "rb") as attachment:
+                with open(resolved_attachment, "rb") as attachment:
                     payload = attachment.read()
             except OSError as read_err:
                 return {
                     "status": "error",
                     "recipient": recipient,
-                    "message": f"❌ Attachment read nahi ho saki: {read_err}",
+                    "message": f"❌ Attachment read nahi ho saki: {redact_secrets(str(read_err))}",
                     "error_code": "ATTACHMENT_MISSING",
                 }
             part = MIMEBase("application", "octet-stream")
@@ -246,12 +364,14 @@ async def send_email(recipient: str, subject: str, body: str,
             part.add_header("Content-Disposition", f"attachment; filename= {filename}")
             email_msg.attach(part)
 
-        # Connect and send in a separate thread
+        smtp_host = _smtp_host()
+        smtp_port = _smtp_port()
+
         def do_send():
-            logger.info("Connecting to Gmail SMTP server...")
-            server = smtplib.SMTP('smtp.gmail.com', 587)
+            logger.info("Connecting to SMTP server %s:%s...", smtp_host, smtp_port)
+            server = smtplib.SMTP(smtp_host, smtp_port, timeout=30)
             server.set_debuglevel(0)
-            server.starttls()
+            server.starttls(context=ssl.create_default_context())
             server.login(user_email, password)
             text = email_msg.as_string()
             server.sendmail(user_email, recipient, text)
@@ -259,6 +379,11 @@ async def send_email(recipient: str, subject: str, body: str,
 
         await asyncio.to_thread(do_send)
 
+        jarvis_audit.JarvisAudit.log_event(
+            "EMAIL_SENT",
+            f"to_count={_email_recipient_count(recipient)} "
+            f"subject_len={len(subject or '')} attachment={has_attachment}",
+        )
         logger.info("Real Email sent to %s successfully.", recipient)
         return {
             "status": "success",
@@ -266,10 +391,17 @@ async def send_email(recipient: str, subject: str, body: str,
             "subject": subject,
             "message": f"📧 Email successfully bhej diya gaya hai '{recipient}' ko, Sir Matloob.",
         }
-    except (smtplib.SMTPException, ConnectionError, OSError) as e:
-        logger.error("Email send error: %s", e)
+    except smtplib.SMTPAuthenticationError:
+        logger.error("Email SMTP authentication failed.")
         return {
             "status": "error",
             "recipient": recipient,
-            "message": f"❌ Error sending email: {e!s}",
+            "message": f"❌ {_GMAIL_AUTH_HINT}",
+        }
+    except (smtplib.SMTPException, ConnectionError, OSError) as e:
+        logger.error("Email send error: %s", redact_secrets(str(e)))
+        return {
+            "status": "error",
+            "recipient": recipient,
+            "message": f"❌ Error sending email: {redact_secrets(str(e))}",
         }
