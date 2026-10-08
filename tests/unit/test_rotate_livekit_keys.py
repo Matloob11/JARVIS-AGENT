@@ -171,3 +171,15 @@ def test_the_ssh_key_defaults_to_jarvis_ssh_key(monkeypatch):
     assert rlk.parse_args([]).ssh_key == Path(os.path.expanduser("~/.ssh/hostinger"))
     monkeypatch.delenv("JARVIS_SSH_KEY")
     assert rlk.parse_args([]).ssh_key == rlk.gen_secrets.VPS_KEY
+
+
+@pytest.mark.parametrize("typed, sent", [
+    ("C:/Program Files/Git/root/jarvis-backups/T/livekit-old.env", "/root/jarvis-backups/T/livekit-old.env"),
+    (r"C:\Program Files\Git\root\jarvis-backups\T\livekit-old.env", "/root/jarvis-backups/T/livekit-old.env"),
+    ("/root/jarvis-backups/T/livekit-old.env", "/root/jarvis-backups/T/livekit-old.env"),
+])
+def test_a_git_bash_rewritten_vps_path_is_sent_as_typed(env, typed, sent):
+    env["args"].check_old = typed
+    runner = LocalRunner(code=0, out="old key rejected: 401\n")
+    assert rlk.check_old(env["args"], runner) == 0
+    assert runner.calls[0]["args"]["file"] == sent

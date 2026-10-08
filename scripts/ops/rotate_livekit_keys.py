@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import os
+import re
 import secrets
 import string
 import sys
@@ -53,11 +54,19 @@ BACKUP_NAME = "livekit-old.env"
 BRIDGE_CONTAINER = "jarvis-bridge"
 LIVEKIT_INTERNAL_URL = "http://jarvis-livekit:7880"
 _ALNUM = string.ascii_letters + string.digits
+# Git Bash (MSYS) turns a POSIX argument such as /root/x into C:/Program Files/Git/root/x before Python sees it.
+_MSYS_MANGLED = re.compile(r"^[A-Za-z]:[\\/]Program Files[\\/]Git(?P<posix>[\\/].+)$")
 
 
 def new_pair() -> tuple[str, str]:
     """(key, secret): 'API' + 12 letters and digits, and secrets.token_urlsafe(48)."""
     return "API" + "".join(secrets.choice(_ALNUM) for _ in range(12)), secrets.token_urlsafe(48)
+
+
+def vps_path(value: str) -> str:
+    """A path on the VPS as typed: the POSIX path back when Git Bash rewrote it into its own install folder."""
+    match = _MSYS_MANGLED.match(value or "")
+    return match.group("posix").replace("\\", "/") if match else value
 
 
 def default_ssh_key() -> Path:
@@ -145,12 +154,14 @@ async def main():
         await lk.room.list_rooms(api.ListRoomsRequest())
         print("OLD KEY STILL WORKS")
         return 1
-    except api.TwirpError as exc:
-        print("old key rejected: %s" % exc.status)
-        return 0 if exc.status == 401 else 1
     except Exception as exc:
-        print("check failed: %s" % type(exc).__name__)
-        return 2
+        # a TwirpError, or aiohttp's ContentTypeError when the 401 body is not JSON: both carry the HTTP status
+        status = getattr(exc, "status", None)
+        if status is None:
+            print("check failed: %s" % type(exc).__name__)
+            return 2
+        print("old key rejected: %s" % status)
+        return 0 if status == 401 else 1
     finally:
         await lk.aclose()
 raise SystemExit(asyncio.run(main()))
@@ -209,7 +220,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
 
 
 def check_old(args: argparse.Namespace, runner: Any) -> int:
-    payload = {"file": args.check_old, "key": KEY_NAME, "secret": SECRET_NAME, "container": BRIDGE_CONTAINER,
+    payload = {"file": vps_path(args.check_old), "key": KEY_NAME, "secret": SECRET_NAME, "container": BRIDGE_CONTAINER,
                "url": LIVEKIT_INTERNAL_URL}
     code, out, err = runner(check_old_program(), payload, args.host, args.ssh_key)
     line = (out.strip().splitlines() or (err.strip().splitlines() or ["no answer"]))[-1]
