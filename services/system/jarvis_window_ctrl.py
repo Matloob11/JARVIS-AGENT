@@ -33,14 +33,21 @@ from fuzzywuzzy import process
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
 from services.system.jarvis_desktop_common import (
     EXEC_EXTS,
+    TEXT_EXTS,
     WindowInfo,
+    clipboard_paste_text,
     close_windows_gracefully,
     find_windows,
     force_foreground,
     is_browser_window,
+    is_network_path,
     is_protected_window,
+    is_sensitive_path,
+    resolve_in_roots,
+    safe_child_path,
     tool_result,
 )
+from services.automation.jarvis_notepad_automation import notepad_automation
 from services.utils import jarvis_delivery
 from services.automation.jarvis_whatsapp_automation import whatsapp_bot
 from services.automation.keyboard_mouse_ctrl import type_text_tool
@@ -330,6 +337,140 @@ def _vlc_installed(index: list[_IndexedApp]) -> bool:
     return False
 
 
+_NOTEPAD_EXE = r"C:\Windows\System32\notepad.exe"
+_NOTEPAD_UNTITLED = "Untitled - Notepad"
+_DEFAULT_SAVE_NAME = "jarvis_notes.txt"
+_BLOCKED_SYSTEM_MARKERS = (
+    "\\windows\\",
+    "\\system32\\",
+    "\\config\\",
+    "pagefile.sys",
+    "ntuser.dat",
+    "desktop.ini",
+)
+
+
+def _basename_only(name: str) -> str | None:
+    raw = (name or "").replace("\\", "/").rstrip("/").rsplit("/", 1)[-1].strip()
+    if ":" in raw[:2]:
+        raw = raw.split(":", 1)[1]
+    return None if raw in ("", ".", "..") else raw
+
+
+def _outputs_save_path(filename: str) -> Path | None:
+    base = _basename_only(filename or _DEFAULT_SAVE_NAME)
+    if base is None:
+        return None
+    folder = getattr(config, "outputs_dir", None) or os.path.join(config.project_root, "Jarvis_Outputs")
+    return safe_child_path(folder, base)
+
+
+def _notepad_candidate_windows() -> list[WindowInfo]:
+    seen: set[int] = set()
+    out: list[WindowInfo] = []
+    for win in find_windows(title_suffix=" - Notepad"):
+        if ".py" in (win.title or "").lower():
+            continue
+        if is_protected_window(win):
+            continue
+        if win.hwnd in seen:
+            continue
+        seen.add(win.hwnd)
+        out.append(win)
+    return out
+
+
+async def _pick_notepad_target() -> WindowInfo | None:
+    if win32gui:
+        fg = _hwnd_to_window_info(win32gui.GetForegroundWindow())
+        if fg and not is_protected_window(fg):
+            title_low = (fg.title or "").lower()
+            if title_low.endswith(" - notepad") or title_low == "notepad":
+                return fg
+    candidates = _notepad_candidate_windows()
+    return candidates[0] if candidates else None
+
+
+def _path_from_notepad_title(title: str) -> str:
+    t = (title or "").strip()
+    if t.lower().endswith(" - notepad"):
+        t = t[: -len(" - Notepad")].strip()
+    if t.startswith("*"):
+        t = t[1:].strip()
+    return t
+
+
+def _is_blocked_system_path(path: Path) -> bool:
+    low = str(path).lower().replace("/", "\\")
+    if is_sensitive_path(path):
+        return True
+    return any(marker in low for marker in _BLOCKED_SYSTEM_MARKERS)
+
+
+def _is_local_filesystem_path(path: Path) -> bool:
+    if is_network_path(path):
+        return False
+    text = str(path)
+    if len(text) >= 2 and text[1] == ":":
+        try:
+            import ctypes
+
+            root = text[:2] + "\\"
+            dtype = ctypes.windll.kernel32.GetDriveTypeW(root)
+            return dtype in (2, 3, 5)
+        except Exception:
+            return False
+    return not text.startswith(("\\\\", "//"))
+
+
+def _resolve_notepad_open_path(file_path: str) -> tuple[Path | None, str | None]:
+    raw = (file_path or "").strip()
+    if not raw:
+        return None, "PATH_NOT_ALLOWED"
+    if is_network_path(raw):
+        return None, "PATH_NOT_ALLOWED"
+    roots = getattr(config, "open_roots", None) or [getattr(config, "outputs_dir", "")]
+    outputs = getattr(config, "outputs_dir", None) or os.path.join(config.project_root, "Jarvis_Outputs")
+    if os.path.isabs(raw) or (len(raw) >= 2 and raw[1] == ":"):
+        resolved = resolve_in_roots(raw, roots)
+        return (resolved, None) if resolved is not None else (None, "PATH_NOT_ALLOWED")
+    child = safe_child_path(outputs, raw)
+    return (child, None) if child is not None else (None, "PATH_NOT_ALLOWED")
+
+
+def _open_notepad_file_risk(arguments: dict[str, Any]) -> str:
+    fp = str(arguments.get("file_path") or "")
+    ext = Path(fp).suffix.lower()
+    if ext and ext not in TEXT_EXTS:
+        return "medium"
+    return "low"
+
+
+def _folder_file_risk(arguments: dict[str, Any]) -> str:
+    probe = str(arguments.get("path") or "").lower()
+    for ext in EXEC_EXTS:
+        if probe.endswith(ext):
+            return "high"
+    return "low"
+
+
+def _resolve_outputs_subfolder(subfolder: str) -> Path:
+    key = (subfolder or "").lower()
+    outputs = Path(getattr(config, "outputs_dir", os.path.join(config.project_root, "Jarvis_Outputs")))
+    shared = Path(getattr(config, "shared_dir", os.path.join(os.path.expanduser("~"), "Jarvis_Shared")))
+    if not key or "note" in key or "code" in key:
+        return outputs
+    if "qr" in key:
+        return shared / "QR_Codes"
+    if "image" in key:
+        return shared / "Generated_Images"
+    if "download" in key or "youtube" in key:
+        return shared / "Downloads"
+    if "lead" in key:
+        return outputs / "leads"
+    return outputs
+
+
 def _parse_write_text(full_command: str) -> str | None:
     low_cmd = full_command.lower()
     write_text: str | None = None
@@ -569,86 +710,138 @@ async def _handle_write_after_open(app_key: str, write_text: str, launch_method:
     )
 
 
-@jarvis_tool
-async def save_notepad(filename: str = "jarvis_notes.txt") -> dict:
+@jarvis_tool(timeout=25, exclusive="desktop_input", risk="low")
+async def save_notepad(filename: str = "jarvis_notes.txt") -> dict[str, Any]:
     """
     Saves the content of an open Notepad window into the Jarvis_Outputs folder.
     """
     try:
-        folder_path = config.outputs_dir
-        os.makedirs(folder_path, exist_ok=True)
+        target = await _pick_notepad_target()
+        if target is None:
+            return tool_result(
+                "error",
+                "❌ Sir, maazrat! Notepad window nahi mili.",
+                tool="save_notepad",
+            )
 
-        file_path = os.path.join(folder_path, os.path.basename(filename))
+        if not await force_foreground(target.hwnd):
+            return tool_result(
+                "error",
+                "❌ Notepad par focus nahi ho saka.",
+                tool="save_notepad",
+            )
 
-        # Try to find Notepad window
-        notepad_windows = list(get_windows('Notepad'))
-        if not notepad_windows:
-            return {
-                "status": "error",
-                "message": "❌ Sir, maazrat! Notepad window nahi mili.",
-            }
+        title = (target.title or "").strip()
+        default_name = _basename_only(filename or _DEFAULT_SAVE_NAME) == _DEFAULT_SAVE_NAME
+        untitled = title == _NOTEPAD_UNTITLED or title.lower() == "untitled - notepad"
+        save_in_place = (not untitled) and default_name
 
-        notepad = notepad_windows[0]
-        notepad.activate()
-        await asyncio.sleep(1)
-
-        # Ctrl+S to trigger Save As
         pyg = _load_pg()
-        pyg.hotkey('ctrl', 's')
-        await asyncio.sleep(1.5)
 
-        # Type absolute path directly for reliability
-        pyg.write(file_path)
-        await asyncio.sleep(0.5)
-        pyg.press('enter')
+        if save_in_place:
+            pyg.hotkey("ctrl", "s")
+            await asyncio.sleep(0.6)
+            reported = _path_from_notepad_title(title)
+            return tool_result(
+                "success",
+                f"💾 Notepad document '{reported}' apni jagah save ho gaya, Sir.",
+                tool="save_notepad",
+                file_path=reported,
+                data={"file_path": reported, "method": "save_in_place"},
+            )
 
-        # Handle Overwrite
-        await asyncio.sleep(1.0)
-        confirm_wins = get_windows('Confirm Save As')
-        if confirm_wins:
-            pyg.press('y')
+        dest = _outputs_save_path(filename)
+        if dest is None:
+            return tool_result(
+                "error",
+                "❌ Save ke liye filename allowed nahi.",
+                tool="save_notepad",
+                error_code="PATH_NOT_ALLOWED",
+            )
+        os.makedirs(dest.parent, exist_ok=True)
+        full_path = str(dest)
 
-        return {
-            "status": "success",
-            "file_path": file_path,
-            "message": f"💾 Notepad file ko '{os.path.basename(file_path)}' ke naam se save kar diya gaya hai, Sir.",
-        }
+        pyg.hotkey("ctrl", "shift", "s")
+        for _ in range(10):
+            if get_windows("Save As"):
+                break
+            await asyncio.sleep(0.5)
+
+        await clipboard_paste_text(full_path, restore=True)
+        await asyncio.sleep(0.2)
+        pyg.press("enter")
+        await asyncio.sleep(0.4)
+        if get_windows("Confirm Save As"):
+            pyg.press("y")
+
+        saved = await notepad_automation.handle_save_as_dialog(full_path)
+        if not saved and not os.path.isfile(full_path):
+            return tool_result(
+                "error",
+                "❌ File save verify nahi ho saki.",
+                tool="save_notepad",
+            )
+
+        return tool_result(
+            "success",
+            f"💾 Notepad file ko '{dest.name}' ke naam se save kar diya gaya hai, Sir.",
+            tool="save_notepad",
+            file_path=full_path,
+            data={"file_path": full_path, "method": "save_as"},
+        )
 
     except WIN32_ERRORS as e:
         logger.error("Notepad save error: %s", e)
-        return {
-            "status": "error",
-            "message": f"❌ Notepad save karne mein masla aaya: {e!s}",
-        }
+        return tool_result(
+            "error",
+            f"❌ Notepad save karne mein masla aaya: {e!s}",
+            tool="save_notepad",
+            error=str(e),
+        )
 
 
-@jarvis_tool
-async def open_notepad_file(file_path: str) -> dict:
+@jarvis_tool(timeout=10, raw_args=("file_path",), risk=_open_notepad_file_risk)
+async def open_notepad_file(file_path: str) -> dict[str, Any]:
     """
     Opens a specific text file in Notepad.
     """
-    if not os.path.exists(file_path):
-        return {
-            "status": "error",
-            "message": f"❌ Maazrat Sir, file nahi mili: {file_path}",
-        }
+    resolved, err = _resolve_notepad_open_path(file_path)
+    if err or resolved is None:
+        return tool_result(
+            "error",
+            "❌ Maazrat Sir, yeh path allowed nahi.",
+            tool="open_notepad_file",
+            error_code=err or "PATH_NOT_ALLOWED",
+        )
+
+    full_path = str(resolved)
+    if not await asyncio.to_thread(os.path.isfile, full_path):
+        return tool_result(
+            "error",
+            f"❌ Maazrat Sir, file nahi mili: {full_path}",
+            tool="open_notepad_file",
+        )
 
     try:
-        # pylint: disable=consider-using-with
-        subprocess.Popen(
-            [r"C:\Windows\System32\notepad.exe", file_path])
-        return {
-            "status": "success",
-            "file_path": file_path,
-            "message": f"📂 {file_path} ko Notepad mein open kar diya gaya hai.",
-        }
+        await asyncio.to_thread(
+            subprocess.Popen,  # pylint: disable=consider-using-with
+            [_NOTEPAD_EXE, full_path],
+        )
+        return tool_result(
+            "success",
+            f"📂 {full_path} ko Notepad mein open kar diya gaya hai.",
+            tool="open_notepad_file",
+            file_path=full_path,
+            data={"file_path": full_path},
+        )
     except OSError as e:
         logger.error("open_notepad_file error: %s", e)
-        return {
-            "status": "error",
-            "message": f"❌ File open karne mein error: {e!s}",
-            "error": str(e),
-        }
+        return tool_result(
+            "error",
+            f"❌ File open karne mein error: {e!s}",
+            tool="open_notepad_file",
+            error=str(e),
+        )
 
 # ===================== CLOSE WINDOW ===================== #
 
@@ -928,112 +1121,167 @@ async def maximize_window(window_name: str = "active") -> dict[str, Any]:
         )
 
 
-@jarvis_tool
-async def folder_file(path: str) -> dict:
+@jarvis_tool(timeout=15, raw_args=("path",), risk=_folder_file_risk)
+async def folder_file(path: str) -> dict[str, Any]:
     """
     Opens a specified folder or file on the system.
     """
     try:
-        if not path:
-            return {"status": "error", "message": "❌ Path empty hai."}
+        raw = (path or "").strip()
+        if not raw:
+            return tool_result("error", "❌ Path empty hai.", tool="folder_file")
 
-        # Resolve path
-        abs_path = os.path.abspath(path)
+        alias = raw.lower()
+        if alias in ("cv", "resume"):
+            cv = getattr(config, "cv_path", None)
+            if not cv:
+                return tool_result(
+                    "error",
+                    "❌ CV path set nahi hai (JARVIS_CV_PATH).",
+                    tool="folder_file",
+                    error_code="CV_PATH_NOT_SET",
+                    hint="Apni CV ka path .env mein JARVIS_CV_PATH se set karein.",
+                )
+            raw = cv
 
-        low_path = abs_path.lower()
-        blocked_keywords = [
-            "\\windows\\", "\\system32\\", "\\config\\",
-            "pagefile.sys", "ntuser.dat", "desktop.ini",
-        ]
+        if is_network_path(raw):
+            return tool_result(
+                "error",
+                "❌ Network ya UNC path allowed nahi.",
+                tool="folder_file",
+                error_code="PATH_NOT_ALLOWED",
+            )
 
-        # Drive validation
-        if not (low_path.startswith("c:\\") or low_path.startswith("d:\\")):
-            return {"status": "error",
-                    "message": "❌ Access Denied: Sir, sirf C: aur D: available hain."}
+        try:
+            candidate = Path(raw).expanduser()
+            abs_path = str(candidate.resolve(strict=False))
+        except (OSError, RuntimeError, ValueError):
+            return tool_result(
+                "error",
+                "❌ Path samajh nahi aaya.",
+                tool="folder_file",
+                error_code="PATH_NOT_ALLOWED",
+            )
 
-        # System folder validation
-        for keyword in blocked_keywords:
-            if keyword in low_path:
-                logger.warning("🚫 BLOCKED ACCESS ATTEMPT: %s", abs_path)
-                return {"status": "error",
-                        "message": "❌ Access Denied: System files block hain."}
+        if is_sensitive_path(abs_path):
+            logger.warning("Blocked sensitive path: %s", abs_path)
+            return tool_result(
+                "error",
+                "❌ Sensitive path open allowed nahi.",
+                tool="folder_file",
+                error_code="PATH_NOT_ALLOWED",
+            )
 
         if not await asyncio.to_thread(os.path.exists, abs_path):
-            return {"status": "error", "message": f"❌ Path nahi mila: {path}"}
+            return tool_result("error", f"❌ Path nahi mila: {raw}", tool="folder_file")
 
-        # Open via startfile in thread
-        await asyncio.to_thread(os.startfile, abs_path)
-        return {
-            "status": "success",
-            "path": abs_path,
-            "message": f"📂 '{os.path.basename(abs_path)}' open ho gaya hai.",
-        }
+        path_obj = Path(abs_path)
+        if path_obj.is_dir():
+            if not _is_local_filesystem_path(path_obj):
+                return tool_result(
+                    "error",
+                    "❌ Remote ya network folder allowed nahi.",
+                    tool="folder_file",
+                    error_code="PATH_NOT_ALLOWED",
+                )
+            if _is_blocked_system_path(path_obj):
+                logger.warning("Blocked system folder access: %s", abs_path)
+                return tool_result(
+                    "error",
+                    "❌ Access Denied: System files block hain.",
+                    tool="folder_file",
+                    error_code="PATH_NOT_ALLOWED",
+                )
+        else:
+            roots = getattr(config, "open_roots", None) or [getattr(config, "outputs_dir", "")]
+            if resolve_in_roots(abs_path, roots) is None:
+                return tool_result(
+                    "needs_confirmation",
+                    "Yeh file allowed roots ke bahar hai; confirm karke kholna hoga.",
+                    tool="folder_file",
+                    data={"path": abs_path},
+                    hint=f'folder_file path="{abs_path}"',
+                )
+
+        await asyncio.to_thread(os.startfile, abs_path)  # pylint: disable=no-member
+        return tool_result(
+            "success",
+            f"📂 '{os.path.basename(abs_path)}' open ho gaya hai.",
+            tool="folder_file",
+            path=abs_path,
+            data={"path": abs_path},
+        )
     except (OSError, ValueError, AttributeError) as e:
         logger.error("folder_file error: %s", e)
-        return {
-            "status": "error",
-            "message": f"❌ Open karne mein error: {e!s}",
-        }
+        return tool_result(
+            "error",
+            f"❌ Open karne mein error: {e!s}",
+            tool="folder_file",
+            error=str(e),
+        )
 
 
-@jarvis_tool
-async def create_folder(folder_name: str):
+@jarvis_tool(timeout=10, risk="low")
+async def create_folder(folder_name: str) -> dict[str, Any]:
     """Creates a new folder on the Desktop."""
     try:
         desktop = os.path.join(os.environ.get("USERPROFILE", ""), "Desktop")
-        if not await asyncio.to_thread(os.path.exists, desktop):
+        if not await asyncio.to_thread(os.path.isdir, desktop):
             desktop = os.path.expanduser("~")
 
-        path = os.path.join(desktop, folder_name)
-        await asyncio.to_thread(os.makedirs, path, exist_ok=True)
-        return f"✅ Folder '{folder_name}' Desktop par create kar diya gaya hai."
+        child = safe_child_path(desktop, folder_name)
+        if child is None:
+            return tool_result(
+                "error",
+                "❌ Folder name allowed nahi (absolute path ya .. use mat karein).",
+                tool="create_folder",
+                error_code="PATH_NOT_ALLOWED",
+            )
+
+        await asyncio.to_thread(os.makedirs, str(child), exist_ok=True)
+        return tool_result(
+            "success",
+            f"✅ Folder '{folder_name}' Desktop par create kar diya gaya hai.",
+            tool="create_folder",
+            data={"path": str(child)},
+        )
     except OSError as e:
         logger.error("Create folder error: %s", e)
-        return {
-            "status": "error",
-            "message": f"❌ Error creating folder: {e!s}",
-            "error": str(e),
-        }
+        return tool_result(
+            "error",
+            f"❌ Error creating folder: {e!s}",
+            tool="create_folder",
+            error=str(e),
+        )
 
 
-@jarvis_tool
-async def open_outputs_folder(subfolder: str = "") -> dict:
+@jarvis_tool(timeout=10, risk="low")
+async def open_outputs_folder(subfolder: str = "") -> dict[str, Any]:
     """
     Opens the Jarvis_Outputs folder or a specific subfolder.
     """
     try:
-        base_dir = os.path.join(config.project_root, "Jarvis_Outputs")
-        target_path = base_dir
+        target_path = _resolve_outputs_subfolder(subfolder)
+        if not target_path.exists():
+            await asyncio.to_thread(os.makedirs, str(target_path), exist_ok=True)
 
-        if subfolder:
-            subfolders = {
-                "qr": "QR_Codes",
-                "image": "Generated_Images",
-                "download": "Downloads",
-            }
-            for key, folder in subfolders.items():
-                if key in subfolder.lower():
-                    target_path = os.path.join(base_dir, folder)
-                    break
-
-        if not os.path.exists(target_path):
-            os.makedirs(target_path, exist_ok=True)
-
-        os.startfile(target_path)  # nosec B606
-        folder_name = os.path.basename(
-            target_path) if subfolder else "Jarvis_Outputs"
-        return {
-            "status": "success",
-            "folder": folder_name,
-            "message": f"📂 {folder_name} folder open kar diya gaya hai.",
-        }
+        await asyncio.to_thread(os.startfile, str(target_path))  # pylint: disable=no-member
+        folder_name = target_path.name if subfolder else "Jarvis_Outputs"
+        return tool_result(
+            "success",
+            f"📂 {folder_name} folder open kar diya gaya hai.",
+            tool="open_outputs_folder",
+            folder=folder_name,
+            data={"folder": folder_name, "path": str(target_path)},
+        )
     except OSError as e:
         logger.error("Error opening outputs folder: %s", e)
-        return {
-            "status": "error",
-            "message": f"❌ Folder open karne mein error: {e!s}",
-            "error": str(e),
-        }
+        return tool_result(
+            "error",
+            f"❌ Folder open karne mein error: {e!s}",
+            tool="open_outputs_folder",
+            error=str(e),
+        )
 
 
 @jarvis_tool(timeout=5, risk="low")

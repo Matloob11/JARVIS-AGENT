@@ -290,6 +290,52 @@ async def test_open_app_uwp_launches_explorer_apps_folder():
     assert "shell:AppsFolder\\Contoso.App!App" in args[1]
 
 
+def test_folder_file_risk_high_for_exe():
+    assert wc._folder_file_risk({"path": r"C:\docs\setup.exe"}) == "high"
+    assert wc._folder_file_risk({"path": r"C:\docs\notes.txt"}) == "low"
+
+
+def test_open_notepad_file_risk_medium_for_non_text():
+    assert wc._open_notepad_file_risk({"file_path": "clip.mp4"}) == "medium"
+    assert wc._open_notepad_file_risk({"file_path": "notes.txt"}) == "low"
+
+
+def test_resolve_outputs_subfolder_mapping():
+    with patch.object(wc.config, "outputs_dir", r"C:\Jarvis_Outputs"), patch.object(
+        wc.config, "shared_dir", r"C:\Jarvis_Shared"
+    ), patch.object(wc.config, "project_root", r"C:\proj"):
+        assert str(wc._resolve_outputs_subfolder("qr")) == r"C:\Jarvis_Shared\QR_Codes"
+        assert str(wc._resolve_outputs_subfolder("images")) == r"C:\Jarvis_Shared\Generated_Images"
+        assert str(wc._resolve_outputs_subfolder("downloads")) == r"C:\Jarvis_Shared\Downloads"
+        assert str(wc._resolve_outputs_subfolder("leads")) == r"C:\Jarvis_Outputs\leads"
+        assert str(wc._resolve_outputs_subfolder("")) == r"C:\Jarvis_Outputs"
+
+
+@pytest.mark.asyncio
+async def test_folder_file_cv_path_not_set():
+    with patch.object(wc.config, "cv_path", None):
+        result = await wc.folder_file("cv")
+    assert result["error_code"] == "CV_PATH_NOT_SET"
+
+
+@pytest.mark.asyncio
+async def test_folder_file_unc_rejected():
+    result = await wc.folder_file(r"\\server\share\file.txt")
+    assert result["error_code"] == "PATH_NOT_ALLOWED"
+
+
+@pytest.mark.asyncio
+async def test_create_folder_rejects_traversal():
+    result = await wc.create_folder(r"..\..\Windows\x")
+    assert result["error_code"] == "PATH_NOT_ALLOWED"
+
+
+@pytest.mark.asyncio
+async def test_open_notepad_file_rejects_traversal():
+    result = await wc.open_notepad_file(r"..\..\..\.env")
+    assert result["error_code"] == "PATH_NOT_ALLOWED"
+
+
 @pytest.mark.asyncio
 async def test_open_app_write_after_open_reads_type_text_message():
     _reset_app_index_cache()
