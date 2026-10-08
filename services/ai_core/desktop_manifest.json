@@ -1,12 +1,12 @@
 {
-  "git_sha": "65dedafbdb503d670798a4e9eab33577f65dfdd4",
+  "git_sha": "6e5c8827aa6f5aef22eb8f6987ded0bea4dd1b80",
   "lk_schema_libs": {
     "docstring-parser": "0.18.0",
     "livekit-agents": "1.4.6",
     "pydantic": "2.12.5",
     "pydantic-core": "2.41.5"
   },
-  "manifest_sha256": "4279f00817b3dd97cc5d6fb9dd30d5d718a6d596bd368906bf345834ed753da7",
+  "manifest_sha256": "dfedae174a846e69ef67d4962fe6b773d55a7d3a31278b16011cb07f6d6b00a3",
   "pc_operations": [
     {
       "arg_hooks": [],
@@ -816,9 +816,9 @@
     },
     {
       "cls": "input",
-      "doc": null,
+      "doc": "Change system volume using mute, up, down or similar controller actions.",
       "idempotent": false,
-      "lk_schema_sha256": "e6efdd57cebbe00859bd4d71f7f11a2c7e8eb3746708f51633001cbb54bdd523",
+      "lk_schema_sha256": "594d0870a7b8d721c885deac730a3f0515c6661f2dddcea9959cc62ca3ac975a",
       "meta": {
         "arg_policies": {},
         "exclusive": null,
@@ -844,9 +844,9 @@
     },
     {
       "cls": "input",
-      "doc": "Creates a new folder on the Desktop.",
+      "doc": "Create a new folder on the Desktop using a safe single-segment folder name.",
       "idempotent": false,
-      "lk_schema_sha256": "e380b8b737b93adf661f7168f5e5f436afb5b42a458105ef528dc5c3c769fda4",
+      "lk_schema_sha256": "184ddf241067260395fc23fae15484ab92059d7d16c67c5b822fbb06b4d709e6",
       "meta": {
         "arg_policies": {},
         "exclusive": null,
@@ -1469,9 +1469,9 @@
     },
     {
       "cls": "input",
-      "doc": null,
+      "doc": "Click the left, right or middle mouse button at the current cursor position.",
       "idempotent": false,
-      "lk_schema_sha256": "a888343c3e631d9c3a47e3e2fe1eaa72682c7326e764d0f8e843ca2338cb1daa",
+      "lk_schema_sha256": "a5d20c4e2834fe2636d9d0d57c2aba3c8916b0cd11625338d9ac6070241eed2b",
       "meta": {
         "arg_policies": {},
         "exclusive": "desktop_input",
@@ -1497,9 +1497,9 @@
     },
     {
       "cls": "input",
-      "doc": null,
+      "doc": "Move the mouse cursor on the desktop by direction and pixel distance.",
       "idempotent": false,
-      "lk_schema_sha256": "e985c1a6dc09389038d8521054f30e2aff9144c043206bc33e2409d856c2fdd4",
+      "lk_schema_sha256": "60978916fe6b40a492d246e9fe85bc72949ae4c6801a0226b699bf8a09d0abd7",
       "meta": {
         "arg_policies": {},
         "exclusive": "desktop_input",
@@ -1588,9 +1588,9 @@
     },
     {
       "cls": "input",
-      "doc": "\n    Opens a specific text file in Notepad.\n    ",
+      "doc": "Open an allowed text file in Notepad after resolving it under open roots.",
       "idempotent": false,
-      "lk_schema_sha256": "f987f1c0cb9b99a53213549760b1cdc395f4eaf4837734afab14e32812b27601",
+      "lk_schema_sha256": "66803328a88606fa1d120d17c98fc766ceae2ad453bf681f2497587838997608",
       "meta": {
         "arg_policies": {
           "file_path": "raw"
@@ -1618,9 +1618,9 @@
     },
     {
       "cls": "input",
-      "doc": "Open a blank Notepad instance.",
+      "doc": "Launch a blank Notepad window on the laptop for quick manual notes.",
       "idempotent": false,
-      "lk_schema_sha256": "f51a950c2939fbc5aa3ca430c92f90b90cd983124a5f5244753e083bfb5b3401",
+      "lk_schema_sha256": "f09807292b5010bd73b4c9f9e8c8861efd7263fca937fe4d6d98be041b8f0c32",
       "meta": {
         "arg_policies": {},
         "exclusive": null,
@@ -1798,9 +1798,9 @@
     },
     {
       "cls": "input",
-      "doc": null,
+      "doc": "Press a keyboard shortcut combination, with guards on protected browser windows.",
       "idempotent": false,
-      "lk_schema_sha256": "80d8ae9f1ebbac6b762b69ecbd1a1b705d2520e925da22813ead7b63f957ce1d",
+      "lk_schema_sha256": "122f6c6e0b62575fc2aadc7d80a93aefc45d0c788fa1e88b24878d87a52f51a8",
       "meta": {
         "arg_policies": {},
         "exclusive": "desktop_input",
@@ -1826,9 +1826,9 @@
     },
     {
       "cls": "input",
-      "doc": null,
+      "doc": "Press a single keyboard key in the currently focused desktop window.",
       "idempotent": false,
-      "lk_schema_sha256": "d035febf76f18e9be274c543f787df39ef89a2d39aea4e799d8eccaa23188577",
+      "lk_schema_sha256": "10913d240d1236b44c3928b3a71162e3307fd5af1caf037ba26057765b11874b",
       "meta": {
         "arg_policies": {},
         "exclusive": "desktop_input",
@@ -2047,9 +2047,9 @@
     },
     {
       "cls": "input",
-      "doc": null,
+      "doc": "Scroll the mouse wheel up or down by the requested number of steps.",
       "idempotent": false,
-      "lk_schema_sha256": "6e28a39752b48e53abfeac581bebf4b6283d8fa390474106838954d181bbb976",
+      "lk_schema_sha256": "e955c530521e5bd21a8f233eb885ac6cac064a18601d86669530a126e43a7981",
       "meta": {
         "arg_policies": {},
         "exclusive": "desktop_input",
@@ -2199,9 +2199,9 @@
     },
     {
       "cls": "input",
-      "doc": null,
+      "doc": "Set the master output volume to an absolute percentage from zero to one hundred.",
       "idempotent": true,
-      "lk_schema_sha256": "9fedaaf9461ddbf5ca7e4707733055a1f2034523c58726ba1cd2d3fd617776f6",
+      "lk_schema_sha256": "ff846c6ab0474d0c804272501d4c6fec9592e20a95315949693cb5d194c78a76",
       "meta": {
         "arg_policies": {},
         "exclusive": null,
@@ -2337,6 +2337,36 @@
       "placement": "laptop"
     },
     {
+      "cls": null,
+      "doc": "\n    Starts Swarm mode for a bigger task: 2-3 AI sub-agents work on its parts in parallel (research, comparison,\n    planning, code) and one merged Markdown report lands in the chat. It runs in the background and answers\n    'started' at once; progress lines start with [SWARM] and a short summary is spoken when the report is ready.\n    Use it when Sir says 'swarm mode' or asks for a multi-part comparison or plan, for example 'swarm mode mein\n    coding ke liye 150k PKR se kam 3 laptops compare karo'.\n\n    Args:\n        task: The whole task in Sir's words.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "81041841c91a3a8acf9bb1dd8d8ee2701b4b7e9cd42480b102b54a5fc5aebbc4",
+      "meta": {
+        "arg_policies": {
+          "task": "multiline"
+        },
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.ai_core.swarm_manager",
+      "name": "start_swarm_mode",
+      "param_schema_sha256": "75b44a14a9d2734af9ef43327d25d7d3a387c9713d9fcea079d3f7d9d59b3f09",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "task",
+          "required": true
+        }
+      ],
+      "placement": "vps"
+    },
+    {
       "cls": "de_escalation",
       "doc": "Stops the running file access server (if any) and cancels its TTL timer.",
       "idempotent": true,
@@ -2358,9 +2388,9 @@
     },
     {
       "cls": "input",
-      "doc": null,
+      "doc": "Perform a touchpad-style swipe gesture in the given direction on the desktop.",
       "idempotent": false,
-      "lk_schema_sha256": "4c0261b41fe654b345112675b7c0a0edd06449678cfc3d8679a47676c912953b",
+      "lk_schema_sha256": "0db0d2fb3399497b5777892f4a0e3a55ac2f43b124b8f5bb4701abbfc36a8032",
       "meta": {
         "arg_policies": {},
         "exclusive": "desktop_input",
@@ -2637,9 +2667,9 @@
     },
     {
       "cls": "input",
-      "doc": null,
+      "doc": "Animate typing a code snippet visibly, then paste any remainder for long inputs.",
       "idempotent": false,
-      "lk_schema_sha256": "ca01ba49ba31debc050aed7316901f309bbb34a44f184b4c8daef840246797a0",
+      "lk_schema_sha256": "d1d86fdac2b67ba80b4400a875563512a12369f2566deb2d35206539253957d5",
       "meta": {
         "arg_policies": {
           "code": "raw"
@@ -2667,9 +2697,9 @@
     },
     {
       "cls": "input",
-      "doc": null,
+      "doc": "Type Unicode text into the focused window, with optional per-key delay or paste.",
       "idempotent": false,
-      "lk_schema_sha256": "c9f98860c1c18bd67310fb93f9752b97e909f76dcf21a6048b7391d9e45ffb45",
+      "lk_schema_sha256": "88319f7f74cda21be163962ccfd8052a1e75d0944c73a701109b2563f157ce04",
       "meta": {
         "arg_policies": {
           "text": "raw"
