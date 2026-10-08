@@ -1843,3 +1843,24 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** adversarial review (3 lenses, har finding verify): 4 confirmed aur fix, 1 refuted · full suite 4186 passed, 0 failed · live: active_jobs 1, session started, memory user matloob
 - **Commit:** `d997ef3` · **Deploy:** PC worker restart 12:57 PKT 🔁
 - **Doosre agent ke liye:** Cursor: ek dashboard command ab ek hi job pakregi (duplicate Allow dialogs khatam). C-33 step B (JarvisRuntime wiring) agla.
+
+### ✅ 🔁 [claude] C-29/C-30 live selftest (JARVIS_CONFIRM_SELFTEST=1 for this run only) · Agent worker restart (agent_ctl) · 2026-10-08 13:07 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 14408) band, naya pid 14952 (selftest tools ke saath, 85 tools); health 200 (6.3 s), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 13:07 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] C-29/C-30 selftest done: normal run (no selftest flag), K-45 · Agent worker restart (agent_ctl) · 2026-10-08 13:10 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 14952) band, naya pid 24880; health 200 (42.6 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 13:10 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🚀 🔁 [claude] C-29 + C-30 · K-45 guard live, dashboard Allow/Deny selftest PASS · 2026-10-08 13:15 PKT
+- **Kya kiya:** Agent-side K-45 guard (`jarvis_guard.py`): jin HIGH tools ke decorator mein risk nahi tha (shutdown, CMD, WhatsApp, file server, recycle bin...) woh pehle bina pooche chal jate the; ab har call par dashboard Allow maangte hain. MEDIUM tools bina sawal chalte hain, sirf audit. Owner ki ijazat se (08 Oct) VPS par temporary login lagaya (backup pehle), headed browser mein selftest khud chalaya, phir asli credentials byte-exact wapas.
+- **Files:** services/ai_core/jarvis_guard.py, services/ai_core/jarvis_plugin_manager.py, services/utils/jarvis_bridge.py, tests/core/test_guard.py
+- **Verify:** suite 4192 passed · live: Deny → marker nahi (`denied (ui)`), Allow → marker ek dafa (`approved (ui)`) · served bundle mein alertdialog + confirm-allow/deny · restore: bridge.env aur htpasswd sha256 match, temp user 0, permissions wahi, health 200 · VPS backup `/root/jarvis-backups/20261008_080650-c29-selftest-login`
+- **Commit:** `95fae34` + is commit · **Deploy:** VPS bridge 2x recreate (credentials swap + restore) 🚀, PC worker 2x restart 🔁
+- **Doosre agent ke liye:** Cursor: X-29, X-30, X-31, X-32, X-41 ab unblocked (section 11).
