@@ -461,9 +461,20 @@ def job(monkeypatch):
 
     state.protectors = []
     state.cleanup_kwargs = []
+    state.listeners = []
+    state.bg_listeners = []
+
+    class FakeListener:
+        def __init__(self, assistant, runtime=None):
+            self.assistant, self.runtime, self.aclosed = assistant, runtime, 0
+            state.listeners.append(self)
+
+        async def aclose(self):
+            self.aclosed += 1
 
     async def no_tasks(*_args, **kwargs):
         state.protectors.append(kwargs.get("protector"))
+        state.bg_listeners.append(kwargs.get("listener"))
         return []
 
     async def returning(result):
@@ -493,7 +504,8 @@ def job(monkeypatch):
                         ("_location_loop", nothing), ("_pc_vitals_loop", nothing),
                         ("_print_startup_banner", lambda: None), ("_start_loop_watchdog", lambda *_a: None),
                         ("_start_background_tasks", no_tasks), ("_rag_warm_delay", lambda: None),
-                        ("_cleanup_session_resources", cleanup), ("_quiet_livekit_agents_logger", lambda: None)):
+                        ("_cleanup_session_resources", cleanup), ("_quiet_livekit_agents_logger", lambda: None),
+                        ("UIBridgeListener", FakeListener)):
         monkeypatch.setattr(ar, name, value)
     monkeypatch.setattr(jarvis_plugin_manager, "JarvisPluginManager", FakePlugins)
     monkeypatch.setattr(ar.asyncio, "sleep", fast_sleep)  # the retry waits (5, 10, 15, 20 s) take no time
@@ -615,6 +627,17 @@ async def test_every_started_session_is_hardened_before_the_assistant_gets_it(jo
     await _run_entrypoint(job, _FakeJobContext())
     first, rebuilt = job.sessions
     assert calls == [("harden", first), ("attach", first), ("harden", rebuilt), ("attach", rebuilt)]
+
+
+@pytest.mark.asyncio
+async def test_the_job_listener_goes_to_the_loops_and_is_closed_with_the_job(job):
+    """C-34: one bridge listener per job, handed to the background loops and aclosed by the runtime's teardown, so
+    a dead job's socket never reconnects."""
+    job.on_start = lambda agent: asyncio.get_running_loop().call_later(0.02, agent.request_end, "paused_by_owner")
+    await _run_entrypoint(job, _FakeJobContext())
+    (listener,) = job.listeners
+    assert job.bg_listeners == [listener] and listener.assistant is job.assistants[-1]
+    assert listener.runtime is not None and listener.aclosed == 1
 
 
 @pytest.mark.asyncio

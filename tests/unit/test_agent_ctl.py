@@ -1577,6 +1577,24 @@ def test_chat_probe_reaches_the_bridge_through_the_vortex_socketio_path():
         assert probe.socket_target(url) == bridge_socket_target(url)
 
 
+def test_the_chat_probe_passes_only_on_exactly_one_reply_to_its_message():
+    """C-34: one user message with the probe's id and one assistant reply to it (update_message events of that
+    reply count once); a second reply means two listeners answered."""
+    probe = _load_windows_local("test_chat_once")
+    user = {"id": "probe-1", "role": "user", "text": "Jarvis, 7 times 8?"}
+    first = {"id": "r1", "role": "assistant", "turn_id": "probe-1", "text": "Sir, 7 times 8"}
+    first_done = {"id": "r1", "role": "assistant", "turn_id": "probe-1", "text": "Sir, 7 times 8 is 56."}
+    other_turn = {"id": "r9", "role": "assistant", "turn_id": "someone-else", "text": "x"}
+    assert probe.evaluate([user, first, first_done, other_turn], "probe-1") == (
+        True, "user messages 1, assistant replies 1")
+    assert probe.evaluate([user, first_done], "probe-1", expect="56")[0] is True
+    assert probe.evaluate([user, first], "probe-1", expect="56")[0] is False
+    duplicate = {"id": "r2", "role": "assistant", "turn_id": "probe-1", "text": "56"}
+    assert probe.evaluate([user, first_done, duplicate], "probe-1") == (False, "user messages 1, assistant replies 2")
+    assert probe.evaluate([first_done], "probe-1")[0] is False  # the user echo never came
+    assert probe.chat_payload("t")["id"].startswith("probe-")
+
+
 def test_worker_priority_is_raised_only_for_the_agent_tree(monkeypatch):
     """The venv launcher hides the real interpreter behind a child process, so agent_ctl lifts the tree."""
     normal, below, above = 32, 16384, 32768  # Windows priority class values, as psutil exposes them

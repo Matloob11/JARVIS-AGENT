@@ -106,6 +106,7 @@ def _safe_on_room_event(self, event):
 rtc.Room._on_room_event = _safe_on_room_event
 
 from services.ai_core.agent_loops import (
+    UIBridgeListener,
     start_adaptation_loop,
     start_bug_hunter_loop,
     start_memory_storage_loop,
@@ -539,7 +540,8 @@ async def perform_startup_diagnostics() -> None:
 
 async def _start_background_tasks(session: AgentSession, assistant: BrainAssistant,
                                   mode: str | None = None,
-                                  protector: TaskProtector | None = None) -> list[asyncio.Task[Any]]:
+                                  protector: TaskProtector | None = None,
+                                  listener: UIBridgeListener | None = None) -> list[asyncio.Task[Any]]:
     """Starts all background loops and monitors via a task protector: the job's own (C-33, from the entrypoint),
     else the global autonomous protector.
 
@@ -553,7 +555,8 @@ async def _start_background_tasks(session: AgentSession, assistant: BrainAssista
     # Launch background loops via the protector to ensure resilience
     await tasks.run_protected("memory_loop", start_memory_loop, assistant, assistant.memory_extractor)
     await tasks.run_protected("heartbeat_loop", start_heartbeat_loop)
-    await tasks.run_protected("ui_command_listener", start_ui_command_listener, assistant)
+    # C-34: the job's own listener (JarvisRuntime acloses it at the end), else a new one
+    await tasks.run_protected("ui_command_listener", start_ui_command_listener, assistant, listener)
 
     # 💥 NEW: Self-Monitoring & Proactive Analysis Loops
     if local:
@@ -1537,7 +1540,11 @@ async def entrypoint(ctx: agents.JobContext):
             _start_loop_watchdog(ctx, track, job["plugin_manager"].running_tools)
             protector = job_protector()
             job["protector"] = runtime.protector = protector
-            bg_tasks = await _start_background_tasks(job["session"], assistant, protector=protector)
+            # C-34: one bridge listener per job; the runtime's teardown acloses it (no reconnect afterwards)
+            listener = UIBridgeListener(assistant, runtime=runtime)
+            runtime.listener = listener
+            bg_tasks = await _start_background_tasks(job["session"], assistant, protector=protector,
+                                                     listener=listener)
             for bt in bg_tasks:
                 active_tasks.add(bt)
                 bt.add_done_callback(active_tasks.discard)

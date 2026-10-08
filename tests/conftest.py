@@ -749,6 +749,17 @@ def _confirm_transcript_check_isolated():
             transcripts.clear()
 
 
+@pytest.fixture(autouse=True)
+def _ui_command_dedupe_isolated():
+    """C-34: the UI command registry's (type, id) dedupe is process-wide (one per worker, as in a job). Each test
+    starts with an empty one, so a chat id one test sent is never a 'duplicate' in the next. Only clears an
+    already-imported registry."""
+    module = sys.modules.get("services.utils.ui_command_registry")
+    if module is not None:
+        module.reset_dedupe()
+    yield
+
+
 @pytest.fixture(scope="session")
 def test_config():
     """Test configuration fixture"""

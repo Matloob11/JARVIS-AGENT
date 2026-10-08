@@ -25,9 +25,18 @@ from services.utils.jarvis_autonomous import TaskProtector, autonomous_protector
 from services.utils.jarvis_bridge import (
     agent_link_v2,
     notify_event,
+    notify_log,
     notify_sim_loading,
     notify_transcription,
     wake_retry_queue,
+)
+# C-34 (K-60): the registry; register_ui_command and dispatch stay importable from here for older imports.
+from services.utils.ui_command_registry import (  # noqa: F401  # pylint: disable=unused-import
+    UI_COMMANDS,
+    CommandContext,
+    JobListenerHandle,
+    dispatch,
+    register_ui_command,
 )
 from services.utils.jarvis_bug_hunter import monitor_logs
 from services.utils.jarvis_config import config
@@ -340,11 +349,161 @@ async def open_job_artifact(payload: Any) -> bool:
     return True
 
 
+# ------------------------------------------------------------------ C-34: the UI commands, one registered handler each
+# Every branch of the old UIBridgeListener._handle_command, with identical behaviour; a handler gets (payload, ctx),
+# ctx being the job listener's CommandContext (assistant, runtime, notify_log, extras['listener']). Other areas
+# register their own commands from their own modules (K-60), e.g. voice_take_over in src/core/voice_link.py.
+
+# K-03: types the bridge forwards (ui_bridge.UI_COMMAND_TYPES) that no agent handler takes yet. They are ignored at
+# DEBUG instead of logging 'Unknown UI command' to the dashboard, until a module registers one (the registry wins).
+FORWARDED_UNHANDLED: frozenset[str] = frozenset({
+    "start", "settings_update", "desktop_stop", "notification_ack", "shutdown_agent", "task_cancel",
+    "tasks_refresh", "voice_take_over", "voice_enroll", "feedback", "request_state",
+})
+
+
+def _listener(ctx: CommandContext) -> "UIBridgeListener":
+    return ctx.extras["listener"]
+
+
+def _spawn_for(assistant: Any, coro: Any) -> None:
+    """A command that must not block the listener (it waits for an Allow or a reply): its own task, kept by the
+    assistant's _spawned_tasks."""
+    task = asyncio.create_task(coro)
+    assistant._spawned_tasks.add(task)  # type: ignore[attr-defined]
+    task.add_done_callback(assistant._spawned_tasks.discard)  # type: ignore[attr-defined]
+
+
+@register_ui_command("mute")
+def _cmd_mute(_payload: Any, ctx: CommandContext) -> None:
+    ctx.assistant.set_muted(True)
+    logger.info("🔇 Agent MUTED via UI.")
+
+
+@register_ui_command("unmute")
+def _cmd_unmute(_payload: Any, ctx: CommandContext) -> None:
+    ctx.assistant.set_muted(False)
+    logger.info("🔊 Agent UNMUTED via UI.")
+
+
+@register_ui_command("wake_word_toggle")
+def _cmd_wake_word_toggle(payload: Any, ctx: CommandContext) -> None:
+    new_mode = payload if isinstance(payload, bool) else (not ctx.assistant.wake_word_mode)
+    ctx.assistant.set_wake_word_mode(new_mode)
+    logger.info("🎤 Wake word mode set to %s via UI.", new_mode)
+
+
+@register_ui_command("stop")
+async def _cmd_stop(_payload: Any, ctx: CommandContext) -> None:
+    # K-60 v9 (C-23): 'Stop speaking' only interrupts speech; the session keeps listening. It no longer sets the
+    # job's stop event, which restarted the whole session in place.
+    await _listener(ctx)._interrupt_speech()  # pylint: disable=protected-access
+    logger.info("STOP: speech interrupted (K-60)")
+
+
+@register_ui_command("pause_agent")
+def _cmd_pause_agent(payload: Any, ctx: CommandContext) -> None:
+    if not bridge_holds_pause(payload):
+        # K-60 v9: only a pause the bridge holds (its room owner keeps the agent out and brings it back on Wake)
+        # ends the job; an older bridge forwards the UI's own command, which changes nothing.
+        logger.info("PAUSE: pause_agent without the bridge's hold ignored (K-60 v9)")
+        return
+    # K-60 v9 (C-23): the owner paused JARVIS; this job ends with ctx.shutdown('paused_by_owner') and the bridge
+    # dispatches nothing until Wake (ui_command start).
+    request_end = getattr(ctx.assistant, "request_end", None)
+    if callable(request_end):
+        request_end("paused_by_owner")
+    elif isinstance(getattr(ctx.assistant, "_stop_event", None), asyncio.Event):
+        ctx.assistant._stop_event.set()  # type: ignore[attr-defined]  # an assistant before C-23
+    logger.warning("PAUSE: the owner paused the agent; this job ends (paused_by_owner)")
+
+
+@register_ui_command("persona_change")
+async def _cmd_persona_change(payload: Any, ctx: CommandContext) -> None:
+    logger.info("🎭 Switching persona to: %s", payload)
+    await ctx.assistant.tool_toggle_gf_mode(payload == "anna")
+
+
+@register_ui_command("clear_memory")
+async def _cmd_clear_memory(_payload: Any, ctx: CommandContext) -> None:
+    logger.info("🧠 Clearing short-term memory...")
+    await ctx.assistant.memory_extractor.memory.clear()
+
+
+@register_ui_command("open_sim_panel")
+async def _cmd_open_sim_panel(_payload: Any, _ctx: CommandContext) -> None:
+    logger.info("Opening SIM lookup panel via UI command.")
+    await open_sim_lookup_panel()
+
+
+@register_ui_command("sim_lookup")
+def _cmd_sim_lookup(payload: Any, ctx: CommandContext) -> None:
+    parsed = sim_lookup_input(payload)
+    if parsed is None:
+        logger.debug("sim_lookup without a usable query ignored (%s)", type(payload).__name__)
+        return
+    # C-79: its own task, because the K-45 gate waits for the owner's Allow and this handler must stay free to
+    # receive that confirm_response.
+    query, purpose = parsed
+    _spawn_for(ctx.assistant, _listener(ctx)._run_sim_lookup(query, purpose))  # pylint: disable=protected-access
+
+
+@register_ui_command("chat")
+def _cmd_chat(payload: Any, ctx: CommandContext) -> None:
+    chat = chat_input(payload)
+    if chat is None:
+        logger.debug("Chat command without text ignored (%s)", type(payload).__name__)
+        return
+    msg_id, text = chat
+    # The text itself is logged by the router (a 60-character preview at INFO, K-59).
+    logger.info("💬 Chat message received (id %s, %d chars)", msg_id or "new", len(text))
+    _spawn_for(ctx.assistant, _listener(ctx)._task_wrapper(text, msg_id))  # pylint: disable=protected-access
+
+
+@register_ui_command("confirm_response")
+async def _cmd_confirm_response(payload: Any, _ctx: CommandContext) -> None:
+    # C-29 (K-14): the owner's Allow/Deny from the dashboard. The bridge already checked that it came from the
+    # owner's UI for a pending, unexpired request; the broker decides the action once.
+    if isinstance(payload, dict) and isinstance(payload.get("id"), str) and isinstance(payload.get("allow"), bool):
+        from services.ai_core.jarvis_confirm import (  # pylint: disable=import-outside-toplevel
+            confirmation_broker,
+        )
+        await confirmation_broker.resolve(payload["id"], payload["allow"], source="ui")
+    else:
+        logger.warning("confirm_response ignored: payload needs {id, allow: bool}")
+
+
+@register_ui_command("swarm")
+def _cmd_swarm(payload: Any, ctx: CommandContext) -> None:
+    if payload:
+        logger.info("🌀 Swarm Mode triggered with: %s", payload)
+        _spawn_for(ctx.assistant, swarm_coordinator.execute_swarm(payload))
+
+
+@register_ui_command("job_cancel")
+def _cmd_job_cancel(payload: Any, _ctx: CommandContext) -> None:
+    # C-57 (K-31): stop one background job; an unknown or finished id changes nothing
+    from services.utils.jarvis_jobs import cancel_job  # pylint: disable=import-outside-toplevel
+    job_id = payload.get("job_id") if isinstance(payload, dict) else None
+    accepted = cancel_job(str(job_id or ""))
+    logger.info("JOB cancel via UI: %s", "accepted" if accepted else "not active")
+
+
+@register_ui_command("open_job_artifact")
+async def _cmd_open_job_artifact(payload: Any, _ctx: CommandContext) -> None:
+    await open_job_artifact(payload)
+
+
 class UIBridgeListener:
-    """Manages Socket.IO connection and command handling for the UI Bridge."""
-    def __init__(self, assistant: "BrainAssistant") -> None:
+    """The job's Socket.IO link to the UI bridge (K-38): one AsyncClient per job, commands through the registry
+    (C-34, K-60) with the (type, id) dedupe, and aclose() ends it with the job (no reconnect afterwards)."""
+
+    def __init__(self, assistant: "BrainAssistant", runtime: Any = None) -> None:
         self.assistant = assistant
         self.sio = socketio.AsyncClient(reconnection=False)
+        self.handle = JobListenerHandle(self.sio)
+        self._ctx = CommandContext(assistant=assistant, runtime=runtime, notify_log=notify_log,
+                                   extras={"listener": self})
         self._is_reconnecting = False
         self._auth_kind = "-"  # what the last connect authenticated with, for the log
 
@@ -353,103 +512,28 @@ class UIBridgeListener:
         self.sio.on('connect', self.on_connect)
         self.sio.on('disconnect', self.on_disconnect)
 
+    @property
+    def closing(self) -> bool:
+        """True once aclose() was asked: the loop returns instead of reconnecting."""
+        return self.handle.closing
+
+    async def aclose(self) -> None:
+        """C-34: ends this job's listener: no reconnect after it, the socket disconnected (bounded, never raises)."""
+        await self.handle.aclose()
+
     async def on_command(self, data: Any) -> None:
         if isinstance(data, dict):
             await self._handle_command(data)
 
     async def _handle_command(self, data: dict[str, Any]) -> None:
+        """One agent_command through the registry: its handler, once per (type, id); an unknown type is logged and
+        shown in the dashboard log; a bridge-forwarded type with no agent handler yet is ignored at DEBUG."""
         cmd_type: Any = data.get("type")
         payload: Any = data.get("payload")
-
-        try:
-            if cmd_type == "mute":
-                self.assistant.set_muted(True)
-                logger.info("🔇 Agent MUTED via UI.")
-            elif cmd_type == "unmute":
-                self.assistant.set_muted(False)
-                logger.info("🔊 Agent UNMUTED via UI.")
-            elif cmd_type == "wake_word_toggle":
-                new_mode = payload if isinstance(payload, bool) else (not self.assistant.wake_word_mode)
-                self.assistant.set_wake_word_mode(new_mode)
-                logger.info("🎤 Wake word mode set to %s via UI.", new_mode)
-            elif cmd_type == "stop":
-                # K-60 v9 (C-23): 'Stop speaking' only interrupts speech; the session keeps listening. It no longer
-                # sets the job's stop event, which restarted the whole session in place.
-                await self._interrupt_speech()
-                logger.info("STOP: speech interrupted (K-60)")
-            elif cmd_type == "pause_agent":
-                if not bridge_holds_pause(payload):
-                    # K-60 v9: only a pause the bridge holds (its room owner keeps the agent out and brings it back
-                    # on Wake) ends the job; an older bridge forwards the UI's own command, which changes nothing.
-                    logger.info("PAUSE: pause_agent without the bridge's hold ignored (K-60 v9)")
-                    return
-                # K-60 v9 (C-23): the owner paused JARVIS; this job ends with ctx.shutdown('paused_by_owner') and the
-                # bridge dispatches nothing until Wake (ui_command start).
-                request_end = getattr(self.assistant, "request_end", None)
-                if callable(request_end):
-                    request_end("paused_by_owner")
-                elif isinstance(getattr(self.assistant, "_stop_event", None), asyncio.Event):
-                    self.assistant._stop_event.set()  # type: ignore[attr-defined]  # an assistant before C-23
-                logger.warning("PAUSE: the owner paused the agent; this job ends (paused_by_owner)")
-            elif cmd_type == "persona_change":
-                logger.info("🎭 Switching persona to: %s", payload)
-                await self.assistant.tool_toggle_gf_mode(payload == "anna")
-            elif cmd_type == "clear_memory":
-                logger.info("🧠 Clearing short-term memory...")
-                await self.assistant.memory_extractor.memory.clear()
-            elif cmd_type == "open_sim_panel":
-                logger.info("Opening SIM lookup panel via UI command.")
-                await open_sim_lookup_panel()
-            elif cmd_type == "sim_lookup":
-                parsed = sim_lookup_input(payload)
-                if parsed is None:
-                    logger.debug("sim_lookup without a usable query ignored (%s)",
-                                 type(payload).__name__)
-                else:
-                    # C-79: its own task, because the K-45 gate waits for the owner's Allow and this
-                    # handler must stay free to receive that confirm_response.
-                    query, purpose = parsed
-                    sim_task = asyncio.create_task(self._run_sim_lookup(query, purpose))
-                    self.assistant._spawned_tasks.add(sim_task) # type: ignore[attr-defined]
-                    sim_task.add_done_callback(self.assistant._spawned_tasks.discard) # type: ignore[attr-defined]
-            elif cmd_type == "chat":
-                chat = chat_input(payload)
-                if chat is None:
-                    logger.debug("Chat command without text ignored (%s)", type(payload).__name__)
-                else:
-                    msg_id, text = chat
-                    # The text itself is logged by the router (a 60-character preview at INFO, K-59).
-                    logger.info("💬 Chat message received (id %s, %d chars)", msg_id or "new", len(text))
-                    new_task = asyncio.create_task(self._task_wrapper(text, msg_id))
-                    self.assistant._spawned_tasks.add(new_task) # type: ignore[attr-defined]
-                    new_task.add_done_callback(self.assistant._spawned_tasks.discard) # type: ignore[attr-defined]
-            elif cmd_type == "confirm_response":
-                # C-29 (K-14): the owner's Allow/Deny from the dashboard. The bridge already checked that it came from
-                # the owner's UI for a pending, unexpired request; the broker decides the action once.
-                if isinstance(payload, dict) and isinstance(payload.get("id"), str) \
-                        and isinstance(payload.get("allow"), bool):
-                    from services.ai_core.jarvis_confirm import (  # pylint: disable=import-outside-toplevel
-                        confirmation_broker,
-                    )
-                    await confirmation_broker.resolve(payload["id"], payload["allow"], source="ui")
-                else:
-                    logger.warning("confirm_response ignored: payload needs {id, allow: bool}")
-            elif cmd_type == "swarm":
-                if payload:
-                    logger.info("🌀 Swarm Mode triggered with: %s", payload)
-                    swarm_task = asyncio.create_task(swarm_coordinator.execute_swarm(payload))
-                    self.assistant._spawned_tasks.add(swarm_task) # type: ignore[attr-defined]
-                    swarm_task.add_done_callback(self.assistant._spawned_tasks.discard) # type: ignore[attr-defined]
-            elif cmd_type == "job_cancel":
-                # C-57 (K-31): stop one background job; an unknown or finished id changes nothing
-                from services.utils.jarvis_jobs import cancel_job  # pylint: disable=import-outside-toplevel
-                job_id = payload.get("job_id") if isinstance(payload, dict) else None
-                accepted = cancel_job(str(job_id or ""))
-                logger.info("JOB cancel via UI: %s", "accepted" if accepted else "not active")
-            elif cmd_type == "open_job_artifact":
-                await open_job_artifact(payload)
-        except Exception as e:
-            logger.error("❌ Error processing UI command %s: %s", cmd_type, e, exc_info=True)
+        if isinstance(cmd_type, str) and cmd_type in FORWARDED_UNHANDLED and cmd_type not in UI_COMMANDS:
+            logger.debug("ui_command %s: no agent handler (the bridge forwards it, K-03)", cmd_type)
+            return
+        await dispatch(cmd_type, payload, self._ctx)
 
     async def _run_sim_lookup(self, query: str, purpose: str) -> None:
         """
@@ -671,9 +755,10 @@ class UIBridgeListener:
 
     async def start(self) -> None:
         """
-        Keeps the UI bridge connection for the life of the job and never returns (K-38). After a failed
-        connect or a lost connection it reconnects with a fresh auth, waiting 1, 2, 4 ... 10 s between
-        attempts (back to 1 s after a connection that held). Cancelling the task closes the socket.
+        Keeps the UI bridge connection for the life of the job (K-38). After a failed connect or a lost connection
+        it reconnects with a fresh auth on the SAME client, waiting 1, 2, 4 ... 10 s between attempts (back to 1 s
+        after a connection that held). It returns once aclose() was asked (C-34); cancelling the task closes the
+        socket too.
         """
         url = config.bridge_url
         base_url, socketio_path = bridge_socket_target(url)
@@ -681,19 +766,26 @@ class UIBridgeListener:
         delay = RECONNECT_FIRST_S
         failures = 0
         last_failure_log = float("-inf")
-        while True:
+        while not self.closing:
             connected_at: float | None = None
             try:
                 await self.sio.connect(base_url, auth=self._auth(url), socketio_path=socketio_path,
                                        wait_timeout=_CONNECT_WAIT_S)
+                if self.closing:  # aclose() came during the connect
+                    await self._close()
+                    return
                 connected_at = loop.time()
                 failures = 0
                 await self.sio.wait()
+                if self.closing:
+                    return
                 logger.warning("🔄 UI Bridge lost. Reconnecting...")
             except asyncio.CancelledError:
                 await self._close()
                 raise
             except Exception as e:
+                if self.closing:
+                    return
                 failures += 1
                 # WARNING, at most once a minute: the bridge may be down for a while (deploy, restart).
                 if failures == 1 or loop.time() - last_failure_log >= _RETRY_LOG_EVERY_S:
@@ -706,7 +798,9 @@ class UIBridgeListener:
             await asyncio.sleep(delay)
             delay = min(delay * 2, RECONNECT_MAX_S)
 
-async def start_ui_command_listener(assistant: "BrainAssistant") -> None:
-    """Entry point for the UI command listener."""
-    listener = UIBridgeListener(assistant)
+
+async def start_ui_command_listener(assistant: "BrainAssistant", listener: UIBridgeListener | None = None) -> None:
+    """Entry point for the UI command listener: the job's own listener (C-34, so JarvisRuntime can aclose it), else
+    a new one."""
+    listener = listener if listener is not None else UIBridgeListener(assistant)
     await listener.start()

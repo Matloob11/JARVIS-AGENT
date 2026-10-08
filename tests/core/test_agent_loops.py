@@ -676,3 +676,75 @@ async def test_end_to_end_after_a_bridge_restart_the_agent_reconnects_and_queued
         with pytest.raises(asyncio.CancelledError):
             await task
     assert listener.sio.connected is False
+
+
+# ---------------------------------------------------------------- C-34: registry, dedupe and the job's listener
+
+LEGACY_COMMANDS = {"mute", "unmute", "wake_word_toggle", "stop", "pause_agent", "persona_change", "clear_memory",
+                   "open_sim_panel", "sim_lookup", "chat", "confirm_response", "swarm", "job_cancel",
+                   "open_job_artifact"}
+
+
+def test_every_legacy_command_has_its_registered_handler():
+    from services.utils.ui_command_registry import UI_COMMANDS
+
+    assert LEGACY_COMMANDS <= set(UI_COMMANDS)
+    assert agent_loops.register_ui_command is not None and agent_loops.dispatch is not None  # re-exported (K-60)
+    assert not (agent_loops.FORWARDED_UNHANDLED & LEGACY_COMMANDS)
+
+
+@pytest.mark.asyncio
+async def test_a_repeated_chat_id_runs_once(chat):
+    """C-34 (K-60): the same (type, id) twice - two tabs, a resent command - is answered once."""
+    payload = {"id": "c34-same-id", "text": "Jarvis, 7 times 8?"}
+    await _send_chat(chat, payload)
+    await _send_chat(chat, dict(payload))
+    assert chat.assistant.handle_user_query.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_an_unknown_command_is_logged_and_shown_but_a_forwarded_one_is_not(monkeypatch):
+    shown: list[tuple[str, str]] = []
+
+    async def notify_log(message, category="SYSTEM"):
+        shown.append((message, category))
+
+    monkeypatch.setattr(agent_loops, "notify_log", notify_log)
+    listener = _listener(monkeypatch)
+    await listener._handle_command({"type": "c34_nonsense", "payload": {}})
+    assert shown == [("Unknown UI command: c34_nonsense", "SYSTEM")]
+    for forwarded in ("start", "settings_update", "request_state", "voice_enroll"):
+        await listener._handle_command({"type": forwarded, "payload": {}})
+    assert len(shown) == 1  # the bridge forwards these; no agent handler yet, no dashboard noise
+
+
+@pytest.mark.asyncio
+async def test_aclose_ends_the_listener_without_a_reconnect(v2_keys, monkeypatch):
+    """C-34: the job's listener stops with the job: aclose() disconnects, wait() returns and start() returns
+    instead of reconnecting on the old client."""
+    released = asyncio.Event()
+
+    async def wait():
+        await released.wait()
+
+    async def disconnect():
+        released.set()
+
+    sio = MagicMock(connect=AsyncMock(), wait=wait, disconnect=disconnect)
+    listener = _listener(monkeypatch, sio)
+    monkeypatch.setattr(config, "bridge_url", "https://jarvis.example/vortex")
+    runner = asyncio.ensure_future(listener.start())
+    for _ in range(50):
+        if sio.connect.await_count:
+            break
+        await asyncio.sleep(0.01)
+    await listener.aclose()
+    await asyncio.wait_for(runner, 2)
+    assert sio.connect.await_count == 1 and listener.closing
+
+
+def test_each_job_gets_its_own_client(monkeypatch):
+    clients: list[Any] = []
+    monkeypatch.setattr(agent_loops.socketio, "AsyncClient", lambda **_k: clients.append(MagicMock()) or clients[-1])
+    first, second = agent_loops.UIBridgeListener(MagicMock()), agent_loops.UIBridgeListener(MagicMock())
+    assert first.sio is clients[0] and second.sio is clients[1] and first.sio is not second.sio

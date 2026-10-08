@@ -1,4 +1,9 @@
-"""One-shot Socket.IO chat probe against the UI bridge (K-38). PASS when an assistant reply comes.
+"""One-shot Socket.IO chat probe against the UI bridge (K-38).
+
+C-34: it sends ui_command chat {id, text} (default 'Jarvis, 7 times 8?') and passes only when exactly one user
+message with that id and exactly one assistant reply to it (turn_id) come back: a second reply means two listeners
+answered the same message. After the first final reply it waits --settle seconds for a duplicate. --expect 56
+also requires that text in the reply.
 
 Two modes:
 
@@ -8,7 +13,7 @@ Two modes:
 - --cookie-via-ssh (C-19, C-AUTH-1): runs 'python -m src.core.bridge_auth mint-session' inside the jarvis-bridge
   container over ssh (JARVIS_VPS_SSH, else JARVIS_VPS_HOST; key JARVIS_SSH_KEY, as agent_ctl uses them), connects to
   https://jarvis.srv1802669.hstgr.cloud (or --url) with socketio_path 'vortex/socket.io' and the session in the
-  Cookie header, sends ui_command chat {id, text: 'ping from probe'} and logs the probe session out at the end.
+  Cookie header, sends ui_command chat {id, text} and logs the probe session out at the end.
   The minted session is short (--ttl, default 300 s) and never printed.
 """
 from __future__ import annotations
@@ -30,7 +35,7 @@ ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_URL = "https://jarvis.srv1802669.hstgr.cloud/vortex"
 BRIDGE_CONTAINER = "jarvis-bridge"
 COOKIE_NAME = "jarvis_session"
-PROBE_TEXT = "ping from probe"
+PROBE_TEXT = "Jarvis, 7 times 8?"
 
 
 def socket_target(url: str) -> tuple[str, str]:
@@ -102,30 +107,70 @@ async def _logout(origin: str, http_base: str, token: str) -> None:
 
 
 async def run_probe(url: str, *, auth: dict | None, headers: dict | None, payload: object,
-                    wait_s: float) -> bool:
+                    wait_s: float, settle_s: float = 8.0) -> list[dict]:
+    """Sends the chat and returns every new_message/update_message seen: up to wait_s for the first final reply to
+    it, then settle_s more, so a duplicate reply has time to arrive."""
     sio = socketio.AsyncClient()
     got: list[dict] = []
+    msg_id = payload.get("id") if isinstance(payload, dict) else None
+    replied = asyncio.Event()
+
+    def note(kind: str, data: dict) -> None:
+        print(kind, data.get("role"), str(data.get("text", ""))[:120])
+        got.append(dict(data))
+        is_reply = data.get("role") in ("assistant", "agent") and (msg_id is None or data.get("turn_id") == msg_id)
+        if is_reply and data.get("final", data.get("is_final", True)):
+            replied.set()
 
     @sio.on("new_message")
     async def on_msg(data):  # type: ignore[no-untyped-def]
-        print("MSG", data.get("role"), str(data.get("text", ""))[:120])
-        got.append(data)
+        note("MSG", data)
 
     @sio.on("update_message")
     async def on_upd(data):  # type: ignore[no-untyped-def]
-        print("UPD", data.get("role"), str(data.get("text", ""))[:120])
-        got.append(data)
+        note("UPD", data)
 
     base_url, socketio_path = socket_target(url)
     await sio.connect(base_url, auth=auth, headers=headers or {}, socketio_path=socketio_path, wait_timeout=10)
     print(f"connected ({base_url}, path /{socketio_path})")
     await sio.emit("ui_command", {"type": "chat", "payload": payload})
-    await asyncio.sleep(wait_s)
+    try:
+        await asyncio.wait_for(replied.wait(), wait_s)
+        await asyncio.sleep(settle_s)
+    except asyncio.TimeoutError:
+        pass
     await sio.disconnect()
-    return any(g.get("role") == "assistant" for g in got)
+    return got
 
 
-async def main_legacy() -> int:
+def evaluate(got: list[dict], msg_id: str, expect: str | None = None) -> tuple[bool, str]:
+    """C-34: (passed, detail): exactly one user message with msg_id and exactly one assistant reply to it (turn_id;
+    its update_message events count as the same reply), and with expect, that text in the reply."""
+    users = {g.get("id") for g in got if g.get("role") == "user" and g.get("id") == msg_id}
+    replies: dict[str, str] = {}
+    for g in got:
+        if g.get("role") in ("assistant", "agent") and g.get("turn_id") == msg_id:
+            replies[str(g.get("id"))] = str(g.get("text") or "")
+    detail = f"user messages {len(users)}, assistant replies {len(replies)}"
+    passed = len(users) == 1 and len(replies) == 1
+    if passed and expect:
+        found = expect in next(iter(replies.values()))
+        detail += f", '{expect}' {'found' if found else 'missing'} in the reply"
+        passed = found
+    return passed, detail
+
+
+def chat_payload(text: str) -> dict:
+    return {"id": f"probe-{uuid.uuid4().hex[:12]}", "text": text}
+
+
+def report(got: list[dict], payload: dict, expect: str | None) -> int:
+    passed, detail = evaluate(got, payload["id"], expect)
+    print(("PASS " if passed else "FAIL ") + detail)
+    return 0 if passed else 2
+
+
+async def main_legacy(args: argparse.Namespace) -> int:
     load_dotenv(ROOT / ".env")
     load_dotenv(Path(__file__).resolve().parent / ".env", override=False)
     url = os.getenv("UI_BRIDGE_URL")
@@ -133,27 +178,29 @@ async def main_legacy() -> int:
     if not url or not token:
         print("FAIL missing UI_BRIDGE_URL / VORTEX_SECURITY_TOKEN")
         return 1
-    ok = await run_probe(url, auth={"token": token}, headers=None, payload="hi", wait_s=25)
-    print("PASS" if ok else "FAIL")
-    return 0 if ok else 2
+    payload = chat_payload(args.text)
+    got = await run_probe(url, auth={"token": token}, headers=None, payload=payload, wait_s=args.wait,
+                          settle_s=args.settle)
+    return report(got, payload, args.expect)
 
 
-async def main_cookie(url: str, ttl: int) -> int:
+async def main_cookie(args: argparse.Namespace) -> int:
     load_dotenv(ROOT / ".env")
     load_dotenv(Path(__file__).resolve().parent / ".env", override=False)
-    token = mint_session_via_ssh(ttl)
+    token = mint_session_via_ssh(max(30, min(args.ttl, 3600)))
     if token is None:
         return 1
+    url = args.url
     parts = urlsplit(url.strip())
     origin = f"{parts.scheme}://{parts.netloc}"
     http_base = url.strip().rstrip("/")
+    payload = chat_payload(args.text)
     try:
-        ok = await run_probe(url, auth=None, headers={"Cookie": f"{COOKIE_NAME}={token}", "Origin": origin},
-                             payload={"id": f"probe-{uuid.uuid4().hex[:12]}", "text": PROBE_TEXT}, wait_s=25)
+        got = await run_probe(url, auth=None, headers={"Cookie": f"{COOKIE_NAME}={token}", "Origin": origin},
+                              payload=payload, wait_s=args.wait, settle_s=args.settle)
     finally:
         await _logout(origin, http_base, token)
-    print("PASS" if ok else "FAIL")
-    return 0 if ok else 2
+    return report(got, payload, args.expect)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -164,14 +211,19 @@ def _parser() -> argparse.ArgumentParser:
                       help="mint an owner session over ssh and connect with the cookie (C-19)")
     parser.add_argument("--url", default=DEFAULT_URL, help=f"bridge URL for --cookie-via-ssh (default {DEFAULT_URL})")
     parser.add_argument("--ttl", type=int, default=300, help="probe session lifetime in seconds (default 300)")
+    parser.add_argument("--text", default=PROBE_TEXT, help=f"the chat text (default {PROBE_TEXT!r})")
+    parser.add_argument("--expect", default=None, help="text the reply must contain, e.g. 56")
+    parser.add_argument("--wait", type=float, default=25.0, help="seconds to wait for the reply (default 25)")
+    parser.add_argument("--settle", type=float, default=8.0,
+                        help="seconds to keep listening after the reply, for a duplicate (default 8)")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     if args.cookie_via_ssh:
-        return asyncio.run(main_cookie(args.url, max(30, min(args.ttl, 3600))))
-    return asyncio.run(main_legacy())
+        return asyncio.run(main_cookie(args))
+    return asyncio.run(main_legacy(args))
 
 
 if __name__ == "__main__":
