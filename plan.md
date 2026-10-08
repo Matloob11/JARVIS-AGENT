@@ -1392,7 +1392,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-41 | cursor | P3 | WhatsApp: install check, process-based window match, confirmed Unicode send, safe close | C-27, C-28, C-26, X-03, X-11, C-30, X-26, K-16 (DesktopToolPolicy) | DONE (cursor, 2026-10-08 16:08 PKT) |
 | X-42 | cursor | P3 | Window control 1/3: close_window (tool 'close' kept as routed alias), minimize/maximize, active-window context | C-27, X-03, X-11, X-41, K-17 (ToolNamesV2), K-21 (ActiveWindowContext), K-16 (DesktopToolPolicy) | DONE (cursor, 2026-10-08 16:11 PKT) |
 | X-43 | cursor | P3 | Window control 2/3: open_app with a universal app index and Chrome/YouTube/WhatsApp/Office/VLC routing | C-26, X-26, X-34, X-41, X-42 | DONE (cursor, 2026-10-08 16:14 PKT) |
-| X-44 | cursor | P3 | Window control 3/3: save_notepad, open_notepad_file, folder_file (+cv alias), create_folder, open_outputs_folder | C-26, X-03, C-30, X-27, X-43 | DOING (cursor, 2026-10-08 16:14 PKT) |
+| X-44 | cursor | P3 | Window control 3/3: save_notepad, open_notepad_file, folder_file (+cv alias), create_folder, open_outputs_folder | C-26, X-03, C-30, X-27, X-43 | DONE (cursor, 2026-10-08 16:17 PKT) |
 | X-45 | cursor | P3 | CameraPanel: opt-in camera, LiveKit publish, honest link badges, Socket.IO fallback only while sharing | X-13, K-05 (DASH-CAMERA-VISION) | DONE (01 Oct 13:35) |
 | X-46 | cursor | P3 | Location card + Map panel: device location and map focus kept separate, OpenStreetMap view | X-17, K-08 (DASH-LOCATION) | DONE (01 Oct 13:35) |
 | X-47 | cursor | P3 | SIM dialog: provider-not-configured state, purpose field, masked results, 20 s timeout | X-15, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS), K-34 (sim_authorized_source) | DONE (01 Oct 13:50) |
@@ -1454,7 +1454,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-59 | cursor | P4 | Complete mock-bridge e2e suite and verify:prod | X-08, X-13, X-14, X-15, X-16, X-19, X-10, X-21, X-22, X-17, X-20, X-49, X-23, X-24, X-33, X-45, X-46, X-47, X-18, X-48, X-51, X-09 | DONE (cursor, 01 Oct 21:45 PKT) |
 | X-60 | cursor | P4 | Opt-in live smoke suite against the VPS (session-cookie storageState, no stored TOTP seed) | X-59, C-65 | BLOCKED (waiting X-59,C-65) |
 | X-61 | cursor | P4 | Info/media tools smoke harness (--dry / --live) | C-48, X-36, X-37, X-57, X-40, X-39, X-58, C-78, X-04 | DOING (cursor, 2026-10-08 16:14 PKT) |
-| X-63 | cursor | P4 | Tool registry/policy tests + legacy test-script cleanup | X-29, X-30, X-26, X-27, X-31, X-25, X-34, X-41, X-42, X-43, X-44, X-62, X-56, X-35, X-28, K-16 (DesktopToolPolicy) | BLOCKED (waiting many tool deps) |
+| X-63 | cursor | P4 | Tool registry/policy tests + legacy test-script cleanup | X-29, X-30, X-26, X-27, X-31, X-25, X-34, X-41, X-42, X-43, X-44, X-62, X-56, X-35, X-28, K-16 (DesktopToolPolicy) | DOING (cursor, 2026-10-08 16:17 PKT) |
 | X-64 | cursor | P3 | Location hook for weather and search (replaces Claude's compat patch) | C-113, C-111 | DONE (cursor, 02 Oct 20:49 PKT) |
 | X-65 | cursor | P3 | VPS-safe Cursor modules: DESKTOP_ONLY guard, lazy GUI imports, delivery helper, safe names, stricter risks | C-113, C-111 | DONE (cursor, 02 Oct 20:56 PKT) |
 | X-66 | cursor | P3 | Reminders and tasks: cross-process locking, timezone-aware times, delivery hooks for agent-svc | C-125 step 1 (jarvis_filelock, landed 08 Oct), C-111 | DONE (cursor, 2026-10-08 16:11 PKT) |

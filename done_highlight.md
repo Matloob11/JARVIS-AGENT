@@ -2038,3 +2038,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** pytest tests/tools/test_whatsapp_tool.py tests/automation/test_whatsapp_automation.py -q -p no:cacheprovider → 40 passed
 - **Commit:** 43c4401 · **Deploy:** no
 - **Doosre agent ke liye:** —
+\n
+### ✅ [cursor] X-44 · safe notepad/folder paths + outputs mapping · 2026-10-08 16:17 PKT
+- **Kya kiya:** save_notepad Save As vs in-place; open_notepad_file root/sensitive guards; folder_file cv alias + exec risk; create_folder Desktop-safe; open_outputs_folder mapping.
+- **Files:** services/system/jarvis_window_ctrl.py, tests/automation/test_window_ctrl_extra.py, tests/tools/test_window_ctrl_tools.py
+- **Verify:** pytest tests/tools/test_window_ctrl_tools.py tests/automation/test_window_ctrl_extra.py -q -p no:cacheprovider → 43 passed
+- **Commit:** d5acbdc · **Deploy:** no
+- **Doosre agent ke liye:** —
