@@ -70,8 +70,22 @@ def _fake_asyncio(monkeypatch, steps: list[Any]) -> None:
 async def _run(monkeypatch, steps: list[Any]) -> list[str]:
     posts: list[str] = []
     _fake_asyncio(monkeypatch, steps)
-    await hunter.monitor_logs(AsyncMock(side_effect=posts.append))
+    with pytest.raises(asyncio.CancelledError):  # the run ends with a cancel, which the hunter passes on (C-33)
+        await hunter.monitor_logs(AsyncMock(side_effect=posts.append))
     return posts
+
+
+async def test_a_cancelled_hunter_ends_instead_of_starting_again(log, monkeypatch):
+    """C-33 (08 Oct): monitor_logs used to swallow its cancel; start_bug_hunter_loop then started a new monitor, the
+    task never ended, and the job's teardown waited for it forever. The cancel now ends the whole loop."""
+    from services.ai_core import agent_loops
+
+    monkeypatch.setattr(hunter, "POLL_S", 0.01)
+    task = asyncio.ensure_future(agent_loops.start_bug_hunter_loop(None))
+    await asyncio.sleep(0.05)
+    task.cancel()
+    await asyncio.wait({task}, timeout=2)
+    assert task.done() and task.cancelled()
 
 
 # ---------------------------------------------------------------- what is reported

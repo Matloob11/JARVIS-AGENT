@@ -267,6 +267,86 @@ async def test_hanging_connect_hits_the_cap_and_closes_connect_failed():
     assert h.rt.reason == END_CONNECT_FAILED
 
 
+# ---- a close requested while the job still starts (C-33 step B review) ---------------------------
+
+
+async def test_a_close_requested_during_the_connect_starts_no_session():
+    """A framework shutdown or a lost room while the job still connects ends it without a session."""
+    h = Harness("ok")
+
+    async def connect_then_close() -> None:
+        h.rt.request_close(END_ROOM_DISCONNECTED)
+
+    h.ctx.connect = connect_then_close
+    assert await h.rt.start() is False
+    assert h.sessions == [] and h.rt.reason == END_ROOM_DISCONNECTED
+
+
+async def test_a_close_requested_between_start_attempts_stops_the_retries():
+    h = Harness("fail", "ok")
+
+    async def sleep_then_close(seconds: float) -> None:
+        h.sleeps.append(seconds)
+        h.rt.request_close(END_ROOM_DISCONNECTED)
+
+    h.rt._sleep = sleep_then_close
+    assert await h.rt.start() is False
+    assert len(h.sessions) == 1  # no second attempt
+    assert h.rt.reason == END_ROOM_DISCONNECTED  # the requested reason, not 'session_failed'
+
+
+async def test_a_close_requested_while_the_session_starts_skips_the_job_setup():
+    h = Harness("ok")
+
+    async def start_then_close(session: FakeSession) -> None:
+        await session.start()
+        h.rt.request_close(END_ROOM_DISCONNECTED)
+
+    h.rt._start_session_hook = start_then_close
+    assert await h.rt.start() is False  # the entrypoint then skips its setup
+    assert h.ctx.room.handlers == []  # no room handlers for a job that is already ending
+    await h.rt.aclose(h.rt.reason)
+    assert h.sessions[0].aclosed == 1 and h.ctx.shutdowns == [END_ROOM_DISCONNECTED]
+
+
+# ---- the close_session hook (C-33 step B review) -------------------------------------------------
+
+
+async def test_failed_attempts_and_replaced_sessions_go_through_the_close_session_hook():
+    """A session that is not the live one is released by the wiring's close_session hook (which also frees what
+    livekit-agents leaves behind for it); the live session is closed by aclose() itself."""
+    h = Harness("fail", "ok")
+    released: list[FakeSession] = []
+
+    async def close_session(session: FakeSession) -> None:
+        released.append(session)
+        await session.aclose()
+
+    h.rt._close_session_hook = close_session
+    assert await h.rt.start() is True
+    assert released == [h.sessions[0]]  # the failed attempt
+    h.sessions[1].emit("close", Ev(reason=CloseReason.ERROR))
+    for _ in range(40):
+        await asyncio.sleep(0)
+        if len(h.sessions) == 3 and h.rt.session is h.sessions[2]:
+            break
+    assert released == [h.sessions[0], h.sessions[1]]  # the replaced one, before its successor existed
+    await h.rt.aclose("paused_by_owner")
+    assert released == [h.sessions[0], h.sessions[1]] and h.sessions[2].aclosed == 1
+
+
+async def test_a_hanging_close_session_hook_is_bounded():
+    h = Harness("fail", "ok")
+
+    async def hang(_session: FakeSession) -> None:
+        await asyncio.Event().wait()
+
+    h.rt._close_session_hook = hang
+    h.rt._release_timeout_s = 0.05  # 20 s in production
+    assert await asyncio.wait_for(h.rt.start(), 5) is True
+    assert h.rt.session is h.sessions[1]
+
+
 async def test_room_handlers_registered_once_and_disconnect_closes():
     h = Harness("ok")
     await h.rt.start()
@@ -305,17 +385,35 @@ async def test_non_error_close_does_not_restart():
     assert not h.rt.closed.is_set()
 
 
-async def test_unrecoverable_error_event_takes_the_rebuild_path():
+async def test_an_unrecoverable_error_event_waits_for_the_close_that_starts_the_rebuild():
+    """C-33 step B review: livekit emits the error BEFORE it closes the session, and the close comes only after the
+    old activity drained (in-flight tools included). Rebuilding on the error itself started the job's one assistant
+    while the old activity still drained, whose late cleanup then nulled the new session's activity."""
     h = Harness("ok")
     await h.rt.start()
     h.sessions[0].emit("error", Ev(error=Ev(recoverable=False)))
     await _drain()
-    assert len(h.sessions) == 2
+    assert len(h.sessions) == 1  # no rebuild yet: the old session is still closing
+    h.sessions[0].emit("close", Ev(reason=CloseReason.ERROR))
+    await _drain()
+    assert len(h.sessions) == 2 and h.rt.session is h.sessions[1]  # exactly one rebuild
 
     # a recoverable error is livekit-agents' own business: no rebuild
     h.sessions[1].emit("error", Ev(error=Ev(recoverable=True)))
     await _drain()
     assert len(h.sessions) == 2
+    assert not h.rt.closed.is_set()
+
+
+async def test_a_session_that_never_closes_after_an_unrecoverable_error_ends_the_job():
+    """A tool that never returns keeps the old session's drain, so its close never comes: the job ends instead of
+    sitting in the room without a session."""
+    h = Harness("ok")
+    h.rt._error_close_wait_s = 0.05  # 120 s in production
+    await h.rt.start()
+    h.sessions[0].emit("error", Ev(error=Ev(recoverable=False)))
+    assert await asyncio.wait_for(h.rt.wait_closed(), 2) == END_SESSION_ERROR
+    assert len(h.sessions) == 1  # never rebuilt on top of the draining session
 
 
 async def test_restart_cap_three_per_window_then_session_error(caplog):

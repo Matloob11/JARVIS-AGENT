@@ -160,7 +160,7 @@ except (ImportError, ValueError):
     from agent_core import BrainAssistant  # type: ignore
 
 from src.core import gemini_resume_guard
-from src.core.jarvis_runtime import is_error_close_reason
+from src.core.jarvis_runtime import JarvisRuntime
 from src.core.conversation_router import ConversationRouter, preview
 from src.core.vision_handler import append_chat_message, desktop_data_message
 
@@ -779,8 +779,9 @@ async def _cleanup_session_resources(session: AgentSession, tasks: list[asyncio.
     with aclose() (AgentSession has no stop() in livekit-agents 1.4.6; that call failed silently before)."""
     logger.info("🧹 Performing session cleanup...")
 
-    # Stop this job's protected loops (the UI listener's cancel closes its bridge socket)
-    await (protector if protector is not None else autonomous_protector).cancel_all()
+    # Stop this job's protected loops (the UI listener's cancel closes its bridge socket). Bounded: on 08 Oct a loop
+    # that swallowed its cancel held this teardown forever and the job never ended.
+    await _bounded_call("protector.cancel_all", (protector if protector is not None else autonomous_protector).cancel_all)
     release_job_protector(protector)
 
     if session:
@@ -801,7 +802,105 @@ async def _cleanup_session_resources(session: AgentSession, tasks: list[asyncio.
             if isinstance(task, asyncio.Future):
                 real_tasks.append(task)
         if real_tasks:
-            await asyncio.gather(*real_tasks, return_exceptions=True)
+            # Bounded like every teardown step (C-33, 08 Oct): a task that swallows its cancel never holds the job's end
+            done, pending = await asyncio.wait(real_tasks, timeout=CLEANUP_STEP_TIMEOUT_S)
+            for task in done:
+                if not task.cancelled():
+                    task.exception()  # retrieved, as gather(return_exceptions=True) did
+            if pending:
+                logger.warning("🛑 %d task(s) ignored their cancel; the job ends without them", len(pending))
+
+
+# ------------------------------------------------------------------ C-33 step B: a session that is not the live one
+ROOMIO_AUDIO_TRACK = "roomio_audio"  # livekit-agents' RoomIO output track (session_room_options names no other)
+UNPUBLISH_TIMEOUT_S = 5.0
+_ROOMIO_PARTS = ("_audio_input", "_video_input", "_audio_output", "_pre_connect_audio_handler")
+
+
+def _agent_audio_sids(room: Any) -> list[str]:
+    """The sids of the agent's own published RoomIO audio tracks."""
+    publications = getattr(getattr(room, "local_participant", None), "track_publications", None)
+    if not hasattr(publications, "items"):
+        return []
+    return [sid for sid, pub in list(publications.items()) if getattr(pub, "name", None) == ROOMIO_AUDIO_TRACK]
+
+
+def _room_listeners_of(room: Any, session: Any) -> list[tuple[str, Any]]:
+    """(event, callback) of the room listeners that the session's RoomIO and its streams still hold (livekit-agents
+    1.4.6 never removes RoomIO's participant_disconnected handler nor its audio input's track_unpublished one)."""
+    events = getattr(room, "_events", None)
+    if not isinstance(events, dict):
+        return []
+    registered = [(event, callback) for event, callbacks in list(events.items()) for callback in list(callbacks)]
+    owners: set[int] = set()
+    for _event, callback in registered:
+        room_io = getattr(callback, "__self__", None)
+        if room_io is not None and getattr(room_io, "_agent_session", None) is session:
+            owners.add(id(room_io))
+            owners.update(id(part) for part in (getattr(room_io, name, None) for name in _ROOMIO_PARTS)
+                          if part is not None)
+    return [(event, callback) for event, callback in registered
+            if getattr(callback, "__self__", None) is not None and id(callback.__self__) in owners]
+
+
+async def _release_session(session: Any, agent: Any, room: Any) -> None:
+    """
+    C-33 step B (JarvisRuntime close_session hook): closes an AgentSession that is NOT the live one (a failed start
+    attempt, the old session of an in-place rebuild, a failed rebuild) together with what livekit-agents 1.4.6 leaves
+    behind for it, because the next session of this job starts the SAME BrainAssistant in the SAME room:
+    - aclose() returns at once for a session whose start failed half way: its client events handler keeps the 'lk.chat'
+      text handler (the next session's typed input is then refused), its RoomIO stays up, and the shared assistant
+      keeps the dead activity, so every later start fails ('cannot start agent: an activity is already running');
+    - RoomIO never unpublishes its 'roomio_audio' track: after a rebuild a silent agent track would stay in the room,
+      and the dashboard's one <audio> element can pick it after a reconnect;
+    - RoomIO's participant_disconnected and its audio input's track_unpublished handlers stay on the room.
+    Runs before the next session exists, so every agent audio track is stale here. Bounded; never raises.
+    """
+    stale_tracks = _agent_audio_sids(room)
+    await _bounded_call("session.aclose", getattr(session, "aclose", None))
+    events = getattr(session, "_client_events_handler", None)
+    if events is not None:  # aclose() of a started session closes it and clears this: a half-started one
+        if getattr(events, "_started", False):
+            await _bounded_call("client_events.aclose", getattr(events, "aclose", None))
+        elif getattr(events, "_text_stream_handler_registered", False):
+            try:
+                room.unregister_text_stream_handler(TEXT_INPUT_TOPIC)
+                events._text_stream_handler_registered = False  # pylint: disable=protected-access
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                logger.debug("RUNTIME lk.chat handler not released: %s", type(e).__name__)
+        session._client_events_handler = None  # pylint: disable=protected-access
+    room_io = getattr(session, "_room_io", None)
+    if room_io is not None:  # likewise
+        await _bounded_call("room_io.aclose", getattr(room_io, "aclose", None))
+        session._room_io = None  # pylint: disable=protected-access
+    activity = getattr(agent, "_activity", None)
+    if activity is not None and getattr(activity, "_session", None) is session:
+        if getattr(session, "_started", False):
+            # Still started, i.e. closing (an in-flight tool keeps its drain): livekit clears the activity itself when
+            # that close ends. Forcing it here would let that late cleanup null the NEXT session's activity.
+            logger.warning("RUNTIME the replaced session still holds the assistant (closing); left to livekit")
+        else:
+            # The orphan of a failed start: nothing in livekit closes it any more
+            await _bounded_call("activity.aclose", getattr(activity, "aclose", None))
+            if getattr(agent, "_activity", None) is activity:
+                agent._activity = None  # pylint: disable=protected-access
+    for event, callback in _room_listeners_of(room, session):
+        try:
+            room.off(event, callback)
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.debug("RUNTIME room listener %s not removed: %s", event, type(e).__name__)
+    local = getattr(room, "local_participant", None)
+    unpublished = 0
+    for sid in stale_tracks:
+        try:
+            if sid in getattr(local, "track_publications", {}):
+                await asyncio.wait_for(local.unpublish_track(sid), UNPUBLISH_TIMEOUT_S)
+                unpublished += 1
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.debug("RUNTIME stale agent track not unpublished: %s", type(e).__name__)
+    logger.info("RUNTIME released a replaced session (%d stale agent track(s) unpublished)", unpublished)
 
 
 # ------------------------------------------------------------------ C-23: the job's session state and its end
@@ -1123,11 +1222,45 @@ def _print_startup_banner() -> None:
     print("="*50 + "\n")
 
 
+def follow_owner_reconnects_live(get_session: Callable[[], Any], room: Any) -> list[tuple[str, Any]]:
+    """C-33 step B: the owner-follow handlers of one JOB (register them once, e.g. with JarvisRuntime.room_on). Unlike
+    follow_owner_reconnects they read the CURRENT session on every event, so after an in-place session rebuild the
+    new RoomIO is relinked, never the old one. Returns [(event, handler)]; runs one relink pass now."""
+
+    def _on_connected(participant: Any) -> None:
+        session = get_session()
+        if session is not None and _may_link(participant):
+            relink_room_input(session, room)
+
+    def _on_disconnected(_participant: Any) -> None:
+        session = get_session()
+        if session is not None:
+            relink_room_input(session, room)
+
+    current = get_session()
+    if current is not None:
+        relink_room_input(current, room)  # the linked person may have left before these handlers existed
+    return [("participant_connected", _on_connected), ("participant_disconnected", _on_disconnected)]
+
+
+DEFAULT_REALTIME_MODEL = "models/gemini-2.5-flash-native-audio-latest"
+
+
+def _realtime_model_name() -> str:
+    """K-69: JARVIS_REALTIME_MODEL, else the pinned native-audio model (typed chat needs mid-session client content)."""
+    return (os.getenv("JARVIS_REALTIME_MODEL") or "").strip() or DEFAULT_REALTIME_MODEL
+
+
 async def entrypoint(ctx: agents.JobContext):
-    """Main job entrypoint. Up to 5 session attempts; the job ends (ctx.shutdown) when the assistant's stop event is
-    set (pause_agent: 'paused_by_owner'; C-33: 'session_error' when the session closes on an unrecoverable error,
-    'room_disconnected' when the room is gone) or when every attempt failed ('session_failed'), never by starting
-    another session in place (C-23, K-60). Each attempt runs its loops on its own task protector (C-33)."""
+    """Main job entrypoint (C-33 step B): one JarvisRuntime per job (src/core/jarvis_runtime.py).
+
+    ctx.connect() runs once (60 s cap; a failure ends the job as 'connect_failed'); session.start is retried 3 times
+    with a fresh AgentSession each time ('session_failed' after the last); an unrecoverable session error rebuilds the
+    session IN PLACE, at most 3 times per 10 minutes ('session_error' beyond the cap); the room's 'disconnected' event
+    or the liveness check ends the job ('room_disconnected'); the assistant's stop event ends it too (pause_agent:
+    'paused_by_owner', K-60). Teardown is bounded and ends in _end_job (jarvis.session 'closed'/'paused', job_end,
+    ctx.shutdown); room handlers are registered once per job and removed at the end; each job runs its loops on its
+    own task protector. A cancelled job is cleaned up but never shut down again."""
     # K-29 backstop for _mask_cli_log_handler(): masks any root handler added since then.
     redact_root_handlers()
     # C-64: the UI log shipper of this process (once per process: a Windows job thread finds it running, a Linux
@@ -1135,26 +1268,230 @@ async def entrypoint(ctx: agents.JobContext):
     start_ui_log_shipping()
     net_guard.harden_process()  # C-124: again in the job (PR_SET_DUMPABLE does not survive an exec)
     local = desktop_mode() == DESKTOP_MODE_LOCAL
-    max_retries = 5
-    attempt = 0
-    ended: str | None = None
-    cancelled = False
+    from services.utils.jarvis_bridge import (  # pylint: disable=import-outside-toplevel
+        notify_location,
+        notify_pc_vitals,
+        notify_thinking,
+        notify_ui,
+    )
+
+    # ULTRA-STRICT: Centralized Task Tracking Set (cancelled at the job's end)
+    active_tasks: set[asyncio.Task] = set()
+
+    def track(coro: Coroutine[Any, Any, Any], _active_tasks: set[asyncio.Task] = active_tasks) -> asyncio.Task[Any]:
+        t: asyncio.Task[Any] = asyncio.create_task(coro)
+        _active_tasks.add(t)
+        t.add_done_callback(_active_tasks.discard)
+        return t
+
+    # Per-job parts, built once after the connect (the first session_factory call) and shared by every session.
+    job: dict[str, Any] = {"assistant": None, "router": None, "model": None, "vad": None, "session": None,
+                           "protector": None, "plugin_manager": None, "request_end": None,
+                           "framework_shutdown": False, "cancelled": False}
+    entry_task = asyncio.current_task()
+
+    async def _build_job_parts() -> None:
+        logger.info("✅ Connected to room: %s", ctx.room.name)
+        # C-137: loads in its own thread while the session starts (C-124: the JARVIS room's job only)
+        _prewarm_vector_memory(getattr(ctx.room, "name", None))
+        # C-72: speaker-ID model loads in its own thread (C-124: the JARVIS room's job only)
+        _prewarm_voice_id(getattr(ctx.room, "name", None))
+        # Now perform secondary initialization (the date is computed locally — no network call)
+        current_dt_res = await get_formatted_datetime()
+        # --- C-32: the prewarmed singletons of this executor (prewarm()). A missing key boots inline exactly as
+        # before C-32 and logs PREWARM_MISS (dev console mode, tests, or a job that arrived before/without prewarm).
+        userdata = _proc_userdata(ctx)
+        from services.ai_core.jarvis_plugin_manager import JarvisPluginManager  # pylint: disable=import-outside-toplevel
+        plugin_manager = JarvisPluginManager()
+        external_tools = userdata.get("tools")
+        if external_tools is None:
+            logger.warning("PREWARM_MISS key=%s", "tools")
+            plugin_manager.discover_plugins(os.path.join(config.project_root, "services"))
+            if not local:
+                remote_compat.install_arg_hooks(plugin_manager)  # C-124: VPS argument hooks
+            external_tools = plugin_manager.get_livekit_tools()
+            logger.info("🛠️ Discovered %d external tools from plugins.", len(external_tools))
+        if not local:
+            remote_compat.self_test()  # K-72: every shim still bound once discovery imported the tools
+        vad = userdata.get("vad")
+        if vad is None:
+            logger.warning("PREWARM_MISS key=%s", "vad")
+            # Tune VAD to be less sensitive to background noise and prevent stuttering
+            vad = silero.VAD.load(
+                min_speech_duration=0.2,  # Sir Matloob's PC - higher threshold reduces noise jitter
+                min_silence_duration=1.0,
+            )
+        city = userdata.get("city")
+        if not isinstance(city, str) or not city:
+            logger.warning("PREWARM_MISS key=%s", "city")
+            city = await get_current_city()
+        # One RealtimeModel per job (K-69 JARVIS_REALTIME_MODEL): the assistant (an Agent) holds it as its llm, and
+        # every rebuilt AgentSession opens a fresh realtime session from it.
+        llm_model = google.realtime.RealtimeModel(
+            voice="Charon",  # Standardized Capitalized ID
+            model=_realtime_model_name(),
+        )
+        # 2026-10-06: after a network blip the plugin replayed a stale session-resumption handle on every reconnect
+        # (APIError/close 1008 'Requested entity was not found') until the session died. The guard drops the stale
+        # handle so the plugin's own retry reconnects fresh.
+        gemini_resume_guard.guard_realtime_model(llm_model)
+        user_id = _resolve_user_id(ctx.room)  # memory identity: JARVIS_USER_ID, else the participant identity
+        assistant = BrainAssistant(
+            chat_ctx=llm.ChatContext(),
+            llm_instance=llm_model,
+            tools=external_tools,
+            current_date=current_dt_res.get("formatted"),
+            current_city=city,
+            user_id=user_id,
+        )
+        # C-23: the stop event comes with the assistant, before the UI listener can receive a pause_agent; the
+        # runtime WATCHES it (never swaps it), so one that arrives before the runtime waits is never lost.
+        stop_event = getattr(assistant, "_stop_event", None)
+        if not isinstance(stop_event, asyncio.Event):
+            stop_event = asyncio.Event()
+            assistant._stop_event = stop_event  # pylint: disable=protected-access
+
+        # Every end path goes through this (an assistant before C-23 has no request_end)
+        def _request_end(reason: str, _assistant=assistant, _stop=stop_event) -> None:
+            end = getattr(_assistant, "request_end", None)
+            if callable(end):
+                end(reason)
+                return
+            if getattr(_assistant, "end_reason", None) is None:
+                try:
+                    _assistant.end_reason = reason
+                except AttributeError:
+                    pass
+            _stop.set()
+
+        # C-42: typed chat (UI and lk.chat) goes into this job's session through the router, and the router emits
+        # every transcript message once (conversation_item_added).
+        router = ConversationRouter(assistant, spawn=track)
+        assistant.attach_router(router)
+        # Set to WARNING to see important SDK signals but ignore trivial ones
+        logging.getLogger("livekit").setLevel(logging.WARNING)
+        _quiet_livekit_agents_logger()
+        job.update(assistant=assistant, router=router, model=llm_model, vad=vad, plugin_manager=plugin_manager,
+                   request_end=_request_end)
+        runtime.assistant, runtime.router = assistant, router
+
+    async def _session_factory() -> Any:
+        if job["assistant"] is None:
+            await _build_job_parts()
+        # Realtime model owns in-room voice. Do not attach Cloud TTS for chat (AI Studio keys are not Cloud TTS
+        # credentials; chat uses text notify).
+        return AgentSession(
+            preemptive_generation=True,
+            allow_interruptions=True,
+            vad=job["vad"],
+            stt=None,
+            llm=job["model"],
+            tts=None,
+        )
+
+    async def _start_session(session: Any) -> None:
+        logger.info("[AGENT] Connecting room and starting session...")
+        # record=False: these jobs never record (self-hosted LiveKit), and a rebuilt session of the same job must not
+        # trip livekit-agents' 'only one primary AgentSession' check, which only applies while recording.
+        await session.start(room=ctx.room, agent=job["assistant"], record=False,
+                            room_options=session_room_options(job["router"].text_input_cb))
+        logger.info("[AGENT] Session started successfully.")
+
+    def _on_session_started(session: Any, rebuilt: bool) -> None:
+        """After EVERY successful session.start (first start and each in-place rebuild): this session's handlers and
+        the per-session hand-overs; room handlers are NOT touched here (they are registered once per job)."""
+        assistant, router = job["assistant"], job["router"]
+        job["session"] = session
+        router.attach(session)
+        harden_room_input(session, ctx.room)  # C-124: owner-only RPC and text (VPS; PC opt-in); idempotent
+        assistant.attach_session(session)
+        _enable_voice_confirm_check()  # C-75: confirm_action needs Sir's own spoken yes from now on
+        jarvis_announcer.attach(session)  # C-55 (K-18): results, jobs and tips are shown and spoken here
+        jarvis_announcer.set_assistant(assistant)
+
+        # --- Transcript messages (K-58) ---
+        # C-42: conversation_item_added is the single source of chat messages (voice user text with the item id,
+        # typed text never twice, replies with turn_id); a final transcription is only logged.
+        @session.on("user_input_transcribed")
+        def on_user_transcription(event: agents.voice.UserInputTranscribedEvent, _assistant=assistant):
+            if not event.transcript or _assistant.muted:
+                return
+            if event.is_final:
+                logger.info("🎤 User Transcription (Final, %d chars): %s", len(event.transcript),
+                            preview(event.transcript))
+                logger.debug("🎤 User Transcription (Final): %s", event.transcript)
+                _note_final_transcript(event, _assistant)  # C-75: spoken confirmations need this
+            else:
+                # Optional: Just log locally for debugging, don't flood the UI
+                logger.debug("🎤 Partial Input: %s", event.transcript)
+
+        @session.on("conversation_item_added")
+        def on_conversation_item_added(event: agents.voice.ConversationItemAddedEvent,
+                                       _router: ConversationRouter = router):
+            _router.on_conversation_item_added(event)
+
+        @session.on("agent_state_changed")
+        def on_agent_state_changed(event: agents.voice.AgentStateChangedEvent):
+            state = event.new_state
+            logger.info("🤖 Agent State: %s", state)
+            # Update UI States
+            if state == "speaking":
+                track(notify_ui("START"))
+                track(notify_thinking("STOP"))
+            elif state == "thinking":
+                track(notify_thinking("START"))
+                track(notify_ui("STOP"))
+            else:
+                track(notify_ui("STOP"))
+                track(notify_thinking("STOP"))
+
+        @session.on("error")
+        def _s_error(err: Any) -> None:
+            logger.error("⚠️ Session Error: %s", err)
+
+        if rebuilt:
+            relink_room_input(session, ctx.room)  # the rebuilt RoomIO starts unlinked
+            logger.info("RUNTIME session rebuilt: handlers and hand-overs re-attached")
+
+    async def _end_runtime_job(reason: str) -> None:
+        """The runtime's end_job hook: the job's own leftovers, then the C-23 end block (skipped on cancel)."""
+        router = job["router"]
+        if router is not None:
+            router.detach()  # typed chat gets the offline answer until the next job attaches
+        if job["session"] is not None:
+            jarvis_announcer.detach(job["session"])  # C-55: only this job's session
+        await _cleanup_session_resources(None, list(active_tasks), protector=job["protector"])
+        if job["cancelled"]:
+            logger.info("JOB END (%s): cancelled, not shut down again", reason)
+            return
+        await _end_job(ctx, reason, framework_shutdown=job["framework_shutdown"])
+
+    runtime = JarvisRuntime(
+        ctx,
+        session_factory=_session_factory,
+        start_session=_start_session,
+        on_session_started=_on_session_started,
+        # a failed attempt or a replaced session, with what livekit-agents leaves behind for it (C-33 review)
+        close_session=lambda session: _release_session(session, job["assistant"], ctx.room),
+        set_session_attr=lambda value: _set_session_attr(ctx, value),  # K-68 v9 (best effort, never blocking)
+        end_job=_end_runtime_job,
+        sleep=asyncio.sleep,  # read now, not at import: tests swap asyncio.sleep
+    )
 
     # C-33: livekit-agents never awaits or cancels this entrypoint when IT ends the job (room 'disconnected', a worker
     # shutdown): it runs the shutdown callbacks, cancels its own tasks and stops the loop, which would cut our
-    # teardown off. This callback asks the current attempt to end and holds the loop (bounded) until it has.
-    entry_task = asyncio.current_task()
-    job_state: dict[str, Any] = {"request_end": None, "protector": None, "framework_shutdown": False}
-
+    # teardown off. This callback asks the job to end and holds the loop (bounded) until it has.
     async def _hold_for_teardown(reason: str) -> None:
-        job_state["framework_shutdown"] = True
-        request_end = job_state["request_end"]
+        job["framework_shutdown"] = True
+        why = END_ROOM_DISCONNECTED if "disconnect" in str(reason).lower() else END_JOB_SHUTDOWN
+        request_end = job["request_end"]
         if callable(request_end):
-            request_end(END_ROOM_DISCONNECTED if "disconnect" in str(reason).lower() else END_JOB_SHUTDOWN)
+            request_end(why)
+        runtime.request_close(why)  # also before the assistant exists
         if entry_task is not None and entry_task is not asyncio.current_task() and not entry_task.done():
             await asyncio.wait({entry_task}, timeout=FRAMEWORK_TEARDOWN_WAIT_S)
         if entry_task is None or not entry_task.done():  # the teardown did not finish in time: the cheap parts
-            release_job_protector(job_state["protector"])
+            release_job_protector(job["protector"])
             await _close_loop_bridge_client()
 
     try:
@@ -1162,244 +1499,45 @@ async def entrypoint(ctx: agents.JobContext):
     except Exception as e:  # pylint: disable=broad-exception-caught  # a stand-in context without callbacks
         logger.debug("no shutdown callback: %s", type(e).__name__)
 
-    while attempt < max_retries:
-        session: AgentSession | None = None
-        router: ConversationRouter | None = None
-        assistant: Any = None
-        protector: TaskProtector | None = None  # C-33: this attempt's own loops (never the global protector)
-        room_handlers: list[tuple[str, Any]] = []  # C-33: removed in finally, so a retry never doubles them
-        # ULTRA-STRICT: Centralized Task Tracking Set
-        active_tasks: set[asyncio.Task] = set()
+    try:
+        logger.info("Attempting to start session (Timeout: 60s)...")
+        if await runtime.start():
+            assistant = job["assistant"]
 
-        def track(coro: Coroutine[Any, Any, Any], _active_tasks: set[asyncio.Task] = active_tasks) -> asyncio.Task[Any]:
-            t: asyncio.Task[Any] = asyncio.create_task(coro)
-            _active_tasks.add(t)
-            t.add_done_callback(_active_tasks.discard)
-            return t
-        try:
-            from services.utils.jarvis_bridge import (  # pylint: disable=import-outside-toplevel
-                notify_location,
-                notify_pc_vitals,
-                notify_thinking,
-                notify_ui,
-            )
-            logger.info("Attempting to start session (Timeout: 60s)...")
-            # INCREASED TIMEOUT: From 10s to 60s for high-load systems (Sir Matloob's Dell PC)
-            await asyncio.wait_for(ctx.connect(), timeout=60.0)
-            logger.info("✅ Connected to room: %s", ctx.room.name)
-            _set_session_attr(ctx, SESSION_STARTING)  # K-68 v9 (best effort, never blocking)
-            # C-137: loads in its own thread while the session starts (C-124: the JARVIS room's job only)
-            _prewarm_vector_memory(getattr(ctx.room, "name", None))
-            # C-72: speaker-ID model loads in its own thread (C-124: the JARVIS room's job only)
-            _prewarm_voice_id(getattr(ctx.room, "name", None))
-
-            # Now perform secondary initialization (the date is computed locally — no network call)
-            current_dt_res = await get_formatted_datetime()
-
-            # --- C-32: the prewarmed singletons of this executor (prewarm()). A missing key boots
-            # inline exactly as before C-32 and logs PREWARM_MISS (dev console mode, tests, or a
-            # job that arrived before/without prewarm).
-            userdata = _proc_userdata(ctx)
-
-            # --- Plugin & Tool Discovery (Centralized; once per process since C-32) ---
-            from services.ai_core.jarvis_plugin_manager import JarvisPluginManager
-            plugin_manager = JarvisPluginManager()
-            external_tools = userdata.get("tools")
-            if external_tools is None:
-                logger.warning("PREWARM_MISS key=%s", "tools")
-                # Root-level services directory
-                package_path = os.path.join(config.project_root, "services")
-                plugin_manager.discover_plugins(package_path)
-                if not local:
-                    remote_compat.install_arg_hooks(plugin_manager)  # C-124: VPS argument hooks
-                external_tools = plugin_manager.get_livekit_tools()
-                logger.info("🛠️ Discovered %d external tools from plugins.", len(external_tools))
-            if not local:
-                remote_compat.self_test()  # K-72: every shim still bound once discovery imported the tools
-
-            vad = userdata.get("vad")
-            if vad is None:
-                logger.warning("PREWARM_MISS key=%s", "vad")
-                # Tune VAD to be less sensitive to background noise and prevent stuttering
-                vad = silero.VAD.load(
-                    min_speech_duration=0.2, # Sir Matloob's PC - higher threshold reduces noise jitter
-                    min_silence_duration=1.0,
-                )
-
-            city = userdata.get("city")
-            if not isinstance(city, str) or not city:
-                logger.warning("PREWARM_MISS key=%s", "city")
-                city = await get_current_city()
-
-            # USER PREFERRED EXPERIMENTAL MODEL: models/gemini-2.5-flash-native-audio-latest
-            llm_model = google.realtime.RealtimeModel(
-                voice="Charon", # Standardized Capitalized ID
-                model="models/gemini-2.5-flash-native-audio-latest",
-            )
-            # 2026-10-06: after a network blip the plugin replayed a stale session-resumption handle on
-            # every reconnect (APIError/close 1008 'Requested entity was not found') until the session
-            # died. The guard drops the stale handle so the plugin's own retry reconnects fresh; no new
-            # restart loop, and the 5-attempt session cap of this entrypoint still applies (K-60 v9).
-            gemini_resume_guard.guard_realtime_model(llm_model)
-
-            # Memory identity: JARVIS_USER_ID, else the participant identity as before
-            user_id = _resolve_user_id(ctx.room)
-
-            chat_ctx = llm.ChatContext()
-            
-            # BrainAssistant now receives the LLM and the external tools
-            # It will add its internal tools (persona, wake-word) automatically
-            assistant = BrainAssistant(
-                chat_ctx=chat_ctx,
-                llm_instance=llm_model,
-                tools=external_tools,
-                current_date=current_dt_res.get("formatted"),
-                current_city=city,
-                user_id=user_id,
-            )
-            # C-23: the stop event comes with the assistant, before the UI listener (_start_background_tasks) can
-            # receive a pause_agent; one that arrives before the wait below is never lost.
-            stop_event = getattr(assistant, "_stop_event", None)
-            if not isinstance(stop_event, asyncio.Event):
-                stop_event = asyncio.Event()
-                assistant._stop_event = stop_event  # pylint: disable=protected-access
-
-            # C-33: every end path goes through this (an assistant before C-23 has no request_end)
-            def _request_end(reason: str, _assistant=assistant, _stop=stop_event) -> None:
-                end = getattr(_assistant, "request_end", None)
-                if callable(end):
-                    end(reason)
-                    return
-                if getattr(_assistant, "end_reason", None) is None:
-                    try:
-                        _assistant.end_reason = reason
-                    except AttributeError:
-                        pass
-                _stop.set()
-
-            job_state["request_end"] = _request_end
-            # C-42: typed chat (UI and lk.chat) goes into this job's session through the router, and the
-            # router emits every transcript message once (conversation_item_added).
-            router = ConversationRouter(assistant, spawn=track)
-            assistant.attach_router(router)
-
-            # Realtime model owns in-room voice. Do not attach Cloud TTS for chat
-            # (AI Studio keys are not Cloud TTS credentials; chat uses text notify).
-            session = AgentSession(
-                preemptive_generation=True,
-                allow_interruptions=True,
-                vad=vad,
-                stt=None,
-                llm=llm_model,
-                tts=None,
-            )
-
-            # --- Internal Session Signaling Handlers ---
-            # Set to WARNING to see important SDK signals but ignore trivial ones
-            logging.getLogger("livekit").setLevel(logging.WARNING)
-            _quiet_livekit_agents_logger()
-
-            @ctx.room.on("data_received")
-            def on_data_received(data: rtc.DataPacket): # pylint: disable=useless-return
+            def on_data_received(data: rtc.DataPacket):  # pylint: disable=useless-return
                 # Suppress ignoring byte stream warnings for internal topics
                 if data.topic in ["lk.agent.session", "lk.agent.monitor", "lk.agent.chat"]:
                     return  # pylint: disable=useless-return
-            room_handlers.append(("data_received", on_data_received))
-
-
-            logger.info("[AGENT] Connecting room and starting session...")
-            await session.start(room=ctx.room, agent=assistant,
-                                room_options=session_room_options(router.text_input_cb))
-            logger.info("[AGENT] Session started successfully.")
-            _set_session_attr(ctx, SESSION_RUNNING)  # K-68 v9: the bridge's voice_ready needs it
-            router.attach(session)
-            harden_room_input(session, ctx.room)  # C-124: owner-only RPC and text (VPS; PC opt-in)
-            follow_owner_reconnects(session, ctx.room)  # the owner comes back under a new identity
-            assistant.attach_session(session)
-            _enable_voice_confirm_check()  # C-75: confirm_action needs Sir's own spoken yes from now on
-            jarvis_announcer.attach(session)  # C-55 (K-18): results, jobs and tips are shown and spoken here
-            jarvis_announcer.set_assistant(assistant)
-
-            # C-33 (step A): the job ends when its session or its room is gone; the bridge dispatches a fresh job.
-            @session.on("close")
-            def _on_session_close(event: Any, _end=_request_end) -> None:
-                if is_error_close_reason(getattr(event, "reason", None)):
-                    logger.warning("SESSION closed on an unrecoverable error; ending the job")
-                    _end(END_SESSION_ERROR)
-
-            def _on_room_disconnected(*_args: Any, _end=_request_end) -> None:
-                _end(END_ROOM_DISCONNECTED)
-
-            ctx.room.on("disconnected")(_on_room_disconnected)
-            room_handlers.append(("disconnected", _on_room_disconnected))
-            track(_room_liveness_loop(ctx.room, _request_end))
-
-            # --- Location and PC vitals loops --- (local mode only, K-72 / K-40)
-            if local:
-                track(_location_loop(notify_location))
-                track(_pc_vitals_loop(notify_pc_vitals))
-
+            runtime.room_on("data_received", on_data_received)  # removed by the runtime's teardown
 
             # --- Speaker Identification Subscription ---
-            @ctx.room.on("track_published")
-            def on_track_published(publication: rtc.TrackPublication, participant: rtc.RemoteParticipant, _assistant=assistant):
+            def on_track_published(publication: rtc.TrackPublication, participant: rtc.RemoteParticipant,
+                                   _assistant=assistant):
                 if publication.kind == rtc.TrackKind.KIND_AUDIO:
                     track(_process_user_audio(publication, _assistant))
-            room_handlers.append(("track_published", on_track_published))
+            runtime.room_on("track_published", on_track_published)
+
+            # The owner comes back under a new identity: relink the CURRENT session (C-35 replaces this with VoiceLink)
+            for event_name, handler in follow_owner_reconnects_live(lambda: job["session"], ctx.room):
+                runtime.room_on(event_name, handler)
+            track(_room_liveness_loop(ctx.room, job["request_end"]))  # C-33 step A: a dead room ends the job
 
             # Subscribe to existing tracks
             for participant in ctx.room.remote_participants.values():
                 for publication in participant.track_publications.values():
                     if publication.kind == rtc.TrackKind.KIND_AUDIO:
                         track(_process_user_audio(publication, assistant))
-            # --------------------------------------------
 
-            # --- Transcript messages (K-58) ---
-            # C-42: conversation_item_added is the single source of chat messages (voice user text with the
-            # item id, typed text never twice, replies with turn_id); a final transcription is only logged.
-            @session.on("user_input_transcribed")
-            def on_user_transcription(event: agents.voice.UserInputTranscribedEvent, _assistant=assistant):
-                if not event.transcript or _assistant.muted:
-                    return
-                if event.is_final:
-                    logger.info("🎤 User Transcription (Final, %d chars): %s", len(event.transcript),
-                                preview(event.transcript))
-                    logger.debug("🎤 User Transcription (Final): %s", event.transcript)
-                    _note_final_transcript(event, _assistant)  # C-75: spoken confirmations need this
-                else:
-                    # Optional: Just log locally for debugging, don't flood the UI
-                    logger.debug("🎤 Partial Input: %s", event.transcript)
-
-            @session.on("conversation_item_added")
-            def on_conversation_item_added(event: agents.voice.ConversationItemAddedEvent,
-                                           _router: ConversationRouter = router):
-                _router.on_conversation_item_added(event)
-
-            @session.on("agent_state_changed")
-            def on_agent_state_changed(event: agents.voice.AgentStateChangedEvent):
-                state = event.new_state
-                logger.info("🤖 Agent State: %s", state)
-
-                # Update UI States
-                if state == "speaking":
-                    track(notify_ui("START"))
-                    track(notify_thinking("STOP"))
-                elif state == "thinking":
-                    track(notify_thinking("START"))
-                    track(notify_ui("STOP"))
-                else:
-                    track(notify_ui("STOP"))
-                    track(notify_thinking("STOP"))
-
-            @session.on("error")
-            def _s_error(err: Any) -> None:
-                logger.error("⚠️ Session Error: %s", err)
+            # --- Location and PC vitals loops --- (local mode only, K-72 / K-40)
+            if local:
+                track(_location_loop(notify_location))
+                track(_pc_vitals_loop(notify_pc_vitals))
 
             _print_startup_banner()
-            _start_loop_watchdog(ctx, track, plugin_manager.running_tools)
+            _start_loop_watchdog(ctx, track, job["plugin_manager"].running_tools)
             protector = job_protector()
-            job_state["protector"] = protector
-            bg_tasks = await _start_background_tasks(session, assistant, protector=protector)
+            job["protector"] = runtime.protector = protector
+            bg_tasks = await _start_background_tasks(job["session"], assistant, protector=protector)
             for bt in bg_tasks:
                 active_tasks.add(bt)
                 bt.add_done_callback(active_tasks.discard)
@@ -1409,47 +1547,19 @@ async def entrypoint(ctx: agents.JobContext):
             if local and rag_warm_delay is not None:
                 track(_warm_document_index(rag_warm_delay))
 
-            # C-23 (K-60 v9): wait until the job is asked to end (pause_agent, or C-62's shutdown_agent); 'stop'
-            # only interrupts speech and never sets this. The job then ends: no other session in this job.
-            await stop_event.wait()
-            ended = getattr(assistant, "end_reason", None) or END_BY_COMMAND
+            # C-23 (K-60): wait until the job is asked to end (pause_agent, C-62's shutdown_agent, a lost room, the
+            # session error cap); 'stop' only interrupts speech and never sets this.
+            ended = await runtime.wait_closed()
             logger.info("SESSION ending: %s", ended)
-            break
-
-        except (asyncio.CancelledError, KeyboardInterrupt):
-            logger.info("🛑 Shutdown signal received.")
-            cancelled = True
-            break
-        except Exception as exc:
-            # Categorize the error for better visibility
-            err_type = type(exc).__name__
-            logger.error("⚠️ Session attempt %d failed [%s]: %s", attempt + 1, err_type, exc)
-            logger.error(traceback.format_exc())
-
-            if "TimeoutError" in str(exc) or "handshake" in str(exc).lower():
-                logger.warning("🕒 Handshake timeout detected. System may be under heavy load.")
-
-            attempt += 1
-            if attempt < max_retries:
-                _set_session_attr(ctx, SESSION_RESTARTING)
-                retry_delay = 5 * attempt
-                logger.info("🔄 Retrying in %ds...", retry_delay)
-                await asyncio.sleep(retry_delay)
-        finally:
-            if router is not None:
-                router.detach()  # typed chat gets the offline answer until the next session attaches
-            await _cleanup_session_resources(session, list(active_tasks), protector=protector, assistant=assistant)
-            room_off = getattr(ctx.room, "off", None)
-            for event_name, handler in room_handlers if callable(room_off) else ():
-                try:
-                    room_off(event_name, handler)
-                except Exception as e:  # pylint: disable=broad-exception-caught
-                    logger.debug("room.off(%s) failed: %s", event_name, type(e).__name__)
-
-    if not cancelled:
-        # C-23: a paused, ended or failed job leaves the room (ctx.shutdown) instead of staying without a session,
-        # which kept LiveKit from dispatching a fresh one.
-        await _end_job(ctx, ended, framework_shutdown=job_state["framework_shutdown"])
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        logger.info("🛑 Shutdown signal received.")
+        job["cancelled"] = True
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.error("⚠️ Job setup failed [%s]: %s", type(exc).__name__, exc)
+        logger.error(traceback.format_exc())
+        runtime.request_close(END_SESSION_FAILED)
+    finally:
+        await runtime.aclose(runtime.reason)
     await _close_loop_bridge_client()
 
 

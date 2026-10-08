@@ -215,9 +215,12 @@ async def test_the_pc_worker_keeps_todays_room_input_by_default(local):
 
 
 def test_the_entrypoint_hardens_right_after_session_start():
+    """C-33 step B: session.start runs in the runtime's start hook and the hardening in the started hook, which the
+    runtime calls only after a successful start (first start and every rebuild; the order at run time is checked in
+    tests/core/test_agent_runner.py)."""
     source = pathlib.Path(agent_runner.__file__).read_text(encoding="utf-8")
-    start = source.index("await session.start(room=ctx.room, agent=assistant,")
-    assert source.index("room_options=session_room_options(router.text_input_cb))") > start
+    start = source.index('await session.start(room=ctx.room, agent=job["assistant"],')
+    assert source.index('room_options=session_room_options(job["router"].text_input_cb))') > start
     assert source.index("harden_room_input(session, ctx.room)") > start
     assert source.index("harden_room_input(session, ctx.room)") < source.index("assistant.attach_session(session)")
 

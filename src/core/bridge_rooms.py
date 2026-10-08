@@ -13,7 +13,7 @@ LiveKit server v1.13.7 (read in its source at that tag) and what this module doe
   of a dead worker's job either): the bridge dispatches again, with backoff.
 - list_dispatch keeps an ended job as JS_RUNNING (deregisterJob never updates the dispatch copy): a pending/running
   job counts as in flight only until its agent was seen in the room and has left, or its agent reported the job's
-  end (notify job_end), and at most 90 s after it started (360 s, the agent's own connect budget, for a job of the PC
+  end (notify job_end), and at most 90 s after it started (150 s, the agent's own connect budget, for a job of the PC
   worker that reported itself last, started after the last Wake, whose agent never appeared).
 - A room created without an agents list gets an implicit dispatch to agent_name '': while '' is accepted (pc mode),
   creating the room counts as a dispatch in flight, and while paused only a person about to join gets a new room.
@@ -101,7 +101,8 @@ KV_WAIT_S = 30.0                 # how long run() waits for the store at start
 CONFIRM_S = 8.0                  # 'no agent' must be seen twice, at least this far apart
 DISPATCH_FRESH_S = 30.0          # a dispatch (or the bridge's marker) younger than this is in flight
 JOB_FRESH_S = 90.0               # a pending/running job younger than this is in flight (v1.13.7 never ends one)
-JOB_CONNECT_BUDGET_S = 360.0     # the agent's own budget: 5 connects of up to 60 s, 5-20 s apart (agent_runner)
+JOB_CONNECT_BUDGET_S = 150.0     # the agent's own budget (C-33 step B, K-60 v19): ONE connect of up to 60 s, then
+                                 # the job ends ('connect_failed'); the rest is the job's start-up margin
 SEEN_KEEP_S = 900.0              # agents seen and job ends reported are remembered this long (> any in-flight window)
 KICK_MIN_S = 1.0                 # non-explicit kicks run at most one pass this often
 BACKOFF_S = (15.0, 30.0, 60.0, 120.0, 240.0, 300.0)

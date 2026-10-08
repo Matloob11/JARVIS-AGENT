@@ -21,6 +21,10 @@ Seams the wiring step fills (see design §1.2 for what each maps to in agent_run
                                       conversation_item_added, agent_state_changed) and re-attach
                                       router/assistant/voice_link; called after EVERY successful
                                       start, with rebuilt=True on an error rebuild
+- close_session(session)              closes a session that is NOT the live one (a failed start
+                                      attempt, the old session of a rebuild, a failed rebuild) plus
+                                      what the framework leaves behind for it (C-33 step B review);
+                                      default: a bounded session.aclose()
 - protector                           per-job TaskProtector (run_protected/cancel_all) — NEVER the
                                       global autonomous_protector (cross-job interference, design §4.6)
 - listener                            the job's UIBridgeListener (or its JobListenerHandle): aclose()
@@ -38,9 +42,11 @@ Lifecycle:
   lost, C-23) -> RUNTIME_STARTED. All attempts failed -> reason 'session_failed'. A ctx.connect
   failure (or the 60 s cap) -> logged, reason 'connect_failed', start() returns False — never a
   bare exception that would leave reason None for the entrypoint's final aclose.
-- session close reason ERROR (or an error event with recoverable=False): rebuild a fresh session in
-  place, <= 3 restarts per rolling 10 min with 2/4/8 s backoff, 'RUNTIME_SESSION_RESTART n=%d';
-  beyond the cap -> closed('session_error'). The worker process never dies for a session error.
+- session close reason ERROR: rebuild a fresh session in place, <= 3 restarts per rolling 10 min
+  with 2/4/8 s backoff, 'RUNTIME_SESSION_RESTART n=%d'; beyond the cap -> closed('session_error').
+  An error event with recoverable=False only arms a watch (C-33 step B review): livekit closes the
+  session itself after the old activity drained, and a session that does not close within
+  ERROR_CLOSE_WAIT_S ends the job ('session_error'). The worker process never dies for a session error.
 - wait_closed(): await the closed event; returns the reason.
 - aclose(reason) — exact bounded order (idempotent, tolerates partial start):
   protector.cancel_all -> listener.aclose (5 s) -> assistant.shutdown (10 s) ->
@@ -66,6 +72,9 @@ BACKOFF_S = (2.0, 4.0, 8.0)
 RESTART_CAP = 3
 RESTART_WINDOW_S = 600.0
 SESSION_CLOSE_TIMEOUT_S = 10.0
+SESSION_RELEASE_TIMEOUT_S = 30.0  # the close_session hook: session.aclose (10 s) plus the leftovers it releases
+ERROR_CLOSE_WAIT_S = 120.0  # an unrecoverable error: how long the session may take to close itself (in-flight tools)
+PROTECTOR_CANCEL_TIMEOUT_S = 15.0  # TaskProtector.cancel_all waits 8 s itself; this bounds any other protector
 LISTENER_CLOSE_TIMEOUT_S = 5.0
 ASSISTANT_SHUTDOWN_TIMEOUT_S = 10.0
 
@@ -112,6 +121,7 @@ class JarvisRuntime:
         session_factory: Callable[[], Any],
         start_session: Callable[[Any], Any] | None = None,
         on_session_started: Callable[..., Any] | None = None,
+        close_session: Callable[[Any], Any] | None = None,
         protector: Any = None,
         listener: Any = None,
         assistant: Any = None,
@@ -121,6 +131,8 @@ class JarvisRuntime:
         end_job: Callable[[str], Any] | None = None,
         connect_timeout_s: float = CONNECT_TIMEOUT_S,
         session_close_timeout_s: float = SESSION_CLOSE_TIMEOUT_S,
+        release_timeout_s: float = SESSION_RELEASE_TIMEOUT_S,
+        error_close_wait_s: float = ERROR_CLOSE_WAIT_S,
         listener_close_timeout_s: float = LISTENER_CLOSE_TIMEOUT_S,
         assistant_shutdown_timeout_s: float = ASSISTANT_SHUTDOWN_TIMEOUT_S,
         sleep: Callable[[float], Awaitable[Any]] = asyncio.sleep,
@@ -139,10 +151,13 @@ class JarvisRuntime:
         self._session_factory = session_factory
         self._start_session_hook = start_session
         self._on_session_started = on_session_started
+        self._close_session_hook = close_session
         self._set_session_attr_hook = set_session_attr
         self._end_job_hook = end_job
         self._connect_timeout_s = connect_timeout_s
         self._session_close_timeout_s = session_close_timeout_s
+        self._release_timeout_s = release_timeout_s
+        self._error_close_wait_s = error_close_wait_s
         self._listener_close_timeout_s = listener_close_timeout_s
         self._assistant_shutdown_timeout_s = assistant_shutdown_timeout_s
         self._sleep = sleep
@@ -151,6 +166,8 @@ class JarvisRuntime:
         self._room_handlers: list[tuple[str, Any]] = []  # for ctx.room.off in aclose
         self._session_handlers: list[tuple[str, Any]] = []  # re-registered per session object
         self._restart_task: asyncio.Task[Any] | None = None
+        self._close_watch_task: asyncio.Task[Any] | None = None
+        self._session_closed: asyncio.Event | None = None  # set by the LIVE session's close event
         self._bg_tasks: set[asyncio.Task[Any]] = set()
         self._started = False
         self._closing = False
@@ -177,9 +194,13 @@ class JarvisRuntime:
                 logger.error("ctx.connect failed: %s", exc)
                 self._close_with(END_CONNECT_FAILED)
                 return False
+        if self.closed.is_set():  # C-33 review: a close (framework shutdown, room loss) came during the connect
+            return False
         self._set_session_attr(SESSION_STARTING)
         if not await self._start_session_with_retries():
-            self._close_with(END_SESSION_FAILED)
+            self._close_with(END_SESSION_FAILED)  # the first reason wins: a close requested meanwhile keeps its own
+            return False
+        if self.closed.is_set():  # asked to close while the session started: the entrypoint's aclose() tears it down
             return False
         self._register_room_handlers()
         self._watch_stop_event()
@@ -205,19 +226,21 @@ class JarvisRuntime:
     async def _start_session_with_retries(self) -> bool:
         """session.start retried up to SESSION_START_RETRIES times (2/4 s between attempts), with
         session.aclose() after every failed attempt and a FRESH session per attempt (C-33: never
-        reuse a half-started session)."""
+        reuse a half-started session). A requested close stops the attempts (C-33 review)."""
         for attempt in range(1, SESSION_START_RETRIES + 1):
+            if self.closed.is_set():
+                return False
             session = await _maybe_await(self._session_factory())
             try:
                 await self._run_session_start(session)
             except asyncio.CancelledError:
-                await self._safe_session_aclose(session)
+                await self._release_session(session)
                 raise
             except Exception as exc:  # pylint: disable=broad-exception-caught
                 logger.warning("session.start failed (attempt %d/%d): %s",
                                attempt, SESSION_START_RETRIES, exc)
-                await self._safe_session_aclose(session)
-                if attempt < SESSION_START_RETRIES:
+                await self._release_session(session)
+                if attempt < SESSION_START_RETRIES and not self.closed.is_set():
                     await self._sleep(BACKOFF_S[attempt - 1])
                 continue
             self.session = session
@@ -230,6 +253,7 @@ class JarvisRuntime:
         wiring callback (router/assistant/voice_link re-attach). Room handlers are NOT touched on a
         rebuild — that is what kills the double-listener bug (design §4.2)."""
         self._session_handlers = []
+        self._session_closed = asyncio.Event()
         on = getattr(session, "on", None)
         if callable(on):
             on("close", self._on_session_close)
@@ -250,17 +274,43 @@ class JarvisRuntime:
                 logger.debug("session.off(%s) failed: %s", event, exc)
 
     def _on_session_close(self, event: Any = None) -> None:
+        if self._session_closed is not None:
+            self._session_closed.set()
         if self._closing or self.closed.is_set():
             return
         if _is_error_close_reason(getattr(event, "reason", None)):
             self._schedule_restart()
 
     def _on_session_error(self, event: Any = None) -> None:
+        """An unrecoverable error (C-114 path) never rebuilds by itself (C-33 step B review): livekit closes the
+        session on it (close reason ERROR) only after the old activity drained, in-flight tools included, and THAT
+        close starts the rebuild. Rebuilding earlier starts the job's one assistant while the old activity still
+        drains, whose late cleanup then nulls the new session's activity (a silent JARVIS). A session that does not
+        close within ERROR_CLOSE_WAIT_S (a tool that never returns) ends the job instead."""
         if self._closing or self.closed.is_set():
             return
         error = getattr(event, "error", None)
-        if getattr(error, "recoverable", None) is False:  # C-114 forward-compat path
-            self._schedule_restart()
+        if getattr(error, "recoverable", None) is False:
+            self._arm_close_watch()
+
+    def _arm_close_watch(self) -> None:
+        task = self._close_watch_task
+        if task is not None and not task.done():
+            return
+        session, closed_evt = self.session, self._session_closed
+        if closed_evt is None:
+            return
+
+        async def _watch() -> None:
+            try:
+                await asyncio.wait_for(closed_evt.wait(), self._error_close_wait_s)
+            except asyncio.TimeoutError:
+                if not (self._closing or self.closed.is_set()) and self.session is session:
+                    logger.warning("session did not close %.0f s after an unrecoverable error: ending the job",
+                                   self._error_close_wait_s)
+                    self._close_with(END_SESSION_ERROR)
+
+        self._close_watch_task = asyncio.get_running_loop().create_task(_watch())
 
     def _schedule_restart(self) -> None:
         task = self._restart_task
@@ -293,22 +343,22 @@ class JarvisRuntime:
         old = self.session
         if old is not None:
             self._unhook_session(old)
-            await self._safe_session_aclose(old)
+            await self._release_session(old)  # before the new one exists: its leftovers go with it
         session: Any = None
         try:
             session = await _maybe_await(self._session_factory())
             await self._run_session_start(session)
         except asyncio.CancelledError:
             if session is not None:
-                await self._safe_session_aclose(session)
+                await self._release_session(session)
             raise
         except Exception as exc:  # pylint: disable=broad-exception-caught
             logger.error("session rebuild failed: %s", exc)
             if session is not None:
                 # A rebuilt session that failed mid-start can hold a Gemini websocket and audio
-                # resources — aclose it, exactly like _start_session_with_retries does after
+                # resources — release it, exactly like _start_session_with_retries does after
                 # every failed attempt (C-33 rule: never leak a half-started session).
-                await self._safe_session_aclose(session)
+                await self._release_session(session)
             self._schedule_restart()  # counts against the same cap on the next pass
             return
         self.session = session
@@ -352,6 +402,10 @@ class JarvisRuntime:
 
     # ---- teardown -----------------------------------------------------------------------------
 
+    def request_close(self, reason: str) -> None:
+        """Asks the runtime to end the job with reason (the first reason wins); wait_closed() returns."""
+        self._close_with(reason)
+
     def _close_with(self, reason: str) -> None:
         if self.reason is None:
             self.reason = reason
@@ -368,16 +422,19 @@ class JarvisRuntime:
         if self.reason is None:
             self.reason = final
         try:
-            # 0. stop our own background tasks (restart task + stop-event bridge)
-            for task in [self._restart_task, *self._bg_tasks]:
+            # 0. stop our own background tasks (restart task, close watch, stop-event bridge)
+            own = [self._restart_task, self._close_watch_task, *self._bg_tasks]
+            for task in own:
                 if task is not None and not task.done():
                     task.cancel()
-            pending = [t for t in [self._restart_task, *self._bg_tasks] if t is not None]
+            pending = [t for t in own if t is not None]
             if pending:
                 await asyncio.gather(*pending, return_exceptions=True)
-            # 1. per-job protector: cannot touch another job's loops (design §4.6)
+            # 1. per-job protector: cannot touch another job's loops (design §4.6); bounded, because a
+            #    loop that swallowed its cancel held a job's teardown forever on 08 Oct
             await self._teardown_step("protector.cancel_all",
-                                      getattr(self.protector, "cancel_all", None))
+                                      getattr(self.protector, "cancel_all", None),
+                                      timeout=PROTECTOR_CANCEL_TIMEOUT_S)
             # 2. the job's bridge listener (C-34): the old AsyncClient must stop reconnecting
             await self._teardown_step("listener.aclose", getattr(self.listener, "aclose", None),
                                       timeout=self._listener_close_timeout_s)
@@ -439,6 +496,18 @@ class JarvisRuntime:
     async def _safe_session_aclose(self, session: Any) -> None:
         await self._teardown_step("session.aclose", getattr(session, "aclose", None),
                                   timeout=self._session_close_timeout_s)
+
+    async def _release_session(self, session: Any) -> None:
+        """Closes a session that is not (or no longer) the live one: a failed start attempt, the old
+        session of a rebuild, a failed rebuild. Through the close_session hook when there is one (the
+        wiring also releases what the framework leaves behind for such a session), else a bounded
+        session.aclose(); never raises."""
+        hook = self._close_session_hook
+        if hook is None:
+            await self._safe_session_aclose(session)
+            return
+        await self._teardown_step("close_session", lambda: hook(session),
+                                  timeout=self._release_timeout_s)
 
     # ---- small helpers ------------------------------------------------------------------------
 

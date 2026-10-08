@@ -15,6 +15,9 @@ logger = setup_logger("JARVIS-AUTONOMOUS")
 
 _bg_tasks: set[asyncio.Task[Any]] = set()
 
+# C-33: how long cancel_all() waits for cancelled loops before the teardown goes on without them
+CANCEL_WAIT_S = 8.0
+
 class TaskProtector:
     """
     Manages background tasks with automatic recovery, failure analysis, and health tracking.
@@ -116,21 +119,26 @@ class TaskProtector:
         t.add_done_callback(_bg_tasks.discard)
         return True
 
-    async def cancel_all(self) -> None:
-        """Cancels all protected tasks and waits for completion."""
+    async def cancel_all(self, timeout: float | None = None) -> None:
+        """Cancels all protected tasks and waits at most `timeout` seconds (CANCEL_WAIT_S) for them to end. C-33
+        (08 Oct): a loop that swallows its cancel must never hold a job's teardown; it is named in the log instead."""
         logger.info("🛑 Cancelling all protected tasks...")
-        real_tasks = []
-        for task in self._tasks.values():
+        real_tasks = {}
+        for name, task in self._tasks.items():
             if not isinstance(task, asyncio.Future):
                 logger.debug("Skipping non-asyncio task during cleanup: %s", type(task))
                 continue
-            real_tasks.append(task)
+            real_tasks[task] = name
             if not task.done():
                 task.cancel()
 
-        # Wait for all tasks to finish cancellation
         if real_tasks:
-            await asyncio.gather(*real_tasks, return_exceptions=True)
+            done, pending = await asyncio.wait(set(real_tasks), timeout=CANCEL_WAIT_S if timeout is None else timeout)
+            for task in done:
+                if not task.cancelled():
+                    task.exception()  # retrieved, like gather(return_exceptions=True) did: no 'never retrieved' noise
+            for task in pending:
+                logger.warning("🛑 Task %s ignored its cancel; teardown goes on without it", real_tasks[task])
         self._tasks.clear()
 
     def get_task_status(self) -> dict[str, dict[str, Any]]:

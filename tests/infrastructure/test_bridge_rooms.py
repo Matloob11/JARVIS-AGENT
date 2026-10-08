@@ -969,9 +969,9 @@ async def test_a_job_whose_end_its_agent_reported_is_not_in_flight(env):
 
 
 async def test_the_reported_workers_job_counts_as_in_flight_for_the_agents_connect_budget(env):
-    """LS-5: the agent retries its connect inside the job (5 x up to 60 s): a job of the PC worker that reported
-    itself last, whose agent never appeared, is in flight for that budget (no second job beside a slow one); another
-    worker's job, or one that started before the last Wake, only for 90 s."""
+    """LS-5: the agent's own connect budget (C-33 step B: one connect of up to 60 s, 150 s with start-up): a job of
+    the PC worker that reported itself last, whose agent never appeared, is in flight for that budget (no second job
+    beside a slow one); another worker's job, or one that started before the last Wake, only for 90 s."""
     manager = env.make()
     report = bridge_rooms.Report(agent_name="", worker_id=WORKER_ID)
     await manager.ensure("agent_ctl_start", explicit=True, report=report)

@@ -214,6 +214,72 @@ async def test_a_wedged_session_close_cannot_hold_the_teardown(monkeypatch):
     await asyncio.wait_for(ar._cleanup_session_resources(session, [], protector=protector, assistant=assistant), 2)
 
 
+@pytest.mark.asyncio
+async def test_a_loop_that_swallows_its_cancel_cannot_hold_the_teardown(monkeypatch):
+    """C-33 (08 Oct): the bug hunter swallowed its cancel, cancel_all waited for it forever and the job never ended
+    (a session-less agent held the room for 1.5 h). cancel_all now waits CANCEL_WAIT_S and names the loop."""
+    warnings: list[str] = []
+    monkeypatch.setattr(jarvis_autonomous.logger, "warning", lambda msg, *args: warnings.append(msg % args))
+    protector = jarvis_autonomous.TaskProtector()
+    stop = asyncio.Event()
+
+    async def stubborn() -> None:
+        while not stop.is_set():
+            try:
+                await asyncio.sleep(10)
+            except asyncio.CancelledError:
+                pass  # swallowed, like monitor_logs before the fix
+
+    await protector.run_protected("stubborn_loop", stubborn)
+    task = protector.get_task("stubborn_loop")
+    await asyncio.sleep(0)
+    await asyncio.wait_for(protector.cancel_all(timeout=0.05), 2)
+    assert any("stubborn_loop ignored its cancel" in line for line in warnings)
+    assert protector.task_names == []
+    stop.set()  # let it end, so the test leaves no task behind
+    task.cancel()
+    await asyncio.wait({task}, timeout=2)
+    assert task.done()
+
+
+@pytest.mark.asyncio
+async def test_a_tracked_task_that_swallows_its_cancel_cannot_hold_the_cleanup(monkeypatch):
+    monkeypatch.setattr(ar, "CLEANUP_STEP_TIMEOUT_S", 0.05)
+    stop = asyncio.Event()
+
+    async def stubborn() -> None:
+        while not stop.is_set():
+            try:
+                await asyncio.sleep(10)
+            except asyncio.CancelledError:
+                pass
+
+    task = asyncio.ensure_future(stubborn())
+    await asyncio.sleep(0)
+    protector = types.SimpleNamespace(cancel_all=AsyncMock())
+    await asyncio.wait_for(ar._cleanup_session_resources(None, [task], protector=protector), 2)
+    stop.set()
+    task.cancel()
+    await asyncio.wait({task}, timeout=2)
+    assert task.done()
+
+
+@pytest.mark.asyncio
+async def test_the_runtime_teardown_bounds_a_protector_that_never_finishes(monkeypatch):
+    monkeypatch.setattr(jarvis_runtime, "PROTECTOR_CANCEL_TIMEOUT_S", 0.05)
+    shutdowns: list[str] = []
+
+    async def never() -> None:
+        await asyncio.Event().wait()
+
+    ctx = types.SimpleNamespace(room=None, job=types.SimpleNamespace(id="AJ_x"),
+                                shutdown=lambda reason="": shutdowns.append(reason))
+    runtime = jarvis_runtime.JarvisRuntime(ctx, session_factory=lambda: None,
+                                           protector=types.SimpleNamespace(cancel_all=never))
+    await asyncio.wait_for(runtime.aclose("session_error"), 2)
+    assert shutdowns == ["session_error"]
+
+
 # ---------------------------------------------------------------- one bridge HTTP client per event loop (K-57)
 
 

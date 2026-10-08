@@ -90,11 +90,15 @@ async def test_cleanup_session_resources_robust():
 
 
 @pytest.mark.asyncio
-async def test_entrypoint_retry_logic():
+async def test_entrypoint_connects_once_and_ends_as_connect_failed():
+    """C-33 step B (K-60 v19): ctx.connect() runs once per job; a failed connect ends the job ('connect_failed') and
+    the bridge dispatches a fresh one, instead of this job retrying the connect."""
     ctx = MagicMock()
+    ctx.is_fake_job.return_value = False
     ctx.connect = AsyncMock(side_effect=[TimeoutError("handshake timeout"), asyncio.CancelledError()])
 
     with patch("asyncio.sleep", AsyncMock()):
         await entrypoint(ctx)
 
-    assert ctx.connect.await_count == 2
+    assert ctx.connect.await_count == 1
+    ctx.shutdown.assert_called_once_with(reason="connect_failed")

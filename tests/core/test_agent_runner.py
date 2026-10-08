@@ -388,7 +388,8 @@ def job(monkeypatch):
 
     from src.core import agent_core, agent_runner as ar
 
-    state = types.SimpleNamespace(sessions=[], assistants=[], room_options=[], on_start=None, cleanups=0)
+    state = types.SimpleNamespace(sessions=[], assistants=[], room_options=[], on_start=None, cleanups=0,
+                                  start_error=None, records=[])
 
     class FakeAssistant:
         def __init__(self, **_kwargs):
@@ -405,17 +406,32 @@ def job(monkeypatch):
 
     class FakeSession:
         def __init__(self, **_kwargs):
-            self.handlers: dict[str, Any] = {}
+            self.handlers: dict[str, list[Any]] = {}
+            self.closed = False
             state.sessions.append(self)
 
-        def on(self, event):
+        def on(self, event, callback=None):  # decorator or (event, callback), like AgentSession
             def register(fn):
-                self.handlers[event] = fn
+                self.handlers.setdefault(event, []).append(fn)
                 return fn
-            return register
+            return register if callback is None else register(callback)
 
-        async def start(self, room, agent, room_options):
+        def off(self, event, callback):
+            if callback in self.handlers.get(event, []):
+                self.handlers[event].remove(callback)
+
+        def fire(self, event, *args):
+            for handler in list(self.handlers.get(event, [])):
+                handler(*args)
+
+        async def aclose(self):
+            self.closed = True
+
+        async def start(self, room, agent, room_options, record=None):
             state.room_options.append(room_options)
+            state.records.append(record)
+            if state.start_error is not None:
+                raise state.start_error
             if state.on_start is not None:
                 state.on_start(agent)
 
@@ -522,12 +538,25 @@ async def test_a_stop_event_without_a_reason_ends_the_job_too(job):
 
 
 @pytest.mark.asyncio
-async def test_five_failed_attempts_end_the_job_as_session_failed(job):
+async def test_a_failed_connect_ends_the_job_once_as_connect_failed(job):
+    """C-33 step B: ctx.connect() runs once per job; a failed connect is not retried inside the job, the bridge
+    dispatches a fresh one instead."""
     ctx = _FakeJobContext(connect_error=RuntimeError("room connect failed"))
     await _run_entrypoint(job, ctx)
-    assert ctx.connects == 5
-    assert ctx.shutdowns == ["session_failed"]  # the bridge can dispatch a fresh job instead of a session-less one
-    assert ctx.room.local_participant.attributes == ["restarting"] * 4 + ["closed"]
+    assert ctx.connects == 1
+    assert ctx.shutdowns == ["connect_failed"]
+    assert ctx.room.local_participant.attributes == ["closed"]
+    assert job.sessions == []
+
+
+@pytest.mark.asyncio
+async def test_three_failed_starts_end_the_job_as_session_failed_with_a_fresh_session_each_time(job):
+    job.start_error = RuntimeError("gemini handshake failed")
+    ctx = _FakeJobContext()
+    await _run_entrypoint(job, ctx)
+    assert ctx.connects == 1
+    assert len(job.sessions) == 3 and all(session.closed for session in job.sessions)
+    assert ctx.shutdowns == ["session_failed"]
 
 
 @pytest.mark.asyncio
@@ -544,19 +573,228 @@ async def test_a_cancelled_job_is_not_shut_down_again(job):
 
 
 @pytest.mark.asyncio
-async def test_a_session_closed_on_an_unrecoverable_error_ends_the_job(job):
-    """C-33 step A: every zombie of 06-08 Oct began with 'AgentSession is closing due to unrecoverable error'; the job
-    now ends ('session_error') and the bridge dispatches a fresh one, instead of a session-less job forever."""
-    def close_with_error(_agent):
+async def test_an_unrecoverable_session_error_rebuilds_the_session_in_place(job):
+    """C-33 step B: a session that closes itself on an unrecoverable error is replaced IN the job (fresh
+    AgentSession, handlers on the new object), instead of a session-less job (06-08 Oct) or a whole new job."""
+    def on_start(agent):
         session = job.sessions[-1]
-        asyncio.get_running_loop().call_later(0.05, lambda: session.handlers["close"](
-            types.SimpleNamespace(reason="error")))
+        loop = asyncio.get_running_loop()
+        if len(job.sessions) == 1:
+            loop.call_later(0.05, lambda: session.fire("close", types.SimpleNamespace(reason="error")))
+        else:
+            loop.call_later(0.05, agent.request_end, "paused_by_owner")
 
-    job.on_start = close_with_error
+    job.on_start = on_start
     ctx = _FakeJobContext()
     await _run_entrypoint(job, ctx)
-    assert len(job.sessions) == 1 and ctx.shutdowns == ["session_error"]
-    assert ctx.room.local_participant.attributes[-1] == "closed"
+    assert len(job.sessions) == 2 and job.sessions[0].closed
+    assert "user_input_transcribed" in job.sessions[1].handlers  # the rebuilt session got its own handlers
+    assert ctx.shutdowns == ["paused_by_owner"]
+    assert "restarting" in ctx.room.local_participant.attributes
+    assert ctx.connects == 1
+
+
+@pytest.mark.asyncio
+async def test_every_started_session_is_hardened_before_the_assistant_gets_it(job, monkeypatch):
+    """C-124 + C-33 step B: the owner-only RPC/text guard wraps EACH session's handlers (the first one and every
+    rebuild) before the assistant can act on that session."""
+    calls: list[tuple[str, Any]] = []
+    monkeypatch.setattr(job.ar, "harden_room_input", lambda session, *_a, **_k: calls.append(("harden", session)))
+    monkeypatch.setattr(job.ar.BrainAssistant, "attach_session",
+                        lambda _self, session: calls.append(("attach", session)))
+
+    def on_start(agent):
+        session = job.sessions[-1]
+        loop = asyncio.get_running_loop()
+        if len(job.sessions) == 1:
+            loop.call_later(0.05, lambda: session.fire("close", types.SimpleNamespace(reason="error")))
+        else:
+            loop.call_later(0.05, agent.request_end, "paused_by_owner")
+
+    job.on_start = on_start
+    await _run_entrypoint(job, _FakeJobContext())
+    first, rebuilt = job.sessions
+    assert calls == [("harden", first), ("attach", first), ("harden", rebuilt), ("attach", rebuilt)]
+
+
+@pytest.mark.asyncio
+async def test_sessions_start_without_recording(job):
+    """record=False: a rebuilt session must never trip livekit-agents' 'only one primary AgentSession' check."""
+    job.on_start = lambda agent: asyncio.get_running_loop().call_later(0.02, agent.request_end, "paused_by_owner")
+    await _run_entrypoint(job, _FakeJobContext())
+    assert job.records == [False]
+
+
+# ---------------------------------------------------------------- C-33 step B review: releasing a replaced session
+
+
+class _ReleaseRoom:
+    """rtc.Room stand-in for _release_session: text stream handlers, EventEmitter's _events, a local participant."""
+
+    def __init__(self) -> None:
+        self._text_stream_handlers: dict[str, Any] = {}
+        self._events: dict[str, set[Any]] = {}
+        self.local_participant = types.SimpleNamespace(track_publications={}, unpublished=[])
+
+        async def unpublish_track(sid):
+            self.local_participant.unpublished.append(sid)
+            self.local_participant.track_publications.pop(sid, None)
+
+        self.local_participant.unpublish_track = unpublish_track
+
+    def on(self, event, callback):
+        self._events.setdefault(event, set()).add(callback)
+
+    def off(self, event, callback):
+        self._events.get(event, set()).discard(callback)
+
+    def unregister_text_stream_handler(self, topic):
+        self._text_stream_handlers.pop(topic, None)
+
+
+class _ReleaseAudioInput:
+    def _on_track_unavailable(self, *_args):
+        return None
+
+
+class _ReleaseRoomIO:
+    """RoomIO stand-in: the two room listeners livekit-agents 1.4.6 never removes."""
+
+    def __init__(self, session, room) -> None:
+        self._agent_session = session
+        self._audio_input = _ReleaseAudioInput()
+        self._video_input = self._audio_output = self._pre_connect_audio_handler = None
+        self.aclosed = 0
+        room.on("participant_disconnected", self._on_participant_disconnected)
+        room.on("track_unpublished", self._audio_input._on_track_unavailable)
+
+    def _on_participant_disconnected(self, _participant):
+        return None
+
+    async def aclose(self):
+        self.aclosed += 1
+
+
+class _HalfStartedSession:
+    """An AgentSession whose start failed half way: aclose() returns at once (livekit-agents: _started is False)."""
+
+    def __init__(self, room) -> None:
+        self._room_io = _ReleaseRoomIO(self, room)
+        self._client_events_handler = types.SimpleNamespace(_started=False, _text_stream_handler_registered=True)
+        self.aclose_calls = 0
+
+    async def aclose(self):
+        self.aclose_calls += 1
+
+
+def _activity_of(session):
+    activity = types.SimpleNamespace(_session=session, aclosed=0)
+
+    async def aclose():
+        activity.aclosed += 1
+
+    activity.aclose = aclose
+    return activity
+
+
+@pytest.mark.asyncio
+async def test_releasing_a_half_started_session_frees_lk_chat_its_room_io_and_the_assistants_activity():
+    from src.core import agent_runner as ar
+
+    room = _ReleaseRoom()
+    session = _HalfStartedSession(room)
+    room_io = session._room_io
+    room._text_stream_handlers["lk.chat"] = object()
+    activity = _activity_of(session)
+    agent = types.SimpleNamespace(_activity=activity)
+    someone_elses = lambda *_a: None  # noqa: E731
+    room.on("participant_disconnected", someone_elses)
+
+    await ar._release_session(session, agent, room)
+    assert session.aclose_calls == 1
+    assert "lk.chat" not in room._text_stream_handlers  # the next session can take typed input again
+    assert session._client_events_handler is None and session._room_io is None and room_io.aclosed == 1
+    assert activity.aclosed == 1 and agent._activity is None  # the next start of the same assistant can run
+    assert room._events["participant_disconnected"] == {someone_elses}  # only this session's listeners go
+    assert room._events["track_unpublished"] == set()
+
+
+@pytest.mark.asyncio
+async def test_releasing_a_replaced_session_unpublishes_only_its_stale_agent_audio_track():
+    from src.core import agent_runner as ar
+
+    room = _ReleaseRoom()
+    room.local_participant.track_publications.update({"TR_old": types.SimpleNamespace(name="roomio_audio"),
+                                                      "TR_other": types.SimpleNamespace(name="screen")})
+    closed_itself = types.SimpleNamespace(_room_io=None, _client_events_handler=None)  # its own aclose already ran
+
+    async def aclose():
+        return None
+
+    closed_itself.aclose = aclose
+    other_activity = _activity_of(object())
+    agent = types.SimpleNamespace(_activity=other_activity)
+
+    await ar._release_session(closed_itself, agent, room)
+    assert room.local_participant.unpublished == ["TR_old"]  # no silent agent track left for the UI to pick
+    assert agent._activity is other_activity and other_activity.aclosed == 0  # never another session's activity
+
+
+@pytest.mark.asyncio
+async def test_the_activity_of_a_session_that_is_still_closing_is_never_forced():
+    """C-33 step B review: livekit clears it itself when that close ends; forcing it would let that late cleanup null
+    the next session's activity."""
+    from src.core import agent_runner as ar
+
+    closing = types.SimpleNamespace(_started=True, _room_io=None, _client_events_handler=None)
+
+    async def aclose():
+        return None
+
+    closing.aclose = aclose
+    activity = _activity_of(closing)
+    agent = types.SimpleNamespace(_activity=activity)
+    await ar._release_session(closing, agent, _ReleaseRoom())
+    assert agent._activity is activity and activity.aclosed == 0
+
+
+def test_the_livekit_internals_release_session_relies_on_still_exist():
+    """_release_session works around livekit-agents 1.4.6 leftovers through private names: an upgrade that renames
+    them fails here instead of silently leaking replaced sessions again."""
+    import inspect
+
+    from livekit.agents.voice import agent_activity, agent_session, client_events
+    from livekit.agents.voice.room_io import _output, room_io
+    from livekit.rtc import event_emitter
+
+    from src.core import agent_runner as ar
+
+    source = inspect.getsource(agent_session.AgentSession)
+    assert "self._room_io" in source and "self._client_events_handler" in source
+    assert "self._agent, self._session = agent, sess" in inspect.getsource(agent_activity.AgentActivity.__init__)
+    assert "self._agent._activity = None" in inspect.getsource(agent_activity.AgentActivity.aclose)
+    source = inspect.getsource(client_events.ClientEventsHandler)
+    assert "self._started" in source and "self._text_stream_handler_registered" in source
+    source = inspect.getsource(room_io.RoomIO)
+    assert '"participant_disconnected", self._on_participant_disconnected' in source
+    assert "self._agent_session" in source and all(f"self.{name}" in source for name in ar._ROOMIO_PARTS)
+    assert f'track_name: str = "{ar.ROOMIO_AUDIO_TRACK}"' in inspect.getsource(
+        _output._ParticipantAudioOutput.__init__)
+    assert "self._events" in inspect.getsource(event_emitter.EventEmitter.__init__)
+
+
+@pytest.mark.asyncio
+async def test_session_errors_beyond_the_cap_end_the_job_as_session_error(job):
+    def on_start(_agent):
+        session = job.sessions[-1]
+        asyncio.get_running_loop().call_later(0.02, lambda: session.fire("close", types.SimpleNamespace(
+            reason="error")))
+
+    job.on_start = on_start
+    ctx = _FakeJobContext()
+    await _run_entrypoint(job, ctx)
+    assert len(job.sessions) == 4  # the first one plus 3 rebuilds in the 10-minute window
+    assert ctx.shutdowns == ["session_error"]
 
 
 @pytest.mark.asyncio
@@ -564,7 +802,7 @@ async def test_a_session_closed_for_another_reason_keeps_the_job(job):
     def close_then_pause(agent):
         session = job.sessions[-1]
         loop = asyncio.get_running_loop()
-        loop.call_later(0.02, lambda: session.handlers["close"](types.SimpleNamespace(reason="user_initiated")))
+        loop.call_later(0.02, lambda: session.fire("close", types.SimpleNamespace(reason="user_initiated")))
         loop.call_later(0.08, agent.request_end, "paused_by_owner")
 
     job.on_start = close_then_pause
@@ -629,7 +867,7 @@ async def test_a_worker_shutdown_is_named_job_shutdown(job):
 
 
 @pytest.mark.asyncio
-async def test_an_assistant_without_request_end_still_ends_on_a_session_error(job, monkeypatch):
+async def test_an_assistant_without_request_end_still_ends_on_a_framework_shutdown(job, monkeypatch):
     """An assistant before C-23 (no request_end): the end paths fall back to its stop event."""
     real_init = job.ar.BrainAssistant.__init__
 
@@ -638,16 +876,14 @@ async def test_an_assistant_without_request_end_still_ends_on_a_session_error(jo
         del self.request_end
 
     monkeypatch.setattr(job.ar.BrainAssistant, "__init__", init)
-
-    def close_with_error(_agent):
-        session = job.sessions[-1]
-        asyncio.get_running_loop().call_later(0.05, lambda: session.handlers["close"](
-            types.SimpleNamespace(reason="error")))
-
-    job.on_start = close_with_error
     ctx = _FakeJobContext()
-    await _run_entrypoint(job, ctx)
-    assert ctx.shutdowns == ["session_error"]
+    entry = asyncio.ensure_future(job.ar.entrypoint(ctx))
+    for _ in range(200):
+        if job.protectors:
+            break
+        await asyncio.sleep(0.005)
+    await asyncio.wait_for(ctx.shutdown_callbacks[0]("room disconnected"), 5)
+    assert entry.done() and ctx.shutdowns == ["room_disconnected"]
 
 
 @pytest.mark.asyncio
@@ -660,7 +896,6 @@ async def test_each_job_runs_its_loops_on_its_own_protector(job):
     [protector] = job.protectors
     assert isinstance(protector, TaskProtector) and protector is not autonomous_protector
     assert job.cleanup_kwargs[-1]["protector"] is protector  # the same one is cancelled at the end
-    assert job.cleanup_kwargs[-1]["assistant"] is job.assistants[-1]
 
 
 @pytest.mark.asyncio
@@ -691,7 +926,7 @@ async def test_a_job_end_is_reported_to_the_bridge_before_the_shutdown(job, monk
     failed = _FakeJobContext(connect_error=RuntimeError("room connect failed"))
     failed.job = types.SimpleNamespace(id="AJ_c23failed")
     await _run_entrypoint(job, failed)
-    assert failed.shutdowns == ["session_failed"]
+    assert failed.shutdowns == ["connect_failed"]
 
 
 @pytest.mark.asyncio

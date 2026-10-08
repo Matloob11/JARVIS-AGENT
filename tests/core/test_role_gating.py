@@ -532,7 +532,8 @@ async def test_the_bug_hunter_posts_a_repeating_error_once(monkeypatch, tmp_path
     # Only the hunter's own sleep is faked; the process-wide asyncio stays untouched.
     monkeypatch.setattr(jarvis_bug_hunter, "asyncio", types.SimpleNamespace(
         sleep=fake_sleep, to_thread=asyncio.to_thread, Lock=asyncio.Lock, CancelledError=asyncio.CancelledError))
-    await jarvis_bug_hunter.monitor_logs(AsyncMock(side_effect=posts.append))
+    with pytest.raises(asyncio.CancelledError):  # C-33: the hunter passes its cancel on
+        await jarvis_bug_hunter.monitor_logs(AsyncMock(side_effect=posts.append))
 
     assert len(posts) == 3
     assert CLIPBOARD_ERROR in posts[0] and "before the hunter" not in posts[0]

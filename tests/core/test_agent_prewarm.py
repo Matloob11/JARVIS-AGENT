@@ -124,8 +124,11 @@ class _FakeRoom:
         self.local_participant = _FakeLocal()
         self.remote_participants = {}
 
-    def on(self, _event):
-        return lambda fn: fn
+    def on(self, _event, callback=None):  # decorator or (event, callback), like rtc.Room
+        return (lambda fn: fn) if callback is None else callback
+
+    def off(self, *_args):
+        return None
 
 
 class _FakeJobContext:
@@ -173,10 +176,13 @@ def entry(prewarm_env, monkeypatch):
             self.kwargs = kwargs
             state.sessions.append(self)
 
-        def on(self, _event):
-            return lambda fn: fn
+        def on(self, _event, callback=None):  # decorator or (event, callback), like AgentSession
+            return (lambda fn: fn) if callback is None else callback
 
-        async def start(self, room, agent, room_options):  # pylint: disable=unused-argument
+        async def aclose(self):
+            return None
+
+        async def start(self, room, agent, room_options, record=None):  # pylint: disable=unused-argument
             agent._stop_event.set()  # end the job right after the session starts
 
     class FakeRouter:

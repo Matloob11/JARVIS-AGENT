@@ -253,8 +253,11 @@ async def monitor_logs(callback: Callable[[str], Any]) -> None:
                 await callback(sanitized_error)
             await asyncio.sleep(POLL_S)
         except asyncio.CancelledError:
+            # C-33 (08 Oct): the cancel must go on. Swallowing it returned normally, start_bug_hunter_loop's own loop
+            # started a new monitor, the task never ended, and the job's teardown waited for it forever (a zombie job
+            # without a session held the room for 1.5 h after a laptop sleep).
             logger.info("Bug Hunter monitoring stopping...")
-            break
+            raise
         except (OSError, ValueError) as e:
             logger.error("Bug Hunter loop error: %s", e)
             await asyncio.sleep(POLL_S)
