@@ -141,11 +141,14 @@ test.describe('voice presence states', () => {
         },
       },
     });
+    await page.request.post(`${MOCK}/__mock/emit`, {
+      data: { event: 'persona_update', payload: { persona: 'anna' } },
+    });
     await expect(page.getByTestId('settings-status-persona')).toHaveAttribute('data-state', 'applied', {
       timeout: 10_000,
     });
     await page.getByTestId('nav-overview').click();
-    await expect(page.getByTestId('hero-persona-name')).toHaveText('ANNA');
+    await expect(page.getByTestId('hero-persona-name')).toHaveText('ANNA', { timeout: 10_000 });
   }
 
   for (const persona of ['jarvis', 'anna'] as const) {

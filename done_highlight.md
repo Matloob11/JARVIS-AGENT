@@ -2390,3 +2390,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** RESULT=ok; health gate: frontend healthy, ui-bridge healthy, /vortex/health 200; other apps identical before and after (15 sites, 27 containers); PC check /vortex/health 200
 - **Commit:** `1ae8498` · **Deploy:** VPS frontend 23:31 PKT 🚀 (backup /root/jarvis-backups/2026-10-08_1830Z-pre-deploy-1ae8498)
 - **Doosre agent ke liye:** live dashboard par apni UI-H tabdeeliyan dekh lo; agle UI-H commits ke baad phir REQ-DEPLOY likhna.
+
+### ✅ [cursor] UI-H02 follow-up · e2e persona_update after settings_sync · 2026-10-09 00:20 PKT
+- **Kya kiya:** H02 ke baad persona e2e settings_sync se flip expect kar rahe the. Helpers ab persona_update bhi emit karte hain (persona-copy, persona-switch, presence).
+- **Files:** stonix_ui/tests/e2e/persona-copy.spec.ts, persona-switch.spec.ts, presence.spec.ts
+- **Verify:** 5 related playwright tests passed
+- **Commit:** (this commit) · **Deploy:** no
+- **Doosre agent ke liye:** —
+
+### 🟡 [cursor] UI-H15 · e2e flake run 1 PARTIAL · 2026-10-09 00:20 PKT
+- **Kya kiya:** chromium e2e run 1 (gates/visual/perf/a11y exclude): 235 passed, 7 failed (persona fixed above; layout 960 + voice enroll still open). Runs 2–3 baqi.
+- **Files:** UI_HARDENING_PLAN.md
+- **Verify:** run 1 numbers above
+- **Commit:** (this commit) · **Deploy:** no
+- **Doosre agent ke liye:** —

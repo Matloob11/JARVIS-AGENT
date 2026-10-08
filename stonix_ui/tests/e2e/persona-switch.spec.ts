@@ -19,6 +19,10 @@ async function confirmPersona(
       },
     },
   });
+  // C-50 / UI-H02: UI persona flips only on persona_update, not settings_sync.
+  await page.request.post(`${MOCK}/__mock/emit`, {
+    data: { event: 'persona_update', payload: { persona } },
+  });
   await expect(page.getByTestId('chip-persona-spinner')).toHaveCount(0, { timeout: 10_000 });
 }
 
@@ -167,6 +171,7 @@ test.describe('persona switch reduced motion', () => {
 
     await page.getByTestId('chip-persona').focus();
     await page.keyboard.press('ArrowRight');
+    await confirmPersona(page, 'anna');
 
     await expect(page.locator('html')).toHaveAttribute('data-persona', 'anna', { timeout: 10_000 });
     await expect(page.getByTestId('hero-persona-name')).toHaveText('ANNA', { timeout: 3_000 });
@@ -175,7 +180,5 @@ test.describe('persona switch reduced motion', () => {
         page.evaluate(() => document.documentElement.classList.contains('vt-run')),
       )
       .toBe(false);
-
-    await confirmPersona(page, 'anna');
   });
 });
