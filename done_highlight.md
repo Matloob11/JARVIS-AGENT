@@ -2187,3 +2187,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** tests 254 green; live: AUDIO_OUT enabled=False reason=start, restart ke baad PEHLA typed message foran jawab ('Sir, 7 times 8, 56 hota hai.'), mic publish par enabled=True, mute par False
 - **Commit:** C-41 commit · **Deploy:** PC worker restart 17:45 🔁
 - **Doosre agent ke liye:** UI ko kuch nahi badalna; JARVIS_SPEAK_TYPED=always ka option handoff mein.
+
+### ✅ 🔁 [claude] C-40: probe jobs serve the probe identity · Agent worker restart (agent_ctl) · 2026-10-08 18:05 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 39976) band, naya pid 25396; health 200 (40.4 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 18:05 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] C-40 · Headless voice/chat probe: JARVIS ko browser ke baghair apne alag room mein jaanchna · 2026-10-08 18:15 PKT
+- **Kya kiya:** Naya scripts/smoke/voice_probe.py: apna jarvis-probe-<epoch> room banata hai, probe-<epoch> ban kar join karta hai, agent aur us ke session ka intezar karta hai, phir typed (lk.chat) ya bola hua (WAV real time mein) turn bhejta hai; agent ka final transcript (lk.transcription) aur pehli awaaz ka waqt (first_audio_latency_ms) naapta hai aur aakhir mein sirf apna room delete karta hai. Ek waqt mein ek probe ya canary; crash se bacha purana probe room saaf ho jata hai. scripts/smoke/make_tts_fixtures.ps1 Windows ki awaaz se 5 WAV fixtures banata hai (gitignored). Agent: probe job mein probe identity hi woh shakhs hai jise session sunta hai (allow_probe) aur room input hardening nahi hoti. Contracts v29.
+- **Files:** scripts/smoke/voice_probe.py, scripts/smoke/make_tts_fixtures.ps1, scripts/smoke/livekit_voice_vision_smoke.py (--live-probe), src/core/roomio_link.py, src/core/voice_link.py, src/core/agent_runner.py, tests (unit/test_voice_probe.py, output gating, runner, no-room-delete), docs/CONTRACTS.md v29
+- **Verify:** tests green; live: --text 'Jarvis, what is 2 plus 2?' PASS (jawab mein 4), --wav tts_jarvis_time.wav PASS (first_audio_latency_ms=3016), 2-turn recall PASS; bridge log aur store mein probe ki 0 lines, probe rooms khatam (C-39 ki live jaanch bhi poori)
+- **Commit:** `208668b`, `9fde3e2` · **Deploy:** PC worker restart 18:05 🔁
+- **Doosre agent ke liye:** UI ko kuch nahi badalna; voice features ab is probe se jaanche ja sakte hain.
