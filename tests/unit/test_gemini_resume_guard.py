@@ -164,3 +164,52 @@ def test_the_pinned_plugin_internals_still_exist():
     assert "_session_resumption_handle" in inspect.getsource(mod)
     log = getattr(mod, "logger", None)
     assert log is not None and log.name.startswith("livekit.plugins.google")
+
+
+# ---------------------------------------------------------------- C-49: restart_fresh
+
+
+class RestartableSession(FakeRealtimeSession):
+    def __init__(self, fail: bool = False) -> None:
+        super().__init__("live-handle")
+        self.restarts, self.fail = 0, fail
+
+    def _mark_restart_needed(self) -> None:
+        if self.fail:
+            raise RuntimeError("closing")
+        self.restarts += 1
+
+
+def test_restart_fresh_drops_the_handle_and_reconnects(monkeypatch):
+    monkeypatch.setattr(guard, "logger", MagicMock())
+    rt = RestartableSession()
+    assert guard.restart_fresh(rt, "instructions") is True
+    assert rt._session_resumption_handle is None and rt.restarts == 1
+    guard.logger.info.assert_called_once_with("SESSION_RESTART_FRESH reason=%s", "instructions")
+
+
+def test_restart_fresh_without_a_restartable_session_changes_nothing(monkeypatch):
+    monkeypatch.setattr(guard, "logger", MagicMock())
+    plain = FakeRealtimeSession("keep")
+    assert guard.restart_fresh(None, "x") is False and guard.restart_fresh(plain, "x") is False
+    assert plain._session_resumption_handle == "keep"
+    failing = RestartableSession(fail=True)
+    assert guard.restart_fresh(failing, "x") is False
+    guard.logger.warning.assert_called_once()
+
+
+def test_a_fresh_reconnect_carries_the_new_instruction_and_replays_the_history():
+    """restart_fresh relies on livekit-plugins-google 1.4.6: _mark_restart_needed exists, the connect config takes the
+    instruction from the options and the handle from _session_resumption_handle, and a connect replays the chat
+    history. An upgrade that changes any of these must fail HERE."""
+    import inspect
+
+    from livekit.plugins.google.realtime import realtime_api
+
+    session = realtime_api.RealtimeSession
+    assert callable(getattr(session, "_mark_restart_needed", None))
+    config = inspect.getsource(session._build_connect_config)
+    assert "self._opts.instructions" in config and "handle=self._session_resumption_handle" in config
+    main = inspect.getsource(session._main_task)
+    assert "self._build_connect_config()" in main and "send_client_content(" in main and "self._chat_ctx" in main
+    assert "LiveClientContent(" in inspect.getsource(session.update_instructions)  # still an appended turn

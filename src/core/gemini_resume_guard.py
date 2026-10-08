@@ -129,6 +129,31 @@ def install_log_hook() -> None:
         _filter_installed = True
 
 
+_RESTART_METHOD = "_mark_restart_needed"  # pinned private member: RealtimeSession._mark_restart_needed()
+
+
+def restart_fresh(rt_session: Any, reason: str) -> bool:
+    """
+    C-49: reconnects a live Gemini session WITHOUT its resumption handle. The new connection carries the current
+    system_instruction and voice from the session's options, and the plugin replays the chat history (user and model
+    turns) as client content. A mid-session update_instructions only appends a client-content turn, so the
+    instruction the session connected with stays in force until such a fresh connect. Call it at a quiet point (the
+    agent listening): the plugin drops whatever was still queued for the old connection. Returns False when the
+    session offers no restart.
+    """
+    restart = getattr(rt_session, _RESTART_METHOD, None) if rt_session is not None else None
+    if not callable(restart):
+        return False
+    try:
+        setattr(rt_session, _HANDLE_ATTR, None)
+        restart()
+    except Exception as exc:  # pylint: disable=broad-exception-caught  # the old connection simply stays
+        logger.warning("SESSION_RESTART_FRESH failed reason=%s (%s)", reason, type(exc).__name__)
+        return False
+    logger.info("SESSION_RESTART_FRESH reason=%s", reason)
+    return True
+
+
 def guard_realtime_model(model: Any) -> Any:
     """
     Arms the guard for model (google.realtime.RealtimeModel): installs the log hook and wraps the

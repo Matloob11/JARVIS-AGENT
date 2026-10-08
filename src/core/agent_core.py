@@ -11,7 +11,7 @@ import re
 import time
 import types  # For SimpleNamespace
 import uuid
-from collections import defaultdict, deque
+from collections import deque
 from collections.abc import Coroutine
 from datetime import datetime
 from typing import Any
@@ -21,7 +21,7 @@ from livekit.agents import Agent, AgentSession, StopResponse, llm
 from services.ai_core.agent_memory import MemoryExtractor
 from services.ai_core.jarvis_identity import jarvis_id
 from services.ai_core.jarvis_plugin_manager import JarvisPluginManager
-from services.ai_core.jarvis_prompt import BEHAVIOR_PROMPT
+from services.ai_core.jarvis_prompt import ANNA_NAMES, BEHAVIOR_PROMPT
 from services.ai_core.jarvis_reasoning import (
     analyze_user_intent,
     generate_smart_response,
@@ -37,13 +37,14 @@ from services.utils.jarvis_logger import setup_logger
 from services.utils.jarvis_resilience import resilience_manager
 from services.utils.jarvis_security import vortex_guard
 from services.utils.jarvis_telemetry import telemetry
+from src.core.gemini_resume_guard import restart_fresh
 
 try:
     from .bridge_notifier import bridge_notifier
-    from .persona_manager import PersonaManager
+    from .persona_manager import PersonaManager, build_instructions
 except (ImportError, ValueError):
     from src.core.bridge_notifier import bridge_notifier
-    from src.core.persona_manager import PersonaManager
+    from src.core.persona_manager import PersonaManager, build_instructions
 
 # Optional handler: when it cannot load (e.g. a desktop-only import on a headless host) the agent runs
 # without vision instead of failing to import.
@@ -115,6 +116,11 @@ def _vision_analysis_failed(analysis: str) -> bool:
     return analysis_failed(analysis)
 
 INSTRUCTIONS_PROMPT = BEHAVIOR_PROMPT
+# C-49: the agent states at which new instructions may reach the live session (no reply or tool call running)
+INSTRUCTIONS_SAFE_STATES = ("listening", "idle")
+# One wake-word list for the prompt and the code (jarvis_prompt.WAKE_WORDS)
+_JARVIS_WAKE = re.compile(r"\bjarvis\b", re.IGNORECASE)
+_ANNA_WAKE = re.compile(r"\b(" + "|".join(name.lower() for name in ANNA_NAMES) + r")\b", re.IGNORECASE)
 # C-48: a camera analysis goes through up to three vision providers; 15 s (the breaker default) cut it off.
 ANALYZE_SURROUNDINGS_TIMEOUT_S = 60.0
 
@@ -144,24 +150,11 @@ class BrainAssistant(Agent):
         """
         Initialize the BRAIN assistant with context, LLM, and tools.
         """
-        identity_context = jarvis_id.get_context()
-        prompt_with_info = f"{INSTRUCTIONS_PROMPT}\n{identity_context}"
-
-        # Real-time Project Age Calculation
-        project_start_date = datetime(2025, 8, 2)
-        days_since_start = (datetime.now() - project_start_date).days
-
         self.current_date = current_date or datetime.now().strftime("%Y-%m-%d")
         self.current_city = current_city or ''
-
-        # Use format_map with defaultdict to safely handle any extra curly braces in prompt
-        prompt_with_info = prompt_with_info.format_map(
-            defaultdict(str, 
-                current_date=self.current_date,
-                current_city=self.current_city,
-                project_age_days=str(days_since_start)
-            ),
-        )
+        # C-49: one composition for every persona and turn mode (jarvis_prompt.compose_instructions); a job starts
+        # as JARVIS with the wake word on.
+        prompt_with_info = build_instructions(self, "jarvis", wake_word=True)
 
         # Initializing core agent state
         self.user_id: str = user_id or os.getenv("USER_NAME") or "User"
@@ -184,6 +177,7 @@ class BrainAssistant(Agent):
         self._wake_word_mode: bool = True
         self._active_session: AgentSession | None = None
         self._conversation_router: Any = None  # C-42: typed chat goes into the session through it
+        self._pending_instructions: str | None = None  # C-49: waits for a safe point (INSTRUCTIONS_SAFE_STATES)
         # C-23 (K-60 v9): set by request_end; the job's entrypoint waits on it and then ends the job. Made with the
         # assistant, so a pause_agent that arrives before the entrypoint waits is never lost.
         self._stop_event: asyncio.Event = asyncio.Event()
@@ -334,12 +328,54 @@ class BrainAssistant(Agent):
 
     async def update_instructions(self, instructions: str) -> None:
         """
-        Dynamically updates the assistant's system instructions.
-        Used by PersonaManager to switch between JARVIS and ANNA.
+        Dynamically updates the assistant's system instructions (PersonaManager: JARVIS <-> ANNA; the wake-word
+        toggle). C-49: kept at once for the next session start (a rebuilt session included). With a live session
+        they wait for a safe point (the agent listening: never inside a reply or a tool call) and then reach Gemini
+        through livekit's Agent.update_instructions plus a fresh reconnect (restart_fresh): a mid-session update is
+        only appended to the session, while a fresh connect makes it the session's system instruction.
         """
         self._instructions = instructions
-        logger.info("Assistant instructions updated (Persona: %s)",
-                    self.persona_manager.active_persona_name)
+        persona = self.persona_manager.active_persona_name
+        if getattr(self, "_activity", None) is None:
+            try:
+                await super().update_instructions(instructions)  # no live session: livekit only stores them
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                logger.warning("INSTRUCTIONS_UPDATE persona=%s store failed (%s)", persona, type(e).__name__)
+            logger.info("INSTRUCTIONS_UPDATE persona=%s chars=%d sent=stored", persona, len(instructions))
+            return
+        self._pending_instructions = instructions
+        state = getattr(self._active_session, "agent_state", None)
+        if state is None or state in INSTRUCTIONS_SAFE_STATES:
+            await self._apply_pending_instructions()
+        else:
+            logger.info("INSTRUCTIONS_UPDATE persona=%s chars=%d sent=deferred state=%s", persona,
+                        len(instructions), state)
+
+    async def on_agent_state(self, state: str) -> None:
+        """The session's agent_state_changed (agent_runner): pending instructions go out once the agent listens."""
+        if state in INSTRUCTIONS_SAFE_STATES and self._pending_instructions is not None:
+            await self._apply_pending_instructions()
+
+    async def _apply_pending_instructions(self) -> None:
+        instructions, self._pending_instructions = self._pending_instructions, None
+        if instructions is None:
+            return
+        persona = self.persona_manager.active_persona_name
+        try:
+            await super().update_instructions(instructions)
+        except Exception as e:  # pylint: disable=broad-exception-caught  # a realtime error never breaks the switch
+            logger.warning("INSTRUCTIONS_UPDATE persona=%s not sent to the live session (%s); kept for the next",
+                           persona, type(e).__name__)
+            return
+        activity = getattr(self, "_activity", None)
+        restarted = restart_fresh(getattr(activity, "realtime_llm_session", None), "instructions")
+        logger.info("INSTRUCTIONS_UPDATE persona=%s chars=%d sent=live restart=%s", persona, len(instructions),
+                    "fresh" if restarted else "none")
+
+    async def refresh_instructions(self) -> None:
+        """C-49: composes the active persona's instructions again (after the wake-word mode changed) and sends them
+        to the live session."""
+        await self.update_instructions(build_instructions(self, self.persona_manager.active_persona_name))
 
     async def tool_toggle_gf_mode(self, active: bool) -> dict[str, Any]:
         """Toggle GF (Anna) persona mode."""
@@ -349,6 +385,7 @@ class BrainAssistant(Agent):
     async def tool_set_wake_word_mode(self, active: bool) -> dict[str, Any]:
         """Toggle the strict wake word enforcement mode."""
         self._wake_word_mode = active
+        await self.refresh_instructions()  # C-49: the wake rule is in the prompt only while the mode is on
         status = "active" if active else "disabled"
         return {
             "status": "success",
@@ -444,6 +481,7 @@ class BrainAssistant(Agent):
     def set_wake_word_mode(self, active: bool) -> None:
         """Toggle the strict wake word enforcement mode."""
         self._wake_word_mode = active
+        self._run_back(self.refresh_instructions())  # C-49: the prompt follows the mode
         status = "active" if active else "disabled"
         logger.info("Wake word mode set to: %s", status)
         self._run_back(self.bridge_notifier.notify_wake_word(active))
@@ -533,6 +571,7 @@ class BrainAssistant(Agent):
         Called by AgentRunner after session start.
         """
         self._active_session = session
+        self._pending_instructions = None  # C-49: a new session starts with the current self._instructions
         logger.info("Live AgentSession attached to BrainAssistant (User: %s)", self.user_id)
         if getattr(self, "_probe", False):
             return  # K-57 (C-39): no vision loop in a probe or canary job
@@ -657,9 +696,8 @@ class BrainAssistant(Agent):
 
     async def _handle_wake_word(self, text: str) -> tuple[bool, bool]:
         """Checks for wake words."""
-        is_j = bool(re.search(r"\bjarvis\b", text, re.IGNORECASE))
-        is_a = bool(re.search(r"\b(anna|babu|jaan|myra|kiara|zoya)\b",
-                              text, re.IGNORECASE))
+        is_j = bool(_JARVIS_WAKE.search(text))
+        is_a = bool(_ANNA_WAKE.search(text))  # C-49: the same names the prompt's wake rule lists
         if not is_j and not is_a:
             return False, False
         await self._handle_persona_switch(is_a, is_j)

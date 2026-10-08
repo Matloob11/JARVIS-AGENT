@@ -1436,9 +1436,12 @@ async def entrypoint(ctx: agents.JobContext):
             _router.on_conversation_item_added(event)
 
         @session.on("agent_state_changed")
-        def on_agent_state_changed(event: agents.voice.AgentStateChangedEvent):
+        def on_agent_state_changed(event: agents.voice.AgentStateChangedEvent, _assistant=assistant):
             state = event.new_state
             logger.info("🤖 Agent State: %s", state)
+            on_state = getattr(_assistant, "on_agent_state", None)
+            if callable(on_state):  # C-49: pending instructions reach the session once the agent listens
+                track(on_state(state))
             # Update UI States
             if state == "speaking":
                 track(notify_ui("START"))

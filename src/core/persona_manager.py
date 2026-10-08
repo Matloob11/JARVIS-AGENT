@@ -1,13 +1,74 @@
+import os
+from datetime import datetime
 from typing import Any, Protocol, runtime_checkable
 
 from livekit.agents import llm
 
 from services.ai_core.jarvis_identity import jarvis_id
-from services.ai_core.jarvis_prompt import ANNA_BEHAVIOR_PROMPT, BEHAVIOR_PROMPT
+from services.ai_core.jarvis_prompt import compose_instructions, normalize_turn_mode
 from services.ai_core.jarvis_reasoning import context_analyzer
+from services.utils.jarvis_config import config
 from services.utils.jarvis_logger import setup_logger
 
 logger = setup_logger("PERSONA-MANAGER")
+
+PROJECT_START_DATE = datetime(2025, 8, 2)
+TURN_MODE_ENV = "JARVIS_TURN_MODE"  # K-69: 'gated' after the VR-22 spike decision, else 'fast'
+OWNER_CONTACT_ENV = "JARVIS_OWNER_CONTACT"  # K-69 v32: the CV contact line, only in the gitignored .env
+# The gated runtime (C-66) does not exist yet: until it does, 'gated' is treated as 'fast', so the prompt's wake rule,
+# today the only wake-word gate for speech, is never dropped by an env setting alone.
+GATED_RUNTIME_AVAILABLE = False
+_gated_warned = False
+
+
+def project_age_days(now: datetime | None = None) -> int:
+    """Days since the project started (2 August 2025), for the prompts' project duration line."""
+    return ((now or datetime.now()) - PROJECT_START_DATE).days
+
+
+def runtime_turn_mode() -> str:
+    """The turn mode the prompt is composed for: JARVIS_TURN_MODE, with 'gated' only once a gated runtime exists."""
+    global _gated_warned  # pylint: disable=global-statement
+    mode = normalize_turn_mode(os.getenv(TURN_MODE_ENV))
+    if mode == "gated" and not GATED_RUNTIME_AVAILABLE:
+        if not _gated_warned:
+            logger.warning("%s=gated but no gated runtime yet (C-66): the prompt keeps the fast-mode wake rule",
+                           TURN_MODE_ENV)
+            _gated_warned = True
+        return "fast"
+    return mode
+
+
+def build_instructions(assistant: Any, persona: str, *, wake_word: bool | None = None) -> str:
+    """
+    C-49: the assistant's full instructions for a persona ('jarvis' | 'anna') from
+    jarvis_prompt.compose_instructions with its live context: date and city, identity facts, the wake-word mode
+    (wake_word, else the assistant's), JARVIS_TURN_MODE, the outputs folder, JARVIS_CV_PATH, and for ANNA her mood
+    and the user and Sir backgrounds from the identity store.
+    """
+    anna_context = None
+    if persona == "anna":
+        state = jarvis_id.get_anna_state()
+        anna_context = {"mood": state.get("mood"), "is_upset": state.get("is_upset"),
+                        "user_background": jarvis_id.data.get("user_background"),
+                        "sir_background": jarvis_id.data.get("sir_background")}
+    if wake_word is None:
+        wake_word = bool(getattr(assistant, "_wake_word_mode", True))
+    return compose_instructions(
+        persona,
+        current_date=getattr(assistant, "current_date", None) or datetime.now().strftime("%Y-%m-%d"),
+        current_city=getattr(assistant, "current_city", None) or "",
+        project_age_days=project_age_days(),
+        identity_context=jarvis_id.get_context(),
+        turn_mode=runtime_turn_mode(),
+        wake_word=wake_word,
+        outputs_dir=getattr(config, "outputs_dir", None) or "Jarvis_Outputs",
+        cv_path=getattr(config, "cv_path", None),
+        anna_context=anna_context,
+        project_root=getattr(config, "project_root", None) or "",
+        owner_contact=os.getenv(OWNER_CONTACT_ENV, ""),
+    )
+
 
 @runtime_checkable
 class AssistantProtocol(Protocol):
@@ -45,26 +106,10 @@ class PersonaManager:
         await self.update_assistant_persona()
 
     async def update_assistant_persona(self) -> None:
-        """Applies current persona settings to the assistant."""
-        if self._gf_mode_active:
-            state = jarvis_id.get_anna_state()
-            
-            # Real-time project age calculation
-            from datetime import datetime
-            project_start_date = datetime(2025, 8, 2)
-            days_since_start = (datetime.now() - project_start_date).days
-
-            instr = ANNA_BEHAVIOR_PROMPT.format(
-                mood=state["mood"],
-                is_upset=state["is_upset"],
-                user_background=jarvis_id.data.get("user_background"),
-                sir_background=jarvis_id.data.get("sir_background"),
-                project_age_days=str(days_since_start)
-            )
-            voice = "Aoede" # Standard Capitalized Gemini Voice
-        else:
-            instr = f"{BEHAVIOR_PROMPT}\n{jarvis_id.get_context()}"
-            voice = "Charon" # Standard Capitalized Gemini Voice
+        """Applies current persona settings to the assistant. C-49: both personas get the composed instructions
+        (every tool protocol included) and the assistant's update_instructions sends them to the live session."""
+        instr = build_instructions(self._assistant, self.active_persona_name)
+        voice = "Aoede" if self._gf_mode_active else "Charon"  # Standard Capitalized Gemini Voices
 
         await self._assistant.update_instructions(instr)
         # Update underlying LLM model property
@@ -81,7 +126,7 @@ class PersonaManager:
             except (AttributeError, RuntimeError) as e:
                 logger.warning("Failed to sync session settings: %s", e)
 
-    def _update_session_options(self, voice: str, instructions: str) -> None:
+    def _update_session_options(self, voice: str, _instructions: str) -> None:
         """Syncs voice and instructions while avoiding keyword errors on wrapper sessions."""
         try:
             # Sync session options struct if present
@@ -94,16 +139,10 @@ class PersonaManager:
             if not active_session:
                 return
 
-            # 1. Update Instructions (Safe for AgentSession)
-            if hasattr(active_session, "update_options"):
-                try:
-                    active_session.update_options(instructions=instructions)
-                    logger.debug("Instructions updated on high-level session.")
-                except TypeError:
-                    # Fallback if AgentSession.update_options doesn't exist/work
-                    pass
+            # C-49: the instructions already went to the live session through the assistant's update_instructions
+            # (AgentSession.update_options takes no instructions; that call only raised a swallowed TypeError).
 
-            # 2. Update Voice (Requires Multimodal RealtimeSession)
+            # Update Voice (Requires Multimodal RealtimeSession)
             # We dig for the internal RT session to find 'voice' parameter support
             rt_session = None
             if hasattr(active_session, "_session"):
@@ -141,7 +180,9 @@ class PersonaManager:
             return
         if "sorry" in text.lower():
             await jarvis_id.set_anna_mood("loving", False)
-            await self.set_persona(True)
+            # C-49: ANNA is active already (set_persona would return at once): compose her prompt again so the
+            # live session gets the new mood
+            await self.update_assistant_persona()
         else:
             turn_ctx.chat_ctx.messages.append(llm.ChatMessage(
                 role="assistant", content=["Demand sorry."],
