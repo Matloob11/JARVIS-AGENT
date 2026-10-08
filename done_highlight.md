@@ -1989,3 +1989,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Commit:** `5cbbfc7` · **Deploy:** no
 - **Doosre agent ke liye:** regen desktop_manifest PinchTab meta; manual curl + voice acceptance
 
+### ✅ [cursor] X-66 · filelock reminders + PKT + svc delivery hooks · 2026-10-08 16:11 PKT
+- **Kya kiya:** reminders.json RMW under jarvis_filelock; Asia/Karachi now; list_due_reminders + mark_reminder_delivered; tasks.db WAL + busy_timeout 5000; concurrent tests green.
+- **Files:** services/automation/jarvis_reminders.py, services/automation/jarvis_task_manager.py, tests/test_reminders.py, tests/automation/test_task_store_locking.py
+- **Verify:** pytest tests/test_reminders.py tests/automation/test_task_store_locking.py tests/tools/test_task_store_v2.py -q → 59 passed
+- **Commit:** `a8136c8` · **Deploy:** no
+- **Doosre agent ke liye:** C-125 must call list_due_reminders / mark_reminder_delivered
+
+### ✅ [cursor] X-42 · close_window + window context · 2026-10-08 16:11 PKT
+- **Kya kiya:** close_window with protected skip, graceful close, WhatsApp route, force→taskkill; close alias; focus/min/max ToolResult; active context adds pid/process_name.
+- **Files:** services/system/jarvis_window_ctrl.py, tests/tools/test_window_ctrl_tools.py
+- **Verify:** pytest tests/tools/test_window_ctrl_tools.py -q -p no:cacheprovider → 12 passed
+- **Commit:** `8fca9dc` · **Deploy:** no
+- **Doosre agent ke liye:** —
+
