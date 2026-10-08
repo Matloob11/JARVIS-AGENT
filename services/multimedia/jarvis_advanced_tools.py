@@ -17,13 +17,11 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 import requests
-try:
-    from ddgs import DDGS
-except ImportError:
-    from duckduckgo_search import DDGS
 
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
+from services.info.jarvis_search import search_images
 from services.utils import jarvis_audit
+from services.utils.jarvis_bridge import notify_event
 from services.utils.jarvis_config import config
 from services.utils.jarvis_logger import setup_logger
 from services.utils.jarvis_security import redact_secrets
@@ -32,7 +30,11 @@ from services.utils.jarvis_security import redact_secrets
 logger = setup_logger("JARVIS-ADVANCED")
 
 _UNSAFE_NAME_CHARS = re.compile(r"[^a-zA-Z0-9._-]+")
+_WIN_IMAGE_NAME_BAD = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 _MAX_EMAIL_ATTACHMENT_BYTES = 20 * 1024 * 1024
+_MAX_IMAGE_BYTES = 10 * 1024 * 1024
+_MAX_ZIP_FOLDER_BYTES = 2 * 1024 * 1024 * 1024
+_DOWNLOAD_CONCURRENCY = 4
 _GMAIL_AUTH_HINT = (
     "Gmail ne app password reject kiya - myaccount.google.com/apppasswords se naya banayein "
     "(2-Step Verification ON honi chahiye)"
@@ -154,48 +156,191 @@ def _safe_zip_basename(name: str) -> str:
     return f"{stem[:120]}.zip"
 
 
-@jarvis_tool
+def _outputs_root() -> str:
+    project = config.project_root
+    return os.path.abspath(
+        getattr(config, "outputs_dir", None) or os.path.join(project, "Jarvis_Outputs"),
+    )
+
+
+def _downloads_base() -> str:
+    return os.path.abspath(os.path.join(_outputs_root(), "Downloads"))
+
+
+def _archives_base() -> str:
+    return os.path.abspath(os.path.join(_outputs_root(), "Archives"))
+
+
+def _folder_name_invalid() -> dict:
+    return {
+        "status": "error",
+        "message": "folder name invalid",
+    }
+
+
+def _resolve_download_dir(folder_name: str) -> tuple[str | None, dict | None]:
+    base = _downloads_base()
+    name = (folder_name or "Downloaded_Images").strip() or "Downloaded_Images"
+    target = os.path.abspath(os.path.join(base, name))
+    try:
+        if os.path.commonpath([base, target]) != base:
+            return None, _folder_name_invalid()
+    except ValueError:
+        return None, _folder_name_invalid()
+    return target, None
+
+
+def _zip_allow_roots() -> list[str]:
+    home = os.path.expanduser("~")
+    project = config.project_root
+    outputs = _outputs_root()
+    shared = (getattr(config, "shared_dir", None) or "").strip() or os.path.join(home, "Jarvis_Shared")
+    roots = [
+        outputs,
+        os.path.abspath(shared),
+        os.path.abspath(os.path.join(home, "Desktop")),
+        os.path.abspath(os.path.join(home, "Documents")),
+        os.path.abspath(os.path.join(home, "Downloads")),
+    ]
+    return list(dict.fromkeys(roots))
+
+
+def _resolve_zip_source(folder_path: str) -> tuple[str | None, dict | None]:
+    raw = (folder_path or "").strip()
+    if not raw:
+        return None, {
+            "status": "error",
+            "message": f"❌ Folder '{folder_path}' nahi mila.",
+        }
+    expanded = os.path.expanduser(raw)
+    project = config.project_root
+    outputs = _outputs_root()
+    candidates: list[str] = []
+    if os.path.isabs(expanded):
+        candidates.append(expanded)
+    else:
+        candidates.extend([
+            os.path.join(project, expanded),
+            os.path.join(outputs, expanded),
+            expanded,
+        ])
+    resolved = None
+    for candidate in candidates:
+        path = os.path.abspath(candidate)
+        if os.path.isdir(path):
+            resolved = path
+            break
+    if not resolved:
+        return None, {
+            "status": "error",
+            "message": f"❌ Folder '{folder_path}' nahi mila.",
+        }
+    if not any(_path_under_allowed_root(resolved, root) for root in _zip_allow_roots()):
+        return None, {
+            "status": "error",
+            "message": (
+                "❌ Sirf Jarvis_Outputs, Jarvis_Shared ya Desktop/Documents/Downloads "
+                "folders zip ho sakte hain."
+            ),
+        }
+    return resolved, None
+
+
+def _directory_size_bytes(path: str) -> int:
+    total = 0
+    for root, _dirs, files in os.walk(path):
+        for name in files:
+            try:
+                total += os.path.getsize(os.path.join(root, name))
+            except OSError:
+                continue
+    return total
+
+
+def _sanitize_image_stem(query: str) -> str:
+    stem = _WIN_IMAGE_NAME_BAD.sub("_", (query or "image").strip() or "image")
+    stem = stem.strip("._") or "image"
+    return stem[:60]
+
+
+def _image_ext(url: str, content_type: str) -> str:
+    ctype = (content_type or "").split(";", maxsplit=1)[0].strip().lower()
+    mapping = {
+        "image/jpeg": "jpg",
+        "image/jpg": "jpg",
+        "image/png": "png",
+        "image/webp": "webp",
+        "image/gif": "gif",
+    }
+    if ctype in mapping:
+        return mapping[ctype]
+    ext = url.rsplit(".", maxsplit=1)[-1].split("?", maxsplit=1)[0].lower()
+    if ext in {"jpg", "jpeg", "png", "webp", "gif"}:
+        return "jpg" if ext == "jpeg" else ext
+    return "jpg"
+
+
+def _lan_download_url(filepath: str) -> str:
+    from services.system.jarvis_file_server import get_local_ip  # pylint: disable=import-outside-toplevel
+
+    root = getattr(config, "file_server_root", None) or config.shared_dir
+    try:
+        rel = os.path.relpath(filepath, root).replace("\\", "/")
+    except ValueError:
+        rel = os.path.basename(filepath)
+    local_ip = get_local_ip()
+    return f"http://{local_ip}:8000/{rel}"
+
+
+async def _emit_download_media_update(
+    *,
+    label: str,
+    url: str,
+    filename: str,
+    query: str,
+) -> None:
+    meta = {"kind": "download", "filename": filename, "query": query}
+    await notify_event(
+        "intelligence_update",
+        {
+            "type": "image",
+            "label": label,
+            "url": url,
+            "data": {"filename": filename, **meta},
+            "meta": meta,
+        },
+    )
+    try:
+        import services.utils.jarvis_bridge as bridge  # pylint: disable=import-outside-toplevel
+
+        upload_media = getattr(bridge, "upload_media", None)
+        if callable(upload_media):
+            await upload_media(url, meta)
+    except (ImportError, TypeError, RuntimeError, OSError, ValueError) as exc:
+        logger.debug("upload_media relay skipped: %s", exc)
+
+
+@jarvis_tool(
+    execution_timeout=90,
+    arg_policies={"folder_name": "path"},
+)
 async def download_images(query: str, count: int = 5,
                           folder_name: str = "Downloaded_Images") -> dict:
     """
     Searches and downloads images from the internet into a local folder.
-    Cascades through: DuckDuckGo -> Google Custom Search.
+    Uses jarvis_search.search_images (DuckDuckGo, Tavily, Google CSE).
     """
     try:
-        safe_folder = _safe_folder_basename(folder_name, "Downloaded_Images")
-        base_path = os.path.join(os.getcwd(), "Jarvis_Outputs", "Downloads")
-        target_dir = os.path.abspath(os.path.join(base_path, safe_folder))
+        target_dir, folder_err = _resolve_download_dir(folder_name)
+        if folder_err:
+            return folder_err
+        assert target_dir is not None
         os.makedirs(target_dir, exist_ok=True)
 
-        logger.info("Searching for %d images for query: '%s'...", count, query)
+        want = max(1, min(int(count), 30))
+        logger.info("Searching for %d images for query: '%s'...", want, query)
 
-        results = []
-        
-        # 1. Try DuckDuckGo
-        try:
-            def search_images_ddg():
-                ddg_results = []
-                with DDGS() as ddgs:
-                    for r in ddgs.images(query, max_results=count):
-                        ddg_results.append(r['image'])
-                return ddg_results
-            
-            results = await asyncio.to_thread(search_images_ddg)
-            logger.info("DuckDuckGo found %d images.", len(results))
-        except Exception as e:
-            logger.warning("DuckDuckGo Image Search failed (likely rate limit): %s", e)
-            
-            # 2. Fallback to Google Custom Search
-            google_key = os.getenv("GOOGLE_SEARCH_API_KEY")
-            google_cx = os.getenv("SEARCH_ENGINE_ID")
-            
-            if google_key and google_cx:
-                logger.info("Attempting Google Image Search fallback...")
-                results = await _search_images_google(query, count, google_key, google_cx)
-                logger.info("Google Image Search found %d images.", len(results))
-            else:
-                logger.error("No Google Search credentials found for fallback.")
-
+        results = await search_images(query, want)
         if not results:
             return {
                 "status": "error",
@@ -203,13 +348,27 @@ async def download_images(query: str, count: int = 5,
             }
 
         logger.info("Downloading images to %s", target_dir)
+        stem = _sanitize_image_stem(query)
+        sem = asyncio.Semaphore(_DOWNLOAD_CONCURRENCY)
 
-        downloaded_count = 0
-        for i, url in enumerate(results, 1):
-            if downloaded_count >= count:
-                break
-            downloaded_count += await _download_single_image(url, i, query, target_dir)
+        async def fetch_one(url: str, index: int) -> str | None:
+            async with sem:
+                return await _download_single_image(url, index, stem, target_dir)
 
+        outcomes = await asyncio.gather(*(fetch_one(url, i) for i, url in enumerate(results[:want], 1)))
+        saved_paths = [p for p in outcomes if p]
+
+        for file_path in saved_paths:
+            filename = os.path.basename(file_path)
+            media_url = _lan_download_url(file_path)
+            await _emit_download_media_update(
+                label=f"Downloaded: {filename}",
+                url=media_url,
+                filename=filename,
+                query=query,
+            )
+
+        downloaded_count = len(saved_paths)
         return {
             "status": "success",
             "query": query,
@@ -229,68 +388,58 @@ async def download_images(query: str, count: int = 5,
         }
 
 
-async def _search_images_google(query: str, count: int, api_key: str, cx: str) -> list[str]:
-    """Helper to search images using Google Custom Search API."""
+async def _download_single_image(url: str, index: int, stem: str, target_dir: str) -> str | None:
+    """Download one image; return saved path or None."""
     try:
-        from urllib.parse import quote
-        url = (
-            f"https://www.googleapis.com/customsearch/v1"
-            f"?key={api_key}&cx={cx}&q={quote(query)}&searchType=image&num={count}"
-        )
-        
         response = await asyncio.to_thread(requests.get, url, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-        
-        return [item['link'] for item in data.get('items', [])]
-    except Exception as e:
-        logger.error("Google Image Search failed: %s", e)
-        return []
+        if response.status_code != 200:
+            return None
+        content_type = response.headers.get("Content-Type", "")
+        if not content_type.lower().startswith("image/"):
+            return None
+        body = response.content
+        if not body or len(body) > _MAX_IMAGE_BYTES:
+            return None
 
-
-async def _download_single_image(url: str, index: int, query: str, target_dir: str) -> int:
-    """Helper to download a single image."""
-    try:
-        ext = url.rsplit('.', maxsplit=1)[-1].split('?', maxsplit=1)[0]
-        if ext.lower() not in ['jpg', 'jpeg', 'png', 'webp']:
-            ext = 'jpg'
-
-        file_name = f"{query.replace(' ', '_')}_{index}.{ext}"
+        ext = _image_ext(url, content_type)
+        file_name = f"{stem}_{index}.{ext}"
         file_path = os.path.join(target_dir, file_name)
-
-        response = await asyncio.to_thread(requests.get, url, timeout=10)
-        if response.status_code == 200:
-            with open(file_path, 'wb') as f:
-                f.write(response.content)
-            return 1
+        with open(file_path, "wb") as handle:
+            handle.write(body)
+        return file_path
     except (requests.RequestException, OSError) as e:
         logger.warning("Failed to download image %d: %s", index, e)
-    return 0
+    return None
 
 
-@jarvis_tool
+@jarvis_tool(
+    execution_timeout=180,
+    arg_policies={"folder_path": "path", "zip_name": "plain"},
+)
 async def zip_files(folder_path: str, zip_name: str = "Archive.zip") -> dict:
     """
     Compresses a folder or directory into a .zip archive.
     Use this when the user wants to zip or compress files.
     """
     try:
-        # Resolve path - if folder_path is just a name, look in common locations
-        if not os.path.isabs(folder_path):
-            # Try Jarvis_Outputs first
-            base_dir = os.path.join(os.getcwd(), "Jarvis_Outputs")
-            actual_path = os.path.abspath(os.path.join(base_dir, folder_path))
-            if not os.path.exists(actual_path):
-                return {
-                    "status": "error",
-                    "message": f"❌ Folder '{folder_path}' nahi mila.",
-                }
-            folder_path = actual_path
+        source_dir, src_err = _resolve_zip_source(folder_path)
+        if src_err:
+            return src_err
+        assert source_dir is not None
+
+        folder_bytes = await asyncio.to_thread(_directory_size_bytes, source_dir)
+        if folder_bytes > _MAX_ZIP_FOLDER_BYTES:
+            return {
+                "status": "error",
+                "message": "❌ Folder 2 GB se zyada hai; zip refuse kar diya gaya.",
+            }
 
         safe_zip = _safe_zip_basename(zip_name)
-        archive_base = os.path.join(os.path.dirname(folder_path), os.path.splitext(safe_zip)[0])
-        await asyncio.to_thread(shutil.make_archive, archive_base, "zip", folder_path)
-        logger.info("Folder '%s' zipped successfully.", folder_path)
+        archives_dir = _archives_base()
+        os.makedirs(archives_dir, exist_ok=True)
+        archive_base = os.path.join(archives_dir, os.path.splitext(safe_zip)[0])
+        await asyncio.to_thread(shutil.make_archive, archive_base, "zip", source_dir)
+        logger.info("Folder '%s' zipped successfully.", source_dir)
         zip_path = f"{archive_base}.zip"
         return {
             "status": "success",
