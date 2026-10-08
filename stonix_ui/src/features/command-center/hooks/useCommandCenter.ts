@@ -1111,6 +1111,7 @@ export const useCommandCenter = () => {
     isSpeaking: isSpeakingLive,
     isUserSpeaking,
     isThinking,
+    awaitingReply: chat.awaitingReply,
     isMuted: settings.muted,
     isWakeWordActive: settings.wakeWord,
     agentAudioActive,

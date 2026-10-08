@@ -30,6 +30,7 @@ interface ChatPanelProps {
   onLoadOlder?: () => void;
   onRetry?: (id: string) => void;
   isThinking?: boolean;
+  awaitingReply?: boolean;
   chatMediaChip?: { label: string } | null;
   approvalsWaiting?: number;
   onOpenSim: () => void;

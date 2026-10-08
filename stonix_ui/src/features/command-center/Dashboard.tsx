@@ -394,6 +394,7 @@ const DashboardInner = () => {
               onLoadOlder={command.loadOlderChatMessages}
               onRetry={command.retryChatMessage}
               isThinking={command.isThinking}
+              awaitingReply={command.awaitingReply}
               chatMediaChip={command.chatMediaChip}
               approvalsWaiting={command.confirmQueueCount}
               onOpenSim={command.openSimPanel}

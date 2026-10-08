@@ -35,6 +35,7 @@ interface RightPanelProps {
   onLoadOlder?: () => void;
   onRetry?: (id: string) => void;
   isThinking?: boolean;
+  awaitingReply?: boolean;
   approvalsWaiting?: number;
   onOpenSim: () => void;
   confirmSlot?: ReactNode;
@@ -65,6 +66,7 @@ const RightPanel = ({
   onLoadOlder,
   onRetry,
   isThinking = false,
+  awaitingReply = false,
   approvalsWaiting = 0,
   onOpenSim,
   confirmSlot,
@@ -118,6 +120,7 @@ const RightPanel = ({
         onFeedback={onFeedback}
         onSuggest={sendSuggestion}
         isThinking={isThinking}
+        awaitingReply={awaitingReply}
       />
     );
   } else if (mainTab === 'approvals') {

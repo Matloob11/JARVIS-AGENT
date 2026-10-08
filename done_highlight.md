@@ -2285,3 +2285,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** tsc --noEmit pass; eslint changed files pass. Live visual audit needs owner login (nginx basic auth).
 - **Commit:** (this commit) · **Deploy:** no — REQ-DEPLOY frontend
 - **Doosre agent ke liye:** section 11 REQ: raw stacks aur Load Adaptation flood source par rate-limit; frontend deploy.
+
+### ✅ [cursor] C-42 · Typing bubble while a typed reply is pending · 2026-10-08 23:12 PKT
+- **Kya kiya:** Voice off typed chat ab dots bubble dikhata hai jab tak jawab na aaye. 60s baad hint "Jawab nahi aaya — Retry". Reconnect (init_state) wait clear karta hai.
+- **Files:** stonix_ui useChat, ChatList, RightPanel, ChatPanel, Dashboard, useCommandCenter, vitest tests
+- **Verify:** npm test 5 passed; npm run build pass
+- **Commit:** (this commit) · **Deploy:** no — REQ-DEPLOY frontend
+- **Doosre agent ke liye:** contract change nahi (K-58 turn_id, K-59). Swarm button same.

@@ -111,6 +111,7 @@ interface ChatListProps {
   onFeedback: (messageId: string, score: 1 | -1) => void;
   onSuggest: (text: string) => void;
   isThinking?: boolean;
+  awaitingReply?: boolean;
   chatMediaChip?: { label: string } | null;
 }
 
@@ -123,6 +124,7 @@ const ChatList = ({
   onFeedback,
   onSuggest,
   isThinking = false,
+  awaitingReply = false,
   chatMediaChip = null,
 }: ChatListProps) => {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -134,8 +136,8 @@ const ChatList = ({
 
   useEffect(() => {
     if (!atBottomRef.current) return;
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages, isThinking]);
+    scrollRef.current?.scrollTo?.({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+  }, [messages, isThinking, awaitingReply]);
 
   const onScroll = () => {
     const el = scrollRef.current;
@@ -158,7 +160,8 @@ const ChatList = ({
     onLoadOlder();
   };
 
-  const empty = messages.length === 0 && !isThinking;
+  const showTyping = isThinking || awaitingReply;
+  const empty = messages.length === 0 && !showTyping;
 
   return (
     <div
@@ -243,7 +246,7 @@ const ChatList = ({
           </button>
         ) : null}
 
-        {isThinking ? <TypingRow persona={activePersona} /> : null}
+        {showTyping ? <TypingRow persona={activePersona} /> : null}
       </div>
     </div>
   );
@@ -317,7 +320,7 @@ const AnswerFeedback = ({
 const TypingRow = ({ persona }: { persona: PersonaKey }) => (
   <div
     className="chat-msg-row chat-typing-row"
-    data-testid="chat-msg"
+    data-testid="chat-typing-row"
     data-role="assistant"
     data-persona={persona}
   >
