@@ -358,7 +358,7 @@ async def open_job_artifact(payload: Any) -> bool:
 # DEBUG instead of logging 'Unknown UI command' to the dashboard, until a module registers one (the registry wins).
 FORWARDED_UNHANDLED: frozenset[str] = frozenset({
     "start", "settings_update", "desktop_stop", "notification_ack", "shutdown_agent", "task_cancel",
-    "tasks_refresh", "voice_take_over", "voice_enroll", "feedback", "request_state",
+    "tasks_refresh", "voice_take_over", "voice_enroll", "voice_enroll_start", "feedback", "request_state",
 })
 
 

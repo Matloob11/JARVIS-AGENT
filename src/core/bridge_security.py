@@ -138,10 +138,12 @@ class TokenBucket:
 
 
 # POST /notify rate classes (K-39 v10): the voice path and the agent's control events; the log lines; everything
-# else (a missing or unknown type included). user_speaking_sync and job_end are low-volume voice/lifecycle events.
+# else (a missing or unknown type included). user_speaking_sync and job_end are low-volume voice/lifecycle events;
+# C-44 adds the voice path's turn_rejected and voice_id_status and the owner-facing task_alert.
 NOTIFY_CLASS_CRITICAL, NOTIFY_CLASS_LOGS, NOTIFY_CLASS_OTHERS = "critical", "logs", "others"
 NOTIFY_CRITICAL_TYPES = frozenset({"transcription", "status", "thinking", "confirm_request", "settings_sync",
-                                   "agent_heartbeat", "user_speaking_sync", "job_end"})
+                                   "agent_heartbeat", "user_speaking_sync", "job_end", "turn_rejected",
+                                   "voice_id_status", "task_alert"})
 NOTIFY_LOG_TYPES = frozenset({"vortex_log", "vortex_log_batch"})
 # class: (tokens a second, burst). critical and others charge one token per notify. The logs class charges one
 # token per item a vortex_log_batch will store (C-64 review SP-3: 10 posts/s x 50 items was a 500 stored-rows/s

@@ -142,7 +142,8 @@ UI_COMMAND_TYPES = frozenset({
     "chat", "mute", "unmute", "wake_word_toggle", "stop", "start", "persona_change", "clear_memory",
     "open_sim_panel", "sim_lookup", "swarm", "confirm_response", "settings_update", "desktop_stop",
     "notification_ack", "shutdown_agent", "pause_agent", "task_cancel", "tasks_refresh",
-    "voice_take_over", "voice_enroll", "feedback", "job_cancel", "open_job_artifact", "request_state",
+    "voice_take_over", "voice_enroll", "voice_enroll_start", "feedback", "job_cancel", "open_job_artifact",
+    "request_state",
 })
 UI_COMMANDS_PER_S = 10.0
 VISION_FRAMES_PER_S = 1.0
@@ -719,6 +720,74 @@ def _internal_notify_body(raw: bytes | None) -> dict[str, Any]:
     return data
 
 
+# ------------------------------------------------------------------ C-58 (K-31): job progress routing
+JOBS_MAX = 20
+_JOB_STATUS = {"queued": "queued", "running": "running", "start": "running", "success": "done", "done": "done",
+               "error": "error", "failed": "error", "timeout": "error", "cancelled": "cancelled",
+               "canceled": "cancelled"}
+_jobs: "OrderedDict[str, dict[str, Any]]" = OrderedDict()  # job_id -> its newest tool_progress event (newest last)
+
+
+def job_progress_event(payload: Any) -> dict[str, Any] | None:
+    """K-31: the tool_progress event {job_id, tool, title, status, percent, message, artifact?, ts} of a job tool_sync
+    (id, action, details, progress, timestamp) or of a direct tool_progress; None without a usable job id. success
+    maps to done; a percent is clamped to 0..100, anything else is null."""
+    if not isinstance(payload, Mapping):
+        return None
+    job_id = payload.get("job_id", payload.get("id"))
+    if not isinstance(job_id, str) or not job_id.strip():
+        return None
+    status = _JOB_STATUS.get(str(payload.get("status") or "running").strip().lower(), "running")
+    percent = payload.get("percent", payload.get("progress"))
+    if isinstance(percent, bool) or not isinstance(percent, (int, float)):
+        percent = None
+    else:
+        percent = max(0.0, min(100.0, float(percent)))
+    ts = payload.get("ts", payload.get("timestamp"))
+    event: dict[str, Any] = {
+        "job_id": _printable(job_id.strip(), 64),
+        "tool": _printable(payload.get("tool") or "job", 64),
+        "title": _printable(payload.get("title") or payload.get("action") or payload.get("details") or "", 200),
+        "status": status,
+        "percent": percent,
+        "message": _printable(payload.get("message") or payload.get("details") or "", 500),
+        "ts": float(ts) if isinstance(ts, (int, float)) and not isinstance(ts, bool) else time.time(),
+    }
+    artifact = payload.get("artifact")
+    if isinstance(artifact, Mapping):
+        clean = {key: _printable(artifact[key], 500) for key in ("kind", "path", "name")
+                 if isinstance(artifact.get(key), str)}
+        if clean:
+            event["artifact"] = clean
+    return event
+
+
+def remember_job(event: dict[str, Any]) -> dict[str, Any]:
+    """Upserts state.jobs (K-31, newest JOBS_MAX): a field the event leaves empty keeps its earlier value (a progress
+    row without a title, an end row without a percent), so the UI and init_state always get the whole job. Returns
+    the merged event."""
+    previous = _jobs.pop(event["job_id"], {})
+    merged = {**previous, **{key: value for key, value in event.items() if value not in (None, "")}}
+    for key in ("title", "message"):
+        merged.setdefault(key, "")
+    merged.setdefault("percent", None)
+    _jobs[event["job_id"]] = merged
+    while len(_jobs) > JOBS_MAX:
+        _jobs.popitem(last=False)
+    return dict(merged)
+
+
+def jobs_newest_first() -> list[dict[str, Any]]:
+    """init_state.jobs (K-31): the remembered jobs, newest first."""
+    return [dict(job) for job in reversed(_jobs.values())]
+
+
+async def _route_job_event(payload: Any) -> None:
+    event = job_progress_event(payload)
+    if event is not None:
+        await emit_ui("tool_progress", remember_job(event))
+
+
 @app.post("/notify")
 async def notify_bridge(request: Request) -> Any:
     """
@@ -838,11 +907,22 @@ async def notify_bridge(request: Request) -> Any:
     elif event_type == "tool_sync":
         await stored("tool log", store.append_event(EVENT_TOOL, payload), 0)
         await emit_ui("tool_update", payload)
-        if isinstance(payload, Mapping) and payload.get("phase") == "progress":  # C-29 step 4 (K-31 job rows)
-            await emit_ui("tool_progress", {
-                "job_id": payload.get("id"), "tool": payload.get("tool"), "title": payload.get("details"),
-                "status": payload.get("status"), "percent": payload.get("progress"),
-                "message": payload.get("message") or payload.get("details"), "ts": payload.get("ts")})
+        # C-58 (K-31): a job event (job: true, every phase) or any progress row becomes a Jobs-panel tool_progress
+        # and is remembered for init_state.jobs
+        if isinstance(payload, Mapping) and (payload.get("job") is True or payload.get("phase") == "progress"):
+            await _route_job_event(payload)
+    elif event_type == "tool_progress":  # K-31: a direct one of the same shape is accepted too
+        await _route_job_event(payload)
+    elif event_type == "turn_rejected":  # C-44 (K-62): a voice turn the agent did not answer, and why
+        await emit_ui("turn_rejected", payload)
+    elif event_type == "voice_id_status":  # C-44 (K-63): the last status also reaches a late UI through init_state
+        await bridge_manager.update_state("voice_id_status", payload)
+        await emit_ui("voice_id_status", payload)
+    elif event_type == "voice_enroll_result":  # C-44 (K-63)
+        await emit_ui("voice_enroll_result", payload)
+    elif event_type == "memory_cleared":  # C-44 (K-58): the bridge forgets its stored short-term memories too
+        await stored("memory clear", store.delete_events(EVENT_MEMORY), 0)
+        await emit_ui("memory_cleared", payload)
     elif event_type == "sim_data_result":
         records: list[Any] = payload.get("records", []) if isinstance(payload, dict) else []
         query_masked: str = payload.get("phone", "") if isinstance(payload, dict) else ""
@@ -1654,6 +1734,7 @@ async def build_init_state() -> dict[str, Any]:
     # C-29: a reloaded UI shows a still-pending confirmation again (the requests as they were sent).
     state["confirmations"] = [record["payload"] for record in
                               await stored("confirmations", store.list_confirmations(), [])]
+    state["jobs"] = jobs_newest_first()  # C-58 (K-31): the Jobs panel comes back after a reload
     state["desktop_status"] = desktop.status()  # K-74 (C-STATE-1 v4)
     state["vitals_pc"] = latest_pc_vitals()
     if _latest_vps_vitals is not None:

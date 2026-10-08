@@ -313,7 +313,7 @@ async def _drain(bridge: Any) -> None:
 
 def test_every_notify_type_has_its_rate_class():
     critical = {"transcription", "status", "thinking", "confirm_request", "settings_sync", "agent_heartbeat",
-                "user_speaking_sync", "job_end"}
+                "user_speaking_sync", "job_end", "turn_rejected", "voice_id_status", "task_alert"}  # C-44
     assert bridge_security.NOTIFY_CRITICAL_TYPES == critical
     assert {t: bridge_security.notify_class(t) for t in ("vortex_log", "vortex_log_batch")} == {
         "vortex_log": "logs", "vortex_log_batch": "logs"}
