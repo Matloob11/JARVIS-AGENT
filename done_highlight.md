@@ -2201,3 +2201,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** tests green; live: --text 'Jarvis, what is 2 plus 2?' PASS (jawab mein 4), --wav tts_jarvis_time.wav PASS (first_audio_latency_ms=3016), 2-turn recall PASS; bridge log aur store mein probe ki 0 lines, probe rooms khatam (C-39 ki live jaanch bhi poori)
 - **Commit:** `208668b`, `9fde3e2` · **Deploy:** PC worker restart 18:05 🔁
 - **Doosre agent ke liye:** UI ko kuch nahi badalna; voice features ab is probe se jaanche ja sakte hain.
+
+### ✅ 🔁 [claude] C-42: state settle and ordered chat sends · Agent worker restart (agent_ctl) · 2026-10-08 18:24 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 25396) band, naya pid 40788; health 200 (38.9 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 18:24 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] C-42 · Typed chat ek hi dafa Gemini session mein; typed reply ke baad agent 'speaking' par nahi atakta · 2026-10-08 18:35 PKT
+- **Kya kiya:** C-42 ki live acceptance (ConversationRouter dd1a506 se live tha). Jaanch mein do cheezein mili aur theek ki: (1) audio band ho (C-41) to livekit-agents realtime reply ke baad state 'listening' nahi karta tha, agent hamesha 'speaking' rehta tha; VoiceLink ab speech khatam hone par state theek karta hai (guard test livekit fix hone par batayega). (2) Router jawab shuru karne se pehle user echo ka bridge round trip (0.4 s) rukta tha; ab sab messages ek tarteeb wali chain se jate hain. test_chat_once.py mein --voice-on (owner tab, khamosh mic) aur --max-reply. Contracts v30.
+- **Files:** src/core/voice_link.py, src/core/conversation_router.py, deploy/windows-local/test_chat_once.py, tests (output gating, conversation router, agent_ctl), docs/CONTRACTS.md v30
+- **Verify:** tests green; live: Voice off aur Voice on dono mein ek user + ek assistant message ('56'), get_weather (30.09 C), 'What is 9 times 6?' bina Jarvis ke jawab (54), voice_probe 7x8=56, har message ki ek CHAT_ROUTER line. Nahi hua: Voice off jawab 5 s se kam (6.0-9.4 s, Gemini ka waqt) → C-88
+- **Commit:** `36ba729` · **Deploy:** PC worker restart 18:24 🔁
+- **Doosre agent ke liye:** UI ka speaking indicator ab typed reply ke baad band hota hai; handoff dekho.
