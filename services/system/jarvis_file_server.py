@@ -230,6 +230,15 @@ def _make_handler_class(root: Path, token: str) -> type[DDriveHandler]:
     })
 
 
+class _FileAccessHTTPServer(ThreadingHTTPServer):
+    """allow_reuse_address off: on Windows, SO_REUSEADDR (HTTPServer's default) lets a second
+    socket bind to a port that is already LISTENING, so a genuine 'address in use' would never
+    surface. Off, a second start on the same port raises OSError as the plan's acceptance test
+    expects ('netstat' shows one LISTENING entry, not two)."""
+
+    allow_reuse_address = False
+
+
 # ---------------------------------------------------------------------------
 # Server lifecycle (X-30 steps 2 and 7)
 # ---------------------------------------------------------------------------
@@ -243,7 +252,7 @@ def _start_server(root: Path, bind_ip: str, port: int, token: str) -> ThreadingH
     read it back from server.server_address[1].
     """
     handler_cls = _make_handler_class(root, token)
-    server = ThreadingHTTPServer((bind_ip, port), handler_cls)  # may raise OSError
+    server = _FileAccessHTTPServer((bind_ip, port), handler_cls)  # may raise OSError
     thread = threading.Thread(target=server.serve_forever, name="jarvis-file-server", daemon=True)
     thread.start()
     server._jarvis_serve_thread = thread  # type: ignore[attr-defined]  # retrieved by the caller
@@ -260,13 +269,6 @@ def _stop_server_sync() -> bool:
         server = _server
         thread = _server_thread
         timer = _server_timer
-        _server = None
-        _server_thread = None
-        _server_timer = None
-        _server_token = None
-        _server_url = None
-        _server_masked_url = None
-        _server_root = None
     if timer is not None:
         timer.cancel()
     if server is None:
@@ -277,6 +279,16 @@ def _stop_server_sync() -> bool:
         server.server_close()
     if thread is not None:
         thread.join(timeout=5.0)
+    # Cleared only once the socket is actually closed, so a caller that polls _server for None
+    # (the TTL auto-stop path included) never sees a free port before it truly is free.
+    with _state_lock:
+        _server = None
+        _server_thread = None
+        _server_timer = None
+        _server_token = None
+        _server_url = None
+        _server_masked_url = None
+        _server_root = None
     return True
 
 

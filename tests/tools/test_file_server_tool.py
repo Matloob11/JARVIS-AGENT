@@ -162,7 +162,9 @@ def test_bind_failure_raises_oserror(served_root: Path) -> None:
 @pytest.fixture
 def tool_env(monkeypatch: pytest.MonkeyPatch, served_root: Path) -> dict[str, AsyncMock]:
     monkeypatch.setattr(jfs.config, "file_server_root", str(served_root), raising=False)
-    monkeypatch.setattr(jfs, "get_local_ip", lambda: "192.168.50.5")
+    # A real bindable (non-127.x) address: 0.0.0.0 is valid to bind() on Windows and still
+    # answers on 127.0.0.1, unlike a made-up LAN IP that belongs to no local interface.
+    monkeypatch.setattr(jfs, "get_local_ip", lambda: "0.0.0.0")
     qr_mock = AsyncMock(return_value={"status": "success",
                                       "file_path": str(served_root / "qr.png")})
     notify_mock = AsyncMock(return_value=None)
@@ -174,7 +176,7 @@ def tool_env(monkeypatch: pytest.MonkeyPatch, served_root: Path) -> dict[str, As
 async def test_missing_root_errors(monkeypatch: pytest.MonkeyPatch,
                                    tool_env: dict[str, AsyncMock]) -> None:
     monkeypatch.setattr(jfs.config, "file_server_root", "", raising=False)
-    res = await jfs.start_file_access_server(port=0, _confirmed=True)
+    res = await jfs.start_file_access_server(port=0)
     assert res["status"] == "error"
     assert res["error_code"] == jfs.ERROR_ROOT_MISSING
 
@@ -182,13 +184,13 @@ async def test_missing_root_errors(monkeypatch: pytest.MonkeyPatch,
 async def test_no_lan_errors(monkeypatch: pytest.MonkeyPatch,
                              tool_env: dict[str, AsyncMock]) -> None:
     monkeypatch.setattr(jfs, "get_local_ip", lambda: "127.0.0.1")
-    res = await jfs.start_file_access_server(port=0, _confirmed=True)
+    res = await jfs.start_file_access_server(port=0)
     assert res["status"] == "error"
     assert res["error_code"] == jfs.ERROR_NO_LAN
 
 
 async def test_start_url_has_token_and_is_reachable(tool_env: dict[str, AsyncMock]) -> None:
-    res = await jfs.start_file_access_server(port=0, _confirmed=True)
+    res = await jfs.start_file_access_server(port=0)
     assert res["status"] == "success"
     token = jfs._server_token
     assert token and token in res["url"]
@@ -204,7 +206,7 @@ async def test_start_url_has_token_and_is_reachable(tool_env: dict[str, AsyncMoc
 
 
 async def test_notify_event_payload_never_has_the_token(tool_env: dict[str, AsyncMock]) -> None:
-    await jfs.start_file_access_server(port=0, _confirmed=True)
+    await jfs.start_file_access_server(port=0)
     notify_mock = tool_env["notify"]
     notify_mock.assert_awaited()
     token = jfs._server_token
@@ -216,16 +218,16 @@ async def test_notify_event_payload_never_has_the_token(tool_env: dict[str, Asyn
 async def test_already_running_is_reported_without_a_second_bind(
     tool_env: dict[str, AsyncMock],
 ) -> None:
-    res1 = await jfs.start_file_access_server(port=0, _confirmed=True)
+    res1 = await jfs.start_file_access_server(port=0)
     server_after_first = jfs._server
-    res2 = await jfs.start_file_access_server(port=0, _confirmed=True)
+    res2 = await jfs.start_file_access_server(port=0)
     assert res1["status"] == "success"
     assert res2["status"] == "info"
     assert jfs._server is server_after_first  # no second server was started
 
 
 async def test_stop_frees_the_port(tool_env: dict[str, AsyncMock]) -> None:
-    await jfs.start_file_access_server(port=0, _confirmed=True)
+    await jfs.start_file_access_server(port=0)
     port = jfs._server.server_address[1]
 
     stop_res = await jfs.stop_file_access_server()
@@ -250,7 +252,7 @@ async def test_stop_with_nothing_running_is_informational(
 async def test_ttl_auto_stop(monkeypatch: pytest.MonkeyPatch,
                              tool_env: dict[str, AsyncMock]) -> None:
     monkeypatch.setattr(jfs, "_ttl_seconds", lambda: 0.2)
-    res = await jfs.start_file_access_server(port=0, _confirmed=True)
+    res = await jfs.start_file_access_server(port=0)
     assert res["status"] == "success"
     port = jfs._server.server_address[1]
 
