@@ -33,7 +33,7 @@ async def test_restart_and_sleep_desktop_only(monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_youtube_downloader_uses_delivery_not_startfile() -> None:
-    src = inspect.getsource(yt_dl_mod.YouTubeDownloader.download)
+    src = inspect.getsource(yt_dl_mod.YouTubeDownloader)
     assert "os.startfile" not in src
     assert "jarvis_delivery.open_artifact" in src
 

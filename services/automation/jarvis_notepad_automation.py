@@ -651,7 +651,7 @@ async def run_cmd_command(command: str, capture: bool = False) -> dict[str, Any]
 
 @jarvis_tool(timeout=10, risk="low")
 async def open_notepad_simple() -> dict[str, Any]:
-    """Open a blank Notepad instance."""
+    """Launch a blank Notepad window on the laptop for quick manual notes."""
 
     def _launch() -> subprocess.Popen[Any]:
         try:

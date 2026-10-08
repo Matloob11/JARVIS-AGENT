@@ -802,9 +802,7 @@ async def save_notepad(filename: str = "jarvis_notes.txt") -> dict[str, Any]:
 
 @jarvis_tool(timeout=10, raw_args=("file_path",), risk=_open_notepad_file_risk)
 async def open_notepad_file(file_path: str) -> dict[str, Any]:
-    """
-    Opens a specific text file in Notepad.
-    """
+    """Open an allowed text file in Notepad after resolving it under open roots."""
     resolved, err = _resolve_notepad_open_path(file_path)
     if err or resolved is None:
         return tool_result(
@@ -1223,7 +1221,7 @@ async def folder_file(path: str) -> dict[str, Any]:
 
 @jarvis_tool(timeout=10, risk="low")
 async def create_folder(folder_name: str) -> dict[str, Any]:
-    """Creates a new folder on the Desktop."""
+    """Create a new folder on the Desktop using a safe single-segment folder name."""
     try:
         desktop = os.path.join(os.environ.get("USERPROFILE", ""), "Desktop")
         if not await asyncio.to_thread(os.path.isdir, desktop):

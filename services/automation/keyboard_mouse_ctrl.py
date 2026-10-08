@@ -711,6 +711,7 @@ async def with_temporary_activation(
 
 @jarvis_tool(timeout=10, risk="low", exclusive="desktop_input")
 async def move_cursor_tool(direction: str, distance: int = 100):
+    """Move the mouse cursor on the desktop by direction and pixel distance."""
     raw = await with_temporary_activation(
         controller.move_cursor, direction, distance, tool="move_cursor_tool"
     )
@@ -719,12 +720,14 @@ async def move_cursor_tool(direction: str, distance: int = 100):
 
 @jarvis_tool(timeout=10, risk="low", exclusive="desktop_input")
 async def mouse_click_tool(button: str = "left"):
+    """Click the left, right or middle mouse button at the current cursor position."""
     raw = await with_temporary_activation(controller.mouse_click, button, tool="mouse_click_tool")
     return _tool_out("mouse_click_tool", raw)
 
 
 @jarvis_tool(timeout=10, risk="low", exclusive="desktop_input")
 async def scroll_cursor_tool(direction: str, amount: int = 10):
+    """Scroll the mouse wheel up or down by the requested number of steps."""
     raw = await with_temporary_activation(
         controller.scroll_cursor, direction, amount, tool="scroll_cursor_tool"
     )
@@ -733,6 +736,7 @@ async def scroll_cursor_tool(direction: str, amount: int = 10):
 
 @jarvis_tool(timeout=60, risk="low", raw_args=("text",), exclusive="desktop_input")
 async def type_text_tool(text: str, interval: float = 0.0, force_typing: bool = False):
+    """Type Unicode text into the focused window, with optional per-key delay or paste."""
     raw = await with_temporary_activation(
         controller.type_text, text, interval, force_typing, tool="type_text_tool"
     )
@@ -741,6 +745,7 @@ async def type_text_tool(text: str, interval: float = 0.0, force_typing: bool = 
 
 @jarvis_tool(timeout=180, risk="low", raw_args=("code",), exclusive="desktop_input")
 async def type_code_animation_tool(code: str):
+    """Animate typing a code snippet visibly, then paste any remainder for long inputs."""
     raw = await with_temporary_activation(
         controller.type_code_animation, code, tool="type_code_animation_tool"
     )
@@ -749,6 +754,7 @@ async def type_code_animation_tool(code: str):
 
 @jarvis_tool(timeout=10, risk="low", exclusive="desktop_input")
 async def press_key_tool(key: str):
+    """Press a single keyboard key in the currently focused desktop window."""
     blocked = _close_combo_guard([key], "press_key_tool")
     if blocked:
         return blocked
@@ -758,6 +764,7 @@ async def press_key_tool(key: str):
 
 @jarvis_tool(timeout=10, risk=_press_hotkey_risk, exclusive="desktop_input")
 async def press_hotkey_tool(keys: list[str]):
+    """Press a keyboard shortcut combination, with guards on protected browser windows."""
     blocked = _close_combo_guard(keys, "press_hotkey_tool")
     if blocked:
         return blocked
@@ -767,12 +774,14 @@ async def press_hotkey_tool(keys: list[str]):
 
 @jarvis_tool(timeout=10, risk="low")
 async def control_volume_tool(action: str):
+    """Change system volume using mute, up, down or similar controller actions."""
     raw = await with_temporary_activation(controller.control_volume, action, tool="control_volume_tool")
     return _tool_out("control_volume_tool", raw)
 
 
 @jarvis_tool(timeout=10, risk="low")
 async def set_volume_tool(percentage: int):
+    """Set the master output volume to an absolute percentage from zero to one hundred."""
     raw = await with_temporary_activation(
         controller.set_volume_percentage, percentage, tool="set_volume_tool"
     )
@@ -781,5 +790,6 @@ async def set_volume_tool(percentage: int):
 
 @jarvis_tool(timeout=10, risk="low", exclusive="desktop_input")
 async def swipe_gesture_tool(direction: str):
+    """Perform a touchpad-style swipe gesture in the given direction on the desktop."""
     raw = await with_temporary_activation(controller.swipe_gesture, direction, tool="swipe_gesture_tool")
     return _tool_out("swipe_gesture_tool", raw)
