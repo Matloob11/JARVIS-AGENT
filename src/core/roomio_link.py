@@ -65,6 +65,62 @@ def eligible(participant: Any, strict_owner: bool = False) -> bool:
     return True
 
 
+# ------------------------------------------------------------------ C-41: audio-output gating
+# Typed replies speak only while someone listens: RoomIO's audio output waits for a subscriber before every frame, so
+# with nobody (or no live microphone) in the room a typed reply would hang. Policy JARVIS_SPEAK_TYPED: 'auto'
+# (default: speak while the linked person's microphone is live, i.e. voice is on), 'always' (whenever an eligible
+# person is in the room), 'never'.
+SPEAK_TYPED_ENV = "JARVIS_SPEAK_TYPED"
+SPEAK_POLICIES = ("auto", "always", "never")
+# livekit 1.1.2 TrackKind.KIND_AUDIO = 1, TrackSource.SOURCE_MICROPHONE = 2 (pinned; names matched too)
+_AUDIO_KIND = (1, "kind_audio", "audio")
+_MIC_SOURCE = (2, "source_microphone", "microphone")
+
+
+def speak_policy(value: Any = None) -> str:
+    """'auto' | 'always' | 'never' from the given value (else 'auto'); anything else is 'auto'."""
+    text = value.strip().lower() if isinstance(value, str) else ""
+    return text if text in SPEAK_POLICIES else "auto"
+
+
+def _enum_is(value: Any, accepted: tuple[Any, ...]) -> bool:
+    name = getattr(value, "name", None)
+    if isinstance(name, str):
+        return name.lower() in accepted
+    if isinstance(value, str):
+        return value.lower() in accepted
+    if isinstance(value, bool) or value is None:
+        return False
+    try:
+        return int(value) in accepted
+    except (TypeError, ValueError):
+        return False
+
+
+def mic_live(participant: Any) -> bool:
+    """True when the participant publishes an unmuted microphone track."""
+    publications = getattr(participant, "track_publications", None)
+    values = publications.values() if hasattr(publications, "values") else []
+    return any(_enum_is(getattr(pub, "kind", None), _AUDIO_KIND)
+               and _enum_is(getattr(pub, "source", None), _MIC_SOURCE)
+               and not getattr(pub, "muted", False) for pub in values)
+
+
+def audio_out_wanted(room: Any, linked: str | None, policy: str = "auto", *, strict_owner: bool = False) -> bool:
+    """Should the agent's audio output be on? (C-41.) Never with policy 'never' or nobody eligible in the room;
+    'always' with an eligible person present; 'auto' when the person the RoomIO listens to (the linked one, else the
+    one pick_target would link) has a live microphone."""
+    if speak_policy(policy) == "never":
+        return False
+    remote = dict(getattr(room, "remote_participants", None) or {})
+    if not any(eligible(p, strict_owner) for p in remote.values()):
+        return False
+    if speak_policy(policy) == "always":
+        return True
+    target = pick_target(room, linked, strict_owner=strict_owner)
+    return target is not None and mic_live(remote.get(target))
+
+
 def pick_target(room: Any, linked: str | None, *, strict_owner: bool = False) -> str | None:
     """The identity the RoomIO should be linked to now. A linked participant still in the room wins
     (never steal); else the newest eligible participant; else None (leave the link alone)."""

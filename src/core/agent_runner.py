@@ -1394,6 +1394,7 @@ async def entrypoint(ctx: agents.JobContext):
 
     async def _start_session(session: Any) -> None:
         logger.info("[AGENT] Connecting room and starting session...")
+        voice_link.prepare(session)  # C-41: with nobody listening the session starts with its audio output off
         # record=False: these jobs never record (self-hosted LiveKit), and a rebuilt session of the same job must not
         # trip livekit-agents' 'only one primary AgentSession' check, which only applies while recording.
         await session.start(room=ctx.room, agent=job["assistant"], record=False,

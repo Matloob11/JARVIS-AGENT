@@ -38,14 +38,18 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+import os
 from typing import Any
 
 from services.utils.ui_command_registry import register_ui_command
-from src.core.roomio_link import eligible, pick_target
+from src.core.roomio_link import SPEAK_TYPED_ENV, audio_out_wanted, eligible, pick_target, speak_policy
 
 logger = logging.getLogger("JARVIS-VOICELINK")
 
 LINKED_IDENTITY_ATTR = "jarvis.linked_identity"
+# C-41: room events after which the audio-output gate is decided again
+MEDIA_EVENTS = ("track_published", "track_unpublished", "track_muted", "track_unmuted", "track_subscribed",
+                "track_unsubscribed")
 
 RELINK_CONNECT = "connect"
 RELINK_REPLACE = "replace"
@@ -75,9 +79,11 @@ def _room_io_of(session: Any) -> Any:
 class VoiceLink:
     """Keeps the session's RoomIO pointed at the right (owner) participant for the life of a job."""
 
-    def __init__(self, ctx: Any, *, strict_owner: bool = False) -> None:
+    def __init__(self, ctx: Any, *, strict_owner: bool = False, speak_typed: str | None = None) -> None:
         self.ctx = ctx
         self.strict_owner = strict_owner
+        # C-41: JARVIS_SPEAK_TYPED ('auto' | 'always' | 'never'), read once per job
+        self.speak_policy = speak_policy(speak_typed if speak_typed is not None else os.getenv(SPEAK_TYPED_ENV))
         self.session: Any = None
         self._linked_identity: str | None = None  # VoiceLink is authoritative for 'who did I link'
         self._room_handlers: list[tuple[str, Any]] = []
@@ -95,7 +101,15 @@ class VoiceLink:
         that pass, if any."""
         self.session = session
         self._ensure_room_handlers()
-        return self.relink_pass()
+        linked = self.relink_pass()
+        self.update_audio_out("session")  # C-41: a rebuilt session starts with its audio output on
+        return linked
+
+    def prepare(self, session: Any) -> None:
+        """C-41, before session.start: with nobody to listen, the session starts with its audio output off,
+        so a typed reply never waits for a subscriber that is not there."""
+        if not self.audio_out_wanted_now():
+            self._set_audio_out(session, False, "start")
 
     def _ensure_room_handlers(self) -> None:
         if self._room_handlers:
@@ -110,6 +124,9 @@ class VoiceLink:
             ("participant_connected", self._on_participant_connected),
             ("participant_disconnected", self._on_participant_disconnected),
         ]
+        for event in MEDIA_EVENTS:  # C-41: the audio gate follows microphones and subscriptions
+            on(event, self._on_media_change)
+            self._room_handlers.append((event, self._on_media_change))
 
     def close(self) -> None:
         """Unregisters the room handlers (teardown; idempotent, never raises)."""
@@ -152,11 +169,11 @@ class VoiceLink:
     def _on_participant_connected(self, participant: Any) -> None:
         if not eligible(participant, self.strict_owner):
             return
-        if self.linked_identity() is not None:
-            return  # an active link is never stolen (only voice_take_over switches)
-        identity = getattr(participant, "identity", None)
-        if isinstance(identity, str):
-            self._relink(identity, RELINK_CONNECT)
+        if self.linked_identity() is None:  # an active link is never stolen (only voice_take_over switches)
+            identity = getattr(participant, "identity", None)
+            if isinstance(identity, str):
+                self._relink(identity, RELINK_CONNECT)
+        self.update_audio_out("participant_connected")
 
     def _on_participant_disconnected(self, participant: Any) -> None:
         identity = getattr(participant, "identity", None)
@@ -169,6 +186,7 @@ class VoiceLink:
         target = pick_target(self.room, None, strict_owner=self.strict_owner)
         if target is not None and target != identity:
             self._relink(target, RELINK_REPLACE)
+        self.update_audio_out("participant_disconnected")
 
     def relink_pass(self) -> str | None:
         """One policy pass for participants already present: right after session.start, and after
@@ -196,6 +214,34 @@ class VoiceLink:
             logger.info("voice_take_over ignored: identity not present or not eligible")
             return False
         return self._relink(identity, RELINK_TAKE_OVER)
+
+    # ---- C-41: the audio-output gate ----------------------------------------------------------
+
+    def _on_media_change(self, *_args: Any) -> None:
+        self.update_audio_out("media")
+
+    def audio_out_wanted_now(self) -> bool:
+        return audio_out_wanted(self.room, self.linked_identity(), self.speak_policy,
+                                strict_owner=self.strict_owner)
+
+    def update_audio_out(self, reason: str) -> None:
+        """Turns the live session's audio output on or off when the policy's answer differs from the
+        session's current state (a rebuilt session starts on). Never raises."""
+        if self.session is not None:
+            self._set_audio_out(self.session, self.audio_out_wanted_now(), reason)
+
+    @staticmethod
+    def _set_audio_out(session: Any, wanted: bool, reason: str) -> None:
+        output = getattr(session, "output", None)
+        setter = getattr(output, "set_audio_enabled", None) if output is not None else None
+        if not callable(setter) or getattr(output, "audio_enabled", None) == wanted:
+            return
+        try:
+            setter(wanted)
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            logger.debug("audio output switch failed: %s", exc)
+            return
+        logger.info("AUDIO_OUT enabled=%s reason=%s", wanted, reason)
 
     # ---- the relink itself --------------------------------------------------------------------
 

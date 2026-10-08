@@ -14,7 +14,7 @@ from typing import Any
 import pytest
 
 from services.utils.ui_command_registry import UI_COMMANDS, CommandContext, dispatch, reset_dedupe
-from src.core.voice_link import LINKED_IDENTITY_ATTR, VoiceLink
+from src.core.voice_link import LINKED_IDENTITY_ATTR, MEDIA_EVENTS, VoiceLink
 
 
 class FakeParticipant:
@@ -132,12 +132,12 @@ def test_attach_registers_room_handlers_once_and_relinks_present_owner(caplog):
     with caplog.at_level(logging.INFO, logger="JARVIS-VOICELINK"):
         assert link.attach(session) == "owner-aaaa1111"
     assert session.rio.set_calls == ["owner-aaaa1111"]
-    assert [e for e, _ in room.handlers] == ["participant_connected", "participant_disconnected"]
+    assert [e for e, _ in room.handlers] == ["participant_connected", "participant_disconnected", *MEDIA_EVENTS]
     assert any("ROOMIO_RELINK" in r.getMessage() and "reason=connect" in r.getMessage()
                for r in caplog.records)
 
     link.attach(session)  # a second attach (same job) must not double the room handlers
-    assert len(room.handlers) == 2
+    assert len(room.handlers) == 2 + len(MEDIA_EVENTS)
 
 
 def test_attach_after_rebuild_relinks_the_fresh_unlinked_roomio():
@@ -150,7 +150,7 @@ def test_attach_after_rebuild_relinks_the_fresh_unlinked_roomio():
     rebuilt = FakeSession()  # the C-33 rebuild: new session, RoomIO starts unlinked
     link.attach(rebuilt)
     assert rebuilt.rio.set_calls == ["owner-aaaa1111"]
-    assert len(room.handlers) == 2  # room handlers still registered exactly once
+    assert len(room.handlers) == 2 + len(MEDIA_EVENTS)  # room handlers still registered exactly once
 
 
 def test_attach_with_empty_room_links_nobody():

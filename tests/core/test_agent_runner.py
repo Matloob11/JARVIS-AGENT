@@ -650,7 +650,11 @@ async def test_the_voice_link_follows_every_session_and_closes_with_the_job(job,
     class FakeVoiceLink:
         def __init__(self, ctx, *, strict_owner=False):
             self.ctx, self.strict_owner, self.attached, self.closed = ctx, strict_owner, [], 0
+            self.prepared: list[Any] = []
             links.append(self)
+
+        def prepare(self, session):  # C-41: before every session.start
+            self.prepared.append(session)
 
         def attach(self, session):
             self.attached.append(session)
@@ -673,6 +677,7 @@ async def test_the_voice_link_follows_every_session_and_closes_with_the_job(job,
     await _run_entrypoint(job, _FakeJobContext())
     (link,) = links
     assert link.attached == job.sessions and len(job.sessions) == 2
+    assert link.prepared == job.sessions  # C-41: the audio gate is set before each start
     assert link.closed == 1 and link.strict_owner is owner_only
 
 
