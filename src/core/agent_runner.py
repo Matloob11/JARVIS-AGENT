@@ -986,6 +986,41 @@ async def _close_loop_bridge_client() -> None:
         logger.debug("bridge client close: %s", type(e).__name__)
 
 
+# ------------------------------------------------------------------ C-75 (TD-19): spoken confirmations
+# The model itself calls confirm_action, so page, search or clipboard text injected into the conversation could
+# "approve" a medium-risk action (a WhatsApp send) without Sir saying anything. The confirm broker approves a spoken
+# confirmation only after a FINAL voice transcript newer than the request says yes (services/ai_core/jarvis_confirm.py
+# _user_affirmed); these helpers feed it and switch the check on when a job's session starts, so it fails closed.
+# Only the voice STT path passes here: typed chat, lk.chat and RPC text never reach user_input_transcribed.
+
+
+def _confirm_broker() -> Any:
+    from services.ai_core.jarvis_confirm import confirmation_broker  # pylint: disable=import-outside-toplevel
+    return confirmation_broker
+
+
+def _enable_voice_confirm_check() -> None:
+    """From this job's start on, confirm_action approves only after Sir's own spoken yes (never raises)."""
+    try:
+        _confirm_broker().enable_transcript_check()
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.warning("voice confirmation check not enabled: %s", type(e).__name__)
+
+
+def _note_final_transcript(event: Any, assistant: Any) -> None:
+    """Passes one FINAL user transcript to the confirm broker (the broker keeps the last 20); a partial one, an empty
+    one or one heard while the assistant is muted is ignored. Never raises."""
+    text = getattr(event, "transcript", None)
+    if not isinstance(text, str) or not text.strip() or not getattr(event, "is_final", False):
+        return
+    if getattr(assistant, "muted", False):
+        return
+    try:
+        _confirm_broker().note_user_transcript(text)
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.debug("transcript not noted for confirmations: %s", type(e).__name__)
+
+
 # ------------------------------------------------------------------ C-32: worker prewarm (design §1.1)
 # The heavy singletons load ONCE per executor (WorkerOptions.prewarm_fnc), BEFORE any job: plugin
 # discovery (JarvisPluginManager is a lock-guarded singleton, so a second prewarm is a cheap
@@ -1255,6 +1290,7 @@ async def entrypoint(ctx: agents.JobContext):
             harden_room_input(session, ctx.room)  # C-124: owner-only RPC and text (VPS; PC opt-in)
             follow_owner_reconnects(session, ctx.room)  # the owner comes back under a new identity
             assistant.attach_session(session)
+            _enable_voice_confirm_check()  # C-75: confirm_action needs Sir's own spoken yes from now on
 
             # C-33 (step A): the job ends when its session or its room is gone; the bridge dispatches a fresh job.
             @session.on("close")
@@ -1301,6 +1337,7 @@ async def entrypoint(ctx: agents.JobContext):
                     logger.info("🎤 User Transcription (Final, %d chars): %s", len(event.transcript),
                                 preview(event.transcript))
                     logger.debug("🎤 User Transcription (Final): %s", event.transcript)
+                    _note_final_transcript(event, _assistant)  # C-75: spoken confirmations need this
                 else:
                     # Optional: Just log locally for debugging, don't flood the UI
                     logger.debug("🎤 Partial Input: %s", event.transcript)

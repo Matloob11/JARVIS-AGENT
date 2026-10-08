@@ -734,6 +734,21 @@ _jarvis_logger.ui_log_shipper.start = lambda *args, **kwargs: False  # type: ign
 logger = setup_logger("JARVIS-TESTS")
 
 
+@pytest.fixture(autouse=True)
+def _confirm_transcript_check_isolated():
+    """C-75: a test that runs the agent entrypoint switches the REAL confirm broker's transcript check on (as a
+    job does). Put the process-wide singleton back to its import-time state after every test, so a later test that
+    uses it never inherits that switch or another test's transcripts. Nothing is imported here."""
+    yield
+    module = sys.modules.get("services.ai_core.jarvis_confirm")
+    broker = getattr(module, "confirmation_broker", None) if module is not None else None
+    if broker is not None and hasattr(broker, "_check_transcripts"):
+        broker._check_transcripts = False  # pylint: disable=protected-access
+        transcripts = getattr(broker, "_transcripts", None)
+        if hasattr(transcripts, "clear"):
+            transcripts.clear()
+
+
 @pytest.fixture(scope="session")
 def test_config():
     """Test configuration fixture"""
