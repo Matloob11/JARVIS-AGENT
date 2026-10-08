@@ -2292,3 +2292,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** npm test 5 passed; npm run build pass
 - **Commit:** (this commit) · **Deploy:** no — REQ-DEPLOY frontend
 - **Doosre agent ke liye:** contract change nahi (K-58 turn_id, K-59). Swarm button same.
+
+### ✅ [cursor] UI-H01 · 503 owner_not_enrolled setup hint · 2026-10-08 23:25 PKT
+- **Kya kiya:** Local login 503 owner_not_enrolled ab owner ko set_owner_credentials.py --target local chalane ko kehta hai (K-09 v33).
+- **Files:** stonix_ui/src/features/auth/api.ts, api.test.ts
+- **Verify:** npm test api.test.ts pass; npx tsc --noEmit pass
+- **Commit:** (UI-H01) · **Deploy:** no — REQ-DEPLOY frontend
+- **Doosre agent ke liye:** —
+
+### ✅ [cursor] UI-H02 · Persona waits for persona_update · 2026-10-08 23:25 PKT
+- **Kya kiya:** Persona click pe turant nahi badalta. Switching tab tak purana naam rehta hai; persona_update ke baad hi naya persona lagta hai (C-50).
+- **Files:** stonix_ui/src/features/settings/useSettings.ts, stonix_ui/docs/UI_AUDIT.md, UI_HARDENING_PLAN.md
+- **Verify:** npx tsc --noEmit pass. Browser e2e UNVERIFIED this session.
+- **Commit:** (UI-H02) · **Deploy:** no — REQ-DEPLOY frontend
+- **Doosre agent ke liye:** settings_sync persona tab ignore hota hai jab switch pending ho.
