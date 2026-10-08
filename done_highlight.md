@@ -2215,3 +2215,31 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** tests green; live: Voice off aur Voice on dono mein ek user + ek assistant message ('56'), get_weather (30.09 C), 'What is 9 times 6?' bina Jarvis ke jawab (54), voice_probe 7x8=56, har message ki ek CHAT_ROUTER line. Nahi hua: Voice off jawab 5 s se kam (6.0-9.4 s, Gemini ka waqt) → C-88
 - **Commit:** `36ba729` · **Deploy:** PC worker restart 18:24 🔁
 - **Doosre agent ke liye:** UI ka speaking indicator ab typed reply ke baad band hota hai; handoff dekho.
+
+### ✅ 🔁 [claude] C-43: reasoning and swarm · Agent worker restart (agent_ctl) · 2026-10-08 18:39 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 40788) band, naya pid 26056; health 200 (42.0 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 18:39 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] C-43: swarm through llm_text · Agent worker restart (agent_ctl) · 2026-10-08 18:46 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 26056) band, naya pid 39016; health 200 (42.9 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 18:46 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] C-43: swarm report to chat · Agent worker restart (agent_ctl) · 2026-10-08 18:51 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 39016) band, naya pid 46908; health 200 (42.4 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 18:51 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] C-43 · Reasoning panel har turn par, aur /swarm ek dafa chal kar report chat mein · 2026-10-08 18:55 PKT
+- **Kya kiya:** Reasoning panel pehle sirf offline template se, React tod-ne wale dict steps ke saath, aur live turns par kabhi nahi chalta tha. Ab router har typed aur voice turn par background mein jarvis_reasoning chalata hai (2 s had, jawab nahi rokta) aur K-67 shakal bhejta hai. Typed '/swarm <task>' swarm command ek dafa chalata hai. Live jaanch mein swarm ke do purane bug mile aur theek kiye: retired model par 404, aur final report aise event par jati thi jise bridge jaanta hi nahi. User ke alfaaz ab INFO log mein nahi.
+- **Files:** src/core/conversation_router.py, src/core/bridge_notifier.py, services/ai_core/swarm_manager.py, services/ai_core/jarvis_reasoning.py, services/ai_core/agent_loops.py, tests (router, swarm_manager, redaction), docs/CONTRACTS.md v31
+- **Verify:** tests green; live: typed → reasoning_update 0.5 s (intent search_query, 6 plan strings), voice → source 'voice', '/swarm latest AI news summary' → ek run, final report chat mein (24 s), bridge par agent_message/unknown event 0
+- **Commit:** `923a8d0`, `5988679`, `9eace56` · **Deploy:** PC worker restarts 18:39, 18:46, 18:51 🔁
+- **Doosre agent ke liye:** UI ko kuch nahi badalna; handoff dekho.
