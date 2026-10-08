@@ -1926,3 +1926,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** pytest tests/tools/test_file_server_tool.py -q → 7 passed
 - **Commit:** `26817c8` · **Deploy:** no
 - **Doosre agent ke liye:** Manual: Allow + phone QR; firewall Private networks; jarvis_qr_gen still builds file-server URL without token for saved image path (known gap).
+
+### ✅ [cursor] X-32 · TaskStore v2 + parse_when · 2026-10-08 16:00 PKT
+- **Kya kiya:** SQLite migration (kind/action_args/result/attempts/updated_at/confirm_id), parse_when (EN+Roman Urdu), schedule_task with JSON args + risk/forbidden, cancel_scheduled_task, set_reminder uses parse_when (das minute baad).
+- **Files:** services/automation/jarvis_task_manager.py, services/automation/jarvis_reminders.py, tests/tools/test_task_store_v2.py
+- **Verify:** pytest test_task_store_v2 + test_reminders → 15 passed
+- **Commit:** `d10934` · **Deploy:** no
+- **Doosre agent ke liye:** C-80 scheduler_dispatcher.action_risk lazy-imported (fallback high). C-62 tasks_refresh can publish from store.

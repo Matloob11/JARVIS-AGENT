@@ -134,7 +134,7 @@ Poori tafseel: architecture page v2, `C:\Users\Matloob\AppData\Local\Temp\claude
 
 ## 4. Contracts
 
-**Canonical copy: `docs/CONTRACTS.md` (v19, 2026-10-08).** Asal wahi hai; yeh section us ki copy hai. Tabdeeli sirf Claude karega, section 11 me `REQ-CONTRACT <contract> <proposal>` ke baad (naya version + Changelog line + yahan copy).
+**Canonical copy: `docs/CONTRACTS.md` (v20, 2026-10-08).** Asal wahi hai; yeh section us ki copy hai. Tabdeeli sirf Claude karega, section 11 me `REQ-CONTRACT <contract> <proposal>` ke baad (naya version + Changelog line + yahan copy).
 
 #### K-01 · DASH-UI-RUNTIME (config+http-client) · owner: Claude
 Owner: Cursor (UI), built on Claude's C-AUTH-1 / C-SOCK-1 / C-ORIGIN-1 (infra). Browser base BRIDGE_BASE = VITE_BRIDGE_BASE || VITE_VORTEX_URL || '/vortex' (relative, same origin; the bundle never contains a secret). Every fetch uses credentials 'include': POST /auth/login {password, totp} | {password, recovery_code}; GET /auth/me; POST /auth/logout; GET /livekit/token (a NEW token before every connect and reconnect); GET /messages?before=&cursor=&limit= (K-41 v5); GET /media/<id> and /media/<id>/sign; POST /feedback. Socket.IO: io(origin, {path: BRIDGE_BASE + '/socket.io', withCredentials: true, transports: ['websocket','polling'], tryAllTransports: true, reconnectionAttempts: Infinity, reconnectionDelayMax: 10000}) with no auth payload. Session expiry: on any connect_error or a 'session_expired' {reason} event the UI calls /auth/me, and a 401 shows the login screen, so it never depends on the refusal text. Dev: Vite proxies /vortex (http + ws) to VITE_DEV_BRIDGE: the mock on 5199, the local bridge on 5001 with VITE_DEV_BRIDGE_STRIP=1, or the VPS with the Origin header rewritten. Electron loads JARVIS_UI_URL (default https://jarvis.srv1802669.hstgr.cloud); file:// dist only with JARVIS_ELECTRON_BACKEND=local or JARVIS_UI_OFFLINE=1.
@@ -247,7 +247,7 @@ Cursor code reads each attribute via getattr(config, name, <same default>) so a 
 - New tools: cancel_shutdown() (jarvis_system_ctrl, Cursor); confirm_action(confirm_id, allow=True) (jarvis_confirm, Claude); list_background_jobs() and cancel_background_job(job_id) (jarvis_jobs, Claude); confirm_selftest only when JARVIS_CONFIRM_SELFTEST=1.
 - Backward-compatible signature changes: sleep_system(mode='sleep'|'hibernate'), close_notepad_tool(force=False), run_cmd_command(command, capture=False).
 - No tool is removed. TD-36 updates the prompt (one change with VCR-06).
-- v4 count (2026-10-01): 83 LLM-visible names = 79 plugin tools (including confirm_action) + 4 internal wrap_* tools; v18 (C-57, 08 Oct): 85 = 81 plugin tools (+ list_background_jobs, cancel_background_job) + 4. The expected set comes from discovery plus the K-71 manifest, never a constant. In vps mode the laptop tools stay registered as K-71 proxies while the laptop is offline and answer DESKTOP_OFFLINE.
+- v4 count (2026-10-01): 83 LLM-visible names = 79 plugin tools (including confirm_action) + 4 internal wrap_* tools; v18 (C-57, 08 Oct): 85 = 81 plugin tools (+ list_background_jobs, cancel_background_job) + 4; v20 (X-29, 08 Oct): 86 = 82 plugin tools (+ cancel_shutdown) + 4. The expected set comes from discovery plus the K-71 manifest, never a constant. In vps mode the laptop tools stay registered as K-71 proxies while the laptop is offline and answer DESKTOP_OFFLINE.
 
 #### K-18 · AnnouncerAPI (python-api (services/utils/jarvis_announcer.py, Claude-owned; re-exported by services/ai_core/announcer.py)) · owner: Claude
 - attach(session) / detach() (aliases set_session(session|None), set_assistant(assistant|None)) called by agent_runner.
@@ -852,7 +852,7 @@ VPS discovery (JARVIS_DESKTOP_MODE=remote)
 - Skip modules whose tools are all laptop-placed, plus the static deny-list: keyboard_mouse_ctrl, jarvis_window_ctrl, jarvis_whatsapp_automation, jarvis_notepad_automation, jarvis_system_ctrl, jarvis_system_info, jarvis_browser_pinchtab.
 - Laptop-placed tools in imported modules are swapped for proxies, and proxies are added for the remaining manifest tools.
 - Expected names = discovery ∪ manifest (never a constant). A mismatch logs ERROR and sets module_health degraded.
-- Counts on 2026-10-01: 83 names = vps 32 (including confirm_action and the 4 internal wrap_* tools), split 1 (analyze_screen), routed 2 (zip_files, list_generated_media_tool), laptop 48. v18 (C-57, 08 Oct): 85 names = vps 34 (+ list_background_jobs, cancel_background_job), split 1, routed 2, laptop 48.
+- Counts on 2026-10-01: 83 names = vps 32 (including confirm_action and the 4 internal wrap_* tools), split 1 (analyze_screen), routed 2 (zip_files, list_generated_media_tool), laptop 48. v18 (C-57, 08 Oct): 85 names = vps 34 (+ list_background_jobs, cancel_background_job), split 1, routed 2, laptop 48. v20 (X-29, 08 Oct): 86 names = vps 34, split 1, routed 2, laptop 49 (+ cancel_shutdown, class de_escalation, so it never needs an approval); the manifest lists 82 tools.
 
 Proxies
 - Built in prewarm with the same __name__, __qualname__, __module__, __doc__ and __signature__ (real type objects, nothing eval'd).
@@ -1380,7 +1380,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-23 | cursor | P3 | Memory (Notes) tab: restore, stream, search, confirmed clear | X-19, X-10, K-07 (DASH-MEMORY-EVENTS) | DONE (01 Oct 16:35 PKT) |
 | X-24 | cursor | P3 | Tasks & Reminders tab with countdown and Cancel, due-item toasts and a notification bell | X-23, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS) | DONE (01 Oct 17:05) |
 | X-28 | cursor | P3 | System info: battery + CPU/RAM/disk ToolResult and collect_pc_vitals() | C-24, X-11, K-26 (VitalsPCHelper) | DONE (cursor, 01 Oct 17:40) |
-| X-32 | cursor | P3 | TaskStore v2: schema columns, parse_when, schedule_task with args + confirm, cancel tool | C-24, C-28, C-30, K-66 (CT-VC-PROACTIVE), K-33 (task_store_v2), K-32 (scheduled_action_runner) | DOING (cursor, 2026-10-08 15:52 PKT) |
+| X-32 | cursor | P3 | TaskStore v2: schema columns, parse_when, schedule_task with args + confirm, cancel tool | C-24, C-28, C-30, K-66 (CT-VC-PROACTIVE), K-33 (task_store_v2), K-32 (scheduled_action_runner) | DONE (cursor, 2026-10-08 16:00 PKT) |
 | X-33 | cursor | P3 | Voice-ID meter with real states and the voice enrollment wizard | X-21, X-13, K-02 (DASH-UI-EVENTS), K-03 (DASH-UI-COMMANDS) | DONE (01 Oct 16:45 PKT) |
 | X-34 | cursor | P3 | YouTube play: real watch URL via yt-dlp search, browser paths from config | C-24, C-26, X-11, K-22 (YouTubeVideoUrl) | DONE (01 Oct 17:40 PKT) |
 | X-35 | cursor | P3 | File opener: config media dirs (+D:/ when present), background index outside outputs, safe open/close | C-24, C-26, X-03, X-11, K-16 (DesktopToolPolicy) | DONE (01 Oct 17:40 PKT) |
@@ -1389,7 +1389,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-38 | cursor | P3 | SIM lookup: authorized-API source with a clear 'provider not configured' mode | C-25, C-24, C-28, K-34 (sim_authorized_source) | DONE (02 Oct 01:32 PKT) |
 | X-39 | cursor | P3 | QR generator: exact data (raw policy), safe filename, open_file parameter | C-24, C-28, K-28 (tool_arg_policies) | DONE (02 Oct 01:32 PKT) |
 | X-40 | cursor | P3 | Image generation: FLUX.1-schnell via HF with Pollinations fallback and clear errors | C-25, C-24 | DONE (01 Oct 21:12 PKT) |
-| X-41 | cursor | P3 | WhatsApp: install check, process-based window match, confirmed Unicode send, safe close | C-27, C-28, C-26, X-03, X-11, C-30, X-26, K-16 (DesktopToolPolicy) | BLOCKED (waiting C-27,C-28,C-26,X-11,C-30,X-26) |
+| X-41 | cursor | P3 | WhatsApp: install check, process-based window match, confirmed Unicode send, safe close | C-27, C-28, C-26, X-03, X-11, C-30, X-26, K-16 (DesktopToolPolicy) | DOING (cursor, 2026-10-08 16:00 PKT) |
 | X-42 | cursor | P3 | Window control 1/3: close_window (tool 'close' kept as routed alias), minimize/maximize, active-window context | C-27, X-03, X-11, X-41, K-17 (ToolNamesV2), K-21 (ActiveWindowContext), K-16 (DesktopToolPolicy) | BLOCKED (waiting C-27,X-11,X-41) |
 | X-43 | cursor | P3 | Window control 2/3: open_app with a universal app index and Chrome/YouTube/WhatsApp/Office/VLC routing | C-26, X-26, X-34, X-41, X-42 | BLOCKED (waiting C-26,X-26,X-34,X-41,X-42) |
 | X-44 | cursor | P3 | Window control 3/3: save_notepad, open_notepad_file, folder_file (+cv alias), create_folder, open_outputs_folder | C-26, X-03, C-30, X-27, X-43 | BLOCKED (waiting C-26,X-03,C-30,X-27,X-43) |
