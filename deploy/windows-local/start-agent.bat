@@ -53,6 +53,12 @@ if errorlevel 1 (
   exit /b 1
 )
 
+REM C-84 (K-23): PinchTab, the local server behind the Chrome tools (127.0.0.1 only), starts before the
+REM worker. Non-fatal: start_pinchtab.ps1 prints one PINCHTAB_* status word and always exits 0. The token
+REM reaches PinchTab only through the environment, never on a command line.
+echo [CHECK] PinchTab for the Chrome tools...
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\pc\start_pinchtab.ps1
+
 echo.
 echo [1/2] Starting LOCAL agent worker...
 set PYTHONPATH=%CD%
