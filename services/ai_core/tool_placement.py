@@ -167,8 +167,8 @@ def _laptop(name: str, cls: str, idempotent: bool = False, **extra: Any) -> Tool
 
 
 # Grouped as in docs/ARCHITECTURE_VPS_BRAIN.md section 4.2. Planned K-17 tools get their entry when
-# they are registered: close_window on the laptop, confirm_selftest on the VPS (list_background_jobs
-# and cancel_background_job landed with C-57, cancel_shutdown with X-29, cancel_scheduled_task with X-32).
+# they are registered: confirm_selftest on the VPS (list_background_jobs and cancel_background_job landed
+# with C-57, cancel_shutdown with X-29, cancel_scheduled_task with X-32, close_window with X-43).
 _TABLE: tuple[ToolPlacement, ...] = (
     # ---------------------------------------------------------------- VPS (35)
     _vps("tool_report_plan_progress", True),
@@ -223,7 +223,7 @@ _TABLE: tuple[ToolPlacement, ...] = (
                   arg_hooks=("open_roots:folder_path", "vps_media_path:folder_path",
                              "safe_name:zip_name")),
     ToolPlacement("list_generated_media_tool", MEDIA_LIST_ROUTE, cls=READ, idempotent=True),
-    # ---------------------------------------------------------------- laptop (49)
+    # ---------------------------------------------------------------- laptop (50)
     _laptop("ask_about_document", READ, True, gui=False),
     _laptop("automate_chrome_browser", INPUT),
     _laptop("chrome_browser_read_page", READ, True),
@@ -265,6 +265,7 @@ _TABLE: tuple[ToolPlacement, ...] = (
     _laptop("save_notepad", INPUT),
     _laptop("open_notepad_file", INPUT, arg_hooks=("open_roots:file_path",)),
     _laptop("close", INPUT),  # force or more than one match: availability
+    _laptop("close_window", INPUT),  # K-17: what "close" calls; force or more than one match: availability
     _laptop("minimize_window", INPUT),
     _laptop("maximize_window", INPUT),
     # Executables, scripts, shortcuts and archives: code_exec.

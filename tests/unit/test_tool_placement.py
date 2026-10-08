@@ -101,15 +101,15 @@ def test_the_internal_tools_are_the_wrap_tools_of_brain_assistant():
 
 
 def test_the_counts_match_k71(local):
-    # C-57: +2 job tools; X-29: cancel_shutdown; X-32: cancel_scheduled_task
-    assert tp.placement_counts() == {"vps": 35, "split": 1, "routed": 2, "laptop": 49}
-    assert len(tp.PLACEMENTS) == len(local["tools"]) + len(tp.INTERNAL_TOOLS) == 87
+    # C-57: +2 job tools; X-29: cancel_shutdown; X-32: cancel_scheduled_task; X-43: close_window
+    assert tp.placement_counts() == {"vps": 35, "split": 1, "routed": 2, "laptop": 50}
+    assert len(tp.PLACEMENTS) == len(local["tools"]) + len(tp.INTERNAL_TOOLS) == 88
 
 
 def test_deny_listed_modules_hold_only_gui_laptop_tools(local):
     denied = {name for name, module in local["tools"].items() if module in tp.REMOTE_DENIED_MODULES}
-    # keyboard/mouse 10, windows 10, Notepad 8, PinchTab 4, system 5, WhatsApp 1, vitals 1
-    assert len(denied) == 39
+    # keyboard/mouse 10, windows 11, Notepad 8, PinchTab 4, system 5, WhatsApp 1, vitals 1
+    assert len(denied) == 40
     for name in denied:
         assert tp.PLACEMENTS[name].kind == tp.LAPTOP and tp.PLACEMENTS[name].gui, name
 
@@ -173,6 +173,19 @@ def _references_webbrowser_open(node: ast.AST) -> bool:
                for sub in ast.walk(node))
 
 
+def _named_defs(tree: ast.Module) -> list[ast.FunctionDef | ast.AsyncFunctionDef]:
+    """Module-level functions and the methods of module-level classes: the names other code can reach. A nested
+    function's name is local (X-55's inner 'factory'), and the same word elsewhere (jarvis_jobs' factory parameter)
+    is another object; following it made every job-running tool look like a browser opener."""
+    defs: list[ast.FunctionDef | ast.AsyncFunctionDef] = []
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            defs.append(node)
+        elif isinstance(node, ast.ClassDef):
+            defs.extend(sub for sub in node.body if isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef)))
+    return defs
+
+
 def _calls_one_of(node: ast.AST, names: set[str]) -> bool:
     return any(isinstance(sub, ast.Call) and (getattr(sub.func, "attr", None) in names
                                               or getattr(sub.func, "id", None) in names)
@@ -188,8 +201,7 @@ def test_vps_tools_that_open_a_browser_are_flagged_opens_urls(local):
         trees = {path.relative_to(PROJECT_ROOT).with_suffix("").as_posix().replace("/", "."):
                  ast.parse(path.read_text(encoding="utf-8"))
                  for path in (PROJECT_ROOT / "services").rglob("*.py") if "tests" not in path.parts}
-    funcs = [func for tree in trees.values() for func in ast.walk(tree)
-             if isinstance(func, (ast.FunctionDef, ast.AsyncFunctionDef))]
+    funcs = [func for tree in trees.values() for func in _named_defs(tree)]
     openers = {func.name for func in funcs if _references_webbrowser_open(func)}
     # Follow the chain: a function that reaches an opener (a direct call, or handing it to
     # asyncio.to_thread) is itself an opener. X-65 moved the real webbrowser.open into
@@ -311,7 +323,7 @@ def test_overrides_change_places_and_skipped_modules():
     assert "services.automation.jarvis_maps_scraper" in default_skip
     assert tp.REMOTE_DENIED_MODULES <= default_skip
     places = tp.effective_placements({"scrape_google_maps_leads": tp.VPS})
-    assert tp.placement_counts(places) == {"vps": 36, "split": 1, "routed": 2, "laptop": 48}
+    assert tp.placement_counts(places) == {"vps": 36, "split": 1, "routed": 2, "laptop": 49}
     assert "services.automation.jarvis_maps_scraper" not in tp.remote_skip_modules(manifest, places)
     # The deny-list holds even without a manifest.
     assert tp.remote_skip_modules(None, places) == tp.REMOTE_DENIED_MODULES
@@ -383,10 +395,10 @@ def test_the_import_guard_refuses_only_deny_listed_modules():
 
 
 def test_local_discovery_ignores_the_table(local):
-    assert len(local["tools"]) == 83
+    assert len(local["tools"]) == 84
     assert local["plan"] is None
     assert local["guard_installed"] is False
-    assert local["health"] == {"ok": True, "count": 83, "detail": ""}
+    assert local["health"] == {"ok": True, "count": 84, "detail": ""}
     assert set(local["denied_loaded"]) == tp.REMOTE_DENIED_MODULES  # the PC brain imports them all
 
 
@@ -413,5 +425,5 @@ def test_remote_discovery_serves_every_expected_name(local, remote):
             "confirm_action"} <= set(plan["vps_local"])
     assert {"shutdown_system", "open_app", "automate_whatsapp"} <= set(plan["add_proxy"])
     # C-57: +2 VPS job tools; X-29: cancel_shutdown (laptop); X-32: cancel_scheduled_task (VPS)
-    assert len(plan["vps_local"]) == 34 and len(served) == 83
+    assert len(plan["vps_local"]) == 34 and len(served) == 84
     assert remote["health"] == {"ok": True, "count": len(remote["tools"]), "detail": ""}

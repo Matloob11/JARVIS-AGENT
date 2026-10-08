@@ -102,7 +102,7 @@ def test_committed_manifest_is_intact(manifest):
 
 def test_manifest_agrees_with_the_placement_table(tools):
     assert set(tools) == set(tp.PLACEMENTS) - set(tp.INTERNAL_TOOLS)
-    assert len(tools) == 83  # C-57: 2 job tools; X-29: cancel_shutdown; X-32: cancel_scheduled_task
+    assert len(tools) == 84  # C-57: 2 job tools; X-29, X-32, X-43: cancel_shutdown, cancel_scheduled_task, close_window
     for name, tool in tools.items():
         entry = tp.PLACEMENTS[name]
         assert (tool["placement"], tool["cls"], tool["idempotent"]) == (
@@ -116,7 +116,7 @@ def test_parameter_hashes_match_the_params(manifest):
 
 def test_laptop_capable_tools_rebuild_from_the_whitelist(tools):
     capable = [name for name in tools if tp.laptop_capable(tp.PLACEMENTS[name])]
-    assert len(capable) == 52  # laptop 49, routed 2, download_youtube_media (laptop fallback)
+    assert len(capable) == 53  # laptop 50, routed 2, download_youtube_media (laptop fallback)
     for name in capable:
         for param in tools[name]["params"]:
             hint = tp.annotation_from_str(param["annotation"])

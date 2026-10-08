@@ -1,12 +1,12 @@
 {
-  "git_sha": "b68df5ca55c8ef27d4d32f69d25158572f2cdf0e",
+  "git_sha": "65dedafbdb503d670798a4e9eab33577f65dfdd4",
   "lk_schema_libs": {
     "docstring-parser": "0.18.0",
     "livekit-agents": "1.4.6",
     "pydantic": "2.12.5",
     "pydantic-core": "2.41.5"
   },
-  "manifest_sha256": "7ed9c06a6852bf09d5efccc784be86de96342e24b080889ffad42c3f40a41703",
+  "manifest_sha256": "4279f00817b3dd97cc5d6fb9dd30d5d718a6d596bd368906bf345834ed753da7",
   "pc_operations": [
     {
       "arg_hooks": [],
@@ -305,16 +305,18 @@
     },
     {
       "cls": "input",
-      "doc": "\n    Sir, main real Chrome browser ki madad se koi bhi website open kar sakta hoon.\n    Voice command par main background (headless) ya desktop (headed) mode use karun ga.\n    \n    Arguments:\n    - url: Website ka address (e.g. 'https://google.com')\n    - mode: 'headed' (desktop par nazar ayega) ya 'headless' (background mein). Default is 'headed'.\n    ",
+      "doc": "\n    Sir, main real Chrome browser ki madad se koi bhi website open kar sakta hoon.\n    Voice command par main background (headless) ya desktop (headed) mode use karun ga.\n\n    Arguments:\n    - url: Website ka address (e.g. 'https://google.com')\n    - mode: 'headed' (desktop par nazar ayega) ya 'headless' (background mein). Default is 'headed'.\n    ",
       "idempotent": false,
       "lk_schema_sha256": "e74bb85ca6f2e710ec0f65eed3cb1df1175cd191b3395e335a355a73f837bde5",
       "meta": {
-        "arg_policies": {},
+        "arg_policies": {
+          "url": "raw"
+        },
         "exclusive": null,
         "long_running": false,
         "max_output_chars": 12000,
         "risk": "low",
-        "timeout": 15.0,
+        "timeout": 60.0,
         "voice_confirm": null
       },
       "module": "services.automation.jarvis_browser_pinchtab",
@@ -340,17 +342,19 @@
     },
     {
       "cls": "messaging",
-      "doc": "\n    Automates WhatsApp Desktop to send a message.\n    Enhanced with 45s timeout for high-load systems.\n    ",
+      "doc": "\n    Sir, is tool se main WhatsApp Desktop par contact_name ko message bhejta hoon (install check,\n    process-based focus — browser kabhi nahi, Unicode/emoji safe, FOCUS_LOST par kuch nahi bhejta).\n    ",
       "idempotent": false,
-      "lk_schema_sha256": "9737116aeeaae1323504acd237bda7a5ae7af2a5ec8899178788c0155653d466",
+      "lk_schema_sha256": "dfb88ba33958e00f306d0d254de64460f879b9bc6d5b42c72a33d3a1330ce251",
       "meta": {
-        "arg_policies": {},
-        "exclusive": null,
+        "arg_policies": {
+          "message": "raw"
+        },
+        "exclusive": "desktop_input",
         "long_running": false,
         "max_output_chars": 12000,
-        "risk": "low",
-        "timeout": 45.0,
-        "voice_confirm": null
+        "risk": "medium",
+        "timeout": 60.0,
+        "voice_confirm": true
       },
       "module": "services.automation.jarvis_whatsapp_automation",
       "name": "automate_whatsapp",
@@ -417,17 +421,21 @@
     },
     {
       "cls": null,
-      "doc": "\n    Performs deep research on a topic, synthesizes it, and sends it via email.\n    This is a multi-step agentic tool for complex requests.\n    ",
+      "doc": "\n    Performs deep research on a topic, synthesizes it, and sends it via email\n    as a background job after dashboard approval.\n    ",
       "idempotent": false,
-      "lk_schema_sha256": "cf0dc19f5ff1258589f4e7b4e72b095064beb1acd47300a3505e8fa1e719fdd9",
+      "lk_schema_sha256": "9e241a96c65c2509f8ccc22675565410c058c063416f60879ffd40af6f379a7a",
       "meta": {
-        "arg_policies": {},
+        "arg_policies": {
+          "query": "plain",
+          "recipient": "email_list",
+          "subject": "plain"
+        },
         "exclusive": null,
         "long_running": false,
         "max_output_chars": 12000,
-        "risk": "low",
-        "timeout": 15.0,
-        "voice_confirm": null
+        "risk": "high",
+        "timeout": 20.0,
+        "voice_confirm": false
       },
       "module": "services.info.jarvis_researcher",
       "name": "autonomous_research_and_email",
@@ -522,16 +530,16 @@
     },
     {
       "cls": null,
-      "doc": "Cancel a pending scheduled task by id.",
+      "doc": "Cancels a previously scheduled task by its id (from list_tasks).",
       "idempotent": true,
-      "lk_schema_sha256": "769cb7c538acd988be4d33638744150362ce89a910879ced47cd8f886ec1644f",
+      "lk_schema_sha256": "04737524b18f2d9c95b7a3fed157cb5d395d67884146dc2915d8e52241dbc4f0",
       "meta": {
         "arg_policies": {},
         "exclusive": null,
         "long_running": false,
         "max_output_chars": 12000,
         "risk": "low",
-        "timeout": 10.0,
+        "timeout": 15.0,
         "voice_confirm": null
       },
       "module": "services.automation.jarvis_task_manager",
@@ -579,7 +587,7 @@
         "long_running": false,
         "max_output_chars": 12000,
         "risk": "low",
-        "timeout": 15.0,
+        "timeout": 20.0,
         "voice_confirm": null
       },
       "module": "services.automation.jarvis_browser_pinchtab",
@@ -594,12 +602,14 @@
       "idempotent": false,
       "lk_schema_sha256": "290f92699487d235626e53b37dbde40a2701c01a76fe945e8035892f7e544f68",
       "meta": {
-        "arg_policies": {},
+        "arg_policies": {
+          "text_input": "raw"
+        },
         "exclusive": null,
         "long_running": false,
         "max_output_chars": 12000,
         "risk": "low",
-        "timeout": 15.0,
+        "timeout": 30.0,
         "voice_confirm": null
       },
       "module": "services.automation.jarvis_browser_pinchtab",
@@ -639,9 +649,9 @@
         "arg_policies": {},
         "exclusive": null,
         "long_running": false,
-        "max_output_chars": 12000,
+        "max_output_chars": 20000,
         "risk": "low",
-        "timeout": 15.0,
+        "timeout": 30.0,
         "voice_confirm": null
       },
       "module": "services.automation.jarvis_browser_pinchtab",
@@ -652,15 +662,15 @@
     },
     {
       "cls": "input",
-      "doc": "\n    Closes a window by its name.\n    ",
+      "doc": "Same as close_window(window_name): closes a desktop application window by name.",
       "idempotent": false,
-      "lk_schema_sha256": "d3a8e97767d3eae55716d68338786edd37d2e10b852507286c429772b78725a1",
+      "lk_schema_sha256": "6e16ee95d38dc0e8830eebd2210a530b002c19431596ddcc564de3567cbe7c72",
       "meta": {
         "arg_policies": {},
         "exclusive": null,
         "long_running": false,
         "max_output_chars": 12000,
-        "risk": "low",
+        "risk": "dynamic",
         "timeout": 15.0,
         "voice_confirm": null
       },
@@ -724,6 +734,41 @@
       "name": "close_notepad_tool",
       "param_schema_sha256": "8a2d74ff161ed2c7bebd137e093901ba51265e4a201279a9d35431744c30f85a",
       "params": [
+        {
+          "annotation": "bool",
+          "default": false,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "force",
+          "required": false
+        }
+      ],
+      "placement": "laptop"
+    },
+    {
+      "cls": "input",
+      "doc": "\n    Closes an application WINDOW on the Windows desktop by name (calculator, chrome, notepad, vlc...).\n    For the JARVIS automation browser use chrome_browser_close; for Notepad-only use close_notepad_tool.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "d200c47c2c6eb5efef8ccad92fe8e3c96529da3d823b410b8322cd666feaa98d",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "dynamic",
+        "timeout": 15.0,
+        "voice_confirm": null
+      },
+      "module": "services.system.jarvis_window_ctrl",
+      "name": "close_window",
+      "param_schema_sha256": "f2d358b79e80685cbce69e28fe8aa5206d614a6154d56815f24e4a1a1c73e564",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "window_name",
+          "required": true
+        },
         {
           "annotation": "bool",
           "default": false,
@@ -808,7 +853,7 @@
         "long_running": false,
         "max_output_chars": 12000,
         "risk": "low",
-        "timeout": 15.0,
+        "timeout": 10.0,
         "voice_confirm": null
       },
       "module": "services.system.jarvis_window_ctrl",
@@ -869,16 +914,18 @@
     },
     {
       "cls": null,
-      "doc": "\n    Searches and downloads images from the internet into a local folder.\n    Cascades through: DuckDuckGo -> Google Custom Search.\n    ",
+      "doc": "\n    Searches and downloads images from the internet into a local folder.\n    Uses jarvis_search.search_images (DuckDuckGo, Tavily, Google CSE).\n    ",
       "idempotent": false,
-      "lk_schema_sha256": "8fc2aacf7024448fd08182e254ba2918334c28df6ed2da5daa0ed66a0d0a64ba",
+      "lk_schema_sha256": "ebe0006e6d41971f7d5e5652815265abb990138f8dcd67983a1eaad7cd936426",
       "meta": {
-        "arg_policies": {},
+        "arg_policies": {
+          "folder_name": "path"
+        },
         "exclusive": null,
         "long_running": false,
         "max_output_chars": 12000,
         "risk": "low",
-        "timeout": 15.0,
+        "timeout": 90.0,
         "voice_confirm": null
       },
       "module": "services.multimedia.jarvis_advanced_tools",
@@ -913,7 +960,7 @@
       "cls": "input",
       "doc": "\n    YouTube se video ya audio download karne ke liye use hota hai.\n    Aap 'audio' (MP3) ya 'video' (MP4) download kar sakte hain.\n    ",
       "idempotent": false,
-      "lk_schema_sha256": "a6ab34594c7522337665e12ad38a490736b7ce69506f0ed7aef718c55401b5b8",
+      "lk_schema_sha256": "0ab8dde294d1ee44be3b210a222eac3b6bf58052be000379a049c9cc24ddc0b2",
       "meta": {
         "arg_policies": {},
         "exclusive": null,
@@ -925,7 +972,7 @@
       },
       "module": "services.multimedia.jarvis_youtube_downloader",
       "name": "download_youtube_media",
-      "param_schema_sha256": "7eefb24199b96075368dc0584190aecedd78fffe0361b115099eb19c63b31227",
+      "param_schema_sha256": "a39fbd76c43a787cebe1284d72058fc28c86ce3fa10922fc9b752897c3d5e3f8",
       "params": [
         {
           "annotation": "str",
@@ -939,6 +986,13 @@
           "default": "audio",
           "kind": "POSITIONAL_OR_KEYWORD",
           "name": "download_type",
+          "required": false
+        },
+        {
+          "annotation": "bool",
+          "default": true,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "auto_open",
           "required": false
         }
       ],
@@ -1007,11 +1061,13 @@
       "idempotent": false,
       "lk_schema_sha256": "e5e6370829aa1fc92e5e1e4ecf030cb16307e7b2e6496a2fbe16b89071c860ab",
       "meta": {
-        "arg_policies": {},
+        "arg_policies": {
+          "path": "raw"
+        },
         "exclusive": null,
         "long_running": false,
         "max_output_chars": 12000,
-        "risk": "low",
+        "risk": "dynamic",
         "timeout": 15.0,
         "voice_confirm": null
       },
@@ -1120,7 +1176,7 @@
         "long_running": false,
         "max_output_chars": 12000,
         "risk": "low",
-        "timeout": 15.0,
+        "timeout": 5.0,
         "voice_confirm": null
       },
       "module": "services.system.jarvis_window_ctrl",
@@ -1302,9 +1358,9 @@
     },
     {
       "cls": null,
-      "doc": "Lists all pending tasks and scheduled actions (kind, status, short result).",
+      "doc": "Lists all pending tasks and scheduled actions.",
       "idempotent": true,
-      "lk_schema_sha256": "e3ba874d0c46559d377299a50cf2e2b6a04a1893fc3348482fcbd046cf590c1c",
+      "lk_schema_sha256": "33f9f72aa7cfca6d08a6b575ed5542fed69ecfdd267ec1e4dfd19ed543f7425a",
       "meta": {
         "arg_policies": {},
         "exclusive": null,
@@ -1357,16 +1413,16 @@
     },
     {
       "cls": "input",
-      "doc": "\n    Maximizes or restores a window.\n    ",
+      "doc": "Maximizes a window by name, or the foreground window when window_name is 'active'.",
       "idempotent": false,
-      "lk_schema_sha256": "28786f1462b4a241cf960007f05319eca9324dc9728cb782951f65bd312e27b7",
+      "lk_schema_sha256": "dac28c6075ce52ae160c4b2dd8786866cc5ef2de2b41db65322788f39535d664",
       "meta": {
         "arg_policies": {},
         "exclusive": null,
         "long_running": false,
         "max_output_chars": 12000,
         "risk": "low",
-        "timeout": 15.0,
+        "timeout": 10.0,
         "voice_confirm": null
       },
       "module": "services.system.jarvis_window_ctrl",
@@ -1385,16 +1441,16 @@
     },
     {
       "cls": "input",
-      "doc": "\n    Minimizes a window.\n    ",
+      "doc": "Minimizes a window by name, or the foreground window when window_name is 'active'.",
       "idempotent": false,
-      "lk_schema_sha256": "5506885ea581b73c2f34024ee32b6f34607e537775e28e98cc34802716bfa3ec",
+      "lk_schema_sha256": "a2f5e77d20856284f3a1c56b1b16f031d7898b98b9447423ad9badaa7adcc0ec",
       "meta": {
         "arg_policies": {},
         "exclusive": null,
         "long_running": false,
         "max_output_chars": 12000,
         "risk": "low",
-        "timeout": 15.0,
+        "timeout": 10.0,
         "voice_confirm": null
       },
       "module": "services.system.jarvis_window_ctrl",
@@ -1481,11 +1537,11 @@
       "lk_schema_sha256": "2e4cc7ce734484db5afb0d6fbaa90fd8c9973dd480526e43f4b658b7b4b20dbf",
       "meta": {
         "arg_policies": {},
-        "exclusive": null,
+        "exclusive": "desktop_input",
         "long_running": false,
         "max_output_chars": 12000,
         "risk": "dynamic",
-        "timeout": 15.0,
+        "timeout": 30.0,
         "voice_confirm": null
       },
       "module": "services.system.jarvis_window_ctrl",
@@ -1536,12 +1592,14 @@
       "idempotent": false,
       "lk_schema_sha256": "f987f1c0cb9b99a53213549760b1cdc395f4eaf4837734afab14e32812b27601",
       "meta": {
-        "arg_policies": {},
+        "arg_policies": {
+          "file_path": "raw"
+        },
         "exclusive": null,
         "long_running": false,
         "max_output_chars": 12000,
-        "risk": "low",
-        "timeout": 15.0,
+        "risk": "dynamic",
+        "timeout": 10.0,
         "voice_confirm": null
       },
       "module": "services.system.jarvis_window_ctrl",
@@ -1589,7 +1647,7 @@
         "long_running": false,
         "max_output_chars": 12000,
         "risk": "low",
-        "timeout": 15.0,
+        "timeout": 10.0,
         "voice_confirm": null
       },
       "module": "services.system.jarvis_window_ctrl",
@@ -1628,16 +1686,16 @@
     },
     {
       "cls": null,
-      "doc": "\n    Perform deep web research on a query by analyzing multiple websites.\n    Returns a synthesized report based on the scraped content.\n    ",
+      "doc": "\n    Perform deep web research on a query by analyzing multiple websites.\n    Returns a synthesized Roman-Urdu report with numbered sources.\n    ",
       "idempotent": true,
-      "lk_schema_sha256": "84c731c2688555f1cf829dece47076030864982ebc4213c3b33f7ace7d65b966",
+      "lk_schema_sha256": "138f4ffa459891583dd4bca63924943991e6443d3195f6e8ab0d57f5ca2e1d01",
       "meta": {
         "arg_policies": {},
         "exclusive": null,
         "long_running": false,
         "max_output_chars": 12000,
         "risk": "low",
-        "timeout": 15.0,
+        "timeout": 120.0,
         "voice_confirm": null
       },
       "module": "services.info.jarvis_researcher",
@@ -1858,11 +1916,11 @@
       "lk_schema_sha256": "171c02c89b0986385bec5121433615832d18d08e3cb1654b213e7f46917a706f",
       "meta": {
         "arg_policies": {},
-        "exclusive": null,
+        "exclusive": "desktop_input",
         "long_running": false,
         "max_output_chars": 12000,
         "risk": "low",
-        "timeout": 15.0,
+        "timeout": 25.0,
         "voice_confirm": null
       },
       "module": "services.system.jarvis_window_ctrl",
@@ -1881,9 +1939,9 @@
     },
     {
       "cls": null,
-      "doc": "\n    Schedule a task or tool action.\n    time_str: e.g. 'in 10 minutes', 'das minute baad', '14:30', ISO.\n    action_args_json: JSON object of tool kwargs (optional).\n    ",
+      "doc": "\n    Schedules an advanced task, optionally running a tool action when it is due.\n    time_str: e.g. '2026-04-04 09:00', 'in 10 minutes', 'das minute baad', '9:00 pm', 'kal 14:00'.\n    description: what needs to be done.\n    action: optional specific tool to trigger when due (e.g. 'get_weather').\n    action_args_json: a JSON object string of arguments for that action, e.g. '{\"city\":\"Lahore\"}'.\n    ",
       "idempotent": false,
-      "lk_schema_sha256": "aebc6d38c5941397d698db24dd721fac98856d631b3512fc9639de883fb477e5",
+      "lk_schema_sha256": "a04f63805a0367a5c5f881b7f0ddb5d106833d1b684f5cf886d4e603c291ac86",
       "meta": {
         "arg_policies": {
           "action_args_json": "raw",
@@ -1893,7 +1951,7 @@
         "long_running": false,
         "max_output_chars": 12000,
         "risk": "dynamic",
-        "timeout": 20.0,
+        "timeout": 15.0,
         "voice_confirm": null
       },
       "module": "services.automation.jarvis_task_manager",
@@ -1935,19 +1993,19 @@
       "cls": "input",
       "doc": "\n    Sir, is tool se main Google Maps par kisi bhi category ke leads (name, address, phone, website) scrap karta hoon.\n    Main browser open karke aapko dikhaon ga ke kaam kaise ho raha hai.\n    ",
       "idempotent": false,
-      "lk_schema_sha256": "0f481e309c08fafe4c4d14e3c8326af930808c3d6edc1f531f74f08947fc0c1f",
+      "lk_schema_sha256": "ef5e9f989718ee0ace9a11d24f18f117170bd2c3fd1caaf63d4cd5f38055d10f",
       "meta": {
         "arg_policies": {},
         "exclusive": null,
         "long_running": false,
         "max_output_chars": 12000,
         "risk": "low",
-        "timeout": 300.0,
+        "timeout": 600.0,
         "voice_confirm": null
       },
       "module": "services.automation.jarvis_maps_scraper",
       "name": "scrape_google_maps_leads",
-      "param_schema_sha256": "01dc99db87f5f2cdcd2a43b46f3a8f57ef645276c31b30e44cd2558a5fd6d43d",
+      "param_schema_sha256": "448389141d40b03f5a743194145272cdfd7cea560516e2a609aa1314aa32710f",
       "params": [
         {
           "annotation": "str",
@@ -1975,6 +2033,13 @@
           "default": "csv",
           "kind": "POSITIONAL_OR_KEYWORD",
           "name": "format",
+          "required": false
+        },
+        {
+          "annotation": "bool",
+          "default": false,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "headless",
           "required": false
         }
       ],
@@ -2049,13 +2114,18 @@
       "idempotent": false,
       "lk_schema_sha256": "e442abddf0080284bf3d09b3525c6db59a501e7ad15a872c8f65f2c5d93d3b91",
       "meta": {
-        "arg_policies": {},
+        "arg_policies": {
+          "attachment_path": "path",
+          "body": "multiline",
+          "recipient": "email_list",
+          "subject": "plain"
+        },
         "exclusive": null,
         "long_running": false,
         "max_output_chars": 12000,
-        "risk": "low",
-        "timeout": 15.0,
-        "voice_confirm": null
+        "risk": "high",
+        "timeout": 60.0,
+        "voice_confirm": false
       },
       "module": "services.multimedia.jarvis_advanced_tools",
       "name": "send_email",
@@ -2094,9 +2164,9 @@
     },
     {
       "cls": null,
-      "doc": "\n    Schedule a reminder for a specific time or duration.\n    time_str can be absolute (e.g., '2026-02-18 14:00') or relative (e.g., '10 minutes').\n    message is the text JARVIS should say when the reminder triggers.\n    ",
+      "doc": "\n    Schedule a reminder for a specific time or duration.\n    time_str can be absolute (e.g., '2026-02-18 14:00', '14:30', '9:00 pm', 'kal 09:00') or\n    relative (e.g., '10 minutes', 'das minute baad'); see jarvis_task_manager.parse_when.\n    message is the text JARVIS should say when the reminder triggers.\n    ",
       "idempotent": false,
-      "lk_schema_sha256": "30e5e67553fef4c7194a25bb21648bb9dd126c6054e0e60f068c3a038b265cdb",
+      "lk_schema_sha256": "acd7c882ae2a98620fa1007b1e5fb157f477c8bb3a9d52e1be5e21eba408c8df",
       "meta": {
         "arg_policies": {},
         "exclusive": null,
@@ -2689,12 +2759,15 @@
       "idempotent": false,
       "lk_schema_sha256": "4c67b46cf862ec527379eb424f10da9e689e853eba9c58e9ed76276ae1b6fae1",
       "meta": {
-        "arg_policies": {},
+        "arg_policies": {
+          "folder_path": "path",
+          "zip_name": "plain"
+        },
         "exclusive": null,
         "long_running": false,
         "max_output_chars": 12000,
         "risk": "low",
-        "timeout": 15.0,
+        "timeout": 180.0,
         "voice_confirm": null
       },
       "module": "services.multimedia.jarvis_advanced_tools",
