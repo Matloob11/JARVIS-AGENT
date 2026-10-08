@@ -2152,3 +2152,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** tests green; live do-tab check 5/5 PASS (ROOMIO_RELINK connect, replace, replace); owner ka 2-minute browser voice test baqi
 - **Commit:** `b60f3eb` + live check commit · **Deploy:** PC worker restart 17:15 🔁
 - **Doosre agent ke liye:** `jarvis.linked_identity` attribute UI ke liye maujood.
+
+### ✅ 🚀 [claude] C-58 + C-44 · Bridge: Jobs panel ki live progress aur voice events UI tak · 2026-10-08 17:30 PKT
+- **Kya kiya:** Bridge ab har job event (start, progress, end) ko Jobs panel ka tool_progress banata hai (success = done, percent 0-100, end par title aur artifact qaim) aur sab se naye 20 jobs init_state mein deta hai, taake reload ke baad panel wapas aaye; seedha tool_progress bhi qubool. Voice ke chaar events (turn_rejected, voice_id_status, voice_enroll_result, memory_cleared) ab 'UNKNOWN EVENT' ke bajaye UI tak; aakhri voice_id_status init_state mein; memory_cleared par bridge ki stored memories bhi saaf. voice_enroll_start allow-list mein; voice events critical rate class mein. Isi deploy mein C-33 ka 150 s PC job window bhi gaya.
+- **Files:** src/core/ui_bridge.py, src/core/bridge_security.py, services/ai_core/agent_loops.py, tests/integration (job events, voice events), tests/infrastructure/test_bridge_notify.py, docs/CONTRACTS.md v26
+- **Verify:** bridge tests 235/235; deploy b5e4a5c, RESULT=ok, other apps identical, health 200; live: live 6/6: tool_progress queued/running/done with title + artifact, turn_rejected + voice_id_status reached a UI socket, init_state.jobs + voice_id_status after a reload; 0 UNKNOWN EVENT in 10 min
+- **Commit:** `b5e4a5c` · **Deploy:** VPS ui-bridge 🚀 (backup + gate)
+- **Doosre agent ke liye:** Jobs panel aur voice events ke liye handoff dekho.
