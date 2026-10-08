@@ -1,7 +1,9 @@
 import asyncio
 import functools
+import threading
 import time
 import traceback
+import weakref
 from collections.abc import Callable, Coroutine
 from typing import Any, TypeVar
 
@@ -177,3 +179,48 @@ def resilient_tool(tool_name: str) -> Callable[[Callable[..., Coroutine[Any, Any
 
 # Global Singleton for ease of use across modules
 autonomous_protector = TaskProtector()
+
+
+# ---------------------------------------------------------------- C-33: one protector per job
+# On Windows every LiveKit job runs on its own thread and event loop in the same process. With one global protector
+# a job's loops overwrote the previous job's entries (those tasks were no longer tracked) and one job's cancel_all()
+# could cancel another job's loops. Each job now runs its loops on its own TaskProtector; the registry below only
+# lets the load and health reports (jarvis_adaptive, jarvis_health) still see every live job's tasks.
+_job_protectors: "weakref.WeakSet[TaskProtector]" = weakref.WeakSet()
+_job_protectors_lock = threading.Lock()
+
+
+def job_protector() -> TaskProtector:
+    """A new TaskProtector for one job, counted by all_task_status() until release_job_protector() (or until it is
+    garbage collected)."""
+    protector = TaskProtector()
+    with _job_protectors_lock:
+        _job_protectors.add(protector)
+    return protector
+
+
+def release_job_protector(protector: TaskProtector | None) -> None:
+    """Stops counting a job's protector (after its cancel_all()). Unknown or None: nothing happens."""
+    if protector is None:
+        return
+    with _job_protectors_lock:
+        try:
+            _job_protectors.discard(protector)
+        except TypeError:  # an object without weak-reference support was never registered
+            pass
+
+
+def all_task_status() -> dict[str, dict[str, Any]]:
+    """get_task_status() of the global protector plus every live job protector's. A name used by several jobs
+    keeps its first entry and the others get a '#<n>' suffix, so no job's failures disappear from the totals."""
+    status: dict[str, dict[str, Any]] = dict(autonomous_protector.get_task_status())
+    with _job_protectors_lock:
+        protectors = list(_job_protectors)
+    for index, protector in enumerate(protectors, start=1):
+        try:
+            entries = protector.get_task_status()
+        except RuntimeError:  # its dict changed size while another thread read it; the next report counts it
+            continue
+        for name, entry in entries.items():
+            status[name if name not in status else f"{name}#{index}"] = entry
+    return status

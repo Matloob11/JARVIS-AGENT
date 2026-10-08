@@ -21,7 +21,7 @@ from services.automation.jarvis_reminders import check_due_reminders
 from services.ai_core.jarvis_vector_memory import jarvis_vector_db
 from services.info.jarvis_sim_lookup import open_sim_lookup_panel
 from services.utils.jarvis_adaptive import adaptive_engine
-from services.utils.jarvis_autonomous import autonomous_protector
+from services.utils.jarvis_autonomous import TaskProtector, autonomous_protector
 from services.utils.jarvis_bridge import (
     agent_link_v2,
     notify_event,
@@ -43,25 +43,26 @@ if TYPE_CHECKING:
 logger = setup_logger("JARVIS-LOOPS")
 logger.info("AGENT_LOOPS_MODULE_V2 loaded from %s", __file__)
 
-# Module-level state for adaptation loop
-_throttled_tasks: set[str] = set()
 # 2026-10-06 (dashboard test): a single CPU spike (the first vision call plus a model load) fired the
-# CRITICAL 'SYSTEM OVERLOAD' throttle at once and cancelled services that were not the problem. The
-# overload must now hold for OVERLOAD_CONSECUTIVE_SAMPLES consecutive readings before anything is
-# throttled; a single spike logs one WARNING only. Recovery behaviour is unchanged.
+# 'SYSTEM OVERLOAD' throttle at once and cancelled services that were not the problem. The overload must hold for
+# OVERLOAD_CONSECUTIVE_SAMPLES consecutive readings before anything is throttled; a single spike logs one WARNING.
 OVERLOAD_CONSECUTIVE_SAMPLES = 2
-_overload_streak = 0  # consecutive CRITICAL/STRESSED readings so far
+# C-33 step 5 (plan section 12): memory and reminders never stop under load. Only the bug hunter is throttled;
+# memory_loop and reminder_loop were cancelled here before, which delayed reminders and paused memory extraction.
+NON_ESSENTIAL_TASKS: tuple[str, ...] = ("bug_hunter_loop",)
 
-async def start_adaptation_loop() -> None:
+
+async def start_adaptation_loop(protector: TaskProtector | None = None) -> None:
     """
-    Autonomous Load Adaptation: Throttles non-essential services during sustained stress
-    (OVERLOAD_CONSECUTIVE_SAMPLES consecutive high readings; a single spike only warns).
-    Self-Monitoring + Self-Healing synergy.
+    Autonomous Load Adaptation: suspends the NON_ESSENTIAL_TASKS of `protector` (the job's own protector, C-33;
+    default the global one) during sustained stress (OVERLOAD_CONSECUTIVE_SAMPLES consecutive high readings; a
+    single spike only warns) and restarts them on the next NORMAL reading. The streak and the throttled set are this
+    loop's own: as module globals they were shared by every job thread, so readings of two jobs a few ms apart
+    counted as 'consecutive' (C-33 step A, 07 Oct log).
     """
-    global _overload_streak  # pylint: disable=global-statement
-    # Track which tasks were throttled to allow self-healing recovery later
-    if not hasattr(start_adaptation_loop, "_throttled_tasks"):
-        start_adaptation_loop._throttled_tasks = set()
+    tasks = protector if protector is not None else autonomous_protector
+    throttled: set[str] = set()
+    streak = 0  # consecutive CRITICAL/STRESSED readings of this loop
 
     while True:
         try:
@@ -69,31 +70,32 @@ async def start_adaptation_loop() -> None:
 
             # In a container the engine only observes its cgroup (K-72): nothing is cancelled for load.
             if stress in ["CRITICAL", "STRESSED"] and not adaptive_engine.observe_only:
-                _overload_streak += 1
-                if _overload_streak < OVERLOAD_CONSECUTIVE_SAMPLES:
+                streak += 1
+                if streak < OVERLOAD_CONSECUTIVE_SAMPLES:
                     # A single spike passes with one WARNING; only sustained load throttles.
                     logger.warning("⚠️ High system load (%s), reading %d/%d: waiting for a consecutive "
-                                   "reading before throttling.", stress, _overload_streak,
-                                   OVERLOAD_CONSECUTIVE_SAMPLES)
+                                   "reading before throttling.", stress, streak, OVERLOAD_CONSECUTIVE_SAMPLES)
                 else:
-                    # Throttling non-essential high-load tasks (sustained overload only)
-                    logger.critical("🚨 SYSTEM OVERLOAD: Throttling high-load services...")
-                    for task_name in ["reminder_loop", "bug_hunter_loop", "memory_loop"]:
-                        task = autonomous_protector.get_task(task_name)
+                    suspended = []
+                    for task_name in NON_ESSENTIAL_TASKS:
+                        task = tasks.get_task(task_name)
                         if task and not task.done():
-                            logger.warning("📉 Suspending non-essential task: %s", task_name)
                             task.cancel()
-                            _throttled_tasks.add(task_name)
+                            throttled.add(task_name)
+                            suspended.append(task_name)
+                    if suspended:  # once per overload, at WARNING (it is a load reaction, not a failure)
+                        logger.warning("🚨 SYSTEM OVERLOAD (%s): suspending non-essential task(s): %s; memory "
+                                       "and reminders keep running.", stress, ", ".join(suspended))
 
             elif stress == "NORMAL":
-                _overload_streak = 0
-                if _throttled_tasks:
+                streak = 0
+                if throttled:
                     # Self-Healing: Bring back suspended tasks once resource pressure is gone
                     logger.info("🌤️ SYSTEM RECOVERED: Restoring previously throttled services...")
-                    for task_name in list(_throttled_tasks):
+                    for task_name in list(throttled):
                         logger.info("🚀 Self-Healing: Restarting %s", task_name)
-                        if autonomous_protector.restart_task(task_name):
-                            _throttled_tasks.remove(task_name)
+                        if tasks.restart_task(task_name):
+                            throttled.discard(task_name)
 
                     # Predictive Optimization: Pre-load heavy AI models during idle time
                     if jarvis_vector_db.client is None:

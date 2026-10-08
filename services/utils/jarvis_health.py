@@ -115,8 +115,8 @@ class JarvisHealthMonitor:
 
         # Add autonomous task status if possible
         try:
-            from services.utils.jarvis_autonomous import autonomous_protector
-            report["protected_tasks"] = autonomous_protector.get_task_status()
+            from services.utils.jarvis_autonomous import all_task_status
+            report["protected_tasks"] = all_task_status()  # C-33: every live job's protector too
         except ImportError:
             pass
 

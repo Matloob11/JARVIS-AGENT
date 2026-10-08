@@ -98,6 +98,10 @@ def _is_error_close_reason(reason: Any) -> bool:
     return token.strip().upper().rsplit(".", 1)[-1] == "ERROR"
 
 
+# Public name for agent_runner's step-A wiring (C-33): the same duck-typed check, one implementation.
+is_error_close_reason = _is_error_close_reason
+
+
 class JarvisRuntime:
     """One per job: owns the session, the per-job protector, the listener and the teardown order."""
 

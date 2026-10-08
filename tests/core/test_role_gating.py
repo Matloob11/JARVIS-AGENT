@@ -81,6 +81,8 @@ async def _session_loops(monkeypatch) -> list[str]:
     monkeypatch.setattr(agent_runner.autonomous_protector, "run_protected",
                         AsyncMock(side_effect=lambda name, *args: started.append(name)))
     monkeypatch.setattr(agent_runner.autonomous_protector, "_tasks", {})
+    # C-33: the entrypoint gives each job its own protector; here it is the patched global one, to record the names
+    monkeypatch.setattr(agent_runner, "job_protector", lambda: agent_runner.autonomous_protector)
     monkeypatch.setattr(jarvis_bridge, "notify_location", AsyncMock())
     monkeypatch.setattr(jarvis_bridge, "notify_pc_vitals", AsyncMock())
     monkeypatch.setattr(jarvis_plugin_manager, "JarvisPluginManager", plugins)
@@ -420,15 +422,14 @@ async def test_cancelling_the_listener_closes_the_socket(monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("observe_only", "cancelled"), [(True, 0), (False, 3)])
+@pytest.mark.parametrize(("observe_only", "cancelled"), [(True, 0), (False, 1)])
 async def test_only_the_pc_cancels_loops_under_load(monkeypatch, observe_only, cancelled):
+    # C-33 step 5: under load only the bug hunter is cancelled (memory and reminders keep running)
     victim = MagicMock()
     victim.done.return_value = False
     monkeypatch.setattr(agent_loops.adaptive_engine, "observe_only", observe_only)
     monkeypatch.setattr(agent_loops.adaptive_engine, "analyze_system_load", MagicMock(return_value="CRITICAL"))
     monkeypatch.setattr(agent_loops.autonomous_protector, "get_task", MagicMock(return_value=victim))
-    monkeypatch.setattr(agent_loops, "_throttled_tasks", set())
-    monkeypatch.setattr(agent_loops, "_overload_streak", 0)
     # two CRITICAL readings: the debounce (OVERLOAD_CONSECUTIVE_SAMPLES=2) only warns on the first
     with patch.object(agent_loops.asyncio, "sleep", AsyncMock(side_effect=[None, asyncio.CancelledError])), \
             pytest.raises(asyncio.CancelledError):

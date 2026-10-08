@@ -116,7 +116,8 @@ async def test_cleanup_session_resources(mock_runner_deps):
     await _cleanup_session_resources(session, [task])
     # In Python 3.11, task.cancelling() returns True if cancel was called
     assert task.cancelling() or task.cancelled()
-    session.stop.assert_called_once()
+    session.aclose.assert_awaited_once()  # C-33: AgentSession has aclose(); the old stop() never existed
+    session.stop.assert_not_called()
 
     # Final cleanup of the task to avoid warnings
     await asyncio.gather(task, return_exceptions=True)
@@ -331,9 +332,18 @@ class _FakeRoom:
     def __init__(self) -> None:
         self.local_participant = _FakeLocal()
         self.remote_participants = {}
+        self.handlers: dict[str, list[Any]] = {}
+        self.removed: list[str] = []
 
-    def on(self, _event):
-        return lambda fn: fn
+    def on(self, event, callback=None):
+        def register(fn):
+            self.handlers.setdefault(event, []).append(fn)
+            return fn
+        return register if callback is None else register(callback)
+
+    def off(self, event, callback):
+        self.handlers.get(event, []).remove(callback)
+        self.removed.append(event)
 
 
 class _FakeJobContext:
@@ -343,6 +353,7 @@ class _FakeJobContext:
         self.connect_error = connect_error
         self.shutdowns: list[str] = []
         self.fake_job = fake_job
+        self.shutdown_callbacks: list[Any] = []
 
     async def connect(self):
         self.connects += 1
@@ -358,8 +369,8 @@ class _FakeJobContext:
     def delete_room(self, *_args, **_kwargs):
         raise AssertionError("the agent never deletes the room (K-60 v9)")
 
-    def add_shutdown_callback(self, _callback):
-        return None
+    def add_shutdown_callback(self, callback):
+        self.shutdown_callbacks.append(callback)
 
 
 @pytest.fixture
@@ -387,10 +398,14 @@ def job(monkeypatch):
 
     class FakeSession:
         def __init__(self, **_kwargs):
+            self.handlers: dict[str, Any] = {}
             state.sessions.append(self)
 
-        def on(self, _event):
-            return lambda fn: fn
+        def on(self, event):
+            def register(fn):
+                self.handlers[event] = fn
+                return fn
+            return register
 
         async def start(self, room, agent, room_options):
             state.room_options.append(room_options)
@@ -421,14 +436,19 @@ def job(monkeypatch):
     async def nothing(*_args, **_kwargs):
         return None
 
-    async def no_tasks(*_args, **_kwargs):
+    state.protectors = []
+    state.cleanup_kwargs = []
+
+    async def no_tasks(*_args, **kwargs):
+        state.protectors.append(kwargs.get("protector"))
         return []
 
     async def returning(result):
         return result
 
-    async def cleanup(*_args, **_kwargs):
+    async def cleanup(*_args, **kwargs):
         state.cleanups += 1
+        state.cleanup_kwargs.append(kwargs)
 
     real_sleep = asyncio.sleep
 
@@ -514,6 +534,126 @@ async def test_a_cancelled_job_is_not_shut_down_again(job):
     task.cancel()
     await asyncio.gather(task, return_exceptions=True)
     assert ctx.shutdowns == []
+
+
+@pytest.mark.asyncio
+async def test_a_session_closed_on_an_unrecoverable_error_ends_the_job(job):
+    """C-33 step A: every zombie of 06-08 Oct began with 'AgentSession is closing due to unrecoverable error'; the job
+    now ends ('session_error') and the bridge dispatches a fresh one, instead of a session-less job forever."""
+    def close_with_error(_agent):
+        session = job.sessions[-1]
+        asyncio.get_running_loop().call_later(0.05, lambda: session.handlers["close"](
+            types.SimpleNamespace(reason="error")))
+
+    job.on_start = close_with_error
+    ctx = _FakeJobContext()
+    await _run_entrypoint(job, ctx)
+    assert len(job.sessions) == 1 and ctx.shutdowns == ["session_error"]
+    assert ctx.room.local_participant.attributes[-1] == "closed"
+
+
+@pytest.mark.asyncio
+async def test_a_session_closed_for_another_reason_keeps_the_job(job):
+    def close_then_pause(agent):
+        session = job.sessions[-1]
+        loop = asyncio.get_running_loop()
+        loop.call_later(0.02, lambda: session.handlers["close"](types.SimpleNamespace(reason="user_initiated")))
+        loop.call_later(0.08, agent.request_end, "paused_by_owner")
+
+    job.on_start = close_then_pause
+    ctx = _FakeJobContext()
+    await _run_entrypoint(job, ctx)
+    assert ctx.shutdowns == ["paused_by_owner"]  # the non-error close did not end it
+
+
+@pytest.mark.asyncio
+async def test_a_room_disconnected_event_ends_the_job_and_its_room_handlers_go(job):
+    ctx = _FakeJobContext()
+
+    def disconnect(_agent):
+        asyncio.get_running_loop().call_later(0.05, lambda: [h() for h in ctx.room.handlers["disconnected"]])
+
+    job.on_start = disconnect
+    await _run_entrypoint(job, ctx)
+    assert ctx.shutdowns == ["room_disconnected"]
+    assert set(ctx.room.removed) >= {"disconnected", "data_received", "track_published"}
+    assert all(not handlers for handlers in ctx.room.handlers.values())  # a retry never doubles them
+
+
+@pytest.mark.asyncio
+async def test_a_livekit_initiated_shutdown_waits_for_our_teardown(job, monkeypatch):
+    """C-33 review: LiveKit never awaits or cancels the entrypoint when it ends a job itself (room gone, worker
+    shutdown); the shutdown callback asks the job to end and holds the loop until the teardown has run. The room
+    cannot take the attribute write or the job_end notify then, so both are skipped."""
+    from services.utils import jarvis_bridge
+
+    notified: list[str] = []
+
+    async def notify_event(event_type, _payload):
+        notified.append(event_type)
+
+    monkeypatch.setattr(jarvis_bridge, "notify_event", notify_event)
+    ctx = _FakeJobContext()
+    ctx.job = types.SimpleNamespace(id="AJ_c33framework")
+    entry = asyncio.ensure_future(job.ar.entrypoint(ctx))
+    for _ in range(200):
+        if job.protectors:
+            break
+        await asyncio.sleep(0.005)
+    [hold] = ctx.shutdown_callbacks
+    await asyncio.wait_for(hold("room disconnected"), 5)  # returns only after the entrypoint finished
+    assert entry.done()
+    assert ctx.shutdowns == ["room_disconnected"]
+    assert "job_end" not in notified
+    assert "closed" not in ctx.room.local_participant.attributes
+    assert job.cleanups == 1
+
+
+@pytest.mark.asyncio
+async def test_a_worker_shutdown_is_named_job_shutdown(job):
+    ctx = _FakeJobContext()
+    entry = asyncio.ensure_future(job.ar.entrypoint(ctx))
+    for _ in range(200):
+        if job.protectors:
+            break
+        await asyncio.sleep(0.005)
+    await asyncio.wait_for(ctx.shutdown_callbacks[0]("shutdown requested"), 5)
+    assert entry.done() and ctx.shutdowns == ["job_shutdown"]
+
+
+@pytest.mark.asyncio
+async def test_an_assistant_without_request_end_still_ends_on_a_session_error(job, monkeypatch):
+    """An assistant before C-23 (no request_end): the end paths fall back to its stop event."""
+    real_init = job.ar.BrainAssistant.__init__
+
+    def init(self, **kwargs):
+        real_init(self, **kwargs)
+        del self.request_end
+
+    monkeypatch.setattr(job.ar.BrainAssistant, "__init__", init)
+
+    def close_with_error(_agent):
+        session = job.sessions[-1]
+        asyncio.get_running_loop().call_later(0.05, lambda: session.handlers["close"](
+            types.SimpleNamespace(reason="error")))
+
+    job.on_start = close_with_error
+    ctx = _FakeJobContext()
+    await _run_entrypoint(job, ctx)
+    assert ctx.shutdowns == ["session_error"]
+
+
+@pytest.mark.asyncio
+async def test_each_job_runs_its_loops_on_its_own_protector(job):
+    from services.utils.jarvis_autonomous import TaskProtector, autonomous_protector
+
+    job.on_start = lambda agent: agent.request_end("paused_by_owner")
+    ctx = _FakeJobContext()
+    await _run_entrypoint(job, ctx)
+    [protector] = job.protectors
+    assert isinstance(protector, TaskProtector) and protector is not autonomous_protector
+    assert job.cleanup_kwargs[-1]["protector"] is protector  # the same one is cancelled at the end
+    assert job.cleanup_kwargs[-1]["assistant"] is job.assistants[-1]
 
 
 @pytest.mark.asyncio

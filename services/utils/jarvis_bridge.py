@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
+from httpx import create_ssl_context as _create_ssl_context
 from typing_extensions import TypedDict
 
 from services.utils.jarvis_config import config
@@ -37,10 +38,28 @@ from services.utils.jarvis_security import security_manager, sign_notify
 
 logger = setup_logger("JARVIS-BRIDGE")
 
-_HTTP_LOCK: asyncio.Lock | None = None
-HTTP_CLIENT: httpx.AsyncClient | None = None
-_TELEMETRY_SEMAPHORE: asyncio.Semaphore | None = None
-_LAST_LOOP: asyncio.AbstractEventLoop | None = None
+
+
+@dataclass
+class _LoopHTTP:
+    """One event loop's HTTP client, lock and telemetry semaphore (C-39 step 2, K-57)."""
+    client: httpx.AsyncClient | None = None
+    lock: asyncio.Lock | None = None
+    semaphore: asyncio.Semaphore | None = None
+
+
+# C-39 step 2 (K-57): on Windows every LiveKit job runs on its own event loop in a thread. The old module globals
+# followed "the last loop", so with two job loops alive every switch dropped the client and built a new one:
+# httpx's ssl.create_default_context blocked the loop for 250-570 ms (about 98% of the 3,456 EVENT_LOOP_STALL lines
+# of 06-08 Oct) and the dropped clients were never closed. Each loop now keeps its own client, lock and semaphore
+# (a new loop never inherits another loop's semaphore permits) and the SSL context is built once per process. A job
+# drops its loop's entry and closes the client at its end (aclose_loop_client). livekit-agents can stop a job's loop
+# without closing it before that runs, and a client's pooled connection references its loop, so the value would keep
+# the weak key alive: every lookup therefore also drops the entries of loops that have ended (closed or no longer
+# running, the rule the retry queue uses), which lets the loop and its sockets be collected.
+_http_by_loop: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, _LoopHTTP]" = weakref.WeakKeyDictionary()
+_http_registry_lock = threading.Lock()
+_ssl_context: Any = None
 
 NOTIFY_TIMEOUT_S = 2.0
 CONFIRM_NOTIFY_TIMEOUT_S = 5.0  # K-14: each ConfirmFlow try takes at most 5 s
@@ -63,38 +82,42 @@ class BridgePayload(TypedDict):
     payload: Any
 
 
-def _check_loop() -> None:
-    """Checks if the event loop has changed and resets globals if so."""
-    global _LAST_LOOP, _HTTP_LOCK, HTTP_CLIENT, _TELEMETRY_SEMAPHORE # pylint: disable=global-statement
-    try:
-        current_loop = asyncio.get_running_loop()
-        if _LAST_LOOP is not current_loop:
-            logger.debug("🔄 Event loop changed, resetting bridge globals.")
-            _HTTP_LOCK = None
-            if HTTP_CLIENT and not HTTP_CLIENT.is_closed:
-                HTTP_CLIENT = None
-            _TELEMETRY_SEMAPHORE = None
-            _LAST_LOOP = current_loop
-    except RuntimeError:
-        pass
+def _loop_http() -> _LoopHTTP:
+    """The running event loop's entry (created on first use); entries of ended loops are dropped first."""
+    loop = asyncio.get_running_loop()
+    with _http_registry_lock:
+        for other in [other for other in _http_by_loop if other is not loop]:
+            if other.is_closed() or not other.is_running():
+                _http_by_loop.pop(other, None)  # its client can no longer be awaited from any loop
+        state = _http_by_loop.get(loop)
+        if state is None:
+            state = _http_by_loop[loop] = _LoopHTTP()
+    return state
 
 
 def _get_lock() -> asyncio.Lock:
-    """Lazily creates lock inside running event loop."""
-    global _HTTP_LOCK # pylint: disable=global-statement
-    _check_loop()
-    if _HTTP_LOCK is None:
-        _HTTP_LOCK = asyncio.Lock()
-    return _HTTP_LOCK
+    """This event loop's lock, created inside the loop."""
+    state = _loop_http()
+    if state.lock is None:
+        state.lock = asyncio.Lock()
+    return state.lock
 
 
 def _get_semaphore() -> asyncio.Semaphore:
-    """Lazily creates semaphore inside running event loop."""
-    global _TELEMETRY_SEMAPHORE  # pylint: disable=global-statement
-    _check_loop()
-    if _TELEMETRY_SEMAPHORE is None:
-        _TELEMETRY_SEMAPHORE = asyncio.Semaphore(20)
-    return _TELEMETRY_SEMAPHORE
+    """This event loop's telemetry semaphore (20 permits), created inside the loop."""
+    state = _loop_http()
+    if state.semaphore is None:
+        state.semaphore = asyncio.Semaphore(20)
+    return state.semaphore
+
+
+def _shared_ssl_context() -> Any:
+    """httpx's default verifying SSL context, built once per process (building it costs 250-570 ms)."""
+    global _ssl_context  # pylint: disable=global-statement
+    with _http_registry_lock:
+        if _ssl_context is None:
+            _ssl_context = _create_ssl_context()
+        return _ssl_context
 
 
 def _get_headers(signature: str) -> dict[str, str]:
@@ -107,18 +130,23 @@ def _get_headers(signature: str) -> dict[str, str]:
 
 
 async def get_http_client() -> httpx.AsyncClient:
-    """Returns a shared httpx client with thread-safe initialization."""
-    global HTTP_CLIENT  # pylint: disable=global-statement
+    """This event loop's shared httpx client (C-39 step 2, K-57): built once per loop with the process-wide SSL
+    context, rebuilt only after it was closed. Another loop never replaces it."""
+    state = _loop_http()
+    if state.client is None or state.client.is_closed:
+        state.client = httpx.AsyncClient(timeout=10.0, verify=_shared_ssl_context())
+    return state.client
 
-    # A new event loop gets a new client, lock and semaphore together: a caller that asks for the client
-    # first must not leave the semaphore of an earlier loop in place (its permits may never come back).
-    _check_loop()
 
-    if HTTP_CLIENT is None or HTTP_CLIENT.is_closed:
-        # Create a new client if none exists or it is closed
-        HTTP_CLIENT = httpx.AsyncClient(timeout=10.0)
-
-    return HTTP_CLIENT
+async def aclose_loop_client() -> None:
+    """Forgets this event loop's entry (client, lock, semaphore) and closes its client: the job's end. A later call on
+    this loop starts a new entry."""
+    loop = asyncio.get_running_loop()
+    with _http_registry_lock:
+        state = _http_by_loop.pop(loop, None)
+    client = state.client if state is not None else None
+    if client is not None and not client.is_closed:
+        await client.aclose()
 
 
 # ---------------------------------------------------------------- agent link v2 (C-NOTIFY-1)

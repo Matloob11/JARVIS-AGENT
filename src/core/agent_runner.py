@@ -8,7 +8,9 @@ Entrypoint and session management for the JARVIS agent.
 
 import asyncio
 import functools
+import inspect
 import logging
+import math
 import os
 import socket
 import sys
@@ -117,7 +119,12 @@ from services.info.jarvis_search import (
     get_formatted_datetime,
 )
 from services.utils.jarvis_adaptive import in_container
-from services.utils.jarvis_autonomous import autonomous_protector
+from services.utils.jarvis_autonomous import (
+    TaskProtector,
+    autonomous_protector,
+    job_protector,
+    release_job_protector,
+)
 from services.utils.jarvis_diagnostics import diagnostics as diagnostics_instance
 from services.utils.jarvis_healing import healing_engine
 from services.utils.jarvis_health import health_monitor
@@ -152,6 +159,7 @@ except (ImportError, ValueError):
     from agent_core import BrainAssistant  # type: ignore
 
 from src.core import gemini_resume_guard
+from src.core.jarvis_runtime import is_error_close_reason
 from src.core.conversation_router import ConversationRouter, preview
 from src.core.vision_handler import append_chat_message, desktop_data_message
 
@@ -509,31 +517,34 @@ async def perform_startup_diagnostics() -> None:
 
 
 async def _start_background_tasks(session: AgentSession, assistant: BrainAssistant,
-                                  mode: str | None = None) -> list[asyncio.Task[Any]]:
-    """Starts all background loops and monitors via the autonomous protector.
+                                  mode: str | None = None,
+                                  protector: TaskProtector | None = None) -> list[asyncio.Task[Any]]:
+    """Starts all background loops and monitors via a task protector: the job's own (C-33, from the entrypoint),
+    else the global autonomous protector.
 
     mode (default JARVIS_DESKTOP_MODE): remote mode (K-72) starts no reminder loop (agent-svc owns
     reminders) and no clipboard monitor (the Desktop Node runs it); local mode starts everything.
     """
     local = (mode or desktop_mode()) == DESKTOP_MODE_LOCAL
+    tasks = protector if protector is not None else autonomous_protector
     logger.info("🔄 Starting protected background tasks...")
 
-    # Launch background loops via the autonomous protector to ensure resilience
-    await autonomous_protector.run_protected("memory_loop", start_memory_loop, assistant, assistant.memory_extractor)
-    await autonomous_protector.run_protected("heartbeat_loop", start_heartbeat_loop)
-    await autonomous_protector.run_protected("ui_command_listener", start_ui_command_listener, assistant)
+    # Launch background loops via the protector to ensure resilience
+    await tasks.run_protected("memory_loop", start_memory_loop, assistant, assistant.memory_extractor)
+    await tasks.run_protected("heartbeat_loop", start_heartbeat_loop)
+    await tasks.run_protected("ui_command_listener", start_ui_command_listener, assistant)
 
     # 💥 NEW: Self-Monitoring & Proactive Analysis Loops
     if local:
-        await autonomous_protector.run_protected("reminder_loop", start_reminder_loop, session)
-    await autonomous_protector.run_protected("bug_hunter_loop", start_bug_hunter_loop, session)
-    await autonomous_protector.run_protected("memory_storage_loop", start_memory_storage_loop, assistant)
+        await tasks.run_protected("reminder_loop", start_reminder_loop, session)
+    await tasks.run_protected("bug_hunter_loop", start_bug_hunter_loop, session)
+    await tasks.run_protected("memory_storage_loop", start_memory_storage_loop, assistant)
 
-    # 🧠 ADAPTIVE BRAIN: Throttles high-load tasks during stress
-    await autonomous_protector.run_protected("adaptation_loop", start_adaptation_loop)
+    # 🧠 ADAPTIVE BRAIN: Throttles the bug hunter during sustained stress (C-33: on this job's protector)
+    await tasks.run_protected("adaptation_loop", start_adaptation_loop, tasks)
 
     # 🚑 HEALING ENGINE: Detects heart-stops and triggers recovery
-    await autonomous_protector.run_protected("healing_loop", healing_engine.start_healing_loop)
+    await tasks.run_protected("healing_loop", healing_engine.start_healing_loop)
 
     # Register Recovery Actions
     async def _recover_ui_bridge():
@@ -577,7 +588,7 @@ async def _start_background_tasks(session: AgentSession, assistant: BrainAssista
         clip_task = asyncio.create_task(clip_monitor.start(_on_clipboard_detected))
 
     # Return all managed tasks to be added to the session's active_tasks set
-    managed_tasks = list(autonomous_protector._tasks.values())
+    managed_tasks = list(tasks._tasks.values())
     if clip_task is not None:
         managed_tasks.append(clip_task)
     return managed_tasks
@@ -718,20 +729,42 @@ async def _process_user_audio(publication: rtc.TrackPublication, assistant: Brai
         logger.error("Audio subscription error: %s", e)
 
 
-async def _cleanup_session_resources(session: AgentSession, tasks: list[asyncio.Task[Any]]) -> None:
-    """Safely cleans up background tasks and session objects."""
+CLEANUP_STEP_TIMEOUT_S = 10.0  # each teardown step (assistant shutdown, session close) waits at most this long
+
+
+async def _bounded_call(name: str, method: Any) -> None:
+    """Calls method() and awaits it when it returns an awaitable, for at most CLEANUP_STEP_TIMEOUT_S; never raises
+    (C-33: a wedged session or assistant cannot hold the job's teardown hostage). A cancel passes through."""
+    if not callable(method):
+        return
+    try:
+        result = method()
+        if inspect.isawaitable(result):
+            await asyncio.wait_for(result, CLEANUP_STEP_TIMEOUT_S)
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.warning("Cleanup step %s failed: %s", name, type(e).__name__)
+
+
+async def _cleanup_session_resources(session: AgentSession, tasks: list[asyncio.Task[Any]],
+                                     protector: TaskProtector | None = None,
+                                     assistant: Any = None) -> None:
+    """Safely cleans up background tasks and session objects. C-33: the JOB's protector (never another job's loops;
+    the global one only for an old caller), then the assistant's own loops (task monitor, vision), then the session
+    with aclose() (AgentSession has no stop() in livekit-agents 1.4.6; that call failed silently before)."""
     logger.info("🧹 Performing session cleanup...")
 
-    # Reset autonomous protector to gracefully stop its loops
-    await autonomous_protector.cancel_all()
+    # Stop this job's protected loops (the UI listener's cancel closes its bridge socket)
+    await (protector if protector is not None else autonomous_protector).cancel_all()
+    release_job_protector(protector)
+
+    if assistant is not None:
+        await _bounded_call("assistant.shutdown", getattr(assistant, "shutdown", None))
 
     if session:
-        try:
-            logger.info("🛑 Stopping AgentSession...")
-            session_any: Any = session
-            await asyncio.wait_for(session_any.stop(), timeout=10.0)
-        except Exception as e:
-            logger.debug("Session stop error: %s", e)
+        logger.info("🛑 Closing AgentSession...")
+        await _bounded_call("session.aclose", getattr(session, "aclose", None))
 
     if tasks:
         logger.info("🛑 Cleaning up background tasks...")
@@ -756,6 +789,10 @@ JOB_END_NOTIFY_S = 3.0                  # notify job_end waits at most this long
 END_PAUSED = "paused_by_owner"          # pause_agent (K-60 v9)
 END_BY_COMMAND = "ended_by_command"     # the stop event without a reason (an assistant before C-23)
 END_SESSION_FAILED = "session_failed"   # every session attempt of this job failed
+END_ROOM_DISCONNECTED = "room_disconnected"  # C-33: the room connection is gone (its event or the liveness check)
+END_SESSION_ERROR = "session_error"          # C-33: the AgentSession closed itself on an unrecoverable error
+END_JOB_SHUTDOWN = "job_shutdown"            # C-33: LiveKit itself shut the job down (e.g. a worker shutdown)
+FRAMEWORK_TEARDOWN_WAIT_S = 8.0              # how long a LiveKit-initiated shutdown waits for our teardown
 
 
 async def _write_session_attr(ctx: Any, value: str) -> bool:
@@ -830,27 +867,123 @@ def _is_console_job(ctx: Any) -> bool:
         return False
 
 
-async def _end_job(ctx: Any, ended: str | None) -> None:
+async def _end_job(ctx: Any, ended: str | None, framework_shutdown: bool = False) -> None:
     """
     C-23 (K-60 v9): after the session loop ends (not on cancel, not in console mode) the job ends instead of staying
     in the room without a session: jarvis.session 'paused' for a pause (else 'closed'), notify job_end, then
-    ctx.shutdown(reason) - 'paused_by_owner', 'ended_by_command', or 'session_failed' after the last failed attempt.
-    The bridge then dispatches a fresh job (with backoff), or none while paused. Never JobContext.delete_room.
+    ctx.shutdown(reason) - 'paused_by_owner', 'ended_by_command', 'session_failed' after the last failed attempt, and
+    (C-33, K-60 v16) 'session_error' or 'room_disconnected'. The bridge then dispatches a fresh job (with backoff), or
+    none while paused. Never JobContext.delete_room.
+    framework_shutdown (C-33): LiveKit is already shutting the job down (room gone, worker shutdown). The attribute
+    write and the job_end notify are skipped then: the room cannot take them, the bridge's room owner stops counting
+    a job whose agent it saw leave, and LiveKit only holds the loop for a few seconds (FRAMEWORK_TEARDOWN_WAIT_S).
     """
     reason = ended or END_SESSION_FAILED
     if _is_console_job(ctx):
         logger.info("JOB END (%s): console mode keeps the job", reason)
         return
-    pending = _pending_session_attr_tasks()
-    if pending:  # an earlier 'starting'/'running' write must never land after the last one
-        await asyncio.wait(pending, timeout=SESSION_ATTR_TIMEOUT_S)
-    await _write_session_attr(ctx, SESSION_PAUSED if reason == END_PAUSED else SESSION_CLOSED)
-    await _report_job_end(ctx, reason)
+    if not framework_shutdown:
+        pending = _pending_session_attr_tasks()
+        if pending:  # an earlier 'starting'/'running' write must never land after the last one
+            await asyncio.wait(pending, timeout=SESSION_ATTR_TIMEOUT_S)
+        await _write_session_attr(ctx, SESSION_PAUSED if reason == END_PAUSED else SESSION_CLOSED)
+        await _report_job_end(ctx, reason)
     logger.warning("JOB END: %s; ctx.shutdown", reason)
     try:
         ctx.shutdown(reason=reason)
     except Exception as e:  # pylint: disable=broad-exception-caught
         logger.error("JOB END: ctx.shutdown failed: %s", type(e).__name__)
+
+
+# ------------------------------------------------------------------ C-33 (step A): a job never outlives its room
+# 06-08 Oct (Hp laptop): after a laptop sleep or a network loss the rtc engine gave up ('failed to reconnect to the
+# livekit room') without ever emitting 'disconnected', and the Gemini session closed itself on an unrecoverable error.
+# Neither LiveKit nor this entrypoint ended those jobs: seven kept every loop and their bridge listener for days
+# (worker active_jobs=8; one dashboard SIM search ran twice, with two Allow dialogs). A job now ends
+# (request_end -> _end_job -> ctx.shutdown) on its session's close with reason ERROR, on the room's 'disconnected'
+# event, and on this liveness check; the bridge (C-23 always mode) then dispatches a fresh job.
+ROOM_LIVENESS_INTERVAL_S = 5.0
+ROOM_DEAD_AFTER_S = 90.0       # seconds of AWAKE time without a usable room before the job ends
+ROOM_PROBE_EVERY = 6           # every 6th check (~30 s) asks the rtc engine itself (a local FFI call, no traffic)
+ROOM_PROBE_TIMEOUT_S = 10.0
+
+
+def _room_connected(room: Any) -> bool | None:
+    """True/False from the room's connection state; None when the room has no usable state (a stand-in)."""
+    state = getattr(room, "connection_state", None)
+    if isinstance(state, bool) or not isinstance(state, int):
+        return None
+    return state == rtc.ConnectionState.CONN_CONNECTED
+
+
+async def _rtc_engine_alive(room: Any) -> bool | None:
+    """True when room.get_rtc_stats() answers within ROOM_PROBE_TIMEOUT_S; False when it fails (a closed engine fails
+    even when no state change ever reached Python); None without a usable probe."""
+    probe = getattr(room, "get_rtc_stats", None)
+    if not callable(probe):
+        return None
+    try:
+        pending = probe()
+        if not inspect.isawaitable(pending):
+            return None
+        await asyncio.wait_for(pending, ROOM_PROBE_TIMEOUT_S)
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.debug("ROOM probe failed: %s", type(e).__name__)
+        return False
+    return True
+
+
+def _room_watchable(room: Any) -> bool:
+    """True when the room offers a connection state or an async engine probe (a real rtc.Room); a stand-in without
+    either has nothing to watch."""
+    return _room_connected(room) is not None or inspect.iscoroutinefunction(getattr(room, "get_rtc_stats", None))
+
+
+async def _room_liveness_loop(room: Any, end_job: Callable[[str], Any],
+                              interval: float = ROOM_LIVENESS_INTERVAL_S,
+                              dead_after: float = ROOM_DEAD_AFTER_S) -> None:
+    """Calls end_job(END_ROOM_DISCONNECTED) once the room has been unusable for dead_after seconds of awake time:
+    the connection state was not CONNECTED for that many consecutive checks, or the engine probe failed that many
+    consecutive times. Checks are COUNTED, not timed, so after a laptop sleep the first check counts once and the rtc
+    engine keeps its full reconnect budget; a healthy reading resets its counter."""
+    if not _room_watchable(room):
+        logger.debug("ROOM liveness: nothing to watch on %s", type(room).__name__)
+        return
+    state_needed = max(1, math.ceil(dead_after / interval))
+    probe_needed = max(1, math.ceil(dead_after / (interval * ROOM_PROBE_EVERY)))
+    state_misses = probe_failures = checks = 0
+    while True:
+        await asyncio.sleep(interval)
+        checks += 1
+        connected = _room_connected(room)
+        if connected is False:
+            state_misses += 1
+        elif connected is True:
+            state_misses = 0
+        if checks % ROOM_PROBE_EVERY == 0:
+            alive = await _rtc_engine_alive(room)
+            if alive is False:
+                probe_failures += 1
+            elif alive is True:
+                probe_failures = 0
+        if state_misses >= state_needed or probe_failures >= probe_needed:
+            logger.warning("ROOM_DEAD: no usable room connection for ~%.0f s of awake time (state misses %d, probe "
+                           "failures %d); ending the job", dead_after, state_misses, probe_failures)
+            end_job(END_ROOM_DISCONNECTED)
+            return
+
+
+async def _close_loop_bridge_client() -> None:
+    """C-39 step 2 (K-57): closes this job loop's bridge HTTP client at the very end of the job; never raises."""
+    try:
+        from services.utils.jarvis_bridge import aclose_loop_client  # pylint: disable=import-outside-toplevel
+        await asyncio.wait_for(aclose_loop_client(), 3.0)
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.debug("bridge client close: %s", type(e).__name__)
 
 
 # ------------------------------------------------------------------ C-32: worker prewarm (design §1.1)
@@ -931,8 +1064,9 @@ def _print_startup_banner() -> None:
 
 async def entrypoint(ctx: agents.JobContext):
     """Main job entrypoint. Up to 5 session attempts; the job ends (ctx.shutdown) when the assistant's stop event is
-    set (pause_agent: 'paused_by_owner') or when every attempt failed ('session_failed'), never by starting another
-    session in place (C-23, K-60 v9)."""
+    set (pause_agent: 'paused_by_owner'; C-33: 'session_error' when the session closes on an unrecoverable error,
+    'room_disconnected' when the room is gone) or when every attempt failed ('session_failed'), never by starting
+    another session in place (C-23, K-60). Each attempt runs its loops on its own task protector (C-33)."""
     # K-29 backstop for _mask_cli_log_handler(): masks any root handler added since then.
     redact_root_handlers()
     # C-64: the UI log shipper of this process (once per process: a Windows job thread finds it running, a Linux
@@ -945,9 +1079,34 @@ async def entrypoint(ctx: agents.JobContext):
     ended: str | None = None
     cancelled = False
 
+    # C-33: livekit-agents never awaits or cancels this entrypoint when IT ends the job (room 'disconnected', a worker
+    # shutdown): it runs the shutdown callbacks, cancels its own tasks and stops the loop, which would cut our
+    # teardown off. This callback asks the current attempt to end and holds the loop (bounded) until it has.
+    entry_task = asyncio.current_task()
+    job_state: dict[str, Any] = {"request_end": None, "protector": None, "framework_shutdown": False}
+
+    async def _hold_for_teardown(reason: str) -> None:
+        job_state["framework_shutdown"] = True
+        request_end = job_state["request_end"]
+        if callable(request_end):
+            request_end(END_ROOM_DISCONNECTED if "disconnect" in str(reason).lower() else END_JOB_SHUTDOWN)
+        if entry_task is not None and entry_task is not asyncio.current_task() and not entry_task.done():
+            await asyncio.wait({entry_task}, timeout=FRAMEWORK_TEARDOWN_WAIT_S)
+        if entry_task is None or not entry_task.done():  # the teardown did not finish in time: the cheap parts
+            release_job_protector(job_state["protector"])
+            await _close_loop_bridge_client()
+
+    try:
+        ctx.add_shutdown_callback(_hold_for_teardown)
+    except Exception as e:  # pylint: disable=broad-exception-caught  # a stand-in context without callbacks
+        logger.debug("no shutdown callback: %s", type(e).__name__)
+
     while attempt < max_retries:
         session: AgentSession | None = None
         router: ConversationRouter | None = None
+        assistant: Any = None
+        protector: TaskProtector | None = None  # C-33: this attempt's own loops (never the global protector)
+        room_handlers: list[tuple[str, Any]] = []  # C-33: removed in finally, so a retry never doubles them
         # ULTRA-STRICT: Centralized Task Tracking Set
         active_tasks: set[asyncio.Task] = set()
 
@@ -1043,6 +1202,21 @@ async def entrypoint(ctx: agents.JobContext):
             if not isinstance(stop_event, asyncio.Event):
                 stop_event = asyncio.Event()
                 assistant._stop_event = stop_event  # pylint: disable=protected-access
+
+            # C-33: every end path goes through this (an assistant before C-23 has no request_end)
+            def _request_end(reason: str, _assistant=assistant, _stop=stop_event) -> None:
+                end = getattr(_assistant, "request_end", None)
+                if callable(end):
+                    end(reason)
+                    return
+                if getattr(_assistant, "end_reason", None) is None:
+                    try:
+                        _assistant.end_reason = reason
+                    except AttributeError:
+                        pass
+                _stop.set()
+
+            job_state["request_end"] = _request_end
             # C-42: typed chat (UI and lk.chat) goes into this job's session through the router, and the
             # router emits every transcript message once (conversation_item_added).
             router = ConversationRouter(assistant, spawn=track)
@@ -1069,6 +1243,7 @@ async def entrypoint(ctx: agents.JobContext):
                 # Suppress ignoring byte stream warnings for internal topics
                 if data.topic in ["lk.agent.session", "lk.agent.monitor", "lk.agent.chat"]:
                     return  # pylint: disable=useless-return
+            room_handlers.append(("data_received", on_data_received))
 
 
             logger.info("[AGENT] Connecting room and starting session...")
@@ -1081,6 +1256,20 @@ async def entrypoint(ctx: agents.JobContext):
             follow_owner_reconnects(session, ctx.room)  # the owner comes back under a new identity
             assistant.attach_session(session)
 
+            # C-33 (step A): the job ends when its session or its room is gone; the bridge dispatches a fresh job.
+            @session.on("close")
+            def _on_session_close(event: Any, _end=_request_end) -> None:
+                if is_error_close_reason(getattr(event, "reason", None)):
+                    logger.warning("SESSION closed on an unrecoverable error; ending the job")
+                    _end(END_SESSION_ERROR)
+
+            def _on_room_disconnected(*_args: Any, _end=_request_end) -> None:
+                _end(END_ROOM_DISCONNECTED)
+
+            ctx.room.on("disconnected")(_on_room_disconnected)
+            room_handlers.append(("disconnected", _on_room_disconnected))
+            track(_room_liveness_loop(ctx.room, _request_end))
+
             # --- Location and PC vitals loops --- (local mode only, K-72 / K-40)
             if local:
                 track(_location_loop(notify_location))
@@ -1092,6 +1281,7 @@ async def entrypoint(ctx: agents.JobContext):
             def on_track_published(publication: rtc.TrackPublication, participant: rtc.RemoteParticipant, _assistant=assistant):
                 if publication.kind == rtc.TrackKind.KIND_AUDIO:
                     track(_process_user_audio(publication, _assistant))
+            room_handlers.append(("track_published", on_track_published))
 
             # Subscribe to existing tracks
             for participant in ctx.room.remote_participants.values():
@@ -1142,7 +1332,9 @@ async def entrypoint(ctx: agents.JobContext):
 
             _print_startup_banner()
             _start_loop_watchdog(ctx, track, plugin_manager.running_tools)
-            bg_tasks = await _start_background_tasks(session, assistant)
+            protector = job_protector()
+            job_state["protector"] = protector
+            bg_tasks = await _start_background_tasks(session, assistant, protector=protector)
             for bt in bg_tasks:
                 active_tasks.add(bt)
                 bt.add_done_callback(active_tasks.discard)
@@ -1181,12 +1373,19 @@ async def entrypoint(ctx: agents.JobContext):
         finally:
             if router is not None:
                 router.detach()  # typed chat gets the offline answer until the next session attaches
-            await _cleanup_session_resources(session, list(active_tasks))
+            await _cleanup_session_resources(session, list(active_tasks), protector=protector, assistant=assistant)
+            room_off = getattr(ctx.room, "off", None)
+            for event_name, handler in room_handlers if callable(room_off) else ():
+                try:
+                    room_off(event_name, handler)
+                except Exception as e:  # pylint: disable=broad-exception-caught
+                    logger.debug("room.off(%s) failed: %s", event_name, type(e).__name__)
 
     if not cancelled:
         # C-23: a paused, ended or failed job leaves the room (ctx.shutdown) instead of staying without a session,
         # which kept LiveKit from dispatching a fresh one.
-        await _end_job(ctx, ended)
+        await _end_job(ctx, ended, framework_shutdown=job_state["framework_shutdown"])
+    await _close_loop_bridge_client()
 
 
 # --------------------------------------------------------------------------- C-136: LiveKit link state

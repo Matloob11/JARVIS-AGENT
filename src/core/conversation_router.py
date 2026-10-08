@@ -296,8 +296,9 @@ class ConversationRouter:
         self.turn_log.append(entry)
 
     def _log(self, status: str, msg_id: str, origin: str, text: str) -> None:
-        logger.info("CHAT_ROUTER %s id=%s origin=%s chars=%d%s", status, msg_id, origin, len(text),
-                    f": {preview(text)}" if text else "")
+        # C-64 SP-1 (C-33 step A fix): the INFO line carries status, id, origin and length only; typed chat text never
+        # reaches the file log or the UI log panel. The full text stays on the console at DEBUG (a private template).
+        logger.info("CHAT_ROUTER %s id=%s origin=%s chars=%d", status, msg_id, origin, len(text))
         if text:
             logger.debug("CHAT_ROUTER %s id=%s full text: %s", status, msg_id, text)
 

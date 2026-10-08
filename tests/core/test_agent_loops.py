@@ -2,6 +2,7 @@ import asyncio
 import importlib
 import socket
 import uuid
+import weakref
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch, AsyncMock
@@ -134,23 +135,20 @@ async def test_start_ui_command_listener():
 
 
 # ================================================================ 2026-10-06: overload debounce (adaptation loop)
-# A single CPU spike (first vision call + model load) used to fire the CRITICAL 'SYSTEM OVERLOAD'
-# throttle at once; now it takes OVERLOAD_CONSECUTIVE_SAMPLES consecutive high readings.
+# A single CPU spike (first vision call + model load) used to fire the 'SYSTEM OVERLOAD' throttle at once; now it
+# takes OVERLOAD_CONSECUTIVE_SAMPLES consecutive high readings. C-33 step 5: only the bug hunter is ever throttled
+# (memory and reminders never stop), at WARNING, and each loop (one per job) keeps its own streak.
 
 
-def _adaptation_run(monkeypatch, readings, throttled=None):
-    """Runs start_adaptation_loop over the given stress readings, then cancels it on the next sleep.
-    Returns (logger mock, autonomous_protector task mock, restart_task mock)."""
-    monkeypatch.setattr(agent_loops, "_overload_streak", 0)
-    monkeypatch.setattr(agent_loops, "_throttled_tasks", set(throttled or ()))
+def _adaptation_run(monkeypatch, readings):
+    """Runs start_adaptation_loop over the given stress readings with a job protector stand-in, then cancels it on
+    the next sleep. Returns (logger mock, protector stand-in, task mock, fake sleep)."""
     monkeypatch.setattr(agent_loops.adaptive_engine, "observe_only", False)
     remaining = list(readings)
     monkeypatch.setattr(agent_loops.adaptive_engine, "analyze_system_load", lambda: remaining.pop(0))
     task = MagicMock()
     task.done.return_value = False
-    monkeypatch.setattr(agent_loops.autonomous_protector, "get_task", MagicMock(return_value=task))
-    restart = MagicMock(return_value=True)
-    monkeypatch.setattr(agent_loops.autonomous_protector, "restart_task", restart)
+    protector = SimpleNamespace(get_task=MagicMock(return_value=task), restart_task=MagicMock(return_value=True))
     # recovery must never trigger the heavy vector preload in a test
     monkeypatch.setattr(agent_loops, "jarvis_vector_db", SimpleNamespace(client=object()))
     log = MagicMock()
@@ -160,57 +158,81 @@ def _adaptation_run(monkeypatch, readings, throttled=None):
         if not remaining:
             raise asyncio.CancelledError
 
-    return log, task, restart, fake_sleep
+    return log, protector, task, fake_sleep
 
 
 @pytest.mark.asyncio
 async def test_a_single_cpu_spike_only_warns_and_cancels_nothing(monkeypatch):
-    log, task, _restart, fake_sleep = _adaptation_run(monkeypatch, ["CRITICAL", "NORMAL"])
+    log, protector, task, fake_sleep = _adaptation_run(monkeypatch, ["CRITICAL", "NORMAL"])
     with patch.object(agent_loops.asyncio, "sleep", fake_sleep), pytest.raises(asyncio.CancelledError):
-        await agent_loops.start_adaptation_loop()
+        await agent_loops.start_adaptation_loop(protector)
 
     task.cancel.assert_not_called()
     log.critical.assert_not_called()
     assert log.warning.call_count == 1  # exactly one WARNING for the spike
     assert "High system load" in log.warning.call_args_list[0].args[0]
-    assert agent_loops._overload_streak == 0  # the NORMAL reading reset the streak
+    protector.restart_task.assert_not_called()  # nothing was throttled, so nothing is restored
 
 
 @pytest.mark.asyncio
-async def test_sustained_overload_still_throttles_exactly_as_before(monkeypatch):
+async def test_sustained_overload_throttles_only_the_bug_hunter_at_warning(monkeypatch):
     assert agent_loops.OVERLOAD_CONSECUTIVE_SAMPLES == 2
-    log, task, _restart, fake_sleep = _adaptation_run(monkeypatch, ["CRITICAL", "CRITICAL"])
+    assert agent_loops.NON_ESSENTIAL_TASKS == ("bug_hunter_loop",)
+    log, protector, task, fake_sleep = _adaptation_run(monkeypatch, ["CRITICAL", "CRITICAL"])
     with patch.object(agent_loops.asyncio, "sleep", fake_sleep), pytest.raises(asyncio.CancelledError):
-        await agent_loops.start_adaptation_loop()
+        await agent_loops.start_adaptation_loop(protector)
 
-    log.critical.assert_called_once_with("🚨 SYSTEM OVERLOAD: Throttling high-load services...")
-    assert task.cancel.call_count == 3  # reminder_loop, bug_hunter_loop, memory_loop as before
-    assert agent_loops._throttled_tasks == {"reminder_loop", "bug_hunter_loop", "memory_loop"}
+    asked = [c.args[0] for c in protector.get_task.call_args_list]
+    assert asked == ["bug_hunter_loop"]  # memory_loop and reminder_loop are never even looked up
+    assert task.cancel.call_count == 1
+    log.critical.assert_not_called()
+    overload = [c for c in log.warning.call_args_list if "SYSTEM OVERLOAD" in c.args[0]]
+    assert len(overload) == 1 and "bug_hunter_loop" in overload[0].args
 
 
 @pytest.mark.asyncio
-async def test_recovery_after_sustained_overload_restores_the_throttled_tasks(monkeypatch):
-    log, task, restart, fake_sleep = _adaptation_run(monkeypatch, ["CRITICAL", "CRITICAL", "NORMAL"])
+async def test_recovery_after_sustained_overload_restores_the_bug_hunter(monkeypatch):
+    _log, protector, _task, fake_sleep = _adaptation_run(monkeypatch, ["CRITICAL", "CRITICAL", "NORMAL"])
     with patch.object(agent_loops.asyncio, "sleep", fake_sleep), pytest.raises(asyncio.CancelledError):
-        await agent_loops.start_adaptation_loop()
+        await agent_loops.start_adaptation_loop(protector)
 
-    log.critical.assert_called_once()  # the sustained overload throttled once
-    assert restart.call_count == 3  # ... and the NORMAL reading restored every task
-    assert agent_loops._throttled_tasks == set()
-    assert agent_loops._overload_streak == 0
+    protector.restart_task.assert_called_once_with("bug_hunter_loop")
 
 
 @pytest.mark.asyncio
 async def test_observe_only_mode_never_counts_toward_the_overload_streak(monkeypatch):
-    log, task, _restart, fake_sleep = _adaptation_run(monkeypatch, ["CRITICAL", "CRITICAL"])
+    log, protector, task, fake_sleep = _adaptation_run(monkeypatch, ["CRITICAL", "CRITICAL"])
     monkeypatch.setattr(agent_loops.adaptive_engine, "observe_only", True)
     with patch.object(agent_loops.asyncio, "sleep", fake_sleep), pytest.raises(asyncio.CancelledError):
-        await agent_loops.start_adaptation_loop()
+        await agent_loops.start_adaptation_loop(protector)
 
     task.cancel.assert_not_called()
     log.critical.assert_not_called()
     log.warning.assert_not_called()
-    assert agent_loops._overload_streak == 0
+
+
+@pytest.mark.asyncio
+async def test_two_jobs_readings_never_add_up_to_one_streak(monkeypatch):
+    """C-33 step A (07 Oct log): two job threads' readings 73 ms apart counted as 'consecutive' through a module
+    global and throttled the live job. Each loop now has its own streak: one high reading per loop throttles nothing."""
+    for _job in range(2):
+        log, protector, task, fake_sleep = _adaptation_run(monkeypatch, ["CRITICAL"])
+        with patch.object(agent_loops.asyncio, "sleep", fake_sleep), pytest.raises(asyncio.CancelledError):
+            await agent_loops.start_adaptation_loop(protector)
+        task.cancel.assert_not_called()
+        assert log.warning.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_a_job_protector_is_used_instead_of_the_global_one(monkeypatch):
+    _log, protector, task, fake_sleep = _adaptation_run(monkeypatch, ["CRITICAL", "CRITICAL"])
+    global_get = MagicMock(return_value=MagicMock())
+    monkeypatch.setattr(agent_loops.autonomous_protector, "get_task", global_get)
+    with patch.object(agent_loops.asyncio, "sleep", fake_sleep), pytest.raises(asyncio.CancelledError):
+        await agent_loops.start_adaptation_loop(protector)
+
+    global_get.assert_not_called()
+    task.cancel.assert_called_once()
 
 
 # ================================================================ plan task C-15: agent link v2 on the listener
@@ -566,7 +588,7 @@ async def real_bridge(v2_keys, monkeypatch, tmp_path):
     monkeypatch.setattr(agent_loops, "RECONNECT_MAX_S", 0.5)
     monkeypatch.setattr(jarvis_bridge, "NOTIFY_TIMEOUT_S", 1.0)
     monkeypatch.setattr(jarvis_bridge, "RETRY_FIRST_S", 30.0)  # only a wake (the socket coming back) flushes
-    monkeypatch.setattr(jarvis_bridge, "HTTP_CLIENT", None)  # a client of this event loop
+    monkeypatch.setattr(jarvis_bridge, "_http_by_loop", weakref.WeakKeyDictionary())  # this loop's client only
     bridge = _RealBridge(module)
     monkeypatch.setattr(config, "bridge_url", bridge.url)
     await bridge.start()
@@ -577,8 +599,7 @@ async def real_bridge(v2_keys, monkeypatch, tmp_path):
             await peer.sio.disconnect()
     if bridge.server is not None and not bridge.task.done():
         await bridge.stop()
-    if jarvis_bridge.HTTP_CLIENT is not None:
-        await jarvis_bridge.HTTP_CLIENT.aclose()
+    await jarvis_bridge.aclose_loop_client()
     await store.close()
 
 

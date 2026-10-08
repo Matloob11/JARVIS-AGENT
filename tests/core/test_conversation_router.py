@@ -297,17 +297,17 @@ def router_log(caplog):
     logger.setLevel(old_level)
 
 
-async def test_one_accepted_line_with_a_short_preview_at_info(router, router_log):
+async def test_one_accepted_line_at_info_without_any_chat_text(router, router_log):
+    """C-64 SP-1: the INFO line (file log, UI log panel) names status, id, origin and length only; typed chat text,
+    not even a preview, reaches INFO. The full text stays on the console at DEBUG (a private template)."""
     caplog = router_log
     router.attach(_session())
     text = "Jarvis " + "x" * 200
     await router.handle_text(text, "u-30", origin="ui")
     info = [r.getMessage() for r in caplog.records if r.levelno == logging.INFO]
     accepted = [m for m in info if m.startswith("CHAT_ROUTER accepted")]
-    assert len(accepted) == 1
-    assert "id=u-30 origin=ui chars=207" in accepted[0]
-    assert text not in "\n".join(info)  # the full text only at DEBUG
-    assert len(accepted[0].split(": ", 1)[1]) <= cr.PREVIEW_CHARS
+    assert accepted == ["CHAT_ROUTER accepted id=u-30 origin=ui chars=207"]
+    assert "Jarvis" not in "\n".join(info)
     assert any(text in r.getMessage() for r in caplog.records if r.levelno == logging.DEBUG)
 
 

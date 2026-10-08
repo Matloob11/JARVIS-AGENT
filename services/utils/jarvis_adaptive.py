@@ -120,12 +120,12 @@ class JarvisAdaptiveEngine:
         AUTONOMOUS ADAPTATION: Detects system stress via task health, circuit states, and real-time vitals.
         Transitions system between performance tiers based on holistic health.
         """
-        from services.utils.jarvis_autonomous import autonomous_protector
+        from services.utils.jarvis_autonomous import all_task_status
         from services.utils.jarvis_health import health_monitor
         from services.utils.jarvis_resilience import resilience_manager
 
-        # 1. Component Level Health
-        status = autonomous_protector.get_task_status()
+        # 1. Component Level Health (C-33: the global protector plus every live job's own protector)
+        status = all_task_status()
         failures = sum(s["failures"] for s in status.values())
         open_circuits = len(resilience_manager._breakers) # Simplified check for total breakers if needed
         # Actually resilience_manager doesn't have a get_open_circuits in the view I saw

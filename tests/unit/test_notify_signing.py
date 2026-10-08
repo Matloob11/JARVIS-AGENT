@@ -737,8 +737,7 @@ def test_a_new_job_loop_still_delivers_after_the_last_one_ended_with_notifies_pe
     semaphore, also when something asked for the HTTP client first (as ConfirmFlow does)."""
     if mode == "legacy":
         monkeypatch.setattr(config, "agent_token", None)
-    for name in ("HTTP_CLIENT", "_LAST_LOOP", "_TELEMETRY_SEMAPHORE", "_HTTP_LOCK"):
-        monkeypatch.setattr(jarvis_bridge, name, None)
+    monkeypatch.setattr(jarvis_bridge, "_http_by_loop", weakref.WeakKeyDictionary())  # C-39: per-loop state
     reached: list[str] = []
 
     async def bridge(_request: httpx.Request) -> httpx.Response:
