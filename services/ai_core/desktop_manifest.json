@@ -1,12 +1,12 @@
 {
-  "git_sha": "b55edea11248555851d673acb0e5891ca39d0cce",
+  "git_sha": "aacd0e2a63769b7185692ba4109c735f11e3d2e9",
   "lk_schema_libs": {
     "docstring-parser": "0.18.0",
     "livekit-agents": "1.4.6",
     "pydantic": "2.12.5",
     "pydantic-core": "2.41.5"
   },
-  "manifest_sha256": "ce546cec003043a1bcd3a516eb61c5e635080abe6f944d30f84efe2860b808ee",
+  "manifest_sha256": "30c8385124d6ee7a7075853432b45311bc4701a0316d4b9b2c699083395d1558",
   "pc_operations": [
     {
       "arg_hooks": [],
@@ -1235,7 +1235,7 @@
         "long_running": false,
         "max_output_chars": 12000,
         "risk": "dynamic",
-        "timeout": 15.0,
+        "timeout": 35.0,
         "voice_confirm": null
       },
       "module": "services.info.jarvis_sim_lookup",
