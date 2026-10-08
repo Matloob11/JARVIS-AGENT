@@ -1401,11 +1401,11 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-50 | cursor | P3 | Real audio visualizer and 'You are speaking' indicator | X-13, X-33 | DONE (01 Oct 17:00) |
 | X-52 | cursor | P3 | Dashboard 'Voice & Conversation' settings and enrollment extras (delta on the dashboard drawer and dialog) | X-22, X-33, K-61 (CT-VC-SETTINGS), K-63 (CT-VC-VOICE-ENROLL) | DONE (cursor, 01 Oct 17:12 PKT) |
 | X-53 | cursor | P3 | Dashboard glue: spoken indicator on reminders, memory backup path, Terminate sends shutdown_agent | X-23, X-24, X-48, K-66 (CT-VC-PROACTIVE), K-60 (CT-VC-CONTROL) | DONE (cursor, 01 Oct 17:30 PKT) |
-| X-54 | cursor | P3 | Email tool: multi-line UTF-8 body, SMTP timeout, attachment allow-list, approval | C-25, C-24, C-28, C-29, C-30, C-55, X-10, K-28 (tool_arg_policies) | BLOCKED (waiting C-25,C-24,C-28,C-29,C-30,C-55,X-10) |
+| X-54 | cursor | P3 | Email tool: multi-line UTF-8 body, SMTP timeout, attachment allow-list, approval | C-25, C-24, C-28, C-29, C-30, C-55, X-10, K-28 (tool_arg_policies) | DOING (cursor, 2026-10-08 16:07 PKT) |
 | X-55 | cursor | P3 | download_images + zip_files: contained paths, safe names, concurrent downloads, honoured zip_name | X-36, X-54, C-24, C-28, K-28 (tool_arg_policies) | BLOCKED (waiting X-36,X-54,C-24,C-28) |
-| X-56 | cursor | P3 | Google Maps leads scraper: Chrome channel, background job, resilient selectors | C-06, C-26, X-11, C-57 | BLOCKED (waiting C-06,C-26,X-11,C-57) |
+| X-56 | cursor | P3 | Google Maps leads scraper: Chrome channel, background job, resilient selectors | C-06, C-26, X-11, C-57 | DOING (cursor, 2026-10-08 16:07 PKT) |
 | X-57 | cursor | P3 | Deep research (multi-source + LLM report) and research-and-email as an approved background job | C-45, X-36, X-54, C-24, C-28, C-55, C-57, K-30 (llm_text), K-31 (job_progress_routing) | BLOCKED (waiting C-45,X-36,X-54,C-24,C-28) |
-| X-58 | cursor | P3 | YouTube downloader as a background job (single task, absorbs desktop K16) | C-47, C-24, C-28, C-55, C-57, K-31 (job_progress_routing) | BLOCKED (waiting C-47,C-24,C-28,C-55,C-57) |
+| X-58 | cursor | P3 | YouTube downloader as a background job (single task, absorbs desktop K16) | C-47, C-24, C-28, C-55, C-57, K-31 (job_progress_routing) | DOING (cursor, 2026-10-08 16:07 PKT) |
 | X-62 | cursor | P3 | PinchTab Chrome tools: auth, autostart, profile/instance lifecycle, text + refs, degraded mode, untrusted page text | C-24, C-26, X-03, X-11, C-75, C-84, K-23 (PinchTabLocalServer), K-16 (DesktopToolPolicy) | DOING (cursor, 2026-10-08 16:05 PKT) |
 | C-100 | claude | P4 | TOOLS.md for info/media tools (env, providers, timeouts, approvals, outputs) | C-46, X-61 | TODO |
 | C-101 | claude | P4 | OpsSupervisor: one entry point for health, healing, adaptation, bug hunter, startup diagnostics, checkpoints, daily backups | C-11, C-63, C-64, C-71, C-76, C-77, C-83 | TODO |
