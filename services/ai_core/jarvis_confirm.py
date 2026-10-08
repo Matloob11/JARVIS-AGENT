@@ -197,9 +197,16 @@ async def _post_to_bridge(event_type: str, payload: dict[str, Any]) -> Any:
 
 
 async def _post_assistant_message(result: dict[str, Any]) -> None:
-    """Default on_result: the approved action's result as an assistant message in the UI chat."""
-    from services.utils import jarvis_bridge  # pylint: disable=import-outside-toplevel
-    await jarvis_bridge.notify_transcription("assistant", str(result.get("message") or ""))
+    """Default on_result (C-55, K-18): the approved action's result through the announcer: the full message in the UI
+    chat, spoken (priority high) as a fixed line, because the message can carry tool output that must never reach the
+    model as instructions."""
+    from services.utils import jarvis_announcer  # pylint: disable=import-outside-toplevel
+    tool = str(result.get("tool") or "kaam")
+    ok = result.get("status") in ("success", "started")
+    spoken = (f"Sir, {tool} ka kaam ho gaya, tafseel chat mein hai." if ok
+              else f"Sir, {tool} ka kaam nahi ho saka, wajah chat mein hai.")
+    await jarvis_announcer.announce(str(result.get("message") or ""), priority="high", kind="confirm_result",
+                                    spoken_text=spoken)
 
 
 @dataclass(eq=False)

@@ -452,7 +452,7 @@ async def test_confirm_action_returns_at_once_and_the_result_arrives_as_an_assis
     messages: list[tuple[str, str]] = []
 
     async def fake_transcription(role: str, text: str, msg_id: str | None = None,
-                                 is_final: bool = True) -> None:
+                                 is_final: bool = True, **_kwargs: Any) -> None:  # C-55: source='system'
         messages.append((role, text))
 
     monkeypatch.setattr(jarvis_bridge, "notify_transcription", fake_transcription)

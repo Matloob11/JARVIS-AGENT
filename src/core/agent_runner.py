@@ -118,6 +118,7 @@ from services.info.jarvis_search import (
     get_current_city_data,
     get_formatted_datetime,
 )
+from services.utils import jarvis_announcer
 from services.utils.jarvis_adaptive import in_container
 from services.utils.jarvis_autonomous import (
     TaskProtector,
@@ -376,6 +377,26 @@ def harden_room_input(session: Any, room: Any, mode: str | None = None) -> list[
     return guarded
 
 
+async def _announce_clipboard_tip(payload: Any) -> None:
+    """C-55 (K-18/K-19): the tip in the UI chat and a tool row. It is spoken only with JARVIS_CLIPBOARD_SPEAK=1, and
+    then as a fixed line: the copied text is untrusted and never goes to the model as instructions. Never raises."""
+    try:
+        if isinstance(payload, dict):
+            excerpt = str(payload.get("error_excerpt") or "").strip()
+            solution = str(payload.get("solution") or "").strip()
+        else:
+            excerpt, solution = "", str(payload or "").strip()
+        text = (f"Clipboard par error: {excerpt}. Mumkina hal: {solution[:300]}" if excerpt
+                else f"Clipboard tip: {solution[:300]}")
+        await jarvis_announcer.announce(
+            text, priority="low", speak=bool(getattr(config, "clipboard_speak", False)), kind="clipboard",
+            spoken_text="Sir, clipboard ke error ka ek mumkina hal chat mein likh diya hai.")
+        from services.utils.jarvis_bridge import notify_tool_action  # pylint: disable=import-outside-toplevel
+        await notify_tool_action("clipboard_helper", excerpt[:200] or "tip", phase="end", status="success")
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.debug("clipboard tip not announced: %s", type(e).__name__)
+
+
 def clipboard_tip_text(payload: Any) -> str:
     """The K-19 ClipboardSuggestion (or the old plain str) as one text: the copied error, the search,
     the tip and its source; the same information the model got before."""
@@ -570,8 +591,11 @@ async def _start_background_tasks(session: AgentSession, assistant: BrainAssista
         async def _on_clipboard_detected(solution):
             # C-124: clipboard text never reaches the log, and the tip reaches the model as quoted,
             # untrusted user-side desktop data, never as a system notification.
+            if not getattr(config, "clipboard_helper_enabled", True):  # K-19: the switch stops tips too
+                return
             tip = clipboard_tip_text(solution)
             logger.info("📋 Clipboard tip ready (%d chars)", len(tip))
+            await _announce_clipboard_tip(solution)
             if assistant and hasattr(assistant, "chat_ctx"):
                 # BrainAssistant.chat_ctx is an llm.ChatContext, whose messages is a method: the tip goes
                 # into its items list (a plain messages list is used when one is there).
@@ -759,6 +783,8 @@ async def _cleanup_session_resources(session: AgentSession, tasks: list[asyncio.
     await (protector if protector is not None else autonomous_protector).cancel_all()
     release_job_protector(protector)
 
+    if session:
+        jarvis_announcer.detach(session)  # C-55: only this job's session (another job's stays attached)
     if assistant is not None:
         await _bounded_call("assistant.shutdown", getattr(assistant, "shutdown", None))
 
@@ -1291,6 +1317,8 @@ async def entrypoint(ctx: agents.JobContext):
             follow_owner_reconnects(session, ctx.room)  # the owner comes back under a new identity
             assistant.attach_session(session)
             _enable_voice_confirm_check()  # C-75: confirm_action needs Sir's own spoken yes from now on
+            jarvis_announcer.attach(session)  # C-55 (K-18): results, jobs and tips are shown and spoken here
+            jarvis_announcer.set_assistant(assistant)
 
             # C-33 (step A): the job ends when its session or its room is gone; the bridge dispatches a fresh job.
             @session.on("close")

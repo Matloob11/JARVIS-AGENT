@@ -162,10 +162,17 @@ async def test_on_clipboard_detected_logic():
             assert mock_start.called
             callback = mock_start.call_args[0][0]
 
-            # Trigger callback
-            await callback("solution text")
+            # Trigger callback (C-55: the tip is also announced in the UI, spoken only with JARVIS_CLIPBOARD_SPEAK)
+            with patch("src.core.agent_runner.jarvis_announcer.announce", new_callable=AsyncMock) as announce, \
+                    patch("services.utils.jarvis_bridge.notify_tool_action", new_callable=AsyncMock) as row:
+                await callback({"error_excerpt": "ZeroDivisionError: division by zero", "solution": "check b != 0"})
             assert len(assistant.chat_ctx.messages) > 0
             assert "CLIPBOARD ERROR DETECTED" in assistant.chat_ctx.messages[0].content[0]
+            announce.assert_awaited_once()
+            assert "ZeroDivisionError" in announce.await_args.args[0]
+            assert announce.await_args.kwargs["priority"] == "low" and announce.await_args.kwargs["speak"] is False
+            assert "ZeroDivisionError" not in announce.await_args.kwargs["spoken_text"]  # never spoken as instructions
+            row.assert_awaited_once()
 
 
 # ------------------------------------------------------------------ C-138: the test isolation reaches children
