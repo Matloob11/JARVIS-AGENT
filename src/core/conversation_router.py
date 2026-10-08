@@ -68,6 +68,10 @@ REASONING_TIMEOUT_S = 2.0  # K-67: the panel's reasoning never takes longer (and
 REASONING_HISTORY = 10  # earlier turns jarvis_reasoning sees
 SWARM_COMMAND = "swarm"
 EMIT_ORDER_WAIT_S = 5.0  # a send waits this long at most for the one before it (a stuck bridge never stalls all)
+# C-50: a typed message that got no reply at all is asked again once (_rescue)
+RESCUE_AFTER_S = 12.0
+RESCUE_POLL_S = 5.0      # while the agent thinks or speaks the rescue looks again this often
+RESCUE_GIVE_UP_S = 45.0  # and gives up after this long: a long tool call is never cut into (the UI offers a retry)
 PREVIEW_CHARS = 60
 
 # Control characters (C0, DEL, C1) except tab and newline; CR is folded into newline first.
@@ -130,6 +134,15 @@ def valid_msg_id(msg_id: Any) -> str | None:
     return None
 
 
+def _agent_busy(session: Any) -> bool:
+    """True while the agent thinks or speaks: a reply or a tool call is under way (the speech counts too, because a
+    realtime tool call can run while the state still says 'listening')."""
+    if getattr(session, "agent_state", None) in ("thinking", "speaking"):
+        return True
+    done = getattr(getattr(session, "current_speech", None), "done", None)
+    return callable(done) and not done()
+
+
 @dataclass
 class _Pending:
     msg_id: str
@@ -159,6 +172,8 @@ class ConversationRouter:
         self._turn_source = "voice"
         self._tasks: set[asyncio.Task[Any]] = set()
         self._emit_tail: asyncio.Task[Any] | None = None  # the newest send of the ordered chain
+        self._awaiting: OrderedDict[str, None] = OrderedDict()  # C-50: typed ids with no reply yet
+        self._rescues: set[asyncio.Task[Any]] = set()  # never awaited by drain(): each one sleeps first
 
     # ------------------------------------------------------------------ session
 
@@ -169,6 +184,9 @@ class ConversationRouter:
     def detach(self) -> None:
         """No session any more: typed text gets the offline answer until the next attach()."""
         self.session = None
+        self._awaiting.clear()
+        for task in list(self._rescues):
+            task.cancel()
 
     @property
     def running(self) -> bool:
@@ -232,6 +250,7 @@ class ConversationRouter:
             self._log("offline", user_id, origin, clean)
             return "offline"
 
+        self._watch_reply(user_id, session)
         self.emit_reasoning(clean, "text", user_id)
         self._log("accepted", user_id, origin, clean)
         return "accepted"
@@ -280,6 +299,7 @@ class ConversationRouter:
             self.emit_reasoning(text, "voice", item_id)
             return self._emit_ordered("user", text, msg_id=item_id, source="voice")
 
+        self._awaiting.clear()  # C-50: the model answers again; no typed message needs a rescue
         turn_id, source = self._turn_id, self._turn_source
         self._log_turn(item_id, "assistant", text, source, turn_id)
         logger.info("CHAT_ROUTER reply id=%s turn=%s source=%s chars=%d: %s", item_id, turn_id or "-", source,
@@ -427,6 +447,48 @@ class ConversationRouter:
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
         return task
+
+    def _watch_reply(self, msg_id: str, session: Any) -> None:
+        """C-50: arms the one-time rescue of a typed message (_rescue)."""
+        self._awaiting[msg_id] = None
+        while len(self._awaiting) > DEDUPE_MAX:
+            self._awaiting.popitem(last=False)
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:  # no running loop: nothing to watch with
+            return
+        task = loop.create_task(self._rescue(msg_id, session))
+        self._rescues.add(task)
+        task.add_done_callback(self._rescues.discard)
+
+    async def _rescue(self, msg_id: str, session: Any) -> None:
+        """
+        C-50: a typed message that got no reply at all is asked again once with session.generate_reply(), its text
+        already in the context. Seen live: a typed turn 0.3 s after a voice switch's fresh reconnect, which then
+        failed with 1008, so the plugin dropped what was queued for the connection (the turn's generate trigger
+        included) and nothing answered. Nothing when any reply came, the session changed or RESCUE_GIVE_UP_S passed
+        while the agent was busy; never while it thinks or speaks.
+        """
+        waited, delay = 0.0, RESCUE_AFTER_S
+        while True:
+            await asyncio.sleep(delay)
+            waited += delay
+            if msg_id not in self._awaiting or self.session is not session:
+                return
+            if not _agent_busy(session):
+                break
+            if waited >= RESCUE_GIVE_UP_S:
+                self._awaiting.pop(msg_id, None)
+                logger.info("CHAT_ROUTER no reply for typed id=%s after %.0f s of work: not asked again", msg_id,
+                            waited)
+                return
+            delay = RESCUE_POLL_S
+        self._awaiting.pop(msg_id, None)
+        logger.warning("CHAT_ROUTER no reply for typed id=%s after %.0f s: asking the session again", msg_id, waited)
+        try:
+            session.generate_reply()
+        except Exception as e:  # pylint: disable=broad-exception-caught  # RuntimeError: the session is closing
+            logger.info("CHAT_ROUTER rescue unavailable (%s)", type(e).__name__)
 
     async def _interrupt(self, session: Any) -> None:
         """Stops the current and queued speech before the typed reply; never fails the typed message."""

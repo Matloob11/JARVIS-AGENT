@@ -590,3 +590,77 @@ async def test_notify_reasoning_sends_the_k67_event(monkeypatch):
                                               msg_id="i-1")
     ((event, payload),) = sent
     assert event == "reasoning" and payload["plan"] == ["a: b"] and payload["source"] == "voice"
+
+
+# ---------------------------------------------------------------- C-50: a typed message with no reply at all
+
+
+async def _rescues(router: ConversationRouter) -> None:
+    await asyncio.wait_for(asyncio.gather(*router._rescues), 5)
+
+
+@pytest.fixture
+def quick_rescue(monkeypatch) -> None:
+    monkeypatch.setattr(cr, "RESCUE_AFTER_S", 0.01)
+    monkeypatch.setattr(cr, "RESCUE_POLL_S", 0.01)
+    monkeypatch.setattr(cr, "RESCUE_GIVE_UP_S", 0.05)
+
+
+async def test_a_typed_message_without_any_reply_is_asked_again_once(router, quick_rescue):
+    """Live 09 Oct: a typed turn 0.3 s after a voice switch's fresh reconnect got no answer at all (the reconnect
+    failed with 1008 and the plugin dropped the turn's queued generate trigger; the text stayed in the context)."""
+    session = _session()
+    router.attach(session)
+    assert await router.handle_text("Jarvis, aaj kaun sa din hai?", "u-1") == "accepted"
+    await _rescues(router)
+    assert session.calls == ["interrupt", "generate_reply:[typed] Jarvis, aaj kaun sa din hai?", "generate_reply:None"]
+    assert router._awaiting == {} and not router._rescues  # once only
+
+
+async def test_any_reply_cancels_the_rescue(router, quick_rescue):
+    session = _session()
+    router.attach(session)
+    await router.handle_text("salam", "u-1")
+    await _added(router, "user", "[typed] salam")
+    await _added(router, "assistant", "Wa alaikum salam, Sir.")
+    await _rescues(router)
+    assert session.generate_reply.call_count == 1
+
+
+async def test_the_rescue_never_cuts_into_a_long_tool_call(router, quick_rescue):
+    session = _session()
+    session.agent_state = "thinking"
+    router.attach(session)
+    await router.handle_text("Jarvis, report banao", "u-1")
+    await _rescues(router)
+    assert session.generate_reply.call_count == 1 and router._awaiting == {}
+
+
+async def test_the_rescue_asks_once_the_agent_is_idle_again(router, quick_rescue):
+    session = _session()
+    session.agent_state = "speaking"
+    router.attach(session)
+    await router.handle_text("Jarvis, time?", "u-1")
+    asyncio.get_running_loop().call_later(0.02, setattr, session, "agent_state", "listening")
+    await _rescues(router)
+    assert session.calls[-1] == "generate_reply:None"
+
+
+async def test_a_rebuilt_session_gets_no_rescue_for_the_old_one(router, quick_rescue):
+    old = _session()
+    router.attach(old)
+    await router.handle_text("salam", "u-1")
+    router.attach(_session())  # a C-33 rebuild
+    await _rescues(router)
+    assert old.generate_reply.call_count == 1
+
+
+async def test_drain_never_waits_for_a_rescue_and_detach_cancels_it(router):
+    router.attach(_session())
+    await router.handle_text("salam", "u-1")
+    await asyncio.wait_for(router.drain(), 1)
+    (rescue,) = router._rescues  # still sleeping (12 s)
+    router.detach()
+    with pytest.raises(asyncio.CancelledError):
+        await rescue
+    assert router._awaiting == {}
