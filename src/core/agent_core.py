@@ -140,7 +140,7 @@ class BrainAssistant(Agent):
 
     def __init__(self, chat_ctx: llm.ChatContext | Any, llm_instance: llm.LLM | None = None,
                  tools: list[llm.FunctionTool] | None = None, current_date: str | None = None,
-                 current_city: str | None = None, user_id: str | None = None) -> None:
+                 current_city: str | None = None, user_id: str | None = None, probe: bool = False) -> None:
         """
         Initialize the BRAIN assistant with context, LLM, and tools.
         """
@@ -220,9 +220,11 @@ class BrainAssistant(Agent):
         self.last_vision_frame: bytes | None = None
         self.last_vision_frame_ts: float | None = None
 
+        # K-57 (C-39): a probe or canary job runs no task monitor and no vision loop
+        self._probe = bool(probe)
         # Start Advanced Task Monitor when constructed inside an active event loop. Local mode only:
         # with the VPS brain agent-svc checks due tasks (K-72).
-        if is_local_mode():
+        if is_local_mode() and not self._probe:
             try:
                 asyncio.get_running_loop()
                 self._run_back(self._task_monitor_loop())
@@ -532,6 +534,8 @@ class BrainAssistant(Agent):
         """
         self._active_session = session
         logger.info("Live AgentSession attached to BrainAssistant (User: %s)", self.user_id)
+        if getattr(self, "_probe", False):
+            return  # K-57 (C-39): no vision loop in a probe or canary job
         try:
             self.vision_handler.start_loop()
         except Exception as e:  # pylint: disable=broad-exception-caught

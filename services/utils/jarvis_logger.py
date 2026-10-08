@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from services.utils.jarvis_security import redact_secrets
+from services.utils.probe_context import bridge_suppressed  # K-57 (C-39)
 
 # Import config safely
 try:
@@ -846,6 +847,8 @@ class UIBridgeHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
         if getattr(self._local, "busy", False):
             return  # a record logged while one is being handled on this thread
+        if bridge_suppressed.get():
+            return  # K-57 (C-39): a probe or canary job's lines never reach the dashboard's log panel
         self._local.busy = True
         try:
             if self.wants(record):

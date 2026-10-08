@@ -677,6 +677,22 @@ async def test_the_voice_link_follows_every_session_and_closes_with_the_job(job,
 
 
 @pytest.mark.asyncio
+async def test_a_probe_room_job_is_isolated(job):
+    """C-39 (K-57): a jarvis-probe-<epoch> job runs no bridge listener and no background loop, and the suppression it
+    sets stays in its own context."""
+    from services.utils import probe_context
+
+    job.on_start = lambda agent: asyncio.get_running_loop().call_later(0.02, agent.request_end, "probe_done")
+    ctx = _FakeJobContext()
+    ctx.job = types.SimpleNamespace(id="AJ_probe1", room=types.SimpleNamespace(name="jarvis-probe-1791460000"))
+    # its own task, as livekit-agents runs an entrypoint (a context of its own)
+    await asyncio.wait_for(asyncio.ensure_future(job.ar.entrypoint(ctx)), 10)
+    assert job.listeners == [] and job.bg_listeners == [] and job.protectors == []
+    assert ctx.shutdowns == ["probe_done"] and len(job.sessions) == 1
+    assert probe_context.is_probe_job() is False  # the test's own context was never suppressed
+
+
+@pytest.mark.asyncio
 async def test_sessions_start_without_recording(job):
     """record=False: a rebuilt session must never trip livekit-agents' 'only one primary AgentSession' check."""
     job.on_start = lambda agent: asyncio.get_running_loop().call_later(0.02, agent.request_end, "paused_by_owner")

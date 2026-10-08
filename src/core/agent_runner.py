@@ -163,6 +163,7 @@ except (ImportError, ValueError):
 from src.core import gemini_resume_guard
 from src.core.jarvis_runtime import JarvisRuntime
 from src.core.voice_link import VoiceLink  # C-35; registers ui_command voice_take_over
+from services.utils.probe_context import bridge_suppressed, is_probe_room  # K-57 (C-39)
 from src.core.conversation_router import ConversationRouter, preview
 from src.core.vision_handler import append_chat_message, desktop_data_message
 
@@ -1226,6 +1227,17 @@ def _print_startup_banner() -> None:
     print("="*50 + "\n")
 
 
+def _job_room_name(ctx: Any) -> str:
+    """The job's room name, known before the connect (the job's own record, else ctx.room)."""
+    try:
+        name = ctx.job.room.name
+    except Exception:  # pylint: disable=broad-exception-caught  # a stand-in context without a job record
+        name = None
+    if not isinstance(name, str) or not name:
+        name = getattr(getattr(ctx, "room", None), "name", "")
+    return name if isinstance(name, str) else ""
+
+
 DEFAULT_REALTIME_MODEL = "models/gemini-2.5-flash-native-audio-latest"
 
 
@@ -1244,6 +1256,13 @@ async def entrypoint(ctx: agents.JobContext):
     'paused_by_owner', K-60). Teardown is bounded and ends in _end_job (jarvis.session 'closed'/'paused', job_end,
     ctx.shutdown); room handlers are registered once per job and removed at the end; each job runs its loops on its
     own task protector. A cancelled job is cleaned up but never shut down again."""
+    # K-57 (C-39): a probe or canary job (jarvis-probe-<epoch>, jarvis-canary-<epoch>) sets the suppression before
+    # it creates any task: nothing it does reaches the bridge, the UI log, memory or the identity file, and it runs
+    # no listener or background loop. The user's own job never sets it.
+    probe = is_probe_room(_job_room_name(ctx))
+    if probe:
+        bridge_suppressed.set(True)
+        logger.info("PROBE_JOB room=%s", _job_room_name(ctx))
     # K-29 backstop for _mask_cli_log_handler(): masks any root handler added since then.
     redact_root_handlers()
     # C-64: the UI log shipper of this process (once per process: a Windows job thread finds it running, a Linux
@@ -1326,6 +1345,7 @@ async def entrypoint(ctx: agents.JobContext):
             current_date=current_dt_res.get("formatted"),
             current_city=city,
             user_id=user_id,
+            probe=probe,
         )
         # C-23: the stop event comes with the assistant, before the UI listener can receive a pause_agent; the
         # runtime WATCHES it (never swaps it), so one that arrives before the runtime waits is never lost.
@@ -1498,10 +1518,10 @@ async def entrypoint(ctx: agents.JobContext):
                     return  # pylint: disable=useless-return
             runtime.room_on("data_received", on_data_received)  # removed by the runtime's teardown
 
-            # --- Speaker Identification Subscription ---
+            # --- Speaker Identification Subscription --- (never in a probe: it can enroll voice samples)
             def on_track_published(publication: rtc.TrackPublication, participant: rtc.RemoteParticipant,
                                    _assistant=assistant):
-                if publication.kind == rtc.TrackKind.KIND_AUDIO:
+                if publication.kind == rtc.TrackKind.KIND_AUDIO and not probe:
                     track(_process_user_audio(publication, _assistant))
             runtime.room_on("track_published", on_track_published)
 
@@ -1511,31 +1531,32 @@ async def entrypoint(ctx: agents.JobContext):
             # Subscribe to existing tracks
             for participant in ctx.room.remote_participants.values():
                 for publication in participant.track_publications.values():
-                    if publication.kind == rtc.TrackKind.KIND_AUDIO:
+                    if publication.kind == rtc.TrackKind.KIND_AUDIO and not probe:
                         track(_process_user_audio(publication, assistant))
 
-            # --- Location and PC vitals loops --- (local mode only, K-72 / K-40)
-            if local:
+            # --- Location and PC vitals loops --- (local mode only, K-72 / K-40; never in a probe, K-57)
+            if local and not probe:
                 track(_location_loop(notify_location))
                 track(_pc_vitals_loop(notify_pc_vitals))
 
-            _print_startup_banner()
             _start_loop_watchdog(ctx, track, job["plugin_manager"].running_tools)
-            protector = job_protector()
-            job["protector"] = runtime.protector = protector
-            # C-34: one bridge listener per job; the runtime's teardown acloses it (no reconnect afterwards)
-            listener = UIBridgeListener(assistant, runtime=runtime)
-            runtime.listener = listener
-            bg_tasks = await _start_background_tasks(job["session"], assistant, protector=protector,
-                                                     listener=listener)
-            for bt in bg_tasks:
-                active_tasks.add(bt)
-                bt.add_done_callback(active_tasks.discard)
+            if not probe:  # K-57: a probe runs no listener and no background loop
+                _print_startup_banner()
+                protector = job_protector()
+                job["protector"] = runtime.protector = protector
+                # C-34: one bridge listener per job; the runtime's teardown acloses it (no reconnect afterwards)
+                listener = UIBridgeListener(assistant, runtime=runtime)
+                runtime.listener = listener
+                bg_tasks = await _start_background_tasks(job["session"], assistant, protector=protector,
+                                                         listener=listener)
+                for bt in bg_tasks:
+                    active_tasks.add(bt)
+                    bt.add_done_callback(active_tasks.discard)
 
-            # C-78: the document index warms after a delay, so its walk never overlaps the start-up walks
-            rag_warm_delay = _rag_warm_delay()
-            if local and rag_warm_delay is not None:
-                track(_warm_document_index(rag_warm_delay))
+                # C-78: the document index warms after a delay, so its walk never overlaps the start-up walks
+                rag_warm_delay = _rag_warm_delay()
+                if local and rag_warm_delay is not None:
+                    track(_warm_document_index(rag_warm_delay))
 
             # C-23 (K-60): wait until the job is asked to end (pause_agent, C-62's shutdown_agent, a lost room, the
             # session error cap); 'stop' only interrupts speech and never sets this.

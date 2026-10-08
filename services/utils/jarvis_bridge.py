@@ -34,6 +34,12 @@ from typing_extensions import TypedDict
 from services.utils.jarvis_config import config
 from services.utils.jarvis_health import health_monitor
 from services.utils.jarvis_logger import setup_logger
+# K-57 (C-39): a probe or canary job's context sends nothing to the bridge (names re-exported here, as K-57 uses)
+from services.utils.probe_context import (  # noqa: F401  # pylint: disable=unused-import
+    bridge_suppressed,
+    is_probe_job,
+    is_probe_room,
+)
 from services.utils.jarvis_security import security_manager, sign_notify
 
 logger = setup_logger("JARVIS-BRIDGE")
@@ -669,6 +675,9 @@ async def _notify_with_answer(event_type: str, payload: Any, timeout: float = CO
     """One POST /notify that returns the bridge's parsed answer and raises on any failure (no retry queue: the
     ConfirmFlow broker does its own tries and reads the answer, K-14). Signed with the agent link v2 keys,
     else with the legacy headers, like notify_event."""
+    if bridge_suppressed.get():  # K-57: a probe never reaches the dashboard; with no UI a confirmation is denied
+        logger.debug("PROBE suppressed %s", event_type)
+        return {"status": "suppressed", "ui_clients": 0}
     if agent_link_v2():
         raw = encode_event(event_type, payload)
         headers = signed_headers(raw)
@@ -702,8 +711,12 @@ async def notify_event(event_type: str, payload: Any) -> None:
     Sends one event to the STONIX UI Bridge (POST /notify, C-NOTIFY-1); never raises. With the agent link
     v2 keys the body is signed as sent, and a failed critical type (CRITICAL_TYPES) goes to the retry queue
     (one WARNING a minute while that fails); critical types reach the bridge in the order they were sent.
-    Any other failure is logged at DEBUG. Without the keys the legacy headers are used, as before.
+    Any other failure is logged at DEBUG. Without the keys the legacy headers are used, as before. Inside a probe
+    or canary job (K-57) nothing is sent.
     """
+    if bridge_suppressed.get():
+        logger.debug("PROBE suppressed %s", event_type)
+        return
     if agent_link_v2():
         await _notify_signed(event_type, payload)
     else:

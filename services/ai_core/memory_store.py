@@ -21,6 +21,7 @@ from services.ai_core.jarvis_vector_memory import jarvis_vector_db
 from services.utils.jarvis_config import config
 from services.utils.jarvis_crypto import jarvis_crypto
 from services.utils.jarvis_logger import setup_logger
+from services.utils.probe_context import bridge_suppressed  # K-57 (C-39)
 
 logger = setup_logger("JARVIS-MEMORY-STORE")
 
@@ -141,6 +142,8 @@ class ConversationMemory:
 
     async def save_conversation(self, conversation: dict | object) -> bool:
         """Atomic save - returns True if successful. Updates LRU cache."""
+        if bridge_suppressed.get():
+            return False  # K-57: a probe or canary job never writes memory
         async with self.lock:
             try:
                 memory = await self._load_memory_unlocked()

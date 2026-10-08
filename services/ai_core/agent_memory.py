@@ -12,6 +12,7 @@ from typing import Any
 from services.ai_core.memory_store import ConversationMemory
 from services.utils.jarvis_bridge import notify_memory
 from services.utils.jarvis_logger import setup_logger
+from services.utils.probe_context import bridge_suppressed  # K-57 (C-39)
 
 logger = setup_logger("JARVIS-MEMORY-EXTRACTOR")
 
@@ -66,6 +67,8 @@ class MemoryExtractor:
         """
         Process chat context to extract and save new messages to memory.
         """
+        if bridge_suppressed.get():
+            return  # K-57 (C-39): a probe or canary job saves no memory
         if not self._audited:
             await self._audit_memory()
             self._audited = True

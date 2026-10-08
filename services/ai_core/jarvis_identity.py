@@ -9,6 +9,7 @@ from typing import TypedDict, cast
 
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
 from services.utils.jarvis_logger import setup_logger
+from services.utils.probe_context import bridge_suppressed  # K-57 (C-39)
 
 logger = setup_logger("JARVIS-IDENTITY")
 
@@ -59,6 +60,8 @@ class IdentityManager:
 
     async def save(self) -> None:
         """Persist data to disk asynchronously."""
+        if bridge_suppressed.get():
+            return  # K-57: a probe or canary job never writes the identity file
         async with self.lock:
             try:
                 os.makedirs(os.path.dirname(self.storage_path), exist_ok=True)
@@ -93,6 +96,8 @@ class IdentityManager:
 
     async def add_fact(self, fact: str) -> str:
         """Adds a new fact to the persistent memory with lock protection."""
+        if bridge_suppressed.get():
+            return "Probe job: nothing stored (K-57)."
         async with self.lock:
             facts = self.data["facts"]
             if fact not in facts:
@@ -103,6 +108,8 @@ class IdentityManager:
 
     async def update_relationship(self, person: str, info: str) -> str:
         """Updates relationship info for a specific person with lock protection."""
+        if bridge_suppressed.get():
+            return "Probe job: nothing stored (K-57)."
         async with self.lock:
             relationships = self.data["relationships"]
             relationships[person.lower()] = info
@@ -111,6 +118,8 @@ class IdentityManager:
 
     async def update_user_background(self, info: str) -> str:
         """Updates user background info with lock protection."""
+        if bridge_suppressed.get():
+            return "Probe job: nothing stored (K-57)."
         async with self.lock:
             self.data["user_background"] = info
             await self._save_internal()
@@ -118,6 +127,8 @@ class IdentityManager:
 
     async def update_sir_background(self, info: str) -> str:
         """Updates 'Sir' background info with lock protection."""
+        if bridge_suppressed.get():
+            return "Probe job: nothing stored (K-57)."
         async with self.lock:
             self.data["sir_background"] = info
             await self._save_internal()
@@ -125,6 +136,8 @@ class IdentityManager:
 
     async def update_sageer_background(self, info: str) -> str:
         """Updates Sageer's background info with lock protection."""
+        if bridge_suppressed.get():
+            return "Probe job: nothing stored (K-57)."
         async with self.lock:
             self.data["sageer_background"] = info
             await self._save_internal()
@@ -132,6 +145,8 @@ class IdentityManager:
 
     async def set_anna_mood(self, mood: str, is_upset: bool = False) -> str:
         """Updates Anna's emotional state with lock protection."""
+        if bridge_suppressed.get():
+            return "Probe job: nothing stored (K-57)."
         async with self.lock:
             self.data["anna_mood"] = mood
             self.data["is_upset"] = is_upset
@@ -140,6 +155,8 @@ class IdentityManager:
 
     async def _save_internal(self) -> None:
         """Internal save - MUST be called while holding the lock."""
+        if bridge_suppressed.get():
+            return  # K-57: a probe or canary job never writes the identity file
         try:
             os.makedirs(os.path.dirname(self.storage_path), exist_ok=True)
             def _write() -> None:
