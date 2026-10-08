@@ -61,32 +61,11 @@ async def set_reminder(time_str: str, message: str) -> str:
     logger.info("Setting reminder: %s at %s", message, time_str)
 
     now = datetime.now()
-    target_time = None
 
     try:
-        # Try relative time first (e.g., "10 minutes")
-        if "minute" in time_str.lower():
-            minutes = int(''.join(filter(str.isdigit, time_str)))
-            target_time = now + timedelta(minutes=minutes)
-        elif "hour" in time_str.lower():
-            hours = int(''.join(filter(str.isdigit, time_str)))
-            target_time = now + timedelta(hours=hours)
-        elif "second" in time_str.lower():
-            seconds = int(''.join(filter(str.isdigit, time_str)))
-            target_time = now + timedelta(seconds=seconds)
-        else:
-            # Try parsing absolute format (HH:MM or YYYY-MM-DD HH:MM)
-            # LLM usually provides simple HH:MM
-            try:
-                # Try HH:MM
-                parsed_time = datetime.strptime(time_str, "%H:%M").time()
-                target_time = datetime.combine(now.date(), parsed_time)
-                # If time has already passed today, assume it's for tomorrow
-                if target_time < now:
-                    target_time += timedelta(days=1)
-            except ValueError:
-                # Fallback for full timestamp
-                target_time = datetime.fromisoformat(time_str)
+        from services.automation.jarvis_task_manager import parse_when
+
+        target_time = parse_when(time_str, now=now)
 
         if not target_time:
             return (
