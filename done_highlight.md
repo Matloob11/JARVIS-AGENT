@@ -2116,3 +2116,25 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** pytest tests/tools/test_run_cmd_tool.py -q → 18 passed
 - **Commit:** 576776c · **Deploy:** no
 - **Doosre agent ke liye:** REQ-RESTART so worker picks the tighter risk callable
+
+
+### 🟡 🔁 [claude] C-34: UI command registry + job listener live · Agent worker restart (agent_ctl) · 2026-10-08 16:59 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 16756) band, naya pid 11964; health 200 (134.6 s me), ensure_room.py: WARNING NO AGENT in the room: the bridge reports in_flight after 90 s; it keeps retrying (backoff).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200, lekin room me agent ki tasdeeq nahi (ensure_room warning)
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 16:59 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] C-136 (incident) · LiveKit ke ghost workers ne naye worker tak job nahi pohanchne di · 2026-10-08 17:03 PKT
+- **Kya kiya:** 16:59 restart ke baad bridge ne 6 dispatch kiye, LiveKit ne har baar PC worker ke purane, adhe-khule registrations (din bhar ke link flaps) ko chuna aur 'context deadline exceeded' par fail hua; naya worker AW_mtbu... kabhi nahi chuna gaya, 4 min voice band. VPS par sirf jarvis-livekit restart kiya (project jarvis): ghosts mite, worker 14 s mein dobara juda, job 10 s mein active.
+- **Files:** —
+- **Verify:** LiveKit log: 'failed to assign job to worker' (ghost IDs) phir restart ke baad 'assigned job'; agent_ctl status: 1 job; RUNTIME_STARTED AJ_wDjSfFiTCGoS
+- **Commit:** — · **Deploy:** VPS jarvis-livekit restart 17:02 PKT
+- **Doosre agent ke liye:** finding section 11 mein; pakka hal C-136/C-23 follow-up.
+
+### ✅ 🔁 [claude] C-34 · UI commands registry se, (type,id) dedupe, har job ka ek listener · 2026-10-08 17:10 PKT
+- **Kya kiya:** agent_loops ke 14 purane commands ab registry handlers (rawaiya wahi); ek hi (type, id) dobara aaye to ek baar chalta hai; anjaan command par WARNING aur dashboard log; bridge ke forward kiye magar agent par na sambhale gaye types (start, settings_update, ...) chup-chap. Entrypoint har job ka apna bridge listener banata hai, background loops ko deta hai, aur JarvisRuntime job khatam hone par use aclose karta hai (phir reconnect nahi). test_chat_once ab 'Jarvis, 7 times 8?' bhej kar sirf theek ek reply par PASS deta hai (--expect 56).
+- **Files:** services/ai_core/agent_loops.py, src/core/agent_runner.py, deploy/windows-local/test_chat_once.py, tests (agent_loops, agent_runner, agent_ctl probe, conftest dedupe reset), docs/CONTRACTS.md v24
+- **Verify:** 408 tests green; live: probe PASS (ek user message, ek reply '...56 hote hain'); docker restart jarvis-bridge -> agent 3 s mein ek socket ke saath wapas (pehla probe session ke foran baad, memory 93% par, jawab nahi aaya: note)
+- **Commit:** `357230f` · **Deploy:** PC worker restart 16:59 🔁
+- **Doosre agent ke liye:** naye commands `register_ui_command` se apne module mein (K-60 v24).
