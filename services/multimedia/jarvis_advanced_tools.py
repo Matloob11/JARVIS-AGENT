@@ -41,12 +41,6 @@ _GMAIL_AUTH_HINT = (
 )
 
 
-def _safe_folder_basename(name: str, default: str) -> str:
-    base = os.path.basename((name or default).strip() or default)
-    cleaned = _UNSAFE_NAME_CHARS.sub("_", base).strip("._") or default
-    return cleaned[:120]
-
-
 def _smtp_host() -> str:
     raw = os.getenv("SMTP_HOST")
     if raw is None:
