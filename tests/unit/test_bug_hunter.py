@@ -4,9 +4,10 @@ LOG_FILE holds INFO and above since C-64, so the hunter decides by the record's 
 ERROR is posted, CRITICAL only with 'ERROR' in its first line or a traceback (C-112: 'SYSTEM OVERLOAD' stays out of
 chat), WARNING and INFO never, and never its own lines. Its read position survives the adaptation loop's cancel and
 restart, starts at the end of the file in a fresh process and follows a rotation through LOG_FILE.1.
-tool_investigate_recent_bugs reports the last error entries only.
+tool_investigate_recent_bugs reports error records only (grouped since C-82: tests/unit/test_bug_hunter_triage.py).
 
-Every log file lives in tmp_path; only the hunter's own asyncio.sleep is faked.
+Every log file lives in tmp_path; only the hunter's own asyncio.sleep is faked, and its LLM triage (C-82) finds no
+provider, as in a test run without keys.
 """
 # pylint: disable=protected-access,redefined-outer-name
 from __future__ import annotations
@@ -21,6 +22,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from services.ai_core.llm_text import LLMUnavailableError
 from services.utils import jarvis_bug_hunter as hunter
 from services.utils.jarvis_config import config
 
@@ -41,12 +43,14 @@ TRACEBACK = ["Traceback (most recent call last):\n", '  File "x.py", line 1, in 
 
 @pytest.fixture
 def log(monkeypatch, tmp_path):
-    """LOG_FILE in tmp_path, a fresh cursor (as in a new process) and a fresh throttle."""
+    """LOG_FILE in tmp_path, a fresh cursor (as in a new process) and a fresh throttle. The triage's llm_text call
+    fails at once, so no test reaches a provider even when a live-probe run keeps the real keys (C-82)."""
     path = tmp_path / "jarvis.log"
     path.write_text("", encoding="utf-8")
     monkeypatch.setattr(hunter, "LOG_FILE", path)
     monkeypatch.setattr(hunter, "_cursor", None)
     monkeypatch.setattr(hunter, "_throttle", hunter.ErrorThrottle())
+    monkeypatch.setattr(hunter, "generate_text", AsyncMock(side_effect=LLMUnavailableError(["test: no provider"])))
     return path
 
 
