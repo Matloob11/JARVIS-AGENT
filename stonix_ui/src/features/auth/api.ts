@@ -32,7 +32,7 @@ async function parseJson(res: Response): Promise<Record<string, unknown>> {
   }
 }
 
-function mapAuthError(res: Response, body: Record<string, unknown>): AuthApiError {
+export function mapAuthError(res: Response, body: Record<string, unknown>): AuthApiError {
   if (res.status === 401) {
     return new AuthApiError('Password ya code ghalat hai', 401);
   }
@@ -47,6 +47,12 @@ function mapAuthError(res: Response, body: Record<string, unknown>): AuthApiErro
           : 60;
     const seconds = Number.isFinite(retryAfter) ? retryAfter : 60;
     return new AuthApiError(`Bohat zyada koshishen - ${seconds} s baad`, 429, seconds);
+  }
+  if (res.status === 503 && body.error === 'owner_not_enrolled') {
+    return new AuthApiError(
+      'Owner login set nahi. Apne terminal mein chalao: .venv_312/Scripts/python.exe scripts/ops/set_owner_credentials.py --target local',
+      503,
+    );
   }
   if (res.status === 503) {
     return new AuthApiError('Login abhi set nahi hua (owner enroll karein)', 503);
