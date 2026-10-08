@@ -123,7 +123,7 @@ export function voiceStatusLine(state: VoiceUiState, key: PersonaKey): string {
     case 'offline':
       return 'Voice unavailable';
     case 'offline-other-device':
-      return 'Voice is on another device';
+      return 'Voice is active on another device';
     case 'joining':
       return 'Joining voice…';
     case 'agent-absent':

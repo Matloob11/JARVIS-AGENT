@@ -3,6 +3,7 @@ import { Bell, Mic, ThumbsDown, ThumbsUp } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { ChatMessage, LiveCaption } from '@/features/chat/types';
 import { SafeChatMarkdown } from '@/features/chat/SafeChatMarkdown';
+import { isTechnicalDump, TECHNICAL_SUMMARY } from '@/features/chat/messageDisplay';
 import { LogoRing } from '@/shared/ui/LogoRing';
 import {
   asPersonaKey,
@@ -65,6 +66,28 @@ function sourceMeta(source?: ChatMessage['source']) {
     return { icon: Bell, sr: 'from a reminder', show: true };
   }
   return { icon: null, sr: 'typed', show: false };
+}
+
+function ChatBody({ text }: { text: string }) {
+  const dump = isTechnicalDump(text);
+  const [open, setOpen] = useState(false);
+  if (!dump) {
+    return <SafeChatMarkdown text={text} />;
+  }
+  return (
+    <div className="chat-tech" data-testid="chat-tech-dump">
+      <p className="chat-tech__summary">{TECHNICAL_SUMMARY}</p>
+      <button
+        type="button"
+        className="chat-tech__toggle"
+        aria-expanded={open}
+        onClick={() => setOpen(value => !value)}
+      >
+        {open ? 'Hide details' : 'Show details'}
+      </button>
+      {open ? <pre className="chat-tech__details">{text}</pre> : null}
+    </div>
+  );
 }
 
 function lastWords(text: string, count: number): string {
@@ -351,7 +374,7 @@ const MessageGroup = ({
                 key={msg.id}
                 className={`chat-msg-text${index > 0 ? ' chat-msg-row--grouped' : ''}`}
               >
-                <SafeChatMarkdown text={msg.text} />
+                <ChatBody text={msg.text} />
               </div>
             ))}
           </div>
@@ -395,7 +418,7 @@ const MessageBubble = ({
         data-id={message.id}
       >
         <div className="chat-msg-bubble">
-          <SafeChatMarkdown text={message.text} />
+          <ChatBody text={message.text} />
         </div>
       </motion.div>
     );
@@ -429,19 +452,23 @@ const MessageBubble = ({
         ) : null}
         <div className="chat-msg-bubble">
           <div className="chat-msg-text">
-            <SafeChatMarkdown
-              text={message.text}
-              suffix={
-                <>
-                  {meta.show && SrcIcon ? (
-                    <span className="chat-msg-src">
-                      <SrcIcon size={12} aria-hidden />
-                    </span>
-                  ) : null}
-                  <span className="sr-only"> ({meta.sr})</span>
-                </>
-              }
-            />
+            {isTechnicalDump(message.text) ? (
+              <ChatBody text={message.text} />
+            ) : (
+              <SafeChatMarkdown
+                text={message.text}
+                suffix={
+                  <>
+                    {meta.show && SrcIcon ? (
+                      <span className="chat-msg-src">
+                        <SrcIcon size={12} aria-hidden />
+                      </span>
+                    ) : null}
+                    <span className="sr-only"> ({meta.sr})</span>
+                  </>
+                }
+              />
+            )}
           </div>
           {isUser ? (
             <span className="chat-msg-time">{formatMessageTime(message.ts)}</span>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import { bridgeUrl } from '@/shared/config/runtime';
 
 export type VortexStatusSnapshot = {
@@ -100,34 +100,59 @@ export async function pullVortexStatus(): Promise<VortexStatusSnapshot | null> {
   }
 }
 
+let shared: VortexStatusSnapshot = DEFAULT;
+const statusListeners = new Set<() => void>();
+let pollTimer: number | null = null;
+let pollUsers = 0;
+
+function emitStatus() {
+  for (const listener of statusListeners) listener();
+}
+
+async function refreshSharedStatus() {
+  if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+  const next = await pullVortexStatus();
+  if (!next) return;
+  shared = next;
+  emitStatus();
+}
+
+function ensureStatusPoll() {
+  if (pollTimer != null) return;
+  void refreshSharedStatus();
+  pollTimer = window.setInterval(() => void refreshSharedStatus(), 30_000);
+  document.addEventListener('visibilitychange', refreshSharedStatus);
+}
+
+function releaseStatusPoll() {
+  pollUsers = Math.max(0, pollUsers - 1);
+  if (pollUsers > 0 || pollTimer == null) return;
+  window.clearInterval(pollTimer);
+  pollTimer = null;
+  document.removeEventListener('visibilitychange', refreshSharedStatus);
+}
+
+function subscribeStatus(listener: () => void) {
+  statusListeners.add(listener);
+  return () => statusListeners.delete(listener);
+}
+
+function getSharedStatus() {
+  return shared;
+}
+
+/** One poll for every chip and stats tile so the device count cannot drift. */
 export function useVortexStatusPoll(enabled: boolean): VortexStatusSnapshot {
-  const [snapshot, setSnapshot] = useState<VortexStatusSnapshot>(DEFAULT);
+  const snapshot = useSyncExternalStore(subscribeStatus, getSharedStatus, getSharedStatus);
 
   useEffect(() => {
     if (!enabled) return undefined;
-
-    let cancelled = false;
-
-    const pull = async () => {
-      if (document.visibilityState !== 'visible') return;
-      const next = await pullVortexStatus();
-      if (!cancelled && next) setSnapshot(next);
-    };
-
-    void pull();
-    const timer = window.setInterval(() => void pull(), 30_000);
-    const onVis = () => {
-      if (document.visibilityState === 'visible') void pull();
-    };
-    document.addEventListener('visibilitychange', onVis);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-      document.removeEventListener('visibilitychange', onVis);
-    };
+    pollUsers += 1;
+    ensureStatusPoll();
+    return () => releaseStatusPoll();
   }, [enabled]);
 
-  return snapshot;
+  return enabled ? snapshot : DEFAULT;
 }
 
 export function connectedDeviceCount(

@@ -17,6 +17,14 @@ const PAGE_SUBTITLES: Record<AppRoute['page'], string> = {
   chat: 'Talk or type to JARVIS & ANNA.',
 };
 
+const PAGE_SUBTITLES_SHORT: Record<AppRoute['page'], string> = {
+  overview: 'Control and automate with JARVIS.',
+  agents: 'Personas, voice and devices.',
+  activity: 'Events, logs, tasks and notes.',
+  settings: 'Session, voice and safety.',
+  chat: 'Talk or type.',
+};
+
 function greetingLine(now: Date): string {
   const h = now.getHours();
   if (h < 12) return 'Good morning,';
@@ -62,7 +70,8 @@ export function PageHeader({
   const [greeting, setGreeting] = useState(() => greetingLine(new Date()));
 
   const pageTitle = routePageTitle(route);
-  const subtitle = PAGE_SUBTITLES[route.page];
+  const fullSubtitle = PAGE_SUBTITLES[route.page];
+  const subtitle = compact || layout === 'ph' ? PAGE_SUBTITLES_SHORT[route.page] : fullSubtitle;
   const sheet = layout === 'ph';
 
   useEffect(() => {
@@ -105,7 +114,9 @@ export function PageHeader({
       <h1 id="page-title" tabIndex={-1} data-testid="page-title" className="page-header-title">
         {pageTitle}
       </h1>
-      <p className="page-header-sub">{subtitle}</p>
+      <p className="page-header-sub" title={fullSubtitle}>
+        {subtitle}
+      </p>
 
       <StatusPills
         bridgeConnected={bridgeConnected}

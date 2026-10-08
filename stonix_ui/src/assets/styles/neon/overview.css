@@ -269,7 +269,8 @@
 
 .overview-activity-row {
   position: relative;
-  height: clamp(46px, calc(54 * var(--vu, 1px)), 54px);
+  min-height: clamp(46px, calc(54 * var(--vu, 1px)), 54px);
+  height: auto;
 }
 
 .overview-activity-row__dot {
@@ -310,22 +311,26 @@
 }
 
 .overview-activity-row__link {
-  display: block;
-  height: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  align-items: start;
+  min-height: 46px;
+  padding: 2px 16px 6px 62px;
   text-decoration: none;
   color: inherit;
 }
 
 .overview-activity-row__title {
-  position: absolute;
-  left: 62px;
-  top: 1px;
+  grid-column: 1;
+  grid-row: 1;
   font: 500 clamp(13.5px, 1.5vh, 14.25px) / 20px var(--font-med);
   color: var(--t1, #f4f6f9);
-  white-space: nowrap;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: calc(100% - 120px);
+  white-space: nowrap;
 }
 
 .overview-activity-row__repeat {
@@ -335,24 +340,23 @@
 }
 
 .overview-activity-row__sub {
-  position: absolute;
-  left: 63px;
-  top: 21px;
+  grid-column: 1 / -1;
+  grid-row: 2;
   font: 400 clamp(13px, 1.5vh, 14.25px) / 20px var(--font-ui);
   color: var(--t-act-sub, #8794b4);
-  white-space: nowrap;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: calc(100% - 130px);
+  white-space: nowrap;
 }
 
 .overview-activity-row__time {
-  position: absolute;
-  right: 20px;
-  top: 3px;
+  grid-column: 2;
+  grid-row: 1;
   font: 400 clamp(12.5px, 1.48vh, 14px) / 20px var(--font-ui);
   font-variant-numeric: tabular-nums;
   color: var(--t-time, #7484aa);
+  white-space: nowrap;
 }
 
 .overview-legacy-strip {
@@ -951,9 +955,25 @@
 
   .overview-hero {
     height: auto;
-    aspect-ratio: 830 / 474;
-    max-height: min(420px, 55vh);
+    aspect-ratio: auto;
+    max-height: none;
+    min-height: 280px;
     width: 100%;
+    overflow: visible;
+    padding-bottom: 8px;
+  }
+
+  .overview-page {
+    padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .overview-hero__btns.t {
+    position: relative;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    top: auto;
+    margin: 12px;
   }
 }
 

@@ -42,13 +42,14 @@ function pushActivityRow(
 ) {
   const ts = row.ts ?? Date.now();
   const top = rows[0];
-  if (
+  const sameBurst =
     top &&
     top.kind === row.kind &&
+    top.level === row.level &&
     top.title === row.title &&
-    top.subtitle === row.subtitle &&
-    ts - top.ts <= 60_000
-  ) {
+    ts - top.ts <= (row.level === 'warn' || row.level === 'error' ? 5 * 60_000 : 60_000) &&
+    (top.subtitle === row.subtitle || row.level === 'warn' || row.level === 'error');
+  if (sameBurst && top) {
     top.repeat = (top.repeat ?? 1) + 1;
     top.ts = ts;
     notify();

@@ -27,14 +27,21 @@ export type AlertsCardProps = {
 };
 
 export function AlertsCard({ systemAlerts, logs }: AlertsCardProps) {
-  const logAlerts = useMemo(
-    () =>
-      logs
-        .map(log => ({ log, level: resolveLogLevel(log) }))
-        .filter((entry): entry is { log: VortexLog; level: string } => entry.level != null)
-        .slice(0, 20),
-    [logs],
-  );
+  const logAlerts = useMemo(() => {
+    const collapsed: { log: VortexLog; level: string; count: number }[] = [];
+    for (const log of logs) {
+      const level = resolveLogLevel(log);
+      if (!level) continue;
+      const text = log.text ?? '';
+      const prev = collapsed[collapsed.length - 1];
+      if (prev && prev.level === level && (prev.log.text ?? '') === text) {
+        prev.count += 1;
+        continue;
+      }
+      collapsed.push({ log, level, count: 1 });
+    }
+    return collapsed.slice(0, 8);
+  }, [logs]);
 
   const hasAlerts = systemAlerts.length > 0 || logAlerts.length > 0;
 
@@ -81,7 +88,7 @@ export function AlertsCard({ systemAlerts, logs }: AlertsCardProps) {
                 </div>
               );
             })}
-            {logAlerts.slice(0, 10).map(({ log, level }, index) => (
+            {logAlerts.map(({ log, level, count }, index) => (
               <div
                 key={`${log.timestamp}-${index}`}
                 className="activity-alert-row"
@@ -92,6 +99,7 @@ export function AlertsCard({ systemAlerts, logs }: AlertsCardProps) {
                 <div className="min-w-0">
                   <span className="activity-alert-row__sev">{level}</span>
                   <span>{log.text}</span>
+                  {count > 1 ? <span className="activity-alert-row__meta"> ×{count}</span> : null}
                 </div>
               </div>
             ))}

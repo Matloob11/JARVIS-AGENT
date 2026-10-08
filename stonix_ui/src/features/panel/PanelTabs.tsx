@@ -25,6 +25,7 @@ const PanelTabs = ({ active, approvalsWaiting, onChange }: PanelTabsProps) => (
           type="button"
           className={isActive ? 'panel-tab panel-tab--active' : 'panel-tab'}
           aria-pressed={isActive}
+          data-testid={`panel-tab-${tab.id}`}
           data-active={isActive ? 'true' : 'false'}
           onClick={() => onChange(tab.id)}
         >

@@ -31,7 +31,11 @@
 .agents-page > .agents-grid2,
 .agents-page > .agents-devices-mount,
 .agents-page > .agents-machines-mount {
-  margin-bottom: 16px;
+  margin-bottom: 22px;
+}
+
+.agents-page .n-card {
+  box-shadow: none;
 }
 
 .agents-grid2 {

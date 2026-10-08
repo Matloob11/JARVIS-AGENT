@@ -659,6 +659,33 @@
   hyphens: none;
 }
 
+.chat-tech__summary {
+  margin: 0 0 6px;
+  color: var(--t2);
+}
+
+.chat-tech__toggle {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--info, #65b7fa);
+  font: 600 13px/18px var(--font-ui);
+  cursor: pointer;
+}
+
+.chat-tech__details {
+  margin: 8px 0 0;
+  max-height: 180px;
+  overflow: auto;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.28);
+  color: var(--t4);
+  font: 12px/16px ui-monospace, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .chat-msg-md {
   display: block;
   white-space: pre-wrap;
@@ -856,12 +883,18 @@ html[data-reference-frame] .chat-status-hint {
   }
 }
 
+.tools-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
 .tools-tab__workspaces {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 4px;
 }
 
 .tools-tab__workspaces-label {

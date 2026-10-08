@@ -293,15 +293,15 @@ const VoiceStatusPill = forwardRef<
   const voiceName = getPersona(settings.persona).voice;
   const e2eTick = useE2EVoiceTick();
 
-  const copy = useMemo(
-    () => deriveVoicePillCopy(liveKit, status, agentMuted, isUserSpeaking, settings.persona),
-    [liveKit, status, agentMuted, isUserSpeaking, settings.persona, e2eTick],
-  );
+  const copy = useMemo(() => {
+    void e2eTick;
+    return deriveVoicePillCopy(liveKit, status, agentMuted, isUserSpeaking, settings.persona);
+  }, [liveKit, status, agentMuted, isUserSpeaking, settings.persona, e2eTick]);
 
   const Icon =
     copy.visual === 'offline' || copy.visual === 'agent-absent' || copy.visual === 'audio-blocked'
       ? Volume2
-      : copy.visual === 'mic-off' || copy.visual === 'muted'
+      : copy.visual === 'muted'
         ? MicOff
         : Mic;
 

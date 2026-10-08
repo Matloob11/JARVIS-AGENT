@@ -265,6 +265,7 @@ export function SettingsPage({
   const settings = useSettings();
   const mainRef = useRef<HTMLDivElement>(null);
   const indexRef = useRef<HTMLElement>(null);
+  const scrollLock = useRef(false);
   const [activeSection, setActiveSection] = useState(SECTIONS[0].id);
   const [indexFade, setIndexFade] = useState<'none' | 'left' | 'right' | 'both'>('none');
   const [notifPerm, setNotifPerm] = useState<NotificationPermission>(() =>
@@ -290,8 +291,13 @@ export function SettingsPage({
   const scrollToSection = useCallback((sectionId: string) => {
     const root = mainRef.current;
     if (!root) return;
+    setActiveSection(sectionId);
+    scrollLock.current = true;
     const target = root.querySelector(`[data-settings-section="${sectionId}"]`);
     target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    window.setTimeout(() => {
+      scrollLock.current = false;
+    }, 700);
   }, []);
 
   useEffect(() => {
@@ -307,14 +313,23 @@ export function SettingsPage({
     if (!sections.length) return;
 
     const observer = new IntersectionObserver(
-      entries => {
-        const visible = entries
-          .filter(e => e.isIntersecting)
-          .sort((a, b) => b.intersectionRatio - a.intersectionRatio);
-        const top = visible[0]?.target.getAttribute('data-settings-section');
-        if (top) setActiveSection(top);
+      () => {
+        if (scrollLock.current) return;
+        const rootTop = root.getBoundingClientRect().top;
+        let bestId: string | null = null;
+        let best = Number.POSITIVE_INFINITY;
+        sections.forEach(el => {
+          const rect = el.getBoundingClientRect();
+          if (rect.bottom < rootTop + 24) return;
+          const dist = Math.abs(rect.top - rootTop);
+          if (dist < best) {
+            best = dist;
+            bestId = el.getAttribute('data-settings-section');
+          }
+        });
+        if (bestId) setActiveSection(bestId);
       },
-      { root, rootMargin: '-20% 0px -55% 0px', threshold: [0, 0.25, 0.5, 1] },
+      { root, rootMargin: '0px', threshold: [0, 0.25, 0.5, 1] },
     );
 
     sections.forEach(el => observer.observe(el));

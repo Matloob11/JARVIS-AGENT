@@ -2278,3 +2278,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** tests 805 green; live probe: switch ka confirmation, phir ANNA ke andaz mein jawab aur get_weather, bina Jarvis ke typed jawab; log INSTRUCTIONS_UPDATE sent=deferred phir sent=live restart=fresh; Session sync failed 0
 - **Commit:** `fbf8920`, `b230879` · **Deploy:** PC worker restarts 22:03, 22:14 🔁
 - **Doosre agent ke liye:** handoff dekho; ANNA ke lambe jawab native-audio ki raftar se aate hain (C-88).
+
+### ✅ [cursor] UI-CLEAN · Neon dashboard dirty-feel cleanup · 2026-10-08 23:05 PKT
+- **Kya kiya:** Chat raw errors ab short line + Show details. Activity warnings consecutive xN. Voice Ready slash-mic hata. Recent Activity grid, phone hero bina inner scroll. Device count ek shared poll. Settings highlight scroll se match. Phone Chat sheet par Approvals/Tools tabs. Header short subtitle.
+- **Files:** stonix_ui chat/panel/activity/shell/settings/overview CSS, assets/qa_live_visual_audit.py, plan.md section 11
+- **Verify:** tsc --noEmit pass; eslint changed files pass. Live visual audit needs owner login (nginx basic auth).
+- **Commit:** (this commit) · **Deploy:** no — REQ-DEPLOY frontend
+- **Doosre agent ke liye:** section 11 REQ: raw stacks aur Load Adaptation flood source par rate-limit; frontend deploy.
