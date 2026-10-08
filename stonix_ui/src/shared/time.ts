@@ -1,4 +1,4 @@
-/** Human-readable relative duration (D11): seconds through days. */
+/** Human-readable relative duration (D11): seconds through years. */
 export function formatRelativeSeconds(totalSeconds: number): string {
   const s = Math.max(0, Math.floor(totalSeconds));
   if (s < 60) return `${s}s`;
@@ -7,7 +7,11 @@ export function formatRelativeSeconds(totalSeconds: number): string {
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours} h`;
   const days = Math.floor(hours / 24);
-  return `${days} d`;
+  if (days < 60) return `${days} d`;
+  const months = Math.floor(days / 30);
+  if (months < 24) return `${months} mo`;
+  const years = Math.floor(days / 365);
+  return `${years} y`;
 }
 
 /** "just now" or "<formatRelativeSeconds> ago" for vitals / last-seen lines. */

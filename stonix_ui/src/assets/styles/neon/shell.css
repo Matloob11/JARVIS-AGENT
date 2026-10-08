@@ -542,9 +542,12 @@ body {
   color: var(--t4);
   font-family: var(--font-ui);
   font-weight: 400;
-  white-space: nowrap;
+  white-space: normal;
   overflow: hidden;
-  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .header-pills {

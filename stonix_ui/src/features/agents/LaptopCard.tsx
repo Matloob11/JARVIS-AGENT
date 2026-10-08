@@ -12,15 +12,14 @@ import {
 } from '@/features/status/desktopStatusStore';
 import { deriveLaptopChipPresentation } from '@/features/status/laptopChipPresentation';
 import { StopDesktopButton } from '@/features/controls/StopDesktopButton';
+import { formatRelativeAgo } from '@/shared/time';
 
 function formatLocationUpdated(ts: unknown, nowMs: number): string {
   const ms = toEpochMs(ts);
   if (ms === undefined) return '';
   const sec = Math.max(0, Math.floor((nowMs - ms) / 1000));
   if (sec < 60) return 'updated just now';
-  const min = Math.floor(sec / 60);
-  if (min === 1) return 'updated 1 min ago';
-  return `updated ${min} min ago`;
+  return `updated ${formatRelativeAgo(sec)}`;
 }
 
 function formatCoords(lat: number, lng: number): string {

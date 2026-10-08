@@ -323,9 +323,6 @@ const HeroCard = ({
         data-helper={isHelper ? 'true' : undefined}
       >
         {helper}
-        {isHelper && voice.error && ui.state === 'offline' ? (
-          <span className="overview-hero__helper-err"> Voice: {voice.error}</span>
-        ) : null}
       </p>
     </article>
   );

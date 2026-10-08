@@ -87,10 +87,23 @@
 .n-dlg-ft {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
   flex-wrap: wrap;
   gap: 10px;
   padding: 14px 22px 20px;
   border-top: 1px solid var(--n-div, rgba(53, 67, 105, 0.45));
+}
+
+.n-dlg-ft .primary-button {
+  width: auto;
+  flex: 0 0 auto;
+  min-width: 96px;
+  padding-inline: 18px;
+}
+
+.n-dlg-ft .n-btn {
+  flex: 0 0 auto;
+  min-width: 88px;
 }
 
 .sim-provider-banner {

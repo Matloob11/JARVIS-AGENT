@@ -50,12 +50,16 @@
   position: relative;
   display: flex;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
   gap: 4px;
   padding: 6px;
+  padding-inline-end: 28px;
   border-radius: 13px;
   background: #0d1529;
-  scrollbar-width: none;
+  scrollbar-width: thin;
   z-index: 5;
+  scroll-snap-type: x proximity;
 }
 
 .set-index::-webkit-scrollbar {
@@ -132,6 +136,7 @@
   font:
     400 14px/20px var(--font-ui);
   white-space: nowrap;
+  scroll-snap-align: start;
 }
 
 @media (min-width: 860px) {

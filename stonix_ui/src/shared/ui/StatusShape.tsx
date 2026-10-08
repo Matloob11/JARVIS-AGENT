@@ -43,7 +43,9 @@ export function StatusShape({ s, label, hideLabel, big, className }: StatusShape
   );
 
   const word: ReactNode = hideLabel ? (
-    <span className="vh">{label}</span>
+    <span className="vh" aria-hidden="true">
+      {label}
+    </span>
   ) : (
     <span>{label}</span>
   );

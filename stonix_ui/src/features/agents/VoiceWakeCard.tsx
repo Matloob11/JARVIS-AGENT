@@ -83,7 +83,7 @@ export function VoiceWakeCard() {
       >
         <AgentsRow
           title="Voice room"
-          sub={identity}
+          sub={room.pill === 'ok' ? identity : room.text}
           right={
             <Pill tone={room.pill} status={room.pill === 'ok' ? 'ok' : room.pill === 'off' ? 'busy' : room.pill}>
               {room.text}
@@ -95,7 +95,9 @@ export function VoiceWakeCard() {
           sub={
             agentMuted
               ? 'Muted. Typed chat keeps working'
-              : 'Hears the room through your mic'
+              : liveKit.voiceUnavailable || liveKit.roomState !== 'connected'
+                ? 'Agent-side mute. Voice room offline — typed chat still works'
+                : 'Hears the room through your mic'
           }
           right={
             <Switch

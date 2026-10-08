@@ -100,15 +100,15 @@ Priority: P0 broken or unsafe, P1 fragile or misleading, P2 clutter, P3 polish.
 - **Fix:** already in `orbRenderer` / `OrbCanvas`: `document.hidden` and IntersectionObserver stop the loop; `prefers-reduced-motion: reduce` draws static. No new animation surfaces. Confirmed by code review + a11y reduced-motion walk (H08).
 - **Verify:** grep `orbOnScreen` / `reducedMotion` in `orbRenderer.ts`; a11y overview reduced-motion case green.
 
-### UI-H15 — Flake check (P1, M) — PARTIAL
+### UI-H15 — Flake check (P1, M) — PARTIAL (layout960 + enroll fixed)
 
-- **Problem:** e2e not run 3 times.
-- **Fix:** run 1 of chromium (grep-invert gates/visual/perf/a11y): **235 passed, 7 failed, 20 skipped**. Persona failures were H02 fallout (tests expected flip on `settings_sync`); fixed helpers to emit `persona_update`. Remaining open: `layout.spec` 960×800 product overview; voice enrollment success (`voice-settings` / `voiceid`). Runs 2–3 not started this session.
-- **Verify:** persona-copy / persona-switch / presence anna·offline re-run green after fix.
+- **Problem:** e2e not run 3 times; layout 960 helper/buttons overlap; voice enroll success lost when late progress events reset phase.
+- **Fix (2026-10-09):** phone/≤1023 hero helper sits above buttons (no overlap); enroll Commit/Cancel no longer `icon-button` w-8; progress ignores updates after done; mock clears enroll timers on commit. Product overview layout **7/7** incl. 960×800; voice-settings + voiceid enroll success green. Runs 2–3 of full suite still open.
+- **Verify:** `npx playwright test tests/e2e/layout.spec.ts -g "product overview layout"` → 7 passed; enroll specs green.
 
 ## Execution order
 
-H01–H09, H11–H12, H14 done. Still TODO: H10, H13, H15. Full section 6 gates (e2e suite ×3, visual, perf, refdiff, electron, `build:prod`) are **not** claimed green; axe suite is green this session.
+H01–H09, H11–H12, H14 done; H15 layout/enroll blockers fixed. Still TODO: H10, H13, H15 full e2e×3. Full section 6 gates (e2e suite ×3, visual, perf, refdiff, electron, `build:prod`) are **not** claimed green; axe suite is green this session.
 
 ## Final report
 

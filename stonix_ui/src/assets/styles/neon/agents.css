@@ -88,6 +88,8 @@
   margin-top: 2px;
   font: 400 13px/18px var(--font-ui);
   color: var(--t4);
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .agents-persona__action {
@@ -118,6 +120,8 @@
   margin-top: 2px;
   font: 400 13px/18px var(--font-ui);
   color: var(--t4);
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .agents-actions {

@@ -70,10 +70,17 @@ function parseResult(raw: unknown): EnrollResult {
     return { ok: false, error: 'Invalid enrollment response' };
   }
   const data = raw as Record<string, unknown>;
+  const scoreRaw = data.self_score ?? data.selfScore;
+  const selfScore =
+    typeof scoreRaw === 'number'
+      ? scoreRaw
+      : typeof scoreRaw === 'string' && scoreRaw.trim() !== '' && Number.isFinite(Number(scoreRaw))
+        ? Number(scoreRaw)
+        : undefined;
   return {
     ok: data.ok === true,
     samples: typeof data.samples === 'number' ? data.samples : undefined,
-    selfScore: typeof data.self_score === 'number' ? data.self_score : undefined,
+    selfScore,
     error: data.error != null ? String(data.error) : undefined,
     message: data.message != null ? String(data.message) : undefined,
   };
@@ -136,7 +143,9 @@ const VoiceEnrollDialog = ({ open, onClose }: VoiceEnrollDialogProps) => {
     const parsed = parseProgress(payload);
     if (!parsed) return;
     setProgress(parsed);
-    setPhase('capturing');
+    setPhase(prev =>
+      prev === 'done' || prev === 'error' || prev === 'timeout' ? prev : 'capturing',
+    );
   });
 
   useSocketEvent('voice_id_status', (payload: unknown) => {
@@ -147,7 +156,9 @@ const VoiceEnrollDialog = ({ open, onClose }: VoiceEnrollDialogProps) => {
     const parsed = parseProgress(data);
     if (!parsed) return;
     setProgress(parsed);
-    setPhase('capturing');
+    setPhase(prev =>
+      prev === 'done' || prev === 'error' || prev === 'timeout' ? prev : 'capturing',
+    );
   });
 
   useSocketEvent('voice_enroll_result', (payload: unknown) => {
@@ -195,6 +206,7 @@ const VoiceEnrollDialog = ({ open, onClose }: VoiceEnrollDialogProps) => {
   };
 
   const handleCommit = () => {
+    if (phase !== 'capturing') return;
     sendEnroll('commit');
   };
 
@@ -202,7 +214,10 @@ const VoiceEnrollDialog = ({ open, onClose }: VoiceEnrollDialogProps) => {
     !agentMuted &&
     !voiceConnecting &&
     phase !== 'capturing' &&
+    phase !== 'done' &&
     (mockEnrollmentPath || (voiceConnected && voice.micEnabled));
+
+  const canCommit = phase === 'capturing';
 
   const showMicLevel = mockEnrollmentPath || (voiceConnected && voice.micEnabled);
   const errorDetail = result?.error || result?.message || 'unknown error';
@@ -245,7 +260,11 @@ const VoiceEnrollDialog = ({ open, onClose }: VoiceEnrollDialogProps) => {
         ) : (
           <ul className="voice-enroll-prereq">
             <li data-ok={voiceConnected || mockEnrollmentPath ? 'true' : 'false'}>
-              <StatusShape s={voiceConnected || mockEnrollmentPath ? 'ok' : 'warn'} label="Voice room joined" hideLabel />
+              <StatusShape
+                s={voiceConnected || mockEnrollmentPath ? 'ok' : 'warn'}
+                label="Voice room joined"
+                hideLabel
+              />
               <span>Voice room joined</span>
             </li>
             {!voice.micEnabled && !mockEnrollmentPath ? (
@@ -339,7 +358,7 @@ const VoiceEnrollDialog = ({ open, onClose }: VoiceEnrollDialogProps) => {
       <div className="n-dlg-ft">
         <button
           type="button"
-          className="primary-button"
+          className={canCommit ? 'n-btn sm' : 'primary-button'}
           data-testid="voice-enroll-start"
           data-dialog-autofocus={canStart ? true : undefined}
           disabled={!canStart}
@@ -349,14 +368,19 @@ const VoiceEnrollDialog = ({ open, onClose }: VoiceEnrollDialogProps) => {
         </button>
         <button
           type="button"
-          className="icon-button"
+          className={canCommit ? 'primary-button' : 'n-btn sm'}
           data-testid="voice-enroll-commit"
-          disabled={phase !== 'capturing'}
+          disabled={!canCommit}
           onClick={handleCommit}
         >
           Commit
         </button>
-        <button type="button" className="icon-button" onClick={handleClose}>
+        <button
+          type="button"
+          className="n-btn sm quiet"
+          data-testid="voice-enroll-cancel"
+          onClick={handleClose}
+        >
           {phase === 'capturing' ? 'Cancel' : 'Close'}
         </button>
       </div>

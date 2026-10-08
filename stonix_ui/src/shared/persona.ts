@@ -187,9 +187,9 @@ export function voiceHelperLine(state: VoiceUiState, key: PersonaKey): string {
 export function voicePillLabel(state: VoiceUiState, compact = false): string {
   switch (state) {
     case 'offline':
-      return compact ? 'Offline' : 'Voice Offline';
+      return compact ? 'Voice off' : 'Voice Offline';
     case 'offline-other-device':
-      return compact ? 'Offline' : 'Voice Offline';
+      return compact ? 'Voice off' : 'Voice Offline';
     case 'joining':
       return compact ? 'Joining' : 'Joining Voice';
     case 'agent-absent':
@@ -211,6 +211,6 @@ export function voicePillLabel(state: VoiceUiState, compact = false): string {
     case 'idle':
       return compact ? 'Ready' : 'Voice Ready';
     default:
-      return compact ? 'Offline' : 'Voice Offline';
+      return compact ? 'Voice off' : 'Voice Offline';
   }
 }

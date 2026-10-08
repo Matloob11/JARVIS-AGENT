@@ -918,18 +918,28 @@
 
   .overview-hero__quote.t,
   .overview-hero__quote[data-helper='true'] {
+    position: absolute;
     left: 12px;
     right: 12px;
     width: auto;
     max-width: none;
     transform: none;
     text-align: left;
-    top: 10px;
-    bottom: auto;
-    height: 18px;
-    max-height: 18px;
-    white-space: nowrap;
+    top: auto;
+    /* Sit above the button row; never share its band. */
+    bottom: calc(12px + max(40px, 56 * var(--u)) + 12px);
+    height: auto;
+    max-height: 44px;
+    margin: 0;
+    white-space: normal;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
     z-index: 4;
+    pointer-events: none;
   }
 
   .overview-page__stats,
@@ -968,12 +978,14 @@
   }
 
   .overview-hero__btns.t {
-    position: relative;
-    left: auto;
-    right: auto;
-    bottom: auto;
+    position: absolute;
+    left: 12px;
+    right: 12px;
     top: auto;
-    margin: 12px;
+    bottom: 12px;
+    width: auto;
+    margin: 0;
+    z-index: 8;
   }
 }
 

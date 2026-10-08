@@ -161,8 +161,23 @@ function buildInitState() {
       mergedMemories.push(row);
     }
   }
+  const now = Math.floor(Date.now() / 1000);
+  const loc = init.location && typeof init.location === 'object' ? init.location : {};
+  const city = typeof loc.city === 'string' && loc.city ? loc.city : 'Karachi';
+  const lat = typeof loc.lat === 'number' ? loc.lat : 24.8607;
+  const lng = typeof loc.lng === 'number' ? loc.lng : 67.0011;
   return {
     ...init,
+    location: { ...loc, city, lat, lng, ts: now - 90 },
+    map_focus: {
+      ...(init.map_focus && typeof init.map_focus === 'object' ? init.map_focus : {}),
+      query: city,
+      display_name: `${city}, Pakistan`,
+      lat,
+      lng,
+      zoom: 12,
+      ts: now - 90,
+    },
     messages: [...(init.messages || []), ...persistedChatMessages],
     memories: mergedMemories.slice(0, 50),
   };
@@ -314,6 +329,14 @@ function handleChat(socket, payload, cb) {
   }, 300);
 }
 
+/** @type {ReturnType<typeof setTimeout>[]} */
+let voiceEnrollTimers = [];
+
+function clearVoiceEnrollTimers() {
+  for (const id of voiceEnrollTimers) clearTimeout(id);
+  voiceEnrollTimers = [];
+}
+
 function handleVoiceEnroll(socket, payload, cb) {
   if (!agentOnline) {
     ackUi(socket, cb, 'agent_offline');
@@ -321,12 +344,16 @@ function handleVoiceEnroll(socket, payload, cb) {
   }
   const action = payload?.action;
   ackUi(socket, cb, 'sent');
-  if (action === 'cancel') return;
+  if (action === 'cancel') {
+    clearVoiceEnrollTimers();
+    return;
+  }
   if (action === 'start') {
+    clearVoiceEnrollTimers();
     const base = loadFixture('voice_enroll_progress');
     const target = payload?.target_seconds ?? base.target_seconds ?? 6;
     [33, 66, 100].forEach((percent, index) => {
-      setTimeout(() => {
+      const id = setTimeout(() => {
         const collected = Math.round((target * percent) / 100);
         emitToUi('voice_enroll_progress', {
           ...base,
@@ -337,13 +364,18 @@ function handleVoiceEnroll(socket, payload, cb) {
           target_s: target,
         });
       }, (index + 1) * 200);
+      voiceEnrollTimers.push(id);
     });
     return;
   }
   if (action === 'commit') {
-    setTimeout(() => {
-      emitToUi('voice_enroll_result', loadFixture('voice_enroll_result'));
+    clearVoiceEnrollTimers();
+    const id = setTimeout(() => {
+      const result = loadFixture('voice_enroll_result');
+      socket.emit('voice_enroll_result', result);
+      emitToUi('voice_enroll_result', result);
     }, 150);
+    voiceEnrollTimers.push(id);
   }
 }
 

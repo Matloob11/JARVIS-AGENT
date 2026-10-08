@@ -187,8 +187,17 @@ test('enrollment dialog progress and self_score from mock', async ({ page }) => 
 
   await expect(page.getByTestId('voice-enroll-progress')).toBeVisible({ timeout: 5_000 });
 
+  await expect(page.getByTestId('voice-enroll-commit')).toBeEnabled({ timeout: 5_000 });
   await page.getByTestId('voice-enroll-commit').click();
 
-  await expect(page.getByTestId('voice-enroll-success')).toBeVisible({ timeout: 10_000 });
+  await expect
+    .poll(async () =>
+      (await uiCommands(page)).some(
+        cmd => cmd.type === 'voice_enroll' && cmd.payload?.action === 'commit',
+      ),
+    )
+    .toBe(true);
+
+  await expect(page.getByTestId('voice-enroll-success')).toBeVisible({ timeout: 25_000 });
   await expect(page.getByTestId('voice-enroll-success')).toContainText(/score/i);
 });

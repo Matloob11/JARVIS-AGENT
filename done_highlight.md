@@ -2467,3 +2467,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** pytest 113 passed (prompt format har persona/mode/wake par, har tool aur parameter manifest mein); live probes: 'calculator band karo' ‚Üí close_window; CMD command ‚Üí confirm path, khud confirm nahi, folder nahi bana
 - **Commit:** `86ff8a1` ¬∑ **Deploy:** PC worker restart 00:26 PKT üîÅ
 - **Doosre agent ke liye:** ‚Äî
+
+### ? [cursor] UI-H15 ∑ Overview overlap + voice enroll + Agents/Settings polish ∑ 2026-10-09 00:35 PKT
+- **Kya kiya:** Phone/960 pe hero helper buttons pe nahi charhta; enroll Commit/Cancel readable; enroll success late progress se wipe nahi hota; Voice off pill, Agents wrap, Settings tabs scroll, location time sane.
+- **Files:** stonix_ui/src/assets/styles/neon/overview.css, dialogs.css, shell.css, settings.css, agents.css, base.css; HeroCard.tsx, VoiceEnrollDialog.tsx, VoiceWakeCard.tsx, LaptopCard.tsx, StatusShape.tsx, persona.ts, time.ts; tests/mock-bridge/server.mjs; tests/e2e/voice-settings.spec.ts; docs/UI_HARDENING_PLAN.md
+- **Verify:** product overview layout 7/7 pass (incl 960); voice-settings + voiceid enroll success pass
+- **Commit:** (pending) ∑ **Deploy:** no (REQ-DEPLOY in ß11)
+- **Doosre agent ke liye:** REQ-DEPLOY frontend when free

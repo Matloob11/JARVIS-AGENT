@@ -215,6 +215,8 @@
   margin: 3px 0 0;
   font: 400 14.25px/20px var(--font-ui);
   color: var(--t4);
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .n-hd-act {
