@@ -1287,7 +1287,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | C-14 | claude | P0 | Agent link v2, bridge side: AGENT_TOKEN + HMAC v2 notify with replay protection, Socket.IO roles/rooms with a legacy transition, env-only origins, secrets tooling | C-13, C-09, K-38 (C-SOCK-1), K-39 (C-NOTIFY-1), K-40 (C-EVT-1), K-47 (C-ENV-1) | DONE (claude, 02 Oct 16:25) |
 | C-15 | claude | P0 | Agent link v2, agent side: signed raw-body notify with retry queue, AGENT_TOKEN socket with reconnect-forever loop, chat id echo | C-14, C-09, K-39 (C-NOTIFY-1), K-38 (C-SOCK-1), K-41 (C-MSG-1) | DONE (claude, 02 Oct 19:20) |
 | C-16 | claude | P0 | Network lockdown: nginx /agent + /twirp, PC agent on wss/https via the domain, 5101/7880 bound to 127.0.0.1, compose memory/log limits | C-12, C-09, C-15, K-48 (C-NET-1) | DONE (claude, 03 Oct 22:22 PKT) |
-| C-17 | claude | P0 | Rotate the LiveKit API key/secret (they sat in world-readable files); values live only in env files | C-16, C-14 | TODO |
+| C-17 | claude | P0 | Rotate the LiveKit API key/secret (they sat in world-readable files); values live only in env files | C-16, C-14 | DOING (claude, 08 Oct 19:10 PKT; scripts/ops/rotate_livekit_keys.py ready, live rotation next) |
 | C-18 | claude | P0 | Least-privilege VPS env: bridge reads only bridge.env, compose .env keeps interpolation vars, unused VPS key copies moved to backups; user rotates Google/Gmail keys | C-14, C-17, C-127 (steps 1-4, 7; 13.2), K-47 (C-ENV-1) | TODO |
 | C-19 | claude | P0 | Owner session auth backend: password + TOTP + recovery codes, JWT cookie on /vortex, session-protected endpoints, LiveKit token per C-LK-1 | C-13, C-14, C-16, K-36 (C-AUTH-1), K-37 (C-LK-1) | DONE (claude, 03 Oct 22:20 PKT) |
 | C-20 | claude | P0 | Owner credential enrollment (password + TOTP + recovery codes), run by the user | C-19, K-36 (C-AUTH-1) | DONE (claude, 03 Oct 22:52 PKT) |
@@ -1317,7 +1317,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-30 | cursor | P0 | File access server: allow-listed root (D:/ kept when present), LAN bind, token path, TTL, audit | C-24, C-28, C-26, X-03, X-11, C-30, K-15 (DesktopConfigKeys), K-45 (C-CONFIRM-1) | DONE (cursor, 2026-10-08 15:56 PKT) |
 | X-31 | cursor | P0 | run_cmd_command: strict read-only allow-list captured, everything else UI-confirmed | X-27, C-28, C-30 | DONE (cursor, 2026-10-08 15:52 PKT) |
 | C-23 | claude | P1 | Room lifecycle: bridge as sole room owner with a lock, explicit dispatch 'jarvis', reconciler + LiveKit webhooks -> agent_status, pause/start, ensure_room.py never deletes | C-09, C-13, C-14, C-15, K-44 (C-ROOM-1), K-39 (C-NOTIFY-1) | BLOCKED (always mode live; baqi: owner live-call test, phase 3 jarvis-pc name, pause/wake probe, phase 4 webhooks in the C-17 LiveKit window) |
-| C-36 | claude | P1 | Local/desktop mode auth parity: COOKIE_SECURE=auto and local owner credentials for vortex.py / Electron local | C-19, C-20, K-09 (DASH-LOCAL-AUTH) | TODO |
+| C-36 | claude | P1 | Local/desktop mode auth parity: COOKIE_SECURE=auto and local owner credentials for vortex.py / Electron local | C-19, C-20, K-09 (DASH-LOCAL-AUTH) | DOING (claude, 08 Oct 19:10 PKT; background agent in a worktree) |
 | C-37 | claude | P1 | Vercel copies redirect to the canonical domain (vercel.json routes 302), shipped by the GitHub push | C-04, K-49 (C-ORIGIN-1) | DONE (01 Oct 14:35; three 302 OK; sigma host has no deployment, user optional) |
 | C-38 | claude | P1 | Voice-ID engine loads: shims before speechbrain import, no implicit download | — | DONE (01 Oct 14:20) |
 | C-39 | claude | P1 | Probe isolation (CT-VC-PROBE) and per-event-loop bridge client | C-33 (13.2), C-15, K-57 (CT-VC-PROBE) | DONE (claude, 08 Oct 17:50 PKT; step 2 d997ef3, rest 13259f3: probe/canary jobs suppress bridge, UI log, memory and identity writes from their own context and run no listener or loops; the live probe run rides C-40's voice_probe.py) |
@@ -1329,7 +1329,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | C-45 | claude | P1 | llm_text helper: Gemini 3.x -> Groq -> OpenRouter with header auth | C-25, K-30 (llm_text) | DONE (claude, 02 Oct 16:25) |
 | C-46 | claude | P1 | Tools-info env keys via one append-only script | C-26, K-35 (tools_info_env) | DONE (claude, 03 Oct 13:40) |
 | C-48 | claude | P1 | Vision tools on current models + fallbacks + fresh frames only | C-45, K-30 (llm_text) | DONE (claude, 03 Oct 13:40) |
-| C-49 | claude | P1 | Instructions reach Gemini; compose_instructions per persona and turn mode (no rule deleted) | C-43 | TODO |
+| C-49 | claude | P1 | Instructions reach Gemini; compose_instructions per persona and turn mode (no rule deleted) | C-43 | DOING (claude, 08 Oct 19:10 PKT; composed instructions for both personas, live check pending) |
 | C-50 | claude | P1 | Real Gemini voices and a voice switch that actually restarts the Gemini session | C-49 | TODO |
 | C-51 | claude | P1 | Control commands: Stop = interrupt, Mute = mic input off, guarded shutdown_agent and clear_memory | C-50, C-34, K-60 (CT-VC-CONTROL) | TODO |
 | C-52 | claude | P1 | Memory core: one stable user, every message saved once, real flush, memory_update events | C-51, C-42, C-39 | TODO |
@@ -1367,8 +1367,8 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | C-78 | claude | P3 | Document Q&A: scoped persistent index, terminating chunker, work off the event loop | C-24 | DONE (claude, 03 Oct 13:55) |
 | C-79 | claude | P3 | SIM ui_command payload {query, purpose}: agent handler + bridge validator | X-38, C-13, C-14, C-19, K-34 (sim_authorized_source) | DONE (claude, 06 Oct 18:08 PKT) |
 | C-80 | claude | P3 | Scheduled action runner: execute due tool actions safely (forbidden list, confirmations, results) | X-32, C-56, C-62, C-24, C-28, C-55, K-32 (scheduled_action_runner), K-33 (task_store_v2) | TODO |
-| C-81 | claude | P3 | Swarm: llm_text calls, voice tool start_swarm_mode as a job, spoken summary | C-25, C-45, C-58, C-43, C-55, C-57, K-30 (llm_text), K-31 (job_progress_routing) | TODO |
-| C-82 | claude | P3 | Bug hunter: grouped errors + LLM triage in tool_investigate_recent_bugs | C-45, C-64, K-30 (llm_text) | TODO |
+| C-81 | claude | P3 | Swarm: llm_text calls, voice tool start_swarm_mode as a job, spoken summary | C-25, C-45, C-58, C-43, C-55, C-57, K-30 (llm_text), K-31 (job_progress_routing) | DOING (claude, 08 Oct 19:10 PKT; background agent in a worktree) |
+| C-82 | claude | P3 | Bug hunter: grouped errors + LLM triage in tool_investigate_recent_bugs | C-45, C-64, K-30 (llm_text) | DOING (claude, 08 Oct 19:10 PKT; background agent in a worktree) |
 | C-83 | claude | P3 | Guarded self-repair: diagnose, propose diff, approved apply with backup and rollback | C-45, C-47, C-24, C-28, C-30, K-30 (llm_text), K-28 (tool_arg_policies) | TODO |
 | C-84 | claude | P3 | Install and auto-start PinchTab (127.0.0.1, token) and install FFmpeg (after approval) | C-06, C-26, C-08, C-09, K-23 (PinchTabLocalServer) | DONE (claude, 08 Oct; FFmpeg 9.0.2 + PinchTab 0.15.2 on 127.0.0.1:9867 with token, explicit strategy; start_pinchtab.ps1, install_desktop_deps.ps1, start-agent.bat hook) |
 | C-85 | claude | P3 | System prompt sync: tool names, confirmation rule, error codes (one prompt change with VCR-06) | C-28, X-29, C-75, C-57, X-42, C-49, K-17 (ToolNamesV2) | TODO |
@@ -1424,7 +1424,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-57 | cursor | P3 | Deep research (multi-source + LLM report) and research-and-email as an approved background job | C-45, X-36, X-54, C-24, C-28, C-55, C-57, K-30 (llm_text), K-31 (job_progress_routing) | DONE (cursor, 2026-10-08 16:13 PKT) |
 | X-58 | cursor | P3 | YouTube downloader as a background job (single task, absorbs desktop K16) | C-47, C-24, C-28, C-55, C-57, K-31 (job_progress_routing) | DONE (cursor, 2026-10-08 16:09 PKT) |
 | X-62 | cursor | P3 | PinchTab Chrome tools: auth, autostart, profile/instance lifecycle, text + refs, degraded mode, untrusted page text | C-24, C-26, X-03, X-11, C-75, C-84, K-23 (PinchTabLocalServer), K-16 (DesktopToolPolicy) | DONE (cursor, 2026-10-08 16:10 PKT) |
-| C-100 | claude | P4 | TOOLS.md for info/media tools (env, providers, timeouts, approvals, outputs) | C-46, X-61 | TODO |
+| C-100 | claude | P4 | TOOLS.md for info/media tools (env, providers, timeouts, approvals, outputs) | C-46, X-61 | DOING (claude, 08 Oct 19:10 PKT; background agent in a worktree) |
 | C-101 | claude | P4 | OpsSupervisor: one entry point for health, healing, adaptation, bug hunter, startup diagnostics, checkpoints, daily backups | C-11, C-63, C-64, C-71, C-76, C-77, C-83 | TODO |
 | C-102 | claude | P4 | Optional monitoring profile: PerformanceMonitor + metrics server on 127.0.0.1:8765 + Phoenix/OpenTelemetry tracing | C-101, C-29 | TODO |
 | C-103 | claude | P4 | Runnable QA command (jarvis_qa + reporter + qa_modules with signed qa_ping), repair_deps --check/--fix, encrypted env support | C-14, C-19, C-101 | TODO |
