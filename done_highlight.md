@@ -2031,3 +2031,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** pytest tests/tools/test_window_ctrl_tools.py -q -p no:cacheprovider → 25 passed
 - **Commit:** e36e0d8 · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] X-41 (follow-up) · richer WhatsApp tests after stale agent · 2026-10-08 16:15 PKT
+- **Kya kiya:** Late subagent rewrote test suites only (production already from fc71d77); board stays DONE. Coverage now 40 tests (FOCUS_LOST, deep-link Urdu/emoji, browser exclusion, tool metadata).
+- **Files:** tests/automation/test_whatsapp_automation.py, tests/tools/test_whatsapp_tool.py
+- **Verify:** pytest tests/tools/test_whatsapp_tool.py tests/automation/test_whatsapp_automation.py -q -p no:cacheprovider → 40 passed
+- **Commit:** 43c4401 · **Deploy:** no
+- **Doosre agent ke liye:** —
