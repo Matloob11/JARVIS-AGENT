@@ -1961,3 +1961,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Commit:** `fc71d77` · **Deploy:** no
 - **Doosre agent ke liye:** REQ-RESTART for automate_whatsapp; manual: linked Desktop + Allow then Urdu/emoji send; not-installed → web only
 
+### ✅ [cursor] X-58 · YouTube download as background job · 2026-10-08 16:09 PKT
+- **Kya kiya:** `download_youtube_media` returns started+job_id immediately; `python -m yt_dlp` with ytsearch1, JARVIS_PROGRESS, ffmpeg/ejs discovery; cancel kills subprocess; auto_open + artifact kept.
+- **Files:** services/multimedia/jarvis_youtube_downloader.py, tests/automation/test_youtube_downloader.py, tests/tools/test_youtube_job.py
+- **Verify:** pytest tests/automation/test_youtube_downloader.py tests/tools/test_youtube_job.py -q → 10 passed
+- **Commit:** `df59734` · **Deploy:** no
+- **Doosre agent ke liye:** REQ-RESTART for new job tool; placement/manifest if tool kwargs changed
+
