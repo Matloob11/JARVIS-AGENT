@@ -81,7 +81,7 @@ def test_parse_when_hhmm_and_kal() -> None:
 
 
 @pytest.mark.asyncio
-async def test_schedule_json_error_and_forbidden(tmp_db, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_schedule_json_error_and_forbidden(tmp_db) -> None:
     _db, mgr = tmp_db
 
     import inspect
@@ -91,11 +91,12 @@ async def test_schedule_json_error_and_forbidden(tmp_db, monkeypatch: pytest.Mon
     assert bad["status"] == "error"
     assert "object" in bad["message"].lower() or "JSON" in bad["message"]
 
-    monkeypatch.setattr(tm, "_schedule_risk", lambda _a: "forbidden")
-    # Re-bind: schedule_task body calls _schedule_risk from module
+    # 'confirm_action' is in _LOCAL_FORBIDDEN_ACTIONS (K-32), checked unconditionally in the
+    # function body, so it is refused outright without touching the risk/confirmation flow.
     forbidden = await inner("in 1 minute", "x", action="confirm_action", action_args_json="{}")
     assert forbidden["status"] == "error"
-    assert forbidden.get("error_code") == "FORBIDDEN_ACTION"
+    assert "confirm_action" in forbidden["message"]
+    assert mgr.list_pending_tasks() == []
 
 
 @pytest.mark.asyncio
