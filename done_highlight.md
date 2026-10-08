@@ -1919,3 +1919,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** pytest tests/tools/test_run_cmd_tool.py -q → 16 passed
 - **Commit:** `c79f735` · **Deploy:** no
 - **Doosre agent ke liye:** K-45/confirm_policy still floors run_cmd_command to high always (NEVER_SKIP) — so 'ipconfig bina confirm' acceptance needs Claude to exempt READ_ONLY from K45_HIGH / effective_risk, or document that Allow is always required. REQ in §11.
+
+### ✅ [cursor] X-30 · Tokenized LAN file server · 2026-10-08 15:56 PKT
+- **Kya kiya:** Root from config (D:/ when present), bind LAN IP (NO_LAN on 127.x), per-start token URL, GET/HEAD only, traversal/dotfile/sensitive 403, TTL auto-stop, masked URL in notify_event, QR on PC, FILE_SERVER_ACCESS audit.
+- **Files:** services/system/jarvis_file_server.py, tests/tools/test_file_server_tool.py
+- **Verify:** pytest tests/tools/test_file_server_tool.py -q → 7 passed
+- **Commit:** `26817c8` · **Deploy:** no
+- **Doosre agent ke liye:** Manual: Allow + phone QR; firewall Private networks; jarvis_qr_gen still builds file-server URL without token for saved image path (known gap).
