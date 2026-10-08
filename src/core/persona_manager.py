@@ -10,6 +10,11 @@ from services.ai_core.jarvis_reasoning import context_analyzer
 from services.utils.jarvis_config import config
 from services.utils.jarvis_logger import setup_logger
 
+try:
+    from .voices import persona_voice
+except (ImportError, ValueError):
+    from src.core.voices import persona_voice
+
 logger = setup_logger("PERSONA-MANAGER")
 
 PROJECT_START_DATE = datetime(2025, 8, 2)
@@ -37,6 +42,27 @@ def runtime_turn_mode() -> str:
             _gated_warned = True
         return "fast"
     return mode
+
+
+def append_turn_note(turn_ctx: Any, message: llm.ChatMessage) -> str:
+    """C-50: appends a message to a turn context. livekit hands on_user_turn_completed a bare llm.ChatContext (its
+    items list; .messages is a method), older code a holder with .chat_ctx (a messages list or a ChatContext).
+    Returns the message text, '' when nothing took it (a read-only livekit context raises RuntimeError)."""
+    chat_ctx = getattr(turn_ctx, "chat_ctx", turn_ctx)
+    for attr in ("messages", "items"):
+        target = getattr(chat_ctx, attr, None)
+        if isinstance(target, list):
+            try:
+                target.append(message)
+            except RuntimeError:
+                return ""
+            return message.text_content or ""
+    return ""
+
+
+def add_context_note(turn_ctx: Any, text: str, role: str = "assistant") -> str:
+    """C-50: appends a note to a turn context (append_turn_note); returns the note text ('' for none)."""
+    return append_turn_note(turn_ctx, llm.ChatMessage(role=role, content=[text]))
 
 
 def build_instructions(assistant: Any, persona: str, *, wake_word: bool | None = None) -> str:
@@ -98,8 +124,12 @@ class PersonaManager:
         return "anna" if self._gf_mode_active else "jarvis"
 
     async def set_persona(self, is_anna: bool) -> None:
-        """Switches the assistant's persona."""
+        """Switches the assistant's persona. C-50: asking for the persona that is active already tells the dashboard
+        again (persona_update), so a stale dashboard or a UI waiting for it never hangs."""
         if self._gf_mode_active == is_anna:
+            announce = getattr(self._assistant, "announce_persona", None)
+            if callable(announce):
+                announce(again=True)
             return
 
         self._gf_mode_active = is_anna
@@ -107,9 +137,11 @@ class PersonaManager:
 
     async def update_assistant_persona(self) -> None:
         """Applies current persona settings to the assistant. C-49: both personas get the composed instructions
-        (every tool protocol included) and the assistant's update_instructions sends them to the live session."""
+        (every tool protocol included) and the assistant's update_instructions sends them to the live session.
+        C-50: the persona's voice goes in the same update; the assistant tells the dashboard (persona_change) once
+        the switch reached the session."""
         instr = build_instructions(self._assistant, self.active_persona_name)
-        voice = "Aoede" if self._gf_mode_active else "Charon"  # Standard Capitalized Gemini Voices
+        voice = persona_voice(self.active_persona_name)  # C-50: JARVIS_VOICE_JARVIS / JARVIS_VOICE_ANNA
 
         update_session = getattr(self._assistant, "update_session", None)
         if callable(update_session):
@@ -180,31 +212,30 @@ class PersonaManager:
         except Exception as e:
             logger.error("Session sync failed critically: %s", e)
 
-    async def handle_anna_upset_state(self, text: str, turn_ctx: Any) -> None:
-        """Processes Anna's upset state based on input."""
+    async def handle_anna_upset_state(self, text: str, turn_ctx: Any) -> str:
+        """Processes Anna's upset state based on input. C-50: returns the note it added to the turn ('' for none)."""
         if not self._gf_mode_active:
-            return
+            return ""
         state = jarvis_id.get_anna_state()
         if not state.get("is_upset"):
-            return
+            return ""
         if "sorry" in text.lower():
             await jarvis_id.set_anna_mood("loving", False)
             # C-49: ANNA is active already (set_persona would return at once): compose her prompt again so the
-            # live session gets the new mood
-            await self.update_assistant_persona()
-        else:
-            turn_ctx.chat_ctx.messages.append(llm.ChatMessage(
-                role="assistant", content=["Demand sorry."],
-            ))
+            # live session gets the new mood. C-50: only the instructions; her voice (a change_voice choice
+            # included) and the dashboard's persona stay as they are.
+            await self._assistant.update_instructions(build_instructions(self._assistant, self.active_persona_name))
+            return ""
+        return add_context_note(turn_ctx, "Demand sorry.")  # C-50: a real llm.ChatContext has items, not messages
 
-    async def inject_emotional_context(self, text: str, turn_ctx: Any, history: list[Any]) -> None:
-        """Injects emotional hints into the reasoning context."""
+    async def inject_emotional_context(self, text: str, turn_ctx: Any, history: list[Any]) -> str:
+        """Injects emotional hints into the reasoning context. C-50: works on a real llm.ChatContext (items) too and
+        returns the note it added ('' for none)."""
         try:
             mem = await self._assistant.memory_extractor.memory.get_recent_context(max_messages=5)
             curr = context_analyzer.analyze_context(text, mem)
             if self._gf_mode_active and curr.get("user_mood") == "upset":
-                turn_ctx.chat_ctx.messages.append(llm.ChatMessage(
-                    role="assistant", content=["Manao him."],
-                ))
+                return add_context_note(turn_ctx, "Manao him.")
         except (AttributeError, KeyError, RuntimeError) as e:
             logger.error("Emotional context injection failed: %s", e)
+        return ""

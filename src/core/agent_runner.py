@@ -162,6 +162,7 @@ except (ImportError, ValueError):
 
 from src.core import gemini_resume_guard
 from src.core.jarvis_runtime import JarvisRuntime
+from src.core.voices import persona_voice  # C-50
 from src.core.voice_link import VoiceLink  # C-35; registers ui_command voice_take_over
 from services.utils.probe_context import bridge_suppressed, is_probe_room  # K-57 (C-39)
 from src.core.conversation_router import ConversationRouter, preview
@@ -1330,7 +1331,7 @@ async def entrypoint(ctx: agents.JobContext):
         # One RealtimeModel per job (K-69 JARVIS_REALTIME_MODEL): the assistant (an Agent) holds it as its llm, and
         # every rebuilt AgentSession opens a fresh realtime session from it.
         llm_model = google.realtime.RealtimeModel(
-            voice="Charon",  # Standardized Capitalized ID
+            voice=persona_voice("jarvis"),  # C-50: JARVIS_VOICE_JARVIS, else Charon (a job starts as JARVIS)
             model=_realtime_model_name(),
         )
         # 2026-10-06: after a network blip the plugin replayed a stale session-resumption handle on every reconnect
@@ -1381,6 +1382,10 @@ async def entrypoint(ctx: agents.JobContext):
     async def _session_factory() -> Any:
         if job["assistant"] is None:
             await _build_job_parts()
+        else:
+            carry = getattr(job["assistant"], "carry_pending_voice", None)
+            if callable(carry):  # C-50: a voice still pending from the closed session: the new one connects with it
+                await carry()
         # Realtime model owns in-room voice. Do not attach Cloud TTS for chat (AI Studio keys are not Cloud TTS
         # credentials; chat uses text notify).
         return AgentSession(
@@ -1410,6 +1415,9 @@ async def entrypoint(ctx: agents.JobContext):
         if not probe:  # a probe room holds only the probe (C-40): its lk.chat must reach the session
             harden_room_input(session, ctx.room)  # C-124: owner-only RPC and text (VPS; PC opt-in); idempotent
         assistant.attach_session(session)
+        announce = getattr(assistant, "announce_persona", None)
+        if not rebuilt and callable(announce):
+            announce()  # C-50: a new job tells the dashboard its persona (the bridge keeps the last job's)
         _enable_voice_confirm_check()  # C-75: confirm_action needs Sir's own spoken yes from now on
         jarvis_announcer.attach(session)  # C-55 (K-18): results, jobs and tips are shown and spoken here
         jarvis_announcer.set_assistant(assistant)

@@ -2383,3 +2383,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** code review; a11y H08 green
 - **Commit:** (this commit) · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ 🚀 [claude] REQ-DEPLOY frontend · Cursor's UI-CLEAN, C-42 typing bubble and UI-H00..H02 live · 2026-10-08 23:31 PKT
+- **Kya kiya:** Cursor ki REQ-DEPLOY par sirf frontend container deploy kiya (deploy_from_pc.sh --services frontend; HEAD 1ae8498, sirf commit ship hua, working tree ki uncommitted C-50 files nahi). Backup pehle, other-apps smoke pehle aur baad mein.
+- **Files:** — (deploy only)
+- **Verify:** RESULT=ok; health gate: frontend healthy, ui-bridge healthy, /vortex/health 200; other apps identical before and after (15 sites, 27 containers); PC check /vortex/health 200
+- **Commit:** `1ae8498` · **Deploy:** VPS frontend 23:31 PKT 🚀 (backup /root/jarvis-backups/2026-10-08_1830Z-pre-deploy-1ae8498)
+- **Doosre agent ke liye:** live dashboard par apni UI-H tabdeeliyan dekh lo; agle UI-H commits ke baad phir REQ-DEPLOY likhna.

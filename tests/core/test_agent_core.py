@@ -2,11 +2,18 @@ import pytest
 import asyncio
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch, AsyncMock, PropertyMock
+from livekit.agents import llm
 from src.core.agent_core import BrainAssistant
 
 @pytest.fixture
 def mock_agent_deps(monkeypatch):
     monkeypatch.delenv("JARVIS_TURN_MODE", raising=False)  # C-49: the prompt's wake rule follows it
+    monkeypatch.delenv("JARVIS_VOICE_JARVIS", raising=False)  # C-50: the persona voices follow these
+    monkeypatch.delenv("JARVIS_VOICE_ANNA", raising=False)
+    # C-50: a persona switch tells the dashboard in the background; no bridge POST from a test
+    monkeypatch.setattr("src.core.agent_core.bridge_notifier", AsyncMock())
+    # C-61: the assistant starts its task monitor inside the test's loop; keep it off the real conversations/tasks.db
+    monkeypatch.setattr("src.core.agent_core.task_manager", MagicMock(get_due_tasks=MagicMock(return_value=[])))
     # Mocking Agent.__init__ to avoid real LiveKit setup
     with patch("livekit.agents.Agent.__init__", return_value=None):
         with patch("livekit.agents.Agent.update_instructions", new_callable=AsyncMock):
@@ -84,51 +91,49 @@ async def test_handle_wake_word(mock_agent_deps):
 async def test_inject_emotional_context(mock_agent_deps):
     assistant, _ = create_test_assistant(mock_agent_deps)
     assistant.persona_manager._gf_mode_active = True
-    turn_ctx = MagicMock()
-    turn_ctx.chat_ctx.messages = []
+    turn_ctx = llm.ChatContext.empty()  # C-50: what livekit hands on_user_turn_completed
     with patch("services.ai_core.jarvis_reasoning.context_analyzer.analyze_context", return_value={"user_mood": "upset"}):
         await assistant.persona_manager.inject_emotional_context("I am sad", turn_ctx, assistant.conversation_history)
-        assert len(turn_ctx.chat_ctx.messages) == 1
-        assert "Manao him." in turn_ctx.chat_ctx.messages[0].content[0]
+        assert [item.text_content for item in turn_ctx.items] == ["Manao him."]
 
 @pytest.mark.asyncio
 async def test_handle_anna_upset_state(mock_agent_deps):
     assistant, _ = create_test_assistant(mock_agent_deps)
     assistant.persona_manager._gf_mode_active = True
-    turn_ctx = MagicMock()
-    turn_ctx.chat_ctx.messages = []
+    turn_ctx = llm.ChatContext.empty()
     with patch("services.ai_core.jarvis_identity.jarvis_id.get_anna_state", return_value={"is_upset": True}):
         with patch("services.ai_core.jarvis_identity.jarvis_id.set_anna_mood", new_callable=AsyncMock) as mock_set_mood:
-            with patch.object(assistant.persona_manager, "update_assistant_persona",
-                              new_callable=AsyncMock) as mock_refresh:
+            with patch.object(assistant, "update_instructions", new_callable=AsyncMock) as mock_refresh, \
+                    patch.object(assistant.persona_manager, "update_assistant_persona",
+                                 new_callable=AsyncMock) as mock_switch:
                 await assistant.persona_manager.handle_anna_upset_state("I am sorry", turn_ctx)
                 mock_set_mood.assert_called_with("loving", False)
                 mock_refresh.assert_awaited_once()  # C-49: the calmer mood reaches the live prompt
+                assert "- Persona: ANNA" in mock_refresh.await_args.args[0]
+                mock_switch.assert_not_awaited()  # C-50: no persona voice and no persona_change for a mood
+    assert turn_ctx.items == []  # sorry was said: no 'Demand sorry.' note
 
 @pytest.mark.asyncio
 async def test_inject_reasoning_and_memory(mock_agent_deps):
     assistant, _ = create_test_assistant(mock_agent_deps)
-    turn_ctx = MagicMock()
-    turn_ctx.chat_ctx.messages = []
-    
+    turn_ctx = llm.ChatContext.empty()  # C-50: what livekit hands on_user_turn_completed
+
     # Correcting the mock response to match Semantic context result structure
     assistant.memory_extractor.memory.get_semantic_context.return_value = [{"document": "memory1", "score": 0.9}]
     
-    with patch("services.ai_core.jarvis_reasoning.process_with_advanced_reasoning", new_callable=AsyncMock, return_value={"is_agentic": True, "plan": "test plan"}):
+    with patch("src.core.agent_core.process_with_advanced_reasoning", new_callable=AsyncMock, return_value={"is_agentic": True, "plan": "test plan"}):
         await assistant._inject_reasoning_and_memory("test", turn_ctx, is_anna=False)
-        all_content = "".join([str(i.content[0]) for i in turn_ctx.chat_ctx.messages])
-        assert "[LONG-TERM MEMORY CONTEXT]" in all_content
+    assert [item.text_content for item in turn_ctx.items] == ["[LONG-TERM MEMORY CONTEXT]: memory1",
+                                                             "[EXECUTION PLAN]: test plan"]
 
 @pytest.mark.asyncio
 async def test_tool_change_voice(mock_agent_deps):
     assistant, mock_llm = create_test_assistant(mock_agent_deps)
-    assistant._active_session = MagicMock()
-    assistant._active_session._activity = MagicMock()
-    assistant._active_session._activity._rt_session = MagicMock()
-
     result = await assistant.tool_change_voice("Ash")
     assert result["status"] == "success"
-    assert mock_llm.voice == "ash"
+    assert result["voice"] == "Orus"  # C-50: the OpenAI-style alias maps to a real Gemini voice
+    # no live session: the voice waits in the model options for the next session
+    mock_llm.update_options.assert_called_once_with(voice="Orus")
 
 
 @pytest.mark.asyncio
@@ -263,8 +268,12 @@ async def test_a_new_session_drops_pending_instructions(mock_agent_deps):
     assistant, _ = create_test_assistant(mock_agent_deps)
     assistant._probe = True  # no vision loop
     assistant._pending_instructions = "OLD"
+    # the new session's Gemini session started with them (AgentActivity sets the shared options' instructions)
+    assistant._activity = SimpleNamespace(update_instructions=AsyncMock(), realtime_llm_session=SimpleNamespace(
+        _opts=SimpleNamespace(instructions="OLD")))
     assistant.attach_session(MagicMock())
     assert assistant._pending_instructions is None  # the new session starts with self._instructions
+    assistant._activity.update_instructions.assert_not_awaited()
 
 
 @pytest.mark.asyncio

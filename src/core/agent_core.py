@@ -41,10 +41,12 @@ from src.core.gemini_resume_guard import restart_fresh
 
 try:
     from .bridge_notifier import bridge_notifier
-    from .persona_manager import PersonaManager, build_instructions
+    from .persona_manager import PersonaManager, append_turn_note, build_instructions
+    from .voices import persona_voice, resolve_voice, voices_help
 except (ImportError, ValueError):
     from src.core.bridge_notifier import bridge_notifier
-    from src.core.persona_manager import PersonaManager, build_instructions
+    from src.core.persona_manager import PersonaManager, append_turn_note, build_instructions
+    from src.core.voices import persona_voice, resolve_voice, voices_help
 
 # Optional handler: when it cannot load (e.g. a desktop-only import on a headless host) the agent runs
 # without vision instead of failing to import.
@@ -180,6 +182,8 @@ class BrainAssistant(Agent):
         # C-49: a session update (instructions, voice) waits for a safe point: no reply or tool call running
         self._pending_instructions: str | None = None
         self._pending_voice: str | None = None
+        # C-50: the persona this job last sent the dashboard (persona_change); None until the job's first announce
+        self._notified_persona: str | None = None
         # C-23 (K-60 v9): set by request_end; the job's entrypoint waits on it and then ends the job. Made with the
         # assistant, so a pause_agent that arrives before the entrypoint waits is never lost.
         self._stop_event: asyncio.Event = asyncio.Event()
@@ -189,7 +193,7 @@ class BrainAssistant(Agent):
         self._audio_sample_rate: int = 16000 # Default
         self._last_speaker_verified: bool = True
         self.voice_id_engine = voice_id_engine
-        self._local_llm: Any = llm_instance or types.SimpleNamespace(voice="Charon")
+        self._local_llm: Any = llm_instance or types.SimpleNamespace(voice=persona_voice("jarvis"))
 
         # Session options for modality sync
         self._session_options = types.SimpleNamespace(
@@ -239,8 +243,11 @@ class BrainAssistant(Agent):
 
         @resilient_tool("change_voice")
         async def wrap_change_voice(voice_name: str) -> dict[str, Any]:
-            """Change the AI's speaking voice. Valid voices include: alloy, echo, shimmer, ash, ballad, coral, sage, verse, charon, aoede."""
+            """Change the AI's speaking voice (from the next reply)."""
             return await self.tool_change_voice(voice_name)
+
+        # C-50: the model sees every real Gemini voice and the OpenAI-style aliases
+        wrap_change_voice.__doc__ = f"Change the AI's speaking voice (from the next reply). {voices_help()}"
 
         @resilient_tool("toggle_persona")
         async def wrap_toggle_gf_mode(active: bool) -> dict[str, Any]:
@@ -347,8 +354,16 @@ class BrainAssistant(Agent):
         persona = self.persona_manager.active_persona_name
         if instructions is not None:
             self._instructions = instructions
+        if voice is not None:
+            self._session_options.voice_id = voice
         if getattr(self, "_activity", None) is None:
+            # C-50: what is stored now replaces anything still pending from a closed session
+            if instructions is not None:
+                self._pending_instructions = None
+            if voice is not None:
+                self._pending_voice = None
             await self._store_for_next_session(instructions, voice, persona)
+            self._announce_persona(persona)
             return
         if instructions is not None:
             self._pending_instructions = instructions
@@ -375,6 +390,41 @@ class BrainAssistant(Agent):
                     update(voice=voice)
                 except Exception as e:  # pylint: disable=broad-exception-caught
                     logger.warning("VOICE_UPDATE store failed (%s)", type(e).__name__)
+            logger.info("VOICE_UPDATE persona=%s voice=%s sent=stored", persona, voice)
+
+    def _announce_persona(self, persona: str) -> None:
+        """C-50: persona_change goes to the dashboard once per real switch, after the switch reached the session (or
+        was stored for the next one), in the background: never inside the toggle_persona tool call, and never for a
+        wake-word, mood or voice refresh of the same persona."""
+        if persona == self._notified_persona:
+            return
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return  # a caller without an event loop: the next switch or job start sends it
+        self._notified_persona = persona
+        self._run_back(self._notify_ui_persona(persona))
+
+    def announce_persona(self, *, again: bool = False) -> None:
+        """C-50: persona_change for the active persona: at a job's start (agent_runner; the bridge keeps the last job's
+        persona while every job starts as JARVIS) and, with again, when the persona that is active already is asked
+        for (a stale dashboard, or a UI that waits for persona_update before it shows the switch)."""
+        if again:
+            self._notified_persona = None
+        self._announce_persona(self.persona_manager.active_persona_name)
+
+    def _live_instructions(self) -> Any:
+        """The instructions the live Gemini session connected or was updated with (its options, shared with the
+        model; AgentActivity sets them when the session starts), else None."""
+        rt_session = getattr(getattr(self, "_activity", None), "realtime_llm_session", None)
+        return getattr(getattr(rt_session, "_opts", None), "instructions", None)
+
+    async def carry_pending_voice(self) -> None:
+        """C-50: before a rebuilt AgentSession connects (agent_runner's session factory, the old activity is gone), a
+        voice still pending from the closed session goes into the model options, so the new session connects with it
+        instead of restarting after its first reply."""
+        if self._pending_voice is not None and getattr(self, "_activity", None) is None:
+            await self.update_session(voice=self._pending_voice)
 
     def _session_busy(self) -> bool:
         """True while a reply or a tool call runs: the agent state says so, or the current speech is not done (a
@@ -383,6 +433,8 @@ class BrainAssistant(Agent):
         state = getattr(session, "agent_state", None)
         if state is not None and state not in INSTRUCTIONS_SAFE_STATES:
             return True
+        if getattr(session, "user_state", None) == "speaking":
+            return True  # C-50: a fresh reconnect now would cut off what the user is saying
         speech = getattr(session, "current_speech", None)
         done = getattr(speech, "done", None)
         return callable(done) and not done()
@@ -413,7 +465,12 @@ class BrainAssistant(Agent):
         if instructions is None and voice is None:
             return
         persona = self.persona_manager.active_persona_name
-        rt_session = getattr(getattr(self, "_activity", None), "realtime_llm_session", None)
+        activity = getattr(self, "_activity", None)
+        if activity is None:  # C-50: the session closed meanwhile (a C-33 rebuild): kept for the next one
+            await self._store_for_next_session(instructions, voice, persona)
+            self._announce_persona(persona)
+            return
+        rt_session = getattr(activity, "realtime_llm_session", None)
         if instructions is not None:
             try:
                 await super().update_instructions(instructions)
@@ -422,19 +479,32 @@ class BrainAssistant(Agent):
                                persona, type(e).__name__)
                 instructions = None
         if voice is not None:
-            update = getattr(rt_session, "update_options", None)  # the session's own options (shared with the model)
-            try:
-                if callable(update):
-                    update(voice=voice)
-            except Exception as e:  # pylint: disable=broad-exception-caught
-                logger.warning("VOICE_UPDATE %s failed (%s)", voice, type(e).__name__)
-                voice = None
+            voice = await self._send_voice(rt_session, voice, persona)
         if instructions is None and voice is None:
             return
         reason = "+".join(name for name, value in (("instructions", instructions), ("voice", voice)) if value)
         restarted = restart_fresh(rt_session, reason)
         logger.info("INSTRUCTIONS_UPDATE persona=%s sent=live update=%s voice=%s restart=%s", persona, reason,
                     voice or "-", "fresh" if restarted else "none")
+        self._announce_persona(persona)
+
+    async def _send_voice(self, rt_session: Any, voice: str, persona: str) -> str | None:
+        """C-50: the voice through the live session's own update_options (it compares with the options it shares with
+        the model, then marks a restart); None when there is nothing to reconnect for: the voice is live already,
+        the session has no update_options (then it is stored for the next session) or the update failed."""
+        update = getattr(rt_session, "update_options", None)
+        if not callable(update):
+            await self._store_for_next_session(None, voice, persona)
+            return None
+        if getattr(getattr(rt_session, "_opts", None), "voice", None) == voice:
+            logger.info("VOICE_UPDATE persona=%s voice=%s already live: no reconnect", persona, voice)
+            return None
+        try:
+            update(voice=voice)
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.warning("VOICE_UPDATE %s failed (%s)", voice, type(e).__name__)
+            return None
+        return voice
 
     async def refresh_instructions(self) -> None:
         """C-49: composes the active persona's instructions again (after the wake-word mode changed) and sends them
@@ -484,27 +554,25 @@ class BrainAssistant(Agent):
         }
 
     async def tool_change_voice(self, voice_name: str) -> dict[str, Any]:
-        """Change the AI's speaking voice."""
-        valid_voices = ["alloy", "echo", "shimmer", "ash",
-                        "ballad", "coral", "sage", "verse", "charon", "aoede"]
-        if voice_name.lower() not in valid_voices:
-            msg = f"Voice '{voice_name}' invalid. Use one of: {', '.join(valid_voices)}"
-            return {"status": "error", "message": msg}
+        """
+        Change the AI's speaking voice (C-50): any of the 30 Gemini Live voices or an OpenAI-style alias (case does
+        not matter). The switch applies from the next reply: the confirmation is still spoken in the old voice, then
+        the session reconnects fresh with the new one (update_session). An unknown name lists the valid voices.
+        """
+        voice = resolve_voice(voice_name)
+        if voice is None:
+            return {"status": "error", "message": f"Voice '{voice_name}' nahi mili. {voices_help()}"}
+        await self.request_voice(voice)
+        return {"status": "success", "voice": voice, "applies": "next reply",
+                "message": f"Sir, agle jawab se meri awaaz {voice} hogi."}
 
-        # Safe voice update for Mypy
+    async def request_voice(self, voice: str) -> None:
+        """C-50: the voice for the live session from the next safe point (update_session); never the shared
+        RealtimeModel options first, which would leave the live session nothing to compare and so no restart."""
         llm_any: Any = getattr(self, "llm", None) or self._local_llm
-        if llm_any and hasattr(llm_any, 'voice'):
-            llm_any.voice = voice_name.lower()
-
-        # Update voice in the session if active
-        session_any: Any = self._active_session
-        if session_any:
-            try:
-                if hasattr(session_any, 'set_voice'):
-                    session_any.set_voice(voice_name.lower())
-            except Exception as e:
-                logger.error("Failed to update session voice: %s", e)
-        return {"status": "success", "voice": voice_name.lower()}
+        if llm_any is not None and hasattr(llm_any, "voice"):
+            llm_any.voice = voice
+        await self.update_session(voice=voice)
 
     def _update_session_modality(self, modality: str) -> None:
         """Internal helper to sync modality if the session supports it."""
@@ -635,8 +703,14 @@ class BrainAssistant(Agent):
         Called by AgentRunner after session start.
         """
         self._active_session = session
-        # C-49: a new session starts with the current self._instructions (a pending voice still goes out later)
-        self._pending_instructions = None
+        # C-49: a new session starts with the current self._instructions, so pending ones it already has are dropped.
+        # C-50: kept when its Gemini session connected before they were set (a switch that raced a rebuild's start()).
+        if self._pending_instructions is not None and self._pending_instructions == self._live_instructions():
+            self._pending_instructions = None
+        if self._pending_instructions is not None or self._pending_voice is not None:
+            # C-50: the new session emitted its first 'listening' inside start(), before agent_runner registered
+            # agent_state_changed: without this the update would wait for one more reply
+            self._run_back(self._apply_when_safe())
         logger.info("Live AgentSession attached to BrainAssistant (User: %s)", self.user_id)
         if getattr(self, "_probe", False):
             return  # K-57 (C-39): no vision loop in a probe or canary job
@@ -748,16 +822,13 @@ class BrainAssistant(Agent):
         except (AttributeError, TypeError, ValueError):
             return ""
 
-    def _append_turn_context_message(self, turn_ctx: Any, message: llm.ChatMessage) -> bool:
-        """Append a system/context message across LiveKit and legacy test contexts."""
-        chat_ctx = getattr(turn_ctx, "chat_ctx", None)
-        for attr in ("messages", "items"):
-            target = getattr(chat_ctx, attr, None)
-            if isinstance(target, list):
-                target.append(message)
-                return True
-        logger.debug("No appendable turn chat context found for message injection.")
-        return False
+    def _append_turn_context_message(self, turn_ctx: Any, message: llm.ChatMessage) -> str:
+        """Append a system/context message to a turn context: livekit's bare llm.ChatContext (items) or a legacy
+        holder with .chat_ctx. C-50: returns the message text, '' when nothing could take it."""
+        text = append_turn_note(turn_ctx, message)
+        if not text:
+            logger.debug("No appendable turn chat context found for message injection.")
+        return text
 
     async def _handle_wake_word(self, text: str) -> tuple[bool, bool]:
         """Checks for wake words."""
@@ -805,10 +876,9 @@ class BrainAssistant(Agent):
 
         if filtered_sem:
             context_str = "\n".join(filtered_sem)
-            self._append_turn_context_message(turn_ctx, llm.ChatMessage(
-                role="system", content=[f"[LONG-TERM MEMORY CONTEXT]: {context_str}"]))
-            logger.info("🧠 Scored Memory Injected: %d items",
-                        len(filtered_sem))
+            if self._append_turn_context_message(turn_ctx, llm.ChatMessage(
+                    role="system", content=[f"[LONG-TERM MEMORY CONTEXT]: {context_str}"])):
+                logger.info("🧠 Scored Memory Injected: %d items", len(filtered_sem))
 
     async def _inject_reasoning_and_memory(self, text: str, turn_ctx: Any,
                                            is_anna: bool = False):

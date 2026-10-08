@@ -607,6 +607,36 @@ async def test_an_unrecoverable_session_error_rebuilds_the_session_in_place(job)
 
 
 @pytest.mark.asyncio
+async def test_a_rebuild_carries_a_pending_voice_and_only_the_first_start_announces(job, monkeypatch):
+    """C-50: the session factory hands a voice still pending from the closed session to the model options before
+    it builds the next AgentSession (never on the first build), and only a job's first session tells the dashboard
+    the persona."""
+    carries: list[int] = []
+    announces: list[int] = []
+
+    async def carry(_self) -> None:
+        carries.append(len(job.sessions))
+
+    monkeypatch.setattr(job.ar.BrainAssistant, "carry_pending_voice", carry, raising=False)
+    monkeypatch.setattr(job.ar.BrainAssistant, "announce_persona",
+                        lambda _self: announces.append(len(job.sessions)), raising=False)
+
+    def on_start(agent):
+        session = job.sessions[-1]
+        loop = asyncio.get_running_loop()
+        if len(job.sessions) == 1:
+            loop.call_later(0.05, lambda: session.fire("close", types.SimpleNamespace(reason="error")))
+        else:
+            loop.call_later(0.05, agent.request_end, "paused_by_owner")
+
+    job.on_start = on_start
+    await _run_entrypoint(job, _FakeJobContext())
+    assert len(job.sessions) == 2
+    assert carries == [1]  # on the rebuild, while only the closed first session existed
+    assert announces == [1]  # the first start only
+
+
+@pytest.mark.asyncio
 async def test_every_started_session_is_hardened_before_the_assistant_gets_it(job, monkeypatch):
     """C-124 + C-33 step B: the owner-only RPC/text guard wraps EACH session's handlers (the first one and every
     rebuild) before the assistant can act on that session."""
