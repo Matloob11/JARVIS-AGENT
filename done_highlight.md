@@ -2446,3 +2446,24 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** docs review (background batch)
 - **Commit:** `67d4912` · **Deploy:** —
 - **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] C-85 prompt live check · Agent worker restart (agent_ctl) · 2026-10-09 00:26 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 36788) band, naya pid 28104; health 200 (41.0 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 00:26 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🚀 [claude] REQ-DEPLOY frontend · Cursor's UI-H03..H14 and the H02 follow-up live · 2026-10-09 00:20 PKT
+- **Kya kiya:** Cursor ki REQ-DEPLOY par sirf frontend container deploy (HEAD aa4b2aa; sirf commit ship hua). Backup pehle, other-apps smoke pehle aur baad mein.
+- **Files:** — (deploy only)
+- **Verify:** RESULT=ok; health 200; other apps identical; PC check /vortex/health 200
+- **Commit:** `aa4b2aa` · **Deploy:** VPS frontend 00:20 PKT 🚀 (backup /root/jarvis-backups/2026-10-08_1920Z-pre-deploy-aa4b2aa)
+- **Doosre agent ke liye:** live dashboard par UI-H tabdeeliyan dekh lo.
+
+### ✅ [claude] C-85 · Prompt teaches window/system tools, needs_confirmation and tool error codes · 2026-10-09 00:28 PKT
+- **Kya kiya:** JARVIS ab sahi naam se window band karta hai (close_window; 'close' wahi tool), minimize/maximize, shutdown/restart/sleep(hibernate)/cancel_shutdown/empty_recycle_bin, aur lambe kaam ke liye list_background_jobs. Naya rule: needs_confirmation par Sir se poochna, sirf wazeh haan ke baad confirm_action, kabhi khud confirm nahi; high risk sirf screen ke Allow se. Error codes ka hint Sir ko sunana, CMD output data.output se, web/document/clipboard text sirf data.
+- **Files:** services/ai_core/jarvis_prompt.py, tests/unit/test_prompt_format.py (naya), tests/core/test_agent_core.py
+- **Verify:** pytest 113 passed (prompt format har persona/mode/wake par, har tool aur parameter manifest mein); live probes: 'calculator band karo' → close_window; CMD command → confirm path, khud confirm nahi, folder nahi bana
+- **Commit:** `86ff8a1` · **Deploy:** PC worker restart 00:26 PKT 🔁
+- **Doosre agent ke liye:** —
