@@ -307,6 +307,39 @@ def chat_input(payload: Any) -> tuple[str | None, str] | None:
     return msg_id, text
 
 
+def _artifact_roots() -> list[str]:
+    """Where a job artifact may be opened from (K-31): <project_root>/Jarvis_Outputs and the shared folder."""
+    roots = [os.path.join(config.project_root, "Jarvis_Outputs"), getattr(config, "shared_dir", "") or ""]
+    return [os.path.realpath(r) for r in roots if r]
+
+
+async def open_job_artifact(payload: Any) -> bool:
+    """
+    ui_command open_job_artifact {job_id} (C-57, K-31): opens the artifact of a FINISHED job only when its file exists
+    under Jarvis_Outputs or the shared folder, through jarvis_delivery.open_artifact (os.startfile on the PC, the
+    laptop's pc.fetch in vps mode), and audits it. Anything else is refused with a log line. Returns True when opened.
+    """
+    from services.utils import jarvis_audit, jarvis_delivery  # pylint: disable=import-outside-toplevel
+    from services.utils.jarvis_jobs import get_job  # pylint: disable=import-outside-toplevel
+
+    job_id = str(payload.get("job_id") or "") if isinstance(payload, dict) else ""
+    job = get_job(job_id)
+    artifact = (job or {}).get("artifact") or {}
+    path = artifact.get("path") if isinstance(artifact, dict) else None
+    if not job or job.get("status") != "done" or not isinstance(path, str) or not path:
+        logger.warning("open_job_artifact refused: no finished job with a file")
+        return False
+    real = os.path.realpath(path)
+    inside = any(os.path.commonpath([real, root]) == root for root in _artifact_roots()
+                 if os.path.splitdrive(real)[0].lower() == os.path.splitdrive(root)[0].lower())
+    if not inside or not os.path.isfile(real):
+        logger.warning("open_job_artifact refused: the file is missing or outside the output folders")
+        return False
+    await asyncio.to_thread(jarvis_delivery.open_artifact, real)
+    jarvis_audit.log_tool("open_job_artifact", "low", "success", f"job {job_id}")
+    return True
+
+
 class UIBridgeListener:
     """Manages Socket.IO connection and command handling for the UI Bridge."""
     def __init__(self, assistant: "BrainAssistant") -> None:
@@ -407,6 +440,14 @@ class UIBridgeListener:
                     swarm_task = asyncio.create_task(swarm_coordinator.execute_swarm(payload))
                     self.assistant._spawned_tasks.add(swarm_task) # type: ignore[attr-defined]
                     swarm_task.add_done_callback(self.assistant._spawned_tasks.discard) # type: ignore[attr-defined]
+            elif cmd_type == "job_cancel":
+                # C-57 (K-31): stop one background job; an unknown or finished id changes nothing
+                from services.utils.jarvis_jobs import cancel_job  # pylint: disable=import-outside-toplevel
+                job_id = payload.get("job_id") if isinstance(payload, dict) else None
+                accepted = cancel_job(str(job_id or ""))
+                logger.info("JOB cancel via UI: %s", "accepted" if accepted else "not active")
+            elif cmd_type == "open_job_artifact":
+                await open_job_artifact(payload)
         except Exception as e:
             logger.error("❌ Error processing UI command %s: %s", cmd_type, e, exc_info=True)
 

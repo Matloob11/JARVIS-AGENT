@@ -1,12 +1,12 @@
 {
-  "git_sha": "aacd0e2a63769b7185692ba4109c735f11e3d2e9",
+  "git_sha": "22b0bccef6920ac7352cb0b0cf2e0513c5b924ad",
   "lk_schema_libs": {
     "docstring-parser": "0.18.0",
     "livekit-agents": "1.4.6",
     "pydantic": "2.12.5",
     "pydantic-core": "2.41.5"
   },
-  "manifest_sha256": "30c8385124d6ee7a7075853432b45311bc4701a0316d4b9b2c699083395d1558",
+  "manifest_sha256": "71d1360d97ddd51f5bf4323859f94b33f1b9e81688896af1bfffa2ab2c0ffc47",
   "pc_operations": [
     {
       "arg_hooks": [],
@@ -487,6 +487,34 @@
           "default": null,
           "kind": "POSITIONAL_OR_KEYWORD",
           "name": "file_path",
+          "required": true
+        }
+      ],
+      "placement": "vps"
+    },
+    {
+      "cls": null,
+      "doc": "\n    Cancels one queued or running background job by its job_id (from list_background_jobs).\n\n    Args:\n        job_id: The job_id of the job to stop.\n    ",
+      "idempotent": false,
+      "lk_schema_sha256": "845a2a9e9ffcf451e641e1826b5a300401bc344844a11f3415eecab6eb3a6555",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 10.0,
+        "voice_confirm": null
+      },
+      "module": "services.ai_core.background_jobs",
+      "name": "cancel_background_job",
+      "param_schema_sha256": "ee497cf94f69e252e82c898680eeb1a3c4634a02bd91f13be58d18f67d2567ea",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "job_id",
           "required": true
         }
       ],
@@ -1134,6 +1162,26 @@
           "required": false
         }
       ],
+      "placement": "vps"
+    },
+    {
+      "cls": null,
+      "doc": "\n    Lists JARVIS's background jobs (running, queued and the most recent finished ones) with their progress.\n    Use it when Sir asks which tasks are running (\"kaunse kaam chal rahe hain?\"). Jobs started before the last\n    agent restart are gone and are not listed.\n    ",
+      "idempotent": true,
+      "lk_schema_sha256": "f21a6373de7a2dd643efe7d1819ab55dd84735b3e5f5f36ef02df03b14d42968",
+      "meta": {
+        "arg_policies": {},
+        "exclusive": null,
+        "long_running": false,
+        "max_output_chars": 12000,
+        "risk": "low",
+        "timeout": 10.0,
+        "voice_confirm": null
+      },
+      "module": "services.ai_core.background_jobs",
+      "name": "list_background_jobs",
+      "param_schema_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "params": [],
       "placement": "vps"
     },
     {
