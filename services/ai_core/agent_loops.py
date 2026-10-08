@@ -16,7 +16,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 import socketio
 
-from services.ai_core.swarm_manager import swarm_coordinator
+from services.ai_core.swarm_manager import start_swarm
 from services.automation.jarvis_reminders import check_due_reminders
 from services.ai_core.jarvis_vector_memory import jarvis_vector_db
 from services.info.jarvis_sim_lookup import open_sim_lookup_panel
@@ -299,6 +299,17 @@ def _sim_lookup_tool() -> Callable[..., Any] | None:
     return None
 
 
+def swarm_task_input(payload: Any) -> str | None:
+    """
+    The task of a ui_command 'swarm' (K-03): the UI's {task} or the legacy plain string (a typed '/swarm <task>'
+    arrives as one, K-59). None when there is no task.
+    """
+    task = payload.get("task") if isinstance(payload, dict) else payload
+    if not isinstance(task, str) or not task.strip():
+        return None
+    return task.strip()
+
+
 def chat_input(payload: Any) -> tuple[str | None, str] | None:
     """
     (id, text) of a ui_command 'chat' (K-41, K-59): the UI's {id|client_msg_id, text} keeps its id; a legacy
@@ -474,12 +485,21 @@ async def _cmd_confirm_response(payload: Any, _ctx: CommandContext) -> None:
 
 
 @register_ui_command("swarm")
-def _cmd_swarm(payload: Any, ctx: CommandContext) -> None:
-    if payload:
-        # the task is typed text: its length at INFO, the words at DEBUG only (C-64 SP-1)
-        logger.info("🌀 SWARM run started (%d chars)", len(str(payload)))
-        logger.debug("SWARM task: %s", payload)
-        _spawn_for(ctx.assistant, swarm_coordinator.execute_swarm(payload))
+async def _cmd_swarm(payload: Any, _ctx: CommandContext) -> None:
+    task = swarm_task_input(payload)
+    if task is None:
+        logger.debug("swarm command without a task ignored (%s)", type(payload).__name__)
+        return
+    # C-81: the voice tool start_swarm_mode's path, a K-20 job (Jobs-panel progress; job_cancel stops it). The
+    # dict payload {task} reached execute_swarm whole before.
+    started = start_swarm(task)
+    if started.get("status") != "started":
+        logger.warning("🌀 SWARM not started: %s", started.get("error_code"))
+        await notify_transcription("assistant", f"[SWARM] {started.get('message')}", source="system")
+        return
+    # the task is typed text: its length at INFO, the words at DEBUG only (C-64 SP-1)
+    logger.info("🌀 SWARM run started (%d chars)", len(task))
+    logger.debug("SWARM task: %s", task)
 
 
 @register_ui_command("job_cancel")

@@ -211,6 +211,7 @@ PinchTab 127.0.0.1:9867, WhatsApp Desktop, Notepad          volumes jarvis_agent
 **Planned K-17 tools:**
 - close_window, cancel_shutdown → laptop
 - list/cancel background job, cancel_scheduled_task, confirm_selftest → VPS
+- start_swarm_mode (C-81: Swarm mode as a background job of LLM calls) → VPS
 
 ### 4.3 Placement mechanics
 - **Placement table:** `services/ai_core/tool_placement.py` (K-71). Each entry has `place`, `fallback`, `fallback_on`, `idempotent`, `cls`, `arg_hooks`, `opens_urls` and `timeout_override`.

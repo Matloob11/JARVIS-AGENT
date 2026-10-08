@@ -168,9 +168,10 @@ def _laptop(name: str, cls: str, idempotent: bool = False, **extra: Any) -> Tool
 
 # Grouped as in docs/ARCHITECTURE_VPS_BRAIN.md section 4.2. Planned K-17 tools get their entry when
 # they are registered: confirm_selftest on the VPS (list_background_jobs and cancel_background_job landed
-# with C-57, cancel_shutdown with X-29, cancel_scheduled_task with X-32, close_window with X-43).
+# with C-57, cancel_shutdown with X-29, cancel_scheduled_task with X-32, close_window with X-43,
+# start_swarm_mode with C-81).
 _TABLE: tuple[ToolPlacement, ...] = (
-    # ---------------------------------------------------------------- VPS (35)
+    # ---------------------------------------------------------------- VPS (36)
     _vps("tool_report_plan_progress", True),
     _vps("tool_update_user_background"),
     _vps("tool_update_sir_background"),
@@ -212,6 +213,7 @@ _TABLE: tuple[ToolPlacement, ...] = (
     _vps("confirm_action"),
     _vps("list_background_jobs", True),  # C-57 (K-20): jobs run where the agent runs
     _vps("cancel_background_job"),
+    _vps("start_swarm_mode"),  # C-81: a K-20 job of LLM calls (llm_text) in the agent
     # ---------------------------------------------------------------- split (1)
     # The laptop captures (pc.capture_screen), the VPS analyses.
     ToolPlacement("analyze_screen", SPLIT, cls=CAPTURE, idempotent=True, timeout_override=45.0),

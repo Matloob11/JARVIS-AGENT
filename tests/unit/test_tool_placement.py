@@ -101,9 +101,10 @@ def test_the_internal_tools_are_the_wrap_tools_of_brain_assistant():
 
 
 def test_the_counts_match_k71(local):
-    # C-57: +2 job tools; X-29: cancel_shutdown; X-32: cancel_scheduled_task; X-43: close_window
-    assert tp.placement_counts() == {"vps": 35, "split": 1, "routed": 2, "laptop": 50}
-    assert len(tp.PLACEMENTS) == len(local["tools"]) + len(tp.INTERNAL_TOOLS) == 88
+    # C-57: +2 job tools; X-29: cancel_shutdown; X-32: cancel_scheduled_task; X-43: close_window;
+    # C-81: start_swarm_mode
+    assert tp.placement_counts() == {"vps": 36, "split": 1, "routed": 2, "laptop": 50}
+    assert len(tp.PLACEMENTS) == len(local["tools"]) + len(tp.INTERNAL_TOOLS) == 89
 
 
 def test_deny_listed_modules_hold_only_gui_laptop_tools(local):
@@ -323,7 +324,7 @@ def test_overrides_change_places_and_skipped_modules():
     assert "services.automation.jarvis_maps_scraper" in default_skip
     assert tp.REMOTE_DENIED_MODULES <= default_skip
     places = tp.effective_placements({"scrape_google_maps_leads": tp.VPS})
-    assert tp.placement_counts(places) == {"vps": 36, "split": 1, "routed": 2, "laptop": 49}
+    assert tp.placement_counts(places) == {"vps": 37, "split": 1, "routed": 2, "laptop": 49}
     assert "services.automation.jarvis_maps_scraper" not in tp.remote_skip_modules(manifest, places)
     # The deny-list holds even without a manifest.
     assert tp.remote_skip_modules(None, places) == tp.REMOTE_DENIED_MODULES
@@ -395,10 +396,10 @@ def test_the_import_guard_refuses_only_deny_listed_modules():
 
 
 def test_local_discovery_ignores_the_table(local):
-    assert len(local["tools"]) == 84
+    assert len(local["tools"]) == 85  # C-81: start_swarm_mode
     assert local["plan"] is None
     assert local["guard_installed"] is False
-    assert local["health"] == {"ok": True, "count": 84, "detail": ""}
+    assert local["health"] == {"ok": True, "count": 85, "detail": ""}
     assert set(local["denied_loaded"]) == tp.REMOTE_DENIED_MODULES  # the PC brain imports them all
 
 
@@ -424,6 +425,7 @@ def test_remote_discovery_serves_every_expected_name(local, remote):
     assert {"analyze_screen", "zip_files", "list_generated_media_tool", "send_email",
             "confirm_action"} <= set(plan["vps_local"])
     assert {"shutdown_system", "open_app", "automate_whatsapp"} <= set(plan["add_proxy"])
-    # C-57: +2 VPS job tools; X-29: cancel_shutdown (laptop); X-32: cancel_scheduled_task (VPS)
-    assert len(plan["vps_local"]) == 34 and len(served) == 84
+    # C-57: +2 VPS job tools; X-29: cancel_shutdown (laptop); X-32: cancel_scheduled_task (VPS);
+    # C-81: start_swarm_mode (VPS)
+    assert len(plan["vps_local"]) == 35 and len(served) == 85
     assert remote["health"] == {"ok": True, "count": len(remote["tools"]), "detail": ""}

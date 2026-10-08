@@ -332,7 +332,7 @@ async def test_ai_tools() -> None:
     from services.ai_core.swarm_manager import swarm_coordinator
 
     if not swarm_coordinator.is_active:
-        log_skip("swarm_coordinator", "GOOGLE_API_KEY not set")
+        log_skip("swarm_coordinator", "no LLM key set (GOOGLE_API_KEY, GROQ_API_KEY or OPENROUTER_API_KEY)")
         results.append(TestResult("swarm_coordinator", "AI", "SKIP", 0, "No API key"))
         return
 
