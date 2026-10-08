@@ -816,13 +816,25 @@ async def notify_memory(content: str) -> None:
     })
 
 
-async def notify_tool_action(tool_name: str, action_details: str) -> None:
-    """Sends a tool execution sync event to the UI."""
-    await notify_event("tool_sync", {
+TOOL_ACTION_EXTRA_KEYS = ("id", "phase", "status", "progress", "risk", "ts", "message")
+
+
+async def notify_tool_action(tool_name: str, action_details: str, **extra: Any) -> None:
+    """Sends a tool execution sync event to the UI. C-29 step 6 (K-13): id, phase, status, progress, risk, ts and
+    message given as keywords merge into the event (None values are left out; other keywords are ignored), so a
+    long tool can report one row's progress. Positional callers are unchanged."""
+    payload: dict[str, Any] = {
         "tool": tool_name,
         "details": action_details,
         "timestamp": time.time(),
-    })
+    }
+    for key in TOOL_ACTION_EXTRA_KEYS:
+        if extra.get(key) is not None:
+            payload[key] = extra[key]
+    ignored = sorted(set(extra) - set(TOOL_ACTION_EXTRA_KEYS))
+    if ignored:
+        logger.debug("notify_tool_action ignored keywords: %s", ", ".join(ignored))
+    await notify_event("tool_sync", payload)
 
 
 async def notify_sim_data(

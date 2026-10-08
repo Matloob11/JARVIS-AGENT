@@ -33,6 +33,7 @@ from services.utils.jarvis_config import (
     runtime_role,
 )
 from services.utils.jarvis_logger import setup_logger
+from services.ai_core import jarvis_guard  # C-29: K-45 policy (imports only src.core.confirm_policy)
 from services.utils.jarvis_resilience import resilience_manager
 from services.utils.jarvis_security import (
     DEFAULT_MAX_OUTPUT_CHARS,
@@ -823,7 +824,8 @@ class JarvisPluginManager:
             # the bridge store and the UI, so sensitive argument values go in masked only.
             details = _args_preview(_sensitive_masked(tool_name, arguments), policies,
                                     param_defaults)
-            call_risk = level if isinstance(level, str) else "high"
+            # C-29 (K-45): the guard raises a K-45 HIGH tool to 'high' whatever its decorator says (never lowers).
+            call_risk = jarvis_guard.effective_risk(tool_name, level if isinstance(level, str) else "high")
             start_task: asyncio.Task[None] | None = None
             start_sent = False
             status, result = "error", None
@@ -838,7 +840,7 @@ class JarvisPluginManager:
                     arguments = _bind_arguments(sig, positional_names, args, kwargs)
                 except ArgPolicyError as e:
                     rejected = e
-                call_risk = _call_risk(level, arguments, label)
+                call_risk = jarvis_guard.effective_risk(tool_name, _call_risk(level, arguments, label))
                 start_task = _emit_tool_sync(_sync_event(
                     call_id, tool_name, phase="start", status="running", details=details,
                     risk=call_risk))
@@ -868,8 +870,10 @@ class JarvisPluginManager:
                 if summary:
                     end_event["result_summary"] = summary
                 _emit_tool_sync(end_event, after=start_task)
-                if call_risk in ("medium", "high"):
-                    _audit_tool_call(tool_name, call_risk, status, arguments,
+                # K-45: a MEDIUM-listed tool runs without a question but is audited as medium
+                audited = jarvis_guard.audit_risk(tool_name, call_risk)
+                if audited in ("medium", "high"):
+                    _audit_tool_call(tool_name, audited, status, arguments,
                                      call_id=call_id, duration_ms=duration_ms)
 
         # Preserving original name and signature for LLM understanding
