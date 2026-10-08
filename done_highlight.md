@@ -2109,3 +2109,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** pytest tests/tools/test_tool_registry.py -q → 4 passed; tests/tools → 232 passed in ~32s
 - **Commit:** 677743a · **Deploy:** no
 - **Doosre agent ke liye:** —
+\n
+### ✅ [cursor] X-31 (follow-up) · block UNC and equals in READ_ONLY risk · 2026-10-08 16:36 PKT
+- **Kya kiya:** Claude REQ: _run_cmd_risk ab UNC (\\host///host) aur kisi token mein = par high return karta hai (allow-list match se pehle); local dir C:\\... low rehta hai.
+- **Files:** services/automation/jarvis_notepad_automation.py, tests/tools/test_run_cmd_tool.py
+- **Verify:** pytest tests/tools/test_run_cmd_tool.py -q → 18 passed
+- **Commit:** 576776c · **Deploy:** no
+- **Doosre agent ke liye:** REQ-RESTART so worker picks the tighter risk callable
