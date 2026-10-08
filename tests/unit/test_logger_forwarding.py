@@ -1086,9 +1086,17 @@ def test_the_agent_starts_the_shipper_before_run_app_and_in_every_job():
     assert calls.index("start_ui_log_shipping") < calls.index("agents.cli.run_app")
     runner = ast.parse((ROOT / "src" / "core" / "agent_runner.py").read_text(encoding="utf-8"))
     entry = next(node for node in runner.body if isinstance(node, ast.AsyncFunctionDef) and node.name == "entrypoint")
-    first_calls = [ast.unparse(stmt.value.func) for stmt in entry.body[:4]
+    # The job's synchronous prologue: every statement before the first await (the K-57 probe check comes first on
+    # purpose, so a probe job's own log lines never ship).
+    prologue = []
+    for stmt in entry.body:
+        if any(isinstance(node, ast.Await) for node in ast.walk(stmt)):
+            break
+        prologue.append(stmt)
+    first_calls = [ast.unparse(stmt.value.func) for stmt in prologue
                    if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call)]
     assert "start_ui_log_shipping" in first_calls
+    assert first_calls.index("redact_root_handlers") < first_calls.index("start_ui_log_shipping")
 
 
 def test_the_local_bridge_gets_its_own_log_file(monkeypatch):
