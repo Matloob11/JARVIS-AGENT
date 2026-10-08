@@ -1406,7 +1406,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-56 | cursor | P3 | Google Maps leads scraper: Chrome channel, background job, resilient selectors | C-06, C-26, X-11, C-57 | BLOCKED (waiting C-06,C-26,X-11,C-57) |
 | X-57 | cursor | P3 | Deep research (multi-source + LLM report) and research-and-email as an approved background job | C-45, X-36, X-54, C-24, C-28, C-55, C-57, K-30 (llm_text), K-31 (job_progress_routing) | BLOCKED (waiting C-45,X-36,X-54,C-24,C-28) |
 | X-58 | cursor | P3 | YouTube downloader as a background job (single task, absorbs desktop K16) | C-47, C-24, C-28, C-55, C-57, K-31 (job_progress_routing) | BLOCKED (waiting C-47,C-24,C-28,C-55,C-57) |
-| X-62 | cursor | P3 | PinchTab Chrome tools: auth, autostart, profile/instance lifecycle, text + refs, degraded mode, untrusted page text | C-24, C-26, X-03, X-11, C-75, C-84, K-23 (PinchTabLocalServer), K-16 (DesktopToolPolicy) | BLOCKED (waiting C-24+) |
+| X-62 | cursor | P3 | PinchTab Chrome tools: auth, autostart, profile/instance lifecycle, text + refs, degraded mode, untrusted page text | C-24, C-26, X-03, X-11, C-75, C-84, K-23 (PinchTabLocalServer), K-16 (DesktopToolPolicy) | DOING (cursor, 2026-10-08 16:05 PKT) |
 | C-100 | claude | P4 | TOOLS.md for info/media tools (env, providers, timeouts, approvals, outputs) | C-46, X-61 | TODO |
 | C-101 | claude | P4 | OpsSupervisor: one entry point for health, healing, adaptation, bug hunter, startup diagnostics, checkpoints, daily backups | C-11, C-63, C-64, C-71, C-76, C-77, C-83 | TODO |
 | C-102 | claude | P4 | Optional monitoring profile: PerformanceMonitor + metrics server on 127.0.0.1:8765 + Phoenix/OpenTelemetry tracing | C-101, C-29 | TODO |
@@ -1457,7 +1457,7 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 | X-63 | cursor | P4 | Tool registry/policy tests + legacy test-script cleanup | X-29, X-30, X-26, X-27, X-31, X-25, X-34, X-41, X-42, X-43, X-44, X-62, X-56, X-35, X-28, K-16 (DesktopToolPolicy) | BLOCKED (waiting many tool deps) |
 | X-64 | cursor | P3 | Location hook for weather and search (replaces Claude's compat patch) | C-113, C-111 | DONE (cursor, 02 Oct 20:49 PKT) |
 | X-65 | cursor | P3 | VPS-safe Cursor modules: DESKTOP_ONLY guard, lazy GUI imports, delivery helper, safe names, stricter risks | C-113, C-111 | DONE (cursor, 02 Oct 20:56 PKT) |
-| X-66 | cursor | P3 | Reminders and tasks: cross-process locking, timezone-aware times, delivery hooks for agent-svc | C-125 step 1 (jarvis_filelock, landed 08 Oct), C-111 | TODO |
+| X-66 | cursor | P3 | Reminders and tasks: cross-process locking, timezone-aware times, delivery hooks for agent-svc | C-125 step 1 (jarvis_filelock, landed 08 Oct), C-111 | DOING (cursor, 2026-10-08 16:05 PKT) |
 | X-67 | cursor | P0 | UI for the split: Laptop chip, Stop desktop, notification ack, media links, Electron 'desktop' mode | C-116, C-117, C-111 | DONE (cursor, 03 Oct 16:15 PKT) |
 | X-68 | cursor | P4 | (optional, deferred by user decision D3) Owner approval key in the browser: pairing and signed approvals over the arguments you see (V9) | C-111, C-116, X-67 | NOT NEEDED (deferred by user decision D3; reopen only if local approvals return) |
 | X-69 | cursor | P3 | Design tokens, Tailwind mapping, self-hosted fonts, icon sprite, full testid inventory baseline | C-135 | DONE (cursor, 02 Oct 21:50 PKT) |
