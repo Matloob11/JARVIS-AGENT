@@ -3,7 +3,7 @@ scripts/smoke/voice_probe.py: a headless voice and chat probe of the JARVIS agen
 
     $PY scripts/smoke/voice_probe.py --text "Jarvis, what is 2 plus 2?" --expect-contains 4 [--json-out logs/probe_text.json]
     $PY scripts/smoke/voice_probe.py --wav tests/integration/fixtures/audio/tts_jarvis_time.wav --expect reply
-    $PY scripts/smoke/voice_probe.py --wav tts_jarvis_secret.wav --wav tts_recall.wav --expect-contains pineapple
+    $PY scripts/smoke/voice_probe.py --wav tts_jarvis_secret.wav --wav tts_recall.wav --expect-contains mango
 
 The probe creates its own room 'jarvis-probe-<epoch>' (empty_timeout 120 s; dispatched to --agent-name or
 JARVIS_AGENT_NAME when one is set, else by LiveKit's automatic dispatch), joins it as 'probe-<epoch>' with

@@ -27,7 +27,7 @@ $phrases = [ordered]@{
     "tts_jarvis_time.wav"   = "Jarvis, what time is it right now?"
     "tts_no_wake_time.wav"  = "What time is it right now?"
     "tts_jarvis_math.wav"   = "Jarvis, what is two plus two?"
-    "tts_jarvis_secret.wav" = "Jarvis, please remember this. The secret word is pineapple."
+    "tts_jarvis_secret.wav" = "Jarvis, please remember this. The secret word is mango."
     "tts_recall.wav"        = "Jarvis, what was the secret word I told you?"
 }
 
