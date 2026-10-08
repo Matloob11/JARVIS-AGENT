@@ -476,7 +476,9 @@ async def _cmd_confirm_response(payload: Any, _ctx: CommandContext) -> None:
 @register_ui_command("swarm")
 def _cmd_swarm(payload: Any, ctx: CommandContext) -> None:
     if payload:
-        logger.info("🌀 Swarm Mode triggered with: %s", payload)
+        # the task is typed text: its length at INFO, the words at DEBUG only (C-64 SP-1)
+        logger.info("🌀 SWARM run started (%d chars)", len(str(payload)))
+        logger.debug("SWARM task: %s", payload)
         _spawn_for(ctx.assistant, swarm_coordinator.execute_swarm(payload))
 
 

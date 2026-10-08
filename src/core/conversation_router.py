@@ -16,6 +16,10 @@ on_conversation_item_added() is the single source of transcript messages from th
 is a pending typed message is not emitted again; any other user item is a voice message (id = item.id); an
 assistant item is emitted with id = item.id, turn_id = the user message it answers and that message's source.
 
+C-43: every accepted typed or voice message also gets the Reasoning panel's event (K-67, jarvis_reasoning in the
+background, 2 s cap, never the reply), and '/swarm <task>' runs the registered 'swarm' command once instead of a
+reply, with no message from the router (the swarm module is the single emitter).
+
 Every message goes out through one ordered chain (each send waits for the one before it, at most
 EMIT_ORDER_WAIT_S): the typed user echo is sent beside the reply instead of before it, so its bridge round trip
 never delays generate_reply, and the reply still reaches the UI after the echo.
@@ -37,6 +41,9 @@ from services.utils import jarvis_bridge
 from services.utils.jarvis_audit import jarvis_audit
 from services.utils.jarvis_logger import setup_logger
 from services.utils.jarvis_security import vortex_guard
+from services.utils.ui_command_registry import CommandContext
+from services.utils.ui_command_registry import dispatch as dispatch_ui_command
+from src.core.bridge_notifier import bridge_notifier
 
 logger = setup_logger("CHAT-ROUTER")
 
@@ -57,14 +64,20 @@ PENDING_KEEP_S = 120.0   # a prefixed item still finds its typed id this long (t
 TURN_LOG_MAX = 200
 INTERRUPT_WAIT_S = 2.0   # the interrupt waits for playout; never let a stuck output hold a typed reply
 OFFLINE_TIMEOUT_S = 10.0
+REASONING_TIMEOUT_S = 2.0  # K-67: the panel's reasoning never takes longer (and never produces the reply)
+REASONING_HISTORY = 10  # earlier turns jarvis_reasoning sees
+SWARM_COMMAND = "swarm"
 EMIT_ORDER_WAIT_S = 5.0  # a send waits this long at most for the one before it (a stuck bridge never stalls all)
 PREVIEW_CHARS = 60
 
 # Control characters (C0, DEL, C1) except tab and newline; CR is folded into newline first.
 _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
 _WHITESPACE = re.compile(r"\s+")
+_SWARM_PREFIX = re.compile(r"^/swarm(?:\s+|$)", re.IGNORECASE)
 
 NotifyFn = Callable[..., Awaitable[Any]]
+ReasonFn = Callable[[str, list[dict[str, Any]]], Awaitable[Any]]
+DispatchFn = Callable[[str, Any], Awaitable[Any]]
 SpawnFn = Callable[[Coroutine[Any, Any, Any]], "asyncio.Task[Any]"]
 
 
@@ -97,6 +110,19 @@ def preview(text: str) -> str:
     return flat if len(flat) <= PREVIEW_CHARS else flat[:PREVIEW_CHARS - 3] + "..."
 
 
+def swarm_task_of(text: str) -> str | None:
+    """The task of a typed '/swarm <task>' ('' for a bare '/swarm'), else None."""
+    match = _SWARM_PREFIX.match(text)
+    return text[match.end():].strip() if match else None
+
+
+async def _advanced_reasoning(text: str, history: list[dict[str, Any]]) -> Any:
+    from services.ai_core.jarvis_reasoning import (  # pylint: disable=import-outside-toplevel
+        process_with_advanced_reasoning,
+    )
+    return await process_with_advanced_reasoning(text, history)
+
+
 def valid_msg_id(msg_id: Any) -> str | None:
     """A client id the router keeps: a str of 1-128 printable characters, else None."""
     if isinstance(msg_id, str) and 0 < len(msg_id) <= ID_MAX_CHARS and msg_id.isprintable():
@@ -114,9 +140,14 @@ class _Pending:
 class ConversationRouter:
     """One per job: routes typed text into the AgentSession and emits every transcript message once."""
 
-    def __init__(self, assistant: Any = None, *, notify: NotifyFn | None = None,
-                 spawn: SpawnFn | None = None, clock: Callable[[], float] = time.monotonic) -> None:
+    def __init__(self, assistant: Any = None, *, notify: NotifyFn | None = None,  # pylint: disable=too-many-arguments
+                 spawn: SpawnFn | None = None, clock: Callable[[], float] = time.monotonic,
+                 reason: ReasonFn | None = None, notify_reasoning: NotifyFn | None = None,
+                 dispatch_command: DispatchFn | None = None) -> None:
         self.assistant = assistant
+        self._reason = reason  # C-43 (K-67): jarvis_reasoning unless a test injects one
+        self._notify_reasoning = notify_reasoning
+        self._dispatch_command = dispatch_command  # '/swarm': the UI command registry unless injected
         self.session: Any = None
         self.turn_log: deque[dict[str, Any]] = deque(maxlen=TURN_LOG_MAX)
         self._notify = notify
@@ -174,6 +205,10 @@ class ConversationRouter:
             self._log("blocked", user_id, origin, clean)
             return "blocked"
 
+        swarm_task = swarm_task_of(clean)
+        if swarm_task is not None:
+            return await self._swarm(swarm_task, user_id, origin, clean)
+
         self._emit_ordered("user", clean, msg_id=user_id, source="text")  # beside the reply, never before it
         self._log_turn(user_id, "user", clean, "text")
 
@@ -197,6 +232,7 @@ class ConversationRouter:
             self._log("offline", user_id, origin, clean)
             return "offline"
 
+        self.emit_reasoning(clean, "text", user_id)
         self._log("accepted", user_id, origin, clean)
         return "accepted"
 
@@ -241,6 +277,7 @@ class ConversationRouter:
             self._log_turn(item_id, "user", text, "voice")
             logger.info("CHAT_ROUTER voice id=%s chars=%d: %s", item_id, len(text), preview(text))
             logger.debug("CHAT_ROUTER voice id=%s full text: %s", item_id, text)
+            self.emit_reasoning(text, "voice", item_id)
             return self._emit_ordered("user", text, msg_id=item_id, source="voice")
 
         turn_id, source = self._turn_id, self._turn_source
@@ -254,6 +291,52 @@ class ConversationRouter:
         """Waits for the emits on_conversation_item_added started (tests, shutdown)."""
         while self._tasks:
             await asyncio.gather(*list(self._tasks), return_exceptions=True)
+
+    # ------------------------------------------------------------------ C-43: reasoning and '/swarm'
+
+    def emit_reasoning(self, text: str, source: str, msg_id: str) -> "asyncio.Task[Any] | None":
+        """K-67: the Reasoning panel's event for an accepted user message (source 'text' or 'voice'), computed in the
+        background with a REASONING_TIMEOUT_S cap; it never produces the reply."""
+        return self._spawn(self._reasoning(text, source, msg_id))
+
+    async def _reasoning(self, text: str, source: str, msg_id: str) -> None:
+        history = [{"role": entry["role"], "content": entry["text"]} for entry in self.turn_log
+                   if entry.get("id") != msg_id][-REASONING_HISTORY:]
+        reason = self._reason or _advanced_reasoning
+        try:
+            result = await asyncio.wait_for(reason(text, history), REASONING_TIMEOUT_S)
+        except asyncio.TimeoutError:
+            logger.debug("CHAT_ROUTER reasoning took over %.0f s for id=%s: skipped", REASONING_TIMEOUT_S, msg_id)
+            return
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.debug("CHAT_ROUTER reasoning failed for id=%s: %s", msg_id, type(e).__name__)
+            return
+        notify = self._notify_reasoning or bridge_notifier.notify_reasoning
+        try:
+            await notify(result, source=source, msg_id=msg_id)
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.error("CHAT_ROUTER reasoning notify failed: %s", type(e).__name__)
+
+    async def _swarm(self, task: str, user_id: str, origin: str, clean: str) -> str:
+        """'/swarm <task>' (K-59): the registered 'swarm' command runs once with the task; the router emits nothing (the
+        swarm module is the single emitter) and the session does not answer."""
+        if not task:
+            self._log("empty", user_id, origin, clean)
+            return "empty"
+        dispatch_command = self._dispatch_command or self._dispatch_registered
+        try:
+            await dispatch_command(SWARM_COMMAND, task)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.error("CHAT_ROUTER swarm dispatch failed: %s", type(e).__name__)
+        self._log("swarm", user_id, origin, clean)
+        return "swarm"
+
+    async def _dispatch_registered(self, command: str, payload: Any) -> bool:
+        return await dispatch_ui_command(command, payload, CommandContext(assistant=self.assistant))
 
     # ------------------------------------------------------------------ internals
 

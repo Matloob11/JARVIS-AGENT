@@ -349,7 +349,8 @@ workflow_planner = WorkflowPlanner()
 async def analyze_user_intent(user_input: str) -> dict[str, Any]:
     """Main function to analyze user intent"""
     try:
-        logger.info("Analyzing intent for: %s...", user_input[:50])
+        # C-43: this runs for every typed and voice turn; the user's words stay out of the INFO log (C-64 SP-1)
+        logger.debug("Analyzing intent for: %s...", user_input[:50])
 
         # Perform intent analysis
         intent_result = intent_analyzer.analyze_intent(user_input)
@@ -373,7 +374,7 @@ async def generate_smart_response(user_input: str, intent_analysis: dict[str, An
                                   is_anna: bool = False) -> str:
     """Generate intelligent response using reasoning and optional semantic memory"""
     try:
-        logger.info("Generating smart response (Anna logic: %s)...", is_anna)
+        logger.debug("Generating smart response (Anna logic: %s)...", is_anna)
 
         # Analyze context
         context_info = context_analyzer.analyze_context(
@@ -392,7 +393,7 @@ async def generate_smart_response(user_input: str, intent_analysis: dict[str, An
             "timestamp": datetime.now().isoformat(),
         }
 
-        logger.info("Generated response with reasoning: %s", reasoning_info)
+        logger.debug("Generated response with reasoning: %s", reasoning_info)
 
         # If we have semantic memory, log it
         if semantic_memory:
@@ -443,7 +444,9 @@ async def process_with_advanced_reasoning(user_input_str: str,
             "processing_timestamp": datetime.now().isoformat(),
         }
 
-        logger.info("Advanced reasoning completed with plan: %s", plan)
+        logger.info("Advanced reasoning completed: intent=%s steps=%s", intent_result.get("primary_intent"),
+                    [step.get("action") for step in plan if isinstance(step, dict)])
+        logger.debug("Advanced reasoning plan: %s", plan)  # descriptions quote the user's words
         return reasoning_result
 
     except (KeyError, AttributeError, TypeError, RuntimeError) as e:  # pylint: disable=broad-exception-caught
