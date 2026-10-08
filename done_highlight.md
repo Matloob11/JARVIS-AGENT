@@ -2024,3 +2024,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Commit:** `9bf14a1` · **Deploy:** no
 - **Doosre agent ke liye:** —
 
+
+### ✅ [cursor] X-43 · open_app universal index + routing · 2026-10-08 16:14 PKT
+- **Kya kiya:** 10-min cached app index (lnk/StartApps/App Paths/mappings); fuzzy 75+; non-blocking launch; Chrome/YouTube/WhatsApp/Office/VLC routing; ToolResult {app,method}.
+- **Files:** services/system/jarvis_window_ctrl.py, tests/tools/test_window_ctrl_tools.py
+- **Verify:** pytest tests/tools/test_window_ctrl_tools.py -q -p no:cacheprovider → 25 passed
+- **Commit:** e36e0d8 · **Deploy:** no
+- **Doosre agent ke liye:** —
