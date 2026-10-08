@@ -57,6 +57,16 @@ def test_control_character_is_high() -> None:
     assert nap._run_cmd_risk({"command": "ipconfig\n/all"}) == "high"
 
 
+def test_unc_path_is_high_even_on_allow_list() -> None:
+    assert nap._run_cmd_risk({"command": r"dir \\fileserver\public"}) == "high"
+    assert nap._run_cmd_risk({"command": "where //intranet/bin/tool.exe"}) == "high"
+
+
+def test_equals_in_token_is_high_even_on_allow_list() -> None:
+    assert nap._run_cmd_risk({"command": "git diff --output=patch.txt"}) == "high"
+    assert nap._run_cmd_risk({"command": "git status --porcelain=v1"}) == "high"
+
+
 # --- Step 1 metadata (signature, raw_args, timeout) ----------------------------------------
 
 

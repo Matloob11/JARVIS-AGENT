@@ -192,10 +192,32 @@ def _run_cmd_has_forbidden_chars(command: str) -> bool:
     return any(ch in _RUN_CMD_FORBIDDEN_CHARS or ord(ch) < 32 for ch in command)
 
 
-def _run_cmd_is_read_only(command: str) -> bool:
+# SMB/NTLM leak risk: \\host or //host anywhere in the command (e.g. dir/where args).
+_RUN_CMD_UNC_RE = re.compile(r"(\\\\|//)[^\s\\/#]+", re.IGNORECASE)
+
+
+def _run_cmd_has_unc_path(command: str) -> bool:
+    return _RUN_CMD_UNC_RE.search(command) is not None
+
+
+def _run_cmd_tokens(command: str) -> list[str] | None:
     try:
-        tokens = shlex.split(command, posix=False)
+        return shlex.split(command, posix=False)
     except ValueError:
+        return None
+
+
+def _run_cmd_token_has_equals(command: str) -> bool:
+    """Any token with '=' can redirect/write (e.g. git diff --output=file)."""
+    tokens = _run_cmd_tokens(command)
+    if tokens is None:
+        return True
+    return any("=" in token for token in tokens)
+
+
+def _run_cmd_is_read_only(command: str) -> bool:
+    tokens = _run_cmd_tokens(command)
+    if tokens is None:
         return False
     normalized = " ".join(tokens)
     return any(pattern.match(normalized) for pattern in _RUN_CMD_READ_ONLY_PATTERNS)
@@ -207,6 +229,10 @@ def _run_cmd_risk(arguments: dict[str, Any]) -> str:
     if not command:
         return "high"
     if _run_cmd_has_forbidden_chars(command):
+        return "high"
+    if _run_cmd_has_unc_path(command):
+        return "high"
+    if _run_cmd_token_has_equals(command):
         return "high"
     if _run_cmd_is_read_only(command):
         return "low"
