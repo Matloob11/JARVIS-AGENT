@@ -2250,3 +2250,31 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** pytest test_empty_recycle_bin_success PASSED; voice_probe PASS (~3.8 s); agent_ctl status health 200; /vortex/health 200
 - **Commit:** (pending) · **Deploy:** no
 - **Doosre agent ke liye:** X-60 still BLOCKED on C-65; C-22 removes temp basic auth so Cursor Playwright can drive the live UI without a second browser login.
+
+### ✅ 🔁 [claude] C-17 key rotation + C-49 instructions · Agent worker restart (agent_ctl) · 2026-10-08 22:03 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 46908) band, naya pid 47388; health 200 (23.2 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 22:03 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] C-49: safe-point session update · Agent worker restart (agent_ctl) · 2026-10-08 22:14 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 47388) band, naya pid 48436; health 200 (42.8 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 22:14 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] C-17 · LiveKit API key/secret badal diye (purani key ab 401) · 2026-10-08 22:20 PKT
+- **Kya kiya:** Naya scripts/ops/rotate_livekit_keys.py: ek ssh run mein purana joda VPS par backup (600), phir naya joda VPS ki .env aur bridge.env (aur .env.agent agar ho) mein; PC ki dono env files VPS kamyab hone ke baad. Koi value kabhi print nahi hoti (sirf fingerprint). Pehle VPS + PC backup, phir rotation, livekit + ui-bridge recreate, worker restart. --check-old purane jode se bridge container ke andar ListRooms karta hai: 401. Git Bash ke path badalne ka masla aur non-JSON 401 bhi theek kiye.
+- **Files:** scripts/ops/rotate_livekit_keys.py, tests/unit/test_rotate_livekit_keys.py
+- **Verify:** old key rejected: 401; livekit.yaml keys 0; tracked secret 0; doosri apps smoke regressions=0; worker nayi key se connected; probe text + voice PASS
+- **Commit:** `37b7248`, `8c6f9c4` · **Deploy:** VPS env + livekit/ui-bridge recreate 22:02 PKT (backup 2026-10-08_1701Z-c17-rotate) 🚀
+- **Doosre agent ke liye:** LIVEKIT keys sirf root .env aur deploy/windows-local/.env se lo; owner ki apni voice call baqi hai.
+
+### ✅ 🔁 [claude] C-49 · Instructions waqai Gemini tak; ANNA ko saare tool protocols; persona switch theek · 2026-10-08 22:20 PKT
+- **Kya kiya:** jarvis_prompt.compose_instructions ab har persona aur turn mode ka prompt banata hai (ACTIVE header, persona, saare shared tool protocols ANNA ke liye bhi, identity, wake section ON/OFF/GATED, tool aur typed rules). Purane prompt ka koi rule nahi mita (golden test har line jaanchta hai). Live mili do baatein theek kiye: mid-session instructions sirf append hoti thin (ab safe point par fresh reconnect se system instruction banti hain), aur persona switch tool call ke beech restart karke jawab gira deta tha (ab instructions + awaaz ek reconnect mein jab koi reply ya tool na chal raha ho). Wake word toggle (tool aur dashboard) ab prompt badalta hai. CV contact line tracked file se nikal kar JARVIS_OWNER_CONTACT (.env) mein. 3 reviewers ke findings address kiye.
+- **Files:** services/ai_core/jarvis_prompt.py, src/core/agent_core.py, src/core/persona_manager.py, src/core/gemini_resume_guard.py, src/core/agent_runner.py, tests (prompt compose + golden, agent core, resume guard), docs/CONTRACTS.md v32
+- **Verify:** tests 805 green; live probe: switch ka confirmation, phir ANNA ke andaz mein jawab aur get_weather, bina Jarvis ke typed jawab; log INSTRUCTIONS_UPDATE sent=deferred phir sent=live restart=fresh; Session sync failed 0
+- **Commit:** `fbf8920`, `b230879` · **Deploy:** PC worker restarts 22:03, 22:14 🔁
+- **Doosre agent ke liye:** handoff dekho; ANNA ke lambe jawab native-audio ki raftar se aate hain (C-88).
