@@ -2010,3 +2010,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Commit:** `e046001` · **Deploy:** no
 - **Doosre agent ke liye:** REQ-RESTART; regen manifest if research tool meta changed
 
+
+### ✅ [cursor] X-32 (follow-up) · test_task_store_v2 fix after X-66 rename · 2026-10-08 16:20 PKT
+- **Kya kiya:** X-32 pehle hi DONE/committed (\d10934\) tha; is run ne pehle galti se poora dobara likh diya tha, lekin phir pakad kar us duplicate rewrite ko discard kar diya (\git checkout --\) taake X-66 ka already-integrated \jarvis_task_manager.py\/\jarvis_reminders.py\ safe rahe. Verify chalane par asal bug mila: X-66 ne \_schedule_risk\ ko \_scheduled_action_risk\ rename kiya tha par \	est_task_store_v2.py\ ka monkeypatch purana naam use kar raha tha (AttributeError) aur ek stale \error_code\ assertion bhi tha jo ab wajood nahi. Sirf test file fix ki — koi production code nahi chhua.
+- **Files:** tests/tools/test_task_store_v2.py
+- **Verify:** pytest tests/tools/test_task_store_v2.py tests/test_reminders.py -q -p no:cacheprovider → 19 passed
+- **Commit:** \dc79285\ · **Deploy:** no
+- **Doosre agent ke liye:** —
+### ✅ [cursor] X-55 · safe download_images + zip_files · 2026-10-08 16:13 PKT
+- **Kya kiya:** Downloads under project_root/Jarvis_Outputs; commonpath folder guard; concurrent image fetch (sem 4, 10MB); zip_name → Archives; source allow-list; >2GB refuse; zip in to_thread.
+- **Files:** services/multimedia/jarvis_advanced_tools.py, tests/tools/test_download_zip.py
+- **Verify:** pytest tests/tools/test_download_zip.py tests/tools/test_send_email.py -q → 9 passed
+- **Commit:** `9bf14a1` · **Deploy:** no
+- **Doosre agent ke liye:** —
+
