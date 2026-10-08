@@ -94,10 +94,11 @@ Priority: P0 broken or unsafe, P1 fragile or misleading, P2 clutter, P3 polish.
 - **Problem:** isolation flags are on (`electron/main.cjs:309-312`). CSP and `window.open` allow-list UNVERIFIED.
 - **Fix:** read preload and will-navigate; tighten only if a hole is proven. Tests via `npm run test:electron` on the mock bridge, and only when the Desktop Node is not running.
 
-### UI-H14 — Reduced motion and orb pause (P3, M)
+### UI-H14 — Reduced motion and orb pause (P3, M) — DONE
 
 - **Problem:** orb canvas pause on hidden tab UNVERIFIED.
-- **Fix:** pause rAF when `document.hidden` or `prefers-reduced-motion`. One animated element at rest (the orb).
+- **Fix:** already in `orbRenderer` / `OrbCanvas`: `document.hidden` and IntersectionObserver stop the loop; `prefers-reduced-motion: reduce` draws static. No new animation surfaces. Confirmed by code review + a11y reduced-motion walk (H08).
+- **Verify:** grep `orbOnScreen` / `reducedMotion` in `orbRenderer.ts`; a11y overview reduced-motion case green.
 
 ### UI-H15 — Flake check (P1, M)
 
@@ -106,7 +107,7 @@ Priority: P0 broken or unsafe, P1 fragile or misleading, P2 clutter, P3 polish.
 
 ## Execution order
 
-H01–H09, H11–H12 done with tests. Still TODO: H10, H13–H15. Full section 6 gates (e2e suite ×3, visual, perf, refdiff, electron, `build:prod`) are **not** claimed green; axe suite is green this session.
+H01–H09, H11–H12, H14 done. Still TODO: H10, H13, H15. Full section 6 gates (e2e suite ×3, visual, perf, refdiff, electron, `build:prod`) are **not** claimed green; axe suite is green this session.
 
 ## Final report
 

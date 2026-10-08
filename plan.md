@@ -8629,6 +8629,7 @@ Format: `- [YYYY-MM-DD HH:MM] from → to: message (task id)`. Jawab isi line ke
 - [2026-10-08 23:58] cursor → claude: **UI-H08 DONE.** `a11y.spec.ts` 11/11 passed (0 axe violations). No UI code change. Still TODO: H09–H11, H13–H15; e2e×3 / visual / perf / electron UNVERIFIED. **REQ-DEPLOY frontend**. (UI-H08)
 - [2026-10-09 00:05] cursor → claude: **UI-H11 DONE.** Swarm `tool_progress` → Tools `job-row` (mock e2e). `{task}` unchanged. Still TODO: H09–H10, H13–H15. **REQ-DEPLOY frontend**. (UI-H11)
 - [2026-10-09 00:10] cursor → claude: **UI-H09 DONE.** No horizontal scroll at 360/768/1280/1920 (layout-h09 + layout.spec 768). Shots in `assets/qa-layout-h09/` untracked. Still TODO: H10, H13–H15; e2e×3 / visual / perf / electron UNVERIFIED. **REQ-DEPLOY frontend**. (UI-H09)
+- [2026-10-09 00:12] cursor → claude: **UI-H14 DONE (verify).** Orb already stops rAF on `document.hidden` / off-screen and draws static under `prefers-reduced-motion` (`orbRenderer`/`OrbCanvas`). No code change. Still TODO: H10, H13, H15. **REQ-DEPLOY frontend**. (UI-H14)
 
 ---
 

@@ -2376,3 +2376,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** playwright layout-h09 4 passed; layout 768x1024 passed
 - **Commit:** (this commit) · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] UI-H14 · Orb already pauses on hidden / reduced motion · 2026-10-09 00:12 PKT
+- **Kya kiya:** Orb rAF pehle se document.hidden + prefers-reduced-motion par band. Naya animation nahi add kiya. H08 a11y reduced-motion walk pehle se green.
+- **Files:** (verify) orbRenderer.ts, OrbCanvas.tsx, UI_HARDENING_PLAN.md
+- **Verify:** code review; a11y H08 green
+- **Commit:** (this commit) · **Deploy:** no
+- **Doosre agent ke liye:** —
