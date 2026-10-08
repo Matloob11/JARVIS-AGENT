@@ -1905,3 +1905,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** jobs 8/8, placement + manifest green · full suite 4216 passed; live 85 tools (81 + 4), session started
 - **Commit:** `72a94aa` · **Deploy:** PC worker restart 🔁
 - **Doosre agent ke liye:** X-54, X-56, X-58 unblocked; bridge ka tool_progress/init_state.jobs routing C-58 mein.
+
+### ✅ [cursor] X-29 · System control guards + cancel_shutdown · 2026-10-08 15:48 PKT
+- **Kya kiya:** Shutdown/restart high+confirm_summary (30s), cancel_shutdown (exit 1116=not_found), sleep S0 monitor-off vs S3 SetSuspendState (non-blocking), hibernate Timer+shutdown /h, recycle bin SHEmptyRecycleBinW + async item/size summary.
+- **Files:** services/system/jarvis_system_ctrl.py, tests/tools/test_system_ctrl_tools.py
+- **Verify:** pytest tests/tools/test_system_ctrl_tools.py -q → 11 passed
+- **Commit:** `b6ee5df` · **Deploy:** no
+- **Doosre agent ke liye:** Manual with Sir: shutdown Allow then cancel; sleep wake Kernel-Power 506. C-85 may need cancel_shutdown in system prompt.
