@@ -13,8 +13,11 @@ with every digit run as '#', first SIGNATURE_CHARS chars) with a count and the f
 INVESTIGATE_GROUPS most frequent and has the TRIAGE_GROUPS most frequent triaged together in one llm_text call (K-30,
 the fast TRIAGE_MODEL first), each group in an equal share of the prompt: a summary and a suggested fix each.
 analyze_error makes at most one LLM call per TRIAGE_INTERVAL_S in a process and masks its input with redact_secrets
-(K-29) first; without an answer it returns the grouped raw errors. monitor_logs and its chat posts are unchanged and
-never call the LLM.
+(K-29) first; without an answer it returns the grouped raw errors. monitor_logs never calls the LLM.
+
+UI-CLEAN (08 Oct): a chat post is one short line per poll (alert_text: the most frequent new error's headline, its
+count, the time it was first logged and how many other errors came with it), never the raw records or a traceback;
+those stay in LOG_FILE for tool_investigate_recent_bugs.
 """
 
 import asyncio
@@ -66,6 +69,7 @@ TRIAGE_INPUT_CHARS = 3000   # of the masked error text in the prompt, an equal s
 TRIAGE_ANSWER_CHARS = 1500
 TRACEBACK_TAIL_LINES = 6    # of a group's newest traceback, in the prompt
 TRACEBACK_LINE_CHARS = 200  # of each of those lines (a google-genai ClientError line carries a 1-3 KB JSON body)
+ALERT_CHARS = 240  # UI-CLEAN: one chat alert line in all
 
 # A record starts with jarvis_logger's asctime, or '{' with LOG_STRUCTURED; other lines (traceback frames)
 # continue the record above them.
@@ -418,9 +422,7 @@ async def monitor_logs(callback: Callable[[str], Any]) -> None:
             new_lines: list[str] = await hunter.get_new_errors()
             fresh: list[str] = _throttle.admit(error_entries(new_lines))
             if fresh:
-                # Sanitize before callback to prevent injection propagation
-                sanitized_error = vortex_guard.sanitize_input(" ".join(_one_line(entry) for entry in fresh))
-                await callback(sanitized_error)
+                await callback(alert_text(fresh))  # UI-CLEAN: one short line, masked and sanitized
             await asyncio.sleep(POLL_S)
         except asyncio.CancelledError:
             # C-33 (08 Oct): the cancel must go on. Swallowing it returned normally, start_bug_hunter_loop's own loop
@@ -491,6 +493,20 @@ def _headline(entry: str, exception: bool = True) -> str:
     line = f"{head.name} - {head.level} - {_clip(redact_secrets(head.message), MESSAGE_CHARS)}"
     traceback = _traceback_lines(entry) if exception else []
     return f"{line} ({_clip(redact_secrets(traceback[-1].strip()), EXCEPTION_CHARS)})" if traceback else line
+
+
+def alert_text(entries: list[str]) -> str:
+    """UI-CLEAN: the chat line for newly posted error records: '<count>x <headline> · log <HH:MM:SS>' of the most
+    frequent group (group_errors; the headline as _headline gives it, the exception line that ends its traceback
+    included), then ' · +<n> aur' for the other groups; masked, sanitized and at most ALERT_CHARS. '' for none."""
+    groups = group_errors(entries)
+    if not groups:
+        return ""
+    top = groups[0]
+    when = top.first_seen[11:19] if len(top.first_seen) >= 19 else top.first_seen
+    tail = (f" · log {when}" if when else "") + (f" · +{len(groups) - 1} aur" if len(groups) > 1 else "")
+    line = vortex_guard.sanitize_input(redact_secrets(f"{top.count}x {_headline(top.latest)}"))
+    return _clip(line, ALERT_CHARS - len(tail)) + tail
 
 
 def _group_line(rank: int, group: ErrorGroup) -> str:

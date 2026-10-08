@@ -437,6 +437,37 @@ async def test_only_the_pc_cancels_loops_under_load(monkeypatch, observe_only, c
     assert victim.cancel.call_count == cancelled
 
 
+def test_the_load_warning_comes_on_a_change_not_on_every_reading(monkeypatch, tmp_path):
+    """UI-CLEAN (Cursor's REQ, 08 Oct): a laptop near its RAM limit logged 'Load Adaptation Triggered' every 30 s,
+    and each one reached the dashboard's alerts. Now: on a level change, then at most every LOAD_WARN_REPEAT_S."""
+    monkeypatch.setattr(jarvis_adaptive, "in_container", lambda: False)
+    engine = jarvis_adaptive.JarvisAdaptiveEngine(str(tmp_path / "learning_state.json"))
+    clock = [1000.0]
+    monkeypatch.setattr(jarvis_adaptive.time, "monotonic", lambda: clock[0])
+    memory = [93.0]
+    vitals = lambda: {"cpu": {"usage": 10.0}, "memory": {"percent": memory[0]}, "disk": {"percent": 50.0}}
+    with patch("services.utils.jarvis_health.health_monitor.get_system_vitals", side_effect=vitals), \
+            patch.object(jarvis_adaptive.logger, "warning") as warning, patch.object(jarvis_adaptive.logger, "info") as info:
+        levels = []
+        for _ in range(5):  # STRESSED every 30 s for two minutes: one WARNING
+            clock[0] += 30
+            levels.append(engine.analyze_system_load())
+        assert levels == ["STRESSED"] * 5 and warning.call_count == 1
+        memory[0] = 96.0  # CRITICAL: a change, so a WARNING at once
+        engine.analyze_system_load()
+        assert warning.call_count == 2 and warning.call_args.args[1] == "CRITICAL"
+        clock[0] += jarvis_adaptive.LOAD_WARN_REPEAT_S  # still CRITICAL ten minutes later: one reminder
+        engine.analyze_system_load()
+        assert warning.call_count == 3
+        memory[0] = 50.0  # back to NORMAL: one INFO, and the next STRESSED warns again at once
+        engine.analyze_system_load()
+        engine.analyze_system_load()
+        assert info.call_count == 1 and "NORMAL" in info.call_args.args[0]
+        memory[0] = 93.0
+        engine.analyze_system_load()
+        assert warning.call_count == 4
+
+
 def test_container_detection(monkeypatch):
     monkeypatch.delenv("container", raising=False)
     assert jarvis_adaptive.in_container() is Path("/.dockerenv").exists()

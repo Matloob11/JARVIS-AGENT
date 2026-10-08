@@ -12,6 +12,7 @@ from services.utils.jarvis_logger import setup_logger
 logger = setup_logger("JARVIS-ADAPTIVE")
 
 _CGROUP_ROOT = Path("/sys/fs/cgroup")
+LOAD_WARN_REPEAT_S = 600.0  # UI-CLEAN: the same stress level is logged again at most every 10 min
 _NO_LIMIT = 1 << 60  # cgroup v1 reports "no memory limit" as a huge number
 
 
@@ -90,6 +91,7 @@ class JarvisAdaptiveEngine:
         self.observe_only: bool = in_container()
         self.last_cgroup: dict[str, float] = {}
         self._cpu_sample: tuple[float, float] | None = None
+        self._load_logged: tuple[str, float] | None = None  # (level, monotonic time) of the last load WARNING
 
     def _load_state(self) -> dict[str, Any]:
         """Loads persistent learning state."""
@@ -156,10 +158,23 @@ class JarvisAdaptiveEngine:
             self.stress_level = "NORMAL"
 
         if self.stress_level != "NORMAL":
-            logger.warning("🧠 Load Adaptation Triggered [%s]: CPU:%.1f%% | MEM:%.1f%% | FAIL:%d",
-                           self.stress_level, cpu_usage, mem_usage, failures)
+            self._log_load(self.stress_level, cpu_usage, mem_usage, failures)
+        elif self._load_logged is not None:
+            self._load_logged = None
+            logger.info("🧠 Load back to NORMAL: CPU:%.1f%% | MEM:%.1f%%", cpu_usage, mem_usage)
 
         return self.stress_level
+
+    def _log_load(self, level: str, cpu_usage: float, mem_usage: float, failures: int) -> None:
+        """UI-CLEAN: the load WARNING when the stress level changes, then at most every LOAD_WARN_REPEAT_S while it
+        stays (a laptop near its RAM limit logged it every 30 s, and each one reached the dashboard's alerts)."""
+        now = time.monotonic()
+        last = self._load_logged
+        if last is not None and last[0] == level and now - last[1] < LOAD_WARN_REPEAT_S:
+            return
+        self._load_logged = (level, now)
+        logger.warning("🧠 Load Adaptation Triggered [%s]: CPU:%.1f%% | MEM:%.1f%% | FAIL:%d",
+                       level, cpu_usage, mem_usage, failures)
 
     def cgroup_vitals(self, root: Path = _CGROUP_ROOT) -> dict[str, float]:
         """This container's own use: memory_mb, memory_percent (of the cgroup limit, or of host memory

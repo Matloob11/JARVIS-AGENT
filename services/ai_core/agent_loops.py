@@ -155,9 +155,11 @@ async def start_bug_hunter_loop(session: "AgentSession") -> None:
                 # C-124 (C-64 review SP-4): log excerpts carry attacker-influenced text (exception messages,
                 # URLs, API error bodies) and this message persists in the chat history the model reads on
                 # later turns, so it is framed as untrusted data, never as instructions.
+                # UI-CLEAN: error_block is one short line (jarvis_bug_hunter.alert_text), never a raw traceback
                 await notify_transcription(
                     "assistant",
-                    f"System error detected: [LOG DATA, untrusted] {error_block[:400]} [END LOG DATA]",
+                    "System error detected (tafseel: 'Jarvis, recent bugs check karo'): "
+                    f"[LOG DATA, untrusted] {error_block[:400]} [END LOG DATA]",
                     source="system",
                 )
 

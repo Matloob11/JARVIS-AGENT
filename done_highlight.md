@@ -2306,3 +2306,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** npx tsc --noEmit pass. Browser e2e UNVERIFIED this session.
 - **Commit:** (UI-H02) · **Deploy:** no — REQ-DEPLOY frontend
 - **Doosre agent ke liye:** settings_sync persona tab ignore hota hai jab switch pending ho.
+
+### ✅ [claude] UI-CLEAN · Backend side of Cursor's cleanup REQ: short bug-hunter line, no Load Adaptation flood · 2026-10-08 23:30 PKT
+- **Kya kiya:** Bug hunter chat mein ab raw log ya traceback nahi bhejta: ek chhoti line (sab se zyada aane wala naya error, kitni baar, pehli dafa ka waqt 'log HH:MM:SS', baqi errors '+N aur'), secrets masked, tafseel ke liye 'Jarvis, recent bugs check karo'. 'Load Adaptation Triggered' WARNING ab sirf level badalne par (aur same level par 10 min mein ek dafa), NORMAL par ek INFO; pehle laptop par har 30 s aata tha aur dashboard alerts bhar deta tha.
+- **Files:** services/utils/jarvis_bug_hunter.py, services/ai_core/agent_loops.py, services/utils/jarvis_adaptive.py, tests/unit/test_bug_hunter.py, tests/core/test_role_gating.py
+- **Verify:** pytest test_bug_hunter + test_bug_hunter_triage + test_role_gating + test_agent_loops: 144 passed; full suite just before this patch: 4751 passed, 1 failed (Cursor-lane X-58 test leak, section 11 REQ-TEST)
+- **Commit:** (this commit) · **Deploy:** PC worker restart next (together with C-50)
+- **Doosre agent ke liye:** UI ko kuch nahi badalna; purane raw messages chat history mein reh sakte hain.

@@ -175,7 +175,8 @@ async def test_after_a_rotation_the_rest_of_dot_1_is_read_then_the_new_file(log,
 
     posts = await _run(monkeypatch, [lambda: _append(log, _record("10:00:00", "S", "INFO", "started")), rotate])
     assert len(posts) == 1
-    assert "written just before the rotation" in posts[0] and "first line of the new file" in posts[0]
+    # UI-CLEAN: one line names the newest error and counts the other one ('written just before the rotation')
+    assert "first line of the new file" in posts[0] and posts[0].endswith(" · +1 aur")
     assert "started" not in posts[0]
 
 
@@ -264,3 +265,28 @@ def test_the_tool_keeps_its_name_and_doc():
     assert hunter.tool_investigate_recent_bugs.__name__ == "tool_investigate_recent_bugs"
     assert hunter.tool_investigate_recent_bugs.__doc__ == "Manual tool to check and analyze the last few errors."
     assert hunter.LOG_FILE.name and config.log_file
+
+
+# ---------------------------------------------------------------- UI-CLEAN: the chat line
+
+
+def test_the_chat_line_is_short_and_never_a_traceback():
+    """Cursor's REQ (08 Oct): raw runner stacks (RealtimeModelError, Traceback, getaddrinfo) filled the chat."""
+    stack = ["Traceback (most recent call last):\n", '  File "x.py", line 1, in <module>\n',
+             "livekit.agents._exceptions.APIConnectionError: getaddrinfo failed " + "x" * 400 + "\n"]
+    entries = hunter.error_entries([
+        _record("23:09:47", "livekit.agents", "ERROR", "Error in _realtime_reply_task"), *stack,
+        _record("23:09:58", "livekit.agents", "ERROR", "Error in _realtime_reply_task"), *stack,
+        _record("23:10:02", "VOICE-ID", "ERROR", "Lazy enrollment failed.")])
+    line = hunter.alert_text(entries)
+    assert line.startswith("2x livekit.agents - ERROR - Error in _realtime_reply_task (livekit.agents.")
+    assert "getaddrinfo failed" in line and line.endswith(" · log 23:09:47 · +1 aur")
+    assert len(line) <= hunter.ALERT_CHARS and "Traceback" not in line and "\n" not in line
+    assert hunter.alert_text([]) == ""
+
+
+def test_the_chat_line_masks_secrets(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "gsk_alert_value_789")
+    entries = hunter.error_entries([_record("10:00:00", "LLM", "ERROR", "call failed with gsk_alert_value_789")])
+    line = hunter.alert_text(entries)
+    assert "gsk_alert_value_789" not in line and "***" in line
