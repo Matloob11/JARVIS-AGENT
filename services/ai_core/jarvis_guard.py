@@ -12,6 +12,9 @@ effective_risk() before it decides whether to ask:
   K-14). The wrapper never lowers a risk, so a tool that already declares 'high' or a stricter risk callable keeps it.
 - JARVIS_CONFIRM_EXTRA (comma list) adds tools to HIGH; JARVIS_CONFIRM_SKIP (comma list) removes tools from it, except
   shutdown_system, restart_system and run_cmd_command, which can never be skipped (one WARNING names an attempt).
+- K-45 v22 (X-31): a run_cmd_command call that its own risk callable rates 'low' (the READ_ONLY allow-list: ipconfig,
+  git status, ...) runs without a question when the guard's own check agrees (no UNC path, no '=', no shell
+  metacharacter); every other run_cmd_command call stays HIGH.
 - K-45 MEDIUM tools (type_text_tool, press_hotkey_tool, ...) keep running without a question, "with a UI toast and an
   audit row": audit_risk() raises only their AUDIT level, so the wrapper audits them as medium. Their own decorator
   risk (K-11, e.g. a per-call risk callable) is untouched.
@@ -24,6 +27,8 @@ from __future__ import annotations
 import logging
 import os
 import threading
+from collections.abc import Mapping
+from typing import Any
 
 from src.core.confirm_policy import K45_HIGH, K45_MEDIUM, RISK_RANK
 
@@ -33,6 +38,18 @@ EXTRA_ENV = "JARVIS_CONFIRM_EXTRA"
 SKIP_ENV = "JARVIS_CONFIRM_SKIP"
 # K-45: these may never be removed from HIGH by JARVIS_CONFIRM_SKIP.
 NEVER_SKIP: frozenset[str] = frozenset({"shutdown_system", "restart_system", "run_cmd_command"})
+# K-45 v22 (X-31): HIGH tools whose own per-call risk callable may rate a call below the floor. run_cmd_command rates
+# its strict READ_ONLY allow-list (ipconfig, git status, ...) 'low' and every other command 'high'; the guard takes
+# that 'low' only when its own check agrees (_read_only_call_ok), so a looser allow-list can never let these through
+# without the Allow: a UNC path (\\host\share or //host/share: Windows logs in over SMB and can leak the NTLM hash),
+# a token with '=' (git diff --output=<file> writes a file), or a shell metacharacter.
+DYNAMIC_FLOOR: frozenset[str] = frozenset({"run_cmd_command"})
+_SHELL_META = frozenset("%!^&|<>()\"'`")
+# The programs whose calls may be READ_ONLY at all (the guard's own coarse copy of X-31's list): the tool's allow-list
+# decides the exact forms, the guard refuses every other program, so a broken risk callable cannot lower 'del x'.
+_READ_ONLY_PROGRAMS = frozenset({"ipconfig", "ping", "tracert", "nslookup", "systeminfo", "tasklist", "whoami",
+                                 "hostname", "ver", "getmac", "netstat", "dir", "where", "python", "node", "git"})
+_GIT_READ_ONLY = frozenset({"status", "log", "diff", "branch"})
 
 _warned: set[str] = set()
 _warned_lock = threading.Lock()
@@ -58,11 +75,34 @@ def high_tools() -> frozenset[str]:
     return (K45_HIGH | _env_names(EXTRA_ENV)) - (skip - NEVER_SKIP)
 
 
-def effective_risk(tool: str, risk: str) -> str:
+def _read_only_call_ok(tool: str, arguments: Mapping[str, Any] | None) -> bool:
+    """The guard's own check for a DYNAMIC_FLOOR call its tool rated 'low' (K-45 v22)."""
+    if tool != "run_cmd_command" or not isinstance(arguments, Mapping):
+        return False
+    command = arguments.get("command")
+    if not isinstance(command, str) or not command.strip():
+        return False
+    if any(ch in _SHELL_META or ord(ch) < 32 for ch in command):
+        return False
+    tokens = command.split()
+    program = tokens[0].lower()
+    if program not in _READ_ONLY_PROGRAMS:
+        return False
+    if program == "git" and (len(tokens) < 2 or tokens[1].lower() not in _GIT_READ_ONLY):
+        return False
+    if program in ("python", "node") and [t.lower() for t in tokens[1:]] != ["--version"]:
+        return False
+    return not any(token.startswith(("\\\\", "//")) or "=" in token for token in tokens)
+
+
+def effective_risk(tool: str, risk: str, arguments: Mapping[str, Any] | None = None) -> str:
     """The risk a call is asked at: 'high' for a HIGH tool whose own risk is lower, else the call's risk unchanged
-    (never lowered; an unknown label is left as it is, the wrapper treats it as high anyway)."""
+    (never lowered; an unknown label is left as it is, the wrapper treats it as high anyway). The one exception
+    (K-45 v22): a DYNAMIC_FLOOR call its tool rated 'low' keeps 'low' when the guard's own check agrees."""
     rank = RISK_RANK.get(risk)
     if rank is not None and rank < RISK_RANK["high"] and tool in high_tools():
+        if tool in DYNAMIC_FLOOR and risk == "low" and _read_only_call_ok(tool, arguments):
+            return "low"
         return "high"
     return risk
 

@@ -840,7 +840,8 @@ class JarvisPluginManager:
                     arguments = _bind_arguments(sig, positional_names, args, kwargs)
                 except ArgPolicyError as e:
                     rejected = e
-                call_risk = jarvis_guard.effective_risk(tool_name, _call_risk(level, arguments, label))
+                call_risk = jarvis_guard.effective_risk(tool_name, _call_risk(level, arguments, label),
+                                                        arguments)  # K-45 v22: run_cmd's READ_ONLY calls
                 start_task = _emit_tool_sync(_sync_event(
                     call_id, tool_name, phase="start", status="running", details=details,
                     risk=call_risk))

