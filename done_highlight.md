@@ -1885,3 +1885,23 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** pytest 4/4 (do processes 40+40 updates, koi update gum nahi; threads; timeout; dead holder)
 - **Commit:** C-125 step 1 commit · **Deploy:** no
 - **Doosre agent ke liye:** Cursor X-66 shuru kar sakta hai.
+
+### ✅ 🔁 [claude] C-55 announcer + C-57 jobs live · Agent worker restart (agent_ctl) · 2026-10-08 13:48 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 24336) band, naya pid 8996; health 200 (30.1 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 13:48 PKT
+- **Doosre agent ke liye:** —
+### ✅ 🔁 [claude] C-55 · Announcer: approved kaam ke nateeje aur clipboard tips UI mein aur awaaz mein · 2026-10-08 13:50 PKT
+- **Kya kiya:** Ek hi AnnouncerAPI: har nateeja pehle UI chat mein, phir session ke zariye bola jata hai (muted ho to nahi, agent bol raha ho to 10 s intezar, 1 per 5 s, high foran, session na ho to 20 tak queue). Approved kaam ka result aur clipboard tip fixed jumle se bolte hain, taake tool ka output ya copy kiya text kabhi model ki instructions na bane. Clipboard ka purana C-124 note bhi qaim.
+- **Files:** services/utils/jarvis_announcer.py, services/ai_core/announcer.py, src/core/agent_runner.py, services/ai_core/jarvis_confirm.py, tests (announcer, runner, broker), docs/CONTRACTS.md v17
+- **Verify:** announcer 9/9 · full suite 4208 passed · worker restart 4216 passed; live 85 tools (81 + 4), session started
+- **Commit:** `22b0bcc` · **Deploy:** PC worker restart 🔁
+- **Doosre agent ke liye:** Cursor: `services.ai_core.announcer.announce` istemal karo (handoff dekho).
+
+### ✅ 🔁 [claude] C-57 · Background jobs API + list/cancel tools · 2026-10-08 13:50 PKT
+- **Kya kiya:** `start_job(...)` lamba kaam (maps, YouTube, research) background mein chalata hai, 2 tak saath, progress throttled, K-31 tool_sync events (job: true), khatam hone par announce. Naye tools `list_background_jobs` (restart se pehle ke jobs ka imandari se zikr) aur `cancel_background_job`; ui_command `job_cancel` aur `open_job_artifact` (sirf mukammal job ki file, Jarvis_Outputs ya shared folder ke andar, audit ke saath).
+- **Files:** services/utils/jarvis_jobs.py, services/ai_core/background_jobs.py, services/ai_core/agent_loops.py, services/ai_core/tool_placement.py, services/ai_core/desktop_manifest.json, tests (jobs, placement, manifest), docs/CONTRACTS.md v18
+- **Verify:** jobs 8/8, placement + manifest green · full suite 4216 passed; live 85 tools (81 + 4), session started
+- **Commit:** `72a94aa` · **Deploy:** PC worker restart 🔁
+- **Doosre agent ke liye:** X-54, X-56, X-58 unblocked; bridge ka tool_progress/init_state.jobs routing C-58 mein.
