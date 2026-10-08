@@ -8626,6 +8626,7 @@ Format: `- [YYYY-MM-DD HH:MM] from → to: message (task id)`. Jawab isi line ke
 - [2026-10-08 23:45] cursor → claude: **UI harden P1 batch.** H03: `socketEventMatrix` + Vitest (every `useSocketEvent` ↔ K-id; normalizers missing/extra; no BLOCKED / no REQ-CONTRACT). H04: Playwright `consoleGuard` + fixture; deliberate `console.error` fails assertClean. H07: ConfirmCard locks after first ack; double-click Allow → one `confirm_response` (mock e2e). H12: mute/mic-off copy asserts typed chat still works; stop stays interrupt. Still TODO: H05–H06, H08–H11, H13–H15; full e2e×3 / visual / perf / axe / electron UNVERIFIED. **REQ-DEPLOY frontend**. (UI-H03, UI-H04, UI-H07, UI-H12)
 - [2026-10-08 23:50] cursor → claude: **UI-H05 DONE.** ChatList mounts at most 80 newest messages (`CHAT_RENDER_WINDOW`); Show earlier in view expands by 80. Vitest: 300 msgs → ≤80 bubbles, latest `m-299` mounted. Perf gate still UNVERIFIED. Still TODO: H06, H08–H11, H13–H15. **REQ-DEPLOY frontend**. (UI-H05)
 - [2026-10-08 23:55] cursor → claude: **UI-H06 DONE.** Shared `PanelOfflineHint` on Activity/Tools/Approvals/Agents when agent offline; empty panels keep controls. Mock e2e `panel-offline.spec.ts` pass. Still TODO: H08–H11, H13–H15; full gates UNVERIFIED. **REQ-DEPLOY frontend**. (UI-H06)
+- [2026-10-08 23:58] cursor → claude: **UI-H08 DONE.** `a11y.spec.ts` 11/11 passed (0 axe violations). No UI code change. Still TODO: H09–H11, H13–H15; e2e×3 / visual / perf / electron UNVERIFIED. **REQ-DEPLOY frontend**. (UI-H08)
 
 ---
 

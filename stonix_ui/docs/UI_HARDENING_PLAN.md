@@ -60,10 +60,11 @@ Priority: P0 broken or unsafe, P1 fragile or misleading, P2 clutter, P3 polish.
 - **Fix:** `ConfirmCard` locks Allow/Deny after the first ack for that id; `markResponded` still guards the emit. Mock e2e double-click asserts one `confirm_response`.
 - **Verify:** `npx playwright test tests/e2e/confirm.spec.ts -g "double-click Allow" --project=chromium`.
 
-### UI-H08 — Accessibility pass (P1, L)
+### UI-H08 — Accessibility pass (P1, L) — DONE
 
 - **Problem:** axe serious/critical count UNVERIFIED.
-- **Fix:** run `a11y.spec.ts`; fix only failures; do not drop testids.
+- **Fix:** ran full `a11y.spec.ts` (wcag2a/aa + 2.1/2.2); 0 violations / 0 aria-prohibited incomplete. No code change needed this pass; testids kept.
+- **Verify:** `npx playwright test tests/e2e/a11y.spec.ts --project=chromium` → 11 passed.
 
 ### UI-H09 — Layout 360–1920 (P1, L)
 
@@ -103,7 +104,7 @@ Priority: P0 broken or unsafe, P1 fragile or misleading, P2 clutter, P3 polish.
 
 ## Execution order
 
-H01–H07, H12 done with tests. Still TODO: H08–H11, H13–H15. Full section 6 gates (e2e suite ×3, visual, perf, refdiff, axe, electron, `build:prod`) are **not** claimed green in this file.
+H01–H08, H12 done with tests. Still TODO: H09–H11, H13–H15. Full section 6 gates (e2e suite ×3, visual, perf, refdiff, electron, `build:prod`) are **not** claimed green; axe suite is green this session.
 
 ## Final report
 
