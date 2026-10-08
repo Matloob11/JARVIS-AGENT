@@ -312,6 +312,19 @@ $PY scripts/smoke/room_check.py command stop --watch 20                         
 unset C23_COOKIE
 ```
 
+### No agent after a worker restart: LiveKit ghost workers (seen 2026-10-08)
+
+Symptom: `agent_ctl restart` ends with `WARNING NO AGENT in the room: the bridge reports in_flight`, `agent_ctl status` shows the LiveKit link `connected` but `jobs 0 active`, and the bridge keeps logging `ROOM dispatched '' ... ROOM in_flight`. Cause: earlier PC worker connections that died silently (laptop sleep, network flaps: `LIVEKIT LINK disconnected ... worker connection closed unexpectedly` in `logs/agent_stderr.log`) are still registered in LiveKit; it hands every dispatch to one of them and the assignment times out, so the live worker never gets a job.
+
+```bash
+$VPS "docker logs --since 10m jarvis-livekit 2>&1 | grep -E 'worker registered|failed to assign job|assigned job'"
+# 'failed to assign job to worker ... context deadline exceeded' for worker IDs other than the one agent_ctl status shows = ghosts
+$VPS "docker restart jarvis-livekit"      # project jarvis only; drops every LiveKit connection, so only while nobody talks
+$PY scripts/agent_ctl.py status           # the worker re-registers by itself; 'jobs 1 active' within ~15 s
+```
+
+The restart wipes the in-memory room; the bridge creates it again and dispatches. On 08 Oct the job was back 10 s after the restart. A lasting fix (a per-run agent name the bridge targets, or a server-side worker timeout) is a C-136/C-23 follow-up (plan.md section 11, FINDING 08 Oct 17:10).
+
 ### LiveKit webhooks (C-23 phase 4, optional)
 
 Webhooks only wake the bridge's loop: the 5 s / 20 s loop alone keeps the room right. They need a LiveKit restart. That restart drops every call and wipes every room, so do it only in an announced idle window. Commit both parts together in phase 4. Neither is in the tree before then.
