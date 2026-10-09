@@ -2502,3 +2502,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** -
 - **Commit:** b906448 · **Deploy:** no
 - **Doosre agent ke liye:** -
+
+### ✅ 🚀 [claude] C-126 · Agent image built on the VPS (build window) · 2026-10-09 12:15 PKT
+- **Kya kiya:** VPS par pehle JARVIS_BRAIN=pc (backup 2026-10-09_0702Z-pre-jarvis-brain), phir `deploy_from_pc.sh --services none` (sirf code, RESULT=ok, other apps identical), phir dedicated jarvis-builder se jarvis-agent:hostinger image (6.5 min, 5.4 GB, rev e440997). Default builder ka cache nahi chhuwa. Offline (network none, uid 10001) IMPORT_OK aur MODELS_OK; compose run checks khali .env.agent placeholder ke saath; create-only inspect 'mem=0 cpus=0 oom=500 user=10001 init=false', phir docker rm. Builder phir stop kiya. Koi agent container chal nahi raha (secrets C-127 mein aayenge).
+- **Files:** — (VPS only; build record /root/jarvis-backups/builds/20261009T070657Z)
+- **Verify:** BUILD_EXIT=0, DEFAULT_BUILDER_CACHE_UNCHANGED, IMPORT_OK, MODELS_OK, inspect line exact; bridge/frontend/livekit healthy aur unchanged
+- **Commit:** `4b5fb79`, `f9618ea` · **Deploy:** VPS code-only deploy e440997 + image build 12:07-12:13 PKT 🚀 (backup /root/jarvis-backups/2026-10-09_0706Z-pre-deploy-e440997)
+- **Doosre agent ke liye:** —
