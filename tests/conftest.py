@@ -146,11 +146,14 @@ def _is_hidden_file_setting(name: str) -> bool:
 
 
 def _is_real_env_file(path: Any) -> bool:
-    """True for an env file of this working tree (.env, .env.<x>, <x>.env; never a *.example template)."""
+    """True for an env file of this working tree (.env, .env.<x>, <x>.env; never a *.example template), or one in a
+    folder above it: a git worktree nested in the main checkout (.claude/worktrees/...) has no .env of its own, and
+    dotenv's upward search then finds the main tree's real one."""
     try:
         full = Path(os.fspath(path)).resolve()
-        full.relative_to(_PROJECT_ROOT)
     except (TypeError, ValueError, OSError):
+        return False
+    if not (full.is_relative_to(_PROJECT_ROOT) or full.parent in _PROJECT_ROOT.parents):
         return False
     name = full.name.lower()
     if name.endswith(".example"):
@@ -230,7 +233,7 @@ def _test_load_dotenv(dotenv_path: Any = None, stream: Any = None, verbose: bool
 
 
 def _real_env_files() -> list[Path]:
-    found = [_PROJECT_ROOT / ".env"]
+    found = [_PROJECT_ROOT / ".env", *(parent / ".env" for parent in _PROJECT_ROOT.parents)]
     deploy = _PROJECT_ROOT / "deploy"
     if deploy.is_dir():
         found.extend(p for p in deploy.rglob("*env*") if p.is_file() and _is_real_env_file(p))
@@ -287,9 +290,14 @@ def _c138_is_real_env_file(path):
     from pathlib import Path
     try:
         full = Path(_c138_os.fspath(path)).resolve()
-        full.relative_to(_C138_ROOT)
     except (TypeError, ValueError, OSError):
         return False
+    root = Path(_C138_ROOT)
+    try:
+        full.relative_to(root)
+    except ValueError:
+        if full.parent not in root.parents:  # a nested worktree finds the main tree's .env above it
+            return False
     name = full.name.lower()
     if name.endswith(".example"):
         return False
