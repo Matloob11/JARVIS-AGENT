@@ -358,6 +358,30 @@ def test_mojibake_line_is_rejected_with_a_hint(sandbox):
 
 
 @needs_git
+def test_an_added_line_that_is_not_utf8_is_rejected_with_a_hint(sandbox):
+    """Cursor's UI-H15 done_highlight entry (09 Oct) landed with raw cp1252 bytes (0xB7 for a middle dot)."""
+    path = sandbox / "stonix_ui" / "app.ts"
+    with open(path, "ab") as fh:
+        fh.write("// status \u00b7 done\n".encode("cp1252"))
+    code, out, moved = _commit(sandbox, "stonix_ui/app.ts", agent="cursor")
+    assert code != 0 and not moved
+    assert "stonix_ui/app.ts:2 NOT_UTF8" in out and "-Encoding UTF8" in out
+
+
+@needs_git
+def test_old_non_utf8_bytes_do_not_block_a_new_utf8_line(sandbox):
+    path = sandbox / "stonix_ui" / "app.ts"
+    with open(path, "ab") as fh:
+        fh.write("// old \u00b7 entry\n".encode("cp1252"))
+    assert _git(sandbox, "add", "stonix_ui/app.ts").returncode == 0
+    assert _git(sandbox, "commit", "--no-verify", "-m", "seed an old ANSI line", agent="user").returncode == 0
+    with open(path, "ab") as fh:
+        fh.write("// new \u00b7 entry\n".encode("utf-8"))
+    code, out, moved = _commit(sandbox, "stonix_ui/app.ts", agent="cursor")
+    assert code == 0 and moved, out
+
+
+@needs_git
 def test_real_unicode_is_not_mojibake(sandbox):
     path = sandbox / "stonix_ui" / "app.ts"
     with open(path, "ab") as fh:

@@ -218,6 +218,30 @@ def utf8_text_blob(spec: str) -> str | None:
         return None
 
 
+def not_utf8_check() -> list[str]:
+    """'done_highlight.md:2471 NOT_UTF8' for an added line that is not valid UTF-8 (a file saved as ANSI/cp1252: a
+    middle dot is the raw byte 0xB7). git hands such lines on with replacement characters, and the next tool that
+    reads the file as UTF-8 fails; only added lines count, so a file that already holds such bytes still commits."""
+    proc = subprocess.run(["git", "diff", "--cached", "-U0", "--no-color", "--diff-filter=ACMR"], capture_output=True,
+                          cwd=ROOT, check=False)
+    findings, current, lineno = [], None, 0
+    for raw in proc.stdout.split(b"\n"):
+        if raw.startswith(b"+++ "):
+            current = raw[6:].decode("utf-8", errors="replace").rstrip("\r") if raw.startswith(b"+++ b/") else None
+            continue
+        if raw.startswith(b"@@"):
+            m = re.search(rb"\+(\d+)", raw)
+            lineno = int(m.group(1)) if m else 0
+            continue
+        if current and raw.startswith(b"+") and not raw.startswith(b"+++"):
+            try:
+                raw[1:].decode("utf-8")
+            except UnicodeDecodeError:
+                findings.append(f"{current}:{lineno} NOT_UTF8")
+            lineno += 1
+    return findings
+
+
 def encoding_loss_check(modified: list[str]) -> list[str]:
     """'plan.md:12-14 ENCODING_LOSS' when committed non-ASCII characters became '?' (file saved as ASCII)."""
     findings = []
@@ -248,6 +272,7 @@ def check_staged(values, terms, agent: str = "", lanes: check_lane.Lanes | None 
     findings += append_only_check(changed, lanes)
     findings += encoding_loss_check(
         [p for p in git("diff", "--cached", "--name-only", "--diff-filter=M").splitlines() if p])
+    findings += not_utf8_check()
     current, lineno = None, 0
     for line in git("diff", "--cached", "-U0", "--no-color", "--diff-filter=ACMR").splitlines():
         if line.startswith("+++ "):
@@ -320,6 +345,12 @@ def fix_hints(problems: list[str], findings: list[str], agent: str) -> list[str]
             "      If PowerShell is needed: Get-Content -Encoding UTF8 ... | Set-Content -Encoding UTF8 ...",
             "      For plan.md / done_highlight.md, ask Claude in plan.md section 11 to repair it.",
             "      Never 'fix' it by saving the file as ASCII: that turns the characters into '?' (ENCODING_LOSS).",
+        ]
+    if "NOT_UTF8" in rules:
+        hints += [
+            "  - NOT_UTF8: the added lines were saved as ANSI (cp1252), not UTF-8 (a middle dot became the raw byte 0xB7).",
+            "      Save the file as UTF-8 with your editor's own edit tool; in PowerShell use Set-Content -Encoding UTF8",
+            "      (or Out-File -Encoding utf8), never the default ANSI encoding of PowerShell 5.1.",
         ]
     if "ENCODING_LOSS" in rules:
         names = sorted({f.split(":", 1)[0] for f in findings if f.endswith(" ENCODING_LOSS")})
