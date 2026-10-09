@@ -2516,3 +2516,24 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** C-51 related 492 passed; full suite 4946 passed, 0 failed; review 7 + verify 3 + verify 3 findings fixed
 - **Commit:** (this commit) · **Deploy:** PC worker restart next (live check)
 - **Doosre agent ke liye:** dashboard Stop ab typed sawal ko dobara nahi chalata; shutdown/clear_memory cards ab job end par khud band hote hain.
+
+### ✅ 🔁 [claude] C-51 live checks · Agent worker restart (agent_ctl) · 2026-10-09 13:04 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 28104) band, naya pid 30492; health 200 (42.0 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 13:04 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] C-51 stop cuts the server reply · Agent worker restart (agent_ctl) · 2026-10-09 13:09 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 30492) band, naya pid 6900; health 200, LiveKit connected 9.4 s.
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 13:09 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ [claude] C-51 · Control commands live: Stop, Mute, shutdown_agent, clear_memory · 2026-10-09 13:14 PKT
+- **Kya kiya:** Live check mein pata chala ke UI Stop ke baad agla sawal 45 s tak jawab nahi pata tha: Gemini plugin ka interrupt() automatic VAD mein server ko kuch nahi bhejta, to server roka hua jawab banata rehta tha. Ab Stop agar server ki generation abhi khuli ho to ek fresh reconnect se use bhi kaat deta hai. Phir saare checks pass: stop 0.25 s, agla sawal 5.7 s; mute par mic off aur typed jawab, unmute par wapas; clear_memory Deny par kuch nahi, Allow par backup (file foran restore); shutdown Deny par job chalta raha, Allow par 'terminated_by_owner' aur 17 s mein naya job.
+- **Files:** src/core/agent_core.py (_cut_server_reply), tests/core/test_control_commands.py, tests/unit/test_gemini_resume_guard.py (pinned internals), docs/CONTRACTS.md + plan.md (K-60 v37 line)
+- **Verify:** pytest control_commands + resume_guard 61 passed; live: stop_check PASS, mute/typed/unmute, clear_memory Deny/Allow + backup, shutdown Deny/Allow + fresh job
+- **Commit:** `7933cb9` + (this commit) · **Deploy:** PC worker restarts 13:04 aur 13:09 PKT 🔁
+- **Doosre agent ke liye:** dashboard ka Stop ab server-side bhi jawab rokta hai; shutdown/clear_memory ke cards live chal rahe hain.

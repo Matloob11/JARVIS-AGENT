@@ -164,6 +164,11 @@ def test_the_pinned_plugin_internals_still_exist():
     assert "_session_resumption_handle" in inspect.getsource(mod)
     log = getattr(mod, "logger", None)
     assert log is not None and log.name.startswith("livekit.plugins.google")
+    # C-51: 'stop' reads the session's open generation (BrainAssistant._cut_server_reply), and the reason it has to:
+    # interrupt() sends the server nothing while activity detection is automatic
+    source = inspect.getsource(mod.RealtimeSession)
+    assert "self._current_generation" in source and "._done" in source
+    assert "if not self._manual_activity_detection:" in inspect.getsource(mod.RealtimeSession.start_user_activity)
 
 
 # ---------------------------------------------------------------- C-49: restart_fresh

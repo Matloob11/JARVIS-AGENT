@@ -1048,3 +1048,36 @@ async def test_the_dashboard_stop_reaches_the_jobs_router(brain, monkeypatch, au
     listener = _listener(monkeypatch, brain)
     await listener._handle_command({"type": "stop", "payload": None})
     assert router._awaiting == {} and "TYPED_RESCUES_CANCELLED=1" in _audited(audit, "STOP_SPEAKING")[0]
+
+
+# ---------------------------------------------------------------- C-51 live check (09 Oct): the server's generation
+
+
+def _realtime(brain, open_generation: bool | None):
+    """A live activity whose Gemini session has an open (or done, or no) current generation."""
+    generation = None if open_generation is None else SimpleNamespace(_done=not open_generation)
+    rt = SimpleNamespace(_current_generation=generation, _session_resumption_handle="h", restarts=0)
+    rt._mark_restart_needed = lambda: setattr(rt, "restarts", rt.restarts + 1)
+    brain._activity = SimpleNamespace(realtime_llm_session=rt)
+    return rt
+
+
+@pytest.mark.parametrize(("open_generation", "restarts"), [(True, 1), (False, 0), (None, 0)])
+async def test_stop_cuts_a_reply_the_server_is_still_generating(brain, open_generation, restarts):
+    """Live: with automatic activity detection the plugin's interrupt() sends the server nothing; a stopped answer went
+    on server side and the next typed question got no reply within 45 s. An open generation is cut by a fresh
+    reconnect; a finished one (only the playout was left) needs none."""
+    session = _Session(current=SpeechHandle.create(allow_interruptions=True))
+    brain.session = session
+    rt = _realtime(brain, open_generation)
+    assert await brain.interrupt_speech() is True
+    assert rt.restarts == restarts
+    assert (rt._session_resumption_handle is None) is (restarts == 1)
+
+
+async def test_a_stop_while_nothing_is_said_reconnects_nothing(brain):
+    session = _Session()
+    brain.session = session
+    rt = _realtime(brain, open_generation=True)
+    await brain.interrupt_speech()
+    assert rt.restarts == 0

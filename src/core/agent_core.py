@@ -763,6 +763,7 @@ class BrainAssistant(Agent):
         session = self._active_session
         if session is None:
             return False
+        replying = self._session_busy()  # before the interrupt: a reply (or a tool call's reply) was under way
         force = needs_forced_interrupt(session)
         try:
             result = session.interrupt(force=True) if force else session.interrupt()
@@ -790,7 +791,22 @@ class BrainAssistant(Agent):
                 logger.debug("STOP: interrupt still finishing after %.0f s", wait_s)
             except Exception as e:  # pylint: disable=broad-exception-caught  # (a cancel is a BaseException)
                 logger.debug("STOP: interrupt failed (%s)", type(e).__name__)
+        if replying:
+            self._cut_server_reply()
         return True
+
+    def _cut_server_reply(self) -> None:
+        """C-51 live check (09 Oct): with Gemini's automatic activity detection the plugin's interrupt() sends the
+        server nothing, so a stopped answer went on being generated server side and the next typed question waited
+        behind it (no reply within 45 s). While the realtime session's current generation is still open, a fresh
+        reconnect (C-49 restart_fresh) ends it; the plugin replays the chat history, the stopped answer's spoken part
+        included. A generation the server had already finished (only the playout was left) needs nothing."""
+        rt_session = getattr(getattr(self, "_activity", None), "realtime_llm_session", None)
+        generation = getattr(rt_session, "_current_generation", None)  # pinned livekit-plugins-google 1.4.6 members
+        if generation is None or getattr(generation, "_done", False) is True:
+            return
+        if restart_fresh(rt_session, "stop"):
+            logger.info("STOP: the stopped reply is cut server side too (fresh reconnect)")
 
     def attach_session(self, session: AgentSession) -> None:
         """
