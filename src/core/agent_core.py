@@ -117,6 +117,14 @@ def _vision_analysis_failed(analysis: str) -> bool:
         return analysis.startswith("Error")
     return analysis_failed(analysis)
 
+
+def needs_forced_interrupt(session: Any) -> bool:
+    """C-51 (K-60 'stop'): True when the session's current speech does not allow interruptions (livekit-agents 1.4.6
+    SpeechHandle.allow_interruptions False); AgentSession.interrupt() refuses such a speech unless force=True."""
+    speech = getattr(session, "current_speech", None)
+    return speech is not None and getattr(speech, "allow_interruptions", True) is False
+
+
 INSTRUCTIONS_PROMPT = BEHAVIOR_PROMPT
 # C-49: the agent states at which new instructions may reach the live session (no reply or tool call running)
 INSTRUCTIONS_SAFE_STATES = ("listening", "idle")
@@ -189,6 +197,10 @@ class BrainAssistant(Agent):
         self._stop_event: asyncio.Event = asyncio.Event()
         self.end_reason: str | None = None
         self._muted: bool = False
+        # C-51 (K-60): the job's legacy voice-ID audio tap (agent_runner.UserAudioTaps: pause()/resume()), and whether a
+        # mute without a session unsubscribed the remote audio tracks (unmute subscribes them again)
+        self._audio_tap: Any = None
+        self._tracks_unsubscribed: bool = False
         self._audio_buffer: deque[int] = deque(maxlen=96000)
         self._audio_sample_rate: int = 16000 # Default
         self._last_speaker_verified: bool = True
@@ -587,7 +599,14 @@ class BrainAssistant(Agent):
         task.add_done_callback(self._background_tasks.discard)
 
     def set_muted(self, active: bool) -> None:
-        """Set the muted state and manage audio track subscriptions."""
+        """
+        Set the muted state (C-51, K-60). Mute turns the live session's microphone input off
+        (session.input.set_audio_enabled(False): RoomIO keeps the track subscribed and drops its frames, so nothing
+        reaches the model), unmute turns it on again. Only while no session is attached are the remote audio tracks
+        unsubscribed instead (the pre-C-51 path, which went behind RoomIO's back), and the next unmute subscribes them
+        again. Mute also clears the voice-ID buffer and pauses the legacy audio tap (agent_runner), unmute restarts
+        it. Typed chat is answered either way: it never uses the microphone. mute_sync tells the dashboard.
+        """
         self._muted = active
         if active:
             self._audio_buffer.clear()
@@ -595,20 +614,79 @@ class BrainAssistant(Agent):
         else:
             logger.info("🔊 Assistant UNMUTED.")
 
-        # If we have an active session, sync audio track subscriptions
-        session_any: Any = self._active_session
-        if session_any and hasattr(session_any, 'room') and session_any.room:
-            for participant in session_any.room.remote_participants.values():
-                for publication in participant.track_publications.values():
-                    if publication.kind == rtc.TrackKind.KIND_AUDIO:
-                        try:
-                            publication.set_subscribed(not active)
-                            logger.info("🎤 Audio track %s subscription set to: %s",
-                                        publication.sid, not active)
-                        except Exception as e:
-                            logger.error("Failed to update subscription for %s: %s", publication.sid, e)
+        if self._active_session is not None:
+            self._set_session_input(not active)
+            if not active and self._tracks_unsubscribed:
+                self._set_track_subscriptions(True)  # a mute without a session had unsubscribed them
+        else:
+            self._set_track_subscriptions(not active)
+        self._sync_audio_tap(active)
 
         self._run_back(self.bridge_notifier.notify_event("mute_sync", active))
+
+    def _set_session_input(self, enabled: bool) -> bool:
+        """C-51: the live session's microphone input on or off (livekit-agents AgentInput.set_audio_enabled). False
+        when the session has no such switch or it failed."""
+        session_input = getattr(self._active_session, "input", None)
+        if not callable(getattr(session_input, "set_audio_enabled", None)):
+            logger.warning("MUTE: the session has no audio input switch; microphone %s not applied",
+                           "on" if enabled else "off")
+            return False
+        try:
+            session_input.set_audio_enabled(enabled)
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.warning("MUTE: microphone input switch failed (%s)", type(e).__name__)
+            return False
+        logger.info("🎤 Session microphone input %s", "ON" if enabled else "OFF")
+        return True
+
+    def _mute_room(self) -> Any:
+        """The job's room for the no-session mute path: an older integration's session.room, else the job context's
+        (an AgentSession has no room in livekit-agents 1.4.6); None outside a job."""
+        room = getattr(self._active_session, "room", None)
+        if room is not None:
+            return room
+        try:
+            from livekit.agents import get_job_context  # pylint: disable=import-outside-toplevel
+            return get_job_context().room
+        except Exception:  # pylint: disable=broad-exception-caught  # RuntimeError: not inside a job
+            return None
+
+    def _set_track_subscriptions(self, subscribed: bool) -> None:
+        """The no-session mute path (pre-C-51): every remote audio publication of the room (un)subscribed."""
+        participants = getattr(self._mute_room(), "remote_participants", None)
+        if not hasattr(participants, "values"):
+            return
+        changed = 0
+        for participant in list(participants.values()):
+            for publication in list(getattr(participant, "track_publications", {}).values()):
+                if getattr(publication, "kind", None) != rtc.TrackKind.KIND_AUDIO:
+                    continue
+                try:
+                    publication.set_subscribed(subscribed)
+                    changed += 1
+                    logger.info("🎤 Audio track %s subscription set to: %s", publication.sid, subscribed)
+                except Exception as e:
+                    logger.error("Failed to update subscription for %s: %s", getattr(publication, "sid", "?"), e)
+        if subscribed:
+            self._tracks_unsubscribed = False
+        elif changed:
+            self._tracks_unsubscribed = True
+
+    def _sync_audio_tap(self, muted: bool) -> None:
+        """C-51: mute pauses the job's legacy voice-ID audio tap, unmute restarts it (attach_audio_tap)."""
+        action = getattr(self._audio_tap, "pause" if muted else "resume", None) if self._audio_tap is not None else None
+        if not callable(action):
+            return
+        try:
+            action()
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.warning("MUTE: audio tap %s failed (%s)", "pause" if muted else "resume", type(e).__name__)
+
+    def attach_audio_tap(self, tap: Any) -> None:
+        """C-51 (K-60): the job's legacy voice-ID audio tap (pause()/resume(), agent_runner.UserAudioTaps); set_muted
+        pauses and restarts it."""
+        self._audio_tap = tap
 
     def set_wake_word_mode(self, active: bool) -> None:
         """Toggle the strict wake word enforcement mode."""
@@ -669,25 +747,42 @@ class BrainAssistant(Agent):
         self._conversation_router = router
 
     def request_end(self, reason: str) -> None:
-        """C-23 (K-60 v9): ends this job ('paused_by_owner' from pause_agent; C-62's shutdown_agent may use
-        'terminated_by_owner'). The first reason wins; the entrypoint then closes the session and calls
-        ctx.shutdown(reason) instead of starting another session."""
+        """C-23 (K-60 v9): ends this job ('paused_by_owner' from pause_agent; 'terminated_by_owner' from a
+        shutdown_agent the owner confirmed, C-51). The first reason wins; the entrypoint then closes the session and
+        calls ctx.shutdown(reason) instead of starting another session."""
         if self.end_reason is None:
             self.end_reason = reason
         self._stop_event.set()
 
     async def interrupt_speech(self, wait_s: float = 3.0) -> bool:
         """C-23 (K-60 v9) 'stop': interrupts the current and queued speech of the live session (AgentSession.interrupt)
-        and waits for it at most wait_s; the session keeps listening. False when no session is attached or the
-        interrupt failed."""
+        and waits for it at most wait_s; the session keeps listening and the job never ends here. C-51: force=True
+        only for a speech that does not allow interruptions (the current one, or a queued one that made the plain
+        interrupt fail), which 'stop' could not cut before. False when no session is attached or the interrupt
+        failed."""
         session = self._active_session
         if session is None:
             return False
+        force = needs_forced_interrupt(session)
         try:
-            result = session.interrupt()
-        except Exception as e:  # pylint: disable=broad-exception-caught  # RuntimeError: not running
+            result = session.interrupt(force=True) if force else session.interrupt()
+        except RuntimeError as e:
+            # livekit-agents 1.4.6: a queued speech that does not allow interruptions refuses the plain interrupt; a
+            # session without an activity is not running, and then nothing is forced either
+            if force or getattr(session, "_activity", None) is None:
+                logger.debug("STOP: interrupt unavailable (%s)", type(e).__name__)
+                return False
+            force = True
+            try:
+                result = session.interrupt(force=True)
+            except Exception as forced_error:  # pylint: disable=broad-exception-caught
+                logger.debug("STOP: forced interrupt unavailable (%s)", type(forced_error).__name__)
+                return False
+        except Exception as e:  # pylint: disable=broad-exception-caught
             logger.debug("STOP: interrupt unavailable (%s)", type(e).__name__)
             return False
+        if force:
+            logger.info("STOP: forced interrupt (a speech that does not allow interruptions)")
         if asyncio.isfuture(result) or asyncio.iscoroutine(result):
             try:
                 await asyncio.wait_for(asyncio.shield(asyncio.ensure_future(result)), wait_s)
@@ -711,6 +806,14 @@ class BrainAssistant(Agent):
             # C-50: the new session emitted its first 'listening' inside start(), before agent_runner registered
             # agent_state_changed: without this the update would wait for one more reply
             self._run_back(self._apply_when_safe())
+        # C-51, a backstop in both directions: agent_runner switches a session started while muted off before
+        # session.start, but a mute or an unmute that arrived while start() ran reached only the previous session
+        enabled = getattr(getattr(session, "input", None), "audio_enabled", None)
+        if isinstance(enabled, bool):
+            if enabled == self._muted:
+                self._set_session_input(not self._muted)
+        elif self._muted:
+            self._set_session_input(False)
         logger.info("Live AgentSession attached to BrainAssistant (User: %s)", self.user_id)
         if getattr(self, "_probe", False):
             return  # K-57 (C-39): no vision loop in a probe or canary job

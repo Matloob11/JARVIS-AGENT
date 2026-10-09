@@ -18,6 +18,11 @@ and flushed on the next attach. Nothing here raises; text never reaches the log 
 spoken_text (K-18 v17) replaces what is SPOKEN: a caller whose text holds untrusted content (a copied error) speaks a
 fixed line instead, so that content never reaches the model as instructions. On Gemini Live an instructions-only
 generate_reply is sometimes not voiced; the UI message is the record (CT-VC-PROACTIVE, C-56, improves speaking).
+
+cancel_pending() (C-51, K-60 'stop'): drops the spoken parts still queued and the announcements still waiting for their
+turn, which would otherwise start speaking right after Sir stopped JARVIS; their UI messages stay. It counts only those
+(one already speaking is the session's interrupt to cut), and it is safe from any job's loop or thread: every piece of
+state it reads or clears is kept under the announcer's lock.
 """
 from __future__ import annotations
 
@@ -51,6 +56,10 @@ class Announcer:
         self._queue: deque[tuple[str, str]] = deque(maxlen=QUEUE_MAX)  # (spoken text, priority)
         self._lock = threading.Lock()
         self._tasks: set[asyncio.Task[Any]] = set()
+        self._epoch = 0  # C-51: bumped by cancel_pending(); a speak started before it stays silent
+        # C-51: the announcements handed to _speak that have not started speaking yet (token -> the loop they run on);
+        # read and changed only under the lock: what cancel_pending() drops and counts
+        self._waiting: dict[object, asyncio.AbstractEventLoop] = {}
 
     # ---- session -------------------------------------------------------------------------------
 
@@ -81,6 +90,21 @@ class Announcer:
 
     def set_assistant(self, assistant: Any) -> None:
         self.assistant = assistant
+
+    def cancel_pending(self) -> int:
+        """C-51 (K-60 'stop'): drops the spoken parts queued for the next session and the announcements still waiting
+        for their turn (each one then skips its generate_reply); the UI messages stay. A speech that already plays is
+        the session's to interrupt (AgentSession.interrupt) and is not counted. Safe from any job's loop or thread
+        (one lock over all of it). Returns how many were dropped."""
+        with self._lock:
+            waiting = sum(1 for loop in self._waiting.values() if not loop.is_closed())
+            dropped = len(self._queue) + waiting
+            self._queue.clear()
+            self._waiting.clear()
+            self._epoch += 1
+        if dropped:
+            logger.info("ANNOUNCE %d pending announcement(s) dropped: stopped by the user", dropped)
+        return dropped
 
     # ---- announce -----------------------------------------------------------------------------
 
@@ -120,17 +144,49 @@ class Announcer:
             running = None
         if loop is None or loop.is_closed():
             return
+        token = object()
+        with self._lock:  # C-51: its epoch and its waiting entry together, so a 'stop' sees both or neither
+            for stale in [key for key, owner in self._waiting.items() if owner.is_closed()]:
+                del self._waiting[stale]  # handed to a loop that closed before it ran: it never speaks
+            epoch = self._epoch
+            self._waiting[token] = loop
+        speak = self._speak(spoken, priority, epoch, token)
         if running is loop:
-            task = loop.create_task(self._speak(spoken, priority))
+            task = loop.create_task(speak)
             self._tasks.add(task)
             task.add_done_callback(self._tasks.discard)
-        else:
-            asyncio.run_coroutine_threadsafe(self._speak(spoken, priority), loop)
+            return
+        try:
+            asyncio.run_coroutine_threadsafe(speak, loop)
+        except RuntimeError:  # the loop closed meanwhile: it never speaks
+            speak.close()
+            self._not_waiting(token)
 
-    async def _speak(self, spoken: str, priority: str) -> None:
+    def _not_waiting(self, token: object | None) -> None:
+        with self._lock:
+            self._waiting.pop(token, None)
+
+    def _stopped_since(self, epoch: int | None) -> bool:
+        """True when cancel_pending() ran after this announcement was handed to _speak."""
+        if epoch is None or epoch == self._epoch:
+            return False
+        logger.info("ANNOUNCE not spoken: stopped by the user")
+        return True
+
+    def _begin_speaking(self, epoch: int | None, token: object | None) -> bool:
+        """C-51: the last check before generate_reply, atomic with cancel_pending(): False when a 'stop' dropped this
+        announcement; else it no longer waits (a 'stop' from now on interrupts it instead of dropping it)."""
+        with self._lock:
+            stopped = epoch is not None and epoch != self._epoch
+            self._waiting.pop(token, None)
+        if stopped:
+            logger.info("ANNOUNCE not spoken: stopped by the user")
+        return not stopped
+
+    async def _speak(self, spoken: str, priority: str, epoch: int | None = None, token: object | None = None) -> None:
         try:
             session = self.session
-            if session is None:
+            if session is None or self._stopped_since(epoch):
                 return
             if getattr(self.assistant, "muted", False):
                 logger.info("ANNOUNCE not spoken: the assistant is muted")
@@ -147,11 +203,15 @@ class Announcer:
                 waited += SPEAKING_POLL_S
             if session is not self.session:  # the job ended while we waited
                 return
+            if not self._begin_speaking(epoch, token):  # C-51: 'stop' came while it waited for its turn
+                return
             reply = session.generate_reply(instructions=SPEAK_PREFIX + spoken)
             if inspect.isawaitable(reply):
                 await reply
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger.warning("announce speak failed: %s", type(e).__name__)
+        finally:
+            self._not_waiting(token)  # skipped (muted, rate limit, no session), failed or cancelled: no longer waiting
 
 
 announcer = Announcer()
@@ -162,3 +222,4 @@ detach = announcer.detach
 set_session = announcer.set_session
 set_assistant = announcer.set_assistant
 announce = announcer.announce
+cancel_pending = announcer.cancel_pending

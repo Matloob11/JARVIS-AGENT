@@ -955,6 +955,40 @@ async def test_shutdown_tells_the_ui_about_the_actions_it_drops(broker, bridge, 
     assert not results
 
 
+async def test_cancel_drops_one_pending_action_and_tells_the_ui(broker, bridge, results, rec):
+    """C-51: cancel() drops ONE action whose asker gave up (its job ended): confirm_resolved
+    'cancelled', its waiter wakes and a late Allow runs nothing, while another pending action
+    stays and a decided one keeps its first outcome."""
+    @jarvis_tool(risk="high")
+    async def c28_asked_by_an_ended_job() -> str:
+        """Its job ends before Sir answers."""
+        return "ran"
+
+    @jarvis_tool(risk="high")
+    async def c28_still_waiting() -> str:
+        """Still waits for Sir."""
+        return "ran"
+
+    asked = await _llm_call("c28_asked_by_an_ended_job", {})
+    other = await _llm_call("c28_still_waiting", {})
+    waiting = asyncio.create_task(broker.wait_outcome(asked["confirm_id"]))
+    await asyncio.sleep(0)
+
+    outcome = broker.cancel(asked["confirm_id"], source="job_end")
+    assert (outcome["status"], outcome["reason"]) == ("cancelled", "cancelled")
+    assert (await asyncio.wait_for(waiting, 2))["reason"] == "cancelled"
+    await _until(lambda: bridge.of("confirm_resolved"))
+    assert bridge.of("confirm_resolved") == [
+        {"id": asked["confirm_id"], "allow": False, "reason": "cancelled"}]
+    assert [action["id"] for action in broker.pending()] == [other["confirm_id"]]
+    assert (await broker.resolve(asked["confirm_id"], True, source="ui"))["status"] == "cancelled"
+    assert broker.cancel(asked["confirm_id"])["status"] == "cancelled"  # decided: the first outcome
+    assert broker.cancel("c51-unknown-id") is None
+    assert ("TOOL_CONFIRM", f"TOOL=c28_asked_by_an_ended_job | RISK=high | ID={asked['confirm_id']} | "
+            "ALLOW=False | REASON=cancelled | SOURCE=job_end") in rec.audit
+    assert len(bridge.of("confirm_resolved")) == 1 and not results
+
+
 # ---------------------------------------------------------------- the bridge's K-45 clamp is enforced (C-29 part 2)
 
 

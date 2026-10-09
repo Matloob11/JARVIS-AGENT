@@ -550,6 +550,117 @@ async def test_a_stop_event_without_a_reason_ends_the_job_too(job):
 
 
 @pytest.mark.asyncio
+async def test_a_confirmed_shutdown_agent_ends_the_job_as_terminated_by_owner(job, monkeypatch):
+    """C-51 (K-60): shutdown_agent's flow ends the job through the entrypoint's C-23 end block: jarvis.session
+    'closed' (not 'paused': the bridge may dispatch a fresh job) and ctx.shutdown('terminated_by_owner')."""
+    from services.ai_core import control_commands
+    from services.utils.ui_command_registry import CommandContext
+
+    monkeypatch.setattr(control_commands, "_confirm_broker", lambda: None)  # payload confirm:true decides
+    flows: list[Any] = []
+
+    def confirm_later(agent):
+        ctx = CommandContext(assistant=agent, notify_log=None)
+        asyncio.get_running_loop().call_later(0.05, lambda: flows.append(asyncio.ensure_future(
+            control_commands.run_shutdown_agent({"confirm": True}, ctx))))
+
+    job.on_start = confirm_later
+    ctx = _FakeJobContext()
+    await _run_entrypoint(job, ctx)
+    assert [flow.result() for flow in flows] == [True]
+    assert ctx.shutdowns == ["terminated_by_owner"]
+    assert ctx.room.local_participant.attributes == ["starting", "running", "closed"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("probe", [False, True], ids=["job", "probe"])
+async def test_the_voice_id_tap_runs_once_per_audio_track_and_goes_to_the_assistant(job, monkeypatch, probe):
+    """C-51 (K-60): the entrypoint hands its UserAudioTaps to the assistant (mute pauses them, unmute restarts them)
+    and starts one tap per remote audio track, in the room already or published later; a probe job starts none."""
+    import types
+
+    from livekit import rtc
+
+    tapped: list[str] = []
+
+    async def tap(publication, _assistant):
+        tapped.append(publication.sid)
+
+    monkeypatch.setattr(job.ar, "_process_user_audio", tap)
+    ctx = _FakeJobContext()
+    if probe:
+        ctx.room.name = "jarvis-probe-1"
+    owner = types.SimpleNamespace(track_publications={
+        "TR_a": types.SimpleNamespace(sid="TR_a", kind=rtc.TrackKind.KIND_AUDIO),
+        "TR_v": types.SimpleNamespace(sid="TR_v", kind=rtc.TrackKind.KIND_VIDEO)})
+    ctx.room.remote_participants = {"owner": owner}
+    later = types.SimpleNamespace(sid="TR_b", kind=rtc.TrackKind.KIND_AUDIO)
+    attached: list[Any] = []
+
+    def on_start(agent):
+        agent.attach_audio_tap = attached.append
+        loop = asyncio.get_running_loop()
+        loop.call_later(0.03, lambda: [handler(later, owner) for handler in ctx.room.handlers["track_published"]])
+        loop.call_later(0.08, agent.request_end, "paused_by_owner")
+
+    job.on_start = on_start
+    await _run_entrypoint(job, ctx)
+    if probe:
+        assert attached == [] and tapped == []
+    else:
+        assert len(attached) == 1 and isinstance(attached[0], job.ar.UserAudioTaps)
+        assert sorted(tapped) == ["TR_a", "TR_b"]  # the video track gets none
+
+
+@pytest.mark.asyncio
+async def test_a_session_rebuilt_while_muted_starts_with_its_microphone_off(job, monkeypatch):
+    """C-51 (K-60): the microphone switch of a session started while muted is off BEFORE session.start, so the input
+    stream RoomIO sets inside start() starts detached. The stand-in assistant's attach_session does nothing here: the
+    switch alone does it. Switched off only after start(), the frames start() buffered would still reach the model
+    (test_control_commands.py::test_a_microphone_switched_off_before_roomio_attaches_queues_no_frame)."""
+    from livekit.agents.voice.io import AgentInput, AudioInput
+
+    class Mic(AudioInput):
+        """RoomIO's audio input in miniature: its frames reach the model only while it is attached."""
+
+        def __init__(self) -> None:
+            super().__init__(label="c51-mic")
+            self.attached = True
+
+        def on_attached(self) -> None:
+            self.attached = True
+
+        def on_detached(self) -> None:
+            self.attached = False
+
+    class MicSession(job.ar.AgentSession):  # the fixture's stand-in with livekit's real AgentInput
+        def __init__(self, **kwargs: Any) -> None:
+            super().__init__(**kwargs)
+            self.input = AgentInput(lambda: None, lambda: None)
+
+    monkeypatch.setattr(job.ar, "AgentSession", MicSession)
+    started: list[bool] = []
+
+    def on_start(agent):
+        session = job.sessions[-1]
+        mic = Mic()
+        session.input.audio = mic  # what RoomIO.start does inside session.start()
+        started.append(mic.attached)  # before its first frame
+        loop = asyncio.get_running_loop()
+        if len(job.sessions) == 1:
+            agent.muted = True  # the owner mutes, then the session fails and is rebuilt in place
+            loop.call_later(0.05, lambda: session.fire("close", types.SimpleNamespace(reason="error")))
+        else:
+            loop.call_later(0.05, agent.request_end, "paused_by_owner")
+
+    job.on_start = on_start
+    await _run_entrypoint(job, _FakeJobContext())
+    assert len(job.sessions) == 2
+    assert started == [True, False]  # the first session started unmuted; the rebuild, muted, with its mic off
+    assert [session.input.audio_enabled for session in job.sessions] == [True, False]
+
+
+@pytest.mark.asyncio
 async def test_a_failed_connect_ends_the_job_once_as_connect_failed(job):
     """C-33 step B: ctx.connect() runs once per job; a failed connect is not retried inside the job, the bridge
     dispatches a fresh one instead."""

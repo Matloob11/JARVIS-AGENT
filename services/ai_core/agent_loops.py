@@ -18,6 +18,7 @@ import socketio
 
 from services.ai_core.swarm_manager import start_swarm
 from services.automation.jarvis_reminders import check_due_reminders
+from services.ai_core.control_commands import close_open_flows, run_clear_memory, run_shutdown_agent, stop_speaking
 from services.ai_core.jarvis_vector_memory import jarvis_vector_db
 from services.info.jarvis_sim_lookup import open_sim_lookup_panel
 from services.utils.jarvis_adaptive import adaptive_engine
@@ -369,8 +370,9 @@ async def open_job_artifact(payload: Any) -> bool:
 
 # K-03: types the bridge forwards (ui_bridge.UI_COMMAND_TYPES) that no agent handler takes yet. They are ignored at
 # DEBUG instead of logging 'Unknown UI command' to the dashboard, until a module registers one (the registry wins).
+# shutdown_agent has its handler since C-51.
 FORWARDED_UNHANDLED: frozenset[str] = frozenset({
-    "start", "settings_update", "desktop_stop", "notification_ack", "shutdown_agent", "task_cancel",
+    "start", "settings_update", "desktop_stop", "notification_ack", "task_cancel",
     "tasks_refresh", "voice_take_over", "voice_enroll", "voice_enroll_start", "feedback", "request_state",
 })
 
@@ -379,12 +381,18 @@ def _listener(ctx: CommandContext) -> "UIBridgeListener":
     return ctx.extras["listener"]
 
 
-def _spawn_for(assistant: Any, coro: Any) -> None:
+_command_tasks: set[asyncio.Task[Any]] = set()  # spawned commands of an assistant without _spawned_tasks
+
+
+def _spawn_for(assistant: Any, coro: Any) -> asyncio.Task[Any]:
     """A command that must not block the listener (it waits for an Allow or a reply): its own task, kept by the
-    assistant's _spawned_tasks."""
+    assistant's _spawned_tasks (C-51: by this module for an assistant without them, an old integration)."""
     task = asyncio.create_task(coro)
-    assistant._spawned_tasks.add(task)  # type: ignore[attr-defined]
-    task.add_done_callback(assistant._spawned_tasks.discard)  # type: ignore[attr-defined]
+    keep = getattr(assistant, "_spawned_tasks", None)
+    keep = keep if isinstance(keep, set) else _command_tasks
+    keep.add(task)
+    task.add_done_callback(keep.discard)
+    return task
 
 
 @register_ui_command("mute")
@@ -409,9 +417,20 @@ def _cmd_wake_word_toggle(payload: Any, ctx: CommandContext) -> None:
 @register_ui_command("stop")
 async def _cmd_stop(_payload: Any, ctx: CommandContext) -> None:
     # K-60 v9 (C-23): 'Stop speaking' only interrupts speech; the session keeps listening. It no longer sets the
-    # job's stop event, which restarted the whole session in place.
-    await _listener(ctx)._interrupt_speech()  # pylint: disable=protected-access
-    logger.info("STOP: speech interrupted (K-60)")
+    # job's stop event, which restarted the whole session in place. C-51 (control_commands.stop_speaking): forced only
+    # for a speech that does not allow interruptions, pending announcements dropped, notify_ui('STOP'), audited.
+    from src.core.conversation_router import router_of  # pylint: disable=import-outside-toplevel
+
+    router = router_of(ctx.assistant)
+    await stop_speaking(_listener(ctx)._interrupt_speech,  # pylint: disable=protected-access
+                        forget_typed=getattr(router, "cancel_rescues", None))
+
+
+@register_ui_command("shutdown_agent")
+def _cmd_shutdown_agent(payload: Any, ctx: CommandContext) -> None:
+    # C-51 (K-60, control_commands): ends the job only after the owner's confirmation; its own task, because the
+    # confirmation waits for the owner's Allow and this handler must stay free to receive that confirm_response.
+    _spawn_for(ctx.assistant, run_shutdown_agent(payload, ctx))
 
 
 @register_ui_command("pause_agent")
@@ -438,9 +457,11 @@ async def _cmd_persona_change(payload: Any, ctx: CommandContext) -> None:
 
 
 @register_ui_command("clear_memory")
-async def _cmd_clear_memory(_payload: Any, ctx: CommandContext) -> None:
-    logger.info("🧠 Clearing short-term memory...")
-    await ctx.assistant.memory_extractor.memory.clear()
+def _cmd_clear_memory(payload: Any, ctx: CommandContext) -> None:
+    # C-51 (K-60, control_commands): confirmed first, then the memory file moved to backups/memory (never deleted); its
+    # own task, like shutdown_agent.
+    logger.info("🧠 Clear memory asked; waiting for the owner's confirmation")
+    _spawn_for(ctx.assistant, run_clear_memory(payload, ctx))
 
 
 @register_ui_command("open_sim_panel")
@@ -542,7 +563,11 @@ class UIBridgeListener:
         return self.handle.closing
 
     async def aclose(self) -> None:
-        """C-34: ends this job's listener: no reconnect after it, the socket disconnected (bounded, never raises)."""
+        """C-34: ends this job's listener: no reconnect after it, the socket disconnected (bounded, never raises).
+        C-51: no Allow can reach this job after it, so first the cards its guarded commands (shutdown_agent,
+        clear_memory) still wait on are cancelled and close on the dashboard as 'cancelled'
+        (control_commands.close_open_flows, bounded)."""
+        await close_open_flows(self._ctx)
         await self.handle.aclose()
 
     async def on_command(self, data: Any) -> None:

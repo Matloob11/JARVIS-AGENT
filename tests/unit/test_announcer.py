@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 import types
 from typing import Any
 
@@ -131,6 +132,67 @@ async def test_detach_of_another_session_keeps_the_live_one_and_nothing_raises(a
 
     monkeypatch.setattr(jarvis_bridge, "notify_transcription", boom)
     await ann.announce("never raises")
+
+
+async def test_stop_counts_only_the_announcements_that_had_not_started_speaking(ann, posted):
+    """C-51 (K-60 'stop'): an announcement already speaking is the session's interrupt to cut, not a dropped one;
+    only the one still waiting for its turn is dropped and counted."""
+    playout = asyncio.Event()  # the first announcement's speech, still playing
+    session = _Session()
+
+    def generate_reply(*, instructions: str) -> Any:
+        session.replies.append(instructions)
+        session.agent_state = "speaking"
+        return playout.wait()  # its task waits for the playout
+
+    session.generate_reply = generate_reply  # type: ignore[method-assign]
+    ann.attach(session)
+    await ann.announce("ab bol raha hai", priority="high")
+    for _ in range(50):
+        if session.replies:
+            break
+        await asyncio.sleep(0.01)
+    await ann.announce("apni baari ka intezar", priority="high")
+    await asyncio.sleep(0.05)
+    assert len(ann._tasks) == 2  # pylint: disable=protected-access  # both still run
+
+    assert ann.cancel_pending() == 1  # the waiting one only
+    playout.set()
+    session.agent_state = "listening"
+    await _drain(ann)
+    assert session.replies == [ja.SPEAK_PREFIX + "ab bol raha hai"]  # the waiting one never starts
+
+
+async def test_stop_counts_an_announcement_handed_over_from_another_thread(ann, posted):
+    session = _Session(state="speaking")
+    ann.attach(session)  # the session's loop is this one
+    worker = threading.Thread(target=lambda: asyncio.run(ann.announce("doosre job se", priority="high")))
+    worker.start()
+    worker.join(5)
+    await asyncio.sleep(0.05)  # it waits for its turn on this loop
+
+    assert ann.cancel_pending() == 1
+    session.agent_state = "listening"
+    await asyncio.sleep(0.1)
+    assert session.replies == []
+
+
+def test_a_stop_while_another_jobs_loop_changes_the_announcement_tasks_still_drops_everything():
+    """C-51: the announcer is one per process and Windows jobs are threads, so another job's loop can start or end an
+    announcement task while 'stop' runs. Simulated deterministically: a task of that loop starts one more while the
+    stop looks at the tasks. The stop never raises ('Set changed size during iteration') and still drops the queue."""
+    ann = ja.Announcer()
+    ann._queue.append(("queued for the next session", "high"))  # pylint: disable=protected-access
+
+    class _OtherLoopsTask:
+        def done(self) -> bool:
+            ann._tasks.add(_OtherLoopsTask())  # type: ignore[arg-type]  # pylint: disable=protected-access
+            return False
+
+    ann._tasks.add(_OtherLoopsTask())  # type: ignore[arg-type]  # pylint: disable=protected-access
+    assert ann.cancel_pending() == 1
+    assert not ann._queue  # pylint: disable=protected-access
+    assert ann.cancel_pending() == 0  # nothing left
 
 
 def test_the_reexport_is_the_same_api():

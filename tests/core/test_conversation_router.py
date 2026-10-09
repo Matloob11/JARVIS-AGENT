@@ -664,3 +664,32 @@ async def test_drain_never_waits_for_a_rescue_and_detach_cancels_it(router):
     with pytest.raises(asyncio.CancelledError):
         await rescue
     assert router._awaiting == {}
+
+
+async def test_stop_cancels_the_typed_rescue(router, quick_rescue):
+    """C-51: a typed reply stopped before its first audio adds no assistant item; 'stop' must not be undone."""
+    session = _session()
+    router.attach(session)
+    await router.handle_text("Jarvis, lambi report banao", "u-1")
+    rescues = list(router._rescues)
+    assert router.cancel_rescues() == 1 and router._awaiting == {}
+    await asyncio.wait_for(asyncio.gather(*rescues, return_exceptions=True), 5)
+    assert session.generate_reply.call_count == 1
+
+
+async def test_a_newer_spoken_turn_supersedes_the_typed_rescue(router, quick_rescue):
+    session = _session()
+    router.attach(session)
+    await router.handle_text("salam", "u-1")
+    await _added(router, "user", "Jarvis ruko")  # a spoken turn after it
+    await asyncio.wait_for(asyncio.gather(*router._rescues, return_exceptions=True), 5)
+    assert session.generate_reply.call_count == 1
+
+
+async def test_only_the_newest_typed_message_is_rescued(router, quick_rescue):
+    session = _session()
+    router.attach(session)
+    await router.handle_text("pehla sawal", "u-1")
+    await router.handle_text("doosra sawal", "u-2")
+    await asyncio.wait_for(asyncio.gather(*router._rescues, return_exceptions=True), 5)
+    assert session.calls.count("generate_reply:None") == 1

@@ -2509,3 +2509,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** BUILD_EXIT=0, DEFAULT_BUILDER_CACHE_UNCHANGED, IMPORT_OK, MODELS_OK, inspect line exact; bridge/frontend/livekit healthy aur unchanged
 - **Commit:** `4b5fb79`, `f9618ea` · **Deploy:** VPS code-only deploy e440997 + image build 12:07-12:13 PKT 🚀 (backup /root/jarvis-backups/2026-10-09_0706Z-pre-deploy-e440997)
 - **Doosre agent ke liye:** —
+
+### ✅ [claude] C-51 (code) · Stop, Mute, guarded shutdown_agent and clear_memory · 2026-10-09 13:02 PKT
+- **Kya kiya:** Stop ab sirf bolna rokta hai (zaroorat par force), intezar karte announcements aur typed-message ka rescue bhi khatam karta hai, job kabhi nahi khatam karta. Mute ab session ka microphone input band karta hai (typed chat chalta rehta hai), voice-ID taps rukte hain; rebuild ke dauran bhi mute/unmute naye session par lagta hai. shutdown_agent aur clear_memory pehle dashboard card se poochte hain (Allow ke baghair kuch nahi); clear_memory file ko backups/memory/ mein le jata hai, naam exclusively reserve, kabhi overwrite nahi. Job khatam ho to khule cards cancel hote hain. scripts/smoke/stop_check.py scripted stop check.
+- **Files:** services/ai_core/control_commands.py (naya), agent_loops.py, jarvis_confirm.py, memory_store.py, services/utils/jarvis_announcer.py, src/core/agent_core.py, agent_runner.py, conversation_router.py, scripts/smoke/stop_check.py, tests; contracts v37
+- **Verify:** C-51 related 492 passed; full suite 4946 passed, 0 failed; review 7 + verify 3 + verify 3 findings fixed
+- **Commit:** (this commit) · **Deploy:** PC worker restart next (live check)
+- **Doosre agent ke liye:** dashboard Stop ab typed sawal ko dobara nahi chalata; shutdown/clear_memory cards ab job end par khud band hote hain.

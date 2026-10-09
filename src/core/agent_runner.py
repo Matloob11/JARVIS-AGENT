@@ -742,21 +742,104 @@ async def _process_user_audio(publication: rtc.TrackPublication, assistant: Brai
             return
 
         audio_stream = rtc.AudioStream(track)
-        async for event in audio_stream:
-            # LiveKit AudioStream yields AudioFrameEvent
-            if hasattr(event, 'frame') and event.frame:
-                assistant.add_audio_frame(event.frame)
-            elif hasattr(event, 'audio_frame') and event.audio_frame:
-                assistant.add_audio_frame(event.audio_frame) # type: ignore
-            elif hasattr(event, 'data'):
-                # Handle direct AudioFrame yields in some SDK versions
-                assistant.add_audio_frame(event)  # type: ignore
-            # Log only once to avoid flooding
-            elif not getattr(assistant, "_audio_format_warned", False):
-                logger.warning("Unsupported audio event type: %s", type(event))
-                assistant._audio_format_warned = True
+        try:
+            async for event in audio_stream:
+                # LiveKit AudioStream yields AudioFrameEvent
+                if hasattr(event, 'frame') and event.frame:
+                    assistant.add_audio_frame(event.frame)
+                elif hasattr(event, 'audio_frame') and event.audio_frame:
+                    assistant.add_audio_frame(event.audio_frame) # type: ignore
+                elif hasattr(event, 'data'):
+                    # Handle direct AudioFrame yields in some SDK versions
+                    assistant.add_audio_frame(event)  # type: ignore
+                # Log only once to avoid flooding
+                elif not getattr(assistant, "_audio_format_warned", False):
+                    logger.warning("Unsupported audio event type: %s", type(event))
+                    assistant._audio_format_warned = True
+        finally:
+            # C-51: a tap paused by mute (cancelled) releases its stream; the track stays subscribed for RoomIO
+            await _close_audio_stream(audio_stream)
     except Exception as e:
         logger.error("Audio subscription error: %s", e)
+
+
+AUDIO_STREAM_CLOSE_TIMEOUT_S = 2.0
+
+
+async def _close_audio_stream(stream: Any) -> None:
+    """Closes one rtc.AudioStream of the voice-ID tap, bounded; never raises (a cancel still passes on)."""
+    if not callable(getattr(stream, "aclose", None)):
+        return
+    try:
+        await asyncio.wait_for(stream.aclose(), AUDIO_STREAM_CLOSE_TIMEOUT_S)
+    except Exception as e:  # pylint: disable=broad-exception-caught  # (a cancel is a BaseException and passes)
+        logger.debug("audio tap stream close: %s", type(e).__name__)
+
+
+class UserAudioTaps:
+    """
+    C-51 (K-60): the job's legacy voice-ID audio taps (_process_user_audio), one task per remote audio track sid.
+    BrainAssistant.set_muted pauses them (each task cancelled and its AudioStream closed; the track itself stays
+    subscribed, because RoomIO reads the same track) and resumes them on unmute for the audio tracks still in the
+    room. No tap starts while the assistant is muted.
+    """
+
+    def __init__(self, assistant: Any, room: Any,
+                 spawn: Callable[[Coroutine[Any, Any, Any]], asyncio.Task[Any]]) -> None:
+        self.assistant = assistant
+        self.room = room
+        self._spawn = spawn
+        self._tasks: dict[str, asyncio.Task[Any]] = {}
+
+    def add(self, publication: Any) -> bool:
+        """Starts the tap for one remote audio publication, once per track and never while muted. True when one
+        started."""
+        if getattr(publication, "kind", None) != rtc.TrackKind.KIND_AUDIO or getattr(self.assistant, "muted", False):
+            return False
+        sid = str(getattr(publication, "sid", "") or id(publication))
+        running = self._tasks.get(sid)
+        if running is not None and not running.done():
+            return False
+        task = self._spawn(_process_user_audio(publication, self.assistant))
+        self._tasks[sid] = task
+        task.add_done_callback(functools.partial(self._forget, sid))
+        return True
+
+    def _forget(self, sid: str, task: asyncio.Task[Any]) -> None:
+        if self._tasks.get(sid) is task:
+            del self._tasks[sid]
+
+    def add_room_tracks(self) -> int:
+        """A tap for every remote audio track already in the room; returns how many started."""
+        started = 0
+        participants = getattr(self.room, "remote_participants", None)
+        for participant in list(participants.values()) if hasattr(participants, "values") else []:
+            for publication in list(getattr(participant, "track_publications", {}).values()):
+                if self.add(publication):
+                    started += 1
+        return started
+
+    def pause(self) -> int:
+        """Mute: every running tap is cancelled; returns how many."""
+        running = [task for task in self._tasks.values() if not task.done()]
+        for task in running:
+            task.cancel()
+        self._tasks.clear()
+        if running:
+            logger.info("🔇 Voice-ID audio tap paused (%d track(s))", len(running))
+        return len(running)
+
+    def resume(self) -> int:
+        """Unmute: the taps start again for the audio tracks still in the room; returns how many."""
+        started = self.add_room_tracks()
+        if started:
+            logger.info("🔊 Voice-ID audio tap resumed (%d track(s))", started)
+        return started
+
+    @property
+    def running(self) -> int:
+        """How many taps run now."""
+        return sum(1 for task in self._tasks.values() if not task.done())
 
 
 CLEANUP_STEP_TIMEOUT_S = 10.0  # each teardown step (assistant shutdown, session close) waits at most this long
@@ -1400,6 +1483,13 @@ async def entrypoint(ctx: agents.JobContext):
     async def _start_session(session: Any) -> None:
         logger.info("[AGENT] Connecting room and starting session...")
         voice_link.prepare(session)  # C-41: with nobody listening the session starts with its audio output off
+        if getattr(job["assistant"], "muted", False):
+            # C-51 (K-60): a session (re)built while muted starts with its microphone input off. AgentInput keeps the
+            # switch until RoomIO sets its input stream inside start(), so that stream starts detached and buffers no
+            # frame. Switched off only after start() (attach_session, kept as a backstop), the frames buffered while
+            # start() ran would still reach the model.
+            session.input.set_audio_enabled(False)
+            logger.info("MUTE: the new session starts with its microphone input off")
         # record=False: these jobs never record (self-hosted LiveKit), and a rebuilt session of the same job must not
         # trip livekit-agents' 'only one primary AgentSession' check, which only applies while recording.
         await session.start(room=ctx.room, agent=job["assistant"], record=False,
@@ -1533,20 +1623,23 @@ async def entrypoint(ctx: agents.JobContext):
             runtime.room_on("data_received", on_data_received)  # removed by the runtime's teardown
 
             # --- Speaker Identification Subscription --- (never in a probe: it can enroll voice samples)
+            # C-51 (K-60): one tap per audio track; mute pauses the taps and unmute restarts them (set_muted)
+            audio_taps = UserAudioTaps(assistant, ctx.room, track)
+            if not probe and callable(getattr(assistant, "attach_audio_tap", None)):
+                assistant.attach_audio_tap(audio_taps)
+
             def on_track_published(publication: rtc.TrackPublication, participant: rtc.RemoteParticipant,
-                                   _assistant=assistant):
+                                   _taps=audio_taps):
                 if publication.kind == rtc.TrackKind.KIND_AUDIO and not probe:
-                    track(_process_user_audio(publication, _assistant))
+                    _taps.add(publication)
             runtime.room_on("track_published", on_track_published)
 
             # The owner coming back under a new identity is relinked by the job's VoiceLink (C-35, attached above)
             track(_room_liveness_loop(ctx.room, job["request_end"]))  # C-33 step A: a dead room ends the job
 
             # Subscribe to existing tracks
-            for participant in ctx.room.remote_participants.values():
-                for publication in participant.track_publications.values():
-                    if publication.kind == rtc.TrackKind.KIND_AUDIO and not probe:
-                        track(_process_user_audio(publication, assistant))
+            if not probe:
+                audio_taps.add_room_tracks()
 
             # --- Location and PC vitals loops --- (local mode only, K-72 / K-40; never in a probe, K-57)
             if local and not probe:
@@ -1572,8 +1665,8 @@ async def entrypoint(ctx: agents.JobContext):
                 if local and rag_warm_delay is not None:
                     track(_warm_document_index(rag_warm_delay))
 
-            # C-23 (K-60): wait until the job is asked to end (pause_agent, C-62's shutdown_agent, a lost room, the
-            # session error cap); 'stop' only interrupts speech and never sets this.
+            # C-23 (K-60): wait until the job is asked to end (pause_agent, a shutdown_agent the owner confirmed (C-51),
+            # a lost room, the session error cap); 'stop' only interrupts speech and never sets this.
             ended = await runtime.wait_closed()
             logger.info("SESSION ending: %s", ended)
     except (asyncio.CancelledError, KeyboardInterrupt):

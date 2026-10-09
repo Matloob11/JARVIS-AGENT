@@ -291,6 +291,7 @@ class ConversationRouter:
                 logger.debug("CHAT_ROUTER typed item %s not emitted again (turn %s)", item_id, self._turn_id)
                 return None
             self._turn_id, self._turn_source = item_id, "voice"
+            self._awaiting.clear()  # C-51: a newer spoken turn (a 'ruko' too) supersedes a typed message's rescue
             if getattr(self.assistant, "muted", False) is True:
                 return None  # muted: no voice bubble, as before
             self._log_turn(item_id, "user", text, "voice")
@@ -448,11 +449,21 @@ class ConversationRouter:
         task.add_done_callback(self._tasks.discard)
         return task
 
+    def cancel_rescues(self) -> int:
+        """C-51: 'stop' (K-60) ends what the owner stopped. A stop before a typed reply's first audio adds no assistant
+        item, so without this the rescue would ask the session again ~12 s later and answer the stopped question (or
+        run its cancelled tool call). Returns how many typed messages were still waiting."""
+        waiting = len(self._awaiting)
+        self._awaiting.clear()
+        for task in list(self._rescues):
+            task.cancel()
+        return waiting
+
     def _watch_reply(self, msg_id: str, session: Any) -> None:
-        """C-50: arms the one-time rescue of a typed message (_rescue)."""
+        """C-50: arms the one-time rescue of a typed message (_rescue). Only the newest typed message is watched: a
+        rescue asks the session to answer its context, whose last user turn is that message."""
+        self._awaiting.clear()
         self._awaiting[msg_id] = None
-        while len(self._awaiting) > DEDUPE_MAX:
-            self._awaiting.popitem(last=False)
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:  # no running loop: nothing to watch with

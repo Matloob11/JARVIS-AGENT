@@ -11,7 +11,7 @@ import pytest
 import socketio
 import uvicorn
 
-from services.ai_core import agent_loops
+from services.ai_core import agent_loops, control_commands
 from services.ai_core.agent_loops import (
     start_memory_storage_loop,
     start_reminder_loop,
@@ -430,6 +430,7 @@ async def test_stop_only_interrupts_speech_and_never_ends_the_session(monkeypatc
     assistant._active_session = session
     shutdown_signal = MagicMock()
     monkeypatch.setattr(agent_loops.autonomous_protector, "shutdown_signal", shutdown_signal)
+    monkeypatch.setattr(control_commands, "notify_ui", AsyncMock())  # C-51: stop clears the UI's speaking state
     listener = _listener(monkeypatch, assistant=assistant)
 
     await listener._handle_command({"type": "stop", "payload": {}})
@@ -476,11 +477,12 @@ async def test_pause_agent_on_an_assistant_before_c23_sets_its_stop_event(monkey
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("command", ["start", "shutdown_agent"])
-async def test_start_and_shutdown_agent_change_nothing_here(monkeypatch, command):
+async def test_start_changes_nothing_here(monkeypatch):
+    """'start' (Wake) belongs to the bridge's room owner. shutdown_agent ends the job only after the owner's
+    confirmation since C-51 (tests/core/test_control_commands.py)."""
     assistant = _EndingAssistant()
     listener = _listener(monkeypatch, assistant=assistant)
-    await listener._handle_command({"type": command, "payload": {}})
+    await listener._handle_command({"type": "start", "payload": {}})
     assert not assistant._stop_event.is_set() and assistant.end_reason is None
 
 

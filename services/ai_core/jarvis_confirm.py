@@ -438,6 +438,22 @@ class ConfirmationBroker:
         final = self._run_finals.get(key)
         return dict(final) if final is not None else None
 
+    def cancel(self, confirm_id: str, source: str = "broker") -> dict[str, Any] | None:
+        """
+        C-51: cancels ONE pending action whose asker gave up on it (the job whose guarded UI
+        command asked it ended, so no Allow can reach that job any more). It is decided as
+        'cancelled' like the actions shutdown() drops: confirm_resolved {allow: false, reason:
+        'cancelled'} closes its dialog, its waiters wake and nothing runs, so a late Allow finds
+        it decided. Returns the outcome (an action decided already keeps its first one), None
+        for an unknown id.
+        """
+        key = str(confirm_id or "").strip().lower()
+        action = self._pending.get(key)
+        if action is None:
+            done = self._resolved.get(key)
+            return dict(done) if done is not None else None
+        return self._finish(action, allow=False, reason="cancelled", source=source)
+
     async def shutdown(self) -> None:
         """
         Cancels every pending action and stops this loop's broker tasks (session end, tests).

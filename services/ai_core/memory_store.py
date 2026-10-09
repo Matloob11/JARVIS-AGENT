@@ -4,10 +4,12 @@ Persistent storage for conversation history and user context.
 """
 
 import asyncio
+import errno
 import json
 import os
+import shutil
 from collections import OrderedDict
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 try:
@@ -26,6 +28,25 @@ from services.utils.probe_context import bridge_suppressed  # K-57 (C-39)
 logger = setup_logger("JARVIS-MEMORY-STORE")
 
 _background_tasks: set[asyncio.Task[Any]] = set()
+
+# C-51 (K-60 clear_memory): a cleared memory file is moved here (<backups>/memory/<UTC ts>_<user>_memory.json)
+MEMORY_BACKUP_SUBDIR = "memory"
+
+
+def memory_backup_dir() -> str:
+    """<project_root>/backups/memory (config.backups_dir), where clear() keeps the previous memory file."""
+    return os.path.join(config.backups_dir, MEMORY_BACKUP_SUBDIR)
+
+
+def _remove_quietly(path: str) -> None:
+    """Removes a leftover of a failed clear (its empty backup reservation or partial copy); never raises."""
+    try:
+        os.remove(path)
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        logger.warning("Leftover %s of a failed memory clear not removed: %s", os.path.basename(path),
+                       type(e).__name__)
 
 
 class ConversationMemory:
@@ -98,13 +119,66 @@ class ConversationMemory:
                 )
             return []
 
-    async def clear(self) -> None:
-        """Deletes all conversation history for this user."""
+    async def clear(self, backup_dir: str | None = None) -> str | None:
+        """
+        C-51 (K-60 clear_memory): forgets this user's conversation history WITHOUT deleting it. The memory file is
+        moved to <backup_dir>/<UTC ts>_<user>_memory.json (default backups/memory, created when missing; '-1', '-2'
+        ... after the time stamp when that name is taken), still encrypted, and the cache is emptied. The backup name
+        is reserved atomically before the move (O_CREAT | O_EXCL), so two clears in the same second, even by two
+        ConversationMemory instances, never share it, and the move only ever replaces its own reservation, never an
+        earlier backup. Where the backup folder is on another file system (the VPS brain keeps conversations and
+        backups on separate volumes, K-75) the file is copied there in full first and only then removed. Returns the
+        backup path, None when there was no file. A move that fails raises OSError and leaves the file and the cache
+        as they were.
+        """
+        target_dir = backup_dir or memory_backup_dir()
         async with self.lock:
-            self.cache.clear()
+            backup: str | None = None
             if await asyncio.to_thread(os.path.exists, self.memory_file):
-                await asyncio.to_thread(os.unlink, self.memory_file)
-            logger.info("🧠 Memory CLEARED for user: %s", self.user_id)
+                backup = await asyncio.to_thread(self._move_to_backup, target_dir)
+            self.cache.clear()
+            logger.info("🧠 Memory CLEARED for user: %s (backup %s)", self.user_id,
+                        os.path.basename(backup) if backup else "none: no memory file")
+            return backup
+
+    def _move_to_backup(self, target_dir: str) -> str:
+        """Moves the memory file into target_dir under a name reserved for it alone (an existing backup is never
+        overwritten: os.replace only ever lands on this call's own empty reservation)."""
+        os.makedirs(target_dir, exist_ok=True)
+        target = self._reserve_backup_name(target_dir)
+        try:
+            os.replace(self.memory_file, target)
+        except OSError as e:
+            if e.errno != errno.EXDEV:
+                _remove_quietly(target)  # the empty reservation; the memory file stays as it was
+                raise
+            # Another file system: a complete copy under its final name first, the original removed only after it.
+            partial = f"{target}.partial"
+            try:
+                shutil.copy2(self.memory_file, partial)
+                os.replace(partial, target)
+            except OSError:
+                _remove_quietly(partial)
+                _remove_quietly(target)
+                raise
+            os.remove(self.memory_file)
+        return target
+
+    def _reserve_backup_name(self, target_dir: str) -> str:
+        """Creates <UTC ts>_<user>_memory.json in target_dir, empty and exclusively (O_CREAT | O_EXCL: of two clears
+        in the same second only one gets a name), with '-1', '-2' ... after the time stamp while a name is taken."""
+        name = os.path.basename(self.memory_file)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_BINARY", 0)
+        suffix = 0
+        while True:
+            target = os.path.join(target_dir, f"{stamp}-{suffix}_{name}" if suffix else f"{stamp}_{name}")
+            try:
+                os.close(os.open(target, flags, 0o600))
+            except FileExistsError:
+                suffix += 1
+                continue
+            return target
 
     def _conversation_exists(
             self, new_conversation: dict[str, Any], existing_conversations: list[dict[str, Any]]) -> bool:
