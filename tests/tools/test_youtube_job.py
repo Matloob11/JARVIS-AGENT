@@ -39,7 +39,7 @@ async def _wait_job(job_id: str, timeout: float = 5.0) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_job_emits_progress_from_fake_subprocess(events, monkeypatch):
+async def test_job_emits_progress_from_fake_subprocess(events):
     from services.multimedia import jarvis_youtube_downloader as ytd_mod
 
     stderr = [
@@ -55,19 +55,19 @@ async def test_job_emits_progress_from_fake_subprocess(events, monkeypatch):
     async def fake_exec(*_args, **_kwargs):
         return proc
 
-    monkeypatch.setattr(ytd_mod.asyncio, "create_subprocess_exec", fake_exec)
+    # patch.object (not monkeypatch) so asyncio is restored before K-27 guard teardown
+    with patch.object(ytd_mod.asyncio, "create_subprocess_exec", fake_exec):
+        with patch("os.path.exists", return_value=True):
+            with patch.object(ytd_mod.jarvis_delivery, "open_artifact"):
+                async def factory(ctx: jarvis_jobs.JobContext) -> dict:
+                    return await ytd_mod.yt_downloader.run_download_job(
+                        ctx, "test track", "audio", auto_open=False
+                    )
 
-    with patch("os.path.exists", return_value=True):
-        with patch.object(ytd_mod.jarvis_delivery, "open_artifact"):
-            async def factory(ctx: jarvis_jobs.JobContext) -> dict:
-                return await ytd_mod.yt_downloader.run_download_job(
-                    ctx, "test track", "audio", auto_open=False
+                job_id = jarvis_jobs.start_job(
+                    "download_youtube_media", "YouTube audio download", factory
                 )
-
-            job_id = jarvis_jobs.start_job(
-                "download_youtube_media", "YouTube audio download", factory
-            )
-            job = await _wait_job(job_id)
+                job = await _wait_job(job_id)
 
     assert job["status"] == "done"
     progress = [
@@ -96,7 +96,7 @@ class _HangingProcess(FakeProcess):
 
 
 @pytest.mark.asyncio
-async def test_job_cancel_kills_subprocess(events, monkeypatch):
+async def test_job_cancel_kills_subprocess(events):
     from services.multimedia import jarvis_youtube_downloader as ytd_mod
 
     started = asyncio.Event()
@@ -106,17 +106,19 @@ async def test_job_cancel_kills_subprocess(events, monkeypatch):
         started.set()
         return proc
 
-    monkeypatch.setattr(ytd_mod.asyncio, "create_subprocess_exec", slow_exec)
-
     async def factory(ctx: jarvis_jobs.JobContext) -> dict:
         return await ytd_mod.yt_downloader.run_download_job(
             ctx, "https://youtube.com/watch?v=abc", "audio", auto_open=False
         )
 
-    job_id = jarvis_jobs.start_job("download_youtube_media", "YouTube cancel test", factory)
-    await asyncio.wait_for(started.wait(), 5)
-    await asyncio.sleep(0.05)
-    assert jarvis_jobs.cancel_job(job_id) is True
-    job = await _wait_job(job_id)
+    with patch.object(ytd_mod.asyncio, "create_subprocess_exec", slow_exec):
+        job_id = jarvis_jobs.start_job(
+            "download_youtube_media", "YouTube cancel test", factory
+        )
+        await asyncio.wait_for(started.wait(), 5)
+        await asyncio.sleep(0.05)
+        assert jarvis_jobs.cancel_job(job_id) is True
+        job = await _wait_job(job_id)
+
     assert job["status"] == "cancelled"
     assert proc.killed is True

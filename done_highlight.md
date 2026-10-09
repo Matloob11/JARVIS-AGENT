@@ -2488,3 +2488,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** C-126 + agent_ctl tests 798 passed (image tests 37 after the LF fix); review 9 + fresh verify 3 findings handled; full suite 4876 passed (1 Cursor-lane X-58 leak)
 - **Commit:** (this commit) · **Deploy:** abhi nahi (agla qadam: VPS .env mein JARVIS_BRAIN=pc, phir build window)
 - **Doosre agent ke liye:** C-125: agent_services SIGTERM khud handle kare aur start par harden_process() chalaye.
+
+### ✅ [cursor] X-58 · youtube job asyncio patch leak · 2026-10-09 12:00 PKT
+- **Kya kiya:** test_youtube_job mein create_subprocess_exec ab patch.object context se; monkeypatch asyncio leak hataya (net_guard full-suite fail).
+- **Files:** tests/tools/test_youtube_job.py
+- **Verify:** pytest tests/tools/test_youtube_job.py + test_net_guard::test_no_secret_reaches_an_asyncio_child_process -> 3 passed
+- **Commit:** (pending) · **Deploy:** no
+- **Doosre agent ke liye:** —
