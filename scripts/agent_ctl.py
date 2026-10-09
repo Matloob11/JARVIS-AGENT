@@ -1491,6 +1491,17 @@ VPS_BRAIN_CONTAINERS = (("jarvis-agent", ("agent", "jarvis-agent")),
                         ("jarvis-agent-svc", ("agent-svc", "jarvis-agent-svc")))
 VPS_DEFAULT_SERVICES = ("agent", "agent-svc")
 VPS_PROVISIONED_BY = "C-126..C-129"
+# Every 'compose up' the way deploy.sh runs it (K-75: always name the services): only the named services, never a
+# depends_on service (compose would recreate the bridge whenever its config differs, e.g. GIT_SHA), from the images
+# already there.
+VPS_COMPOSE_UP = ("up", "-d", "--no-deps", "--no-build", "--pull", "never")
+# The bridge reads JARVIS_BRAIN only when it starts (K-72 v9), so START_NEW recreates it after FLIP_ENV, and a restore
+# recreates it again; then up to VPS_BRIDGE_TRIES x VPS_BRIDGE_POLL_S (deploy.sh's 120 s gate) until Docker says it
+# is healthy.
+VPS_BRIDGE_SERVICE = "ui-bridge"
+VPS_BRIDGE_CONTAINER = "jarvis-bridge"
+VPS_BRIDGE_TRIES = 40
+VPS_BRIDGE_POLL_S = 3
 
 
 _brain_warned: set[str] = set()
@@ -2230,7 +2241,8 @@ def _vps_shell(script: str) -> list[str]:
 
 def _vps_compose(*args: str) -> str:
     """docker compose for the VPS brain services the way deploy.sh runs compose: project 'jarvis', the compose
-    file and its .env in deploy/hostinger, plus the vps-brain profile that holds the agent services."""
+    file and its .env in deploy/hostinger, plus the vps-brain profile that holds the agent services. An 'up' is
+    always VPS_COMPOSE_UP followed by the service names."""
     return (f"cd {VPS_COMPOSE_DIR} && docker compose -p {VPS_COMPOSE_PROJECT} --profile {VPS_BRAIN_PROFILE} "
             + " ".join(shlex.quote(arg) for arg in args))
 
@@ -2239,6 +2251,31 @@ def _vps_helper(path: str, *args: str) -> str:
     """A helper of the VPS checkout (VPS_HELPERS): a .py through python3, a shell script as ./<path>."""
     runner = "python3 " if path.endswith(".py") else "./"
     return f"cd {VPS_APP_DIR} && {runner}{path}" + "".join(" " + shlex.quote(arg) for arg in args)
+
+
+def vps_bridge_recreate_script() -> str:
+    """Recreates ui-bridge alone, so it reads the JARVIS_BRAIN the VPS .env says now: from its existing image (no
+    build, no pull) and with the GIT_SHA that image runs: the running container's own GIT_SHA, else (none, or
+    'unknown') the first line of DEPLOYED_SHA, as deploy.sh and rollback.sh give it (without one compose fills in
+    'unknown', which /health then reports, K-43). DEPLOYED_SHA alone could name a newer commit than the bridge
+    image (a '--services frontend' or 'none' deploy writes it too). Then it waits until Docker reports the container
+    healthy; exit 1 when it is not within VPS_BRIDGE_TRIES x VPS_BRIDGE_POLL_S."""
+    health = "{{if .State.Health}}{{.State.Health.Status}}{{end}}"
+    env_list = "{{range .Config.Env}}{{println .}}{{end}}"
+    return "\n".join([
+        f"cd {VPS_COMPOSE_DIR} || exit 1",
+        f"sha=\"$(docker inspect -f '{env_list}' {VPS_BRIDGE_CONTAINER} 2>/dev/null | sed -n 's/^GIT_SHA=//p' "
+        "| head -n 1)\"",
+        f'if [ -z "$sha" ] || [ "$sha" = unknown ]; then sha="$(head -n 1 {VPS_APP_DIR}/DEPLOYED_SHA 2>/dev/null)"; fi',
+        f'GIT_SHA="$sha" docker compose -p {VPS_COMPOSE_PROJECT} '
+        f"{' '.join(VPS_COMPOSE_UP)} --force-recreate {VPS_BRIDGE_SERVICE} || exit 1",
+        "i=0",
+        f'while [ "$i" -lt {VPS_BRIDGE_TRIES} ]; do',
+        f"""  [ "$(docker inspect -f '{health}' {VPS_BRIDGE_CONTAINER} 2>/dev/null)" = healthy ] && exit 0""",
+        f"  sleep {VPS_BRIDGE_POLL_S}; i=$((i + 1))",
+        "done",
+        f"echo '{VPS_BRIDGE_CONTAINER} is not healthy after {VPS_BRIDGE_TRIES * VPS_BRIDGE_POLL_S} s' >&2",
+        "exit 1"])
 
 
 def vps_provision_script() -> str:
@@ -2296,6 +2333,10 @@ class BrainSwitch:
     - FLIP_ENV writes JARVIS_BRAIN on the VPS .env and then in the laptop's root .env (set_laptop_brain), so the
       laptop agrees (a PC worker start is refused once it says vps). The restore writes the previous brain back to
       both, and a resume past FLIP_ENV re-applies the laptop value before it goes on.
+    - START_NEW first recreates ui-bridge, which reads JARVIS_BRAIN only when it starts (K-72 v9), with the GIT_SHA
+      of DEPLOYED_SHA, and waits until Docker says it is healthy; only then the new brain starts. Every compose
+      'up' names its services with --no-deps --no-build --pull never (K-75), so it never recreates a dependency. A
+      restore after START_NEW began recreates the bridge again for the previous brain.
     - When the VPS already says the target, both sides are compared: equal is 'already' (nothing to switch); a
       laptop that differs is repaired alone (its JARVIS_BRAIN written, journalled; no VPS command, nothing stopped
       or started), so 'brain pc' frees the owner's worker from a laptop .env left at vps.
@@ -2639,8 +2680,13 @@ class BrainSwitch:
         self._laptop_env(self.target)
 
     def _start_new(self) -> None:
+        # The bridge reads JARVIS_BRAIN only when it starts (K-72 v9): recreate it from the flipped .env and wait
+        # until it is healthy before the new brain starts, ENSURE asks it for the room and VERIFY reads its status.
+        # The journal notes it first, so a restore (or a resumed one) recreates it again for the previous brain.
+        self._save(bridge_brain=self.target)
+        self._ssh_step(_vps_shell(vps_bridge_recreate_script()), "START_NEW (recreate ui-bridge)")
         if self.target == "vps":
-            self._ssh_step(_vps_shell(_vps_compose("up", "-d", *self._services())), "START_NEW")
+            self._ssh_step(_vps_shell(_vps_compose(*VPS_COMPOSE_UP, *self._services())), "START_NEW")
             if self._laptop.start("vps") != EXIT_OK:
                 raise BrainSwitchError("the Desktop Node did not start")
         else:
@@ -2669,8 +2715,9 @@ class BrainSwitch:
 
     def _restore(self, why: str) -> tuple[int, dict[str, Any]]:
         """Bring the previous brain back: the new laptop side down, JARVIS_BRAIN back (the VPS .env, then the
-        laptop's root .env), the old side up. Every
-        action runs even when one before it failed; the journal says 'restoring' so a crash resumes the restore."""
+        laptop's root .env), the bridge recreated when START_NEW had recreated it for the target, the old side up.
+        Every action runs even when one before it failed; the journal says 'restoring' so a crash resumes the
+        restore."""
         previous = self.journal.get("previous")
         if previous not in BRAINS or previous == self.target:
             self._clear()
@@ -2683,8 +2730,13 @@ class BrainSwitch:
             ("restore JARVIS_BRAIN", lambda: self._ssh(_vps_shell(
                 _vps_helper("deploy/hostinger/set_env.py", BRAIN_ENV, previous)))),
             ("restore JARVIS_BRAIN on this laptop", lambda: self._laptop_env(previous))]
+        if self.journal.get("bridge_brain") == self.target:
+            # START_NEW recreated the bridge for the target (or began to): once more, so it reads the previous brain.
+            # A failure before START_NEW never touched it, so the UI and node sockets are not dropped for nothing.
+            actions.append(("recreate the bridge", lambda: self._ssh(_vps_shell(vps_bridge_recreate_script()))))
         if previous == "vps":
-            actions += [("start the VPS brain", lambda: self._ssh(_vps_shell(_vps_compose("up", "-d", *services)))),
+            actions += [("start the VPS brain",
+                         lambda: self._ssh(_vps_shell(_vps_compose(*VPS_COMPOSE_UP, *services)))),
                         ("start the Desktop Node", lambda: self._laptop.start("vps"))]
         else:
             actions += [("stop the VPS brain", lambda: self._ssh(_vps_shell(_vps_compose("stop", *services)))),
@@ -2988,8 +3040,10 @@ def _add_brain_parser(sub: Any) -> None:
                     "and until the PC-signed /vortex/status shows the current brain with its running agent "
                     "(lk.agent.name, jarvis.session), which VERIFY and the restore check need. FLIP_ENV writes "
                     "JARVIS_BRAIN in the VPS .env and in this laptop's root .env (only that line); a failure "
-                    "writes the previous brain back to both. When the VPS already says <target> but this laptop does "
-                    "not, only the laptop's JARVIS_BRAIN line is repaired (no VPS command, nothing stopped). "
+                    "writes the previous brain back to both. START_NEW first recreates ui-bridge on the VPS (it reads "
+                    "JARVIS_BRAIN only when it starts) and waits until it is healthy. When the VPS already says "
+                    "<target> but this laptop does not, only the laptop's JARVIS_BRAIN line is repaired (no VPS "
+                    "command, nothing stopped). "
                     f"'brain pc {LAPTOP_ONLY_FLAG}' does that repair without reading the VPS at all. "
                     "run/brain.lock refuses a second 'brain' run while one is running. Ctrl+C leaves "
                     "run/brain_switch.json: run the same 'brain <target>' again to finish the switch or restore the "

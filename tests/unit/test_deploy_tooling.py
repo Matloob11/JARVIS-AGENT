@@ -1,4 +1,5 @@
 """C-12 / OP-08: the deploy tooling (deploy_from_pc.sh, deploy.sh v2, rollback.sh, smoke_other_apps.sh), offline.
+C-126 adds agent_ctl's compose calls and its ui-bridge recreate script (the brain switch, K-72 v9) to the same rules.
 
 Every script runs under bash inside a scratch sandbox in tmp_path. JARVIS_DEPLOY_SANDBOX moves the VPS paths
 (/opt/jarvis-agent, /root/jarvis-backups, /etc/nginx, /etc/letsencrypt) into it, and docker, nginx, systemctl,
@@ -10,8 +11,10 @@ The other apps in the fake server (sites, containers) must never show up by name
 # pylint: disable=redefined-outer-name,too-many-lines  # the fakes are embedded so the module stands alone
 from __future__ import annotations
 
+import ast
 import functools
 import hashlib
+import importlib.util
 import io
 import json
 import os
@@ -20,12 +23,14 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import types
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 HOSTINGER = ROOT / "deploy" / "hostinger"
+AGENT_CTL = ROOT / "scripts" / "agent_ctl.py"
 DOMAIN = "jarvis.srv1802669.hstgr.cloud"
 OLD_SHA = "1111111"
 NEW_SHA = "abcdef1"
@@ -858,8 +863,23 @@ def test_scripts_parse_and_use_lf_line_endings() -> None:
         assert proc.returncode == 0, name + ": " + proc.stderr
 
 
+@functools.lru_cache(maxsize=None)
+def _agent_ctl() -> types.ModuleType:
+    """scripts/agent_ctl.py, loaded once (its top level only defines things; tests/test_agent_ctl.py checks that)."""
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    spec = importlib.util.spec_from_file_location("agent_ctl_deploy_tooling", AGENT_CTL)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def test_compose_commands_always_name_services() -> None:
-    """Every 'compose up' names its services with --no-deps; no prune, no 'down', no nginx/docker restart."""
+    """Every 'compose up' names its services with --no-deps; no prune, no 'down', no nginx/docker restart. agent_ctl's
+    brain switch too (K-75): each _vps_compose call stops, or starts with VPS_COMPOSE_UP, and its ui-bridge recreate
+    (K-72 v9) is that same 'up' for the bridge alone. Without --no-deps, the depends_on of agent and agent-svc would
+    let compose recreate the bridge (with GIT_SHA 'unknown') whenever its config differs."""
     ups = 0
     for name in ("deploy.sh", "rollback.sh"):
         for line in (HOSTINGER / name).read_text(encoding="utf-8").splitlines():
@@ -871,6 +891,138 @@ def test_compose_commands_always_name_services() -> None:
             assert "compose down" not in code and " rmi " not in code, name + ": " + code
             assert "restart nginx" not in code and "restart docker" not in code, name + ": " + code
     assert ups == 3   # deploy, automatic rollback, rollback.sh
+
+    ctl = _agent_ctl()
+    assert ctl.VPS_COMPOSE_UP == ("up", "-d", "--no-deps", "--no-build", "--pull", "never")
+    verbs = []
+    for node in ast.walk(ast.parse(AGENT_CTL.read_text(encoding="utf-8"))):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "_vps_compose":
+            first = node.args[0]
+            if isinstance(first, ast.Starred):
+                assert ast.unparse(first.value) == "VPS_COMPOSE_UP", ast.unparse(node)
+                verbs.append("up")
+            else:
+                assert isinstance(first, ast.Constant) and first.value == "stop", ast.unparse(node)
+                verbs.append("stop")
+    assert verbs.count("up") == 2 and verbs.count("stop") == 3   # up: START_NEW and the restore (to vps)
+    assert ctl._vps_compose(*ctl.VPS_COMPOSE_UP, "agent", "agent-svc") == (  # pylint: disable=protected-access
+        "cd /opt/jarvis-agent/deploy/hostinger && docker compose -p jarvis --profile vps-brain up -d --no-deps "
+        "--no-build --pull never agent agent-svc")
+    recreate = ctl.vps_bridge_recreate_script()
+    compose_lines = [line for line in recreate.splitlines() if "docker compose" in line]
+    assert len(compose_lines) == 1 and compose_lines[0].endswith(
+        "docker compose -p jarvis up -d --no-deps --no-build --pull never --force-recreate ui-bridge || exit 1")
+    assert not re.search(r"\bprune\b|compose down|\brmi\b|restart (nginx|docker)", recreate)
+
+
+# --------------------------------------------------------------------------- agent_ctl's ui-bridge recreate
+
+FAKE_BRIDGE_DOCKER = r'''#!/usr/bin/env bash
+# docker for agent_ctl's ui-bridge recreate: every call is logged next to this file; an env 'inspect' prints the
+# running container's environment (GIT_SHA=$FAKE_RUNNING_SHA when set), a health 'inspect' answers 'starting' until
+# its FAKE_HEALTHY_AT-th call, then 'healthy'
+here=${0%/*}
+case "$1" in
+  compose)
+    printf 'compose GIT_SHA=[%s] PWD=%s ARGS=%s\n' "${GIT_SHA-unset}" "$PWD" "$*" >> "$here/calls.log"
+    exit "${FAKE_COMPOSE_EXIT:-0}" ;;
+  inspect)
+    printf 'inspect ARGS=%s\n' "$*" >> "$here/calls.log"
+    case "$*" in
+      *Config.Env*)
+        echo "PATH=/usr/local/bin:/usr/bin"
+        if [ -n "${FAKE_RUNNING_SHA:-}" ]; then echo "GIT_SHA=$FAKE_RUNNING_SHA"; fi
+        exit 0 ;;
+    esac
+    n=0
+    if [ -f "$here/inspects" ]; then read -r n < "$here/inspects"; fi
+    n=$((n + 1)); echo "$n" > "$here/inspects"
+    if [ "$n" -ge "${FAKE_HEALTHY_AT:-1}" ]; then echo healthy; else echo starting; fi ;;
+  *) printf 'unexpected: docker %s\n' "$*" >&2; exit 99 ;;
+esac
+'''
+BRIDGE_INSPECT = "inspect ARGS=inspect -f {{if .State.Health}}{{.State.Health.Status}}{{end}} jarvis-bridge"
+BRIDGE_ENV_INSPECT = "inspect ARGS=inspect -f {{range .Config.Env}}{{println .}}{{end}} jarvis-bridge"
+RUNNING_SHA = "1234abc"
+
+
+@pytest.mark.parametrize(("healthy_at", "compose_exit", "deployed", "running", "code", "inspects"), [
+    (3, 0, True, "", 0, 3),             # healthy on the third look
+    (99, 0, True, "", 1, 4),            # never healthy: exit 1 after VPS_BRIDGE_TRIES looks
+    (1, 1, True, "", 1, 0),             # compose failed: no wait
+    (1, 0, False, "", 0, 1),            # no DEPLOYED_SHA: an empty GIT_SHA, which compose turns into 'unknown'
+    (1, 0, True, RUNNING_SHA, 0, 1),    # the running bridge's own GIT_SHA wins over a newer DEPLOYED_SHA
+    (1, 0, True, "unknown", 0, 1),      # a running 'unknown' says nothing: DEPLOYED_SHA
+])
+def test_agent_ctl_recreates_only_the_bridge_with_its_own_sha_then_waits_until_it_is_healthy(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, healthy_at: int, compose_exit: int, deployed: bool,
+        running: str, code: int, inspects: int) -> None:
+    """The bridge reads JARVIS_BRAIN only when it starts (K-72 v9), so the brain switch recreates it: alone, from its
+    image, with the GIT_SHA that image runs (the running container's, else DEPLOYED_SHA; never the calling shell's:
+    a '--services frontend' or 'none' deploy writes DEPLOYED_SHA without a new bridge image), and only a healthy
+    bridge counts."""
+    ctl = _agent_ctl()
+    monkeypatch.setattr(ctl, "VPS_BRIDGE_TRIES", 4)
+    monkeypatch.setattr(ctl, "VPS_BRIDGE_POLL_S", 0)
+    app = tmp_path / "opt" / "jarvis-agent"
+    compose_dir = app / "deploy" / "hostinger"
+    compose_dir.mkdir(parents=True)
+    if deployed:
+        _write(app / "DEPLOYED_SHA", NEW_SHA + "\nnot-the-first-line\n")   # only its first line counts
+    script = ctl.vps_bridge_recreate_script()
+    assert script.count(ctl.VPS_APP_DIR) == 2   # the compose folder and DEPLOYED_SHA, both moved into tmp_path
+    boxed = _write(tmp_path / "recreate.sh", script.replace(ctl.VPS_APP_DIR, _posix(app)))
+    fakebin = tmp_path / "fakebin"
+    _write(fakebin / "docker", FAKE_BRIDGE_DOCKER, 0o755)
+    keep = ("SYSTEMROOT", "WINDIR", "TEMP", "TMP", "USERPROFILE", "COMSPEC", "PATHEXT")
+    env = {k: v for k, v in os.environ.items() if k.upper() in keep}
+    assert BASH is not None
+    env.update(PATH=os.pathsep.join([str(fakebin), str(Path(BASH).parent)]), LC_ALL="C", GIT_SHA="from-the-shell",
+               FAKE_HEALTHY_AT=str(healthy_at), FAKE_COMPOSE_EXIT=str(compose_exit), FAKE_RUNNING_SHA=running)
+    proc = subprocess.run([BASH, _posix(boxed)], env=env, capture_output=True, text=True, encoding="utf-8",
+                          errors="replace", timeout=60, check=False)
+    assert proc.returncode == code, _out(proc)
+    sha = running if running not in ("", "unknown") else NEW_SHA if deployed else ""
+    assert (fakebin / "calls.log").read_text(encoding="utf-8").splitlines() == [
+        BRIDGE_ENV_INSPECT,
+        f"compose GIT_SHA=[{sha}] PWD={_posix(compose_dir)} ARGS=compose -p jarvis up -d --no-deps --no-build "
+        "--pull never --force-recreate ui-bridge"] + [BRIDGE_INSPECT] * inspects
+    assert ("jarvis-bridge is not healthy" in proc.stderr) == (code == 1 and compose_exit == 0)
+
+
+# --------------------------------------------------------------------------- rollback.sh --env after C-126
+
+@pytest.mark.parametrize(("before", "line", "name", "after"), [
+    ("A=1\n", "JARVIS_BRAIN=pc", "JARVIS_BRAIN", "A=1\nJARVIS_BRAIN=pc\n"),            # a backup from before C-126
+    ("A=1\nJARVIS_BRAIN=\n", "JARVIS_BRAIN=pc", "JARVIS_BRAIN", "A=1\nJARVIS_BRAIN=pc\n"),  # an empty one is no brain
+    ("JARVIS_BRAIN=vps\n", "JARVIS_BRAIN=pc", "JARVIS_BRAIN", "JARVIS_BRAIN=vps\n"),     # the restored file's own wins
+    ("A=1\n", "", "JARVIS_BRAIN", "A=1\n"),                                             # nothing live: nothing added
+    ("A=1\n", "COMPOSE_PROFILES=vps-brain", "COMPOSE_PROFILES", "A=1\nCOMPOSE_PROFILES=vps-brain\n"),
+    ("COMPOSE_PROFILES=\n", "COMPOSE_PROFILES=vps-brain", "COMPOSE_PROFILES", "COMPOSE_PROFILES=\n"),  # a setting
+])
+def test_rollback_env_restore_keeps_the_live_brain(tmp_path: Path, before: str, line: str, name: str,
+                                                   after: str) -> None:
+    """C-126: the compose file needs a non-empty JARVIS_BRAIN in .env. rollback.sh --env to a backup from before C-126
+    keeps the live JARVIS_BRAIN (and COMPOSE_PROFILES) line, so the rollback's own compose commands still run."""
+    assert BASH is not None
+    source = (HOSTINGER / "rollback.sh").read_text(encoding="utf-8")
+    func = re.search(r"^keep_env_line\(\) \{.*?^\}\n", source, re.M | re.S)
+    assert func is not None and 'keep_env_line "${dst[0]}" "$brain" JARVIS_BRAIN' in source
+    env_file = tmp_path / ".env"
+    env_file.write_bytes(before.encode("utf-8"))
+    script = func.group(0) + 'log() { printf "%s\\n" "$*"; }\nkeep_env_line "$1" "$2" "$3"\n'
+    proc = subprocess.run([BASH, "-c", script, "keep", _posix(env_file), line, name], capture_output=True, text=True,
+                          encoding="utf-8", errors="replace", timeout=60, check=False)
+    assert proc.returncode == 0, _out(proc)
+    assert env_file.read_bytes().decode("utf-8") == after
+
+
+def test_gate_only_fails_when_the_compose_file_does_not_interpolate() -> None:
+    """C-126: without a non-empty JARVIS_BRAIN, 'compose ps' sees no container and the gate checked nothing."""
+    source = (HOSTINGER / "deploy.sh").read_text(encoding="utf-8")
+    body = source[source.index("gate_only_main() {"):]
+    body = body[:body.index("\n}\n")]
+    assert body.index("compose config -q") < body.index("run_gates") and 'fail "docker compose config fails' in body
 
 
 # --------------------------------------------------------------------------- smoke_other_apps.sh

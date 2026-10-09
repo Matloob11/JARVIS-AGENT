@@ -20,7 +20,8 @@ section 11, items 9 and 10):
 
 2. Child processes (the VPS, Linux only): every subprocess.Popen, and so every
    asyncio.create_subprocess_exec/shell, gets an environment allow-list (PATH, HOME, LANG, LC_*, TZ,
-   TMPDIR, HF_* without tokens, TRANSFORMERS_OFFLINE). prctl(PR_SET_DUMPABLE, 0) makes the process
+   TMPDIR, HF_* without tokens, TRANSFORMERS_OFFLINE, and JARVIS_MEDIA_PRIORITY for the image's media
+   wrappers, C-126). prctl(PR_SET_DUMPABLE, 0) makes the process
    non-dumpable, so no other process of the same uid reads its memory or /proc/<pid>/environ. A Windows PC
    keeps today's child environment: its desktop tools need SYSTEMROOT, APPDATA, USERPROFILE, PATHEXT,
    COMSPEC and more.
@@ -409,7 +410,8 @@ def guard_enabled(profile: RuntimeProfile | None = None) -> bool:
 # ---------------------------------------------------------------- child processes
 
 
-CHILD_ENV_NAMES = frozenset({"PATH", "HOME", "LANG", "TZ", "TMPDIR", "TRANSFORMERS_OFFLINE"})
+# JARVIS_MEDIA_PRIORITY (C-126, K-75): the image's ffmpeg/ffprobe/yt-dlp wrappers read it in the child itself
+CHILD_ENV_NAMES = frozenset({"PATH", "HOME", "LANG", "TZ", "TMPDIR", "TRANSFORMERS_OFFLINE", "JARVIS_MEDIA_PRIORITY"})
 CHILD_ENV_PREFIXES = ("LC_", "HF_")
 _SECRET_WORDS = ("TOKEN", "SECRET", "KEY", "PASSWORD", "PASSWD", "CREDENTIAL", "AUTH")
 

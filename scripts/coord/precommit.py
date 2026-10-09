@@ -28,16 +28,23 @@ import check_lane  # noqa: E402  pylint: disable=wrong-import-position
 import restore_unicode  # noqa: E402  pylint: disable=wrong-import-position
 
 ROOT = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True).stdout.strip()
-ENV_FILES = [".env", "deploy/windows-local/.env", "deploy/hostinger/.env", "deploy/hostinger/bridge.env"]
+# Their secret values are looked for in every staged line (when the file exists here). .env.agent (C-126, K-75) is the
+# VPS agent containers' env file; a copy on this PC is scanned the same way.
+ENV_FILES = [".env", "deploy/windows-local/.env", "deploy/hostinger/.env", "deploy/hostinger/bridge.env",
+             "deploy/hostinger/.env.agent"]
 PRIVATE_TERMS_FILE = ".coord/private_terms.txt"
 MAX_SCAN_BYTES = 2_000_000
 AGENT_ENV = "JARVIS_AGENT"
 
 FORBIDDEN_PATHS = [
     (re.compile(r"(^|/)\.env$"), "ENV_FILE"),
-    (re.compile(r"(^|/)\.env\.(?!example$|production\.example$)[^/]+$"), "ENV_FILE"),
+    # .env.<anything> (.env.local, the VPS agent's .env.agent and its .tmp, ...) unless it is a names-only template
+    # ending in .example (.env.example, .env.production.example, .env.agent.example)
+    (re.compile(r"(^|/)\.env\.(?!(?:[^/]*\.)?example$)[^/]+$"), "ENV_FILE"),
     (re.compile(r"\.htpasswd$"), "HTPASSWD"),
     (re.compile(r"(^|/)bridge\.env$"), "BRIDGE_ENV"),
+    # Any other <name>.env (C-126): copies such as hostinger.env or root.env hold the same secrets
+    (re.compile(r"(^|/)(?!bridge\.env$)[^/]+\.env$"), "ENV_FILE"),
     (re.compile(r"\.(pem|key)$"), "PRIVATE_KEY_FILE"),
     (re.compile(r"(^|/)claude-artifact-[^/]*\.png$"), "AUDIT_SCREENSHOT"),
 ]

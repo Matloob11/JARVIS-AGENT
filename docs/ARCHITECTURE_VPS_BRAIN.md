@@ -441,7 +441,7 @@ It is built on the VPS by the dedicated `jarvis-builder` (D19). A first build ta
     profiles: ["vps-brain"]
     command: ["python", "-m", "src.core.agent", "start", "--drain-timeout", "20"]
     user: "10001:10001"
-    init: true
+    init: false                     # python is PID 1 and non-dumpable (K-72); docker-init would hold every secret in a dumpable /proc/1/environ
     env_file: [.env.agent]          # secrets only; root 600; never mounted
     environment: {JARVIS_ROLE: agent, JARVIS_BRAIN: "${JARVIS_BRAIN:?}", JARVIS_DESKTOP_MODE: remote, TZ: Asia/Karachi, USER_CITY: Lahore, JARVIS_USER_ID: matloob, LIVEKIT_URL: "ws://jarvis-livekit:7880", UI_BRIDGE_URL: "http://jarvis-bridge:5002", JARVIS_AGENT_NAME: jarvis, AGENT_DISPATCH_MODE: on_demand, JARVIS_IDLE_PROCS: "2", JARVIS_PREWARM_TIMEOUT: "120", JARVIS_LOAD_THRESHOLD: inf, JARVIS_JOB_MEMORY_WARN_MB: "3000", JARVIS_SHUTDOWN_PROC_TIMEOUT: "20", LOG_FILE: logs/jarvis_agent.log, HF_HUB_OFFLINE: "1"}
     volumes: [jarvis_agent_conversations:/app/conversations, jarvis_agent_chroma:/app/chroma_db, jarvis_agent_data:/app/data, jarvis_agent_backups:/app/backups, jarvis_agent_logs:/app/logs, jarvis_outputs:/app/Jarvis_Outputs, jarvis_shared:/app/Jarvis_Shared]

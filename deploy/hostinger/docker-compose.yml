@@ -4,6 +4,65 @@
 
 name: jarvis
 
+# VPS brain (plan C-126, contract K-75): what the services agent (jarvis-agent) and agent-svc (jarvis-agent-svc)
+# share. Both sit in the profile vps-brain, so a plain 'docker compose -p jarvis up -d' never starts them; naming them
+# ('up -d --no-deps agent') or COMPOSE_PROFILES=vps-brain in .env (K-72) does. The image is built only with the
+# dedicated builder (Dockerfile.agent, D19), so there is no build: section here. No CPU, memory or pids limit (user
+# decision 2026-10-01; pids_limit only if the user approves D10), no tmpfs (/tmp stays on the disk), no published port.
+x-agent-service: &agent-service
+  image: jarvis-agent:hostinger
+  profiles: ["vps-brain"]
+  user: "10001"
+  # No init: docker-init would be PID 1 as uid 10001 with the whole environment (every .env.agent secret) and stay
+  # dumpable, so any process of that uid could read them in /proc/1/environ. python is PID 1: harden_process() makes
+  # it non-dumpable (K-72), the LiveKit CLI drains on SIGTERM, and agent_services (C-125) must handle SIGTERM and call
+  # harden_process() itself. An orphaned grandchild is not reaped (a rare zombie until the next restart). 'false', not
+  # left out: without a value dockerd applies its own default, and a daemon-wide "init": true would bring docker-init.
+  init: false
+  # Secrets only (the K-47 names, see .env.agent.example): root 600 next to this file, read by compose, never mounted
+  env_file:
+    - path: .env.agent
+      required: true
+  depends_on:
+    livekit:
+      condition: service_started
+    ui-bridge:
+      condition: service_healthy
+  restart: unless-stopped
+  # drain 20 s + job shutdown 20 s fit inside it
+  stop_grace_period: 60s
+  # Not a limit: under host memory pressure the kernel ends a JARVIS agent before the bridge (300) or another app
+  oom_score_adj: 500
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+  networks:
+    - jarvis-net
+
+# Their non-secret environment (K-72). JARVIS_BRAIN comes from .env, the switch's source of truth: compose refuses to
+# run without it. GIT_SHA is the image's label and ENV, never set here.
+x-agent-environment: &agent-environment
+  JARVIS_BRAIN: "${JARVIS_BRAIN:?set JARVIS_BRAIN (vps or pc) in deploy/hostinger/.env}"
+  JARVIS_DESKTOP_MODE: remote
+  VORTEX_ENV: production
+  TZ: Asia/Karachi
+  USER_CITY: Lahore
+  JARVIS_USER_ID: matloob
+  LIVEKIT_URL: ws://jarvis-livekit:7880
+  UI_BRIDGE_URL: http://jarvis-bridge:5002
+  JARVIS_ROOM_NAME: jarvis-hybrid
+  JARVIS_SHARED_DIR: /app/Jarvis_Shared
+  JARVIS_MEDIA_PRIORITY: normal
+  JARVIS_NET_GUARD: "1"
+  JARVIS_REMINDER_EMAIL_AFTER_MIN: "0"
+  HF_HUB_OFFLINE: "1"
+
 services:
   livekit:
     image: livekit/livekit-server:v1.13.7
@@ -54,12 +113,16 @@ services:
       LIVEKIT_URL: ws://jarvis-livekit:7880
       LIVEKIT_PUBLIC_URL: wss://jarvis.srv1802669.hstgr.cloud
       JARVIS_ROOM_NAME: jarvis-hybrid
-      # C-23 (K-44/K-47 v9): the room owner. JARVIS_AGENT_NAME is the VPS brain's lk.agent.name; JARVIS_BRAIN and
-      # JARVIS_PC_AGENT_NAME (default jarvis-pc) come from the .env above and are read when the bridge starts. The
+      # C-23 (K-44/K-47 v9): the room owner. JARVIS_AGENT_NAME is the VPS brain's lk.agent.name; JARVIS_BRAIN (below)
+      # and JARVIS_PC_AGENT_NAME (default jarvis-pc, from the .env above) are read when the bridge starts. The
       # first C-23 deploy only observes: 'python -m src.core.bridge_rooms mode always' (or observe) switches it
       # within 5 s without a deploy, and the C-23 phase-5 cleanup removes the AGENT_DISPATCH_MODE line.
       JARVIS_AGENT_NAME: jarvis
       AGENT_DISPATCH_MODE: observe
+      # The brain switch's source of truth (K-72), the same .env value the agents read, named here so it stays when
+      # bridge.env replaces the .env above (V2b, C-127). Compose refuses to run without it; a brain switch recreates
+      # the bridge after FLIP_ENV (scripts/agent_ctl.py, plan C-126).
+      JARVIS_BRAIN: "${JARVIS_BRAIN:?set JARVIS_BRAIN (vps or pc) in deploy/hostinger/.env}"
       # Env only (K-49): the domain and the Vite dev origins; no raw-IP or Vercel origins
       ALLOWED_ORIGINS: https://jarvis.srv1802669.hstgr.cloud,http://127.0.0.1:5173,http://localhost:5173
       COOKIE_PATH: /vortex
@@ -121,6 +184,68 @@ services:
     networks:
       - jarvis-net
 
+  # The VPS brain's LiveKit worker 'jarvis' (K-72): voice and typed chat, conversation jobs only (K-77)
+  agent:
+    <<: *agent-service
+    container_name: jarvis-agent
+    command: ["python", "-m", "src.core.agent", "start", "--drain-timeout", "20"]
+    environment:
+      <<: *agent-environment
+      JARVIS_ROLE: agent
+      LOG_FILE: logs/jarvis_agent.log
+      # Worker and session (K-72): 2 warm processes, no load cap, no memory limit (the job warning only logs)
+      JARVIS_AGENT_NAME: jarvis
+      AGENT_DISPATCH_MODE: on_demand
+      JARVIS_IDLE_PROCS: "2"
+      JARVIS_PREWARM_TIMEOUT: "120"
+      JARVIS_LOAD_THRESHOLD: inf
+      JARVIS_JOB_MEMORY_WARN_MB: "3000"
+      JARVIS_SHUTDOWN_PROC_TIMEOUT: "20"
+      JARVIS_IDLE_CLOSE_MIN: "30"
+      JARVIS_CTX_TRIGGER_TOKENS: "24000"
+    volumes:
+      - jarvis_agent_conversations:/app/conversations
+      - jarvis_agent_chroma:/app/chroma_db
+      - jarvis_agent_data:/app/data
+      - jarvis_agent_backups:/app/backups
+      - jarvis_agent_logs:/app/logs
+      - jarvis_outputs:/app/Jarvis_Outputs
+      - jarvis_shared:/app/Jarvis_Shared
+    # The worker's health server (127.0.0.1:8081 inside the container). Docker starts every probe with the
+    # container's whole environment; 'env -i' drops it before curl runs, so no dumpable probe holds a secret.
+    healthcheck:
+      test: ["CMD", "env", "-i", "curl", "-fsS", "http://127.0.0.1:8081/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+
+  # The always-on service (K-77): reminders, tasks, the scheduler and the daily snapshot; standby unless
+  # JARVIS_BRAIN=vps. The media folders are read-only here; the snapshots are its own.
+  agent-svc:
+    <<: *agent-service
+    container_name: jarvis-agent-svc
+    command: ["python", "-m", "src.core.agent_services"]
+    environment:
+      <<: *agent-environment
+      JARVIS_ROLE: svc
+      LOG_FILE: logs/jarvis_agent_svc.log
+    volumes:
+      - jarvis_agent_conversations:/app/conversations
+      - jarvis_agent_chroma:/app/chroma_db
+      - jarvis_agent_data:/app/data
+      - jarvis_agent_backups:/app/backups
+      - jarvis_agent_logs:/app/logs
+      - jarvis_agent_snapshots:/app/snapshots
+      - jarvis_outputs:/app/Jarvis_Outputs:ro
+      - jarvis_shared:/app/Jarvis_Shared:ro
+    healthcheck:
+      test: ["CMD", "env", "-i", "curl", "-fsS", "http://127.0.0.1:8083/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
 networks:
   jarvis-net:
     name: jarvis-network
@@ -138,3 +263,15 @@ volumes:
     name: jarvis_agent_snapshots
   jarvis_bridge_data:
     name: jarvis_bridge_data
+  # C-126 (K-75): the VPS brain's own data, created on the first 'up' of agent or agent-svc (owner uid 10001 from the
+  # image). Never pruned; backup_vps.sh v2 (C-128) copies them, encrypted to the PC key.
+  jarvis_agent_conversations:
+    name: jarvis_agent_conversations
+  jarvis_agent_chroma:
+    name: jarvis_agent_chroma
+  jarvis_agent_data:
+    name: jarvis_agent_data
+  jarvis_agent_backups:
+    name: jarvis_agent_backups
+  jarvis_agent_logs:
+    name: jarvis_agent_logs

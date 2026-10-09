@@ -96,6 +96,9 @@ def test_agent_mode_lists_only_paths_outside_the_lane():
     (".coord/lanes.json", "claude"),
     ("docs/CONTRACTS.md", "claude"),
     ("deploy/hostinger/.env.example", "claude"),
+    ("deploy/hostinger/Dockerfile.agent", "claude"),
+    ("deploy/hostinger/agent-bin/ffmpeg", "claude"),
+    ("scripts/models/check_models.py", "claude"),
     ("plan.md", "shared"),
     ("done_highlight.md", "shared"),
     ("src\\core\\ui_bridge.py", "claude"),
@@ -437,3 +440,61 @@ def test_changed_binary_file_is_not_an_encoding_loss(sandbox):
     (sandbox / "data.bin").write_bytes(BINARY_BYTES.replace(b"\xff", b"?"))
     code, out, moved = _commit(sandbox, "data.bin", agent="user")
     assert code == 0 and moved, out
+
+
+# ---------------------------------------------------------------- secret env files (C-126, K-75)
+
+
+@pytest.fixture(scope="module", name="precommit")
+def fixture_precommit():
+    """scripts/coord/precommit.py as a module (its import asks git for the repo root, so it needs a checkout)."""
+    if not HAS_GIT:
+        pytest.skip("git is not installed")
+    spec = importlib.util.spec_from_file_location("jarvis_coord_precommit", COORD / "precommit.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(module)
+    except subprocess.CalledProcessError:
+        pytest.skip("not a git checkout")
+    return module
+
+
+@pytest.mark.parametrize(("path", "rules"), [
+    ("deploy/hostinger/.env.agent", ["ENV_FILE"]),
+    ("deploy/hostinger/.env.agent.tmp", ["ENV_FILE"]),
+    (".env.agent", ["ENV_FILE"]),
+    ("deploy/hostinger/bridge.env", ["BRIDGE_ENV"]),
+    ("bridge.env", ["BRIDGE_ENV"]),
+    ("backups/2026-10-08_0100/hostinger.env", ["ENV_FILE"]),
+    ("deploy/hostinger/.env", ["ENV_FILE"]),
+    ("stonix_ui/.env.local", ["ENV_FILE"]),
+    ("deploy/hostinger/.env.agent.example", []),
+    ("deploy/hostinger/.env.example", []),
+    (".env.production.example", []),
+    ("deploy/hostinger/.env.agent.example.bak", ["ENV_FILE"]),
+    ("deploy/hostinger/requirements-agent.txt", []),
+    ("docs/environment.md", []),
+])
+def test_env_files_are_refused_and_names_only_templates_pass(precommit, path, rules):
+    assert [finding.rsplit(" ", 1)[1] for finding in precommit.forbidden(path)] == rules
+
+
+def test_the_agent_env_file_values_are_scanned_too(precommit):
+    assert "deploy/hostinger/.env.agent" in precommit.ENV_FILES
+    assert "deploy/hostinger/bridge.env" in precommit.ENV_FILES
+
+
+@needs_git
+def test_committing_the_agent_env_file_is_rejected_but_its_template_passes(sandbox):
+    hostinger = sandbox / "deploy" / "hostinger"
+    hostinger.mkdir(parents=True)
+    (hostinger / ".env.agent.example").write_text("GOOGLE_API_KEY=\n", encoding="utf-8")
+    assert _git(sandbox, "add", "deploy/hostinger/.env.agent.example").returncode == 0
+    code, out, moved = _commit(sandbox, "deploy/hostinger/.env.agent.example", agent="claude")
+    assert code == 0 and moved, out
+    (hostinger / ".env.agent").write_text("JARVIS_BRAIN=pc\n", encoding="utf-8")
+    assert _git(sandbox, "add", "deploy/hostinger/.env.agent").returncode == 0
+    code, out, moved = _commit(sandbox, "deploy/hostinger/.env.agent", agent="claude")
+    assert code != 0 and not moved
+    assert "deploy/hostinger/.env.agent:0 ENV_FILE" in out

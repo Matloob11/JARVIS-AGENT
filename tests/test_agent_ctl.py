@@ -489,6 +489,8 @@ class FakeLaptop:
 
 # What PREFLIGHT's provisioning check prints on a VPS that has every helper and both brain services (C-126..C-129).
 PROVISIONED = "service:livekit\nservice:ui-bridge\nservice:frontend\nservice:agent\nservice:agent-svc\n"
+# START_NEW's (and a restore's) recreate of ui-bridge, as FakeVps.joined() shows it (K-72 v9, plan C-126)
+BRIDGE_RECREATE = "bash -lc " + agent_ctl.vps_bridge_recreate_script()
 
 
 def _provision_answer(cmd):
@@ -647,6 +649,14 @@ def test_brain_now_speaks_a_notice_then_switches(ctl, monkeypatch):
     assert laptop.calls == [("stop", "vps"), ("start", "pc"), ("ensure", "pc")]
     assert "set_env.py JARVIS_BRAIN pc" in vps.joined()
     assert "--profile vps-brain stop agent agent-svc" in vps.joined()
+    # The bridge reads JARVIS_BRAIN only when it starts (K-72 v9): START_NEW recreates it right after the flip to pc,
+    # else it would keep dispatching to the stopped VPS brain and VERIFY would fail
+    steps = [" ".join(c) for c in _changing_calls(vps)]
+    flip = steps.index("bash -lc cd /opt/jarvis-agent && python3 deploy/hostinger/set_env.py JARVIS_BRAIN pc")
+    assert steps[flip + 1:flip + 3] == [
+        BRIDGE_RECREATE,
+        "bash -lc cd /opt/jarvis-agent/deploy/hostinger && docker compose -p jarvis --profile vps-brain stop agent "
+        "agent-svc"]
 
 
 # =============================================================================================================
@@ -840,8 +850,9 @@ def test_a_provisioned_vps_proceeds_through_every_state(ctl):
         "bash -lc cd /opt/jarvis-agent && ./deploy/hostinger/backup.sh",
         "bash -lc cd /opt/jarvis-agent && ./deploy/hostinger/sync_brain_data.sh vps",
         "bash -lc cd /opt/jarvis-agent && python3 deploy/hostinger/set_env.py JARVIS_BRAIN vps",
+        BRIDGE_RECREATE,
         "bash -lc cd /opt/jarvis-agent/deploy/hostinger && docker compose -p jarvis --profile vps-brain up -d "
-        "agent agent-svc"]
+        "--no-deps --no-build --pull never agent agent-svc"]
     assert not (ctl.run / agent_ctl.BRAIN_JOURNAL_FILE).exists()
 
 
@@ -851,7 +862,7 @@ def test_container_named_compose_services_are_used_as_found(ctl):
     live = LiveStatus("pc")
     code, _ = _make_switch(ctl, "vps", ssh=vps, status=live, laptop=FakeLaptop(live)).run()
     assert code == 0
-    assert "up -d jarvis-agent jarvis-agent-svc" in vps.joined()
+    assert "up -d --no-deps --no-build --pull never jarvis-agent jarvis-agent-svc" in vps.joined()
 
 
 def test_a_backup_failure_changes_nothing_and_restores_nothing(ctl):
@@ -1429,6 +1440,8 @@ def test_a_laptop_env_write_failure_at_flip_env_restores_both_sides(ctl):
     assert code == agent_ctl.EXIT_FAILED and details["error"].startswith("failed at FLIP_ENV")
     assert writes == ["vps", "pc"] and "set_env.py JARVIS_BRAIN pc" in vps.joined()
     assert ("start", "vps") not in laptop.calls and ("start", "pc") in laptop.calls
+    # START_NEW never began, so the bridge still reads pc: the restore leaves it (and every socket on it) alone
+    assert "ui-bridge" not in vps.joined()
 
 
 def test_a_resume_past_flip_env_reapplies_the_laptop_brain(ctl):
@@ -1772,8 +1785,9 @@ def test_a_failed_vps_to_pc_switch_brings_the_vps_containers_and_the_node_back(c
     steps = [" ".join(c) for c in _changing_calls(vps)]
     flip_back = steps.index("bash -lc cd /opt/jarvis-agent && python3 deploy/hostinger/set_env.py JARVIS_BRAIN vps")
     assert steps[flip_back + 1:] == [
+        BRIDGE_RECREATE,                                              # START_NEW had recreated it for pc
         "bash -lc cd /opt/jarvis-agent/deploy/hostinger && docker compose -p jarvis --profile vps-brain up -d "
-        "agent agent-svc"]                                            # the restore's compose up, after the flip back
+        "--no-deps --no-build --pull never agent agent-svc"]          # the restore's compose up, after the flip back
     assert laptop.calls[-2:] == [("stop", "pc"), ("start", "vps")]   # the worker down, then the node started again
     assert agent_ctl.current_brain() == "vps"                         # the laptop .env is vps again
     assert not (ctl.run / agent_ctl.BRAIN_JOURNAL_FILE).exists()
@@ -1807,7 +1821,8 @@ def test_real_laptop_failed_vps_to_pc_switch_runs_the_node_task_and_compose_up_a
     joined = vps.joined()
     back = joined.index("set_env.py JARVIS_BRAIN vps")
     assert joined.index("set_env.py JARVIS_BRAIN pc") < back
-    assert "--profile vps-brain up -d agent agent-svc" in joined[back:]      # the VPS brain started again
+    assert "--profile vps-brain up -d --no-deps --no-build --pull never agent agent-svc" in joined[back:]  # started
+    assert BRIDGE_RECREATE in joined[back:]                                   # the bridge reads vps again
     assert agent_ctl.current_brain() == "vps"
     entry = audit_lines(ctl.logs)[-1]
     assert (entry["result"], entry["restored"], entry["brain"]) == ("failed", True, "vps")

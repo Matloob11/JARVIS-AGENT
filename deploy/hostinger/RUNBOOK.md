@@ -10,6 +10,7 @@ How to operate the JARVIS stack on the Hostinger VPS and the Windows PC.
 | [Other-apps smoke check](#other-apps-smoke-check) | C-12 (OP-08) |
 | [Maintenance window checklist](#maintenance-window-checklist) | C-12 (OP-08) |
 | [Adding a JARVIS service](#adding-a-jarvis-service) | C-12 (OP-08) |
+| [Agent image](#agent-image) | C-126 |
 | [Testing the deploy tooling](#testing-the-deploy-tooling) | C-12 (OP-08) |
 | [Room ops](#room-ops) | C-23 (OP-22) |
 | [Backup & Restore](#backup--restore) | C-11 (OP-07) |
@@ -206,7 +207,7 @@ $VPS 'bash /root/jarvis-backups/tools/rollback.sh --tag pre-emergency-2026-09-30
 - **A named backup made by deploy.sh or rollback.sh** puts back exactly what that run changed.
 - **Any other backup_vps.sh folder** puts back the services whose running image differs from its `containers.txt`. Add `--code`, `--nginx`, `--env` or `--services LIST` as needed.
 - `--code` restores `/opt/jarvis-agent` from `opt-jarvis-agent.tgz`, but never the env files: a secret rotated after the backup stays rotated.
-- `--env` restores `hostinger.env`, `bridge.env` and `root.env` from the backup (mode 600). Use it only when an env change was the problem.
+- `--env` restores `hostinger.env`, `bridge.env` and `root.env` from the backup (mode 600). Use it only when an env change was the problem. The live `JARVIS_BRAIN` and `COMPOSE_PROFILES` lines stay (C-126): a `hostinger.env` from before C-126 has no `JARVIS_BRAIN`, and the compose file refuses every command without a non-empty one.
 - `--tag T` takes `<image>:T`, for JARVIS's own images (`jarvis-*`) only. The `pre-emergency` images hold the revoked token (see [Known snapshots](#known-snapshots)).
 - Before it changes anything, `rollback.sh` checks each service against the compose file it will meet: a service it stops against the current file, a service it brings back against the target one (the backup's own with `--code`). So the printed undo of a rollback that stopped a new service (for example `agent`) works.
 - Image tags follow the deploy rule: JARVIS's own `jarvis-*` tags are re-pointed; a third-party tag (LiveKit) is never moved onto another version. When the target state ran another LiveKit version than the compose file in effect names, `rollback.sh` refuses (exit 1, nothing changed) and asks for `--code`, which brings back the compose file that names it. After the first sync deploy (LiveKit pinned to v1.13.7), a rollback to a plain backup from before it therefore needs `--code`.
@@ -267,8 +268,92 @@ This is for the VPS-brain services such as `agent` and `agent-svc` (planned cont
    - `deploy.sh` makes the `jarvis-<name>:rollback-<backup>` tag;
    - a failed first deploy stops the new container.
 4. Optional, in `deploy.sh`: a longer wait in `gate_timeout` (`agent` and `agent-svc` already get 240 s), HTTP probes in `gate_probes`, and any bind-mounted config file in `HOLD_FILES`.
-5. `backup_vps.sh` still tags only the bridge and the frontend, and backs up only the bridge volumes. The task that adds the service extends it (its volumes, `agent.env`).
+5. `backup_vps.sh` still tags only the bridge and the frontend, and backs up only the bridge volumes. The task that adds the service extends it (its volumes, `.env.agent`; C-128 for the agent services).
 6. Run the full tests below.
+
+## Agent image
+
+The VPS brain's image `jarvis-agent:hostinger` (`deploy/hostinger/Dockerfile.agent`, contract K-75) runs both `agent` (container `jarvis-agent`, the LiveKit worker) and `agent-svc` (`jarvis-agent-svc`, the always-on service).
+
+- Both services are in the compose profile `vps-brain`. `docker compose -p jarvis up -d` without it never starts them; naming them (`up -d --no-deps agent`) or `COMPOSE_PROFILES=vps-brain` in `.env` (vps mode, K-72) does.
+- `deploy.sh` and `rollback.sh` touch them only when they are named in `--services` or recorded by a deploy that named them, always with `up -d --no-deps --no-build --pull never`.
+- They have no `build:` section. The image is built only with the dedicated builder below (D19), never by `deploy.sh` or the default builder, whose cache other apps share. A deploy of `agent` before the image exists fails before any live change.
+- Uid 10001, `cap_drop: ALL`, `no-new-privileges`, `oom_score_adj` 500, no published port. No CPU, memory or pids limit and no tmpfs (user decision; `pids_limit` only after a yes to D10).
+- `init: false`, so python is PID 1. It makes itself non-dumpable (`harden_process()`, K-72), and no other uid-10001 process (ffmpeg, yt-dlp, node) can read the secrets in `/proc/1/environ`. docker-init would keep them there, dumpable. The value is explicit because without one dockerd applies its own default. The healthchecks run `env -i curl`, so the probe holds no secret either. `agent-svc` (C-125) must handle SIGTERM and call `harden_process()` itself.
+- Secrets come only from `deploy/hostinger/.env.agent` (root 600, names in `.env.agent.example`); compose refuses to start them without it.
+- `docker-compose.yml` reads `${JARVIS_BRAIN:?}`. Set `JARVIS_BRAIN=pc` in `deploy/hostinger/.env` once, before the first deploy of that compose file, or every compose command (deploy, rollback, the backup fallback) refuses to run. Check the name only: `grep -c '^JARVIS_BRAIN=' /opt/jarvis-agent/deploy/hostinger/.env`.
+- `agent-svc` runs `src.core.agent_services` (C-125); do not start it before that module exists.
+
+### Build window (announced; about 10-15 min the first time, then only the changed layers)
+
+First make sure the VPS `.env` has `JARVIS_BRAIN` (see above): `deploy.sh` checks the shipped compose file with the live env files and refuses the run without it. Then, on the PC, ship the commit without touching a container (backup and `DEPLOYED_SHA` included):
+
+```bash
+bash deploy/hostinger/deploy_from_pc.sh --services none
+```
+
+On the VPS (as root). Downloads need 20 GB free on the Docker disk (K-75); stop below that.
+
+```bash
+cd /opt/jarvis-agent
+df -h "$(docker info -f '{{.DockerRootDir}}')"
+# once (D19): a docker-container builder; no --use, so the default builder stays the default
+docker buildx inspect jarvis-builder >/dev/null 2>&1 || docker buildx create --name jarvis-builder --driver docker-container
+R=/root/jarvis-backups/builds/$(date -u +%Y%m%dT%H%M%SZ); mkdir -p "$R"
+docker buildx du --builder jarvis-builder > "$R/du-before.txt"
+docker buildx du | grep -E '^(Shared|Private|Reclaimable|Total):' > "$R/du-default-before.txt"   # summary lines only
+( set -o pipefail; docker buildx build --builder jarvis-builder --load --progress=plain \
+    -f deploy/hostinger/Dockerfile.agent -t jarvis-agent:hostinger --build-arg GIT_SHA="$(head -n 1 DEPLOYED_SHA)" . \
+    2>&1 | tee "$R/build.log" ); echo "BUILD_EXIT=$?"
+docker buildx du --builder jarvis-builder > "$R/du-after.txt"
+docker buildx du | grep -E '^(Shared|Private|Reclaimable|Total):' > "$R/du-default-after.txt"
+diff "$R/du-default-before.txt" "$R/du-default-after.txt" && echo DEFAULT_BUILDER_CACHE_UNCHANGED
+```
+
+The build itself already fails on a broken dependency, a GUI OpenCV, a missing ffmpeg/node/yt-dlp, a failed `IMPORT_OK` or a model that does not load offline as uid 10001. The same checks by hand, as uid 10001 and without any network:
+
+```bash
+I='docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges jarvis-agent:hostinger'
+$I sh -c 'id -u; node --version; ffmpeg -hide_banner -version | sed -n 1p; yt-dlp --version; python -c "import torch; print(torch.__version__)"'
+$I env JARVIS_ROLE=agent python -c 'import src.core.agent_runner; print("IMPORT_OK")'
+$I python scripts/models/check_models.py --expect-uid 10001          # MODELS_OK
+docker image inspect -f '{{.Config.User}} {{index .Config.Labels "org.opencontainers.image.revision"}}' jarvis-agent:hostinger
+```
+
+The plan's compose form needs `.env.agent`: compose requires it for these services, and C-127 fills it. Until then an empty root-600 placeholder stands in. The guard never replaces an existing file. The placeholder starts nothing either: a plain `up` leaves the `vps-brain` services out, and agent_ctl's PREFLIGHT still refuses. C-127 replaces it (tmp, then mv). The runs create the empty `jarvis_agent_*` volumes (owner 10001):
+
+```bash
+cd /opt/jarvis-agent/deploy/hostinger
+[ -e .env.agent ] || install -m 600 -o root -g root /dev/null .env.agent
+docker compose -p jarvis run --rm --no-deps agent python -c 'import src.core.agent_runner; print("IMPORT_OK")'
+docker compose -p jarvis run --rm --no-deps -e HF_HUB_OFFLINE=1 agent python scripts/models/check_models.py
+```
+
+The plan's `docker inspect` acceptance, before anything starts. Compose creates the container without starting it (`--no-start`), from the image already there, and leaves the bridge and LiveKit alone (`--no-deps`). Then `docker rm` removes it; without `-f` it refuses a running container. Run it only while no `jarvis-agent` exists: an `up` would recreate a running one.
+
+```bash
+cd /opt/jarvis-agent/deploy/hostinger
+if docker container inspect jarvis-agent >/dev/null 2>&1; then
+  echo 'jarvis-agent already exists: inspect it as it is, never recreate it here'
+else
+  docker compose -p jarvis up --no-start --no-deps --no-build --pull never agent
+  docker inspect -f 'mem={{.HostConfig.Memory}} cpus={{.HostConfig.NanoCpus}} oom={{.HostConfig.OomScoreAdj}} user={{.Config.User}} init={{.HostConfig.Init}}' jarvis-agent
+  docker rm jarvis-agent
+fi
+```
+
+It prints `mem=0 cpus=0 oom=500 user=10001 init=false`.
+
+Before the first start of either service (and with `.env.agent` in place), give the volumes they share with the bridge to uid 10001, once (K-75). The services drop every capability, so `chown` needs `--cap-add CHOWN`; `agent` mounts the media folders read-write, `agent-svc` the snapshots:
+
+```bash
+docker compose -p jarvis run --rm --no-deps --user 0 --cap-add CHOWN --entrypoint chown agent \
+  -R 10001:10001 /app/Jarvis_Outputs /app/Jarvis_Shared
+docker compose -p jarvis run --rm --no-deps --user 0 --cap-add CHOWN --entrypoint chown agent-svc \
+  -R 10001:10001 /app/snapshots
+```
+
+After the first `up` (C-128/C-131), the same `docker inspect` line on the running `jarvis-agent` must print the same values. Nothing in `/root/jarvis-backups/builds` or the builder is ever pruned without the user's OK.
 
 ## Testing the deploy tooling
 
@@ -494,7 +579,7 @@ install -m 600 $B/hostinger.env /opt/jarvis-agent/deploy/hostinger/.env
 $C up -d --no-build --no-deps ui-bridge
 ```
 
-Compose recreates the bridge when its env changes. Build args are baked into the frontend image, so for the frontend either roll the image back (step 1) or rebuild it. If the LiveKit keys changed, also run `$C up -d --no-deps livekit`.
+A `hostinger.env` from before C-126 has no `JARVIS_BRAIN`: put the live line back first (`grep -c '^JARVIS_BRAIN=..*' /opt/jarvis-agent/deploy/hostinger/.env` must say 1), or every compose command refuses. Compose recreates the bridge when its env changes. Build args are baked into the frontend image, so for the frontend either roll the image back (step 1) or rebuild it. If the LiveKit keys changed, also run `$C up -d --no-deps livekit`.
 
 **5. Volumes** (bridge logs, outputs, shared files and data):
 

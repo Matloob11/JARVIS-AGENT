@@ -1,0 +1,115 @@
+# VPS brain image jarvis-agent:hostinger (plan C-126, contract K-75). The compose services 'agent' (the LiveKit
+# worker 'jarvis') and 'agent-svc' (the always-on service, K-77) both run it as uid 10001.
+#
+# Built on the VPS from the committed HEAD in /opt/jarvis-agent, with the dedicated builder only (user decision D19;
+# never the default builder, whose BuildKit cache other apps share). deploy/hostinger/RUNBOOK.md, "Agent image":
+#   docker buildx build --builder jarvis-builder --load -f deploy/hostinger/Dockerfile.agent \
+#     -t jarvis-agent:hostinger --build-arg GIT_SHA="$(cat /opt/jarvis-agent/DEPLOYED_SHA)" /opt/jarvis-agent
+# The build context is the repo root; .dockerignore keeps every env file out. No secret is baked in: the containers
+# read theirs from .env.agent when they start.
+FROM python:3.12-slim-trixie@sha256:05cda9777409a9c3ffddd94a4c476b79f0769a0b4857f0c7ed9226b6800b0d6f
+
+# A failing command anywhere in a pipe fails the build
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+ARG DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONPATH=/app
+
+WORKDIR /app
+
+# ffmpeg/ffprobe (media, voice-ID decoding), nodejs (yt-dlp's JavaScript challenges, --js-runtimes node),
+# curl (the healthchecks), ca-certificates, tzdata (TZ=Asia/Karachi)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg nodejs curl ca-certificates tzdata \
+    && rm -rf /var/lib/apt/lists/*
+
+# The runtime user (K-75: uid 10001). The code stays root-owned; only the data folders below belong to it.
+RUN groupadd --gid 10001 jarvis \
+    && useradd --uid 10001 --gid 10001 --home-dir /home/jarvis --create-home --shell /usr/sbin/nologin jarvis
+
+# Python packages. First the CPU builds of torch, torchaudio and torchvision from the PyTorch CPU index, alone
+# (--no-deps) and pinned by the constraints, so no CUDA wheel is pulled; then the agent list from PyPI with the same
+# constraints, which keeps those three as they are. pip check fails the build on a broken dependency, and the
+# last check refuses a GUI OpenCV build (it would need libGL) or mediapipe (grep without -q reads the whole list).
+COPY deploy/hostinger/requirements-agent.txt deploy/hostinger/constraints-agent.txt /tmp/agent-req/
+RUN pip install --no-deps --index-url https://download.pytorch.org/whl/cpu \
+        -c /tmp/agent-req/constraints-agent.txt torch torchaudio torchvision \
+    && pip install -r /tmp/agent-req/requirements-agent.txt -c /tmp/agent-req/constraints-agent.txt \
+    && pip check \
+    && ! pip list --format=freeze | grep -iE '^(opencv-python|opencv-contrib-python|mediapipe)=='
+
+# Media wrappers (K-75): nice/ionice only with JARVIS_MEDIA_PRIORITY=low (D9, off by default). First on PATH, so
+# 'ffmpeg', 'ffprobe' and 'yt-dlp' are the wrappers; they run the real programs from /usr/bin and /usr/local/bin.
+COPY deploy/hostinger/agent-bin/ /usr/local/jarvis-bin/
+RUN chmod 0755 /usr/local/jarvis-bin/ffmpeg /usr/local/jarvis-bin/ffprobe /usr/local/jarvis-bin/yt-dlp
+ENV PATH=/usr/local/jarvis-bin:$PATH
+
+# Build check: the programs the agent runs are there, through the wrappers; their versions go into the build log
+# (sed reads the whole output, so pipefail never sees a SIGPIPE)
+RUN node --version \
+    && ffmpeg -hide_banner -version | sed -n 1p \
+    && ffprobe -hide_banner -version | sed -n 1p \
+    && yt-dlp --version \
+    && python -c "import cv2, torch, torchaudio; assert torch.__version__.endswith('+cpu'), torch.__version__; print('torch', torch.__version__, 'torchaudio', torchaudio.__version__, 'cv2', cv2.__version__)"
+
+# The two models the agent prewarms, baked in (K-75) and loaded offline at run time: ECAPA with its fixed download
+# script into pretrained_models/spkrec-ecapa-voxceleb (where config.pretrained_models_dir points), MiniLM at a pinned
+# revision into the Hugging Face cache below. Only scripts/models is copied here, so a code change keeps this layer.
+# They get the runtime user's uid in this same layer. SpeechBrain 1.0.1 writes into the ECAPA folder at every load (it
+# re-creates a dangling custom.py link there, and links label_encoder.ckpt at the first), so uid 10001 must own it; a
+# chown in a later layer would store all ~180 MB of them again with every code change.
+ENV HF_HOME=/app/pretrained_models/huggingface
+COPY scripts/models/ /app/scripts/models/
+RUN python scripts/models/download_voice_model.py \
+    && python scripts/models/check_models.py --bake \
+    && chown -R 10001:10001 /app/pretrained_models
+
+# The code, root-owned and read-only for the runtime user, compiled once (no process writes bytecode at run time)
+COPY src /app/src
+COPY services /app/services
+COPY scripts /app/scripts
+RUN python -m compileall -q /app/src /app/services /app/scripts
+
+# The data folders the compose volumes mount over (a fresh named volume takes this owner and mode) and run/ for the
+# worker lock; all of them are empty here, so this layer stays small. identity/ stays owner-only (700).
+RUN mkdir -p /app/conversations /app/chroma_db /app/data/identity /app/backups /app/logs /app/snapshots \
+        /app/Jarvis_Outputs /app/Jarvis_Shared /app/run \
+    && chmod 700 /app/data/identity \
+    && chown -R 10001:10001 /app/conversations /app/chroma_db /app/data /app/backups /app/logs /app/snapshots \
+        /app/Jarvis_Outputs /app/Jarvis_Shared /app/run
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1 \
+    TZ=Asia/Karachi \
+    VORTEX_ENV=production \
+    JARVIS_DESKTOP_MODE=remote \
+    JARVIS_SHARED_DIR=/app/Jarvis_Shared
+
+USER 10001
+
+# Build check as the runtime user, offline: the agent imports (IMPORT_OK) and both models load. The data folders are
+# emptied again afterwards, so a fresh volume starts clean.
+RUN JARVIS_ROLE=agent python -c "import src.core.agent_runner; print('IMPORT_OK')" \
+    && python scripts/models/check_models.py --expect-uid 10001 \
+    && find /app/conversations /app/chroma_db /app/data /app/backups /app/logs /app/snapshots /app/Jarvis_Outputs \
+        /app/Jarvis_Shared /app/run -mindepth 1 -delete \
+    && mkdir -m 700 /app/data/identity
+
+# agent: the LiveKit worker's health server (JARVIS_WORKER_HOST/PORT, 127.0.0.1:8081). agent-svc sets its own
+# healthcheck (127.0.0.1:8083/health) in docker-compose.yml. Docker starts the probe with the container's whole
+# environment; 'env -i' drops it before curl runs, so no dumpable probe holds a secret (and no shell runs).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
+  CMD ["env", "-i", "curl", "-fsS", "http://127.0.0.1:8081/"]
+
+# Drain 20 s on SIGTERM; with the 20 s job shutdown it fits compose's 60 s stop_grace_period (K-75)
+CMD ["python", "-m", "src.core.agent", "start", "--drain-timeout", "20"]
+
+# Last, so a new commit changes only this layer: the commit as a label and as ENV, never in compose (K-75)
+ARG GIT_SHA=unknown
+LABEL org.opencontainers.image.title="jarvis-agent" \
+      org.opencontainers.image.revision="${GIT_SHA}"
+ENV GIT_SHA=${GIT_SHA}

@@ -1,0 +1,28 @@
+#!/bin/sh
+# deploy/hostinger/agent-bin/<name>, installed as /usr/local/jarvis-bin/<name> in the VPS agent image (plan C-126,
+# contract K-75). ffmpeg, ffprobe and yt-dlp are this same script: it runs the real program of its own name from
+# /usr/local/bin, /usr/bin or /bin, where apt (ffmpeg, ffprobe) and pip (yt-dlp) put them. It never looks in its own
+# folder, so it cannot call itself. The image puts /usr/local/jarvis-bin first on PATH, so the agent's tools, and
+# yt-dlp through --ffmpeg-location, run these wrappers.
+#
+# JARVIS_MEDIA_PRIORITY=low (user decision D9, opt-in) runs the program under 'nice -n 10' and, where ionice exists,
+# in the idle I/O class. That is a lower priority, never a limit: an idle server still gives it every free cycle.
+# Unset, 'normal' or any other value (the default) runs the program unchanged. Exit code and output are the program's.
+set -eu
+name=${0##*/}
+for dir in /usr/local/bin /usr/bin /bin; do
+  real="$dir/$name"
+  if [ -f "$real" ] && [ -x "$real" ]; then
+    case "${JARVIS_MEDIA_PRIORITY:-normal}" in
+      low | LOW | Low)
+        if command -v ionice >/dev/null 2>&1; then
+          exec nice -n 10 ionice -c 3 -t "$real" "$@"
+        fi
+        exec nice -n 10 "$real" "$@"
+        ;;
+    esac
+    exec "$real" "$@"
+  fi
+done
+echo "jarvis-bin: no $name in /usr/local/bin, /usr/bin or /bin" >&2
+exit 127

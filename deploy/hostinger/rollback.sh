@@ -265,15 +265,34 @@ print_rollback_plan() {
   log "first        backup_vps.sh pre-rollback, smoke check (pre); after: health gate, smoke check (post)"
 }
 
+keep_env_line() {  # <env file> <live line> <name>: the live NAME=... line goes into the restored file unless that
+  # file already sets NAME (JARVIS_BRAIN only counts when non-empty: compose's ${JARVIS_BRAIN:?} rejects an empty one)
+  local file="$1" line="$2" name="$3" have="^$3="
+  [[ -n $line ]] || return 0
+  if [[ $name == JARVIS_BRAIN ]]; then have="^$3=..*"; fi
+  if grep -q "$have" "$file" 2>/dev/null; then return 0; fi
+  sed -i "/^$name=\$/d" "$file" && printf '%s\n' "$line" >> "$file" \
+    && log "  kept the live $name in $file (the backup predates it)"
+}
+
 restore_env() {  # <backup dir>
-  local b="$1" i
+  local b="$1" i brain profiles
   local -a src=(hostinger.env bridge.env root.env) dst=("$H/.env" "$H/bridge.env" "$APP_DIR/.env")
+  # C-126: the compose file needs a non-empty JARVIS_BRAIN in .env and a backup from before C-126 has none. The live
+  # brain and its COMPOSE_PROFILES belong to the brain switch (agent_ctl brain), never to a rollback, so they stay.
+  brain="$(grep -m 1 '^JARVIS_BRAIN=..*' "$H/.env" 2>/dev/null || true)"
+  profiles="$(grep -m 1 '^COMPOSE_PROFILES=' "$H/.env" 2>/dev/null || true)"
   for i in "${!src[@]}"; do
     [[ -f $b/${src[$i]} ]] || continue
     if install_root_file 600 "$b/${src[$i]}" "${dst[$i]}"; then
       log "  restored ${dst[$i]}"
     else
       fail "cannot restore ${dst[$i]}"
+      continue
+    fi
+    if (( i == 0 )); then
+      keep_env_line "${dst[0]}" "$brain" JARVIS_BRAIN || fail "cannot keep JARVIS_BRAIN in ${dst[0]}"
+      keep_env_line "${dst[0]}" "$profiles" COMPOSE_PROFILES || fail "cannot keep COMPOSE_PROFILES in ${dst[0]}"
     fi
   done
 }

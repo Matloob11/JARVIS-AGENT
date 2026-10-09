@@ -345,6 +345,15 @@ def test_the_child_env_allow_list():
     assert FAKE_SECRET not in explicit.values() and "JARVIS_USER_ID" not in explicit
 
 
+def test_the_media_priority_reaches_child_processes():
+    # C-126 (K-75): the image's ffmpeg/ffprobe/yt-dlp wrappers read JARVIS_MEDIA_PRIORITY in the child itself
+    assert ng.child_env_allowed("JARVIS_MEDIA_PRIORITY")
+    parent = {"PATH": "/usr/local/jarvis-bin:/usr/bin", "JARVIS_MEDIA_PRIORITY": "low", "JARVIS_NET_GUARD": "1",
+              "GOOGLE_API_KEY": FAKE_SECRET}
+    assert ng.scrub_child_env(None, parent) == {"PATH": "/usr/local/jarvis-bin:/usr/bin",
+                                                "JARVIS_MEDIA_PRIORITY": "low"}
+
+
 def _env_dump_command() -> list[str]:
     if os.name == "nt":
         return [os.path.join(os.environ.get("SYSTEMROOT", r"C:\Windows"), "System32", "cmd.exe"), "/c", "set"]

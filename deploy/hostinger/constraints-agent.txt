@@ -1,0 +1,28 @@
+# Constraints for the VPS brain image (deploy/hostinger/Dockerfile.agent, plan C-126, contract K-75).
+# pip install -r requirements-agent.txt -c constraints-agent.txt. A constraint installs nothing by itself: it only
+# fixes the version when something asks for the package. tests/infrastructure/test_agent_requirements.py checks
+# every line against deploy/windows-local/requirements-hybrid.txt (the PC brain's pins).
+
+# The CPU builds of the PC's torch pins, from https://download.pytorch.org/whl/cpu. The Dockerfile installs these
+# three first and alone, so no CUDA wheel (several GB) is ever pulled from PyPI.
+torch==2.10.0+cpu
+torchaudio==2.10.0+cpu
+torchvision==0.25.0+cpu
+
+# The memory store: the on-disk format the migrated chroma_db (C-129) was written with
+chromadb==1.5.0
+
+# The livekit family moves together (agents 1.4.6 and its plugins, with the rtc/api/protocol versions it was tested with)
+livekit==1.1.2
+livekit-agents==1.4.6
+livekit-api==1.1.0
+livekit-protocol==1.1.2
+livekit-plugins-google==1.4.6
+livekit-plugins-openai==1.4.6
+livekit-plugins-silero==1.4.6
+livekit-plugins-noise-cancellation==0.2.5
+
+# Not asked for by name, but pulled in: livekit-agents depends on sounddevice (used only by its console mode, never in
+# the containers), and requirements-agent.txt allows a range of huggingface_hub. Both stay on the PC's versions.
+sounddevice==0.5.5
+huggingface_hub==1.16.1

@@ -1,5 +1,7 @@
 *.gif filter=lfs diff=lfs merge=lfs -text
 *.sh text eol=lf
+# C-126: the agent image's media wrappers are /bin/sh scripts without an extension
+deploy/hostinger/agent-bin/* text eol=lf
 *.conf text eol=lf
 *.yml text eol=lf
 *.yaml text eol=lf

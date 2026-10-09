@@ -37,6 +37,10 @@ stonix_ui/.vite/
 
 .env
 .env.*
+# C-126 (K-75): env files in every folder (deploy/hostinger/.env, .env.agent, bridge.env, *.tmp copies) never reach a
+# build context, so no image can hold a secret
+**/.env*
+**/*.env
 *.encrypted
 *.log
 *.tmp

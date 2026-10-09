@@ -2481,3 +2481,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** —
 - **Commit:** 5b27c0b · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### âœ… [claude] C-126 (files) Â· Agent image and vps-brain compose services written, nothing built yet Â· 2026-10-09 12:00 PKT
+- **Kya kiya:** VPS brain ke liye agent image (Dockerfile.agent: pinned base, CPU torch, models baked aur uid 10001 ke, healthcheck env -i, media wrappers) aur compose services agent/agent-svc 'vps-brain' profile mein (bina naam ke kabhi start nahi hote, init false taake secrets /proc/1/environ mein na rahein, koi CPU/RAM limit nahi). agent_ctl ka brain switch ab bridge ko akela recreate karta hai, chalte container ke GIT_SHA ke saath. rollback.sh --env purane backup par live JARVIS_BRAIN rakhta hai; deploy.sh --gate-only compose config fail par fail hota hai. Pre-commit ab koi bhi *.env aur .env.agent block/scan karta hai.
+- **Files:** deploy/hostinger/(Dockerfile.agent, docker-compose.yml, .env.agent.example, requirements/constraints-agent.txt, agent-bin/*, RUNBOOK.md, deploy.sh, rollback.sh), scripts/agent_ctl.py, scripts/coord/precommit.py, scripts/models/check_models.py, services/utils/net_guard.py, docs/ARCHITECTURE_VPS_BRAIN.md, tests; contracts v36 (K-47, K-72, K-75)
+- **Verify:** C-126 + agent_ctl tests 798 passed (image tests 37 after the LF fix); review 9 + fresh verify 3 findings handled; full suite 4876 passed (1 Cursor-lane X-58 leak)
+- **Commit:** (this commit) Â· **Deploy:** abhi nahi (agla qadam: VPS .env mein JARVIS_BRAIN=pc, phir build window)
+- **Doosre agent ke liye:** C-125: agent_services SIGTERM khud handle kare aur start par harden_process() chalaye.

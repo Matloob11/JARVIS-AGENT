@@ -136,3 +136,9 @@ stonix_ui/.env*
 !.env.example
 !.env.production.example
 !**/.env.example
+# C-126 (K-75): the VPS agent containers' secrets (.env.agent, its .tmp from gen_desktop_keys.py) and the bridge's
+# bridge.env, in any folder; only the names-only template is tracked
+.env.agent
+.env.agent.*
+bridge.env
+!**/.env.agent.example

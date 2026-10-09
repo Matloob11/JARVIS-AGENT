@@ -986,6 +986,11 @@ print_plan() {
 
 gate_only_main() {
   local -a svcs=("${SERVICES[@]}")
+  # A compose file that does not interpolate (C-126: JARVIS_BRAIN missing from .env) hides every container from
+  # 'compose ps', so the gate below would check nothing and still say GATE=ok.
+  if ! compose config -q >/dev/null 2>&1; then
+    fail "docker compose config fails (is a non-empty JARVIS_BRAIN in the .env?): no container can be checked"
+  fi
   if (( ${#svcs[@]} == 0 )); then
     mapfile -t svcs < <({ compose ps -a --format '{{.Service}}' 2>/dev/null || true; } | LC_ALL=C sort -u)
   fi
