@@ -73,7 +73,7 @@ function contentSecurityPolicy() {
     "default-src 'self'",
     "base-uri 'self'",
     "object-src 'none'",
-    "frame-src 'none'",
+    "frame-src https://www.openstreetmap.org",
     "form-action 'self'",
     "script-src 'self'",
     "style-src 'self' 'unsafe-inline'",

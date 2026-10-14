@@ -94,6 +94,8 @@ test('CSP blocks inline scripts and data navigation stays in the app', async () 
     const csp = response.headers()['content-security-policy'] || '';
     expect(csp).toContain("script-src 'self'");
     expect(csp).toContain("object-src 'none'");
+    expect(csp).toContain('frame-src https://www.openstreetmap.org');
+    expect(csp).not.toContain("frame-src 'none'");
     expect(csp).not.toContain('unsafe-eval');
 
     await expect(window.getByTestId('login-password')).toBeVisible();

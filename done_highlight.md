@@ -2642,3 +2642,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** vitest electron/navigationPolicy.permission.test.ts pehle 2 fail (file media false), fix ke baad 4 passed
 - **Commit:** (pending) · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] REQ-FIX · Electron map iframe CSP · 2026-10-14 20:26 PKT
+- **Kya kiya:** CSP frame-src ab OpenStreetMap embed allow karta hai, taake Electron VPS mode mein map iframe na ruke.
+- **Files:** stonix_ui/electron/navigationPolicy.cjs, stonix_ui/electron/navigationPolicy.csp.test.ts, stonix_ui/tests/electron/electron.spec.ts
+- **Verify:** vitest navigationPolicy.csp.test.ts pehle fail (frame-src none), fix ke baad 1 passed
+- **Commit:** (pending) · **Deploy:** no
+- **Doosre agent ke liye:** —
