@@ -119,6 +119,71 @@ async def test_download_query_uses_ytsearch(mock_subprocess_exec, mock_yt_bot):
 
 
 @pytest.mark.asyncio
+async def test_bot_check_returns_error_without_browser_or_partial(
+    tmp_path, mock_subprocess_exec, mock_yt_bot
+):
+    dl = YouTubeDownloader()
+    dl.base_dir = str(tmp_path)
+    partial = tmp_path / "track.mp4.part"
+    sidecar = tmp_path / "track.mp4.ytdl"
+
+    async def fake_exec(*_args, **_kwargs):
+        partial.write_bytes(b"partial")
+        sidecar.write_text("meta", encoding="utf-8")
+        return FakeProcess(
+            stderr_lines=[
+                b"ERROR: [youtube] abc: Sign in to confirm you're not a bot\n"
+            ],
+            returncode=1,
+        )
+
+    mock_subprocess_exec.side_effect = fake_exec
+    res = await dl.download("https://www.youtube.com/watch?v=dQw4w9WgXcQ", "video")
+
+    assert res["status"] == "error"
+    assert res["error_code"] == "YT_BOT_CHECK"
+    assert res["effect"] == "none"
+    assert "bot check" in res["message"]
+    mock_yt_bot.open_url_in_app.assert_not_awaited()
+    mock_yt_bot.get_video_url.assert_not_awaited()
+    assert mock_subprocess_exec.await_count == 1
+    assert not partial.exists()
+    assert not sidecar.exists()
+
+
+@pytest.mark.asyncio
+async def test_bot_check_job_result_before_browser(
+    tmp_path, mock_subprocess_exec, mock_yt_bot
+):
+    dl = YouTubeDownloader()
+    dl.base_dir = str(tmp_path)
+
+    async def fake_exec(*_args, **_kwargs):
+        (tmp_path / "song.mp3.part").write_bytes(b"x")
+        return FakeProcess(
+            stderr_lines=[b"Sign in to confirm you\xe2\x80\x99re not a bot\n"],
+            returncode=1,
+        )
+
+    mock_subprocess_exec.side_effect = fake_exec
+
+    class _Ctx:
+        cancelled = False
+
+        async def progress(self, pct, msg):
+            del pct, msg
+
+    res = await dl.run_download_job(
+        _Ctx(), "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "audio", auto_open=False
+    )
+    assert res["error_code"] == "YT_BOT_CHECK"
+    assert res["effect"] == "none"
+    assert res["status"] == "error"
+    mock_yt_bot.open_url_in_app.assert_not_awaited()
+    assert not (tmp_path / "song.mp3.part").exists()
+
+
+@pytest.mark.asyncio
 async def test_download_error_fallback(mock_subprocess_exec, mock_yt_bot):
     dl = YouTubeDownloader()
     mock_subprocess_exec.return_value = FakeProcess(

@@ -98,6 +98,26 @@ def _start_job_available() -> bool:
         return False
 
 
+_BOT_CHECK_RE = re.compile(
+    r"sign in to confirm you['\u2019]re not a bot",
+    re.IGNORECASE,
+)
+_PARTIAL_SUFFIXES = (".part", ".ytdl", ".temp")
+
+
+def _is_youtube_bot_check(*chunks: str) -> bool:
+    return bool(_BOT_CHECK_RE.search("\n".join(chunks)))
+
+
+def _bot_check_result() -> dict:
+    return {
+        "status": "error",
+        "error_code": "YT_BOT_CHECK",
+        "effect": "none",
+        "message": "YouTube ne bot check lagaya, is liye download nahi hua.",
+    }
+
+
 class YouTubeDownloader:
     """Class to handle YouTube video and audio downloads."""
 
@@ -160,6 +180,33 @@ class YouTubeDownloader:
         found = await yt_bot.get_video_url(text)
         return found or text
 
+    def _list_download_files(self) -> set[str]:
+        found: set[str] = set()
+        if not os.path.isdir(self.base_dir):
+            return found
+        for dirpath, _, filenames in os.walk(self.base_dir):
+            for name in filenames:
+                found.add(os.path.normcase(os.path.abspath(os.path.join(dirpath, name))))
+        return found
+
+    def _discard_bot_check_files(self, before: set[str], output_text: str) -> None:
+        """Drop files this run created, plus partials named in yt-dlp's output."""
+        root = os.path.normcase(os.path.abspath(self.base_dir))
+        victims = {path for path in self._list_download_files() - before if path.startswith(root)}
+        for match in re.finditer(r"[A-Za-z]:\\[^\r\n\"']+|/(?:[^\s\"']+)", output_text):
+            raw = match.group(0).strip().rstrip(".,)")
+            if not raw.lower().endswith(_PARTIAL_SUFFIXES):
+                continue
+            abs_path = os.path.normcase(os.path.abspath(raw))
+            if abs_path.startswith(root):
+                victims.add(abs_path)
+        for path in victims:
+            try:
+                if os.path.isfile(path):
+                    os.remove(path)
+            except OSError:
+                logger.warning("Could not remove partial YouTube download: %s", path)
+
     async def _run_ytdlp(
         self,
         cmd: list[str],
@@ -171,6 +218,7 @@ class YouTubeDownloader:
     ) -> dict:
         """Runs yt-dlp as a subprocess; optional JobContext for progress and cancel."""
         logger.info("Executing yt-dlp: %s", " ".join(cmd))
+        before_files = self._list_download_files()
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
@@ -221,6 +269,11 @@ class YouTubeDownloader:
                 stdout_task.cancel()
 
         stderr_text = "\n".join(stderr_chunks)
+        stdout_text = "\n".join(stdout_lines)
+        if _is_youtube_bot_check(stderr_text, stdout_text):
+            self._discard_bot_check_files(before_files, f"{stderr_text}\n{stdout_text}")
+            return _bot_check_result()
+
         if returncode != 0:
             err = subprocess.CalledProcessError(returncode, cmd, stderr=stderr_text)
             return await self._handle_download_error(
@@ -312,6 +365,9 @@ class YouTubeDownloader:
         """Handles yt-dlp specific errors."""
         stderr = err.stderr or ""
         logger.error("yt-dlp error: %s", stderr)
+        if _is_youtube_bot_check(stderr):
+            self._discard_bot_check_files(self._list_download_files(), stderr)
+            return _bot_check_result()
         fallback_url = await self._fallback_target_url(url_or_query)
         if download_type == "audio" and "ffmpeg not found" in stderr.lower():
             return await self._try_audio_fallback(fallback_url, auto_open=auto_open)

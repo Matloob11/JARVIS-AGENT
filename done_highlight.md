@@ -2593,3 +2593,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** pytest prompt tests 87 passed; live: 3-step kaam par progress 1/3 → 2/3 → 3/3 → COMPLETED, swarm 'started'
 - **Commit:** `6fbe06d` + (this commit) · **Deploy:** PC worker restarts 16:37, 16:41, 16:47 PKT
 - **Doosre agent ke liye:** plan progress dashboard tak tab pohanchega jab bridge par `plan_progress` route banega (TOOLS.md "Not working yet").
+
+### ✅ [cursor] YT_BOT_CHECK · bot check before browser fallback · 2026-10-14 17:06 PKT
+- **Kya kiya:** yt-dlp jab YouTube bot check par ruke, download error YT_BOT_CHECK (effect none) deta hai, browser nahi kholta, aur isi run ki partial files hata deta hai.
+- **Files:** services/multimedia/jarvis_youtube_downloader.py, tests/automation/test_youtube_downloader.py
+- **Verify:** pytest tests/automation/test_youtube_downloader.py tests/tools/test_youtube_job.py -> 12 passed
+- **Commit:** (pending) · **Deploy:** no
+- **Doosre agent ke liye:** C-119 is error_code par laptop re-run kar sakta hai.
