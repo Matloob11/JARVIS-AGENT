@@ -7,10 +7,13 @@ A medium/high LLM tool call becomes a PendingAction and returns needs_confirmati
 model never waits. Sir answers on screen (ui_command confirm_response -> resolve(), routed by
 C-29) or by voice (confirm_action). An approved action runs exactly once, in a task that re-enters
 the tool wrapper (timeout, exclusive lock, kill switch, tool_sync and audit still apply), and its
-result reaches Sir through on_result. Denied and expired actions never run.
+result reaches Sir through on_result. Denied and expired actions never run. While the run goes,
+approved_action holds the action as its dialog showed it (id, tool, summary), so a tool body can
+tell which Allow it runs under.
 """
 
 import asyncio
+import contextvars
 import functools
 import hashlib
 import inspect
@@ -92,6 +95,21 @@ _NO = _phrase_pattern(_NO_WORDS)
 
 # Approved runs, confirm_resolved posts and sweepers, kept referenced until they end.
 _background_tasks: set[asyncio.Task[Any]] = set()
+
+
+@dataclass(frozen=True)
+class ApprovedAction:
+    """The pending action an approved run executes for, as its Allow dialog showed it (K-14)."""
+    id: str
+    tool: str
+    summary: str
+
+
+# Set around the one run of an approved action (_run_approved), so the tool body can read the
+# very dialog Sir allowed: C-83 autonomous_self_repair writes only the diff that summary names.
+# None outside an approved run.
+approved_action: contextvars.ContextVar[ApprovedAction | None] = contextvars.ContextVar(
+    "approved_action", default=None)
 
 
 def is_affirmative(text: str) -> bool:
@@ -601,6 +619,7 @@ class ConfirmationBroker:
         run = action.run
         if run is None:
             return
+        token = approved_action.set(ApprovedAction(action.id, action.tool, action.summary))
         try:
             result = await run()
         except Exception as e:  # pylint: disable=broad-exception-caught
@@ -608,6 +627,8 @@ class ConfirmationBroker:
             logger.error("Approved %s (%s) failed: %s", action.tool, action.id, e, exc_info=True)
             result = {"status": "error", "tool": action.tool,
                       "message": f"Sir, {action.tool} nahi ho saka."}
+        finally:
+            approved_action.reset(token)
         status = result_status(result)
         logger.info("Approved %s (%s) finished: %s", action.tool, action.id, status)
         # C79-V2-1: the run's final status and whether its result bore 'records' (the tool body

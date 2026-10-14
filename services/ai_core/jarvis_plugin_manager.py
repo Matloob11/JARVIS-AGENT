@@ -83,6 +83,8 @@ _SYNC_STATUS = {
     "warning": "degraded", "started": "started", "pending": "started",
     "needs_confirmation": "needs_confirmation", "cancelled": "cancelled",
     "blocked": "blocked", "denied": "blocked", "timeout": "timeout",
+    # C-83 autonomous_self_repair: a diff proposed, a patch applied ('rolled_back' stays an error).
+    "proposed": "success", "applied": "success",
 }
 # A legacy tool reports a failure as plain text: '❌ ...', 'Error: ...' or 'ERROR: ...'.
 _FAILURE_TEXT = re.compile(r"\s*(?:❌|error\b)", re.IGNORECASE)

@@ -232,6 +232,34 @@ async def test_a_high_risk_tool_runs_only_after_approval_and_exactly_once(broker
                         f"REASON=approved | SOURCE=ui")
 
 
+async def test_an_approved_run_sees_the_dialog_it_was_allowed_under(broker, results):
+    """C-83: while an approved run goes, jarvis_confirm.approved_action holds its own pending
+    action (id, tool and the summary its dialog showed); asking, another run and the code around
+    them see nothing of it."""
+    seen: dict[str, Any] = {}
+
+    @jarvis_tool(risk="high", timeout=5, confirm_summary="Patch {target} as shown")
+    async def c28_patch(target: str) -> dict:
+        """Patches.
+
+        Args:
+            target: what to patch
+        """
+        seen[target] = jarvis_confirm.approved_action.get()
+        return {"status": "success", "message": "ok"}
+
+    first = await _llm_call("c28_patch", {"target": "a"})
+    second = await _llm_call("c28_patch", {"target": "b"})
+    assert not seen and jarvis_confirm.approved_action.get() is None  # asking runs nothing
+    await broker.resolve(second["confirm_id"], True, source="ui")
+    await broker.resolve(first["confirm_id"], True, source="ui")
+    await _until(lambda: len(results) == 2)
+    shown = jarvis_confirm.ApprovedAction
+    assert seen == {"a": shown(first["confirm_id"], "c28_patch", "Patch a as shown"),
+                    "b": shown(second["confirm_id"], "c28_patch", "Patch b as shown")}
+    assert jarvis_confirm.approved_action.get() is None
+
+
 async def test_wait_result_status_reports_the_approved_runs_end_without_touching_the_outcome(
         broker, results):
     """C79-V2-1: a waiter learns the approved run's K-13 end status and whether its result bore

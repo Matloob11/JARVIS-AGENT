@@ -132,7 +132,7 @@ The first three are internal tools of the agent: they run through the resilience
 | Tool | Env keys | Providers, in order | Timeout | Approval | Files | Dashboard |
 |---|---|---|---|---|---|---|
 | `tool_investigate_recent_bugs()` | `LOG_FILE` (default `logs/jarvis.log`; the PC root `.env` names the real one) | Reads the last 512 KB of the log (plus the end of its `.1` file) and returns the last 10 error entries. No LLM triage yet (C-82). | 15 s | none | - | Chat. The background bug hunter also checks the log every 10 s and posts "System error detected: [LOG DATA, untrusted] ..." to Chat: the same error at most once in 10 min, at most 6 posts an hour. |
-| `autonomous_self_repair(error_details, file_path)` | `JARVIS_SELF_REPAIR_APPLY` (0; read only once C-83 lands) | Today a report only: the pylint score of the file. It never edits a file. See [Self-repair apply gate](#self-repair-apply-gate). | 15 s | **Allow** (K-45 lists it high, even for the report) | - | Approvals; Chat |
+| `autonomous_self_repair(error_details, file_path, apply=False)` | `JARVIS_SELF_REPAIR_APPLY` (0; only exactly `1` allows an apply) | py_compile and pylint on one `.py` file (a missing pylint shows as "pylint not installed", never 0.0), then one AI call (Gemini, Groq, OpenRouter) for a small diff of that file only. `apply=False` proposes the diff and posts it whole to Chat; the file does not change. `apply=True` patches only with the gate at 1, after the Allow, and only with a diff already shown in Chat. See [Self-repair apply gate](#self-repair-apply-gate). | 120 s | **Allow** for every call (K-45 lists it high, even for the report; a spoken yes never approves it) | Backup `backups/self_repair/<time>_<name>`; one line per apply call in `logs/self_repair_audit.jsonl` | Approvals; Chat (the diff and the outcome) |
 | `start_file_access_server(port=None)`, `stop_file_access_server()` | `JARVIS_FILE_SERVER_ROOT` (else D:/ when it exists, else `<shared>`), `JARVIS_FILE_SERVER_PORT` (8000), `JARVIS_FILE_SERVER_TTL_MIN` (30) | A token-protected HTTP server on the PC's LAN address that stops by itself after the TTL. Windows Firewall asks once: allow Private networks only. | 20 s (start), 10 s (stop) | start **Allow** ("... folder phone ke liye LAN par ... minute share karna hai"); stop none | QR: `<shared>/QR_Codes/jarvis_file_server_qr.png`; a `FILE_SERVER_ACCESS` audit row in `logs/security.log` | Approvals; Chat (its "screen par QR code scan karein" line is wrong today); open `<shared>/QR_Codes/jarvis_file_server_qr.png` on the PC to scan it (it is not opened by itself); Media shows a FILE SERVER card (the URL without the token, the root and the TTL) and a QR card with a LAN-only link (see the [Media link note](#media-link-note)) |
 
 ### Media link note
@@ -173,17 +173,20 @@ To switch it off and keep the keys: `env_defaults.py --update SIM_SOURCE=none`, 
 
 ## Self-repair apply gate
 
-`JARVIS_SELF_REPAIR_APPLY` (default 0) decides whether `autonomous_self_repair` may change a source file.
+`JARVIS_SELF_REPAIR_APPLY` (default 0) decides whether `autonomous_self_repair` may change a source file. Only the exact value `1` turns it on.
 
-- **Today** (C-83 has not landed): the tool only reports the file's pylint score. It never edits anything, whatever the gate says, and K-45 still asks for the dashboard Allow first.
-- **After C-83**:
-  - `apply=False` (the default) only proposes a diff.
-  - `apply=True` is refused unless the gate is 1, and then still needs the dashboard Allow.
-  - An approved patch is backed up to `backups/self_repair/<time>_<name>`, applied with `git apply`, and checked again with py_compile and pylint. A failed check rolls the file back by itself. Each run adds a line to `logs/self_repair_audit.jsonl`.
-  - It refuses `.env*`, `deploy/**`, `.venv*`, `node_modules`, `stonix_ui/**`, files over 200 KB and files changed in the last 30 minutes. It never restarts the agent.
+- **Report** (`apply=False`, the default): py_compile and pylint check the file, the AI writes a diff of that file only, and the whole diff goes to Chat. The file never changes.
+  - A diff is refused (PATCH_REJECTED) when it changes more than 200 lines, does not fit one chat message (8000 characters), leaves the file uncompilable, adds a call that starts a shell or a process or runs text as code, has a changed line the chat would show masked or with hidden Unicode characters, or fails `git apply --check`.
+  - When the bridge does not take the chat message, the result says DIFF_NOT_SHOWN and that diff can never be applied.
+- **Apply** (`apply=True`): refused while the gate is not 1 (SELF_REPAIR_APPLY_DISABLED, the value in the reason) and always on the VPS brain (SELF_REPAIR_REMOTE).
+  - With the gate at 1, the Allow line starts with the proposal ("Patch proposal <id> (+a -r lines, ..."), and the run writes only that diff. Read the diff in Chat before you approve.
+  - With no diff shown before, the call posts a new diff and changes nothing; ask again to apply it.
+  - An approved patch is backed up to `backups/self_repair/<time>_<name>`, applied with `git apply`, and checked again with py_compile and pylint. A failed check, a lower score or a new error rolls the file back by itself (`rolled_back`). A file that changed after its diff was made is never patched (FILE_CHANGED).
+  - Each call with apply adds a line to `logs/self_repair_audit.jsonl` (hashes and sizes, never the diff or the error text).
+- It works only on `.py` files under `services`, `src`, `scripts` and `tests`. It refuses `.env*`, `deploy/**`, `.venv*`, `node_modules`, `.git`, `stonix_ui/**` and the rest of Cursor's lane, the approval and security files (all of `src/core/**` among them), files over 200 KB and files changed in the last 30 minutes. It never restarts the agent: a patch takes effect at the next restart.
 - **Why 0 for now**: Claude and Cursor both edit the tree, and JARVIS would be a third writer. C-110 turns the gate on after the build-out with `env_defaults.py --update JARVIS_SELF_REPAIR_APPLY=1` and an `agent_ctl` restart.
 - A scheduled self-repair with apply is always refused (K-32).
-- With the VPS brain the gate lives in `.env.agent`. A patch is applied to the PC repo and shipped with a deploy, because the code inside the image is read-only.
+- With the VPS brain the gate lives in `.env.agent`, but the agent there refuses an apply: a patch is applied to the PC repo and shipped with a deploy, because the code inside the image is read-only.
 
 ## FFmpeg
 
@@ -271,7 +274,7 @@ Until the cutover (C-131) the PC brain runs every tool on the PC. After it, with
 | Due scheduled actions are marked completed without running | C-80 |
 | Swarm has no voice tool, job, progress or Cancel | C-81 |
 | Bug hunter has no grouping or LLM triage | C-82 |
-| Self-repair is report-only; apply mode, then switching the gate on | C-83, C-110 |
+| Self-repair apply gate stays 0 until the build-out ends | C-110 |
 | Prompt rules for plan progress, swarm, long jobs and self-healing | C-86 |
 | `plan_progress` has no bridge route, and the planner still posts with the legacy token header, so nothing reaches Logs | no task yet (C-97 only checks it) |
 | Reminders and due tasks are not spoken | C-56 |
