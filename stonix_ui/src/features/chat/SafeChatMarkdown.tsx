@@ -51,8 +51,9 @@ function isBlank(line: string): boolean {
   return /^\s*$/.test(line);
 }
 
+/** Fence lines may start with a zero-width space so the chat text is not a tool call. */
 function isFence(line: string): boolean {
-  return /^\s*```/.test(line);
+  return /^[\s\u200B\u200C\u200D\uFEFF]*```/.test(line);
 }
 
 function headingMatch(line: string): { level: number; text: string } | null {

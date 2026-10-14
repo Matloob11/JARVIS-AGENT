@@ -2621,3 +2621,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** npm run test:e2e x3 -> 279 passed (17.9m), 279 passed (11.6m), 279 passed (15.1m). Log assets/qa-h15-e2e.log
 - **Commit:** (pending) · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] C-83 UI · self-repair diff in chat and confirm card · 2026-10-14 18:42 PKT
+- **Kya kiya:** Zero-width space se pehle wala diff fence ab code block hai, list ya HTML nahi. Lamba diff Connection glitch mein nahi chhupta. Confirm card poora Patch proposal summary dikhata hai.
+- **Files:** stonix_ui/src/features/chat/SafeChatMarkdown.tsx, stonix_ui/src/features/chat/messageDisplay.ts, stonix_ui/src/features/chat/SafeChatMarkdown.test.tsx, stonix_ui/src/assets/styles/neon/panel.css
+- **Verify:** npm test -- src/features/chat/SafeChatMarkdown.test.tsx src/features/panel/ChatList.test.tsx -> 6 passed
+- **Commit:** (pending) · **Deploy:** no
+- **Doosre agent ke liye:** —
