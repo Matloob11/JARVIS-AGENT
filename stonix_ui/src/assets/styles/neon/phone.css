@@ -25,7 +25,7 @@
     align-items: stretch;
     height: calc(64px + env(safe-area-inset-bottom, 0px));
     padding-bottom: env(safe-area-inset-bottom, 0px);
-    border-top: 1px solid var(--sidebar-divider, #1f2a48);
+    border-top: 1px solid var(--sidebar-divider);
     background: rgba(6, 13, 32, 0.92);
     backdrop-filter: blur(16px);
   }
@@ -50,7 +50,7 @@
     background: transparent;
     cursor: pointer;
     padding: 6px 2px 4px;
-    color: #9ba7cf;
+    color: var(--t-nav);
     font-family: var(--font-ui);
     font-weight: 500;
     font-size: 12px;
@@ -58,7 +58,7 @@
   }
 
   .mobile-tab-bar__item--active {
-    color: #fff;
+    color: var(--t1);
     font-weight: 700;
   }
 
@@ -99,7 +99,7 @@
     padding: 0 5px;
     border-radius: 999px;
     font: 700 12px/18px var(--font-ui);
-    color: #fff;
+    color: var(--t1);
     background: var(--badge-red, #e24b4b);
     pointer-events: none;
   }
@@ -112,7 +112,7 @@
   .mobile-tab-bar__mark--warn {
     min-width: 16px;
     padding: 0 4px;
-    background: var(--warn, #e9ab4a);
+    background: var(--warn);
     color: #1b1408;
     font-size: 12px;
   }

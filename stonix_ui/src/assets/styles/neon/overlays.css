@@ -8,7 +8,7 @@
   font-size: 14px;
   line-height: 20px;
   background: var(--card, linear-gradient(180deg, #131c36 0%, #0f172e 40%, #0d1529 100%));
-  --edge: linear-gradient(180deg, #2e3b60, #1d2843 50%, #18223a);
+  --edge: linear-gradient(180deg, #2e3b60, var(--inset-line) 50%, #18223a);
   box-shadow: var(--shadow-pop, 0 24px 60px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(10, 16, 34, 0.6));
   outline: 0;
   max-height: min(82vh, 640px);
@@ -61,7 +61,7 @@
   font-weight: 700;
   font-size: 16px;
   line-height: 22px;
-  color: var(--t1, #fff);
+  color: var(--t1);
 }
 
 .neon-pop-sec {

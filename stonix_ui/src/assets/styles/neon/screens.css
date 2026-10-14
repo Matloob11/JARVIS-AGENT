@@ -12,7 +12,7 @@
     radial-gradient(60vw 40vh at 18% 0%, rgba(27, 37, 111, 0.55), rgba(27, 37, 111, 0) 70%),
     radial-gradient(40vw 40vh at 92% 8%, rgba(24, 69, 162, 0.35), rgba(24, 69, 162, 0) 70%),
     radial-gradient(50vw 30vh at 10% 100%, rgba(21, 18, 67, 0.6), rgba(21, 18, 67, 0) 70%),
-    linear-gradient(180deg, var(--bg-top) 0%, var(--bg) 50%, #060d1e 100%);
+    linear-gradient(180deg, var(--bg-top) 0%, var(--bg) 50%, var(--bg) 100%);
 }
 
 .session-check {
@@ -168,7 +168,7 @@
 }
 
 .login-eye-btn:hover {
-  color: #fff;
+  color: var(--t1);
   background: rgba(255, 255, 255, 0.06);
 }
 

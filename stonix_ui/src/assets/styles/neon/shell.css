@@ -103,7 +103,7 @@ body {
     background:
       radial-gradient(90vw 40vh at 60% -8%, rgba(13, 30, 84, 0.5), rgba(13, 30, 84, 0) 70%),
       radial-gradient(50vw 40vh at 0% 100%, rgba(21, 18, 67, 0.45), rgba(21, 18, 67, 0) 70%),
-      linear-gradient(180deg, #0a1023 0, #060d20 320px, #060d1e 100%);
+      linear-gradient(180deg, var(--bg-top) 0, #060d20 320px, var(--bg) 100%);
   }
 
   .app-shell-sidebar {
@@ -192,7 +192,7 @@ body {
   text-align: center;
   font-family: var(--font-brand);
   font-weight: 600;
-  color: #fff;
+  color: var(--t1);
   letter-spacing: -0.3px;
 }
 
@@ -324,7 +324,7 @@ body {
   border-radius: 50%;
   background: var(--err);
   box-shadow:
-    0 0 0 2px #0a1124,
+    0 0 0 2px var(--sidebar),
     0 0 8px rgba(242, 85, 90, 0.6);
 }
 
@@ -665,7 +665,7 @@ body {
   height: 9px;
   border-radius: 50%;
   background: var(--acc-line);
-  box-shadow: 0 0 0 2px #111f43;
+  box-shadow: 0 0 0 2px var(--pill-voice);
   pointer-events: none;
 }
 

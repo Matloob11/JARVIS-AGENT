@@ -13,8 +13,8 @@
   padding: 1px;
   background: var(--panel-edge);
   -webkit-mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
+    linear-gradient(var(--t1) 0 0) content-box,
+    linear-gradient(var(--t1) 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
   pointer-events: none;
@@ -54,7 +54,7 @@
 }
 
 .panel-tab--active {
-  color: #fff;
+  color: var(--t1);
   font-weight: 550;
 }
 
@@ -88,7 +88,7 @@
   padding: 0 6px;
   border-radius: 999px;
   background: var(--acc-badge);
-  color: #fff;
+  color: var(--t1);
   font-size: 12.5px;
   font-weight: 600;
   line-height: 1;
@@ -245,7 +245,7 @@
   border-radius: 999px;
   background: var(--warn-pill, rgba(60, 40, 16, 0.9));
   border: 1px solid var(--warn-pill-edge, rgba(216, 154, 72, 0.35));
-  color: var(--t-cf-pill, #d89a48);
+  color: var(--t-cf-pill);
   font-size: 12.25px;
   font-weight: 600;
 }
@@ -254,7 +254,7 @@
   font-size: 16.25px;
   line-height: 24px;
   font-weight: 400;
-  color: var(--t-cf-q, #a8b3cd);
+  color: var(--t-cf-q);
   margin: 0 0 12px;
 }
 
@@ -264,8 +264,8 @@
   overflow-wrap: normal;
   word-break: normal;
   overflow: auto;
-  background: var(--code, #060c1c);
-  color: var(--t-code, #e6e7ec);
+  background: var(--code);
+  color: var(--t-code);
   border-radius: 12px;
   padding: calc(19 * var(--vu, 1px)) 20px calc(13 * var(--vu, 1px));
   font: 400 15px / 24px var(--font-mono, ui-monospace, monospace);
@@ -329,16 +329,21 @@
   border: 0;
   border-radius: 12px;
   font: 500 15.25px / 20px var(--font-med);
-  color: #fff;
+  color: var(--t1);
 }
 
 .confirm-card__actions .confirm-dialog__deny {
-  background: #131b30;
+  background: var(--ghost);
   box-shadow: inset 0 0 0 1px #2e364f;
 }
 
 .confirm-card__actions .confirm-dialog__allow {
   background: var(--acc-approve);
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.confirm-card__actions .confirm-dialog__allow:hover,
+.confirm-card__actions .confirm-dialog__allow:focus-visible {
   box-shadow: 0 4px 16px rgba(var(--acc-glow), 0.28), inset 0 -1px 0 rgba(255, 255, 255, 0.18);
 }
 
@@ -360,7 +365,7 @@
   margin: 10px 0 0;
   font-size: 12.5px;
   line-height: 18px;
-  color: var(--t4, #94a4ca);
+  color: var(--t4, var(--t-placeholder));
   text-align: center;
 }
 
@@ -378,7 +383,7 @@
 
 .confirm-card__later:hover,
 .confirm-card__later:focus-visible {
-  color: #fff;
+  color: var(--t1);
 }
 
 .confirm-bar {
@@ -425,7 +430,7 @@
   gap: 6px 14px;
   margin-top: 14px;
   font-size: 13px;
-  color: var(--t4, #94a4ca);
+  color: var(--t4, var(--t-placeholder));
 }
 
 .confirm-card__meta strong {
@@ -499,7 +504,7 @@
 }
 
 .panel-captions .chat-live-label {
-  color: #fff;
+  color: var(--t1);
   margin-right: 6px;
 }
 
@@ -668,7 +673,7 @@
   border: 0;
   background: transparent;
   padding: 0;
-  color: var(--info, #65b7fa);
+  color: var(--info, var(--ic-mem));
   font: 600 13px/18px var(--font-ui);
   cursor: pointer;
 }
@@ -796,7 +801,7 @@ html[data-reference-frame] .chat-status-hint {
 .chat-empty__title {
   font-weight: 600;
   font-size: 16px;
-  color: #fff;
+  color: var(--t1);
 }
 
 .chat-empty__chips {
@@ -819,7 +824,7 @@ html[data-reference-frame] .chat-status-hint {
 
 .chat-empty__chip:hover {
   background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  color: var(--t1);
 }
 
 .media-chip {
@@ -921,7 +926,7 @@ html[data-reference-frame] .chat-status-hint {
 
 .approvals-tab-pane__title {
   font-weight: 600;
-  color: #fff;
+  color: var(--t1);
 }
 
 .approvals-tab-pane__icon {
@@ -959,18 +964,18 @@ html[data-reference-frame] .chat-status-hint {
   margin: 0 0 12px;
   font-size: 14px;
   font-weight: 700;
-  color: #fff;
+  color: var(--t1);
 }
 
 .approvals-section__title small {
   font-size: 12px;
   font-weight: 500;
-  color: var(--t4, #94a4ca);
+  color: var(--t4, var(--t-placeholder));
 }
 
 .approvals-section__empty {
   font-size: 13px;
-  color: var(--t4, #94a4ca);
+  color: var(--t4, var(--t-placeholder));
 }
 
 .approvals-row {
@@ -1025,7 +1030,7 @@ html[data-reference-frame] .chat-status-hint {
   margin: 0;
   font-size: 12.5px;
   line-height: 18px;
-  color: var(--t4, #94a4ca);
+  color: var(--t4, var(--t-placeholder));
 }
 
 .approvals-row__meta code {
@@ -1036,7 +1041,7 @@ html[data-reference-frame] .chat-status-hint {
 .approvals-row__time {
   margin: 6px 0 0;
   font-size: 12px;
-  color: var(--t4, #94a4ca);
+  color: var(--t4, var(--t-placeholder));
 }
 
 .panel-composer {
@@ -1070,8 +1075,8 @@ html[data-reference-frame] .chat-status-hint {
   padding: 1px;
   background: var(--composer-edge);
   -webkit-mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
+    linear-gradient(var(--t1) 0 0) content-box,
+    linear-gradient(var(--t1) 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
   pointer-events: none;
@@ -1088,7 +1093,7 @@ html[data-reference-frame] .chat-status-hint {
   padding: 0 10px;
   border-radius: 999px;
   background: rgba(var(--acc-glow-rgb, 46, 130, 255), 0.16);
-  color: var(--chip-task-t, #bcd6ff);
+  color: var(--chip-task-t);
   font: 600 12.5px/1 var(--font-ui, system-ui);
   box-shadow: inset 0 0 0 1px rgba(var(--acc-edge-rgb, 46, 130, 255), 0.35);
 }
@@ -1116,13 +1121,13 @@ html[data-reference-frame] .chat-status-hint {
   align-items: stretch;
   min-height: clamp(46px, 6.16vh, 58px);
   border-radius: 12px;
-  background: var(--field, #15203d);
-  box-shadow: inset 0 0 0 1px #1b2744;
+  background: var(--field);
+  box-shadow: inset 0 0 0 1px var(--input-edge);
 }
 
 .neon-composer__field:focus-within {
   box-shadow:
-    inset 0 0 0 1px #1b2744,
+    inset 0 0 0 1px var(--input-edge),
     0 0 0 2px var(--acc-line, #3d7cff),
     0 0 0 6px rgba(var(--acc-glow-rgb, 46, 130, 255), 0.35);
 }
@@ -1157,7 +1162,7 @@ html[data-reference-frame] .chat-status-hint {
   margin: 2px 2px 2px 0;
   border: none;
   border-radius: 12px;
-  background: var(--acc-deep, #163b80);
+  background: var(--acc-deep);
   color: #eef3fd;
   box-shadow: inset 0 0 0 1px rgba(40, 80, 160, 0.35);
   cursor: pointer;
@@ -1235,11 +1240,11 @@ html[data-reference-frame] .chat-status-hint {
 }
 
 .neon-composer__mic[aria-pressed='true'] {
-  color: #fff;
+  color: var(--t1);
 }
 
 .neon-composer__mic[aria-pressed='true'] svg {
-  color: #22c086;
+  color: var(--ok);
 }
 
 .neon-composer__mic-label {

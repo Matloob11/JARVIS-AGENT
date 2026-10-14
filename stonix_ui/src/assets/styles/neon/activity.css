@@ -32,7 +32,7 @@
   gap: 4px;
   height: 62px;
   padding: 0 10px;
-  border-bottom: 2px solid #161e33;
+  border-bottom: 2px solid var(--tabs-divider);
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -91,11 +91,11 @@
 }
 
 .activity-tabs button:hover {
-  color: #fff;
+  color: var(--t1);
 }
 
 .activity-tabs button[aria-pressed='true'] {
-  color: #fff;
+  color: var(--t1);
   font-weight: 700;
 }
 
@@ -213,7 +213,7 @@
 
 .n-chip[aria-pressed='true'],
 .activity-chip[aria-pressed='true'] {
-  color: #fff;
+  color: var(--t1);
   background: rgba(var(--acc-glow), 0.14);
   box-shadow: inset 0 0 0 1px rgba(var(--acc-glow), 0.45);
 }
@@ -251,33 +251,33 @@
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #8895bc;
-  box-shadow: 0 0 0 3px #0c1428;
+  background: var(--neutral);
+  box-shadow: 0 0 0 3px var(--ring-cut);
 }
 
 .activity-timeline__row.k-ok .activity-timeline__dot {
   background: #23b084;
-  box-shadow: 0 0 0 3px #0c1428, 0 0 6px rgba(35, 176, 132, 0.3);
+  box-shadow: 0 0 0 3px var(--ring-cut), 0 0 6px rgba(35, 176, 132, 0.3);
 }
 
 .activity-timeline__row.k-info .activity-timeline__dot {
   background: #4a95fb;
-  box-shadow: 0 0 0 3px #0c1428, 0 0 8px 1px rgba(74, 149, 251, 0.5);
+  box-shadow: 0 0 0 3px var(--ring-cut), 0 0 8px 1px rgba(74, 149, 251, 0.5);
 }
 
 .activity-timeline__row.k-device .activity-timeline__dot {
   background: #7a50f9;
-  box-shadow: 0 0 0 3px #0c1428, 0 0 8px 1px rgba(122, 80, 249, 0.5);
+  box-shadow: 0 0 0 3px var(--ring-cut), 0 0 8px 1px rgba(122, 80, 249, 0.5);
 }
 
 .activity-timeline__row.k-warn .activity-timeline__dot {
-  background: #f9bc54;
-  box-shadow: 0 0 0 3px #0c1428, 0 0 8px rgba(249, 188, 84, 0.4);
+  background: var(--disk);
+  box-shadow: 0 0 0 3px var(--ring-cut), 0 0 8px rgba(249, 188, 84, 0.4);
 }
 
 .activity-timeline__row.k-err .activity-timeline__dot {
-  background: #f2555a;
-  box-shadow: 0 0 0 3px #0c1428, 0 0 8px rgba(242, 85, 90, 0.45);
+  background: var(--err);
+  box-shadow: 0 0 0 3px var(--ring-cut), 0 0 8px rgba(242, 85, 90, 0.45);
 }
 
 .activity-timeline__link {
@@ -295,12 +295,12 @@
 .activity-timeline__link span {
   display: block;
   font: 400 14px/20px var(--font-ui);
-  color: #8794b4;
+  color: var(--t-act-sub);
 }
 
 .activity-timeline__row time {
   font: 400 13.5px/20px var(--font-ui);
-  color: #8190b6;
+  color: var(--t5);
   white-space: nowrap;
   padding-top: 1px;
   font-variant-numeric: tabular-nums;

@@ -153,12 +153,12 @@
 }
 
 .set-index a:hover {
-  color: #fff;
+  color: var(--t1);
   background: rgba(120, 145, 215, 0.06);
 }
 
 .set-index a[aria-current='true'] {
-  color: #fff;
+  color: var(--t1);
   font-weight: 600;
   background: linear-gradient(90deg, #16285b, #172347 60%, #172141);
 }

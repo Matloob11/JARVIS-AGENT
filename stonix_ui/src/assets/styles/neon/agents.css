@@ -9,7 +9,7 @@
 .n-group {
   margin: 6px 2px 12px;
   font: 600 14.5px/20px var(--font-ui);
-  color: #a6b1d0;
+  color: var(--t3);
   letter-spacing: 0.2px;
   display: flex;
   align-items: center;
@@ -147,7 +147,7 @@
 
 .agents-num {
   font: 600 14px/18px var(--font-ui);
-  color: #fff;
+  color: var(--t1);
 }
 
 .agents-vid-meter {
@@ -165,7 +165,7 @@
 
 .agents-vid-score {
   font: 700 28px/32px var(--font-ui);
-  color: #fff;
+  color: var(--t1);
 }
 
 .agents-vid-score small {
@@ -176,7 +176,7 @@
 
 .agents-vid-empty-title {
   font: 700 17px/22px var(--font-ui);
-  color: #fff;
+  color: var(--t1);
 }
 
 .agents-vid-note {
@@ -308,7 +308,7 @@
 
 .agents-restart-session.danger-hover:hover,
 .agents-restart-session.danger-hover:focus-visible {
-  color: var(--command-danger, #f2555a);
+  color: var(--command-danger, var(--err));
   border-color: var(--err-border-strong, rgba(242, 85, 90, 0.45));
 }
 
@@ -410,7 +410,7 @@
 
 .flow-map .n-node b {
   font: 600 14.5px/19px var(--font-ui);
-  color: #fff;
+  color: var(--t1);
 }
 
 .flow-map .n-node > span:last-child {
@@ -430,7 +430,6 @@
   height: 6px;
   border-radius: 50%;
   background: var(--acc-text);
-  box-shadow: 0 0 8px rgba(var(--acc-glow), 0.55);
   opacity: 0;
   pointer-events: none;
 }
@@ -438,12 +437,14 @@
 .flow-map .n-flow--voice-packets .n-flow__packet--voice {
   opacity: 1;
   left: 8%;
+  box-shadow: 0 0 8px rgba(var(--acc-glow), 0.55);
   animation: n-flow-packet-forward 1.4s linear infinite;
 }
 
 .flow-map .n-flow--tools-packets .n-flow__packet--tools {
   opacity: 1;
   right: 8%;
+  box-shadow: 0 0 8px rgba(var(--acc-glow), 0.55);
   animation: n-flow-packet-backward 1.4s linear infinite;
 }
 

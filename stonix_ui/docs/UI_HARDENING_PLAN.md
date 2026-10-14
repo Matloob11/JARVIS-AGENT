@@ -72,10 +72,12 @@ Priority: P0 broken or unsafe, P1 fragile or misleading, P2 clutter, P3 polish.
 - **Fix:** `layout-h09.spec.ts` shots at 360/768/1280/1920 into `assets/qa-layout-h09/` (untracked); `layout.spec.ts` gains 768×1024 no-scroll case. No horizontal scroll at those widths.
 - **Verify:** `npx playwright test tests/e2e/layout-h09.spec.ts --project=chromium` → 4 passed.
 
-### UI-H10 — Visual tokens (P2, L)
+### UI-H10 — Visual tokens (P2, L) — DONE
 
 - **Problem:** neon CSS still uses many raw colors (`assets/styles/neon/*.css`). No lint rule yet.
-- **Fix:** inventory hex outside token files; collapse only duplicates. Glow limited to active states. Do not restyle by deleting panels.
+- **Fix:** 140 duplicate hex values now use existing tokens (`--inset-line`, `--ring-cut` for the two repeated border colours). Idle glow on primary buttons, the listen button, the hero ring, the meter tick, and hidden flow packets moved to hover, focus, pressed, or packet-on. Panels were not removed.
+- **Accept:** `npm run check:tokens` passes: no neon hex duplicates a `tokens.css` colour, and outer glow is only on active, hover, focus, or status selectors.
+- **Verify:** `node scripts/check-neon-tokens.mjs` → UI-H10 tokens ok.
 
 ### UI-H11 — Swarm job UX (P2, M) — DONE
 
@@ -108,7 +110,7 @@ Priority: P0 broken or unsafe, P1 fragile or misleading, P2 clutter, P3 polish.
 
 ## Execution order
 
-H01–H09, H11–H12, H14 done; H15 layout/enroll blockers fixed. Still TODO: H10, H13, H15 full e2e×3. Full section 6 gates (e2e suite ×3, visual, perf, refdiff, electron, `build:prod`) are **not** claimed green; axe suite is green this session.
+H01–H12, H14 done; H10 token check is green. Still TODO: H13, H15 full e2e×3. Full section 6 gates (e2e suite ×3, visual, perf, refdiff, electron, `build:prod`) are **not** claimed green; axe suite is green this session.
 
 ## Final report
 

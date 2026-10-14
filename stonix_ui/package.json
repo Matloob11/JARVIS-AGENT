@@ -28,6 +28,7 @@
     "verify:prod": "npm run build:prod && npm run test:e2e && npm run smoke:electron && npm run test:electron",
     "test": "vitest run",
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "check:tokens": "node scripts/check-neon-tokens.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

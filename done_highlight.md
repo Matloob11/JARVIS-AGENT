@@ -2600,3 +2600,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** pytest tests/automation/test_youtube_downloader.py tests/tools/test_youtube_job.py -> 12 passed
 - **Commit:** (pending) · **Deploy:** no
 - **Doosre agent ke liye:** C-119 is error_code par laptop re-run kar sakta hai.
+
+### ✅ [cursor] UI-H10 · neon token duplicates and idle glow · 2026-10-14 17:20 PKT
+- **Kya kiya:** neon CSS ke duplicate hex ab tokens use karte hain; idle glow hover, focus, pressed ya packet-on par hai. Panels nahi hate.
+- **Files:** stonix_ui/src/assets/styles/tokens.css, stonix_ui/src/assets/styles/neon/*.css, stonix_ui/scripts/check-neon-tokens.mjs, stonix_ui/package.json, stonix_ui/docs/UI_HARDENING_PLAN.md
+- **Verify:** node scripts/check-neon-tokens.mjs -> UI-H10 tokens ok (101 token colours)
+- **Commit:** (pending) · **Deploy:** no
+- **Doosre agent ke liye:** —
