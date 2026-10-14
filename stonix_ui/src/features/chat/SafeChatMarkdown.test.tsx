@@ -7,26 +7,33 @@ import ConfirmCard from '@/features/confirm/ConfirmCard';
 import type { QueuedConfirm } from '@/features/confirm/useConfirmQueue';
 
 const ZWSP = '\u200b';
+const INNER_FENCE = ` ${ZWSP}\`\`\`python`;
 const DIFF = [
   'Self-repair proposal.',
-  `${ZWSP}\`\`\`diff`,
+  '```diff',
   '--- a/services/demo.py',
   '+++ b/services/demo.py',
+  INNER_FENCE,
+  '- x',
+  '+ y',
   '- old error line',
   '+ new line',
-  `${ZWSP}\`\`\``,
+  '```',
 ].join('\n');
 
 describe('SafeChatMarkdown diff fence', () => {
-  it('keeps a zero-width-prefixed diff fence as code, not a list or HTML', () => {
+  it('keeps an inner zero-width fence line inside one diff block', () => {
     const { container } = render(<SafeChatMarkdown text={DIFF} />);
-    const code = container.querySelector('pre code');
-    expect(code).toBeTruthy();
-    expect(code?.textContent).toContain('- old error line');
-    expect(code?.textContent).toContain('+ new line');
+    const blocks = container.querySelectorAll('pre');
+    expect(blocks).toHaveLength(1);
+    const lines = (blocks[0]?.querySelector('code')?.textContent ?? '').split('\n');
+    expect(lines).toContain(INNER_FENCE);
+    expect(lines).toContain('- x');
+    expect(lines).toContain('+ y');
+    expect(lines).toContain('- old error line');
+    expect(lines).toContain('+ new line');
     expect(container.querySelector('ul')).toBeNull();
     expect(container.querySelector('script')).toBeNull();
-    expect(code?.textContent).not.toContain('```');
   });
 });
 

@@ -2649,3 +2649,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** vitest navigationPolicy.csp.test.ts pehle fail (frame-src none), fix ke baad 1 passed
 - **Commit:** (pending) · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] REQ-FIX · diff inner fence stays in the block · 2026-10-14 20:27 PKT
+- **Kya kiya:** isFence wapas sirf asli fence lines par. Diff ke andar zero-width space wali ` line block ko band nahi karti, minus/plus markers rehte hain.
+- **Files:** stonix_ui/src/features/chat/SafeChatMarkdown.tsx, stonix_ui/src/features/chat/SafeChatMarkdown.test.tsx
+- **Verify:** vitest SafeChatMarkdown.test.tsx pehle 2 fail (do pre, minus line gayab), fix ke baad chat tests 6 passed
+- **Commit:** (pending) · **Deploy:** no
+- **Doosre agent ke liye:** —
