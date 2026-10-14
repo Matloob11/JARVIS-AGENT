@@ -2537,3 +2537,31 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** pytest control_commands + resume_guard 61 passed; live: stop_check PASS, mute/typed/unmute, clear_memory Deny/Allow + backup, shutdown Deny/Allow + fresh job
 - **Commit:** `7933cb9` + (this commit) · **Deploy:** PC worker restarts 13:04 aur 13:09 PKT 🔁
 - **Doosre agent ke liye:** dashboard ka Stop ab server-side bhi jawab rokta hai; shutdown/clear_memory ke cards live chal rahe hain.
+
+### ✅ 🔁 [claude] C-83 live check · Agent worker start (agent_ctl) · 2026-10-14 16:20 PKT
+- **Kya kiya:** `agent_ctl start` se worker chala: pid 21648, health 200 (7.5 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent start 16:20 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] C-83 live apply (gate 1 for this check only) · Agent worker restart (agent_ctl) · 2026-10-14 16:24 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 21648) band, naya pid 27752; health 200 (39.8 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 16:24 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] C-83 gate back to 0 after the live apply · Agent worker restart (agent_ctl) · 2026-10-14 16:30 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 27752) band, naya pid 29312; health 200 (39.6 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 16:30 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ [claude] C-83 · Guarded self-repair: diagnose, diff proposal in the chat, approved apply with backup and rollback · 2026-10-14 16:31 PKT
+- **Kya kiya:** `autonomous_self_repair(error_details, file_path, apply=False)`: py_compile + pylint, phir ek AI diff sirf usi file ka, poora chat mein (file nahi badalti). `apply=True` sirf `JARVIS_SELF_REPAIR_APPLY=1` par, dashboard Allow ke baad, aur sirf woh diff jo Allow card par naam se likha ho; backup, git apply, dobara checks, fail par khud rollback, har apply call ki audit line. `.env*`, `deploy/**`, Cursor lane, approval files aur 30 min se kam purani files refuse. Live: report, gate 0 par refusal, aur gate 1 (sirf is check ke liye) par asli patch + backup; gate wapas 0.
+- **Files:** services/utils/jarvis_self_healing.py, services/ai_core/jarvis_confirm.py (approved_action), services/ai_core/jarvis_plugin_manager.py, tests/unit/test_self_repair.py, tests/unit/test_confirm_broker.py, docs/CONTRACTS.md (v38), deploy/windows-local/TOOLS.md, .env.example, services/ai_core/desktop_manifest.json
+- **Verify:** full suite 5098 passed (2 C-51 test-fake failures fixed in c80d767); live c83 report/apply checks through the VPS bridge
+- **Commit:** `1f08160` + `b4f0377` + (this commit) · **Deploy:** PC worker restarts 16:24 aur 16:30 PKT (gate 1 sirf live apply ke liye, phir 0)
+- **Doosre agent ke liye:** gate abhi bhi 0 hai (C-110 baad mein kholega); project files kabhi write_custom_code/Notepad se nahi, self-repair report se.
