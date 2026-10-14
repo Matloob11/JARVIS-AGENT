@@ -149,14 +149,47 @@ function urlOrigin(raw) {
   }
 }
 
+function contentSecurityPolicy() {
+  return [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "frame-src 'none'",
+    "form-action 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https:",
+    "font-src 'self' data:",
+    "media-src 'self' blob: data: https: http://127.0.0.1:* http://localhost:*",
+    "worker-src 'self' blob:",
+    "connect-src 'self' https: wss: http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*",
+  ].join('; ');
+}
+
+function installContentSecurityPolicy() {
+  const csp = contentSecurityPolicy();
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const headers = { ...(details.responseHeaders || {}) };
+    const url = details.url || '';
+    if (url.startsWith('file:') || url.startsWith('devtools:') || url.startsWith('chrome-extension:')) {
+      callback({ responseHeaders: headers });
+      return;
+    }
+    headers['Content-Security-Policy'] = [csp];
+    callback({ responseHeaders: headers });
+  });
+}
+
 function allowedNavigationOrigins(uiUrl) {
-  const origins = new Set(['null']);
+  const origins = new Set();
   const uiOrigin = urlOrigin(uiUrl);
-  if (uiOrigin) origins.add(uiOrigin);
-  origins.add('http://127.0.0.1:5173');
-  origins.add('http://localhost:5173');
-  origins.add('http://127.0.0.1:4173');
-  origins.add('http://localhost:4173');
+  if (uiOrigin && uiOrigin !== 'null') origins.add(uiOrigin);
+  if (isDev) {
+    origins.add('http://127.0.0.1:5173');
+    origins.add('http://localhost:5173');
+    origins.add('http://127.0.0.1:4173');
+    origins.add('http://localhost:4173');
+  }
   return origins;
 }
 
@@ -242,8 +275,14 @@ async function retryVpsLoad() {
 
 function wireSecurity(win, uiUrl) {
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('https:') || url.startsWith('http:')) {
-      shell.openExternal(url);
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return { action: 'deny' };
+    }
+    if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+      shell.openExternal(parsed.href);
     }
     return { action: 'deny' };
   });
@@ -358,6 +397,7 @@ function createWindow() {
 }
 
 app.on('ready', () => {
+  installContentSecurityPolicy();
   const backendMode = resolveBackendMode();
   if (backendMode === 'none') {
     console.log('[Electron] Backend spawn disabled (mode none or DISABLE_BACKEND=1).');

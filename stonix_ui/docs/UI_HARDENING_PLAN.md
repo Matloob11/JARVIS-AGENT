@@ -91,10 +91,12 @@ Priority: P0 broken or unsafe, P1 fragile or misleading, P2 clutter, P3 polish.
 - **Fix:** shared EN constants on `persona.ts`; VoicePopover uses them; Vitest asserts mute/mic-off mention typed chat and stop stays interrupt-only. No contract change.
 - **Verify:** `npm test -- src/shared/persona.muteStop.test.ts`.
 
-### UI-H13 — Electron CSP and navigation (P2, M)
+### UI-H13 — Electron CSP and navigation (P2, M) — DONE
 
-- **Problem:** isolation flags are on (`electron/main.cjs:309-312`). CSP and `window.open` allow-list UNVERIFIED.
-- **Fix:** read preload and will-navigate; tighten only if a hole is proven. Tests via `npm run test:electron` on the mock bridge, and only when the Desktop Node is not running.
+- **Problem:** isolation flags are on (`electron/main.cjs`). CSP was missing, and `will-navigate` allowed origin `null` (so `data:` URLs) plus dev ports even when the window was on the VPS.
+- **Fix:** http(s) responses get a CSP (`script-src 'self'`, `object-src 'none'`, no `unsafe-eval`). `data:` and other null-origin navigations are blocked. Dev ports are extra origins only while `isDev`. `window.open` still denies an in-app window and only hands `http:`/`https:` to the system browser. `file:` offline page is unchanged so its inline retry script still runs. Preload still exposes only window controls.
+- **Accept:** `npm run test:electron` on the mock bridge (backend mode none, no Desktop Node start) shows the CSP header, a blocked inline script, and a `data:` navigation that stays on the login screen.
+- **Verify:** `npm run test:electron`.
 
 ### UI-H14 — Reduced motion and orb pause (P3, M) — DONE
 
@@ -110,7 +112,7 @@ Priority: P0 broken or unsafe, P1 fragile or misleading, P2 clutter, P3 polish.
 
 ## Execution order
 
-H01–H12, H14 done; H10 token check is green. Still TODO: H13, H15 full e2e×3. Full section 6 gates (e2e suite ×3, visual, perf, refdiff, electron, `build:prod`) are **not** claimed green; axe suite is green this session.
+H01–H14 done. Still TODO: H15 full e2e×3. Full section 6 gates (e2e suite ×3, visual, perf, refdiff, `build:prod`) are **not** claimed green; the electron suite and axe suite are green this session.
 
 ## Final report
 

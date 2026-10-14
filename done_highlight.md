@@ -2607,3 +2607,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** node scripts/check-neon-tokens.mjs -> UI-H10 tokens ok (101 token colours)
 - **Commit:** (pending) · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] UI-H13 · Electron CSP and navigation · 2026-10-14 17:28 PKT
+- **Kya kiya:** Electron http(s) pages par CSP lagaya. data: navigation band. window.open sirf http/https system browser ko deta hai. Offline page ka inline script waisa hi hai.
+- **Files:** stonix_ui/electron/main.cjs, stonix_ui/tests/electron/electron.spec.ts, stonix_ui/docs/UI_HARDENING_PLAN.md
+- **Verify:** npm run test:electron -> 5 passed (CSP header, inline script blocked, data: stay, offline retry, backend none)
+- **Commit:** (pending) · **Deploy:** no
+- **Doosre agent ke liye:** —

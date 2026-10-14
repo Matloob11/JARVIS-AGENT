@@ -78,6 +78,47 @@ test('tray and favicon strings', async () => {
   }
 });
 
+test('CSP blocks inline scripts and data navigation stays in the app', async () => {
+  const app = await launchElectron();
+  try {
+    const window = await app.firstWindow();
+    await window.waitForLoadState('domcontentloaded');
+    await expect(window.getByTestId('login-password')).toBeVisible();
+
+    const [response] = await Promise.all([
+      window.waitForResponse(
+        (res) => res.url().startsWith('http://127.0.0.1:4173') && res.request().resourceType() === 'document',
+      ),
+      window.reload(),
+    ]);
+    const csp = response.headers()['content-security-policy'] || '';
+    expect(csp).toContain("script-src 'self'");
+    expect(csp).toContain("object-src 'none'");
+    expect(csp).not.toContain('unsafe-eval');
+
+    await expect(window.getByTestId('login-password')).toBeVisible();
+    const inlineRan = await window.evaluate(() => {
+      const marker = '__jarvis_inline_csp';
+      (window as unknown as Record<string, unknown>)[marker] = false;
+      const script = document.createElement('script');
+      script.textContent = `window.${marker} = true`;
+      document.body.appendChild(script);
+      return Boolean((window as unknown as Record<string, unknown>)[marker]);
+    });
+    expect(inlineRan).toBe(false);
+
+    const before = window.url();
+    await window.evaluate(() => {
+      window.location.assign('data:text/html,<h1>blocked</h1>');
+    });
+    await window.waitForTimeout(400);
+    expect(window.url()).toBe(before);
+    await expect(window.getByTestId('login-password')).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});
+
 test('backend mode none does not spawn agent or vortex python', async () => {
   const before = countJarvisPythonProcesses();
   const app = await launchElectron();
