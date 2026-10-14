@@ -398,8 +398,11 @@ class _EndingAssistant:
         self._stop_event = asyncio.Event()
         self.end_reason = None
         self._active_session = None
+        self._activity = None  # no realtime session: the C-51 server-side cut has nothing to restart
         self.request_end = BrainAssistant.request_end.__get__(self)
         self.interrupt_speech = BrainAssistant.interrupt_speech.__get__(self)
+        self._session_busy = BrainAssistant._session_busy.__get__(self)
+        self._cut_server_reply = BrainAssistant._cut_server_reply.__get__(self)
 
 
 @pytest.mark.asyncio
