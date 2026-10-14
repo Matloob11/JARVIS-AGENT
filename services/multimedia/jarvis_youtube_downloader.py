@@ -189,16 +189,22 @@ class YouTubeDownloader:
                 found.add(os.path.normcase(os.path.abspath(os.path.join(dirpath, name))))
         return found
 
+    def _in_download_dir(self, path: str) -> bool:
+        root = os.path.normcase(os.path.abspath(self.base_dir))
+        prefix = root if root.endswith(os.sep) else root + os.sep
+        return path.startswith(prefix)
+
     def _discard_bot_check_files(self, before: set[str], output_text: str) -> None:
         """Drop files this run created, plus partials named in yt-dlp's output."""
-        root = os.path.normcase(os.path.abspath(self.base_dir))
-        victims = {path for path in self._list_download_files() - before if path.startswith(root)}
+        victims = {
+            path for path in self._list_download_files() - before if self._in_download_dir(path)
+        }
         for match in re.finditer(r"[A-Za-z]:\\[^\r\n\"']+|/(?:[^\s\"']+)", output_text):
             raw = match.group(0).strip().rstrip(".,)")
             if not raw.lower().endswith(_PARTIAL_SUFFIXES):
                 continue
             abs_path = os.path.normcase(os.path.abspath(raw))
-            if abs_path.startswith(root):
+            if self._in_download_dir(abs_path):
                 victims.add(abs_path)
         for path in victims:
             try:
@@ -270,7 +276,7 @@ class YouTubeDownloader:
 
         stderr_text = "\n".join(stderr_chunks)
         stdout_text = "\n".join(stdout_lines)
-        if _is_youtube_bot_check(stderr_text, stdout_text):
+        if returncode != 0 and _is_youtube_bot_check(stderr_text, stdout_text):
             self._discard_bot_check_files(before_files, f"{stderr_text}\n{stdout_text}")
             return _bot_check_result()
 

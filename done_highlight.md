@@ -2656,3 +2656,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** vitest SafeChatMarkdown.test.tsx pehle 2 fail (do pre, minus line gayab), fix ke baad chat tests 6 passed
 - **Commit:** (pending) · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] REQ-FIX · YT_BOT_CHECK only on failure · 2026-10-14 20:28 PKT
+- **Kya kiya:** Bot-check sirf tab jab yt-dlp non-zero exit kare. Partial cleanup sirf YouTube folder ke andar, YouTube2 jaise sibling folder nahi.
+- **Files:** services/multimedia/jarvis_youtube_downloader.py, tests/automation/test_youtube_downloader.py
+- **Verify:** naye 2 tests pehle fail; phir pytest youtube downloader + job -> 14 passed
+- **Commit:** (pending) · **Deploy:** no
+- **Doosre agent ke liye:** —
