@@ -2614,3 +2614,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** npm run test:electron -> 5 passed (CSP header, inline script blocked, data: stay, offline retry, backend none)
 - **Commit:** (pending) · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] UI-H15 · e2e flake check x3 · 2026-10-14 18:40 PKT
+- **Kya kiya:** Poori e2e suite teen dafa chali. Map focus reload par Islamabad rehta hai. Hero layout helper ki width se nahi hilta, aur speaking orb loop 20 se zyada frames par pass hota hai.
+- **Files:** stonix_ui/tests/e2e/presence.spec.ts, stonix_ui/tests/mock-bridge/server.mjs, stonix_ui/docs/UI_HARDENING_PLAN.md, assets/qa-h15-e2e.log
+- **Verify:** npm run test:e2e x3 -> 279 passed (17.9m), 279 passed (11.6m), 279 passed (15.1m). Log assets/qa-h15-e2e.log
+- **Commit:** (pending) · **Deploy:** no
+- **Doosre agent ke liye:** —

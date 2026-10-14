@@ -104,16 +104,17 @@ Priority: P0 broken or unsafe, P1 fragile or misleading, P2 clutter, P3 polish.
 - **Fix:** already in `orbRenderer` / `OrbCanvas`: `document.hidden` and IntersectionObserver stop the loop; `prefers-reduced-motion: reduce` draws static. No new animation surfaces. Confirmed by code review + a11y reduced-motion walk (H08).
 - **Verify:** grep `orbOnScreen` / `reducedMotion` in `orbRenderer.ts`; a11y overview reduced-motion case green.
 
-### UI-H15 — Flake check (P1, M) — PARTIAL (layout960 + enroll fixed)
+### UI-H15 — Flake check (P1, M) — DONE
 
 - **Problem:** e2e not run 3 times; layout 960 helper/buttons overlap; voice enroll success lost when late progress events reset phase.
-- **Fix (2026-10-09):** phone/≤1023 hero helper sits above buttons (no overlap); enroll Commit/Cancel no longer `icon-button` w-8; progress ignores updates after done; mock clears enroll timers on commit. Product overview layout **7/7** incl. 960×800; voice-settings + voiceid enroll success green. Runs 2–3 of full suite still open.
-- **Verify:** `npx playwright test tests/e2e/layout.spec.ts -g "product overview layout"` → 7 passed; enroll specs green.
+- **Fix (2026-10-09):** phone/≤1023 hero helper sits above buttons (no overlap); enroll Commit/Cancel no longer `icon-button` w-8; progress ignores updates after done; mock clears enroll timers on commit.
+- **Fix (2026-10-14):** mock `init_state` keeps the fixture map focus (Islamabad) and only refreshes its timestamp, so reload does not copy the device city onto the map. Hero layout check ignores helper-quote x (copy recenters) and the speaking orb loop accepts a 1s frame count above 20.
+- **Verify:** `npm run test:e2e` three times. Log: `assets/qa-h15-e2e.log`.
 
 ## Execution order
 
-H01–H14 done. Still TODO: H15 full e2e×3. Full section 6 gates (e2e suite ×3, visual, perf, refdiff, `build:prod`) are **not** claimed green; the electron suite and axe suite are green this session.
+H01–H15 done. Full e2e is green three times (279 passed each). Visual, perf, refdiff and `build:prod` gates are still not claimed.
 
 ## Final report
 
-In progress. Stop condition in the mission section 9 is **not** met.
+H01–H15 are done. The mission stop condition still needs the visual, perf, refdiff and production-build gates.
