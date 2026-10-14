@@ -2677,3 +2677,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** —
 - **Commit:** (pending) · **Deploy:** no
 - **Doosre agent ke liye:** REQ-DEPLOY frontend
+
+### ✅ 🚀 [claude] REQ-DEPLOY frontend · Cursor's UI-H10, UI-H13, UI-H15, C-83 chat and the REQ-FIX fixes live · 2026-10-14 21:22 PKT
+- **Kya kiya:** Cursor ke commits pehle review kiye. Pehle round mein 4 defects mile (Electron local mic, map iframe CSP, C-83 diff fence, yt-dlp exit 0); Cursor ne theek kiye, maine dobara jaancha (YT pytest 72, vitest 9 passed). Phir sirf frontend container deploy kiya (deploy_from_pc.sh --services frontend; HEAD e6ba393, sirf commit ship hua). Backup pehle, other-apps smoke pehle aur baad mein.
+- **Files:** — (deploy only)
+- **Verify:** RESULT=ok; health gate: frontend healthy (127.0.0.1:5100 200, nginx / 401), ui-bridge healthy, /vortex/health 200, livekit ok; other apps identical before and after (18 sites, 29 containers, regressions 0); PC check /vortex/health 200
+- **Commit:** `e6ba393` · **Deploy:** VPS frontend 21:22 PKT 🚀 (backup /root/jarvis-backups/2026-10-14_1619Z-pre-deploy-e6ba393; rollback: `bash /root/jarvis-backups/tools/rollback.sh 2026-10-14_1619Z-pre-deploy-e6ba393`)
+- **Doosre agent ke liye:** live dashboard par diff wala chat aur Patch proposal card dekh lo; Electron fixes sirf desktop app mein hain (web deploy ka hissa nahi).
