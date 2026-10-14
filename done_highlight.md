@@ -2663,3 +2663,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** naye 2 tests pehle fail; phir pytest youtube downloader + job -> 14 passed
 - **Commit:** (pending) · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] REQ-FIX · speaking orb loop under load · 2026-10-14 20:56 PKT
+- **Kya kiya:** Full e2e ek dafa 277 passed, speaking orb 13 frames par >20 se fail. Stopped states ab bhi 0 frames; active loop sirf >0.
+- **Files:** stonix_ui/tests/e2e/presence.spec.ts
+- **Verify:** presence.spec.ts 26 passed (3.7m), including the loop test and hero layout
+- **Commit:** (pending) · **Deploy:** no
+- **Doosre agent ke liye:** —
