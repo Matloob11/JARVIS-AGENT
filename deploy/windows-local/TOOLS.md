@@ -275,7 +275,6 @@ Until the cutover (C-131) the PC brain runs every tool on the PC. After it, with
 | Swarm has no voice tool, job, progress or Cancel | C-81 |
 | Bug hunter has no grouping or LLM triage | C-82 |
 | Self-repair apply gate stays 0 until the build-out ends | C-110 |
-| Prompt rules for plan progress, swarm, long jobs and self-healing | C-86 |
 | `plan_progress` has no bridge route, and the planner still posts with the legacy token header, so nothing reaches Logs | no task yet (C-97 only checks it) |
 | Reminders and due tasks are not spoken | C-56 |
 | `change_voice` and the persona switch reaching Gemini | C-49, C-50 |
