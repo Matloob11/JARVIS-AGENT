@@ -2670,3 +2670,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** presence.spec.ts 26 passed (3.7m), including the loop test and hero layout
 - **Commit:** (pending) · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] REQ-FIX · section 11 hashes · 2026-10-14 20:57 PKT
+- **Kya kiya:** 52e6290 mic, 46cd760 map CSP, 0ae1742 inner fence, e0c75df YT_BOT_CHECK, a0a8f60 orb loop
+- **Files:** plan.md
+- **Verify:** —
+- **Commit:** (pending) · **Deploy:** no
+- **Doosre agent ke liye:** REQ-DEPLOY frontend
