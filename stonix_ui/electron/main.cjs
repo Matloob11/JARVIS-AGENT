@@ -1,4 +1,9 @@
 const { app, BrowserWindow, ipcMain, Menu, Tray, shell, session } = require('electron');
+const {
+  isNavigationAllowed: navigationAllowed,
+  isPermissionAllowed,
+  contentSecurityPolicy,
+} = require('./navigationPolicy.cjs');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -141,29 +146,8 @@ function getUiUrl() {
   return (process.env.JARVIS_UI_URL || DEFAULT_UI_URL).trim();
 }
 
-function urlOrigin(raw) {
-  try {
-    return new URL(raw).origin;
-  } catch {
-    return null;
-  }
-}
-
-function contentSecurityPolicy() {
-  return [
-    "default-src 'self'",
-    "base-uri 'self'",
-    "object-src 'none'",
-    "frame-src 'none'",
-    "form-action 'self'",
-    "script-src 'self'",
-    "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob: https:",
-    "font-src 'self' data:",
-    "media-src 'self' blob: data: https: http://127.0.0.1:* http://localhost:*",
-    "worker-src 'self' blob:",
-    "connect-src 'self' https: wss: http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*",
-  ].join('; ');
+function policyPaths() {
+  return { distIndex: DIST_INDEX, offlinePage: OFFLINE_PAGE, isDev };
 }
 
 function installContentSecurityPolicy() {
@@ -180,29 +164,8 @@ function installContentSecurityPolicy() {
   });
 }
 
-function allowedNavigationOrigins(uiUrl) {
-  const origins = new Set();
-  const uiOrigin = urlOrigin(uiUrl);
-  if (uiOrigin && uiOrigin !== 'null') origins.add(uiOrigin);
-  if (isDev) {
-    origins.add('http://127.0.0.1:5173');
-    origins.add('http://localhost:5173');
-    origins.add('http://127.0.0.1:4173');
-    origins.add('http://localhost:4173');
-  }
-  return origins;
-}
-
 function isNavigationAllowed(targetUrl, uiUrl) {
-  if (targetUrl.startsWith('file://')) {
-    const normalized = targetUrl.replace(/\\/g, '/').toLowerCase();
-    const distNormalized = fileDistUrl().toLowerCase();
-    const offlineNormalized = `file://${OFFLINE_PAGE.replace(/\\/g, '/')}`.toLowerCase();
-    return normalized.startsWith(distNormalized.split('#')[0]) || normalized.startsWith(offlineNormalized);
-  }
-  const origin = urlOrigin(targetUrl);
-  if (!origin) return false;
-  return allowedNavigationOrigins(uiUrl).has(origin);
+  return navigationAllowed(targetUrl, uiUrl, policyPaths());
 }
 
 function probeUrlReachable(url, timeoutMs = 12_000) {
@@ -294,17 +257,7 @@ function wireSecurity(win, uiUrl) {
   });
 
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
-    const requestOrigin = urlOrigin(details.requestingUrl || '');
-    const allowed = allowedNavigationOrigins(uiUrl);
-    if (!requestOrigin || !allowed.has(requestOrigin)) {
-      callback(false);
-      return;
-    }
-    if (permission === 'media' || permission === 'notifications') {
-      callback(true);
-      return;
-    }
-    callback(false);
+    callback(isPermissionAllowed(details.requestingUrl || '', permission, uiUrl, policyPaths()));
   });
 }
 
