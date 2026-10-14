@@ -2565,3 +2565,31 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** full suite 5098 passed (2 C-51 test-fake failures fixed in c80d767); live c83 report/apply checks through the VPS bridge
 - **Commit:** `1f08160` + `b4f0377` + (this commit) · **Deploy:** PC worker restarts 16:24 aur 16:30 PKT (gate 1 sirf live apply ke liye, phir 0)
 - **Doosre agent ke liye:** gate abhi bhi 0 hai (C-110 baad mein kholega); project files kabhi write_custom_code/Notepad se nahi, self-repair report se.
+
+### ✅ 🔁 [claude] C-86 prompt rules live check · Agent worker restart (agent_ctl) · 2026-10-14 16:37 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 29312) band, naya pid 25772; health 200 (42.2 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 16:37 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] C-86 prompt rules live check (no wait between steps) · Agent worker restart (agent_ctl) · 2026-10-14 16:41 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 25772) band, naya pid 13944; health 200 (41.5 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 16:41 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] C-86 prompt rules live check (progress in TOOL RULES) · Agent worker restart (agent_ctl) · 2026-10-14 16:47 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 13944) band, naya pid 25568; health 200 (42.7 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 16:47 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ [claude] C-86 · Prompt rules: plan progress, swarm, long jobs, self-healing · 2026-10-14 16:52 PKT
+- **Kya kiya:** Prompt ab 3+ step kaam par har step se pehle `tool_report_plan_progress` aur aakhir mein COMPLETED maangta hai (steps ke beech rukna nahi), swarm ke liye `start_swarm_mode`, aur lambe `started` jobs par "shuru ho gaya, baad mein bataunga". Purana IMMORTAL MODE (tool error par `write_custom_code` se code badalna) hata diya: self-repair sirf Sir ke kehne par, default report.
+- **Files:** services/ai_core/jarvis_prompt.py, tests/unit/test_prompt_rules.py, tests/core/golden/c49_old_prompt_rules.json, deploy/windows-local/TOOLS.md
+- **Verify:** pytest prompt tests 87 passed; live: 3-step kaam par progress 1/3 → 2/3 → 3/3 → COMPLETED, swarm 'started'
+- **Commit:** `6fbe06d` + (this commit) · **Deploy:** PC worker restarts 16:37, 16:41, 16:47 PKT
+- **Doosre agent ke liye:** plan progress dashboard tak tab pohanchega jab bridge par `plan_progress` route banega (TOOLS.md "Not working yet").
