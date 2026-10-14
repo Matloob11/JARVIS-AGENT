@@ -1,12 +1,12 @@
 {
-  "git_sha": "6e5c8827aa6f5aef22eb8f6987ded0bea4dd1b80",
+  "git_sha": "1f081600caea9f29b738ba24568477d0390654cb",
   "lk_schema_libs": {
     "docstring-parser": "0.18.0",
     "livekit-agents": "1.4.6",
     "pydantic": "2.12.5",
     "pydantic-core": "2.41.5"
   },
-  "manifest_sha256": "dfedae174a846e69ef67d4962fe6b773d55a7d3a31278b16011cb07f6d6b00a3",
+  "manifest_sha256": "0e3cc07bd25a62c02844052e4a4918da12b622866eaca9d03a842966d0b5867f",
   "pc_operations": [
     {
       "arg_hooks": [],
@@ -467,21 +467,24 @@
     },
     {
       "cls": null,
-      "doc": "\n    Autonomously repair a code file based on provided error details.\n    Uses LLM reasoning to generate a patch and applies it.\n    ",
+      "doc": "\n    Self-repair of one JARVIS Python file (under services, src, scripts or tests): checks it with py_compile and\n    pylint and asks the AI for a small fix as a unified diff. apply=False (the default) only proposes the diff and\n    shows it in the chat; the file does not change. apply=True patches the file only while JARVIS_SELF_REPAIR_APPLY=1\n    and after Sir's Allow on the dashboard, and only with a diff an earlier call already showed in the chat (else it\n    shows the diff first and changes nothing); it keeps a backup and rolls back by itself when the checks fail. Use\n    it only when Sir asks; never fix project files with write_custom_code or Notepad. A patch takes effect after an\n    agent restart.\n\n    Args:\n        error_details: The error message or traceback to fix, in full.\n        file_path: The file to repair, relative to the project root (for example services/utils/jarvis_diagnostics.py).\n        apply: True only when Sir explicitly asks to apply the fix to the file.\n    ",
       "idempotent": false,
-      "lk_schema_sha256": "58caffe86cf4a344b209dea648023d1768235715bee0a5add23c036aa7169111",
+      "lk_schema_sha256": "bd797c56d730d88724caee6ba44c9e2d18aa0f5bf2d8b841b89f1bd43c901bf3",
       "meta": {
-        "arg_policies": {},
+        "arg_policies": {
+          "error_details": "multiline",
+          "file_path": "path"
+        },
         "exclusive": null,
         "long_running": false,
         "max_output_chars": 12000,
-        "risk": "low",
-        "timeout": 15.0,
-        "voice_confirm": null
+        "risk": "dynamic",
+        "timeout": 120.0,
+        "voice_confirm": false
       },
       "module": "services.utils.jarvis_self_healing",
       "name": "autonomous_self_repair",
-      "param_schema_sha256": "b795c92a9fa1e912c45d100586350d4dbb88acf163c1094d012fd1c208922022",
+      "param_schema_sha256": "89bfa89322151495c835f2dda67460b8d8e07cbd1965a341db1e8947736ae46a",
       "params": [
         {
           "annotation": "str",
@@ -491,11 +494,18 @@
           "required": true
         },
         {
-          "annotation": "str | pathlib.Path",
+          "annotation": "str",
           "default": null,
           "kind": "POSITIONAL_OR_KEYWORD",
           "name": "file_path",
           "required": true
+        },
+        {
+          "annotation": "bool",
+          "default": false,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "apply",
+          "required": false
         }
       ],
       "placement": "vps"
