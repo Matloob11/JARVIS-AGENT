@@ -2684,3 +2684,24 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** RESULT=ok; health gate: frontend healthy (127.0.0.1:5100 200, nginx / 401), ui-bridge healthy, /vortex/health 200, livekit ok; other apps identical before and after (18 sites, 29 containers, regressions 0); PC check /vortex/health 200
 - **Commit:** `e6ba393` · **Deploy:** VPS frontend 21:22 PKT 🚀 (backup /root/jarvis-backups/2026-10-14_1619Z-pre-deploy-e6ba393; rollback: `bash /root/jarvis-backups/tools/rollback.sh 2026-10-14_1619Z-pre-deploy-e6ba393`)
 - **Doosre agent ke liye:** live dashboard par diff wala chat aur Patch proposal card dekh lo; Electron fixes sirf desktop app mein hain (web deploy ka hissa nahi).
+
+### ✅ 🔁 [claude] C-54 live check · Agent worker start (agent_ctl) · 2026-10-20 12:40 PKT
+- **Kya kiya:** `agent_ctl start` se worker chala: pid 21168, health 200 (18.7 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent start 12:40 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] C-54 live check (saved voice after a restart) · Agent worker restart (agent_ctl) · 2026-10-20 12:42 PKT
+- **Kya kiya:** `agent_ctl restart` (C-54 live check: saved voice after a restart); health 200, agent room mein (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 12:42 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🚀 [claude] C-54 · Agent settings service: settings_update -> validate -> apply -> persist -> settings_sync · 2026-10-20 12:50 PKT
+- **Kya kiya:** Naya src/core/agent_settings.py: dashboard ki settings (voice, persona, wake word, speak_typed_replies, ...) validate hoti hain, C-50/C-51 ke mehfooz raaste se lagti hain, data/settings/agent_settings.json mein atomic save hoti hain aur settings_sync wapas jata hai. Bridge ab settings_sync store karke UI ko bhejta hai aur agent connect par settings_bootstrap deta hai (sirf naya copy, sirf saved fields). Legacy wake_word_toggle/persona_change bhi isi validated raaste se.
+- **Files:** src/core/agent_settings.py (naya), src/core/agent_runner.py, src/core/agent_core.py, src/core/persona_manager.py, src/core/ui_bridge.py, services/ai_core/agent_loops.py, .gitignore, tests/core/test_agent_settings.py (naya), tests/core/test_persona_voice.py, tests/infrastructure/test_bridge_store.py, tests/infrastructure/test_bridge_socket_rooms.py, docs/CONTRACTS.md (v39)
+- **Verify:** full suite 5157 passed; live: voice Puck -> settings_sync 0.28 s aur restart ke baad bhi Puck, 'alloyx' -> errors.voice, wake word off/on, persona round trip se owner ki default voice wapas
+- **Commit:** `4acdcaf` + (this commit) · **Deploy:** VPS ui-bridge 12:39 PKT 🚀 (backup /root/jarvis-backups/2026-10-20_0739Z-pre-deploy-4acdcaf; rollback: `bash /root/jarvis-backups/tools/rollback.sh 2026-10-20_0739Z-pre-deploy-4acdcaf`); PC worker start 12:40, restart 12:42 PKT
+- **Doosre agent ke liye:** Cursor: settings panel ab live hai; 'unsupported' fields ko error nahi, 'abhi active nahi' dikhana (section 11).
