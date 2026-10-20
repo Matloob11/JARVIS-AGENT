@@ -65,6 +65,14 @@ be reached), journalled like that repair. A running 'brain' holds run/brain.lock
 start/restart (except the worker's own recovery) are refused meanwhile. run/restart.lock and run/brain.lock are
 taken with O_EXCL; a stale one is taken over only under an OS lock on run/<name>.takeover, after judging it stale
 again there, so two processes can never both take it.
+PC fallback secrets (C-127 step 5, D13): once 'brain vps' has started the Desktop Node, scripts/ops/fallback_env.py
+moves them (the LiveKit secret, the legacy token, the AI, search and email keys) out of the env files into the
+DPAPI-wrapped run/fallback.env.dpapi; only 'brain pc' unwraps them, back into the env files, before it starts the PC
+worker (or, when it starts nothing, at its end), and never while the Desktop Node still runs: then no PC worker starts
+either (a restore whose node stop failed keeps them wrapped). While that file exists a PC worker start is refused
+(exit 4): the worker would run without them. A store this Windows user can never unwrap (the repo copied to another PC
+or Windows user, a rebuilt profile) is moved aside, never deleted, with 'scripts/ops/fallback_env.py --discard
+--confirm', and the values are entered again (the refusal and the failed restore say so).
 """
 # pylint: disable=too-many-lines  # one self-contained CLI; the six commands share these helpers
 from __future__ import annotations
@@ -953,6 +961,9 @@ def start_worker(args: argparse.Namespace, mode: str, *, foreground: bool, timeo
               f"since {info.get('started_at', '?')}). Not starting a second one. "
               "Use: python scripts/agent_ctl.py restart --by <you> --reason <why>", file=sys.stderr)
         return EXIT_ALREADY_RUNNING, {"result": "already_running", "running_pid": info.get("pid")}
+    refused = _fallback_store_refused()
+    if refused is not None:
+        return refused
     problem, listener = _port_problem()
     if problem:
         print(f"[agent_ctl] Refusing to start: {problem}. Stop that process first.", file=sys.stderr)
@@ -1504,6 +1515,16 @@ VPS_BRIDGE_TRIES = 40
 VPS_BRIDGE_POLL_S = 3
 
 
+FALLBACK_STORE_FILE = "fallback.env.dpapi"   # C-127 (D13): the PC fallback secrets, DPAPI-wrapped in vps mode
+FALLBACK_ENV_SCRIPT = ROOT / "scripts" / "ops" / "fallback_env.py"
+# The way out when the store can never be unwrapped here (fallback_env.UNUSABLE_HINT says the same in its refusals).
+FALLBACK_UNREADABLE_HINT = (
+    "If this Windows user can never unwrap that file (the repo copied to another PC or Windows user, a rebuilt Windows "
+    "profile), move it aside with 'scripts/ops/fallback_env.py --discard --confirm' (--discard --dry-run checks first) "
+    "and enter the values again from their VPS copies with 'fallback_env.py --set NAME --value-from-stdin' or "
+    "rotate_env_secret.py (deploy/hostinger/RUNBOOK.md, 'The PC fallback secrets')")
+_fallback_env_module: Any = None
+
 _brain_warned: set[str] = set()
 
 
@@ -1620,6 +1641,89 @@ def _vps_mode_worker_refused(args: argparse.Namespace, action: str) -> tuple[int
                   "there too")
     print(f"[agent_ctl] {action.capitalize()} refused: {error}.", file=sys.stderr)
     return EXIT_REFUSED, {"result": "refused", "error": error, "brain": "vps"}
+
+
+def _fallback_env() -> Any:
+    """scripts/ops/fallback_env.py, loaded once by its path (scripts/ops is not a package)."""
+    global _fallback_env_module  # pylint: disable=global-statement
+    if _fallback_env_module is None:
+        import importlib.util  # pylint: disable=import-outside-toplevel
+        spec = importlib.util.spec_from_file_location("jarvis_ops_fallback_env", FALLBACK_ENV_SCRIPT)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"cannot load {FALLBACK_ENV_SCRIPT}")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _fallback_env_module = module
+    return _fallback_env_module
+
+
+def fallback_store_path() -> Path:
+    """run/fallback.env.dpapi: the PC fallback secrets while the VPS brain runs (C-127 step 5, K-47 v4)."""
+    return agent_lock.run_dir() / FALLBACK_STORE_FILE
+
+
+def _print_fallback_report(report: Any) -> None:
+    for line in getattr(report, "lines", []):
+        print(f"[agent_ctl] fallback secrets: {line}", file=sys.stderr if getattr(report, "code", 1) else sys.stdout)
+
+
+def restore_fallback_secrets() -> bool:
+    """Unwraps run/fallback.env.dpapi back into the env files (names only are printed) and deletes it. Only 'brain
+    pc' calls this. True when nothing is wrapped any more; on a failure the store is kept and the env files are as
+    they were. A store this Windows user cannot use is reported with the way out (fallback_env's refusal ends with
+    UNUSABLE_HINT: 'fallback_env.py --discard')."""
+    if not fallback_store_path().exists():
+        return True
+    try:
+        report = _fallback_env().restore_for_brain_pc(list(ENV_FILES), agent_lock.run_dir())
+    except Exception as exc:  # pylint: disable=broad-exception-caught  # reported; the switch decides
+        print(f"[agent_ctl] fallback secrets: could not be restored ({type(exc).__name__})", file=sys.stderr)
+        return False
+    _print_fallback_report(report)
+    return getattr(report, "code", 1) == 0 and not fallback_store_path().exists()
+
+
+def wrap_fallback_secrets() -> None:
+    """'brain vps' once the Desktop Node runs: the PC fallback secrets out of the env files into the DPAPI-wrapped
+    run/fallback.env.dpapi. A failure only leaves them in the env files (a warning; the switch goes on)."""
+    try:
+        report = _fallback_env().wrap_for_brain_vps(list(ENV_FILES), agent_lock.run_dir(),
+                                                    worker=agent_lock.is_locked())
+    except Exception as exc:  # pylint: disable=broad-exception-caught  # never stops the switch
+        print(f"[agent_ctl] WARNING: the PC fallback secrets stay in the env files ({type(exc).__name__})",
+              file=sys.stderr)
+        return
+    if getattr(report, "code", 1) or getattr(report, "changed", False):
+        _print_fallback_report(report)
+    if getattr(report, "code", 1):
+        print("[agent_ctl] WARNING: the PC fallback secrets stay in the env files; wrap them later with "
+              "'scripts/ops/fallback_env.py --wrap'.", file=sys.stderr)
+
+
+def _fallback_store_refused() -> tuple[int, dict[str, Any]] | None:
+    """A PC worker start while the fallback secrets are still wrapped would run without the LiveKit secret and the AI
+    keys: refused (exit 4) with the command that unwraps them, and the way out for a store that never unwraps here."""
+    if not fallback_store_path().exists():
+        return None
+    error = (f"the PC fallback secrets are still DPAPI-wrapped in run/{FALLBACK_STORE_FILE} (vps mode, C-127): "
+             f"'{BRAIN_PC_COMMAND} --by <you>' restores them, and the switch starts the worker ({LAPTOP_ONLY_FLAG} "
+             f"when the VPS cannot be read). {FALLBACK_UNREADABLE_HINT}")
+    print(f"[agent_ctl] Refusing to start: {error}.", file=sys.stderr)
+    return EXIT_REFUSED, {"result": "refused", "error": error}
+
+
+def _restore_fallback_after_brain_pc() -> tuple[int, str]:
+    """After a 'brain pc' that started no worker itself (already pc, or a laptop-only repair): the wrapped secrets go
+    back into the env files now, unless the Desktop Node still runs (it must not meet them, and a PC worker could not
+    start beside it anyway). (exit code, audit word)."""
+    if node_running():
+        print("[agent_ctl] The PC fallback secrets stay DPAPI-wrapped while the Desktop Node runs: stop it with "
+              f"'agent_ctl node stop', then run '{BRAIN_PC_COMMAND} --by <you>' again; it restores them.",
+              file=sys.stderr)
+        return EXIT_REFUSED, "kept (the Desktop Node runs)"
+    if restore_fallback_secrets():
+        return EXIT_OK, "restored"
+    return EXIT_FAILED, "failed"
 
 
 def take_brain_lock(args: argparse.Namespace) -> tuple[Path | None, str]:
@@ -2194,7 +2298,24 @@ class LaptopBrain:
 
     def start(self, brain: str) -> int:
         if brain == "vps":
-            return node_start(self._args)
+            code = node_start(self._args)
+            if code == EXIT_OK:
+                wrap_fallback_secrets()  # C-127: in vps mode the PC fallback secrets are DPAPI-wrapped
+            return code
+        if node_running():
+            # C-127 (D13): the Desktop Node must never meet the unwrapped fallback secrets (e.g. the restore of a failed
+            # 'brain vps' whose node stop timed out), and a PC worker cannot run beside it anyway (the node holds
+            # run/desktop_actor.lock): nothing is unwrapped and nothing starts, as in _restore_fallback_after_brain_pc.
+            kept = (f"; the PC fallback secrets stay DPAPI-wrapped in run/{FALLBACK_STORE_FILE}"
+                    if fallback_store_path().exists() else "")
+            print(f"[agent_ctl] The PC worker was not started: the Desktop Node still runs{kept}. Stop it with "
+                  f"'agent_ctl node stop', then run '{BRAIN_PC_COMMAND} --by <you>' again.", file=sys.stderr)
+            return EXIT_FAILED
+        if not restore_fallback_secrets():  # C-127: only 'brain pc' unwraps them, before the worker starts
+            print("[agent_ctl] The PC worker was not started: the wrapped fallback secrets "
+                  f"(run/{FALLBACK_STORE_FILE}, kept as it is) could not be restored; "
+                  "'scripts/ops/fallback_env.py --status' lists them by name.", file=sys.stderr)
+            return EXIT_FAILED
         code, _ = start_worker(self._args, "start", foreground=False)
         return EXIT_OK if code == EXIT_OK else EXIT_FAILED
 
@@ -2811,6 +2932,8 @@ def cmd_brain(args: argparse.Namespace) -> int:
         except KeyboardInterrupt:
             _report_interrupted_switch(args, switch.journal_path)
             return EXIT_INTERRUPTED
+        if code == EXIT_OK and args.target == "pc" and fallback_store_path().exists():
+            code, details["fallback_secrets"] = _restore_fallback_after_brain_pc()
     finally:
         release_run_lock(lock)
     audit("brain", args, exit=code, target=args.target, **details)

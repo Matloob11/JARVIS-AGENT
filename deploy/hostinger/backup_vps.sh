@@ -8,10 +8,14 @@
 #
 # Writes /root/jarvis-backups/<YYYY-MM-DD_HHMMZ>[-label]/ (folder 700, files 600):
 #   opt-jarvis-agent.tgz  /opt/jarvis-agent without stonix_ui/node_modules (members jarvis-agent/..., restore with -C /opt)
+#                         and without deploy/hostinger/.env.agent (and its .tmp / temp copies): the agent's secrets,
+#                         its link private key among them (K-70), are only in env.agent, which the PC mirror leaves out
 #   jarvis.conf           /etc/nginx/conf.d/jarvis.conf
 #   jarvis.htpasswd       /etc/nginx/jarvis.htpasswd                     (when present)
 #   hostinger.env         /opt/jarvis-agent/deploy/hostinger/.env
 #   bridge.env            /opt/jarvis-agent/deploy/hostinger/bridge.env  (when present)
+#   env.agent             /opt/jarvis-agent/deploy/hostinger/.env.agent  (when present; C-127; stays on the VPS: the
+#                         RUNBOOK's PC mirror leaves it out)
 #   root.env              /opt/jarvis-agent/.env                         (when present)
 #   DEPLOYED_SHA          /opt/jarvis-agent/DEPLOYED_SHA                 (when present)
 #   volumes.tgz           /app/{logs,Jarvis_Outputs,Jarvis_Shared,data} of the bridge's named volumes
@@ -19,7 +23,9 @@
 #   images.txt            rollback tags, image ids, LiveKit image id
 #   docker-ps.txt         docker ps -a of compose project jarvis
 #   containers.txt        image, state and mounts per jarvis container (no env, no secrets)
-#   MANIFEST.txt          what was captured, warnings and errors
+#   MANIFEST.txt          what was captured, warnings and errors, and the env layout: one 'env_layout:' line per env
+#                         file the containers read (.env, bridge.env, .env.agent) with present/absent and the names it
+#                         assigns a value, never a value; rollback.sh compares it with the live files (C-127)
 #   SHA256SUMS            checksums of the files above (check with: sha256sum -c SHA256SUMS)
 # and tags the images that the jarvis-bridge / jarvis-frontend containers run (normally
 # jarvis-{bridge,frontend}:hostinger) as jarvis-{bridge,frontend}:rollback-<backup folder name>.
@@ -101,8 +107,12 @@ backup_code() {
   local parent base rc=0 entries
   parent="$(dirname "$APP_DIR")"
   base="$(basename "$APP_DIR")"
-  log "[1/6] code: $APP_DIR -> opt-jarvis-agent.tgz (without stonix_ui/node_modules)"
-  tar -czf "$B/opt-jarvis-agent.tgz" --exclude="$base/stonix_ui/node_modules" -C "$parent" "$base" || rc=$?
+  log "[1/6] code: $APP_DIR -> opt-jarvis-agent.tgz (without stonix_ui/node_modules and .env.agent)"
+  # C-127: .env.agent only as env.agent (copy_private below). The code archive also goes to the PC mirror, which
+  # must never hold the agent's link private key (K-70) or its AI keys; a code restore never extracts env files anyway.
+  tar -czf "$B/opt-jarvis-agent.tgz" --exclude="$base/stonix_ui/node_modules" \
+    --exclude="$base/deploy/hostinger/.env.agent" --exclude="$base/deploy/hostinger/.env.agent.tmp" \
+    --exclude="$base/deploy/hostinger/..env.agent.*" -C "$parent" "$base" || rc=$?
   if (( rc == 1 )); then
     warn "tar: some files under $APP_DIR changed while they were archived"
   elif (( rc != 0 )); then
@@ -138,6 +148,7 @@ backup_files() {
   copy_private "$HTPASSWD" jarvis.htpasswd 0
   copy_private "$HOSTINGER_DIR/.env" hostinger.env 1
   copy_private "$HOSTINGER_DIR/bridge.env" bridge.env 0
+  copy_private "$HOSTINGER_DIR/.env.agent" env.agent 0
   copy_private "$APP_DIR/.env" root.env 0
   copy_private "$APP_DIR/DEPLOYED_SHA" DEPLOYED_SHA 0
 }
@@ -291,6 +302,27 @@ record_state() {
 }
 
 # ---------------------------------------------------------------- manifest + checksums
+# C-127: the env layout, names only. The same name rule as env_names() in rollback.sh (a test keeps them equal): the
+# names a file assigns a non-empty value ('NAME=x' or 'export NAME = x'), sorted, comma-separated, '-' for none. A
+# UTF-8 BOM in front of the first line is read past (compose does too), so the name on that line is recorded.
+env_names() {  # <file>
+  local names bom=$'\xef\xbb\xbf'
+  names="$({ sed -n -E -e "1s/^$bom//" -e 's/^[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*=[[:space:]]*[^[:space:]#].*$/\2/p' "$1" \
+    || true; } | LC_ALL=C sort -u | paste -sd, -)"
+  printf '%s\n' "${names:--}"
+}
+
+env_layout_lines() {  # one 'env_layout: <file> <present|absent> <names>' line per env file the containers read
+  local f
+  for f in .env bridge.env .env.agent; do
+    if [[ -f "$HOSTINGER_DIR/$f" ]]; then
+      printf 'env_layout:    %s present %s\n' "$f" "$(env_names "$HOSTINGER_DIR/$f")"
+    else
+      printf 'env_layout:    %s absent -\n' "$f"
+    fi
+  done
+}
+
 write_manifest() {
   local w e
   {
@@ -305,6 +337,7 @@ write_manifest() {
     printf 'volumes_via:   %s\n' "${VOLUMES_MODE:-FAILED}"
     printf 'bridge_db:     %s\n' "$DB_STATUS"
     printf 'restore:       deploy/hostinger/RUNBOOK.md, section "Backup & Restore"\n'
+    env_layout_lines
     printf '\nfiles (bytes, name):\n'
     (cd "$B" && find . -maxdepth 1 -type f ! -name MANIFEST.txt ! -name SHA256SUMS ! -name '.*' -printf '  %s\t%P\n' \
       | LC_ALL=C sort -k2)

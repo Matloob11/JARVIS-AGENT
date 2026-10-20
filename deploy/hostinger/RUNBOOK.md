@@ -11,6 +11,7 @@ How to operate the JARVIS stack on the Hostinger VPS and the Windows PC.
 | [Maintenance window checklist](#maintenance-window-checklist) | C-12 (OP-08) |
 | [Adding a JARVIS service](#adding-a-jarvis-service) | C-12 (OP-08) |
 | [Agent image](#agent-image) | C-126 |
+| [Secrets split (V2a, V2b, push)](#secrets-split-v2a-v2b-push), including [the PC copies before V4](#before-v4-pc-copies-of-the-vps-env-files), [the PC fallback secrets](#the-pc-fallback-secrets-vps-mode) and [the PC fallback's LiveKit pair](#v6-the-pc-fallbacks-livekit-pair) | C-127 |
 | [Testing the deploy tooling](#testing-the-deploy-tooling) | C-12 (OP-08) |
 | [Room ops](#room-ops) | C-23 (OP-22) |
 | [Backup & Restore](#backup--restore) | C-11 (OP-07) |
@@ -182,7 +183,7 @@ The coordinator runs this in an announced window, because the LiveKit recreate d
 4. `$PY scripts/agent_ctl.py restart --by claude --reason OP-08`, because the LiveKit restart ends the room.
 5. Verify:
    - `[ "$($VPS 'cat /opt/jarvis-agent/DEPLOYED_SHA')" = "$(git rev-parse --short HEAD)" ] && echo SHA_MATCH`
-   - `$VPS 'D=$(ls -1d /root/jarvis-backups/2* | tail -1); diff $D/smoke-pre.txt $D/smoke-post.txt && echo OTHER_APPS_UNCHANGED'`
+   - `$VPS 'D=/root/jarvis-backups/$(cat /root/jarvis-backups/LAST_DEPLOY); diff $D/smoke-pre.txt $D/smoke-post.txt && echo OTHER_APPS_UNCHANGED'` (the deploy's own backup; the newest `2*` folder can be another tool's)
    - `$VPS 'grep -c ^keys: /opt/jarvis-agent/deploy/hostinger/livekit.yaml; docker inspect -f {{.Config.Image}} jarvis-livekit'` should print 0 and `livekit/livekit-server:v1.13.7`.
    - The user presses Voice in the UI and hears a reply.
 6. Rollback drill (step 9): `$VPS 'bash /root/jarvis-backups/tools/rollback.sh --dry-run'`, then without `--dry-run`. It undoes the deploy, LiveKit version included, because that backup records the code. Check health, then go forward again with the undo command it printed (or redeploy HEAD as in step 3). Each of these recreates LiveKit, so run the agent restart of step 4 after each one. A plain backup from before this deploy, such as `2026-10-01_0826Z-verify`, needs `--code`.
@@ -200,15 +201,19 @@ What a read-only check on 2026-10-02 found:
 $VPS 'bash /root/jarvis-backups/tools/rollback.sh --dry-run'          # plan: undo the last deploy
 $VPS 'bash /root/jarvis-backups/tools/rollback.sh'                    # undo the last deploy
 $VPS 'bash /root/jarvis-backups/tools/rollback.sh <backup folder>'    # back to that backup
-$VPS 'bash /root/jarvis-backups/tools/rollback.sh --tag pre-emergency-2026-09-30_2340 --services ui-bridge'
+$VPS 'bash /root/jarvis-backups/tools/rollback.sh --tag rollback-<backup> --services ui-bridge'              # images only
+$VPS 'bash /root/jarvis-backups/tools/rollback.sh --tag rollback-<backup> --services ui-bridge --with-env'   # image + compose + env
+$VPS 'bash /root/jarvis-backups/tools/rollback.sh <backup folder> --services ui-bridge --with-env --dry-run'    # env plan + checks
 ```
 
-- **The default (`--last`)** uses `/root/jarvis-backups/LAST_DEPLOY`. It names the backup that the last deploy took before it changed anything. That backup's `deploy.env` says which services, and whether the code and nginx, go back.
+- **The default (`--last`)** uses `/root/jarvis-backups/LAST_DEPLOY`. It names the backup that the last deploy took before it changed anything. That backup's `deploy.env` says which services, and whether the code, nginx and env files, go back.
 - **A named backup made by deploy.sh or rollback.sh** puts back exactly what that run changed.
-- **Any other backup_vps.sh folder** puts back the services whose running image differs from its `containers.txt`. Add `--code`, `--nginx`, `--env` or `--services LIST` as needed.
+- **Any other backup_vps.sh folder** puts back the services whose running image differs from its `containers.txt`. Add `--code`, `--nginx`, `--with-env` or `--services LIST` as needed.
 - `--code` restores `/opt/jarvis-agent` from `opt-jarvis-agent.tgz`, but never the env files: a secret rotated after the backup stays rotated.
-- `--env` restores `hostinger.env`, `bridge.env` and `root.env` from the backup (mode 600). Use it only when an env change was the problem. The live `JARVIS_BRAIN` and `COMPOSE_PROFILES` lines stay (C-126): a `hostinger.env` from before C-126 has no `JARVIS_BRAIN`, and the compose file refuses every command without a non-empty one.
-- `--tag T` takes `<image>:T`, for JARVIS's own images (`jarvis-*`) only. The `pre-emergency` images hold the revoked token (see [Known snapshots](#known-snapshots)).
+- `--with-env` (C-127; `--env` is the same) restores the image tags, `docker-compose.yml` and the env files together from one backup: mode 600, the env files that the services of this rollback read (the readers of the layout check below: `.env` from `hostinger.env`, `bridge.env`, `.env.agent` from `env.agent`), plus `root.env`, which no container reads, and, whenever `.env` goes back, the compose file of its `opt-jarvis-agent.tgz` (all of it with `--code`). Every other env file stays as it is: an env file whose readers are not recreated would meet them at their next restart out of step with their image (for example `--services ui-bridge --with-env` never touches `.env.agent`). With no service that reads an env file (`--services frontend`, `--services none`) neither `.env` nor the compose file goes back, so the next recreate of the bridge, LiveKit or the agents never meets the backup's compose file with today's env files. A live `bridge.env` the target never had is moved aside (`bridge.env.pre-rollback-<UTC>`, never deleted), because it would win over the restored `.env`; the live `.env.agent` stays when the backup has none. The live `JARVIS_BRAIN` and `COMPOSE_PROFILES` lines are always written back into the restored `.env`, replacing the backup's: the brain switch owns them (K-72; only `agent_ctl brain` writes `JARVIS_BRAIN`), and a `hostinger.env` from before C-126 has no `JARVIS_BRAIN`, without which the compose file refuses every command. The live Desktop Link key lines are written back the same way: `DESKTOP_AGENT_PUBLIC_KEY` and `DESKTOP_PC_PUBLIC_KEY` into a restored `bridge.env`, those two and `DESKTOP_AGENT_SIGNING_KEY` into a restored `.env.agent` (a live file without one drops the backup's too). Their other halves are on the laptop (its own key, its pin of the agent's key, C-123), which no rollback touches; an older key there would switch the bridge's `/desktop` relay off or make it refuse every PC-signed request, and in vps mode the laptop would go offline. Every other value comes back as the backup holds it, so a value rotated since the backup is undone in the restored files: the owner login of `bridge.env` (`OWNER_PASSWORD_HASH`, `OWNER_TOTP_SECRET`, `OWNER_RECOVERY_HASHES`, `SESSION_JWT_SECRET`: the old password, the old 2FA secret, and every session signed out), and any setting changed since. The shared values are the exception: `AGENT_TOKEN`, `BRIDGE_HMAC_SECRET` (the notify credentials, K-47 v36), `LIVEKIT_API_KEY`/`LIVEKIT_API_SECRET` and the PC fallback's own pair `LIVEKIT_PC_API_KEY`/`LIVEKIT_PC_API_SECRET` (once `livekit_pc_pair.py create` made it, [V6](#v6-the-pc-fallbacks-livekit-pair)) must equal the live ones, because the PC, the laptop and every service the rollback does not recreate keep the live values. `rollback.sh` compares them on the VPS by digest before it changes anything (the dry run too; names only, on its `env values` line) and refuses a difference (exit 1, the names printed): for example a `rotate_env_secret.py --name AGENT_TOKEN` since the backup would come back in `bridge.env` only and the agent's notifies would be dropped, and a backup taken between `livekit_pc_pair.py create` and a `revoke` would bring back the PC secret a lost or compromised laptop holds, which LiveKit accepts again at its next recreate. Make them equal first, or add `--shared-values-differ-ok` when you make them equal again right after the rollback; its printed undo then carries that option too. The plan (and the dry run) lists every file it replaces, moves aside or keeps. With `--tag rollback-<backup>` the backup is that folder.
+- **The env layout check (C-127).** `backup_vps.sh` records in `MANIFEST.txt` which env files the containers read exist (`.env`, `bridge.env`, `.env.agent`) and the names each one assigns (`env_layout:` lines, names only). Before it changes anything, `rollback.sh` compares the target's layout (that record; for an older backup the names of its env copies) with the live files, for the files its services read: `ui-bridge` reads `.env` and `bridge.env`, `livekit` reads `.env`, `agent` and `agent-svc` read `.env` and `.env.agent`, and `.env` counts whenever `--code` brings back another compose file. `JARVIS_BRAIN` and `COMPOSE_PROFILES` never count. Like compose and the Python env tools, `backup_vps.sh` and `rollback.sh` read past a UTF-8 byte order mark in front of an env file's first line (a file saved by a Windows editor), so the name on that line counts everywhere: in the layout, in the shared-value digests and in the live `JARVIS_BRAIN`, `COMPOSE_PROFILES` and link key lines a restore keeps. A different layout, for example a target from before the V2b secrets split, is refused (exit 1, nothing changed, the differing names printed) unless `--with-env`: an old image with today's env files, or the reverse, can crash both brains. An unknown layout is refused the same way (exit 1) unless `--layout-unknown-ok`: a `--tag` with no backup folder `rollback-<folder>` (a hand-made tag such as `pre-emergency-...`, or a rollback tag whose folder was pruned) records none, and `--with-env` is refused there (exit 64) because nothing records its env files. Add `--layout-unknown-ok` only once you know those images run with the live env files. The dry run prints the result on its `env layout` line.
+- A backup folder and `--tag` are never combined (exit 64): the images of one state with the env layout and env files of another is the mix the check exists to stop. `--tag rollback-<backup>` already takes all three from that backup.
+- `--tag T` takes `<image>:T`, for JARVIS's own images (`jarvis-*`) only. The `pre-emergency` images hold the revoked token (see [Known snapshots](#known-snapshots)) and are disaster recovery only. After V2b they cannot run at all: their bridge is from before C-112, its legacy `config.validate()` needs `GOOGLE_API_KEY` from the pre-split `.env`, and it crash-loops with the split env files.
 - Before it changes anything, `rollback.sh` checks each service against the compose file it will meet: a service it stops against the current file, a service it brings back against the target one (the backup's own with `--code`). So the printed undo of a rollback that stopped a new service (for example `agent`) works.
 - Image tags follow the deploy rule: JARVIS's own `jarvis-*` tags are re-pointed; a third-party tag (LiveKit) is never moved onto another version. When the target state ran another LiveKit version than the compose file in effect names, `rollback.sh` refuses (exit 1, nothing changed) and asks for `--code`, which brings back the compose file that names it. After the first sync deploy (LiveKit pinned to v1.13.7), a rollback to a plain backup from before it therefore needs `--code`.
 - Every rollback first runs `backup_vps.sh pre-rollback` and prints the command that undoes the rollback.
@@ -268,7 +273,7 @@ This is for the VPS-brain services such as `agent` and `agent-svc` (planned cont
    - `deploy.sh` makes the `jarvis-<name>:rollback-<backup>` tag;
    - a failed first deploy stops the new container.
 4. Optional, in `deploy.sh`: a longer wait in `gate_timeout` (`agent` and `agent-svc` already get 240 s), HTTP probes in `gate_probes`, and any bind-mounted config file in `HOLD_FILES`.
-5. `backup_vps.sh` still tags only the bridge and the frontend, and backs up only the bridge volumes. The task that adds the service extends it (its volumes, `.env.agent`; C-128 for the agent services).
+5. `backup_vps.sh` still tags only the bridge and the frontend, and backs up only the bridge volumes (and, since C-127, `.env.agent`). The task that adds the service extends it (its volumes; C-128 for the agent services).
 6. Run the full tests below.
 
 ## Agent image
@@ -354,6 +359,161 @@ docker compose -p jarvis run --rm --no-deps --user 0 --cap-add CHOWN --entrypoin
 ```
 
 After the first `up` (C-128/C-131), the same `docker inspect` line on the running `jarvis-agent` must print the same values. Nothing in `/root/jarvis-backups/builds` or the builder is ever pruned without the user's OK.
+
+## Secrets split (V2a, V2b, push)
+
+Plan C-127, contracts K-47 and K-75. Today the bridge reads `.env` (the compose interpolation values plus the AI, search, email and SIM keys, `JARVIS_ENCRYPTION_KEY` and `CONTROLLER_TOKEN`) and `bridge.env` (the agent link and login secrets, which win). After the split:
+
+| File (VPS, root 600) | Holds | Read by |
+|---|---|---|
+| `.env` | every variable `docker-compose.yml` interpolates (`JARVIS_BRAIN`, the LiveKit pair, the legacy token, later the PC pair), `COMPOSE_PROFILES`, `JARVIS_PC_AGENT_NAME` and the other non-secret names it has today; no agent secret | compose; ui-bridge until C-18 drops it from its `env_file` |
+| `bridge.env` | its K-47 names, the Desktop Link public keys, and the bridge settings that only `.env` held so far (`LOG_LEVEL`, `LOG_FILE` ...) | ui-bridge (it wins over `.env`) |
+| `.env.agent` | the K-47 v4 names from the PC root `.env`, `AGENT_TOKEN`, `BRIDGE_HMAC_SECRET`, the main LiveKit pair, the agent link key | agent, agent-svc |
+
+The tools run on the PC and send one program over ssh stdin (python3 on the VPS, standard library only); they print names, lengths, file modes and public keys, never a value. After the split, change a bridge setting in `bridge.env`, not `.env`: `bridge.env` wins.
+
+Three stages, each in its own session. The PC brain keeps answering through all of them.
+
+### V2a: the bridge with the role-aware validate (env files unchanged)
+
+The bridge in HEAD calls `config.validate('bridge')` (C-112): it needs the LiveKit pair and, while `LEGACY_TOKEN_AUTH` is on, the legacy token, never an AI key. V2a ships that code while both env files stay as they are.
+
+```bash
+$PY scripts/ops/backup_local.py --now                                    # 1. PC backup
+bash deploy/hostinger/deploy_from_pc.sh --dry-run --services ui-bridge   # 2. offline plan
+bash deploy/hostinger/deploy_from_pc.sh --check --services ui-bridge     # 3. dry run on the VPS
+bash deploy/hostinger/deploy_from_pc.sh --services ui-bridge             # 4. backup (it records the env layout), deploy, gate
+$VPS 'D=$(cat /root/jarvis-backups/LAST_DEPLOY); grep "^env_layout:" /root/jarvis-backups/$D/MANIFEST.txt'   # 5. names only
+```
+
+6. The user asks one voice question and sends one typed message; the PC brain answers both.
+7. The rollback drill, back to the previous bridge image and forward again. The env files did not change, so the dry run prints `env layout   same as ...`:
+
+```bash
+$VPS 'bash /root/jarvis-backups/tools/rollback.sh --dry-run'
+$VPS 'bash /root/jarvis-backups/tools/rollback.sh'                  # healthy on the previous bridge image
+$VPS 'bash /root/jarvis-backups/tools/rollback.sh <the backup it printed>'   # forward again, healthy
+```
+
+Before V2b, `$PY scripts/ops/split_bridge_env.py --check-bridge` still lists the agent secret names in `jarvis-bridge` (exit 1): that is the state V2b fixes.
+
+### V2b: the env split (env files only)
+
+```bash
+$PY scripts/ops/backup_local.py --now                                                    # 1. PC backup
+$VPS 'bash /opt/jarvis-agent/deploy/hostinger/backup_vps.sh pre-env-split | tail -n 1'    # 2. BACKUP_DIR=<folder>: note it
+$VPS 'grep "^env_layout:" <folder>/MANIFEST.txt; ls <folder>'                            # 3. names only; hostinger.env, bridge.env there
+$PY scripts/ops/split_bridge_env.py --dry-run                                            # 4. the plan, names only
+$PY scripts/ops/split_bridge_env.py                                                      # 5. its own backup, then bridge.env and .env
+$VPS 'stat -c "%a %U %n" /opt/jarvis-agent/deploy/hostinger/.env /opt/jarvis-agent/deploy/hostinger/bridge.env'   # 6. 600 root
+```
+
+- Step 4 must show `removes` the agent secret names only, `docker-compose.yml interpolates ...` with every name kept in `.env`, and no `REFUSED:` line. Read the warnings: a name that looks like a secret but is on no list stays in `.env` until you decide. A refusal writes nothing; fix its cause and run the dry run again.
+- Step 5 also copies `.env` and `bridge.env` to `/root/jarvis-backups/env/<UTC>-pre-env-split/` (folder 700, files 600) before it writes; each file goes through a temp file and a rename. The env tools (`split_bridge_env.py`, `push_agent_env.py`, `livekit_pc_pair.py`) keep their backups in `/root/jarvis-backups/env/`, never in a `2*` folder beside `backup_vps.sh`'s, so the PC mirror and the "newest backup" commands below never take one of them.
+
+7. Recreate the bridge alone, from its image and with its own `GIT_SHA` (only its env files changed), then the gate:
+
+```bash
+$VPS 'cd /opt/jarvis-agent/deploy/hostinger && sha=$(docker inspect -f "{{range .Config.Env}}{{println .}}{{end}}" jarvis-bridge | sed -n "s/^GIT_SHA=//p" | head -n 1) && GIT_SHA="$sha" docker compose -p jarvis up -d --no-deps --no-build --pull never --force-recreate ui-bridge'
+$VPS 'bash /root/jarvis-backups/tools/deploy.sh --gate-only --services ui-bridge'    # GATE=ok
+```
+
+8. Step 7 of the plan, names only (`docker inspect` is cut to names on the VPS):
+
+```bash
+$PY scripts/ops/split_bridge_env.py --check-bridge                     # NO_AGENT_SECRETS_IN_BRIDGE, exit 0
+$VPS "docker exec jarvis-bridge env | cut -d= -f1" | $PY scripts/ops/split_bridge_env.py --check-names -   # the same check, by hand
+```
+
+9. The user asks one voice question and sends one typed message; the PC brain answers both.
+10. The done_highlight.md entry names the undo: `$VPS 'bash /root/jarvis-backups/tools/rollback.sh <folder of step 2> --services ui-bridge --with-env'` (dry run first: it lists each file it replaces or keeps, and its `env values` line). It puts back the pre-split `.env` and `bridge.env` as step 2 saved them and recreates the bridge from the same image. `.env.agent` stays as it is (no service of that rollback reads it), the live `JARVIS_BRAIN` and `COMPOSE_PROFILES` lines are written back into the restored `.env`, and the live Desktop Link public keys (`push_agent_env.py --keys` adds them after step 2) into the restored `bridge.env`, so the laptop stays paired. Every other value changed since step 2 comes back as step 2 saved it, for example the owner login (`set_owner_credentials.py`) and `SESSION_JWT_SECRET` (every session signed out). It refuses (exit 1, names only) while `AGENT_TOKEN`, `BRIDGE_HMAC_SECRET`, the LiveKit pair or the PC fallback's pair (after V6) differ from the live values (rotated or revoked since step 2): the agent's notifies would be dropped, LiveKit would refuse the bridge, or a revoked PC pair would work again. Make them equal first, or add `--shared-values-differ-ok` and make them equal again right after.
+
+A later rollback to any state from before the split needs `--with-env` ([Rollback](#rollback)): the dry run refuses without it and names the env names that differ.
+
+### Push the agent env (after V2b, before V4)
+
+```bash
+$PY scripts/ops/backup_local.py --now
+$VPS 'bash /opt/jarvis-agent/deploy/hostinger/backup_vps.sh pre-agent-env | tail -n 1'
+$PY scripts/ops/push_agent_env.py --dry-run           # names: add / replace / keep (equal), no value sent
+$PY scripts/ops/push_agent_env.py                     # writes .env.agent (backup first), then compares by HMAC digest
+```
+
+- The push copies `PC_NAMES` from the PC root `.env` (K-47's single source) and the main LiveKit pair from the VPS `.env`, which never leaves the VPS. Every comparison line must say `equal`. `AGENT_TOKEN` and `BRIDGE_HMAC_SECRET` must equal `bridge.env`, or the agent's notifies are dropped: the VPS step compares them before it writes and refuses (nothing written) when they differ or `bridge.env` lacks them.
+- It refuses before sending anything while `GOOGLE_API_KEY`, `JARVIS_ENCRYPTION_KEY`, `AGENT_TOKEN` or `BRIDGE_HMAC_SECRET` is missing on the PC, or while pushed names are DPAPI-wrapped (vps mode): push before `agent_ctl brain vps`.
+
+The agent's Desktop Link key, made on the VPS in a one-off agent container (`--network none`, the folder of `.env.agent` mounted; the C-115 As-built form). First the laptop's own key, as the user who runs the node, if `DESKTOP_PC_PUBLIC_KEY` is not in the root `.env` yet:
+
+```bash
+$PY scripts/ops/gen_desktop_keys.py --role pc         # prints DESKTOP_PC_PUBLIC_KEY=<hex>, a public key
+$PY scripts/ops/env_set.py DESKTOP_PC_PUBLIC_KEY=<that hex> --env-file .env
+$PY scripts/ops/push_agent_env.py --keys --dry-run    # the docker run line, nothing run
+$PY scripts/ops/push_agent_env.py --keys              # public keys only; bridge.env and the PC root .env get them
+$VPS 'stat -c "%a %U %n" /opt/jarvis-agent/deploy/hostinger/.env.agent /opt/jarvis-agent/deploy/hostinger/bridge.env'   # 600 root
+```
+
+Then recreate the bridge (it reads the public keys from `bridge.env`) as in V2b step 7, run `split_bridge_env.py --check-bridge` again, and end with `$PY scripts/ops/push_agent_env.py --check` (all `equal`). `agent_ctl node update` pins the agent public key on the laptop at V4 (C-123). An existing agent key is kept; `--keys --rotate` replaces it (backups first, as above).
+
+### Before V4: PC copies of the VPS env files
+
+`fallback_env.py --wrap`, and so the wrap of `agent_ctl brain vps`, refuses while a PC copy of a VPS env file inside the repo holds a PC fallback secret in plain text (or cannot be read): `deploy/hostinger/.env` (for example a stale copy of the pre-split VPS `.env`), `deploy/hostinger/bridge.env` or `deploy/hostinger/.env.agent`, the git-ignored files the pre-commit hook scans too. No JARVIS process reads them and no deploy ships them (env files are never shipped), but in vps mode the Desktop Node and every process it starts would find those secrets on disk. Before V4, on the PC in Git Bash from the repo root, move them out of the repo after a backup outside it:
+
+```bash
+$PY scripts/ops/fallback_env.py --status       # names only: one '(PC copy of a VPS env file)' line per copy
+$PY scripts/ops/backup_local.py --now          # the usual PC backup first (its zip does not hold these copies)
+D="$PCB/pc-env-copies/$(date -u +%Y%m%dT%H%M%SZ)" && mkdir -p "$D"
+for f in deploy/hostinger/.env deploy/hostinger/bridge.env deploy/hostinger/.env.agent; do
+  [ -f "$f" ] || continue
+  t="$D/$(printf '%s' "$f" | tr / _)"
+  cp -p "$f" "$t" && cmp -s "$f" "$t" && rm "$f" && echo "moved $f"   # names only; never print a copy
+done
+$PY scripts/ops/fallback_env.py --status       # no '(PC copy of a VPS env file)' line is left
+```
+
+- `$PCB` is the PC backup folder outside the repo (the shorthands at the top). A copy leaves the repo only once its backup there reads back identical. Keep that folder as long as you may need the copies, and never copy one back into the repo: they hold the values of their day, while the live values are on the VPS and in the PC root `.env` (or the store).
+- Until then `--status` names each copy with the fallback names it holds, and `--wrap` refuses with the same names (exit 1, nothing written).
+
+### The PC fallback secrets (vps mode)
+
+User decision D13: while the VPS brain runs, the PC fallback's secrets (`LIVEKIT_API_SECRET`, the legacy token, the AI, image, search and weather keys, `SIM_LOOKUP_API_KEY`, `EMAIL_APP_PASSWORD`) leave the PC env files for the DPAPI-wrapped `run/fallback.env.dpapi` (`scripts/ops/fallback_env.py`, the node keys' DPAPI helper, a file only this Windows user can open). Neither the Desktop Node nor a process it starts finds them in the root `.env` then.
+
+- `agent_ctl brain vps` wraps them once the node has started. `agent_ctl brain pc` unwraps them back into the env files before it starts the PC worker; a `brain pc` that starts nothing (already pc, or `--laptop-only`) does it at its end. Never while the Desktop Node still runs: a `brain pc` that would start nothing exits 4, and the PC worker start of a switch (or of the restore of a failed `brain vps` whose node stop failed) is not made, so the secrets stay wrapped (stop the node, then run `brain pc` again). Nothing else unwraps them, and a PC worker start is refused (exit 4) while the store exists.
+- Names only: `$PY scripts/ops/fallback_env.py --status`. By hand: `--wrap [--dry-run]`, and `--restore [--dry-run]` as the emergency way back. `--wrap` refuses while a PC copy of a VPS env file holds a fallback secret ([Before V4](#before-v4-pc-copies-of-the-vps-env-files)).
+- A store this Windows user can never unwrap (the repo copied to another PC or Windows user, a rebuilt Windows profile) keeps the PC fallback down: every PC worker start is refused while it exists, `brain pc` cannot restore it, and the tools that read it refuse (`could not be unwrapped by this Windows user`, followed by this way out). Move it aside, never delete it, then enter the values again:
+
+  ```bash
+  $PY scripts/ops/fallback_env.py --discard --dry-run   # names only: why it cannot be used, what it holds, where it would go
+  $PY scripts/ops/fallback_env.py --discard --confirm   # renamed to run/fallback.env.dpapi.unreadable-<UTC>
+  # once per name it held: n the name on this PC, v the name in the VPS copy, f that copy (.env.agent: the AI, image,
+  # search, weather, SIM and email keys; .env: LIVEKIT_API_SECRET, LIVEKIT_PC_API_SECRET and the legacy token)
+  n=GOOGLE_API_KEY v=GOOGLE_API_KEY f=.env.agent
+  $VPS "sed -n 's/^$v=//p' /opt/jarvis-agent/deploy/hostinger/$f | tail -n 1" | sed "s/^'\(.*\)'\$/\1/" | $PY scripts/ops/fallback_env.py --set $n --value-from-stdin
+  $PY scripts/ops/push_agent_env.py --check             # each pushed name: 'equal to this PC'
+  $PY scripts/ops/fallback_env.py --wrap                # vps mode: wrapped again, for this Windows user
+  ```
+
+  `--discard` refuses while this Windows user can unwrap the store (`--restore` or `brain pc` then puts the values back), and it never overwrites an earlier aside file; delete that file only once you are sure (renamed back, it is the store again). Each pipe carries one value from the VPS straight into `--set` (no store now, so into the root `.env`), never onto a screen or a command line; the second `sed` drops the single quotes the env tools put around a value with spaces. After V6 `activate` this PC's `LIVEKIT_API_SECRET` is the PC pair's: `n=LIVEKIT_API_SECRET v=LIVEKIT_PC_API_SECRET f=.env`, then `livekit_pc_pair.py verify`. Instead of copying, a name can get a new value on both sides with `rotate_env_secret.py` (the main LiveKit pair: `rotate_livekit_keys.py`; the PC pair: `livekit_pc_pair.py create --rotate`, the LiveKit recreate and `activate`). In vps mode run `--wrap` right after the last `--set`, so the values do not stay in the root `.env` beside the Desktop Node.
+- In vps mode a rotated value goes where its name is now, and `rotate_env_secret.py` does both sides in one run: `$PY scripts/ops/rotate_env_secret.py --name NAME --pc-files .env --vps-file /opt/jarvis-agent/deploy/hostinger/.env.agent [--value-from-stdin]`. While `run/fallback.env.dpapi` exists, a fallback name (`fallback_env.FALLBACK_NAMES`) given with `--pc-files` goes into that store (`fallback_env.put_values`), never into an env file, and the given env files lose any copy of it; `--alias` follows when the PC holds it. Before its VPS step the tool checks, writing nothing, that this Windows user can unwrap the store and that the env files can be written, and refuses otherwise (exit 2, nothing written anywhere). A `--name` and `--alias` of which only one is a fallback name are refused (exit 2): rotate them one at a time. The PC side alone: `$PY scripts/ops/fallback_env.py --set NAME --value-from-stdin`. Either way the value is piped in or typed into a console that hides it, never on a command line (C-18).
+- The pre-commit hook still finds a wrapped value in a staged line (`ENV_VALUE:<NAME>`): it unwraps the store in its own process, as this Windows user, and keeps the values in memory only. When it cannot (another Windows user, a damaged store), it names the wrapped names on stderr, with the way out above, and runs every other check.
+- The LiveKit pair in vps mode (backups first, an announced window): `$PY scripts/ops/rotate_livekit_keys.py --dry-run`, then without `--dry-run`, with the default PC files. While `run/fallback.env.dpapi` exists the new `LIVEKIT_API_SECRET` goes into that store, never into an env file, and `LIVEKIT_API_KEY` into the root `.env` (`deploy/windows-local/.env` loses its own key line, so no old copy stays); before its VPS step the tool checks, writing nothing, that this Windows user can unwrap the store and the env files can be written, and refuses otherwise (exit 2, nothing written anywhere). If the PC side still fails after the VPS step (exit 1, names printed), fix the cause and run the rotation again: it makes a new pair for both sides (between V6 `create` and `activate` that run is refused, because the PC's key is no longer the VPS one: run `activate`, or copy the VPS `.env`'s main pair over with `fallback_env.py --set`). Then on the VPS recreate `livekit` and `ui-bridge` and the VPS brain's `agent` and `agent-svc` (they read the pair from `.env.agent`): the two `docker compose` lines the tool prints. Then `--check-old <backup it printed>` (`old key rejected: 401`). The PC worker takes the new pair at the next `agent_ctl brain pc`, which unwraps the store. After V6 `activate` the PC holds the PC pair instead (after a later `create --rotate` still the earlier one, until `activate` runs again): rotate the main pair with `--pc-files ''`. A rotation with PC files is then refused by its VPS step (exit 2, nothing written on the VPS or the PC, the dry run too): the tool sends the PC's `LIVEKIT_API_KEY` values (keys, never a secret) along, and while the VPS `.env` holds a PC pair the VPS step refuses when one of them is its `LIVEKIT_PC_API_KEY`, or when none of them is its `LIVEKIT_API_KEY` (the PC does not hold the main pair), because the new main pair would overwrite the PC pair or reach a PC that does not hold it, and a later `revoke` would cut nothing off. Before V6 `create` neither check applies, so a PC that an earlier rotation missed is brought up to date.
+- `backup_local.py` copies the env files, not `run/`: in vps mode its zip holds no fallback secret. The store opens only for this Windows user on this PC; `.env.agent` (AI keys) and the VPS env files (LiveKit, legacy token) hold the same values.
+
+### V6: the PC fallback's LiveKit pair
+
+Plan step 6: the PC fallback gets its own LiveKit pair, so it can be revoked without touching the bridge, the VPS agent or the browsers. It is applied only in the V6 LiveKit window (announced; LiveKit restarts once). The tool support is `scripts/ops/livekit_pc_pair.py`; until that window `docker-compose.yml` names one pair only.
+
+1. `$PY scripts/ops/livekit_pc_pair.py create --dry-run`, then `create`: the VPS `.env` gets `LIVEKIT_PC_API_KEY` and `LIVEKIT_PC_API_SECRET` (backup first), and the PC the same pending pair (the secret in the DPAPI store while wrapped). Nothing uses it yet.
+2. In the window, the compose change, committed and deployed with `--services livekit` (RUNBOOK [Deploy](#deploy-claude-only)); the `\n` in the double-quoted string makes the two lines LiveKit parses as two keys, and `:?` makes compose refuse while the pair is missing:
+
+   ```yaml
+       environment:
+         LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}\n${LIVEKIT_PC_API_KEY:?run livekit_pc_pair.py create}: ${LIVEKIT_PC_API_SECRET:?run livekit_pc_pair.py create}"
+   ```
+
+   `split_bridge_env.py` keeps both names in `.env` from then on (they are interpolated). Restart the PC worker after the LiveKit recreate if the PC brain runs (`agent_ctl restart`), as after every LiveKit restart, and check one voice question: the bridge, the VPS agent and the browsers still use the main pair.
+3. `$PY scripts/ops/livekit_pc_pair.py verify`: `PC pair accepted`, then `this PC's ... are the VPS .env pair (HMAC digests)`. It checks this PC's own copy, the one the PC worker would use (the pending names before `activate`, `LIVEKIT_API_KEY`/`LIVEKIT_API_SECRET` after it; a wrapped secret is unwrapped in the tool's process): that copy goes on ssh stdin to the VPS, a ListRooms call signed with it is made inside `jarvis-bridge`, and the VPS sends back only the HMAC digests of its own pair to compare. Exit 0 only when LiveKit accepts this PC's copy and it equals the VPS `.env` pair.
+4. `activate --dry-run`, then `activate`: verify again with the pending pair, which LiveKit must accept and whose key and secret must both equal the VPS ones by HMAC digest (a revoked or stale pending secret is refused, so it never replaces the working main pair), then the PC's `LIVEKIT_API_KEY`/`LIVEKIT_API_SECRET` take the PC pair (the key in the root `.env`, the secret in the root `.env` or, while wrapped, in the DPAPI store), and `deploy/windows-local/.env` loses its own `LIVEKIT_API_KEY`/`LIVEKIT_API_SECRET` lines, so no copy of the main pair stays on the PC. The env files are staged before the store is written; when they cannot be written (for example a read-only `.env`, or one that another program holds open), the store is put back byte for byte and `activate` can simply run again. The PC worker uses the PC pair from its next start. From then on rotate the main pair with `rotate_livekit_keys.py --pc-files ''`: the PC no longer holds it, and a rotation with PC files is refused (exit 2, nothing written), since it would overwrite the PC pair or hand the PC the main pair (also after a later `create --rotate`, until `activate` runs again).
+5. Revoke the PC pair alone: `revoke --dry-run`, then `revoke` (the VPS secret gets a random value nobody holds). Until LiveKit is recreated it still accepts the old secret: `verify` prints `PC pair accepted` and that this PC's secret is no longer the VPS one, exit 1. Then in an announced window `docker compose -p jarvis up -d --no-deps --force-recreate livekit`; `verify` then prints `PC pair rejected: 401`, exit 1. Back: `create --rotate`, the LiveKit recreate, `verify`, `activate`. The PC pair is one of the shared values of `rollback.sh --with-env` ([Rollback](#rollback)): a rollback to a backup taken between `create` and the revoke is refused (exit 1, names only), because its `.env` holds the revoked secret (a backup from before `create` holds no PC pair at all); `--shared-values-differ-ok` only with a `revoke` again right after.
 
 ## Testing the deploy tooling
 
@@ -448,18 +608,19 @@ Rollback: `$VPS /root/jarvis-backups/tools/rollback.sh --last`. That is one more
 
 | File | Source | Notes |
 |---|---|---|
-| `opt-jarvis-agent.tgz` | `/opt/jarvis-agent` without `stonix_ui/node_modules` | Members are `jarvis-agent/...`, so extract with `-C /opt`. Also holds the env files and `livekit.yaml`. |
+| `opt-jarvis-agent.tgz` | `/opt/jarvis-agent` without `stonix_ui/node_modules` | Members are `jarvis-agent/...`, so extract with `-C /opt`. Also holds `livekit.yaml` and the env files except `.env.agent` (C-127: the agent's secrets are only in `env.agent`, which the PC mirror leaves out). |
 | `jarvis.conf` | `/etc/nginx/conf.d/jarvis.conf` | |
 | `jarvis.htpasswd` | `/etc/nginx/jarvis.htpasswd` | Copied only when present. |
 | `hostinger.env` | `/opt/jarvis-agent/deploy/hostinger/.env` | Compose interpolation and the bridge `env_file`. |
 | `bridge.env` | `/opt/jarvis-agent/deploy/hostinger/bridge.env` | Copied only when present (after C-ENV-1). |
+| `env.agent` | `/opt/jarvis-agent/deploy/hostinger/.env.agent` | Copied only when present (C-127; the VPS brain's secrets, the agent's link private key among them, K-70). It stays on the VPS: the PC mirror below leaves it out. |
 | `root.env` | `/opt/jarvis-agent/.env` | Copied only when present. |
 | `DEPLOYED_SHA` | `/opt/jarvis-agent/DEPLOYED_SHA` | Copied only when present (after C-12). |
 | `volumes.tgz` | `/app/logs`, `/app/Jarvis_Outputs`, `/app/Jarvis_Shared`, `/app/data` of the bridge | Made by `docker exec jarvis-bridge tar`. If the bridge is down, a one-off `compose run` container makes it instead. The live SQLite files are left out when `bridge.db` was captured. |
 | `bridge.db` | `/app/data/bridge.db` | Present only when that DB exists. Taken online with the SQLite backup API, passes `integrity_check`, then `docker cp`. |
 | `images.txt` | Docker | Rollback tags with their image ids, plus the LiveKit image ref and id. |
 | `docker-ps.txt`, `containers.txt` | Docker | State of project `jarvis`: image, health and mounts. No env values. |
-| `MANIFEST.txt`, `SHA256SUMS` | | Summary with any warnings and errors, plus checksums for `sha256sum -c`. |
+| `MANIFEST.txt`, `SHA256SUMS` | | Summary with any warnings and errors, the env layout (`env_layout:` lines: each env file the containers read, present or absent, and its names, never a value; [Rollback](#rollback) compares it), plus checksums for `sha256sum -c`. |
 
 The script also tags the images that the `jarvis-bridge` and `jarvis-frontend` containers are running as `jarvis-bridge:rollback-<folder>` and `jarvis-frontend:rollback-<folder>`. These are normally the `:hostinger` images.
 
@@ -471,7 +632,7 @@ The script never deletes or changes an older backup. It prints `BACKUP_DIR=<fold
 - `--full-tree` writes `tree_<ts>.tar.gz`: the whole repo, including `.git`, without `.venv_312`, `stonix_ui/node_modules`, `pretrained_models` and caches. Add `--no-git` to also leave out `.git`. Rotation never deletes these archives.
 - `--list` shows the local backups, the older one-off archives in `JARVIS-backups\` and the VPS mirrors in `JARVIS-backups\vps\`.
 
-The VPS mirrors and the PC backups contain secrets (env files, htpasswd, tokens inside the tarballs). Keep them in `JARVIS-backups`, which is outside the repo, and never commit or share them.
+The VPS mirrors and the PC backups contain secrets (env files, htpasswd, tokens inside the tarballs). Keep them in `JARVIS-backups`, which is outside the repo, and never commit or share them. The mirror never holds `.env.agent` (C-127): K-70 keeps the agent's link private key on the VPS, and in vps mode the PC holds its AI keys only DPAPI-wrapped (D13). Encrypting the other env copies to the PC backup key is C-128.
 
 ### Known snapshots
 
@@ -481,7 +642,7 @@ The VPS mirrors and the PC backups contain secrets (env files, htpasswd, tokens 
 | `2026-10-01_0825Z-first-scripted` | `backup_vps.sh` v1, first run | `jarvis-{bridge,frontend}:rollback-2026-10-01_0825Z-first-scripted` | State after the emergency fixes. |
 | `2026-10-01_0826Z-verify` | `backup_vps.sh` v1, verify run | `jarvis-{bridge,frontend}:rollback-2026-10-01_0826Z-verify` | Same state as above. |
 
-Treat the `pre-emergency` snapshot as disaster recovery only. Its code archive has the old, revoked token and `5100` published on all interfaces, and its frontend image has the revoked token in the JS bundle. Restoring it undoes the 30 Sep security fixes, so use it only to recover data or as a last resort.
+Treat the `pre-emergency` snapshot as disaster recovery only. Its code archive has the old, revoked token and `5100` published on all interfaces, and its frontend image has the revoked token in the JS bundle. Restoring it undoes the 30 Sep security fixes, so use it only to recover data or as a last resort. After V2b (C-127) its bridge image cannot start with the split env files at all (its legacy `config.validate()` needs `GOOGLE_API_KEY` in `.env`), and `rollback.sh` refuses its tags, which record no env layout, unless `--layout-unknown-ok`.
 
 ### Take a VPS backup
 
@@ -494,34 +655,35 @@ $VPS 'bash /opt/jarvis-agent/deploy/hostinger/backup_vps.sh pre-deploy'
 
 ### Mirror VPS backups to the PC
 
-Copy a single snapshot and check it:
+The mirror takes only `backup_vps.sh` folders (they hold `MANIFEST.txt`; the env tools' backups in `/root/jarvis-backups/env/` and other tools' folders are never copied) and streams each one through tar without its `env.agent` (C-127), so that file never reaches the PC, not even for a moment. Copy a single snapshot and check it (`SHA256SUMS` without its `env.agent` line):
 
 ```bash
 mkdir -p "$PCB/vps"
 TS=2026-10-01_0826Z-verify
-scp -p -r -i ~/.ssh/id_ed25519_hostinger -o BatchMode=yes "root@187.127.123.235:/root/jarvis-backups/$TS" "$PCB/vps/"
-(cd "$PCB/vps/$TS" && sha256sum -c --quiet SHA256SUMS && echo MIRROR_OK)
+$VPS "tar -C /root/jarvis-backups --exclude=$TS/env.agent -cf - $TS" | tar -C "$PCB/vps" -xf -
+(cd "$PCB/vps/$TS" && grep -v '  env\.agent$' SHA256SUMS | sha256sum -c --quiet - && echo MIRROR_OK)
 ```
 
 Copy every snapshot that is not on the PC yet. This never overwrites or deletes anything:
 
 ```bash
-for TS in $($VPS 'ls -1 /root/jarvis-backups | grep "^2"'); do
-  [ -e "$PCB/vps/$TS" ] || scp -p -r -q -i ~/.ssh/id_ed25519_hostinger -o BatchMode=yes \
-    "root@187.127.123.235:/root/jarvis-backups/$TS" "$PCB/vps/"
+for TS in $($VPS 'cd /root/jarvis-backups && ls -1d 2*/MANIFEST.txt | cut -d/ -f1'); do
+  [ -e "$PCB/vps/$TS" ] || $VPS "tar -C /root/jarvis-backups --exclude=$TS/env.agent -cf - $TS" | tar -C "$PCB/vps" -xf -
 done
 ```
+
+The old `scp -r` loop copied every `2*` name, so an older mirror can also hold other tools' folders (old env copies, without `MANIFEST.txt`): delete those on the PC only after the user's OK.
 
 The hand-made `2026-09-30_2340` snapshot has no `SHA256SUMS`. Check it by comparing `find . -type f -print0 | sort -z | xargs -0 sha256sum` on both sides.
 
 ### Restore drill (read-only; run after every backup)
 
 ```bash
-$VPS 'D=$(ls -1d /root/jarvis-backups/2* | tail -1); tar --compare -z -f $D/opt-jarvis-agent.tgz -C /opt 2>&1 | grep -v DEPLOYED_SHA | head; echo RESTORE_DRILL_DONE'
-$VPS 'D=$(ls -1d /root/jarvis-backups/2* | tail -1); cd $D && sha256sum -c --quiet SHA256SUMS && tar -tzf volumes.tgz >/dev/null && echo ARCHIVES_OK'
+$VPS 'D=$(ls -1d /root/jarvis-backups/2*/MANIFEST.txt | tail -1); D=${D%/MANIFEST.txt}; tar --compare -z -f $D/opt-jarvis-agent.tgz -C /opt 2>&1 | grep -v DEPLOYED_SHA | head; echo RESTORE_DRILL_DONE'
+$VPS 'D=$(ls -1d /root/jarvis-backups/2*/MANIFEST.txt | tail -1); D=${D%/MANIFEST.txt}; cd $D && sha256sum -c --quiet SHA256SUMS && tar -tzf volumes.tgz >/dev/null && echo ARCHIVES_OK'
 ```
 
-If nothing is printed before `RESTORE_DRILL_DONE`, the live `/opt/jarvis-agent` matches the backup. Right after a deploy, a list of differences is expected.
+`D` is the newest `backup_vps.sh` folder: only those hold `MANIFEST.txt`, so another tool's `2*` folder is never taken. If nothing is printed before `RESTORE_DRILL_DONE`, the live `/opt/jarvis-agent` matches the backup. Right after a deploy, a list of differences is expected.
 
 ### Restore (restore only what is broken)
 
@@ -570,16 +732,16 @@ nginx -t && systemctl reload nginx
 
 For the `2026-09-30_2340` snapshot, use `nginx-jarvis.conf.live` instead. It has no htpasswd.
 
-**4. Env files.**
+**4. Env files.** With `rollback.sh` (C-127), dry run first. It puts the env files back together with the image and the compose file they belong to, and only the env files that the services it recreates read. It checks the env layout and the shared values first, keeps the live `JARVIS_BRAIN`, `COMPOSE_PROFILES` and Desktop Link key lines, and moves a live `bridge.env` that the backup never had aside ([Rollback](#rollback)):
 
 ```bash
-install -m 600 $B/hostinger.env /opt/jarvis-agent/deploy/hostinger/.env
-[ ! -f $B/bridge.env ] || install -m 600 $B/bridge.env /opt/jarvis-agent/deploy/hostinger/bridge.env
-[ ! -f $B/root.env ]   || install -m 600 $B/root.env   /opt/jarvis-agent/.env
-$C up -d --no-build --no-deps ui-bridge
+bash $T/rollback.sh ${B##*/} --services ui-bridge --with-env --dry-run   # each env file it replaces, keeps or moves aside
+bash $T/rollback.sh ${B##*/} --services ui-bridge --with-env
 ```
 
-A `hostinger.env` from before C-126 has no `JARVIS_BRAIN`: put the live line back first (`grep -c '^JARVIS_BRAIN=..*' /opt/jarvis-agent/deploy/hostinger/.env` must say 1), or every compose command refuses. Compose recreates the bridge when its env changes. Build args are baked into the frontend image, so for the frontend either roll the image back (step 1) or rebuild it. If the LiveKit keys changed, also run `$C up -d --no-deps livekit`.
+- `.env.agent` (the backup's `env.agent`) goes back only with a rollback that recreates `agent` and `agent-svc` (`--services agent,agent-svc --with-env`, in vps mode only: in pc mode they stay stopped, K-72), never with the bridge alone: at their next restart they would meet it out of step with their image.
+- Do not `install` the backup's env files by hand. A plain copy brings back the backup's `DESKTOP_AGENT_PUBLIC_KEY` and `DESKTOP_PC_PUBLIC_KEY` in `bridge.env` (and `DESKTOP_AGENT_SIGNING_KEY` with them in `.env.agent`), whose other halves are on the laptop, so the bridge's `/desktop` relay would switch off or refuse every PC-signed request; and it checks neither the env layout nor the shared values. If `rollback.sh` cannot run at all and you copy the env files of the services you recreate anyway (`.env.agent` only together with `agent` and `agent-svc`, as above), put the live lines back from the `pre-restore` backup above before any `up`: `JARVIS_BRAIN` and `COMPOSE_PROFILES` into `.env` (a `hostinger.env` from before C-126 has no `JARVIS_BRAIN`, and every compose command refuses without it; `grep -c '^JARVIS_BRAIN=..*' /opt/jarvis-agent/deploy/hostinger/.env` must say 1), the two public keys into `bridge.env`, and those two and `DESKTOP_AGENT_SIGNING_KEY` into `.env.agent`. Make `AGENT_TOKEN`, `BRIDGE_HMAC_SECRET` and the LiveKit pairs equal to the live values (the PC, the laptop and every service you do not recreate keep those), then recreate those services with `$C up -d --no-build --no-deps <services>` (the bridge: `ui-bridge`).
+- Build args are baked into the frontend image, so for the frontend either roll the image back (step 1) or rebuild it.
 
 **5. Volumes** (bridge logs, outputs, shared files and data):
 

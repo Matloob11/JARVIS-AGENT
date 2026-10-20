@@ -1871,10 +1871,16 @@ def test_a_second_brain_run_is_refused_while_one_runs(ctl, monkeypatch, capsys):
     assert not (ctl.run / agent_ctl.BRAIN_LOCK_FILE).exists()   # released after the switch
 
 
+def _held_since() -> float:
+    """A live lock's time: 5 s ago, but never before this process started. agent_ctl takes a lock whose pid is
+    younger than the lock for a reused pid (stale), and a freshly started pytest process is younger than 5 s."""
+    return max(time.time() - 5, agent_ctl.psutil.Process(os.getpid()).create_time())
+
+
 def test_a_held_brain_lock_refuses_before_any_vps_call(ctl, monkeypatch, capsys):
     ctl.run.mkdir(parents=True)
     lock = ctl.run / agent_ctl.BRAIN_LOCK_FILE
-    lock.write_text(json.dumps({"pid": os.getpid(), "ts": time.time() - 5, "by": "user"}), encoding="utf-8")
+    lock.write_text(json.dumps({"pid": os.getpid(), "ts": _held_since(), "by": "user"}), encoding="utf-8")
     vps = FakeVps(brain="pc")
     monkeypatch.setattr(agent_ctl, "_default_ssh", vps)
     monkeypatch.setattr(agent_ctl, "LaptopBrain", lambda args: pytest.fail("no laptop step"))
@@ -1942,7 +1948,7 @@ def _restart_while_brain_lock_held(module: types.ModuleType, ctl, monkeypatch) -
         0, {"result": "started", "new_pid": 222, "start_s": 1.0, "room_result": "OK"}))
     ctl.run.mkdir(parents=True, exist_ok=True)
     lock = ctl.run / agent_ctl.BRAIN_LOCK_FILE
-    lock.write_text(json.dumps({"pid": os.getpid(), "ts": time.time() - 5, "by": "user"}), encoding="utf-8")
+    lock.write_text(json.dumps({"pid": os.getpid(), "ts": _held_since(), "by": "user"}), encoding="utf-8")
     try:
         code = module.main(["restart", "--by", "claude", "--reason", "OPS", "--force"])
     finally:
@@ -1975,7 +1981,7 @@ def test_the_workers_own_recovery_passes_the_brain_lock_gate(ctl, monkeypatch, c
     refused by its own rule (the worker that asked no longer runs), not by the brain lock."""
     ctl.run.mkdir(parents=True)
     (ctl.run / agent_ctl.BRAIN_LOCK_FILE).write_text(
-        json.dumps({"pid": os.getpid(), "ts": time.time() - 5, "by": "user"}), encoding="utf-8")
+        json.dumps({"pid": os.getpid(), "ts": _held_since(), "by": "user"}), encoding="utf-8")
     monkeypatch.setattr(agent_ctl.agent_lock, "is_locked", lambda: False)
     monkeypatch.setattr(agent_ctl, "stop_worker", lambda *a, **k: pytest.fail("nothing to stop"))
 
@@ -2478,3 +2484,199 @@ def test_in_agent_venv_follows_sys_prefix(monkeypatch, tmp_path):
     assert agent_ctl._in_agent_venv() is True
     monkeypatch.setattr(sys, "prefix", str(tmp_path))
     assert agent_ctl._in_agent_venv() is False
+
+
+# =============================================================================================================
+# C-127 step 5 (D13): the PC fallback secrets are DPAPI-wrapped in vps mode; only 'brain pc' unwraps them
+# =============================================================================================================
+
+FALLBACK_ROOT_ENV = ("JARVIS_BRAIN=pc\r\nLIVEKIT_API_KEY=APIkeep\r\nLIVEKIT_API_SECRET=c127-fake-livekit\r\n"
+                     "GOOGLE_API_KEY=c127-fake-google\r\nAGENT_TOKEN=c127-fake-agent-stays\r\n")
+
+
+def _fake_dpapi(monkeypatch) -> types.ModuleType:
+    """scripts/ops/fallback_env.py exactly as agent_ctl loads it, with a fake DPAPI (a reversible scramble) and ACL."""
+    module = agent_ctl._fallback_env()
+    monkeypatch.setattr(module, "dpapi_protect", lambda data: b"F:" + bytes(b ^ 0x21 for b in data))
+    monkeypatch.setattr(module, "dpapi_unprotect", lambda blob: bytes(b ^ 0x21 for b in blob[2:]))
+    monkeypatch.setattr(module, "restrict_to_user", lambda _path: None)
+    return module
+
+
+def _no_fallback_values(text: str) -> None:
+    assert "c127-fake" not in text, "a fallback secret reached the output"
+
+
+def test_brain_vps_wraps_the_fallback_secrets_and_brain_pc_restores_them_before_the_worker(ctl, monkeypatch,
+                                                                                          capsys):
+    """End to end with the real LaptopBrain: 'brain vps' wraps the secrets once the node runs (they leave the root
+    .env), a PC worker start is refused while they are wrapped, and 'brain pc' unwraps them before its worker."""
+    _fake_dpapi(monkeypatch)
+    _pin_snapshot(ctl)
+    ctl.env.write_bytes(FALLBACK_ROOT_ENV.encode())
+    live = LiveStatus("pc")
+    state = _real_laptop(ctl, monkeypatch, node_up=False, live=live, vps=FakeVps(brain="pc"))
+    monkeypatch.setattr(agent_ctl.agent_lock, "is_locked", lambda: False)
+
+    def schtasks(*args, check=False):
+        state["events"].append(("schtasks", *args))
+        if args[:1] == ("/Run",):
+            state["node_up"] = True
+            live.brain = "vps"
+        return subprocess.CompletedProcess(["schtasks", *args], 0, "", "")
+
+    monkeypatch.setattr(agent_ctl, "_schtasks", schtasks)
+    assert agent_ctl.main(["brain", "vps", "--now", "--by", "claude", "--reason", "C-127"]) == 0
+    store = ctl.run / agent_ctl.FALLBACK_STORE_FILE
+    root = ctl.env.read_text(encoding="utf-8")
+    assert store.exists() and "LIVEKIT_API_SECRET" not in root and "GOOGLE_API_KEY" not in root
+    assert "JARVIS_BRAIN=vps" in root and "AGENT_TOKEN=c127-fake-agent-stays" in root and "LIVEKIT_API_KEY" in root
+
+    # the switch back: the worker the switch starts must find the secrets in the env files again
+    seen: list = []
+
+    def start_worker(args, mode, **_kwargs):
+        seen.append(ctl.env.read_text(encoding="utf-8"))
+        live.brain = "pc"
+        return agent_ctl.EXIT_OK, {"result": "started"}
+
+    monkeypatch.setattr(agent_ctl, "start_worker", start_worker)
+    monkeypatch.setattr(agent_ctl, "_default_ssh", FakeVps(brain="vps"))
+    assert agent_ctl.main(["brain", "pc", "--now", "--by", "claude", "--reason", "C-127"]) == 0
+    assert not store.exists()
+    assert "LIVEKIT_API_SECRET=c127-fake-livekit" in seen[0] and "GOOGLE_API_KEY=c127-fake-google" in seen[0]
+    out = capsys.readouterr()
+    _no_fallback_values(out.out + out.err)
+
+
+def test_a_worker_start_is_refused_while_the_fallback_secrets_are_wrapped(ctl, monkeypatch, capsys):
+    ctl.run.mkdir(parents=True)
+    ctl.env.write_text("JARVIS_BRAIN=pc\n", encoding="utf-8")
+    (ctl.run / agent_ctl.FALLBACK_STORE_FILE).write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(agent_ctl.agent_lock, "is_locked", lambda: False)
+    monkeypatch.setattr(agent_ctl, "_port_problem", lambda: pytest.fail("refused before the port check"))
+    assert agent_ctl.main(["start", "--by", "user"]) == agent_ctl.EXIT_REFUSED
+    err = capsys.readouterr().err
+    assert "still DPAPI-wrapped in run/fallback.env.dpapi" in err and "brain pc --by <you>" in err
+    entry = audit_lines(ctl.logs)[-1]
+    assert (entry["action"], entry["result"]) == ("start", "refused")
+
+
+@pytest.mark.parametrize("node_up", [False, True])
+def test_a_brain_pc_that_starts_nothing_restores_the_wrapped_secrets(ctl, monkeypatch, capsys, node_up):
+    """'brain pc --laptop-only' (the VPS cannot be read) starts no worker: it unwraps the secrets at its end, unless
+    the Desktop Node still runs (exit 4, the store kept: the node must not meet them)."""
+    module = _fake_dpapi(monkeypatch)
+    ctl.run.mkdir(parents=True)
+    ctl.env.write_bytes(FALLBACK_ROOT_ENV.replace("JARVIS_BRAIN=pc", "JARVIS_BRAIN=vps").encode())
+    assert module.wrap([ctl.env], ctl.run, worker=False).code == 0
+    _unreachable_vps(monkeypatch)
+    monkeypatch.setattr(agent_ctl, "node_running", lambda: node_up)
+    code = agent_ctl.main(["brain", "pc", "--laptop-only", "--by", "user"])
+    store = ctl.run / agent_ctl.FALLBACK_STORE_FILE
+    root = ctl.env.read_text(encoding="utf-8")
+    entry = audit_lines(ctl.logs)[-1]
+    if node_up:
+        assert code == agent_ctl.EXIT_REFUSED and store.exists() and "GOOGLE_API_KEY" not in root
+        assert entry["fallback_secrets"] == "kept (the Desktop Node runs)"
+        assert "stay DPAPI-wrapped while the Desktop Node runs" in capsys.readouterr().err
+    else:
+        assert code == 0 and not store.exists() and entry["fallback_secrets"] == "restored"
+        assert "GOOGLE_API_KEY=c127-fake-google" in root and "JARVIS_BRAIN=pc" in root
+    out = capsys.readouterr()
+    _no_fallback_values(out.out + out.err)
+
+
+def test_a_failed_restore_never_starts_the_pc_worker(ctl, monkeypatch, capsys):
+    module = _fake_dpapi(monkeypatch)
+    ctl.run.mkdir(parents=True)
+    ctl.env.write_bytes(FALLBACK_ROOT_ENV.replace("JARVIS_BRAIN=pc", "JARVIS_BRAIN=vps").encode())
+    assert module.wrap([ctl.env], ctl.run, worker=False).code == 0
+
+    def other_user(_blob):
+        raise OSError("DPAPI could not unwrap the data")
+
+    monkeypatch.setattr(module, "dpapi_unprotect", other_user)
+    monkeypatch.setattr(agent_ctl, "node_running", lambda: False)   # never the real 127.0.0.1:8082
+    monkeypatch.setattr(agent_ctl, "start_worker", lambda *a, **k: pytest.fail("no worker without its secrets"))
+    laptop = agent_ctl.LaptopBrain(types.SimpleNamespace(by="claude", reason="C-127"))
+    assert laptop.start("pc") == agent_ctl.EXIT_FAILED
+    assert (ctl.run / agent_ctl.FALLBACK_STORE_FILE).exists()
+    err = capsys.readouterr().err
+    assert "The PC worker was not started" in err and "could not be unwrapped by this Windows user (OSError)" in err
+    _no_fallback_values(err)
+
+
+def test_a_store_this_user_can_never_unwrap_names_the_way_out_and_discard_frees_brain_pc(ctl, monkeypatch, capsys):
+    """C-127 review: a store this Windows user can never unwrap (the repo copied to another laptop in vps mode, a
+    rebuilt profile) refused every PC worker start and every 'brain pc' restore without saying what to do, so the PC
+    fallback stayed down. Both now name 'fallback_env.py --discard --confirm'; once that moved the store aside (never
+    deleted), 'brain pc' starts the worker again."""
+    module = _fake_dpapi(monkeypatch)
+    ctl.run.mkdir(parents=True)
+    ctl.env.write_bytes(FALLBACK_ROOT_ENV.encode())                 # JARVIS_BRAIN=pc: no vps-mode refusal comes first
+    assert module.wrap([ctl.env], ctl.run, brain="vps", worker=False).code == 0
+
+    def other_user(_blob):
+        raise OSError("DPAPI could not unwrap the data")
+
+    monkeypatch.setattr(module, "dpapi_unprotect", other_user)
+    monkeypatch.setattr(agent_ctl.agent_lock, "is_locked", lambda: False)
+    monkeypatch.setattr(agent_ctl, "_port_problem", lambda: pytest.fail("refused before the port check"))
+    assert agent_ctl.main(["start", "--by", "user"]) == agent_ctl.EXIT_REFUSED
+    err = capsys.readouterr().err
+    assert "still DPAPI-wrapped in run/fallback.env.dpapi" in err and "fallback_env.py --discard --confirm" in err
+    assert "'The PC fallback secrets'" in err
+    assert "--discard --confirm" in audit_lines(ctl.logs)[-1]["error"]
+    # 'brain pc' (LaptopBrain.start): the failed restore names the way out, and no worker starts
+    monkeypatch.setattr(agent_ctl, "node_running", lambda: False)    # never the real 127.0.0.1:8082
+    started: list = []
+    monkeypatch.setattr(agent_ctl, "start_worker",
+                        lambda *a, **_k: started.append(a[1]) or (agent_ctl.EXIT_OK, {"result": "started"}))
+    laptop = agent_ctl.LaptopBrain(types.SimpleNamespace(by="claude", reason="C-127"))
+    assert laptop.start("pc") == agent_ctl.EXIT_FAILED and started == []
+    err = capsys.readouterr().err
+    assert "could not be unwrapped by this Windows user (OSError)" in err and "--discard --confirm" in err
+    # the way out: renamed aside, then 'brain pc' starts the worker
+    report = module.discard(ctl.run, confirm=True)
+    assert report.code == 0 and not (ctl.run / agent_ctl.FALLBACK_STORE_FILE).exists()
+    asides = [p.name for p in ctl.run.iterdir() if p.name.startswith(agent_ctl.FALLBACK_STORE_FILE)]
+    assert len(asides) == 1 and asides[0].startswith(agent_ctl.FALLBACK_STORE_FILE + ".unreadable-")
+    assert laptop.start("pc") == agent_ctl.EXIT_OK and started == ["start"]
+    out = capsys.readouterr()
+    _no_fallback_values(out.out + out.err + "\n".join(report.lines))
+
+
+def test_the_restore_of_a_failed_brain_vps_never_unwraps_the_secrets_beside_a_running_node(ctl, monkeypatch, capsys):
+    """'brain vps': the node starts and the secrets are wrapped, then VERIFY fails. The restore's node stop times out
+    (the node keeps answering /health): the PC worker start is not made and the secrets stay wrapped, because the node
+    must never meet them (D13) and a worker cannot run beside it anyway."""
+    module = _fake_dpapi(monkeypatch)
+    _pin_snapshot(ctl)
+    ctl.env.write_bytes(FALLBACK_ROOT_ENV.encode())
+    live = LiveStatus("pc")   # VERIFY never sees the vps agent
+    state = _real_laptop(ctl, monkeypatch, node_up=False, live=live, vps=FakeVps(brain="pc"))
+    monkeypatch.setattr(agent_ctl.agent_lock, "is_locked", lambda: False)
+
+    def stop_times_out(timeout=agent_ctl.NODE_STOP_TIMEOUT_S):
+        state["events"].append(("node_stop_request", timeout))
+        return False, f"the node still answers /health {timeout:g} s after POST /stop"
+
+    monkeypatch.setattr(agent_ctl, "node_stop_request", stop_times_out)
+    restores: list = []
+    real_restore = module.restore_for_brain_pc
+    monkeypatch.setattr(module, "restore_for_brain_pc", lambda *a, **k: restores.append(a) or real_restore(*a, **k))
+
+    assert agent_ctl.main(["brain", "vps", "--now", "--by", "claude", "--reason", "C-127"]) == agent_ctl.EXIT_FAILED
+
+    assert state["node_up"] is True and ("node_stop_request", agent_ctl.NODE_STOP_TIMEOUT_S) in state["events"]
+    store = ctl.run / agent_ctl.FALLBACK_STORE_FILE
+    root = ctl.env.read_text(encoding="utf-8")
+    assert store.exists() and restores == []
+    assert "LIVEKIT_API_SECRET" not in root and "GOOGLE_API_KEY" not in root   # never back beside the node
+    assert not [e for e in state["events"] if e[0] == "start_worker"]
+    err = capsys.readouterr().err
+    assert "The PC worker was not started: the Desktop Node still runs; the PC fallback secrets stay DPAPI-wrapped" \
+        in err
+    assert "restore could not start the PC worker: exit 1" in err
+    _no_fallback_values(err)

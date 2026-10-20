@@ -36,8 +36,10 @@ LANES = check_lane.load_lanes(str(LANES_JSON))
 
 
 def _env(agent: str | None = None) -> dict:
-    """Environment without GIT_* (so git can only see the repo in cwd) and with JARVIS_AGENT only when given."""
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_") and k != "JARVIS_AGENT"}
+    """Environment without GIT_* (so git can only see the repo in cwd), without JARVIS_RUN_DIR (so the hook looks for
+    the DPAPI fallback store only under the throwaway repo) and with JARVIS_AGENT only when given."""
+    env = {k: v for k, v in os.environ.items()
+           if not k.startswith("GIT_") and k not in ("JARVIS_AGENT", "JARVIS_RUN_DIR")}
     if agent is not None:
         env["JARVIS_AGENT"] = agent
     return env
@@ -507,6 +509,116 @@ def test_env_files_are_refused_and_names_only_templates_pass(precommit, path, ru
 def test_the_agent_env_file_values_are_scanned_too(precommit):
     assert "deploy/hostinger/.env.agent" in precommit.ENV_FILES
     assert "deploy/hostinger/bridge.env" in precommit.ENV_FILES
+
+
+# ---------------------------------------------------------------- the DPAPI-wrapped PC fallback secrets (C-127 review)
+
+WRAPPED_SECRET = "c127-fake-wrapped-livekit-secret-0123"
+PLAIN_AGENT_TOKEN = "c127-fake-plain-agent-token-4567"
+
+
+def _fallback_env():
+    spec = importlib.util.spec_from_file_location("jarvis_ops_fallback_env_for_check_lane",
+                                                  ROOT / "scripts" / "ops" / "fallback_env.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _fake_protect(data: bytes) -> bytes:
+    """A reversible scramble standing in for Windows DPAPI, so no value is plain text in the store."""
+    return b"FAKE-DPAPI:" + bytes(b ^ 0x3C for b in data)
+
+
+def _fake_unprotect(blob: bytes) -> bytes:
+    if not blob.startswith(b"FAKE-DPAPI:"):
+        raise OSError("not ours")
+    return bytes(b ^ 0x3C for b in blob[len(b"FAKE-DPAPI:"):])
+
+
+@pytest.fixture(name="vps_mode_root")
+def fixture_vps_mode_root(precommit, tmp_path, monkeypatch):
+    """A repo root under tmp_path as 'agent_ctl brain vps' leaves it: the root .env keeps AGENT_TOKEN (not a fallback
+    secret) and no LiveKit secret, which is in run/fallback.env.dpapi (fallback_env's own writer, a fake DPAPI)."""
+    fallback_env = _fallback_env()
+    (tmp_path / ".env").write_text(f"JARVIS_BRAIN=vps\nLIVEKIT_API_KEY=APIc127keep\nAGENT_TOKEN={PLAIN_AGENT_TOKEN}\n",
+                                   encoding="utf-8")
+    fallback_env.write_store(tmp_path / "run" / fallback_env.STORE_NAME,
+                             {"root": {"LIVEKIT_API_SECRET": WRAPPED_SECRET}},
+                             protect=_fake_protect, unprotect=_fake_unprotect, restrict=lambda _path: None)
+    monkeypatch.setattr(precommit, "ROOT", str(tmp_path))
+    monkeypatch.delenv("JARVIS_RUN_DIR", raising=False)
+    return tmp_path
+
+
+def test_a_wrapped_fallback_secret_is_still_found_in_a_staged_line(precommit, vps_mode_root, capsys):
+    """The review case: the ENV_VALUE rule matched only the plaintext values of ENV_FILES, so once 'agent_ctl brain vps'
+    wrapped the LiveKit secret, a line holding it passed. The hook now unwraps the store in its own process."""
+    values = precommit.env_values(unprotect=_fake_unprotect)
+    assert ("LIVEKIT_API_SECRET", WRAPPED_SECRET) in values
+    assert ("AGENT_TOKEN", PLAIN_AGENT_TOKEN) in values                  # the plaintext values as before
+    assert precommit.scan_line("src/core/x.py", 7, f'SECRET = "{WRAPPED_SECRET}"', values, []) == [
+        "src/core/x.py:7 ENV_VALUE:LIVEKIT_API_SECRET"]
+    captured = capsys.readouterr()
+    assert WRAPPED_SECRET not in captured.out + captured.err and captured.err == ""
+
+
+def test_a_store_the_hook_cannot_unwrap_is_named_and_every_other_check_runs(precommit, vps_mode_root, capsys):
+    def other_user(_blob: bytes) -> bytes:
+        raise OSError("DPAPI could not unwrap the data (another user, or a damaged file)")
+
+    values = precommit.env_values(unprotect=other_user)
+    assert ("AGENT_TOKEN", PLAIN_AGENT_TOKEN) in values
+    assert not [key for key, _ in values if key == "LIVEKIT_API_SECRET"]
+    err = capsys.readouterr().err
+    assert "WARNING" in err and "(LIVEKIT_API_SECRET)" in err and "Every other check still runs" in err
+    assert "could not be unwrapped by this Windows user (OSError)" in err and WRAPPED_SECRET not in err
+
+
+def test_the_hook_looks_for_the_store_where_fallback_env_keeps_it(precommit, vps_mode_root, monkeypatch,
+                                                                 tmp_path_factory, capsys):
+    """JARVIS_RUN_DIR, else <repo>/run, as fallback_env.store_path(); no store there: only the plaintext values."""
+    elsewhere = tmp_path_factory.mktemp("run_elsewhere")
+    monkeypatch.setenv("JARVIS_RUN_DIR", str(elsewhere))
+    assert Path(precommit.fallback_store()) == _fallback_env().store_path() == elsewhere / "fallback.env.dpapi"
+    values = precommit.env_values(unprotect=_fake_unprotect)
+    assert not [key for key, _ in values if key == "LIVEKIT_API_SECRET"] and capsys.readouterr().err == ""
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows DPAPI")
+def test_the_hook_unwraps_a_real_dpapi_store_with_fallback_envs_own_helper(precommit, tmp_path, monkeypatch):
+    """No fake: the store wrapped with the real DPAPI helper, the hook's default unwrap (fallback_env.py loaded from
+    beside scripts/coord). The value is a throwaway."""
+    pytest.importorskip("win32crypt")
+    fallback_env = _fallback_env()
+    (tmp_path / ".env").write_text("JARVIS_BRAIN=vps\n", encoding="utf-8")
+    fallback_env.write_store(tmp_path / "run" / fallback_env.STORE_NAME,
+                             {"root": {"EMAIL_APP_PASSWORD": "c127 fake mail pass"}},
+                             protect=fallback_env.dpapi_protect, unprotect=fallback_env.dpapi_unprotect,
+                             restrict=lambda _path: None)
+    monkeypatch.setattr(precommit, "ROOT", str(tmp_path))
+    monkeypatch.delenv("JARVIS_RUN_DIR", raising=False)
+    assert ("EMAIL_APP_PASSWORD", "c127 fake mail pass") in precommit.env_values()
+
+
+@needs_git
+def test_a_commit_is_still_checked_when_the_store_cannot_be_unwrapped(sandbox):
+    """The throwaway repo has no scripts/ops/fallback_env.py, so its hook cannot unwrap a store: it names the wrapped
+    names on stderr and still checks the commit (a clean one passes, a forbidden file is still refused)."""
+    (sandbox / "run").mkdir()
+    (sandbox / "run" / "fallback.env.dpapi").write_text(json.dumps(
+        {"kind": "jarvis_pc_fallback_env", "v": 1, "created": 1, "names": {"root": ["LIVEKIT_API_SECRET"]},
+         "blob": "AAAA"}), encoding="utf-8")
+    _append(sandbox / "docs" / "CONTRACTS.md", "# lane test\n")
+    code, out, moved = _commit(sandbox, "docs/CONTRACTS.md", agent="claude")
+    assert code == 0 and moved, out
+    assert "(LIVEKIT_API_SECRET)" in out and "Every other check still runs" in out
+    (sandbox / "deploy").mkdir()
+    (sandbox / "deploy" / "bridge.env").write_text("LEGACY_TOKEN_AUTH=1\n", encoding="utf-8")
+    assert _git(sandbox, "add", "-f", "deploy/bridge.env").returncode == 0
+    code, out, moved = _commit(sandbox, "deploy/bridge.env", agent="claude")
+    assert code != 0 and not moved and "deploy/bridge.env:0 BRIDGE_ENV" in out
 
 
 @needs_git

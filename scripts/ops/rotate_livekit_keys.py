@@ -1,7 +1,7 @@
 """Rotate the LiveKit API key and secret without printing them (plan task C-17, OP-14).
 
 Usage (from the repo root, with the project venv):
-    .venv_312/Scripts/python.exe scripts/ops/rotate_livekit_keys.py [--dry-run] [--host H] [--ssh-key K]
+    .venv_312/Scripts/python.exe scripts/ops/rotate_livekit_keys.py [--dry-run] [--host H] [--ssh-key K] [--run-dir D]
     .venv_312/Scripts/python.exe scripts/ops/rotate_livekit_keys.py --check-old /root/jarvis-backups/<TS>/livekit-old.env
 
 Rotation: a new pair is generated on this PC (key 'API' + 12 letters and digits, secret secrets.token_urlsafe(48)).
@@ -13,16 +13,40 @@ files (.env and deploy/windows-local/.env) are staged before the VPS step and re
 rotate_env_secret.py does: nothing on this PC changes when the VPS step fails. Only lengths and fingerprints (sha256
 of 'jarvis-fp:' + value, first 8 hex) are printed.
 
+vps mode (C-127 step 5, D13): while run/fallback.env.dpapi exists ('agent_ctl brain vps' DPAPI-wrapped the PC
+fallback secrets), the new secret never goes into a PC env file. Before the VPS step scripts/ops/fallback_env.py
+put_values checks, writing nothing, that this Windows user can unwrap the store and that the env file edits can be
+written (else exit 2, nothing written anywhere); after it the secret goes into the store and the key into the root
+.env (the first PC file), and no other PC env file keeps an older LiveKit key. When that fails after the VPS step,
+run the rotation again: it makes a new pair for both sides (between 'livekit_pc_pair.py create' and 'activate' the
+'pc_not_main' guard below refuses that run, since this PC's key is no longer the VPS .env's: run 'activate', or copy
+the VPS .env's main pair over by hand with fallback_env.py --set). The PC worker takes the pair at the next
+'agent_ctl brain pc', which unwraps the store. After V6 'livekit_pc_pair.py activate' this PC holds the PC pair, not
+the main one (and still the earlier PC pair after a later 'create --rotate', until its 'activate'): rotate the main
+pair with --pc-files '' then.
+
+The PC pair guards (C-127 step 6): the VPS step also gets this PC's current LIVEKIT_API_KEY values (keys, never a
+secret; on ssh stdin like the rest). While the VPS .env holds a PC fallback pair (LIVEKIT_PC_API_KEY, from
+'livekit_pc_pair.py create') it refuses before any backup or write (exit 2, nothing written on the VPS or this PC, the
+dry run too) when one of them is that LIVEKIT_PC_API_KEY ('pc_pair': this PC holds the PC pair since 'activate'), or
+when none of them is the VPS .env's LIVEKIT_API_KEY ('pc_not_main': this PC does not hold the main pair, for example the
+earlier PC pair while a 'create --rotate' waits for its 'activate', an older main key, or no key). A rotation with PC
+files would give such a PC the new main pair, so a later 'livekit_pc_pair.py revoke' (a lost laptop) would cut nothing
+off. Without a PC pair in the VPS .env (before V6 'create') neither guard applies, so a PC that an earlier rotation
+missed is brought up to date; before 'activate' this PC holds the main pair and the rotation goes ahead. --pc-files ''
+sends no key and rotates the VPS only.
+
 The pair takes effect when the readers restart (printed as the next steps): LiveKit (LIVEKIT_KEYS from the compose
 .env) and the bridge (bridge.env) with 'docker compose -p jarvis up -d --no-deps --force-recreate livekit ui-bridge'
-on the VPS, then the PC worker with agent_ctl restart. Back up first: deploy/hostinger/backup_vps.sh on the VPS.
+on the VPS, then the PC worker with agent_ctl restart (in vps mode the VPS brain's agent and agent-svc instead: they
+read the pair from .env.agent). Back up first: deploy/hostinger/backup_vps.sh on the VPS.
 
 --check-old FILE: the old pair from FILE (on the VPS) goes on stdin into the jarvis-bridge container, which mints a
 token with it and calls ListRooms on http://jarvis-livekit:7880. Prints 'old key rejected: 401' (exit 0) or 'OLD KEY
 STILL WORKS' (exit 1); never a value or the server's message.
 
 Exit codes: 0 ok, 1 the VPS step failed (nothing written on this PC), a PC file could not be replaced after the VPS
-files were written, or the old key still works; 2 usage or file error (nothing written).
+files were written, or the old key still works; 2 usage or file error, or refused (nothing written).
 """
 from __future__ import annotations
 
@@ -35,19 +59,29 @@ import string
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
-# scripts/ops is not a package: rotate_env_secret.py (which loads gen_secrets.py and env_set.py) is loaded by path.
-_ROTATE_SPEC = importlib.util.spec_from_file_location("jarvis_ops_rotate_env_secret",
-                                                      Path(__file__).with_name("rotate_env_secret.py"))
-assert _ROTATE_SPEC is not None and _ROTATE_SPEC.loader is not None
-rotate_env_secret = importlib.util.module_from_spec(_ROTATE_SPEC)
-_ROTATE_SPEC.loader.exec_module(rotate_env_secret)
+
+def _load_sibling(name: str) -> ModuleType:
+    """scripts/ops/<name>.py as a module (scripts/ops is not a package)."""
+    spec = importlib.util.spec_from_file_location(f"jarvis_ops_{name}", Path(__file__).with_name(f"{name}.py"))
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+# fallback_env.py (the vps-mode DPAPI store) loads rotate_env_secret.py, which loads gen_secrets.py and env_set.py;
+# this tool uses those same copies, so the EnvError that fallback_env raises is the one caught here.
+fallback_env = _load_sibling("fallback_env")
+rotate_env_secret = fallback_env.rotate_env_secret
 gen_secrets = rotate_env_secret.gen_secrets
 env_set = rotate_env_secret.env_set
 EnvError = env_set.EnvError
 
 KEY_NAME, SECRET_NAME = "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET"
+PC_PAIR_KEY_NAME = "LIVEKIT_PC_API_KEY"  # the PC fallback's own pair in the VPS .env (livekit_pc_pair.py, V6)
 VPS_FILES = (".env", "bridge.env", ".env.agent")  # .env.agent (VPS brain) only when it already has the pair
 BACKUP_ROOT = "/root/jarvis-backups"
 BACKUP_NAME = "livekit-old.env"
@@ -79,7 +113,10 @@ def remote_rotate(args: dict[str, Any]) -> int:
     """
     Runs on the VPS (python3, standard library only, with remote_env_edit defined beside it): backs up the current
     pair from the first file, then edits every file with remote_env_edit. Prints JSON lines without values; returns
-    0 ok, 1 when the backup or a file edit fails (later files are left alone).
+    0 ok, 1 when the backup or a file edit fails (later files are left alone), 2 refused before anything was written
+    (the PC pair guards, only while the first file has a LIVEKIT_PC_API_KEY): 'pc_pair' when one of the PC's
+    LIVEKIT_API_KEY values (args['pc_keys']) is that LIVEKIT_PC_API_KEY, 'pc_not_main' when the PC files are written
+    (args['pc_files']) and none of those values is the first file's LIVEKIT_API_KEY.
     """
     import json  # pylint: disable=import-outside-toplevel,redefined-outer-name,reimported
     import os  # pylint: disable=import-outside-toplevel,redefined-outer-name,reimported
@@ -94,11 +131,30 @@ def remote_rotate(args: dict[str, Any]) -> int:
         found = [line for line in lines if re.match(r"^\s*(?:export\s+)?" + re.escape(key) + r"\s*=\s*\S", line)]
         return found[-1] if found else None
 
+    def value_of(line: str | None) -> str:
+        """An assignment line's value as compose reads it: quotes removed, an unquoted value cut before ' #'."""
+        raw = line.split("=", 1)[1].strip() if line and "=" in line else ""
+        if raw[:1] in ("'", '"'):
+            end = raw.find(raw[0], 1)
+            return raw[1:end] if end > 0 else raw[1:]
+        return re.split(r"[ \t]+#", raw, maxsplit=1)[0].strip()
+
     source = args["files"][0]
     old = [last_line(source, key) for key in args["keys"]]
     if not all(old):
         print(json.dumps({"backup": None, "error": "the current pair is not in " + source}))
         return 1
+    # The PC pair guards (C-127 step 6), while the first file holds a PC fallback pair: never overwrite that pair on a
+    # PC that holds it, and never hand the main pair to a PC that does not hold it (the earlier PC pair while a
+    # 'create --rotate' waits for its 'activate', an older main key, or no key at all)
+    pc_pair_key = value_of(last_line(source, args["pc_pair_key_name"])) if args.get("pc_pair_key_name") else ""
+    held_keys = args.get("pc_keys") or []
+    if pc_pair_key and pc_pair_key in held_keys:
+        print(json.dumps({"refused": "pc_pair"}))
+        return 2
+    if pc_pair_key and args.get("pc_files") and value_of(old[0]) not in held_keys:
+        print(json.dumps({"refused": "pc_not_main"}))
+        return 2
     if not args["dry_run"]:
         old_umask = os.umask(0o077)
         try:
@@ -186,6 +242,8 @@ def _report(rows_text: str) -> tuple[list[str], str | None]:
             row = json.loads(raw)
         except ValueError:
             continue
+        if not isinstance(row, dict) or "refused" in row:   # a refusal: _refusal() reads it
+            continue
         if "backup" in row:
             backup = row["backup"]
             if row.get("error"):
@@ -198,6 +256,43 @@ def _report(rows_text: str) -> tuple[list[str], str | None]:
         elif "written" in row:
             lines.append(f"{current}: {'written' if row['written'] else 'not changed'} (mode {row.get('mode')})")
     return lines, backup
+
+
+def _refusal(rows_text: str) -> str | None:
+    """The reason the VPS step refused before writing anything ('pc_pair', 'pc_not_main'), else None."""
+    import json  # pylint: disable=import-outside-toplevel
+
+    for raw in rows_text.splitlines():
+        try:
+            row = json.loads(raw)
+        except ValueError:
+            continue
+        if isinstance(row, dict) and row.get("refused"):
+            return str(row["refused"])
+    return None
+
+
+def pc_keys(files: list[Any]) -> list[str]:
+    """This PC's LIVEKIT_API_KEY values, one per distinct value of the PC files (keys, never a secret): the VPS step
+    compares them with its LIVEKIT_PC_API_KEY and its LIVEKIT_API_KEY (the PC pair guards)."""
+    return sorted({f.value(KEY_NAME) for f in files if f.value(KEY_NAME)})
+
+
+def _refusal_text(reason: str, vps_dir: str) -> str:
+    """Why the VPS step refused (names only) and the way on."""
+    if reason == "pc_pair":
+        return (f"this PC's {KEY_NAME} is {PC_PAIR_KEY_NAME} of {vps_dir}/.env, the PC fallback's own pair "
+                "('livekit_pc_pair.py activate', V6). A rotation that also writes this PC would overwrite that pair "
+                "with the new main one, and a later 'livekit_pc_pair.py revoke' would then cut nothing off. Rotate the "
+                "main pair with --pc-files '' (this PC keeps the PC pair).")
+    if reason == "pc_not_main":
+        return (f"{vps_dir}/.env holds a PC fallback pair ({PC_PAIR_KEY_NAME}, V6) and no {KEY_NAME} of this PC is "
+                f"that file's {KEY_NAME}, so this PC does not hold the main pair: it holds the earlier PC pair (a "
+                "'livekit_pc_pair.py create --rotate' after 'activate' made a new pending one), an older main key or "
+                "none. A rotation that also writes this PC would hand it the new main pair, and a later "
+                "'livekit_pc_pair.py revoke' would then cut nothing off. Rotate the main pair with --pc-files '' (the "
+                "VPS only); this PC gets the PC pair with 'livekit_pc_pair.py verify' and 'activate' (V6).")
+    return f"{reason}."
 
 
 class _Parser(env_set._Parser):  # pylint: disable=protected-access
@@ -213,7 +308,10 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--ssh-key", type=Path, default=None, help="ssh identity file (default JARVIS_SSH_KEY)")
     parser.add_argument("--vps-dir", default=gen_secrets.VPS_DIR, help=f"default {gen_secrets.VPS_DIR}")
     parser.add_argument("--pc-files", default=",".join(str(p) for p in gen_secrets.PC_FILES),
-                        help="PC env files, comma-separated (default .env,deploy/windows-local/.env)")
+                        help="PC env files, comma-separated, the root .env first (default .env,deploy/windows-local/"
+                             ".env); '' leaves this PC alone (after V6 'activate' it holds the PC pair: then '')")
+    parser.add_argument("--run-dir", type=Path, default=None,
+                        help="folder of run/fallback.env.dpapi, the vps-mode store (default JARVIS_RUN_DIR or run/)")
     args = parser.parse_args(argv)
     args.ssh_key = args.ssh_key or default_ssh_key()
     return args
@@ -228,50 +326,98 @@ def check_old(args: argparse.Namespace, runner: Any) -> int:
     return 0 if code == 0 and line.startswith("old key rejected: 401") else 1
 
 
+def _wrapped_pc_put(args: argparse.Namespace, paths: list[Path], key: str, secret: str, *, check: bool) -> Any:
+    """vps mode: the secret into run/fallback.env.dpapi (never an env file), the key into the root .env, and no other
+    env file keeps an older key (fallback_env.put_values; with check nothing is written). Its report: names only."""
+    return fallback_env.put_values({KEY_NAME: key, SECRET_NAME: secret}, paths, args.run_dir,
+                                   exclusive=True, check=check)
+
+
 def rotate(args: argparse.Namespace, runner: Any, pair: tuple[str, str] | None = None) -> int:
     key, secret = pair or new_pair()
     staged: Any = []
     try:
         paths = [Path(p.strip()) for p in args.pc_files.split(",") if p.strip()]
         files = [env_set.EnvFile(path) for path in paths]
-        for f in files:
-            rotate_env_secret.replace_in(f, KEY_NAME, env_set.render_value(KEY_NAME, key))
-            rotate_env_secret.replace_in(f, SECRET_NAME, env_set.render_value(SECRET_NAME, secret))
-        # Temp files before the VPS step: a PC file that cannot be written stops the run while nothing has changed.
-        staged = [] if args.dry_run else gen_secrets.stage_private(files)
+        # vps mode (C-127 step 5, D13): while the DPAPI store exists the new secret must never reach an env file
+        wrapped = bool(paths) and fallback_env.store_path(args.run_dir).exists()
+        if wrapped:
+            # Before the VPS step: this Windows user can unwrap the store and the env file edits stage (nothing written)
+            check = _wrapped_pc_put(args, paths, key, secret, check=True)
+            if check.code:
+                for line in check.lines:
+                    print(f"pc  {line}", file=sys.stderr)
+                print("rotate_livekit_keys: this PC cannot take the pair (vps mode: its secret goes into the DPAPI "
+                      "store); nothing was written on the VPS or this PC", file=sys.stderr)
+                return 2
+            if args.dry_run:
+                for line in check.lines:
+                    print(f"pc  {line}")
+        else:
+            for f in files:
+                rotate_env_secret.replace_in(f, KEY_NAME, env_set.render_value(KEY_NAME, key))
+                rotate_env_secret.replace_in(f, SECRET_NAME, env_set.render_value(SECRET_NAME, secret))
+            # Temp files before the VPS step: a PC file that cannot be written stops the run while nothing has changed.
+            staged = [] if args.dry_run else gen_secrets.stage_private(files)
 
         vps_dir = args.vps_dir.rstrip("/")
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         remote = {"files": [f"{vps_dir}/{name}" for name in VPS_FILES],
                   "required": [f"{vps_dir}/{name}" for name in VPS_FILES[:2]],
                   "keys": [KEY_NAME, SECRET_NAME], "values": [key, secret], "dry_run": args.dry_run,
-                  "backup_dir": f"{BACKUP_ROOT}/{stamp}", "backup_name": BACKUP_NAME}
+                  "backup_dir": f"{BACKUP_ROOT}/{stamp}", "backup_name": BACKUP_NAME,
+                  # the PC pair guards: whether this PC is written, and its LIVEKIT_API_KEY values (none with
+                  # --pc-files '')
+                  "pc_files": bool(files), "pc_keys": pc_keys(files), "pc_pair_key_name": PC_PAIR_KEY_NAME}
         code, out, err = runner(rotate_program(), remote, args.host, args.ssh_key)
         report, backup = _report(out)
         for line in report:
             print(f"vps {line}")
+        refusal = _refusal(out)
+        if refusal:
+            print(f"rotate_livekit_keys: refused by the VPS step: {_refusal_text(refusal, vps_dir)} Nothing was "
+                  "written on the VPS or this PC.", file=sys.stderr)
+            return 2
         if code:
             last = (err.strip().splitlines() or ["no answer"])[-1]
             print(f"rotate_livekit_keys: the VPS step failed (exit {code}): {last[:200]}; nothing written on this PC",
                   file=sys.stderr)
             return 1
         if args.dry_run:
-            print(f"dry run: the pair would be rotated in {len(VPS_FILES)} VPS files (when present) and "
-                  f"{len(files)} PC files; nothing written")
+            where = (f"; on this PC (vps mode) {KEY_NAME} would go into {files[0].label} and {SECRET_NAME} into the "
+                     "DPAPI store" if wrapped else f" and {len(files)} PC files")
+            print(f"dry run: the pair would be rotated in {len(VPS_FILES)} VPS files (when present){where}; "
+                  "nothing written")
             return 0
-        try:
-            written = gen_secrets.commit_private(staged)
-        except EnvError as exc:
-            print(f"rotate_livekit_keys: the VPS files already hold the new pair (key fp {gen_secrets.fingerprint(key)})"
-                  f", but this PC's files were not updated: {exc}. Copy the pair over by hand from the VPS .env.",
-                  file=sys.stderr)
-            return 1
-        print(f"written: {', '.join(written)}")
+        if wrapped:
+            done = _wrapped_pc_put(args, paths, key, secret, check=False)
+            for line in done.lines:
+                print(f"pc  {line}", file=sys.stderr if done.code else sys.stdout)
+            if done.code:
+                print(f"rotate_livekit_keys: the VPS files already hold the new pair (key fp "
+                      f"{gen_secrets.fingerprint(key)}), but this PC does not (see above). Fix the cause, then run the "
+                      "rotation again: it makes a new pair for the VPS and this PC.", file=sys.stderr)
+                return 1
+        else:
+            try:
+                written = gen_secrets.commit_private(staged)
+            except EnvError as exc:
+                print(f"rotate_livekit_keys: the VPS files already hold the new pair (key fp "
+                      f"{gen_secrets.fingerprint(key)}), but this PC's files were not updated: {exc}. Copy the pair "
+                      "over by hand from the VPS .env.", file=sys.stderr)
+                return 1
+            print(f"written: {', '.join(written)}")
         print(f"{KEY_NAME} rotated (len {len(key)}, fp {gen_secrets.fingerprint(key)}); "
               f"{SECRET_NAME} rotated (len {len(secret)}, fp {gen_secrets.fingerprint(secret)})")
         print(f"old pair backed up on the VPS: {backup}")
-        print("next: ssh to the VPS and run 'cd " + vps_dir + " && docker compose -p jarvis up -d --no-deps "
-              "--force-recreate livekit ui-bridge', then agent_ctl restart, then --check-old " + str(backup))
+        recreate = f"'cd {vps_dir} && docker compose -p jarvis up -d --no-deps --force-recreate livekit ui-bridge'"
+        if wrapped:
+            print(f"next: ssh to the VPS and run {recreate}, then the VPS brain's agents, which read the pair from "
+                  f".env.agent: 'cd {vps_dir} && docker compose -p jarvis --profile vps-brain up -d --no-deps "
+                  f"--no-build --pull never --force-recreate agent agent-svc', then --check-old {backup}. This PC "
+                  "takes the new pair at its next 'agent_ctl brain pc' (it unwraps the store).")
+        else:
+            print(f"next: ssh to the VPS and run {recreate}, then agent_ctl restart, then --check-old {backup}")
         return 0
     except EnvError as exc:
         print(f"rotate_livekit_keys: {exc}", file=sys.stderr)

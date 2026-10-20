@@ -101,7 +101,9 @@ services:
     expose:
       - "5002"
     # bridge.env (root 600, gitignored; scripts/ops/gen_secrets.py --vps writes it) holds the agent link
-    # secrets (C-ENV-1). Optional, so the bridge also starts before it exists; its values win over .env.
+    # secrets (C-ENV-1). Optional, so the bridge also starts before it exists; its values win over .env. Since the
+    # V2b split (C-127, scripts/ops/split_bridge_env.py) it holds the bridge's own names and settings and .env no
+    # agent secret; C-18 then drops .env from this list (JARVIS_PC_AGENT_NAME then comes in through environment:).
     env_file:
       - .env
       - path: bridge.env
@@ -120,7 +122,7 @@ services:
       JARVIS_AGENT_NAME: jarvis
       AGENT_DISPATCH_MODE: observe
       # The brain switch's source of truth (K-72), the same .env value the agents read, named here so it stays when
-      # bridge.env replaces the .env above (V2b, C-127). Compose refuses to run without it; a brain switch recreates
+      # C-18 drops the .env above (after the C-127 split). Compose refuses to run without it; a brain switch recreates
       # the bridge after FLIP_ENV (scripts/agent_ctl.py, plan C-126).
       JARVIS_BRAIN: "${JARVIS_BRAIN:?set JARVIS_BRAIN (vps or pc) in deploy/hostinger/.env}"
       # Env only (K-49): the domain and the Vite dev origins; no raw-IP or Vercel origins

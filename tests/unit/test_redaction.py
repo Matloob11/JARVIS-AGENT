@@ -124,6 +124,14 @@ def test_url_encoded_form_of_a_value_is_masked(monkeypatch):
     assert redact_secrets("q=ab%2Bcd%2Fef%3D%3Dghij raw ab+cd/ef==ghij") == "q=*** raw ***"
 
 
+def test_the_pc_fallback_livekit_secret_is_masked(monkeypatch):
+    """C-127 review: LIVEKIT_PC_API_SECRET (the PC fallback's own LiveKit pair, in the PC root .env and the VPS .env,
+    which ui-bridge reads) is a secret env name, so K-29 lists it and redact_secrets masks its value."""
+    assert "LIVEKIT_PC_API_SECRET" in SECRET_ENV_NAMES and "LIVEKIT_PC_API_KEY" not in SECRET_ENV_NAMES
+    monkeypatch.setenv("LIVEKIT_PC_API_SECRET", "fake-pc-livekit-secret-0123")
+    assert redact_secrets("signed with fake-pc-livekit-secret-0123") == "signed with ***"
+
+
 def test_every_contract_env_name_is_masked(monkeypatch):
     for i, name in enumerate(SECRET_ENV_NAMES):
         monkeypatch.setenv(name, f"fake-{name.lower()}-{i:02d}")

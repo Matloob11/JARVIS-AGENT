@@ -64,6 +64,14 @@ class LocalRunner:
         return code, out.getvalue(), ""
 
 
+@pytest.fixture(autouse=True)
+def no_real_fallback_store(tmp_path, monkeypatch):
+    """rotate_env_secret.py sends a fallback secret into run/fallback.env.dpapi while that store exists (vps mode,
+    C-127): JARVIS_RUN_DIR points under tmp_path, so these pc-mode tests never meet the real store of a laptop in vps
+    mode (tests/unit/test_rotate_env_secret.py covers vps mode)."""
+    monkeypatch.setenv("JARVIS_RUN_DIR", str(tmp_path / "run"))
+
+
 @pytest.fixture
 def pc(tmp_path):
     root, overlay = tmp_path / "root.env", tmp_path / "overlay.env"

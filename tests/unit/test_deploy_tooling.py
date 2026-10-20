@@ -995,19 +995,33 @@ def test_agent_ctl_recreates_only_the_bridge_with_its_own_sha_then_waits_until_i
 @pytest.mark.parametrize(("before", "line", "name", "after"), [
     ("A=1\n", "JARVIS_BRAIN=pc", "JARVIS_BRAIN", "A=1\nJARVIS_BRAIN=pc\n"),            # a backup from before C-126
     ("A=1\nJARVIS_BRAIN=\n", "JARVIS_BRAIN=pc", "JARVIS_BRAIN", "A=1\nJARVIS_BRAIN=pc\n"),  # an empty one is no brain
-    ("JARVIS_BRAIN=vps\n", "JARVIS_BRAIN=pc", "JARVIS_BRAIN", "JARVIS_BRAIN=vps\n"),     # the restored file's own wins
+    # C-127: the live brain wins over the backup's own (only 'agent_ctl brain' writes JARVIS_BRAIN, K-72)
+    ("JARVIS_BRAIN=pc\nA=1\n", "JARVIS_BRAIN=vps", "JARVIS_BRAIN", "A=1\nJARVIS_BRAIN=vps\n"),
+    ("export JARVIS_BRAIN = pc\nJARVIS_BRAIN=pc\nA=1", "JARVIS_BRAIN=vps", "JARVIS_BRAIN", "A=1\nJARVIS_BRAIN=vps\n"),
+    ("JARVIS_BRAIN=vps\n", "", "JARVIS_BRAIN", "JARVIS_BRAIN=vps\n"),     # no live brain: the restored file's own stays
+    ("JARVIS_BRAIN=vps\n", "JARVIS_BRAIN=", "JARVIS_BRAIN", "JARVIS_BRAIN=vps\n"),      # an empty live one is none
     ("A=1\n", "", "JARVIS_BRAIN", "A=1\n"),                                             # nothing live: nothing added
     ("A=1\n", "COMPOSE_PROFILES=vps-brain", "COMPOSE_PROFILES", "A=1\nCOMPOSE_PROFILES=vps-brain\n"),
-    ("COMPOSE_PROFILES=\n", "COMPOSE_PROFILES=vps-brain", "COMPOSE_PROFILES", "COMPOSE_PROFILES=\n"),  # a setting
+    ("COMPOSE_PROFILES=\nA=1\n", "COMPOSE_PROFILES=vps-brain", "COMPOSE_PROFILES", "A=1\nCOMPOSE_PROFILES=vps-brain\n"),
+    ("COMPOSE_PROFILES=vps-brain\nA=1\n", "COMPOSE_PROFILES=", "COMPOSE_PROFILES", "A=1\nCOMPOSE_PROFILES=\n"),
+    ("COMPOSE_PROFILES=vps-brain\nA=1\n", "", "COMPOSE_PROFILES", "A=1\n"),   # no live line: the backup's goes too
+    # C-127 review: a restored file saved with a UTF-8 BOM. Its first line counts (compose reads past the BOM): the
+    # backup's JARVIS_BRAIN=pc there used to stay beside the live line, and a COMPOSE_PROFILES there was never dropped
+    ("\ufeffJARVIS_BRAIN=pc\nA=1\n", "JARVIS_BRAIN=vps", "JARVIS_BRAIN", "A=1\nJARVIS_BRAIN=vps\n"),
+    ("\ufeff export JARVIS_BRAIN = pc\nA=1\n", "JARVIS_BRAIN=vps", "JARVIS_BRAIN", "A=1\nJARVIS_BRAIN=vps\n"),
+    ("\ufeffCOMPOSE_PROFILES=vps-brain\nA=1\n", "", "COMPOSE_PROFILES", "A=1\n"),
+    ("\ufeffA=1\nJARVIS_BRAIN=pc\n", "JARVIS_BRAIN=vps", "JARVIS_BRAIN", "\ufeffA=1\nJARVIS_BRAIN=vps\n"),  # BOM kept
 ])
 def test_rollback_env_restore_keeps_the_live_brain(tmp_path: Path, before: str, line: str, name: str,
                                                    after: str) -> None:
-    """C-126: the compose file needs a non-empty JARVIS_BRAIN in .env. rollback.sh --env to a backup from before C-126
-    keeps the live JARVIS_BRAIN (and COMPOSE_PROFILES) line, so the rollback's own compose commands still run."""
+    """C-126: the compose file needs a non-empty JARVIS_BRAIN in .env. rollback.sh --with-env to a backup from before
+    C-126 keeps the live JARVIS_BRAIN (and COMPOSE_PROFILES) line, so the rollback's own compose commands still run.
+    C-127: the live lines replace the backup's own, so a pc-era backup never flips a vps brain back to pc, also when the
+    restored file starts with a UTF-8 BOM."""
     assert BASH is not None
     source = (HOSTINGER / "rollback.sh").read_text(encoding="utf-8")
     func = re.search(r"^keep_env_line\(\) \{.*?^\}\n", source, re.M | re.S)
-    assert func is not None and 'keep_env_line "${dst[0]}" "$brain" JARVIS_BRAIN' in source
+    assert func is not None and 'keep_env_line "$dst" "$brain" JARVIS_BRAIN' in source
     env_file = tmp_path / ".env"
     env_file.write_bytes(before.encode("utf-8"))
     script = func.group(0) + 'log() { printf "%s\\n" "$*"; }\nkeep_env_line "$1" "$2" "$3"\n'
@@ -1394,8 +1408,9 @@ def test_rollback_last_undoes_the_deploy(sb: Sandbox) -> None:
 @e2e
 def test_rollback_tag_mode_touches_only_images(sb: Sandbox) -> None:
     before, tags = _digest(sb.app), sb.load_state()["tags"]
+    # a hand-made tag records no env layout (C-127): refused unless --layout-unknown-ok
     proc = sb.run(sb.run_dir / "tree" / "deploy" / "hostinger" / "rollback.sh", "--tag",
-                  "pre-emergency-2026-09-30_2340", "--services", "ui-bridge", "--foreground")
+                  "pre-emergency-2026-09-30_2340", "--services", "ui-bridge", "--layout-unknown-ok", "--foreground")
     assert proc.returncode == 0, _out(proc)
     assert sb.load_state()["containers"]["jarvis-bridge"]["image"] == B_EMERGENCY
     _assert_tags(sb, tags, {"jarvis-bridge:hostinger": B_EMERGENCY})   # LiveKit's :latest still names L_OLD
@@ -1638,3 +1653,605 @@ def test_pc_passes_the_deploy_exit_code_through(sb: Sandbox, pc_repo: Path) -> N
     proc = sb.run(pc_repo / "deploy" / "hostinger" / "deploy_from_pc.sh", "--services", "ui-bridge", env=_pc_env(sb))
     assert proc.returncode == 2, _out(proc)
     assert not sb.calls("curl")
+
+
+# --------------------------------------------------------------------------- rollback.sh: the env layout (C-127)
+
+PRE_SPLIT_ENV = ("LIVEKIT_API_KEY=placeholder\nLIVEKIT_API_SECRET=placeholder\nGOOGLE_API_KEY=c127-fake-google\n"
+                 "EMAIL_APP_PASSWORD=c127-fake-mail\nJARVIS_BRAIN=pc\n")
+POST_SPLIT_ENV = "LIVEKIT_API_KEY=placeholder\nLIVEKIT_API_SECRET=placeholder\nJARVIS_BRAIN=pc\n"
+PRE_SPLIT_BRIDGE = "AGENT_TOKEN=c127-fake-agent\nLIVEKIT_API_KEY=placeholder\n"
+POST_SPLIT_BRIDGE = PRE_SPLIT_BRIDGE + "LOG_LEVEL=INFO\n"
+PRE_SPLIT_LAYOUT = ("env_layout:    .env present EMAIL_APP_PASSWORD,GOOGLE_API_KEY,JARVIS_BRAIN,LIVEKIT_API_KEY,"
+                    "LIVEKIT_API_SECRET\nenv_layout:    bridge.env present AGENT_TOKEN,LIVEKIT_API_KEY\n"
+                    "env_layout:    .env.agent absent -\n")
+
+
+def _pre_split_backup(sb: Sandbox, *, manifest: bool = True) -> str:
+    """A deploy backup taken before the V2b split (its MANIFEST records the old layout), live files after it."""
+    name = sb.fake_deployed_state()
+    backup = sb.base / name
+    _write(backup / "hostinger.env", PRE_SPLIT_ENV)
+    _write(backup / "bridge.env", PRE_SPLIT_BRIDGE)
+    if manifest:
+        _write(backup / "MANIFEST.txt", f"backup:        {name}\n{PRE_SPLIT_LAYOUT}")
+    _write(sb.hostinger / ".env", POST_SPLIT_ENV)
+    _write(sb.hostinger / "bridge.env", POST_SPLIT_BRIDGE)
+    state = sb.load_state()
+    state["tags"][f"jarvis-bridge:rollback-{name}"] = B_OLD
+    sb.save_state(state)
+    return name
+
+
+def _assert_unchanged(sb: Sandbox, before: dict[str, str], state: dict, n_backups: int) -> None:
+    assert _digest(sb.app) == before and sb.load_state() == state and len(sb.backups()) == n_backups
+    assert not sb.mutating_docker_calls()
+
+
+def test_rollback_refuses_another_env_layout_without_with_env(sb: Sandbox) -> None:
+    """C-127: going back to a backup from before the secrets split is refused (nothing changes) unless --with-env,
+    which brings its env files back with the images; the refusal names the differing names, never a value."""
+    name = _pre_split_backup(sb)
+    before, state, n_backups = _digest(sb.app), sb.load_state(), len(sb.backups())
+    tools = sb.base / "tools" / "rollback.sh"
+    proc = sb.run(tools, "--dry-run")
+    out = _out(proc)
+    assert proc.returncode == 1, out
+    assert ("env layout   .env: target present, live present; only in the target: EMAIL_APP_PASSWORD,GOOGLE_API_KEY;"
+            " only live: none") in out
+    assert "env layout   bridge.env: target present, live present; only in the target: none; only live: LOG_LEVEL" \
+        in out
+    assert f"the env layout of {name} differs from the live env files" in out and "Add --with-env" in out
+    assert "c127-fake" not in out
+    _assert_unchanged(sb, before, state, n_backups)
+    proc = sb.run(tools, "--dry-run", "--with-env")
+    out = _out(proc)
+    assert proc.returncode == 0, out
+    assert f"env          from {sb.sh(sb.base / name)} (mode 600; the live JARVIS_BRAIN and COMPOSE_PROFILES" in out
+    assert f"  replace    {sb.sh(sb.hostinger / '.env')} <- hostinger.env" in out
+    assert f"  replace    {sb.sh(sb.hostinger / 'bridge.env')} <- bridge.env" in out
+    assert f"env layout   differs from {name} (.env bridge.env): its env files and docker-compose.yml go back" in out
+    assert ("env values   the restored env files hold the live AGENT_TOKEN, BRIDGE_HMAC_SECRET, LIVEKIT_API_KEY, "
+            "LIVEKIT_API_SECRET, LIVEKIT_PC_API_KEY, LIVEKIT_PC_API_SECRET (compared by digest, names only)") in out
+    assert "VERDICT: a real run would proceed" in out and "c127-fake" not in out
+    _assert_unchanged(sb, before, state, n_backups)
+
+
+def test_rollback_to_a_pre_split_tag_is_refused_without_with_env(sb: Sandbox) -> None:
+    """The plan's verify line: 'rollback.sh --dry-run --tag <pre-split-tag>' refuses without --with-env. A
+    rollback-<backup> tag takes its env layout (and, with --with-env, its env and compose files) from that backup."""
+    name = _pre_split_backup(sb)
+    before, state, n_backups = _digest(sb.app), sb.load_state(), len(sb.backups())
+    tools = sb.base / "tools" / "rollback.sh"
+    proc = sb.run(tools, "--dry-run", "--tag", f"rollback-{name}", "--services", "ui-bridge")
+    assert proc.returncode == 1 and "Add --with-env" in _out(proc), _out(proc)
+    proc = sb.run(tools, "--dry-run", "--tag", f"rollback-{name}", "--services", "ui-bridge", "--with-env")
+    out = _out(proc)
+    assert proc.returncode == 0, out
+    assert f"env          from {sb.sh(sb.base / name)} (mode 600" in out
+    assert f"  replace    {sb.sh(sb.hostinger / 'docker-compose.yml')} <- the docker-compose.yml in " \
+           "opt-jarvis-agent.tgz" in out
+    _assert_unchanged(sb, before, state, n_backups)
+    # a hand-made tag records no layout: refused like a differing one (the RUNBOOK's old pre-emergency example, whose
+    # pre-C-112 bridge crash-loops with the split env files), unless --layout-unknown-ok; --with-env has no backup to
+    # take the env files from
+    proc = sb.run(tools, "--dry-run", "--tag", "pre-emergency-2026-09-30_2340", "--services", "ui-bridge")
+    out = _out(proc)
+    assert proc.returncode == 1 and "the env layout of the target is unknown (the tag :pre-emergency" in out, out
+    assert "--layout-unknown-ok" in out and "VERDICT" not in out
+    proc = sb.run(tools, "--dry-run", "--tag", "pre-emergency-2026-09-30_2340", "--services", "ui-bridge",
+                  "--layout-unknown-ok")
+    out = _out(proc)
+    assert proc.returncode == 0 and "env layout of the target unknown" in out and "VERDICT: a real run" in out, out
+    assert "env layout   UNKNOWN (the tag :pre-emergency-2026-09-30_2340" in out
+    proc = sb.run(tools, "--dry-run", "--tag", "pre-emergency-2026-09-30_2340", "--services", "ui-bridge",
+                  "--with-env")
+    assert proc.returncode == 64 and "--with-env needs a backup folder" in _out(proc)
+    _assert_unchanged(sb, before, state, n_backups)
+
+
+def test_a_rollback_tag_whose_folder_was_pruned_is_refused_without_layout_unknown_ok(sb: Sandbox) -> None:
+    """prune keeps a rollback tag that a container still uses: its folder (and so its layout record) is gone."""
+    _pre_split_backup(sb)
+    pruned = "rollback-2026-09-01_0000Z-pruned"
+    state = sb.load_state()
+    state["tags"][f"jarvis-bridge:{pruned}"] = B_OLD
+    state["tags"][f"jarvis-frontend:{pruned}"] = F_OLD
+    sb.save_state(state)
+    before, n_backups = _digest(sb.app), len(sb.backups())
+    tools = sb.base / "tools" / "rollback.sh"
+    proc = sb.run(tools, "--dry-run", "--tag", pruned, "--services", "ui-bridge")
+    out = _out(proc)
+    assert proc.returncode == 1 and f"the tag :{pruned} has no backup folder" in out, out
+    _assert_unchanged(sb, before, state, n_backups)
+    # the frontend reads no env file: nothing to compare, so nothing is refused
+    proc = sb.run(tools, "--dry-run", "--tag", pruned, "--services", "frontend")
+    out = _out(proc)
+    assert proc.returncode == 0 and "env layout   not compared (no service of this rollback reads" in out, out
+    _assert_unchanged(sb, before, state, n_backups)
+
+
+def test_rollback_refuses_a_backup_folder_together_with_a_tag(sb: Sandbox) -> None:
+    """C-127: '<post-split backup> --tag rollback-<pre-split backup>' would compare (and restore) the folder's env
+    files while the images come from the tag: a pre-split bridge on the post-split env. Refused as a usage error."""
+    name = _pre_split_backup(sb)
+    post = sb.base / "2026-10-02_0999Z-post-split"
+    _write(post / "hostinger.env", POST_SPLIT_ENV)   # the live layout: the folder alone would pass the check
+    _write(post / "bridge.env", POST_SPLIT_BRIDGE)
+    _write(post / "containers.txt", "")
+    before, state, n_backups = _digest(sb.app), sb.load_state(), len(sb.backups())
+    tools = sb.base / "tools" / "rollback.sh"
+    for extra in ((), ("--with-env",)):
+        proc = sb.run(tools, post.name, "--tag", f"rollback-{name}", "--services", "ui-bridge", "--dry-run", *extra)
+        out = _out(proc)
+        assert proc.returncode == 64 and "name a backup folder or --tag, not both" in out, out
+        assert "VERDICT" not in out
+    _assert_unchanged(sb, before, state, n_backups)
+
+
+def test_rollback_with_the_same_env_layout_needs_nothing_more(sb: Sandbox) -> None:
+    name = _pre_split_backup(sb, manifest=False)
+    _write(sb.base / name / "hostinger.env", POST_SPLIT_ENV.replace("JARVIS_BRAIN=pc", "JARVIS_BRAIN=vps"))
+    _write(sb.base / name / "bridge.env", POST_SPLIT_BRIDGE)   # derived from the env copies (no MANIFEST record)
+    proc = sb.run(sb.base / "tools" / "rollback.sh", "--dry-run")
+    out = _out(proc)
+    assert proc.returncode == 0, out
+    assert f"env layout   same as {name} (.env bridge.env; names only)" in out   # JARVIS_BRAIN never counts
+
+
+def test_rollback_of_a_service_that_reads_no_env_file_compares_nothing(sb: Sandbox) -> None:
+    name = _pre_split_backup(sb)
+    for record in ("deploy.env", "deploy-images.txt"):
+        (sb.base / name / record).unlink()              # a plain backup_vps.sh folder
+    proc = sb.run(sb.base / "tools" / "rollback.sh", name, "--services", "frontend", "--dry-run")
+    out = _out(proc)
+    assert proc.returncode == 0, out
+    assert "env layout   not compared (no service of this rollback reads an env file)" in out
+
+
+def test_with_env_keeps_the_live_compose_file_when_no_service_reads_an_env_file(sb: Sandbox) -> None:
+    """C-127 review: '--services frontend --with-env' (or 'none') put the backup's docker-compose.yml back while every
+    env file stayed live, so the next recreate of the bridge, LiveKit or the agents met that compose file with today's
+    env files (one from before bridge.env was in ui-bridge's env_file would drop the owner login, AGENT_TOKEN and the
+    link keys). The compose file now goes back only together with .env."""
+    name = _pre_split_backup(sb)
+    for record in ("deploy.env", "deploy-images.txt"):
+        (sb.base / name / record).unlink()              # a plain backup_vps.sh folder: no --code by default
+    before, state, n_backups = _digest(sb.app), sb.load_state(), len(sb.backups())
+    tools = sb.base / "tools" / "rollback.sh"
+    compose = sb.sh(sb.hostinger / "docker-compose.yml")
+    for services in ("frontend", "none"):
+        proc = sb.run(tools, name, "--services", services, "--with-env", "--dry-run")
+        out = _out(proc)
+        assert proc.returncode == 0, out
+        assert f"  keep       {compose} (no service of this rollback reads an env file" in out
+        assert "<- the docker-compose.yml in opt-jarvis-agent.tgz" not in out and "VERDICT: a real run" in out
+        assert f"  keep       {sb.sh(sb.hostinger / '.env')} (no service of this rollback reads it)" in out
+        assert "env values   nothing to compare" in out
+    _assert_unchanged(sb, before, state, n_backups)
+    # a service that reads .env brings the compose file back with it
+    proc = sb.run(tools, name, "--services", "ui-bridge", "--with-env", "--dry-run")
+    out = _out(proc)
+    assert proc.returncode == 0 and f"  replace    {compose} <- the docker-compose.yml in opt-jarvis-agent.tgz" in out, \
+        out
+
+
+ROTATED_BRIDGE = POST_SPLIT_BRIDGE.replace("AGENT_TOKEN=c127-fake-agent", "AGENT_TOKEN=c127-fake-agent-rotated")
+PC_PAIR = "LIVEKIT_PC_API_KEY=c127-fake-pc-key\nLIVEKIT_PC_API_SECRET=c127-fake-pc-secret\n"
+
+
+@pytest.mark.parametrize(("live", "backup", "differs"), [
+    # 'rotate_env_secret.py --name AGENT_TOKEN' since the backup: bridge.env and .env.agent hold the new value
+    ({"bridge.env": ROTATED_BRIDGE, ".env.agent": "AGENT_TOKEN=c127-fake-agent-rotated\n"}, {},
+     "env values   AGENT_TOKEN: bridge.env of the backup differs from the live bridge.env, .env.agent"),
+    # 'rotate_livekit_keys.py' since the backup: LiveKit (not recreated) and the PC hold the new pair
+    ({".env": POST_SPLIT_ENV.replace("LIVEKIT_API_SECRET=placeholder", "LIVEKIT_API_SECRET=c127-fake-lk-rotated")}, {},
+     "env values   LIVEKIT_API_SECRET: hostinger.env of the backup differs from the live .env"),
+    # 'livekit_pc_pair.py revoke' since the backup (a lost laptop): the VPS .env holds a PC secret nobody has, the
+    # backup's is the one that laptop holds, which LiveKit would accept again at its next recreate
+    ({".env": POST_SPLIT_ENV + PC_PAIR.replace("c127-fake-pc-secret", "c127-fake-pc-revoked")},
+     {"hostinger.env": PRE_SPLIT_ENV + PC_PAIR},
+     "env values   LIVEKIT_PC_API_SECRET: hostinger.env of the backup differs from the live .env"),
+    # the rotated secret on the first line of a live .env saved with a UTF-8 BOM (compose reads past it): it used to be
+    # invisible, so nothing was compared and the old secret came back
+    ({".env": "\ufeffLIVEKIT_API_SECRET=c127-fake-lk-rotated\nLIVEKIT_API_KEY=placeholder\nJARVIS_BRAIN=pc\n"}, {},
+     "env values   LIVEKIT_API_SECRET: hostinger.env of the backup differs from the live .env"),
+], ids=["agent-token-rotated", "livekit-secret-rotated", "pc-pair-revoked", "bom-live-env"])
+def test_with_env_refuses_shared_values_that_differ_from_the_live_ones(sb: Sandbox, live: dict[str, str],
+                                                                       backup: dict[str, str], differs: str) -> None:
+    """C-127 review: a rotation of AGENT_TOKEN/BRIDGE_HMAC_SECRET or of the LiveKit pair since the backup came back in
+    the restored files only (same names, so the layout check saw nothing): the agent's notifies dropped, or LiveKit
+    refusing the bridge. The same for the PC fallback's own pair after a revoke, and for a value behind a UTF-8 BOM.
+    The values are compared by digest on the VPS (names only) before anything changes."""
+    name = _pre_split_backup(sb)
+    for file, text in live.items():
+        _write(sb.hostinger / file, text)
+    for file, text in backup.items():
+        _write(sb.base / name / file, text)
+    before, state, n_backups = _digest(sb.app), sb.load_state(), len(sb.backups())
+    tools = sb.base / "tools" / "rollback.sh"
+    proc = sb.run(tools, name, "--with-env", "--dry-run")
+    out = _out(proc)
+    assert proc.returncode == 1, out
+    assert differs in out and "a value the restored env files share with the live ones differs" in out
+    assert "--shared-values-differ-ok" in out and "c127-fake" not in out and "VERDICT" not in out
+    _assert_unchanged(sb, before, state, n_backups)
+    proc = sb.run(tools, name, "--with-env", "--shared-values-differ-ok", "--dry-run")
+    out = _out(proc)
+    assert proc.returncode == 0, out
+    assert differs in out and "env values   DIFFER from the live env files" in out
+    assert "VERDICT: a real run would proceed" in out and "c127-fake" not in out
+    _assert_unchanged(sb, before, state, n_backups)
+    proc = sb.run(tools, name, "--shared-values-differ-ok", "--dry-run")   # the record has no ENV: no --with-env
+    assert proc.returncode == 64 and "--shared-values-differ-ok goes with --with-env" in _out(proc), _out(proc)
+    _assert_unchanged(sb, before, state, n_backups)
+
+
+def _shell_function(script: str, name: str) -> str:
+    match = re.search(rf"^{name}\(\) \{{.*?^\}}\n", (HOSTINGER / script).read_text(encoding="utf-8"), re.M | re.S)
+    assert match is not None, f"{name}() not found in {script}"
+    return match.group(0)
+
+
+def _rollback_constants() -> str:
+    """rollback.sh's own lines for the names its env functions use (so a test script never drifts from them)."""
+    source = (HOSTINGER / "rollback.sh").read_text(encoding="utf-8")
+    lines = []
+    for name in ("LINK_BRIDGE_NAMES", "LINK_AGENT_NAMES", "SHARED_NAMES", "EMPTY_SHA256"):
+        match = re.search(rf"^readonly {name}=.*$", source, re.M)
+        assert match is not None, name
+        lines.append(match.group(0))
+    return "\n".join(lines) + "\n"
+
+
+LIVE_AGENT_ENV = "JARVIS_ENCRYPTION_KEY=c127-fake-fernet\nDESKTOP_AGENT_SIGNING_KEY=c127-fake-seed\n"
+LIVE_VPS_ENV = POST_SPLIT_ENV.replace("JARVIS_BRAIN=pc", "JARVIS_BRAIN=vps") + "COMPOSE_PROFILES=vps-brain\n"
+RESTORED_ENV = PRE_SPLIT_ENV.replace("JARVIS_BRAIN=pc\n", "") + "JARVIS_BRAIN=vps\nCOMPOSE_PROFILES=vps-brain\n"
+
+
+@pytest.mark.parametrize(("services", "replaced", "kept"), [
+    ("ui-bridge", (".env", "bridge.env"), (".env.agent",)),              # the V2b undo: the agents keep their keys
+    ("agent agent-svc", (".env", ".env.agent"), ("bridge.env",)),
+    ("frontend", (), (".env", "bridge.env", ".env.agent")),              # it reads no env file
+])
+def test_with_env_restores_only_the_env_files_its_services_read(sb: Sandbox, services: str, replaced: tuple,
+                                                                 kept: tuple) -> None:
+    """C-127: --with-env puts back the env files that the services of the rollback read (the layout check's readers)
+    and root.env, and leaves every other one as it is: a ui-bridge rollback never replaces .env.agent (the backup's
+    could be the empty C-126 placeholder: the agents would lose JARVIS_ENCRYPTION_KEY at their next restart). The plan
+    lists each file, and the live JARVIS_BRAIN and COMPOSE_PROFILES lines replace the backup's (a pc-era backup never
+    flips a vps brain back)."""
+    backup = sb.base / "2026-10-02_0001Z-pre-env-split"
+    _write(backup / "hostinger.env", PRE_SPLIT_ENV)                  # JARVIS_BRAIN=pc, no COMPOSE_PROFILES
+    _write(backup / "bridge.env", PRE_SPLIT_BRIDGE)
+    _write(backup / "env.agent", "")                                 # the C-126 placeholder of that time
+    _write(backup / "root.env", "ROOT_SETTING=c127-fake-old-root\n")
+    _write(sb.hostinger / ".env", LIVE_VPS_ENV)
+    _write(sb.hostinger / "bridge.env", POST_SPLIT_BRIDGE)
+    _write(sb.hostinger / ".env.agent", LIVE_AGENT_ENV)
+    live = {name: (sb.hostinger / name).read_text(encoding="utf-8") for name in (".env", "bridge.env", ".env.agent")}
+    out = _run_env_functions(sb, backup, services, env_compose=".env" in replaced)
+    assert "c127-fake" not in out and "FAIL" not in out
+    # the backup's placeholder .env.agent comes back, plus the live agent link key (C-127 review: the Desktop Link
+    # keys never roll back, the laptop pins the live one)
+    restored = {".env": RESTORED_ENV, "bridge.env": PRE_SPLIT_BRIDGE,
+                ".env.agent": "DESKTOP_AGENT_SIGNING_KEY=c127-fake-seed\n"}
+    for name in replaced:
+        assert (sb.hostinger / name).read_text(encoding="utf-8") == restored[name], name
+        assert f"  replace    {sb.sh(sb.hostinger / name)} <- " in out
+    for name in kept:
+        assert (sb.hostinger / name).read_text(encoding="utf-8") == live[name], name
+        assert f"  keep       {sb.sh(sb.hostinger / name)} (no service of this rollback reads it)" in out
+    assert (sb.app / ".env").read_text(encoding="utf-8") == "ROOT_SETTING=c127-fake-old-root\n"   # read by no container
+    assert f"  replace    {sb.sh(sb.app / '.env')} <- root.env" in out
+    assert ("the live JARVIS_BRAIN and COMPOSE_PROFILES lines are written back" in out) == (".env" in replaced)
+    # the compose file goes back only together with .env (C-127 review: never the backup's compose file with today's
+    # env files)
+    compose = sb.sh(sb.hostinger / "docker-compose.yml")
+    assert (f"  replace    {compose} <- the docker-compose.yml in opt-jarvis-agent.tgz" in out) == (".env" in replaced)
+    assert (f"  keep       {compose} (no service of this rollback reads an env file" in out) == (".env" not in replaced)
+
+
+def _run_env_functions(sb: Sandbox, backup: Path, services: str, *, env_compose: bool,
+                       tail: str = 'print_env_plan\nrestore_env "$ENV_TB"\n') -> str:
+    """rollback.sh's env functions in a bash of their own (deploy.sh sourced, as rollback.sh does), for SERVICES. The
+    script goes into a file: MSYS bash cuts a 'bash -c' script argument longer than about 8 KB without a word."""
+    lib = sb.sh(sb.run_dir / "tree" / "deploy" / "hostinger" / "deploy.sh")
+    functions = "".join(_shell_function("rollback.sh", name) for name in (
+        "layout_copy_name", "layout_readers", "env_dest", "plan_env_files", "print_env_plan", "live_env_line",
+        "keep_env_line", "restore_env", "env_value_digest", "check_shared_values"))
+    script = (f'source "{lib}"\n{functions}{_rollback_constants()}LAYOUT_FILES=(.env bridge.env .env.agent)\n'
+              f'CODE_OPT=0\nENV_COMPOSE={int(env_compose)}\nSHARED_OK=0\nSHARED_NOTE=""\n'
+              f'ENV_TB="{sb.sh(backup)}"\nread -r -a SERVICES <<< "{services}"\n'
+              f'mapfile -t ENV_READERS < <(layout_readers)\n{tail}echo ENV_FUNCTIONS_DONE\n')
+    path = _write(sb.tmp / "env_functions.sh", script)
+    proc = subprocess.run([BASH, sb.sh(path)], env=sb.env(), capture_output=True, text=True, encoding="utf-8",
+                          errors="replace", timeout=120, check=False)
+    out = _out(proc)
+    assert proc.returncode == 0 and "ENV_FUNCTIONS_DONE" in proc.stdout, out   # the whole script ran
+    return out
+
+
+HEX_AGENT, HEX_PC, HEX_OLD = "a1" * 32, "b2" * 32, "c3" * 32
+LIVE_LINK_BRIDGE = POST_SPLIT_BRIDGE + f"DESKTOP_AGENT_PUBLIC_KEY={HEX_AGENT}\nDESKTOP_PC_PUBLIC_KEY={HEX_PC}\n"
+LIVE_LINK_AGENT = ("JARVIS_ENCRYPTION_KEY=c127-fake-fernet\nDESKTOP_AGENT_SIGNING_KEY=c127-fake-seed-new\n"
+                   f"DESKTOP_AGENT_PUBLIC_KEY={HEX_AGENT}\nDESKTOP_PC_PUBLIC_KEY={HEX_PC}\n")
+
+
+@pytest.mark.parametrize(("services", "backup_bridge", "backup_agent", "want"), [
+    # the V2b undo: the backup's bridge.env is from before 'push_agent_env.py --keys'
+    ("ui-bridge", PRE_SPLIT_BRIDGE, None,
+     {"bridge.env": PRE_SPLIT_BRIDGE + f"DESKTOP_AGENT_PUBLIC_KEY={HEX_AGENT}\nDESKTOP_PC_PUBLIC_KEY={HEX_PC}\n",
+      ".env.agent": LIVE_LINK_AGENT}),
+    # 'push_agent_env.py --keys --rotate' since the backup: its older key never comes back
+    ("ui-bridge", PRE_SPLIT_BRIDGE + f"DESKTOP_AGENT_PUBLIC_KEY={HEX_OLD}\n", None,
+     {"bridge.env": PRE_SPLIT_BRIDGE + f"DESKTOP_AGENT_PUBLIC_KEY={HEX_AGENT}\nDESKTOP_PC_PUBLIC_KEY={HEX_PC}\n"}),
+    # the reverse: the agents' file goes back, the live bridge.env stays: the live agent key (and the laptop's
+    # public key) are written into the restored .env.agent
+    ("agent agent-svc", None,
+     "JARVIS_ENCRYPTION_KEY=c127-fake-fernet\nDESKTOP_AGENT_SIGNING_KEY=c127-fake-seed-old\n"
+     f"DESKTOP_AGENT_PUBLIC_KEY={HEX_OLD}\n",
+     {".env.agent": LIVE_LINK_AGENT, "bridge.env": LIVE_LINK_BRIDGE}),
+], ids=["v2b-undo-before-keys", "agent-key-rotated-since", "agents-file-restored"])
+def test_with_env_keeps_the_live_desktop_link_keys(sb: Sandbox, services: str, backup_bridge: str | None,
+                                                   backup_agent: str | None, want: dict[str, str]) -> None:
+    """C-127 review: --with-env put back a bridge.env without (or with older) Desktop Link public keys while the laptop
+    kept its pairing: the bridge's /desktop relay went off and every PC-signed request got 401, so in vps mode the
+    laptop went offline and 'agent_ctl brain' was refused at PREFLIGHT, while the /health gate stayed green. The live
+    link key lines are now written into a restored bridge.env and .env.agent, like JARVIS_BRAIN into .env."""
+    backup = sb.base / "2026-10-02_0001Z-pre-env-split"
+    _write(backup / "hostinger.env", PRE_SPLIT_ENV)
+    if backup_bridge is not None:
+        _write(backup / "bridge.env", backup_bridge)
+    if backup_agent is not None:
+        _write(backup / "env.agent", backup_agent)
+    _write(sb.hostinger / ".env", LIVE_VPS_ENV)
+    _write(sb.hostinger / "bridge.env", LIVE_LINK_BRIDGE)
+    _write(sb.hostinger / ".env.agent", LIVE_LINK_AGENT)
+    out = _run_env_functions(sb, backup, services, env_compose=True)
+    assert "c127-fake" not in out and HEX_AGENT not in out and "FAIL" not in out
+    for name, text in want.items():
+        assert (sb.hostinger / name).read_text(encoding="utf-8") == text, name
+    restored = "bridge.env" if services == "ui-bridge" else ".env.agent"
+    assert f"  kept the live DESKTOP_AGENT_PUBLIC_KEY in {sb.sh(sb.hostinger / restored)}" in out
+    assert f"the live Desktop Link key lines are written back into {restored}" in out
+
+
+def test_with_env_drops_a_link_key_the_live_file_does_not_have(sb: Sandbox) -> None:
+    """The live state wins both ways: a link key the live bridge.env lacks (the relay switched off by hand) does not
+    come back from the backup either."""
+    backup = sb.base / "2026-10-02_0001Z-pre-env-split"
+    _write(backup / "hostinger.env", PRE_SPLIT_ENV)
+    _write(backup / "bridge.env", PRE_SPLIT_BRIDGE + f"DESKTOP_PC_PUBLIC_KEY={HEX_OLD}\n")
+    _write(sb.hostinger / ".env", LIVE_VPS_ENV)
+    _write(sb.hostinger / "bridge.env", POST_SPLIT_BRIDGE)
+    out = _run_env_functions(sb, backup, "ui-bridge", env_compose=True)
+    assert (sb.hostinger / "bridge.env").read_text(encoding="utf-8") == PRE_SPLIT_BRIDGE
+    assert f"  dropped DESKTOP_PC_PUBLIC_KEY from {sb.sh(sb.hostinger / 'bridge.env')} (the live bridge.env has none)" \
+        in out and HEX_OLD not in out
+
+
+def test_with_env_reads_the_live_lines_behind_a_utf8_bom(sb: Sandbox) -> None:
+    """C-127 review (reproduced): a live .env saved with a UTF-8 BOM and JARVIS_BRAIN=vps on its first line looked to
+    rollback.sh like a file without JARVIS_BRAIN (compose and the Python env tools read past the BOM), so 'rollback.sh
+    <pc-era backup> --services ui-bridge --with-env' kept the backup's JARVIS_BRAIN=pc and flipped the vps brain back
+    to pc. The live lines behind a BOM are found now (the link key of a BOM bridge.env too), a backup copy's own line
+    behind a BOM goes, and no BOM travels into the middle of a restored file."""
+    backup = sb.base / "2026-10-02_0001Z-pre-env-split"
+    _write(backup / "hostinger.env", "\ufeffJARVIS_BRAIN=pc\n" + PRE_SPLIT_ENV.replace("JARVIS_BRAIN=pc\n", ""))
+    _write(backup / "bridge.env", PRE_SPLIT_BRIDGE)
+    _write(sb.hostinger / ".env", "\ufeffJARVIS_BRAIN=vps\nCOMPOSE_PROFILES=vps-brain\n"
+           + POST_SPLIT_ENV.replace("JARVIS_BRAIN=pc\n", ""))
+    _write(sb.hostinger / "bridge.env", f"\ufeffDESKTOP_AGENT_PUBLIC_KEY={HEX_AGENT}\n{POST_SPLIT_BRIDGE}")
+    out = _run_env_functions(sb, backup, "ui-bridge", env_compose=True)
+    assert "c127-fake" not in out and HEX_AGENT not in out and "FAIL" not in out
+    assert (sb.hostinger / ".env").read_text(encoding="utf-8") == RESTORED_ENV   # JARVIS_BRAIN=vps, the live profile
+    assert (sb.hostinger / "bridge.env").read_text(encoding="utf-8") == (
+        PRE_SPLIT_BRIDGE + f"DESKTOP_AGENT_PUBLIC_KEY={HEX_AGENT}\n")
+    assert f"  kept the live JARVIS_BRAIN in {sb.sh(sb.hostinger / '.env')}" in out
+    assert f"  kept the live DESKTOP_AGENT_PUBLIC_KEY in {sb.sh(sb.hostinger / 'bridge.env')}" in out
+
+
+@pytest.mark.parametrize(("live_line", "equal"), [
+    ("AGENT_TOKEN=c127-fake-agent", True),
+    ('AGENT_TOKEN="c127-fake-agent"', True),
+    ("export AGENT_TOKEN = 'c127-fake-agent'  # note", True),
+    ("AGENT_TOKEN=c127-fake-agent # c127-fake-comment", True),
+    ("AGENT_TOKEN=c127-fake-agent-rotated", False),
+    ("AGENT_TOKEN=", None),        # empty: no value to compare
+    ("OTHER=c127-fake-agent", None),
+    ("\ufeffAGENT_TOKEN=c127-fake-agent", True),             # a UTF-8 BOM in front of the first line: read past
+    ("\ufeffAGENT_TOKEN=c127-fake-agent-rotated", False),
+], ids=["plain", "double-quoted", "export-single-quoted-comment", "inline-comment", "rotated", "empty", "absent",
+        "bom-first-line", "bom-first-line-rotated"])
+def test_env_value_digest_compares_values_as_compose_reads_them_and_prints_none(tmp_path: Path, live_line: str,
+                                                                                equal: bool | None) -> None:
+    """The shared values are compared by digest on the VPS (rollback.sh, C-127 review): quoting, 'export', an inline
+    comment and a UTF-8 BOM in front of the first line do not matter (compose reads past all of them; a BOM used to hide
+    that line, so a rotated value there was never compared), the last assignment wins, and the output is a digest or
+    '-', never a value."""
+    backup = _write(tmp_path / "backup.env", "AGENT_TOKEN=old\nAGENT_TOKEN=c127-fake-agent\n")
+    live = _write(tmp_path / "live.env", live_line + "\n")
+    script = (_shell_function("rollback.sh", "env_value_digest") + _rollback_constants()
+              + 'env_value_digest "$1" AGENT_TOKEN\nenv_value_digest "$2" AGENT_TOKEN\nenv_value_digest "$3" AGENT_TOKEN\n')
+    env = dict(os.environ, PATH=os.pathsep.join([str(Path(BASH).parent), os.environ.get("PATH", "")]))
+    proc = subprocess.run([BASH, "-c", script, "digest", _posix(backup), _posix(live), _posix(tmp_path / "missing")],
+                          env=env, capture_output=True, text=True, check=False)
+    assert proc.returncode == 0, _out(proc)
+    first, second, third = proc.stdout.split()
+    assert "c127-fake" not in _out(proc) and re.fullmatch(r"[0-9a-f]{64}", first) and third == "-"
+    if equal is None:
+        assert second == "-"
+    else:
+        assert (first == second) == equal and re.fullmatch(r"[0-9a-f]{64}", second)
+
+
+def test_backup_and_rollback_read_env_names_the_same_way_and_never_print_values(tmp_path: Path) -> None:
+    """backup_vps.sh records the layout and rollback.sh reads the live one: both must cut the same names. A UTF-8 BOM in
+    front of the first line (a file a Windows editor saved) is read past, as compose and env_remote.env_entries do; it
+    used to hide that line's name from the layout (C-127 review)."""
+    env_file = _write(tmp_path / "x.env", "# c\nA=1\n export B = c127-fake-b\nEMPTY=\nCOMMENTED= # c127-fake\n"
+                                          "Q=\"c127-fake quoted\"\nbare\nA=again\n_U9=x=y\n")
+    bom_file = _write(tmp_path / "bom.env", "\ufeffZ_FIRST=c127-fake-z\nA=1\nB=\ufeffnot-a-name\n")
+    bom_comment = _write(tmp_path / "bom-comment.env", "\ufeff# c\nA=1\n")
+    for path, want in ((env_file, "A,B,Q,_U9\n"), (bom_file, "A,B,Z_FIRST\n"), (bom_comment, "A\n")):
+        outputs = []
+        for script in ("backup_vps.sh", "rollback.sh"):
+            proc = subprocess.run([BASH, "-c", _shell_function(script, "env_names") + 'env_names "$1"', "names",
+                                   _posix(path)], capture_output=True, text=True, check=False)
+            assert proc.returncode == 0, proc.stderr
+            assert "c127-fake" not in proc.stdout + proc.stderr
+            outputs.append(proc.stdout)
+        assert outputs[0] == outputs[1] == want, path.name
+    empty = _write(tmp_path / "empty.env", "# nothing\n")
+    proc = subprocess.run([BASH, "-c", _shell_function("rollback.sh", "env_names") + 'env_names "$1"', "names",
+                           _posix(empty)], capture_output=True, text=True, check=False)
+    assert proc.stdout == "-\n"
+
+
+def test_backup_vps_records_the_env_layout_in_its_manifest(tmp_path: Path) -> None:
+    hostinger = tmp_path / "hostinger"
+    _write(hostinger / ".env", "LIVEKIT_API_KEY=c127-fake-k\nJARVIS_BRAIN=pc\n")
+    _write(hostinger / "bridge.env", "\ufeffAGENT_TOKEN=c127-fake-t\n")   # a UTF-8 BOM: its first name still counts
+    script = (_shell_function("backup_vps.sh", "env_names") + _shell_function("backup_vps.sh", "env_layout_lines")
+              + f'HOSTINGER_DIR="{_posix(hostinger)}"\nenv_layout_lines\n')
+    proc = subprocess.run([BASH, "-c", script], capture_output=True, text=True, check=False)
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout == ("env_layout:    .env present JARVIS_BRAIN,LIVEKIT_API_KEY\n"
+                           "env_layout:    bridge.env present AGENT_TOKEN\n"
+                           "env_layout:    .env.agent absent -\n")
+    source = (HOSTINGER / "backup_vps.sh").read_text(encoding="utf-8")
+    assert 'copy_private "$HOSTINGER_DIR/.env.agent" env.agent 0' in source
+    assert source.index("env_layout_lines") < source.index('} > "$B/MANIFEST.txt"')
+
+
+def test_backup_vps_keeps_the_agent_env_out_of_the_code_archive(tmp_path: Path) -> None:
+    """C-127: .env.agent (the agent's link private key, K-70, and its AI keys) is backed up only as env.agent, which the
+    PC mirror leaves out; the code archive, which the mirror copies, never holds it (nor its .tmp or temp copies)."""
+    hostinger = tmp_path / "opt" / "jarvis-agent" / "deploy" / "hostinger"
+    _write(hostinger / ".env", "LIVEKIT_API_KEY=c127-fake-k\n")
+    _write(hostinger / ".env.agent", "DESKTOP_AGENT_SIGNING_KEY=c127-fake-seed\n")
+    _write(hostinger / ".env.agent.tmp", "DESKTOP_AGENT_SIGNING_KEY=c127-fake-seed-new\n")
+    _write(hostinger / "..env.agent.1a2b3c4d.part", "GOOGLE_API_KEY=c127-fake-google\n")
+    _write(hostinger / ".env.agent.example", "GOOGLE_API_KEY=\n")
+    _write(tmp_path / "opt" / "jarvis-agent" / "src" / "core" / "x.py", "X = 1\n")
+    backup = tmp_path / "backup"
+    backup.mkdir()
+    assert BASH is not None
+    script = (_shell_function("backup_vps.sh", "backup_code")
+              + f'APP_DIR="{_posix(tmp_path / "opt" / "jarvis-agent")}"\nB="{_posix(backup)}"\n'
+              'log() { printf "%s\\n" "$*"; }\nwarn() { printf "WARN %s\\n" "$*"; }\n'
+              'fail() { printf "FAIL %s\\n" "$*"; }\nbackup_code\n')
+    env = dict(os.environ, PATH=os.pathsep.join([str(Path(BASH).parent), os.environ.get("PATH", "")]))
+    proc = subprocess.run([BASH, "-c", script], env=env, capture_output=True, text=True, check=False)
+    assert proc.returncode == 0 and "FAIL" not in proc.stdout, _out(proc)
+    with tarfile.open(backup / "opt-jarvis-agent.tgz") as tar:
+        names = tar.getnames()
+    assert "jarvis-agent/src/core/x.py" in names and "jarvis-agent/deploy/hostinger/.env" in names
+    assert "jarvis-agent/deploy/hostinger/.env.agent.example" in names        # a template, no secret
+    assert not [n for n in names if n.endswith((".env.agent", ".env.agent.tmp")) or "..env.agent." in n], names
+
+
+def test_runbook_mirror_and_newest_backup_never_take_the_agent_env_or_another_tools_folder() -> None:
+    """C-127: the PC mirror copies only backup_vps.sh folders (they hold MANIFEST.txt) and streams each one without
+    env.agent; the 'newest backup' commands never take a 2* folder of another tool (the env tools keep theirs in
+    /root/jarvis-backups/env, rotate_livekit_keys and set_owner_credentials in 2* folders without MANIFEST.txt)."""
+    text = (HOSTINGER / "RUNBOOK.md").read_text(encoding="utf-8")
+    mirror = text[text.index("### Mirror VPS backups to the PC"):text.index("### Restore drill")]
+    copies = [line for line in mirror.splitlines() if "/root/jarvis-backups" in line and not line.startswith("The ")]
+    assert copies and not any("scp" in line for line in copies), copies   # scp -r would take env.agent along
+    assert all("--exclude=$TS/env.agent" in line for line in copies if "tar -C /root/jarvis-backups" in line)
+    assert "ls -1d 2*/MANIFEST.txt" in mirror and "grep -v '  env\\.agent$' SHA256SUMS" in mirror
+    assert "jarvis-backups/2* | tail" not in text and 'grep "^2"' not in text
+    assert text.count("ls -1d /root/jarvis-backups/2*/MANIFEST.txt | tail -1") == 2   # restore drill, archives
+
+
+def test_runbook_env_restore_goes_through_rollback_with_env_never_a_plain_copy() -> None:
+    """C-127 review: 'Restore > 4. Env files' installed the backup's env.agent beside a recreate of the bridge alone
+    and put the backup's Desktop Link keys back, the opposite of rollback.sh --with-env (only the env files of the
+    recreated services go back, the live link keys stay). The step now goes through rollback.sh, and it names the live
+    lines a copy by hand would have to put back."""
+    text = (HOSTINGER / "RUNBOOK.md").read_text(encoding="utf-8")
+    step = text[text.index("**4. Env files.**"):text.index("**5. Volumes**")]
+    assert "bash $T/rollback.sh ${B##*/} --services ui-bridge --with-env --dry-run" in step
+    assert not [line for line in step.splitlines() if line.startswith("install ") or "$B/env.agent" in line], step
+    for name in ("DESKTOP_AGENT_PUBLIC_KEY", "DESKTOP_PC_PUBLIC_KEY", "DESKTOP_AGENT_SIGNING_KEY", "JARVIS_BRAIN",
+                 "COMPOSE_PROFILES", "AGENT_TOKEN", "BRIDGE_HMAC_SECRET"):
+        assert name in step, name
+    assert "`.env.agent` (the backup's `env.agent`) goes back only with a rollback that recreates `agent`" in step
+
+
+@e2e
+def test_rollback_with_env_restores_image_compose_and_env_files_together(sb: Sandbox) -> None:
+    """C-127 acceptance: the pre-split tag works with --with-env: the bridge image, docker-compose.yml and the env
+    files the bridge reads all come back from the one backup, while .env.agent (no service of this rollback reads it)
+    and the live JARVIS_BRAIN stay; its printed undo goes forward again."""
+    name = _pre_split_backup(sb)
+    _write(sb.base / name / "env.agent", "")                    # the C-126 placeholder of that time
+    _write(sb.hostinger / "docker-compose.yml", COMPOSE_NEW)   # the code moved on since that backup
+    _write(sb.hostinger / ".env", POST_SPLIT_ENV.replace("JARVIS_BRAIN=pc", "JARVIS_BRAIN=vps"))   # after cutover
+    _write(sb.hostinger / ".env.agent", LIVE_AGENT_ENV)
+    tools = sb.base / "tools" / "rollback.sh"
+    proc = sb.run(tools, "--tag", f"rollback-{name}", "--services", "ui-bridge", "--with-env", "--foreground")
+    out = _out(proc)
+    assert proc.returncode == 0, out
+    assert "c127-fake" not in out
+    _assert_no_other_names(out)
+    assert (sb.hostinger / ".env").read_text(encoding="utf-8") == PRE_SPLIT_ENV.replace("JARVIS_BRAIN=pc",
+                                                                                      "JARVIS_BRAIN=vps")
+    assert (sb.hostinger / "bridge.env").read_text(encoding="utf-8") == PRE_SPLIT_BRIDGE
+    assert (sb.hostinger / "docker-compose.yml").read_text(encoding="utf-8") == COMPOSE_OLD
+    assert (sb.hostinger / ".env.agent").read_text(encoding="utf-8") == LIVE_AGENT_ENV
+    assert f"keep       {sb.sh(sb.hostinger / '.env.agent')} (no service of this rollback reads it)" in out
+    assert sb.load_state()["containers"]["jarvis-bridge"]["image"] == B_OLD
+    undo = sb.backups()[-1]
+    assert "ENV=1" in (undo / "deploy.env").read_text(encoding="utf-8")
+
+
+@e2e
+def test_rollback_with_env_keeps_the_link_keys_and_refuses_a_rotated_agent_token(sb: Sandbox) -> None:
+    """C-127 review, a real run: the V2b undo after 'push_agent_env.py --keys' and an AGENT_TOKEN rotation. Refused
+    before any change; with --shared-values-differ-ok the pre-split bridge.env comes back with the live link keys, and
+    the printed undo carries the option."""
+    name = _pre_split_backup(sb)
+    _write(sb.base / name / "env.agent", "")
+    _write(sb.hostinger / "docker-compose.yml", COMPOSE_NEW)
+    _write(sb.hostinger / ".env", POST_SPLIT_ENV.replace("JARVIS_BRAIN=pc", "JARVIS_BRAIN=vps"))
+    _write(sb.hostinger / "bridge.env", ROTATED_BRIDGE + f"DESKTOP_AGENT_PUBLIC_KEY={HEX_AGENT}\n"
+                                                         f"DESKTOP_PC_PUBLIC_KEY={HEX_PC}\n")
+    _write(sb.hostinger / ".env.agent", LIVE_LINK_AGENT)
+    tools = sb.base / "tools" / "rollback.sh"
+    before, state, n_backups = _digest(sb.app), sb.load_state(), len(sb.backups())
+    args = ("--tag", f"rollback-{name}", "--services", "ui-bridge", "--with-env", "--foreground")
+    proc = sb.run(tools, *args)
+    out = _out(proc)
+    assert proc.returncode == 1 and "AGENT_TOKEN: bridge.env of the backup differs from the live bridge.env" in out, out
+    _assert_unchanged(sb, before, state, n_backups)
+    proc = sb.run(tools, *args, "--shared-values-differ-ok")
+    out = _out(proc)
+    assert proc.returncode == 0, out
+    assert "c127-fake" not in out and HEX_AGENT not in out
+    _assert_no_other_names(out)
+    assert (sb.hostinger / "bridge.env").read_text(encoding="utf-8") == (
+        PRE_SPLIT_BRIDGE + f"DESKTOP_AGENT_PUBLIC_KEY={HEX_AGENT}\nDESKTOP_PC_PUBLIC_KEY={HEX_PC}\n")
+    assert (sb.hostinger / ".env.agent").read_text(encoding="utf-8") == LIVE_LINK_AGENT
+    undo = sb.backups()[-1].name
+    assert f"undo this rollback with: bash {sb.sh(sb.base / 'tools')}/rollback.sh {undo} --shared-values-differ-ok" \
+        in out
+
+
+@e2e
+def test_rollback_with_env_of_a_service_that_reads_no_env_file_leaves_compose_and_env_alone(sb: Sandbox) -> None:
+    """C-127 review, a real run: '--services frontend --with-env' never puts the backup's docker-compose.yml (or .env)
+    back beside today's env files."""
+    name = _pre_split_backup(sb)
+    for record in ("deploy.env", "deploy-images.txt"):
+        (sb.base / name / record).unlink()
+    _write(sb.hostinger / "docker-compose.yml", COMPOSE_NEW)        # the code moved on since that backup
+    live = {f: (sb.hostinger / f).read_bytes() for f in ("docker-compose.yml", ".env", "bridge.env")}
+    proc = sb.run(sb.base / "tools" / "rollback.sh", name, "--services", "frontend", "--with-env", "--foreground")
+    out = _out(proc)
+    assert proc.returncode == 0, out
+    assert {f: (sb.hostinger / f).read_bytes() for f in live} == live
+    assert "restored " + sb.sh(sb.hostinger / "docker-compose.yml") not in out
+    assert sb.load_state()["containers"]["jarvis-frontend"]["image"] == F_OLD

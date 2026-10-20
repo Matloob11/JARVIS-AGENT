@@ -4,7 +4,7 @@
 Usage (from the repo root, with the project venv):
     .venv_312/Scripts/python.exe scripts/ops/rotate_env_secret.py --name KEY [--alias KEY2]
         [--pc-files .env,deploy/windows-local/.env] [--vps-file /opt/jarvis-agent/deploy/hostinger/bridge.env]
-        [--value-from-stdin] [--dry-run] [--host H] [--ssh-key K]
+        [--value-from-stdin] [--dry-run] [--host H] [--ssh-key K] [--run-dir D]
 
 --name KEY          the key to replace. Its new value is generated (AGENT_TOKEN token_urlsafe(48),
                     BRIDGE_HMAC_SECRET token_hex(32), SESSION_JWT_SECRET token_urlsafe(64), any other key
@@ -23,12 +23,21 @@ the VPS file is written, then the temp files are renamed over the PC files (atom
 line stays byte for byte. Nothing is written anywhere when a temp file cannot be written, and nothing on this PC
 when the VPS step fails. If a rename still fails after the VPS step, the error says that the VPS file already holds
 the new value (with its fingerprint): fix the cause and run the same command again.
+vps mode (plan C-127 step 5, user decision D13): while run/fallback.env.dpapi exists (--run-dir D, default
+JARVIS_RUN_DIR or run/; 'agent_ctl brain vps' DPAPI-wrapped the PC fallback secrets there), a --name or --alias in
+scripts/ops/fallback_env.py FALLBACK_NAMES never goes into a --pc-files file: the PC side goes through
+fallback_env.put_values into the store (the given env files lose any copy of it, so the store holds the only one;
+--alias only when this PC holds it, in the store or an env file). Before the VPS step put_values checks, writing
+nothing, that this Windows user can unwrap the store and that the env file edits can be written (else exit 2, nothing
+written anywhere). A --name and --alias of which only one is a fallback name, while the other would be written on
+this PC, are refused (exit 2): rotate them one at a time. 'fallback_env.py --set NAME --value-from-stdin' does the
+PC side alone.
 Prints 'KEY rotated in N files' with the value's length and fingerprint (sha256 of 'jarvis-fp:' + value, first
 8 hex); never the value. Afterwards restart what reads the key (the bridge: deploy_from_pc.sh or
 'docker compose -p jarvis up -d --no-deps ui-bridge'; the PC agent: agent_ctl restart).
 Back up first: scripts/ops/backup_local.py --now (PC) and deploy/hostinger/backup_vps.sh (VPS).
-Exit codes: 0 ok, 1 the VPS step failed (nothing written on this PC) or a PC file could not be replaced after the
-VPS file was written, 2 usage or file error (nothing written).
+Exit codes: 0 ok, 1 the VPS step failed (nothing written on this PC) or a PC file (in vps mode: the store) could not
+be replaced after the VPS file was written, 2 usage or file error (nothing written).
 """
 from __future__ import annotations
 
@@ -53,6 +62,17 @@ EnvError = env_set.EnvError
 # Git Bash's mintty (like Cygwin's) gives a Windows program named pipes instead of a console, so isatty() is False
 # while the terminal shows what is typed. The pipes are named \msys-<key>-pty<N>-from-master (or cygwin-, -to-, -nat).
 _MSYS_PTY = re.compile(r"(?:\\Device\\NamedPipe)?\\(?:msys|cygwin)-[^-\\]+-pty[^-\\]*-(?:from|to)-master(?:-[^\\]*)?")
+
+
+def _fallback_env() -> Any:
+    """scripts/ops/fallback_env.py, the vps-mode DPAPI store of the PC fallback secrets (C-127 step 5). Loaded when a
+    run names PC files, never at import: fallback_env.py loads this file itself (as a module of its own)."""
+    spec = importlib.util.spec_from_file_location("jarvis_ops_fallback_env",
+                                                  Path(__file__).with_name("fallback_env.py"))
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def replace_in(env_file: Any, key: str, token: str) -> str:
@@ -134,6 +154,8 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--dry-run", action="store_true", help="report what would change; write nothing")
     parser.add_argument("--host", default=gen_secrets.VPS_HOST, help=f"ssh target (default {gen_secrets.VPS_HOST})")
     parser.add_argument("--ssh-key", type=Path, default=gen_secrets.VPS_KEY, help="ssh identity file")
+    parser.add_argument("--run-dir", type=Path, default=None,
+                        help="folder of run/fallback.env.dpapi, the vps-mode store (default JARVIS_RUN_DIR or run/)")
     args = parser.parse_args(argv)
     for option in ("name", "alias"):
         value = getattr(args, option)
@@ -160,6 +182,71 @@ def _vps_rotate(args: argparse.Namespace, value: str, runner: Any) -> tuple[int,
     return 0, report, True
 
 
+def store_route_names(args: argparse.Namespace, files: list[Any], fe: Any) -> list[str]:
+    """vps mode: the names of this run whose PC side goes into run/fallback.env.dpapi instead of the env files; []
+    when no PC file is given, there is no store, or neither name is a fallback name. --alias counts only when this PC
+    holds it (in the store, by its plaintext header, or in a given env file). Raises EnvError when one of the names
+    to write on this PC is a fallback name and the other is not."""
+    if not files or not fe.store_path(args.run_dir).exists():
+        return []
+    held = fe.wrapped_names(fe.store_path(args.run_dir)) | {key for f in files for key in f.values if f.value(key)}
+    names = [args.name] + ([args.alias] if args.alias and args.alias in held else [])
+    wrapped = [name for name in names if name in fe.FALLBACK_NAMES]
+    if wrapped and len(wrapped) != len(names):
+        plain = [name for name in names if name not in wrapped]
+        raise EnvError(f"vps mode: {', '.join(wrapped)} goes into {fe.STORE_NAME} and {', '.join(plain)} into the env "
+                       "files; rotate them one at a time")
+    return wrapped
+
+
+def _rotate_wrapped(args: argparse.Namespace, value: str, paths: list[Path], fe: Any, names: list[str],
+                    runner: Any) -> int:
+    """vps mode (C-127 step 5, D13): the PC side through fallback_env.put_values into the store, never an env file.
+    put_values first runs with check (nothing written) before the VPS step; the VPS file, then the store."""
+    values = {name: value for name in names}
+    shown = fe._shown(fe.store_path(args.run_dir))  # pylint: disable=protected-access  # run/fallback.env.dpapi
+    fp = gen_secrets.fingerprint(value)
+    check = fe.put_values(values, paths, args.run_dir, check=True)
+    if check.code:
+        for line in check.lines:
+            print(f"pc  {line}", file=sys.stderr)
+        print(f"rotate_env_secret: this PC cannot take the new {args.name} (vps mode: it goes into the DPAPI store "
+              f"{shown}, never into an env file); nothing was written on the VPS or this PC", file=sys.stderr)
+        return 2
+    if args.dry_run:
+        for line in check.lines:
+            print(f"pc  {line}")
+    count, alias_files = 1, int(bool(args.alias) and args.alias in values)
+    if args.vps_file:
+        code, report, done = _vps_rotate(args, value, runner)
+        for line in report:
+            print(f"vps {line}")
+        if code:
+            print("nothing written on this PC", file=sys.stderr)
+            return code
+        count += int(done)
+        alias_files += sum(1 for line in report if args.alias and line.startswith(f"{args.alias}: replaced"))
+    verb = "would be rotated" if args.dry_run else "rotated"
+    if args.dry_run:
+        print(f"dry run: {args.name} would be rotated in {count} files (on this PC in {shown}, vps mode); nothing "
+              "written on this PC")
+    else:
+        done_pc = fe.put_values(values, paths, args.run_dir)
+        for line in done_pc.lines:
+            print(f"pc  {line}", file=sys.stderr if done_pc.code else sys.stdout)
+        if done_pc.code:
+            if not args.vps_file:
+                return 2
+            print(f"rotate_env_secret: the VPS file {args.vps_file} already holds the new {args.name} (fp {fp}), but "
+                  f"this PC's {shown} does not (see above). Fix that, then run the same command again.",
+                  file=sys.stderr)
+            return 1
+    print(f"{args.name} {verb} in {count} files (len {len(value)}, fp {fp}); on this PC in {shown} (vps mode)")
+    if args.alias:
+        print(f"{args.alias} {verb} in {alias_files} files (same value)")
+    return 0
+
+
 def main(argv: list[str] | None = None, runner: Any = None, stdin: TextIO | None = None) -> int:
     args = parse_args(argv)
     runner = runner or gen_secrets.run_ssh
@@ -172,7 +259,12 @@ def main(argv: list[str] | None = None, runner: Any = None, stdin: TextIO | None
         if len({os.path.normcase(str(p.resolve())) for p in paths}) != len(paths):
             raise EnvError("the same file is given twice")
         files = [env_set.EnvFile(path) for path in paths]
-        token = env_set.render_value(args.name, value)
+        token = env_set.render_value(args.name, value)   # also in vps mode: 'agent_ctl brain pc' writes it to .env
+        # vps mode (C-127 step 5, D13): while the DPAPI store exists a fallback secret never reaches a PC env file
+        fe = _fallback_env() if files else None
+        wrapped = store_route_names(args, files, fe) if fe is not None else []
+        if wrapped:
+            return _rotate_wrapped(args, value, paths, fe, wrapped, runner)
         alias_files = 0
         for f in files:
             replace_in(f, args.name, token)

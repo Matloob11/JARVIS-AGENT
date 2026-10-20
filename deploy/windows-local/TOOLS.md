@@ -165,6 +165,7 @@ How to add the key:
    ```powershell
    .\.venv_312\Scripts\python.exe scripts\ops\rotate_env_secret.py --name SIM_LOOKUP_API_KEY --pc-files .env --value-from-stdin
    ```
+   In vps mode the key goes into the DPAPI-wrapped `run\fallback.env.dpapi` instead of `.env` ([Adding or changing a key](#adding-or-changing-a-key), step 2).
 4. Make sure the source is on: `.\.venv_312\Scripts\python.exe scripts\ops\env_defaults.py --update SIM_SOURCE=auto`
 5. Restart the worker: `.\.venv_312\Scripts\python.exe scripts\agent_ctl.py restart --by user --reason sim-key`
 6. Open the SIM dialog. The banner now names `authorized_api`, and a test lookup asks for the Allow and a purpose.
@@ -210,6 +211,7 @@ Check it with `.\.venv_312\Scripts\python.exe scripts\pc\check_desktop_prereqs.p
    ```powershell
    .\.venv_312\Scripts\python.exe scripts\ops\rotate_env_secret.py --name <KEY> --pc-files .env --value-from-stdin
    ```
+   In vps mode (C-127: while `run\fallback.env.dpapi` exists, after `agent_ctl brain vps`) a PC fallback secret named this way (the AI, image, search, weather, SIM and email keys, `LIVEKIT_API_SECRET`, the legacy token) goes into that DPAPI-wrapped store, never into `.env`: the tool first checks that this Windows user can unwrap the store, and refuses otherwise (exit 2, nothing written). `scripts\ops\fallback_env.py --status` lists where each name is, names only; `agent_ctl brain pc` puts the values back into `.env`. A store this Windows user can never unwrap (the repo copied to another laptop or Windows user, a rebuilt profile) is moved aside, never deleted, with `scripts\ops\fallback_env.py --discard --confirm` (`--discard --dry-run` checks first); then enter the values again (`deploy/hostinger/RUNBOOK.md`, "The PC fallback secrets").
 3. Switches that are not secret can be changed with `env_defaults.py --update KEY=VALUE`. This works only for `JARVIS_SELF_REPAIR_APPLY`, `TAVILY_SEARCH_DEPTH`, `SIM_SOURCE`, `SIM_LOOKUP_SHOW_ADDRESS`, `SIM_LOOKUP_DAILY_LIMIT` and the `JARVIS_*_MODEL` names; a name that looks secret is refused.
 4. Check which keys exist, never their values:
    ```powershell

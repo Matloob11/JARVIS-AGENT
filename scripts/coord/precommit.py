@@ -11,10 +11,16 @@ PowerShell: $env:JARVIS_AGENT='cursor'; git commit -m "[cursor] X-NN: ..." -- <p
 Lanes come from HEAD's .coord/lanes.json (scripts/coord/check_lane.py); a staged or unstaged edit applies from the next commit.
 Added lines are also checked for MOJIBAKE (UTF-8 text saved after being read as ANSI), and modified files
 for ENCODING_LOSS (committed non-ASCII characters saved as '?'; scripts/coord/restore_unicode.py undoes it).
+ENV_VALUE looks for the secret values of ENV_FILES and, in vps mode, for the PC fallback secrets that 'agent_ctl brain
+vps' moved out of the env files into the DPAPI-wrapped run/fallback.env.dpapi (scripts/ops/fallback_env.py, plan task
+C-127, D13): this process unwraps that store (it runs as the same Windows user) and keeps the values in memory only.
+A store it cannot unwrap is named on stderr with the names it holds, and every other check still runs.
 Prints only "path:line RULE" (never the secret value). Exit code 1 if anything is found.
 """
 from __future__ import annotations
 
+import importlib.util
+import json
 import os
 import re
 import subprocess
@@ -32,6 +38,10 @@ ROOT = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=Tr
 # VPS agent containers' env file; a copy on this PC is scanned the same way.
 ENV_FILES = [".env", "deploy/windows-local/.env", "deploy/hostinger/.env", "deploy/hostinger/bridge.env",
              "deploy/hostinger/.env.agent"]
+# vps mode (C-127 step 5, D13): the PC fallback secrets leave the first two ENV_FILES for this DPAPI-wrapped store
+# (fallback_env.store_path(): JARVIS_RUN_DIR, else <repo>/run); fallback_values() reads it with fallback_env's own code.
+FALLBACK_ENV_SCRIPT = os.path.join(os.path.dirname(_HERE), "ops", "fallback_env.py")
+FALLBACK_STORE = "fallback.env.dpapi"
 PRIVATE_TERMS_FILE = ".coord/private_terms.txt"
 MAX_SCAN_BYTES = 2_000_000
 AGENT_ENV = "JARVIS_AGENT"
@@ -75,8 +85,72 @@ def phone_variants(number: str) -> list[str]:
     return sorted({digits, "+" + digits, "0" + local, local})
 
 
-def env_values() -> list[tuple[str, str]]:
-    """(KEY_NAME, value) for secret-like .env values (16+ chars) and private values (email, test numbers)."""
+def _value_entries(key: str, value: str) -> list[tuple[str, str]]:
+    """The (KEY_NAME, value) pairs one assignment adds: a secret-like value (16+ chars), a private value (6+ chars),
+    every form of each test number; none for anything else."""
+    if not value:
+        return []
+    if key == "WHATSAPP_TEST_NUMBERS":
+        return [(key, v) for num in value.split(",") for v in phone_variants(num)]
+    if key in PRIVATE_VALUE_KEYS and len(value) >= 6:
+        return [(key, value)]
+    if SECRET_KEY_NAME.search(key) and len(value) >= 16:
+        return [(key, value)]
+    return []
+
+
+def fallback_store() -> str:
+    """The DPAPI store of the PC fallback secrets, where scripts/ops/fallback_env.py keeps it: JARVIS_RUN_DIR, else
+    <repo>/run."""
+    return os.path.join(os.environ.get("JARVIS_RUN_DIR") or os.path.join(ROOT, "run"), FALLBACK_STORE)
+
+
+def _store_names(path: str) -> list[str]:
+    """The names in the store's plaintext header (nothing is unwrapped); [] when it cannot be read."""
+    try:
+        with open(path, encoding="utf-8") as handle:
+            groups = json.load(handle).get("names") or {}
+        return sorted({str(name) for names in groups.values() for name in names})
+    except (OSError, ValueError, AttributeError, TypeError):
+        return []
+
+
+def _load_fallback_env():
+    """scripts/ops/fallback_env.py next to this folder, as a module (scripts/ops is not a package)."""
+    spec = importlib.util.spec_from_file_location("jarvis_coord_fallback_env", FALLBACK_ENV_SCRIPT)
+    if spec is None or spec.loader is None:
+        raise ImportError("scripts/ops/fallback_env.py cannot be loaded")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def fallback_values(unprotect=None) -> list[tuple[str, str]]:
+    """(name, value) of the PC fallback secrets in the DPAPI store (vps mode, C-127 step 5, D13), unwrapped in this
+    process by fallback_env.load_store with its DPAPI call (`unprotect` replaces that call in the tests): the hook runs
+    as the Windows user who wrapped them. The values stay in memory and are never printed. None without a store. A
+    store that cannot be unwrapped (another Windows user, a damaged file, fallback_env.py or its packages missing) is
+    reported on stderr with the names its plaintext header holds, never a value; the caller's other checks go on."""
+    store = fallback_store()
+    if not os.path.isfile(store):
+        return []
+    module = None
+    try:
+        module = _load_fallback_env()
+        files = module.load_store(store, unprotect or module.dpapi_unprotect)
+    except Exception as exc:  # pylint: disable=broad-exception-caught  # named on stderr; the commit check goes on
+        # fallback_env's EnvError never carries a value; anything else is named by its type only
+        why = str(exc) if module is not None and isinstance(exc, module.EnvError) else type(exc).__name__
+        names = ", ".join(_store_names(store)) or "names unreadable"
+        print(f"JARVIS pre-commit guard: WARNING: no line is checked for the values of the DPAPI-wrapped PC fallback "
+              f"secrets ({names}): {why}. Every other check still runs.", file=sys.stderr)
+        return []
+    return [(str(name), str(value)) for values in files.values() for name, value in values.items()]
+
+
+def env_values(unprotect=None) -> list[tuple[str, str]]:
+    """(KEY_NAME, value) for secret-like .env values (16+ chars) and private values (email, test numbers): from
+    ENV_FILES, and in vps mode from the DPAPI-wrapped PC fallback store (fallback_values)."""
     out = []
     for rel in ENV_FILES:
         path = os.path.join(ROOT, rel)
@@ -86,16 +160,9 @@ def env_values() -> list[tuple[str, str]]:
             m = re.match(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$", line.rstrip("\r\n"))
             if not m:
                 continue
-            key, value = m.group(1), m.group(2).strip().strip('"').strip("'")
-            if not value:
-                continue
-            if key == "WHATSAPP_TEST_NUMBERS":
-                for num in value.split(","):
-                    out += [(key, v) for v in phone_variants(num)]
-            elif key in PRIVATE_VALUE_KEYS and len(value) >= 6:
-                out.append((key, value))
-            elif SECRET_KEY_NAME.search(key) and len(value) >= 16:
-                out.append((key, value))
+            out += _value_entries(m.group(1), m.group(2).strip().strip('"').strip("'"))
+    for key, value in fallback_values(unprotect):
+        out += _value_entries(key, value)
     return out
 
 
