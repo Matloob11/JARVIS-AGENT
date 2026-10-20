@@ -20,9 +20,11 @@ async function openSettingsDrawer(page: import('@playwright/test').Page) {
 test.describe.configure({ mode: 'serial', timeout: 90_000 });
 
 test.beforeEach(async ({ page }) => {
+  await page.request.post(`${MOCK}/__mock/reset-settings`);
   await loginViaRecovery(page);
   await expect(page.getByTestId('chip-bridge')).toBeVisible({ timeout: 15_000 });
   await page.request.post(`${MOCK}/__mock/agent`, { data: { online: true } });
+  await page.request.post(`${MOCK}/__mock/reset-settings`);
 });
 
 test('turn mode change shows restart required until cleared', async ({ page }) => {
@@ -113,9 +115,12 @@ test('quiet hours emits quiet_hours partial', async ({ page }) => {
     )
     .toBe(true);
 
-  await expect(page.getByTestId('settings-status-quietHours')).toHaveAttribute('data-state', 'applied', {
-    timeout: 10_000,
-  });
+  await expect(page.getByTestId('settings-status-quietHours')).toHaveAttribute(
+    'data-state',
+    'unsupported',
+    { timeout: 10_000 },
+  );
+  await expect(page.getByTestId('settings-status-quietHours')).toContainText(/abhi active nahi/i);
 });
 
 test('voice-ID reject polite and threshold slider emit updates', async ({ page }) => {

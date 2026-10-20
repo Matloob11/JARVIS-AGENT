@@ -18,6 +18,10 @@ async function setSuppressSettingsSync(page: import('@playwright/test').Page, su
   });
 }
 
+async function resetMockSettings(page: import('@playwright/test').Page) {
+  await page.request.post(`${MOCK}/__mock/reset-settings`);
+}
+
 async function openSettingsDrawer(page: import('@playwright/test').Page) {
   await page.getByTitle('Settings').click();
   await expect(page.getByTestId('settings-drawer')).toBeVisible();
@@ -27,9 +31,11 @@ test.describe.configure({ mode: 'serial', timeout: 90_000 });
 
 test.beforeEach(async ({ page }) => {
   await setSuppressSettingsSync(page, false);
+  await resetMockSettings(page);
   await loginViaRecovery(page);
   await expect(page.getByTestId('chip-bridge')).toBeVisible({ timeout: 15_000 });
   await page.request.post(`${MOCK}/__mock/agent`, { data: { online: true } });
+  await resetMockSettings(page);
 });
 
 test('voice Puck emits settings_update and shows applied after settings_sync', async ({ page }) => {
@@ -87,21 +93,75 @@ test('settings sync timeout reverts optimistic value', async ({ page }) => {
   await setSuppressSettingsSync(page, false);
 });
 
-test('settings_sync errors.voice is shown in the drawer', async ({ page }) => {
+test('bad voice alloyx shows error and leaves value unchanged', async ({ page }) => {
   await openSettingsDrawer(page);
+  await expect(page.getByTestId('settings-voice-select')).toHaveValue('Aoede');
 
-  await page.request.post(`${MOCK}/__mock/emit`, {
-    data: {
-      event: 'settings_sync',
-      payload: {
-        settings: { voice: 'Aoede' },
-        errors: { voice: 'Voice abhi apply nahi ho saki' },
-      },
-    },
+  await page.getByTestId('settings-voice-select').evaluate(el => {
+    const select = el as HTMLSelectElement;
+    const opt = document.createElement('option');
+    opt.value = 'alloyx';
+    opt.textContent = 'alloyx';
+    select.appendChild(opt);
+    select.value = 'alloyx';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
   });
 
-  await expect(page.getByTestId('settings-status-voice')).toHaveAttribute('data-state', 'error');
-  await expect(page.getByTestId('settings-status-voice')).toContainText('Voice abhi apply nahi ho saki');
+  await expect
+    .poll(async () =>
+      (await uiCommands(page)).some(
+        cmd => cmd.type === 'settings_update' && cmd.payload?.voice === 'alloyx',
+      ),
+    )
+    .toBe(true);
+
+  await expect(page.getByTestId('settings-status-voice')).toHaveAttribute('data-state', 'error', {
+    timeout: 10_000,
+  });
+  await expect(page.getByTestId('settings-status-voice')).toContainText(/nahi mili/i);
+  await expect(page.getByTestId('settings-voice-select')).toHaveValue('Aoede');
+});
+
+test('language change shows neutral abhi active nahi', async ({ page }) => {
+  await openSettingsDrawer(page);
+  await page.getByTestId('settings-language-select').selectOption('en');
+
+  await expect
+    .poll(async () =>
+      (await uiCommands(page)).some(
+        cmd => cmd.type === 'settings_update' && cmd.payload?.language === 'en',
+      ),
+    )
+    .toBe(true);
+
+  const badge = page.getByTestId('settings-status-language');
+  await expect(badge).toHaveAttribute('data-state', 'unsupported', { timeout: 10_000 });
+  await expect(badge).toContainText(/abhi active nahi/i);
+  await expect(badge).not.toHaveAttribute('data-state', 'error');
+});
+
+test('persona switch drops saved voice to persona default', async ({ page }) => {
+  await openSettingsDrawer(page);
+  await page.getByTestId('settings-voice-select').selectOption('Puck');
+  await expect(page.getByTestId('settings-status-voice')).toHaveAttribute('data-state', 'applied', {
+    timeout: 10_000,
+  });
+  await expect(page.getByTestId('settings-voice-select')).toHaveValue('Puck');
+
+  await page.getByTestId('settings-persona').getByRole('button', { name: 'ANNA' }).click();
+
+  await expect
+    .poll(async () =>
+      (await uiCommands(page)).some(
+        cmd => cmd.type === 'settings_update' && cmd.payload?.persona === 'anna',
+      ),
+    )
+    .toBe(true);
+
+  await expect(page.getByTestId('settings-voice-select')).toHaveValue('Aoede', { timeout: 10_000 });
+  await expect(page.getByTestId('settings-status-persona')).toHaveAttribute('data-state', 'applied', {
+    timeout: 10_000,
+  });
 });
 
 test('advanced settings show guarded tools from settings_sync', async ({ page }) => {
@@ -139,7 +199,7 @@ test('turn mode fast emits settings_update and applies after sync', async ({ pag
   });
 });
 
-test('follow-up window 20s emits wake_followup_s', async ({ page }) => {
+test('follow-up window 20s emits wake_followup_s as unsupported', async ({ page }) => {
   await openSettingsDrawer(page);
   await page.getByTestId('settings-wake-followup-select').selectOption('20');
 
@@ -154,12 +214,13 @@ test('follow-up window 20s emits wake_followup_s', async ({ page }) => {
 
   await expect(page.getByTestId('settings-status-wakeFollowupS')).toHaveAttribute(
     'data-state',
-    'applied',
+    'unsupported',
     { timeout: 10_000 },
   );
+  await expect(page.getByTestId('settings-status-wakeFollowupS')).toContainText(/abhi active nahi/i);
 });
 
-test('transcript native emits transcript_script', async ({ page }) => {
+test('transcript native emits transcript_script as unsupported', async ({ page }) => {
   await openSettingsDrawer(page);
   await page.getByTestId('settings-transcript-script').getByRole('button', { name: 'Native' }).click();
 
@@ -173,7 +234,7 @@ test('transcript native emits transcript_script', async ({ page }) => {
 
   await expect(page.getByTestId('settings-status-transcriptScript')).toHaveAttribute(
     'data-state',
-    'applied',
+    'unsupported',
     { timeout: 10_000 },
   );
 });

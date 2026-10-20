@@ -3,6 +3,7 @@
     "persona": "jarvis",
     "language": "ur",
     "voice": "Aoede",
+    "wake_word": true,
     "wake_word_active": true,
     "muted": false,
     "turn_mode": "gated",
@@ -14,14 +15,33 @@
     "voice_id_enrolled": false,
     "voice_id_threshold": 0.45,
     "voice_id_reject": "silent",
+    "confirm_level": "normal",
+    "style": "",
+    "emotional_intelligence": true,
     "automation": {
       "desktop_control": true,
       "clipboard_helper": true,
       "clipboard_speak": false,
       "voice_confirm_high": false
     },
-    "vision_mode": "live"
+    "vision_mode": "live",
+    "saved": ["language", "voice"],
+    "updated_ts": 1729420000
   },
   "guarded_tools": ["keyboard_type", "mouse_click", "run_shell"],
-  "applied": true
+  "applied": {},
+  "errors": {},
+  "pending_restart": [],
+  "restart_required": [],
+  "enforced": {
+    "wake_word": true,
+    "voice_id": false
+  },
+  "available_voices": [
+    "Achernar", "Achird", "Algenib", "Algieba", "Alnilam", "Aoede", "Autonoe", "Callirrhoe",
+    "Charon", "Despina", "Enceladus", "Erinome", "Fenrir", "Gacrux", "Iapetus", "Kore",
+    "Laomedeia", "Leda", "Orus", "Puck", "Pulcherrima", "Rasalgethi", "Sadachbia", "Sadaltager",
+    "Schedar", "Sulafat", "Umbriel", "Vindemiatrix", "Zephyr", "Zubenelgenubi"
+  ],
+  "available_languages": ["auto", "ur", "hi", "en"]
 }

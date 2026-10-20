@@ -48,28 +48,225 @@ function loadFixture(name) {
   return JSON.parse(readFileSync(path, 'utf8'));
 }
 
-function mergeSettingsSync(base, payload) {
-  if (!payload || typeof payload !== 'object') {
-    return { ...base, settings: { ...(base.settings || {}) } };
+/** Gemini Live voices + OpenAI-style aliases (mirrors src/core/voices.py). */
+const GEMINI_VOICES = [
+  'Achernar', 'Achird', 'Algenib', 'Algieba', 'Alnilam', 'Aoede', 'Autonoe', 'Callirrhoe',
+  'Charon', 'Despina', 'Enceladus', 'Erinome', 'Fenrir', 'Gacrux', 'Iapetus', 'Kore',
+  'Laomedeia', 'Leda', 'Orus', 'Puck', 'Pulcherrima', 'Rasalgethi', 'Sadachbia', 'Sadaltager',
+  'Schedar', 'Sulafat', 'Umbriel', 'Vindemiatrix', 'Zephyr', 'Zubenelgenubi',
+];
+const VOICE_ALIASES = {
+  alloy: 'Zephyr', echo: 'Charon', shimmer: 'Aoede', ash: 'Orus', ballad: 'Algieba',
+  coral: 'Leda', sage: 'Sadaltager', verse: 'Puck',
+};
+const PERSONA_DEFAULT_VOICE = { jarvis: 'Charon', anna: 'Aoede' };
+const UNSUPPORTED_FIELDS = new Set([
+  'language', 'transcript_script', 'quiet_hours', 'confirm_level', 'style', 'emotional_intelligence',
+  'voice_id', 'voice_id_threshold', 'voice_id_reject', 'wake_followup_s',
+]);
+const LANGUAGES = ['auto', 'ur', 'hi', 'en'];
+
+function resolveMockVoice(name) {
+  if (typeof name !== 'string') return null;
+  const key = name.trim().toLowerCase();
+  const byLower = Object.fromEntries(GEMINI_VOICES.map(v => [v.toLowerCase(), v]));
+  return byLower[key] || VOICE_ALIASES[key] || null;
+}
+
+function voicesHelp() {
+  const aliases = Object.entries(VOICE_ALIASES).map(([a, v]) => `${a}=${v}`).join(', ');
+  return `Valid voices: ${GEMINI_VOICES.join(', ')} (aliases: ${aliases})`;
+}
+
+/** @type {Record<string, unknown>} */
+let liveSettings = {};
+/** @type {Set<string>} */
+let liveSaved = new Set();
+let liveUpdatedTs = 0;
+let runningTurnMode = 'gated';
+
+function resetLiveSettingsFromFixture() {
+  const sync = loadFixture('settings_sync');
+  const base = { ...(sync.settings || {}) };
+  const savedList = Array.isArray(base.saved) ? base.saved.map(String) : [];
+  const updated = typeof base.updated_ts === 'number' ? base.updated_ts : 0;
+  delete base.saved;
+  delete base.updated_ts;
+  if (typeof base.wake_word_active === 'boolean' && base.wake_word == null) {
+    base.wake_word = base.wake_word_active;
   }
-  const nextSettings = { ...(base.settings || {}), ...payload };
-  if (payload.automation && typeof payload.automation === 'object') {
-    nextSettings.automation = {
-      ...(base.settings?.automation || {}),
-      ...payload.automation,
+  liveSettings = base;
+  liveSaved = new Set(savedList);
+  liveUpdatedTs = updated;
+  runningTurnMode = String(liveSettings.turn_mode || 'gated');
+}
+
+resetLiveSettingsFromFixture();
+
+function buildSettingsSync(applied = {}, errors = {}) {
+  const persona = liveSettings.persona === 'anna' ? 'anna' : 'jarvis';
+  const values = {
+    ...liveSettings,
+    persona,
+    wake_word: Boolean(liveSettings.wake_word ?? liveSettings.wake_word_active ?? true),
+    wake_word_active: Boolean(liveSettings.wake_word ?? liveSettings.wake_word_active ?? true),
+    muted: Boolean(liveSettings.muted),
+    voice_id_enrolled: Boolean(liveSettings.voice_id_enrolled),
+    updated_ts: liveUpdatedTs,
+    saved: [...liveSaved].filter(k => k !== 'saved' && k !== 'updated_ts'),
+  };
+  const pending =
+    String(values.turn_mode) !== runningTurnMode ? ['turn_mode'] : [];
+  const gated = runningTurnMode === 'gated';
+  return {
+    settings: values,
+    applied: { ...applied },
+    errors: { ...errors },
+    pending_restart: pending,
+    restart_required: [...pending],
+    enforced: {
+      wake_word: gated && Boolean(values.wake_word),
+      voice_id: gated && Boolean(values.voice_id) && Boolean(values.voice_id_enrolled),
+    },
+    available_voices: [...GEMINI_VOICES],
+    available_languages: [...LANGUAGES],
+    guarded_tools: loadFixture('settings_sync').guarded_tools || [],
+    ts: Date.now() / 1000,
+  };
+}
+
+/**
+ * Apply a settings_update like the real agent (K-61 v39): validate, set applied/
+ * unsupported/pending_restart, update saved + updated_ts, emit wake_word_update when needed.
+ */
+function applySettingsUpdate(payload, socket) {
+  const patch = payload && typeof payload === 'object' ? { ...payload } : {};
+  delete patch.saved;
+  delete patch.updated_ts;
+
+  /** @type {Record<string, string>} */
+  const applied = {};
+  /** @type {Record<string, string>} */
+  const errors = {};
+  let wakeChanged = false;
+  const prevWake = Boolean(liveSettings.wake_word ?? liveSettings.wake_word_active ?? true);
+
+  // Persona before voice: persona without voice drops saved voice to persona default.
+  if (Object.prototype.hasOwnProperty.call(patch, 'persona')) {
+    const raw = String(patch.persona || '').toLowerCase();
+    if (raw !== 'jarvis' && raw !== 'anna') {
+      errors.persona = "persona must be 'jarvis' or 'anna'";
+    } else {
+      liveSettings.persona = raw;
+      liveSaved.add('persona');
+      applied.persona = 'applied';
+      if (!Object.prototype.hasOwnProperty.call(patch, 'voice')) {
+        liveSettings.voice = PERSONA_DEFAULT_VOICE[raw];
+        liveSaved.delete('voice');
+      }
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, 'voice')) {
+    const resolved = resolveMockVoice(patch.voice);
+    if (!resolved) {
+      errors.voice = `Voice '${String(patch.voice).slice(0, 40)}' nahi mili. ${voicesHelp()}`;
+    } else {
+      liveSettings.voice = resolved;
+      liveSaved.add('voice');
+      applied.voice = 'applied';
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, 'wake_word')
+      || Object.prototype.hasOwnProperty.call(patch, 'wake_word_active')) {
+    const next = Object.prototype.hasOwnProperty.call(patch, 'wake_word')
+      ? Boolean(patch.wake_word)
+      : Boolean(patch.wake_word_active);
+    liveSettings.wake_word = next;
+    liveSettings.wake_word_active = next;
+    liveSaved.add('wake_word');
+    applied.wake_word = 'applied';
+    if (next !== prevWake) wakeChanged = true;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, 'muted')) {
+    liveSettings.muted = Boolean(patch.muted);
+    applied.muted = 'applied';
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, 'speak_typed_replies')) {
+    const v = String(patch.speak_typed_replies || '').toLowerCase();
+    if (v === 'auto' || v === 'always' || v === 'never') {
+      liveSettings.speak_typed_replies = v;
+      liveSaved.add('speak_typed_replies');
+      applied.speak_typed_replies = 'applied';
+    } else {
+      errors.speak_typed_replies = 'speak_typed_replies must be auto|always|never';
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, 'turn_mode')) {
+    const v = String(patch.turn_mode || '').toLowerCase();
+    if (v === 'fast' || v === 'gated') {
+      liveSettings.turn_mode = v;
+      liveSaved.add('turn_mode');
+      applied.turn_mode = v === runningTurnMode ? 'applied' : 'pending_restart';
+    } else {
+      errors.turn_mode = "turn_mode must be 'fast' or 'gated'";
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, 'automation') && patch.automation
+      && typeof patch.automation === 'object') {
+    liveSettings.automation = {
+      ...(liveSettings.automation && typeof liveSettings.automation === 'object'
+        ? liveSettings.automation
+        : {}),
+      ...patch.automation,
     };
+    applied.automation = 'applied';
   }
-  const out = { ...base, settings: nextSettings };
-  if (Object.prototype.hasOwnProperty.call(payload, 'turn_mode')) {
-    out.restart_required = ['turn_mode'];
-    out.applied =
-      typeof base.applied === 'object' && base.applied
-        ? { ...base.applied, turn_mode: 'pending_restart' }
-        : { turn_mode: 'pending_restart' };
-  } else if (base.applied === true) {
-    out.applied = true;
+
+  if (Object.prototype.hasOwnProperty.call(patch, 'vision_mode')) {
+    const v = String(patch.vision_mode || '').toLowerCase();
+    if (v === 'live' || v === 'on_request') {
+      liveSettings.vision_mode = v;
+      liveSaved.add('vision_mode');
+      applied.vision_mode = 'applied';
+    }
   }
-  return out;
+
+  for (const key of Object.keys(patch)) {
+    if (['persona', 'voice', 'wake_word', 'wake_word_active', 'muted', 'speak_typed_replies',
+      'turn_mode', 'automation', 'vision_mode'].includes(key)) {
+      continue;
+    }
+    if (UNSUPPORTED_FIELDS.has(key)) {
+      liveSettings[key] = patch[key];
+      liveSaved.add(key);
+      applied[key] = 'unsupported';
+      continue;
+    }
+    // Unknown keys: still report unsupported (saved in live for visibility).
+    liveSettings[key] = patch[key];
+    applied[key] = 'unsupported';
+  }
+
+  if (Object.keys(applied).length || Object.keys(errors).length) {
+    liveUpdatedTs = Date.now() / 1000;
+  }
+
+  const sync = buildSettingsSync(applied, errors);
+  if (socket && wakeChanged) {
+    socket.emit('wake_word_update', Boolean(liveSettings.wake_word));
+  }
+  return sync;
+}
+
+/** @deprecated use applySettingsUpdate; kept for direct merge in older call sites */
+function mergeSettingsSync(_base, payload) {
+  return applySettingsUpdate(payload || {}, null);
 }
 
 function parseCookies(header) {
@@ -413,8 +610,7 @@ function handleUiCommand(socket, cmd, cb) {
     case 'settings_update': {
       ackUi(socket, cb, 'sent');
       if (!suppressSettingsSync) {
-        const sync = loadFixture('settings_sync');
-        socket.emit('settings_sync', mergeSettingsSync(sync, payload || {}));
+        socket.emit('settings_sync', applySettingsUpdate(payload || {}, socket));
       }
       break;
     }
@@ -478,10 +674,10 @@ function handleUiCommand(socket, cmd, cb) {
     case 'persona_change': {
       ackUi(socket, cb, 'sent');
       const persona = payload === 'anna' || payload?.persona === 'anna' ? 'anna' : 'jarvis';
-      socket.emit('settings_sync', {
-        settings: { persona },
-        applied: true,
-      });
+      socket.emit(
+        'settings_sync',
+        applySettingsUpdate({ persona }, socket),
+      );
       break;
     }
     case 'request_state':
@@ -502,6 +698,18 @@ function handleUiCommand(socket, cmd, cb) {
       }, 40);
       break;
     }
+    case 'wake_word_toggle': {
+      ackUi(socket, cb, 'sent');
+      const current = Boolean(liveSettings.wake_word ?? liveSettings.wake_word_active ?? true);
+      const next =
+        typeof payload === 'boolean'
+          ? payload
+          : payload && typeof payload === 'object' && typeof payload.active === 'boolean'
+            ? payload.active
+            : !current;
+      socket.emit('settings_sync', applySettingsUpdate({ wake_word: next }, socket));
+      break;
+    }
     case 'stop':
     case 'tasks_refresh':
     case 'feedback':
@@ -511,7 +719,6 @@ function handleUiCommand(socket, cmd, cb) {
     case 'job_cancel':
     case 'open_job_artifact':
     case 'voice_take_over':
-    case 'wake_word_toggle':
       ackUi(socket, cb, 'sent');
       break;
     case 'pause_agent': {
@@ -663,6 +870,15 @@ async function handleMockControl(req, res, pathname, method) {
     const body = await readBody(req);
     suppressSettingsSync = body?.suppress === true;
     json(res, 200, { ok: true, suppress: suppressSettingsSync });
+    return true;
+  }
+
+  if (pathname === '/__mock/reset-settings' && method === 'POST') {
+    resetLiveSettingsFromFixture();
+    suppressSettingsSync = false;
+    const sync = buildSettingsSync();
+    emitToUi('settings_sync', sync);
+    json(res, 200, { ok: true, settings: sync.settings });
     return true;
   }
 
@@ -868,7 +1084,7 @@ io.use((socket, next) => {
 io.on('connection', socket => {
   uiSockets.push(socket);
   socket.emit('init_state', buildInitState());
-  socket.emit('settings_sync', loadFixture('settings_sync'));
+  socket.emit('settings_sync', buildSettingsSync());
 
   socket.on('ui_command', (cmd, cb) => {
     try {

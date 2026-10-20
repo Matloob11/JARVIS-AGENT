@@ -441,8 +441,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         settings,
         prevVoice: valuesRef.current.voice,
         personaDefault: defaultVoiceForPersona(persona),
-        resolveVoice: asVoice,
-      });
+        resolveVoice: (raw, fallback) => asVoice(raw, asVoice(fallback, DEFAULT_VOICE_JARVIS)),
+      }) as GeminiVoice;
       setValues(prev => ({
         persona,
         voice,
