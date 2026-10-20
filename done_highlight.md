@@ -2705,3 +2705,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** full suite 5157 passed; live: voice Puck -> settings_sync 0.28 s aur restart ke baad bhi Puck, 'alloyx' -> errors.voice, wake word off/on, persona round trip se owner ki default voice wapas
 - **Commit:** `4acdcaf` + (this commit) · **Deploy:** VPS ui-bridge 12:39 PKT 🚀 (backup /root/jarvis-backups/2026-10-20_0739Z-pre-deploy-4acdcaf; rollback: `bash /root/jarvis-backups/tools/rollback.sh 2026-10-20_0739Z-pre-deploy-4acdcaf`); PC worker start 12:40, restart 12:42 PKT
 - **Doosre agent ke liye:** Cursor: settings panel ab live hai; 'unsupported' fields ko error nahi, 'abhi active nahi' dikhana (section 11).
+
+### ✅ 🔁 [claude] C-114 live check · Agent worker restart (agent_ctl) · 2026-10-20 13:25 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 41544) band, naya pid 45156; health 200 (38.9 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 13:25 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ [claude] C-114 · 24/7 voice session safety: compression, remove-only cut, re-seed, refresh, idle close, liveness attribute · 2026-10-20 13:45 PKT
+- **Kya kiya:** Naya src/core/session_policy.py: Gemini Live context compression (trigger 24000), har 20 items par chat cut jo Gemini ko sirf hataane ka diff bhejta hai (purani baatein dobara nahi jatin), memory se re-seed (sirf 60 min ke andar ki, '[MEMORY]' note ke saath), instructions sirf naye din ya naye shehar par refresh, idle close (VPS par 30 min, PC par off) aur 24 h recycle (job end 'idle'), jarvis.session 'idle' + jarvis.session_ts, jarvis_jobs.count_active.
+- **Files:** src/core/session_policy.py (naya), src/core/agent_runner.py, src/core/agent_core.py, services/utils/jarvis_jobs.py, .env.example, tests/core/test_session_policy.py (naya), tests/core/test_role_gating.py, tests/unit/test_jobs.py, docs/CONTRACTS.md (v40)
+- **Verify:** full suite 5263 passed; live: compression on, 31 typed sawal, cut 41->40 aur 61->40 (realtime remove only), cut ke baad jawab theek; fixed context ~12.2k tokens naapa
+- **Commit:** `605f961` + (this commit) · **Deploy:** PC worker restart 13:25 PKT
+- **Doosre agent ke liye:** memory flush (step 8) C-52 mein; VPS brain ka dashboard-socket demand wala low C-130 canary mein dekhna.
