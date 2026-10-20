@@ -2761,3 +2761,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** full suite 5594 passed (3 fails: 2 re-seed tests theek kiye, 1 deploy test load par flaky, akele pass); live: 6 messages id ke saath save, dump CHECK ok, migrate dry run: kuch badalna nahi
 - **Commit:** `db4709c` + (this commit) · **Deploy:** PC worker restart 17:46 PKT (C-52 live check)
 - **Doosre agent ke liye:** dashboard ko ab har saved message ka memory_update {id, content, role, source, user_id, ts} milta hai.
+
+### ✅ 🚀 [claude] C-127 / C-126 · Agent image dobara bani + Desktop Link keys (VPS) · 2026-10-20 18:25 PKT
+- **Kya kiya:** VPS par jarvis-agent:hostinger image gaayab thi (bahar ke kisi prune ne unused image hata di). Code 70bff62 bheja (deploy --services none, RESULT=ok), jarvis-builder se dobara build (cache se 2.5 min): BUILD_EXIT=0, default builder cache unchanged, IMPORT_OK, MODELS_OK, uid 10001, revision 70bff62, builder phir band. Phir push_agent_env.py --keys: agent signing key ek network-less container mein bani (.env.agent), DESKTOP_AGENT_PUBLIC_KEY aur DESKTOP_PC_PUBLIC_KEY bridge.env mein, agent public key PC .env mein; ui-bridge apne GIT_SHA ke saath dobara bana, GATE=ok.
+- **Files:** — (VPS: image, .env.agent, bridge.env; PC: .env public key, laptop node key %LOCALAPPDATA%\JARVIS\node\keys.dpapi)
+- **Verify:** check-bridge NO_AGENT_SECRETS_IN_BRIDGE (43 names), push_agent_env --check 37 equal + signing key set, files 600 root, PC brain typed jawab theek
+- **Commit:** `70bff62` · **Deploy:** VPS code 18:19, image build 18:19-18:22, keys 18:23, bridge recreate 18:24 PKT 🚀 (backups /root/jarvis-backups/2026-10-20_1319Z-pre-deploy-70bff62, /root/jarvis-backups/2026-10-20_1322Z-pre-agent-keys, /root/jarvis-backups/env/20261020T132311Z-pre-agent-keys)
+- **Doosre agent ke liye:** image phir gaayab ho to builder se 3 min mein dobara banti hai; V4 se pehle 'agent_ctl node update' laptop par agent public key pin karega.
