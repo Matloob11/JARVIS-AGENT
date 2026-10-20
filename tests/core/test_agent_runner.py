@@ -1109,6 +1109,62 @@ async def test_a_worker_shutdown_is_named_job_shutdown(job):
     assert entry.done() and ctx.shutdowns == ["job_shutdown"]
 
 
+def _with_memory(job, monkeypatch) -> list[str]:
+    """C-52: the job's assistant gets a memory extractor whose flush records each call."""
+    flushes: list[str] = []
+    real_init = job.ar.BrainAssistant.__init__
+
+    def init(self, **kwargs):
+        real_init(self, **kwargs)
+
+        async def flush():
+            flushes.append("flush")
+            return 0
+
+        self.memory_extractor = types.SimpleNamespace(flush=flush)
+
+    monkeypatch.setattr(job.ar.BrainAssistant, "__init__", init)
+    return flushes
+
+
+@pytest.mark.asyncio
+async def test_the_job_end_flushes_the_memory_before_the_shutdown(job, monkeypatch):
+    """C-52 (C-114 step 8): the runtime's teardown writes what the memory loop has not written yet before the job ends,
+    so the next job's re-seed finds it."""
+    flushes = _with_memory(job, monkeypatch)
+    job.on_start = lambda agent: asyncio.get_running_loop().call_later(0.05, agent.request_end, "paused_by_owner")
+    ctx = _FakeJobContext()
+    at_shutdown: list[int] = []
+    real_shutdown = ctx.shutdown
+
+    def shutdown(reason=""):
+        at_shutdown.append(len(flushes))
+        real_shutdown(reason)
+
+    ctx.shutdown = shutdown
+    await _run_entrypoint(job, ctx)
+    assert ctx.shutdowns == ["paused_by_owner"] and flushes == ["flush"] and at_shutdown == [1]
+
+
+@pytest.mark.asyncio
+async def test_a_livekit_shutdown_flushes_the_memory_in_its_callback_first(job, monkeypatch):
+    """C-52: LiveKit may stop the loop before our teardown is done, so its shutdown callback flushes first; the
+    teardown's flush then finds nothing new (the extractor saves each message once)."""
+    import time
+
+    flushes = _with_memory(job, monkeypatch)
+    ctx = _FakeJobContext()
+    entry = asyncio.ensure_future(job.ar.entrypoint(ctx))
+    deadline = time.monotonic() + 5  # real time: the job's settings load runs in a thread, slower under load
+    while not job.protectors and time.monotonic() < deadline:
+        await asyncio.sleep(0.005)  # the fixture's fast sleep: one turn of the loop
+    assert job.protectors and job.assistants  # the job runs, its assistant (and memory) built
+    [hold] = ctx.shutdown_callbacks
+    await asyncio.wait_for(hold("room disconnected"), 5)
+    assert entry.done() and ctx.shutdowns == ["room_disconnected"]
+    assert flushes == ["flush", "flush"]  # the callback's own, then the runtime teardown's
+
+
 @pytest.mark.asyncio
 async def test_an_assistant_without_request_end_still_ends_on_a_framework_shutdown(job, monkeypatch):
     """An assistant before C-23 (no request_end): the end paths fall back to its stop event."""

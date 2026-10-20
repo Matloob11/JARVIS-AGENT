@@ -31,7 +31,7 @@ from services.ai_core.voice_fingerprint import voice_id_engine
 from services.utils.jarvis_adaptive import adaptive_engine
 from services.utils.jarvis_audit import jarvis_audit
 from services.utils.jarvis_autonomous import resilient_tool
-from services.utils.jarvis_config import config, is_local_mode
+from services.utils.jarvis_config import DEFAULT_USER_ID, config, is_local_mode
 from services.utils.jarvis_health import health_monitor
 from services.utils.jarvis_logger import setup_logger
 from services.utils.jarvis_resilience import resilience_manager
@@ -167,20 +167,10 @@ class BrainAssistant(Agent):
         # as JARVIS with the wake word on.
         prompt_with_info = build_instructions(self, "jarvis", wake_word=True)
 
-        # Initializing core agent state
-        self.user_id: str = user_id or os.getenv("USER_NAME") or "User"
+        # Initializing core agent state. C-52 (K-69): the memory identity is JARVIS_USER_ID (agent_runner passes it;
+        # unset: 'matloob'), never a room participant's identity.
+        self.user_id: str = user_id or config.user_id or DEFAULT_USER_ID
         self._chat_ctx = chat_ctx
-
-        # Robustly determine final user_id if not provided
-        if not user_id and chat_ctx:
-            # chat_ctx might be a SimpleNamespace or llm.ChatContext
-            try:
-                participant = getattr(chat_ctx, 'participant', None)
-                if participant and hasattr(participant, 'identity'):
-                    self.user_id = str(participant.identity)
-            except AttributeError:
-                logger.debug("ChatContext has no accessible participant attribute.")
-                participant = None
 
         self._last_user_speak_pulse: float = 0.0
         self.memory_extractor = MemoryExtractor(self.user_id)
@@ -406,6 +396,13 @@ class BrainAssistant(Agent):
             return  # a caller without an event loop: the next switch or job start sends it
         self._notified_persona = persona
         self._run_back(self._notify_ui_persona(persona))
+
+    @property
+    def reply_persona(self) -> str:
+        """C-52: the persona the live session answers as: the one the dashboard was last told (a switch is told once it
+        reached the session, C-50), else the active one. A reply that is still running when a persona switch is asked
+        for comes from the old persona, so the memory records it for that one."""
+        return self._notified_persona or self.persona_manager.active_persona_name
 
     def announce_persona(self, *, again: bool = False) -> None:
         """C-50: persona_change for the active persona: at a job's start (agent_runner; the bridge keeps the last job's

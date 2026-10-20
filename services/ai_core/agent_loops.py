@@ -121,12 +121,14 @@ async def start_adaptation_loop(protector: TaskProtector | None = None) -> None:
 
 
 async def start_memory_storage_loop(assistant: "BrainAssistant") -> None:
-    """Periodically saves memory to disk."""
+    """Every 10 minutes the memory's real flush (C-52): ConversationMemory.save_to_disk runs the extractor's flush (what
+    the memory loop has not written yet). 'Auto-saved memory snapshot' is logged only when it wrote something."""
     while True:
         try:
             await asyncio.sleep(600)  # Every 10 minutes
-            await assistant.memory_extractor.memory.save_to_disk()
-            logger.info("💾 Auto-saved memory snapshot.")
+            written = await assistant.memory_extractor.memory.save_to_disk()
+            if isinstance(written, int) and not isinstance(written, bool) and written > 0:
+                logger.info("💾 Auto-saved memory snapshot (%d message(s)).", written)
         except Exception as e:
             logger.error("🛑 Memory storage loop failure: %s", e)
             await asyncio.sleep(30) # Wait before retry

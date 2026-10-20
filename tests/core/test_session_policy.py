@@ -747,9 +747,8 @@ async def test_the_reseed_puts_a_memory_note_and_the_turns_before_the_first_star
 
 
 async def test_nothing_is_replayed_when_the_newest_saved_turn_is_over_an_hour_old(records):
-    """Until C-52 the extractor saves only about the first 20 messages of each job: after a long chat the newest saved
-    turns are its opening ones, so a conversation whose newest saved turn is over an hour old is never replayed as the
-    latest exchange."""
+    """A conversation whose newest saved turn is over an hour old is never replayed as the latest exchange (C-114's
+    bound; C-52 keeps it, though since C-52 every message is saved within about 10 s and at the job's end)."""
     assert sp.RESEED_MAX_AGE_S == 3600
     old = _saved([{"role": "user", "content": "ZEBRA purana sawal"}, {"role": "assistant", "content": "purana jawab"}],
                  ago_s=70 * 60)
@@ -814,9 +813,10 @@ async def test_the_reseed_replays_what_the_memory_extractor_saved(tmp_path, monk
     chat = llm.ChatContext.empty()
     chat.add_message(role="user", content="kal subah meeting hai")
     await extractor.run(list(chat.items))
-    # The reply is saved by a later pass. ConversationMemory takes a one-message conversation whose save time equals an
-    # earlier one's for a duplicate, and the Windows wall clock moves in steps of up to 15.6 ms: saved in the same pass,
-    # the reply was dropped now and then, and with it the turn (the user turn left unanswered is never replayed).
+    # The reply is saved by a later pass here. Before C-52, ConversationMemory took a one-message conversation whose save
+    # time equaled an earlier one's for a duplicate (the Windows wall clock moves in steps of up to 15.6 ms), so a reply
+    # saved in the same pass was dropped now and then; C-52 dedupes by message id (tests/core/test_memory.py saves
+    # both in one pass).
     await asyncio.sleep(0.1)
     chat.add_message(role="assistant", content="Theek hai Sir, yaad rahega.")
     await extractor.run(list(chat.items))

@@ -22,11 +22,14 @@ session inside the model's limits and end a job nobody uses.
   30 minutes before its newest saved turn (at most 20), and only when that newest turn is at most 60 minutes old, go
   into its chat context as user/model turns (Gemini drops system items) after one '[MEMORY]' note that says they
   come from memory and how old they are, so a new job (a restart, an idle recycle) still knows the conversation it
-  follows. The bounds are tight until C-52: the extractor saves only about the first 20 messages of each job (newest
-  saved can mean the opening of a long chat) and records no persona (ANNA's replies come back as the model's own
-  turns in a job that starts as JARVIS). User turns at the end with no reply after them stay out: the model must
-  never take an old request for one still waiting. Every re-seeded message, the note too, has an id starting
-  'reseed-'; without_reseeded() keeps them away from the memory extractor, so a replayed turn is never saved twice.
+  follows. C-52 keeps C-114's bounds (since C-52 every message reaches the memory file within about 10 s and at the
+  job's end, so the newest saved turn is the conversation's real end) and records the persona of every saved reply:
+  a reply of the other persona than the one the job starts as (its saved persona, C-54) stays out together with the
+  user turns it answered, so ANNA's replies never come back as the model's own turns in a job that starts as JARVIS
+  (or the other way round); a reply saved before C-52 has no persona, counts as unknown and is replayed as before.
+  User turns at the end with no reply after them stay out: the model must never take an old request for one still
+  waiting. Every re-seeded message, the note too, has an id starting 'reseed-'; without_reseeded() keeps them away
+  from the memory extractor (which also skips such ids itself), so a replayed turn is never saved twice.
 - SessionPolicy: built with the job's parts (every session reports its conversation activity to it), its loop on
   the job's own protector (never in a probe or canary job, K-57). Every 60 s it compares the date part of the clock
   and the city (local mode: the readings of the existing location loop; remote mode: the Desktop Node's location
@@ -372,9 +375,8 @@ def _log_block_cut(which: str, dropped: int) -> None:
 RESEED_TURNS = 20
 RESEED_ID_PREFIX = "reseed-"
 RESEED_READ = 80           # memory messages read to find RESEED_TURNS turns after the filter
-# Until C-52 (which may relax both): nothing is replayed when the newest saved turn is older than RESEED_MAX_AGE_S
-# (the extractor keeps only about the first 20 messages of each job, so after a long chat the newest saved turns are
-# its opening ones), and only what was saved in the RESEED_WINDOW_S before that newest turn comes back.
+# C-114's bounds, which C-52 keeps: nothing is replayed when the newest saved turn is older than RESEED_MAX_AGE_S, and
+# only what was saved in the RESEED_WINDOW_S before that newest turn comes back.
 RESEED_MAX_AGE_S = 3600.0
 RESEED_WINDOW_S = 1800.0
 # Off since 20 Oct 2026: live, a job whose context got replayed turns (sent to Gemini as client content at connect)
@@ -387,11 +389,15 @@ RESEED_TEXT_MAX = 1500     # characters per replayed turn
 RESEED_STEP_S = 0.001      # created_at spacing: the replayed turns sort before anything already in the context
 MEMORY_TAG = "[MEMORY]"    # the data tag of the note before the replayed turns
 RESEED_NOTE = MEMORY_TAG + " Pichli baat-cheet ka hissa (taqreeban {minutes} minute purana), sirf context ke liye."
-# Texts that were never a real turn: injected context, proactive and bug-hunter lines, laptop data, a re-seed note.
+# Texts that were never a real turn: injected context, proactive and bug-hunter lines, laptop data, a re-seed note, and
+# (C-52, whose extractor saves the router's turn log) the router's '[offline] ' template answer of a typed message
+# that came while no session ran: saved as a chat message, never replayed as the model's own turn.
+OFFLINE_MARK = "[offline]"  # conversation_router.OFFLINE_PREFIX without its trailing space
 RESEED_SKIP_PREFIXES = ("[JARVIS CONTEXT]", "[SYSTEM", "[LOG DATA", "System error detected", "[DESKTOP DATA",
-                        MEMORY_TAG)
+                        MEMORY_TAG, OFFLINE_MARK)
 TYPED_MARK = "[typed]"     # conversation_router.TYPED_PREFIX without its trailing space
 REPLAY_ROLES = ("user", "assistant")
+PERSONAS = ("jarvis", "anna")  # C-52: the persona MemoryExtractor records on every saved reply ('unknown' otherwise)
 
 
 def _content_text(content: Any) -> str:
@@ -481,21 +487,52 @@ def reseed_note(age_s: float) -> str:
     return RESEED_NOTE.format(minutes=_note_minutes(age_s))
 
 
-def reseed_turns(messages: Iterable[Any], limit: int = RESEED_TURNS) -> list[tuple[str, str]]:
+def known_persona(value: Any) -> str | None:
+    """'jarvis' or 'anna' (any case), else None (unknown)."""
+    if isinstance(value, str) and value.strip().lower() in PERSONAS:
+        return value.strip().lower()
+    return None
+
+
+def other_persona(message: Any, persona: str | None) -> bool:
+    """C-52: True for a saved reply of the other persona than `persona` (the one the job starts as). A reply saved
+    without a persona (before C-52) is unknown and never counts as the other; without a job persona nothing does."""
+    if persona is None or not isinstance(message, dict) or message.get("role") != "assistant":
+        return False
+    saved = known_persona(message.get("persona"))
+    return saved is not None and saved != persona
+
+
+def reseed_turns(messages: Iterable[Any], limit: int = RESEED_TURNS,
+                 persona: str | None = None) -> list[tuple[str, str]]:
     """(role, text) of the last `limit` replayable turns of ConversationMemory messages ({role, content} dicts), oldest
     first; a turn repeated back to back counts once, and user turns at the end with no reply after them are dropped
-    (the model would take an old request for one still waiting and could act on it)."""
+    (the model would take an old request for one still waiting and could act on it). C-52: with `persona` ('jarvis' or
+    'anna': the persona the job starts as), a reply of the other persona stays out together with the user turns it
+    answered (those since the reply before it), so the job never takes the other persona's words for its own; a reply
+    without a persona (saved before C-52) is unknown and kept."""
+    persona = known_persona(persona)
     turns: list[tuple[str, str]] = []
+    asked: list[tuple[str, str]] = []  # user turns since the last reply
     for message in messages or []:
         if not isinstance(message, dict):
             continue
         role = message.get("role")
         text = replay_text(role, message.get("content"))
-        if text is None or (turns and turns[-1] == (role, text)):
+        if text is None:
             continue
+        last = asked[-1] if asked else (turns[-1] if turns else None)
+        if last == (role, text):
+            continue
+        if role == "user":
+            asked.append((role, text))
+            continue
+        if other_persona(message, persona):
+            asked = []  # answered by the other persona: the whole exchange stays out
+            continue
+        turns.extend(asked)
+        asked = []
         turns.append((role, text))
-    while turns and turns[-1][0] == "user":
-        turns.pop()
     return turns[-limit:] if limit > 0 else []
 
 
@@ -537,9 +574,9 @@ def keep_reseed_block_whole(ctx: Any) -> int:
     return len(reseeded)
 
 
-async def reseed_chat_ctx(agent: Any, *, limit: int = RESEED_TURNS, read: int = RESEED_READ,
-                          max_age_s: float = RESEED_MAX_AGE_S, window_s: float = RESEED_WINDOW_S,
-                          timeout_s: float = RESEED_TIMEOUT_S) -> int:
+async def reseed_chat_ctx(agent: Any, *, persona: str | None = None, limit: int = RESEED_TURNS,
+                          read: int = RESEED_READ, max_age_s: float = RESEED_MAX_AGE_S,
+                          window_s: float = RESEED_WINDOW_S, timeout_s: float = RESEED_TIMEOUT_S) -> int:
     """
     Before the job's first session.start (no activity runs, so update_chat_ctx only sets the agent's context, which the
     session then hands to Gemini as its first client content): the last `limit` user/assistant turns that the agent's
@@ -548,10 +585,10 @@ async def reseed_chat_ctx(agent: Any, *, limit: int = RESEED_TURNS, read: int = 
     user/assistant messages after one user note (reseed_note: '[MEMORY] ... taqreeban N minute purana ...', N the
     newest turn's age), all with ids 'reseed-<hex>', before anything already in the context. In the google turn format
     the note joins the first replayed user turn as one more part (or stands before a replayed model turn).
-    Why so tight, until C-52: MemoryExtractor saves only about the first 20 messages of each job (a sliding 20-item
-    window), so the newest saved turns of a long chat are its opening ones, hours old; and it records no persona, so
-    ANNA's replies come back as the model's own turns in a job that starts as JARVIS. The note tells the model they are
-    old context, never the latest exchange.
+    C-52: persona is the persona the job starts as (agent_runner: the saved one, C-54; default: the agent's active
+    persona); a saved reply of the other persona stays out with the user turns it answered (reseed_turns), and a
+    reply saved before C-52 (no persona) is unknown and replayed. The bounds stay C-114's (RESEED_MAX_AGE_S,
+    RESEED_WINDOW_S). The note tells the model they are old context, never the latest exchange.
     A context that has them already (a C-33 rebuild, a retried start) is left alone. Logs counts, never a text.
     Returns how many turns went in (the note not counted); never raises.
     """
@@ -572,10 +609,16 @@ async def reseed_chat_ctx(agent: Any, *, limit: int = RESEED_TURNS, read: int = 
             return 0
         if any(is_reseeded(item) for item in list(getattr(chat_ctx, "items", None) or [])):
             return 0
+        job_persona = known_persona(persona) or known_persona(
+            getattr(getattr(agent, "persona_manager", None), "active_persona_name", None))
         conversations = await asyncio.wait_for(load_memory(), timeout_s)
         recent, age_s = recent_messages(conversations if isinstance(conversations, list) else [], read=read,
                                         max_age_s=max_age_s, window_s=window_s)
-        turns = reseed_turns(recent, limit)
+        turns = reseed_turns(recent, limit, job_persona)
+        left_out = sum(1 for message in recent if other_persona(message, job_persona))
+        if left_out:
+            logger.info("SESSION_POLICY re-seed left out %d repl%s of the other persona (the job starts as %s)",
+                        left_out, "y" if left_out == 1 else "ies", job_persona)
         if not turns:
             logger.info("SESSION_POLICY re-seed: no turns saved in the last %d min to replay", int(max_age_s // 60))
             return 0

@@ -221,7 +221,7 @@ def test_profile_defaults_are_the_pc_brain(make_config):
     assert jarvis_config.runtime_profile() == RuntimeProfile("agent", "pc", "local")
     assert (cfg.role, cfg.brain, cfg.desktop_mode) == ("agent", "pc", "local")
     assert jarvis_config.is_local_mode() is True
-    assert cfg.user_id is None
+    assert cfg.user_id == jarvis_config.DEFAULT_USER_ID == "matloob"  # C-52 (K-69): unset means the owner's id
 
 
 def test_profile_is_read_from_the_environment(make_config, monkeypatch):

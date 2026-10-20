@@ -6,7 +6,8 @@
 - 'mute'/'unmute' switch the live session's microphone input (livekit-agents AgentInput) and pause/restart the legacy
   voice-ID tap; typed chat is still answered while muted.
 - 'clear_memory' needs the owner's confirmation and moves the memory file to backups/memory (never a delete); the
-  vector wipe needs a second confirmation.
+  vector wipe needs a second confirmation. C-52: it goes through the job's MemoryExtractor, so what the job said
+  before the clear and its memory loop had not written yet never reaches the fresh file.
 - 'shutdown_agent' needs the owner's confirmation and then ends the job as 'terminated_by_owner' through the runtime.
 - A guarded command's card never outlives its job: the job's end (its listener closing) or a cancel of the flow
   cancels it (confirm_resolved 'cancelled'), so a late Allow runs nothing.
@@ -36,7 +37,7 @@ from livekit.agents import StopResponse, llm
 from livekit.agents.voice.io import AgentInput, AudioInput
 from livekit.agents.voice.speech_handle import SpeechHandle
 
-from services.ai_core import agent_loops, control_commands, jarvis_confirm, memory_store
+from services.ai_core import agent_loops, agent_memory, control_commands, jarvis_confirm, memory_store
 from services.utils import jarvis_announcer, jarvis_audit, jarvis_bridge
 from services.utils.jarvis_config import config
 from services.utils.ui_command_registry import UI_COMMANDS, reset_dedupe
@@ -255,7 +256,7 @@ def memory_file(brain, monkeypatch, tmp_path) -> Path:
     monkeypatch.setattr(config, "backups_dir", str(tmp_path / "backups"))
     memory = brain.memory_extractor.memory
     Path(memory.memory_file).write_bytes(b"c51-encrypted-memory")
-    memory.cache["m-1"] = {"role": "user", "content": "c51"}
+    memory.cache.append({"id": "m-1", "role": "user", "content": "c51"})  # C-52: the cache is a deque of messages
     return Path(memory.memory_file)
 
 
@@ -681,6 +682,34 @@ async def test_a_clear_whose_move_fails_reports_it_and_deletes_nothing(brain, me
     assert told == ["Clear memory failed: the memory file could not be moved; nothing was deleted."]
 
 
+async def test_clear_memory_forgets_what_the_jobs_memory_loop_has_not_written_yet(brain, monkeypatch, tmp_path):
+    """C-52: clear_memory goes through the job's MemoryExtractor (clear_memory), so the exchange its 10 s memory loop
+    has not read yet (in the router's turn log) never reaches the fresh memory file after the owner's Allow."""
+    monkeypatch.setattr(control_commands, "_confirm_broker", lambda: None)
+    monkeypatch.setattr(config, "project_root", str(tmp_path))
+    monkeypatch.setattr(config, "backups_dir", str(tmp_path / "backups"))
+    monkeypatch.setattr(agent_memory, "notify_memory", AsyncMock())  # memory_update never reaches a bridge
+    memory = brain.memory_extractor.memory
+    monkeypatch.setattr(memory, "_sync_to_vector_db", AsyncMock())  # never the vector store
+    extractor = agent_memory.MemoryExtractor(USER)
+    extractor.memory = memory
+    brain.memory_extractor = extractor
+    log = [{"id": f"c51-{n}", "role": "user" if n % 2 == 0 else "assistant", "text": f"baat {n}", "source": "voice",
+            "ts": 1_760_000_000.0 + n} for n in range(2)]
+    extractor.bind(source=lambda: list(log))  # as agent_runner's memory loop binds the router's turn log
+    assert await extractor.flush() == 2  # a pass of the loop
+    log += [{"id": f"c51-{n}", "role": "user" if n % 2 == 0 else "assistant", "text": f"baat {n}", "source": "voice",
+             "ts": 1_760_000_000.0 + n} for n in range(2, 4)]  # said and answered after it
+    ctx = _listener(monkeypatch, brain)._ctx
+
+    cleared = await control_commands.run_clear_memory({"confirm": True}, ctx)
+    assert cleared is not None and cleared["scope"] == "short_term"
+    [backup] = list((tmp_path / "backups" / "memory").iterdir())
+    assert cleared["backup"] == f"backups/memory/{backup.name}"
+    assert await extractor.flush() == 0  # the loop's next pass writes nothing into the fresh file
+    assert not Path(memory.memory_file).exists()
+
+
 class _FixedDatetime(datetime):
     @classmethod
     def now(cls, tz=None):  # type: ignore[override]
@@ -693,7 +722,7 @@ async def test_clear_moves_the_file_and_never_overwrites_an_earlier_backup(tmp_p
     backups = tmp_path / "backups" / "memory"  # missing: clear() creates it
 
     Path(memory.memory_file).write_bytes(b"first")
-    memory.cache["a"] = {"content": "x"}
+    memory.cache.append({"id": "a", "content": "x"})
     first = Path(await memory.clear(str(backups)))
     assert first.name == f"20261009T010203Z_{USER}_memory.json" and first.read_bytes() == b"first"
     assert not Path(memory.memory_file).exists() and not memory.cache
@@ -758,7 +787,7 @@ async def test_across_file_systems_the_backup_is_complete_before_the_original_go
 async def test_a_move_that_fails_keeps_the_file_and_the_cache(tmp_path, monkeypatch):
     memory = memory_store.ConversationMemory(USER, storage_path=str(tmp_path))
     Path(memory.memory_file).write_bytes(b"keep me")
-    memory.cache["a"] = {"content": "x"}
+    memory.cache.append({"id": "a", "content": "x"})
 
     def replace(_src, _dst):
         raise PermissionError(errno.EACCES, "locked")

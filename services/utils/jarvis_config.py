@@ -38,6 +38,8 @@ BRAIN_PC, BRAIN_VPS = "pc", "vps"
 BRAINS = (BRAIN_PC, BRAIN_VPS)
 DESKTOP_MODE_LOCAL, DESKTOP_MODE_REMOTE = "local", "remote"
 DESKTOP_MODES = (DESKTOP_MODE_LOCAL, DESKTOP_MODE_REMOTE)
+# The memory identity when JARVIS_USER_ID is unset or empty (K-69, C-52): one memory file in every mode and brain.
+DEFAULT_USER_ID = "matloob"
 _warned_choices: set[tuple[str, str]] = set()
 
 
@@ -407,7 +409,7 @@ class JarvisConfig:
     whatsapp_app_id: str
     whatsapp_contacts_file: str
     cv_path: str | None
-    user_id: str | None
+    user_id: str
     desktop_pc_signing_key: str | None
 
     # validate(role, mode) reads these names from their attribute, so a key a role holds only in memory
@@ -470,8 +472,9 @@ class JarvisConfig:
         # User Info
         self.user_name = os.getenv("USER_NAME", "Sir Matloob")
         self.user_city = os.getenv("USER_CITY", "Lahore")
-        # Memory identity (K-69 v4): the same in every mode, so the PC and the VPS share one memory file.
-        self.user_id = _env_str("JARVIS_USER_ID")
+        # Memory identity (K-69 v4, C-52): the same in every mode and brain, so the PC and the VPS share one memory
+        # file; unset or empty is DEFAULT_USER_ID. A room participant's identity is never the memory key.
+        self.user_id = _env_str("JARVIS_USER_ID") or DEFAULT_USER_ID
         self.desktop_pc_signing_key = _env_str("DESKTOP_PC_SIGNING_KEY")
 
         # Root Directory

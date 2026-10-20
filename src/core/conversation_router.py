@@ -32,6 +32,9 @@ message went out, so the chat never shows Jarvis's answer above the message it a
 the C-50 rescue, and it ends the one an older typed message still had armed, as the dashboard Stop does (C-51):
 today it is a stop, and what it stopped is never asked of the model again. A typed message sent while the hooks run
 keeps its own rescue.
+
+C-52: turn_log (the last TURN_LOG_MAX messages of both sides, each with its message id) is what the job's memory
+extractor saves; every assistant entry records the persona that answered (reply_persona).
 """
 
 from __future__ import annotations
@@ -78,6 +81,7 @@ REASONING_TIMEOUT_S = 2.0  # K-67: the panel's reasoning never takes longer (and
 REASONING_HISTORY = 10  # earlier turns jarvis_reasoning sees
 SWARM_COMMAND = "swarm"
 EMIT_ORDER_WAIT_S = 5.0  # a send waits this long at most for the one before it (a stuck bridge never stalls all)
+PERSONAS = ("jarvis", "anna")  # C-52: an assistant entry of the turn log records which one answered
 # C-50: a typed message that got no reply at all is asked again once (_rescue)
 RESCUE_AFTER_S = 12.0
 RESCUE_POLL_S = 5.0      # while the agent thinks or speaks the rescue looks again this often
@@ -144,6 +148,16 @@ def valid_msg_id(msg_id: Any) -> str | None:
     """A client id the router keeps: a str of 1-128 printable characters, else None."""
     if isinstance(msg_id, str) and 0 < len(msg_id) <= ID_MAX_CHARS and msg_id.isprintable():
         return msg_id
+    return None
+
+
+def reply_persona(assistant: Any) -> str | None:
+    """C-52: the persona a reply of this assistant comes from: its reply_persona (the persona its live session answers
+    as), else its active persona; None when neither is 'jarvis' or 'anna'."""
+    for value in (getattr(assistant, "reply_persona", None),
+                  getattr(getattr(assistant, "persona_manager", None), "active_persona_name", None)):
+        if isinstance(value, str) and value in PERSONAS:
+            return value
     return None
 
 
@@ -462,9 +476,15 @@ class ConversationRouter:
         return pending
 
     def _log_turn(self, msg_id: str, role: str, text: str, source: str, turn_id: str | None = None) -> None:
+        """One entry of the turn log {id, role, text, source, ts, turn_id?, persona? (assistant)}: the jarvis_reasoning
+        history and C-52's memory (MemoryExtractor saves each entry once, by its id)."""
         entry: dict[str, Any] = {"id": msg_id, "role": role, "text": text, "source": source, "ts": time.time()}
         if turn_id:
             entry["turn_id"] = turn_id
+        if role == "assistant":
+            persona = reply_persona(self.assistant)  # C-52: recorded when the reply came, not when it is saved
+            if persona is not None:
+                entry["persona"] = persona
         self.turn_log.append(entry)
 
     def _log(self, status: str, msg_id: str, origin: str, text: str) -> None:

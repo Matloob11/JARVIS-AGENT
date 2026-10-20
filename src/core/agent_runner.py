@@ -132,6 +132,7 @@ from services.utils.jarvis_healing import healing_engine
 from services.utils.jarvis_health import health_monitor
 from services.utils.jarvis_config import (
     BRAIN_VPS,
+    DEFAULT_USER_ID,
     DESKTOP_MODE_LOCAL,
     DESKTOP_MODE_REMOTE,
     ROLE_AGENT,
@@ -167,7 +168,7 @@ from src.core.jarvis_runtime import JarvisRuntime
 from src.core.voices import persona_voice  # C-50
 from src.core.voice_link import VoiceLink  # C-35; registers ui_command voice_take_over
 from services.utils.probe_context import bridge_suppressed, is_probe_room  # K-57 (C-39)
-from src.core.conversation_router import ConversationRouter, preview
+from src.core.conversation_router import ConversationRouter, preview, reply_persona, router_of
 from src.core.vision_handler import append_chat_message, desktop_data_message
 
 logger = setup_logger("AGENT-RUNNER")
@@ -412,54 +413,84 @@ def clipboard_tip_text(payload: Any) -> str:
     return "" if payload is None else str(payload)
 
 
+MEMORY_LOOP_INTERVAL_S = 10.0  # C-52 (C-114 step 8): a final transcript reaches the memory file within about 10 s
+MEMORY_FLUSH_TIMEOUT_S = 5.0   # the job's end waits at most this long for its last memory write
+
+
+async def _memory_items(assistant: Any) -> list[Any]:
+    """C-52: the job's messages for its memory extractor: the router's turn_log (every K-58 transcript message once,
+    with its id, C-42) while a ConversationRouter is attached, else the assistant's chat context messages (an assistant
+    without a router); never a turn re-seeded from memory at job start (C-114: ids 'reseed-*')."""
+    router = router_of(assistant)
+    if router is not None:
+        return session_policy.without_reseeded(list(router.turn_log))
+    history_items: list[Any] = []
+    history_list = getattr(assistant, 'chat_ctx', None)
+    if history_list and hasattr(history_list, 'messages'):
+        # Handle both property, synchronous method, and asynchronous coroutine
+        msg_source = history_list.messages
+        messages = msg_source() if callable(msg_source) else msg_source
+        # Critical Fix: LiveKit messages may return a coroutine
+        if asyncio.iscoroutine(messages) or hasattr(messages, '__await__'):
+            messages = await messages
+        # Make sure messages is iterable and not a ChatContext object itself
+        if not isinstance(messages, list):
+            if hasattr(messages, "messages"):
+                messages = messages.messages
+            elif not hasattr(messages, "__iter__"):
+                messages = []
+        history_items = session_policy.without_reseeded(messages) if messages else []
+    if not history_items:
+        history = getattr(assistant, "history", None)
+        items = getattr(history, "items", None)
+        if callable(items):
+            items = items()
+        if asyncio.iscoroutine(items) or hasattr(items, "__await__"):
+            items = await items
+        if isinstance(items, list) or (items and hasattr(items, "__iter__")):
+            history_items = session_policy.without_reseeded(items)
+    return history_items
+
+
 async def start_memory_loop(assistant: BrainAssistant | Any, memory_extractor: MemoryExtractor | None = None) -> None:
-    """Continuous memory extraction loop. C-114: the turns re-seeded from memory at job start (ids 'reseed-*') are
-    dropped before the extractor sees the window, so a replayed turn is never saved again (C-52 rewrites the
-    extractor)."""
+    """C-52: every MEMORY_LOOP_INTERVAL_S the job's new messages (_memory_items: the router's turn_log) go to the
+    memory file; the extractor saves each message once, by its id, in one bundle per pass (before C-52 it read a
+    20-item window every 120 s and stopped after the first 20 messages). The extractor is bound to the same source and
+    to the assistant's reply persona, so its flush at the job's end and in the memory storage loop sees what this loop
+    sees. The turns re-seeded from memory at job start (C-114) are never saved again."""
     memory_extractor = memory_extractor or MemoryExtractor(getattr(assistant, "user_id", None))
+    bind = getattr(memory_extractor, "bind", None)
+    if callable(bind) and not inspect.iscoroutinefunction(bind):  # a test's AsyncMock extractor has nothing to bind
+        bind(source=functools.partial(_memory_items, assistant), persona=functools.partial(reply_persona, assistant))
     while True:
         try:
-            # Fetch latest history from ChatContext messages
-            history_items = []
-            history_list = getattr(assistant, 'chat_ctx', None)
-            if history_list and hasattr(history_list, 'messages'):
-                # Handle both property, synchronous method, and asynchronous coroutine
-                msg_source = history_list.messages
-                if callable(msg_source):
-                    messages = msg_source()
-                else:
-                    messages = msg_source
-
-                # Critical Fix: LiveKit messages may return a coroutine
-                if asyncio.iscoroutine(messages) or hasattr(messages, '__await__'):
-                    messages = await messages
-
-                # Make sure messages is iterable and not a ChatContext object itself
-                if not isinstance(messages, list):
-                    if hasattr(messages, "messages"):
-                        messages = messages.messages
-                    elif not hasattr(messages, "__iter__"):
-                        messages = []
-
-                history_items = session_policy.without_reseeded(messages)[-20:] if messages else []
-
-            if not history_items:
-                history = getattr(assistant, "history", None)
-                items = getattr(history, "items", None)
-                if callable(items):
-                    items = items()
-                if asyncio.iscoroutine(items) or hasattr(items, "__await__"):
-                    items = await items
-                if isinstance(items, list) or (items and hasattr(items, "__iter__")):
-                    history_items = session_policy.without_reseeded(items)[-20:]
-
+            history_items = await _memory_items(assistant)
             if history_items:
-                logger.debug("Running memory extraction for %s", getattr(assistant, "user_id", "User"))
                 await memory_extractor.run(history_items)
-            await asyncio.sleep(120) # Throttled to 2 minutes to ensure smoothness
         except Exception as e:
-            logger.error("Memory loop error: %s", e)
-            await asyncio.sleep(60)
+            logger.error("Memory loop error: %s", type(e).__name__)
+        await asyncio.sleep(MEMORY_LOOP_INTERVAL_S)
+
+
+async def _flush_memory(assistant: Any, reason: str) -> int:
+    """C-52 (C-114 step 8): at the job's end (its runtime teardown, and LiveKit's shutdown callback, which may stop the
+    loop before the teardown is done) the messages the memory loop has not written yet go to the memory file, so the
+    next job's re-seed finds them. Bounded by MEMORY_FLUSH_TIMEOUT_S; never raises; a probe job writes nothing."""
+    flush = getattr(getattr(assistant, "memory_extractor", None), "flush", None)
+    if not callable(flush):
+        return 0
+    try:
+        result = flush()
+        written = await asyncio.wait_for(result, MEMORY_FLUSH_TIMEOUT_S) if inspect.isawaitable(result) else 0
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:  # pylint: disable=broad-exception-caught  # TimeoutError too: the save itself goes on
+        logger.warning("MEMORY flush at the job end (%s) failed: %s", reason, type(e).__name__)
+        return 0
+    written = written if isinstance(written, int) and not isinstance(written, bool) else 0
+    if written:
+        logger.info("MEMORY flush at the job end (%s): %d message(s) written", reason, written)
+    return written
 
 
 async def start_heartbeat_loop() -> None:
@@ -517,21 +548,18 @@ async def _pc_vitals_loop(notify_pc_vitals: Callable[[dict[str, Any]], Awaitable
 
 
 def _resolve_user_id(room: Any) -> str:
-    """Memory identity: JARVIS_USER_ID in every mode (K-69 v4), so the PC and the VPS share one memory
-    file. When it is unset: the old per-job identity (the first remote participant, else this agent's
-    own), with a WARNING."""
-    if config.user_id:
-        return config.user_id
-    user_id = "User"
-    remote_participants = list(getattr(room, "remote_participants", {}).values())
-    if remote_participants:
-        # Take the first remote participant if available
-        first_participant = remote_participants[0]
-        user_id = first_participant.identity
-    elif getattr(room, "local_participant", None):
-        # Fallback to local participant identity if remote not found yet
-        user_id = room.local_participant.identity
-    logger.warning("JARVIS_USER_ID is not set; memory is keyed by this job's participant identity")
+    """Memory identity (K-69, C-52): JARVIS_USER_ID in every mode and brain (unset: 'matloob'), so the PC and the VPS
+    share one memory file and every job of the owner writes the same one. The room's participant identity is never the
+    memory key any more (it made a new memory file per job), and only its kind ('owner-*', _identity_kind) is logged:
+    an identity never goes into a log line (AGENT-RUNNER's INFO lines reach the UI log panel)."""
+    user_id = config.user_id or DEFAULT_USER_ID
+    try:
+        remote_participants = list((getattr(room, "remote_participants", None) or {}).values())
+        identity = getattr(remote_participants[0], "identity", None) if remote_participants else None
+    except Exception:  # pylint: disable=broad-exception-caught  # a stand-in room: nothing to log
+        identity = None
+    logger.info("MEMORY user=%s (room participant %s: never the memory key)", user_id,
+                _identity_kind(identity) if isinstance(identity, str) and identity else "none yet")
     return user_id
 
 
@@ -1515,8 +1543,9 @@ async def entrypoint(ctx: agents.JobContext):
         truncator.spawn = track
         if not probe:
             # C-114: the last turns from memory before the first session.start (once per job: a C-33 rebuild and a
-            # retried start reuse these parts); K-57: a probe or canary job starts empty
-            await session_policy.reseed_chat_ctx(assistant)
+            # retried start reuse these parts); K-57: a probe or canary job starts empty. C-52: the replies of the
+            # other persona than the saved one this job starts as (C-54) stay out
+            await session_policy.reseed_chat_ctx(assistant, persona=job_settings.get("persona"))
         # C-114: the job's date/city refresh and idle rules, built here so every session's handlers report their
         # conversation activity to it; its loop runs on the job's protector once the session runs (never in a probe)
         policy = session_policy.SessionPolicy(
@@ -1665,6 +1694,8 @@ async def entrypoint(ctx: agents.JobContext):
         """The runtime's end_job hook: the job's own leftovers, then the C-23 end block (skipped on cancel)."""
         if not local:  # C-119: the Desktop Link never reconnects from this job's process again (also on cancel)
             _retire_desktop_link(desktop_job)
+        if not probe:  # C-52: the last messages, before the next job can start
+            await _flush_memory(job["assistant"], reason)
         settings = getattr(runtime, "settings", None)
         if settings is not None:  # C-54: a voice, persona or wake word a tool changed survives the restart
             await settings.persist_live_state()
@@ -1703,6 +1734,10 @@ async def entrypoint(ctx: agents.JobContext):
         if not local:  # C-119: at once, as the teardown may outlast LiveKit's wait (the process then drains)
             _retire_desktop_link(desktop_job)
         why = END_ROOM_DISCONNECTED if "disconnect" in str(reason).lower() else END_JOB_SHUTDOWN
+        # C-52: the memory flush first, in case LiveKit stops the loop before our teardown is done. This callback runs
+        # outside the job task's context (the K-57 probe flag is not set here), hence the explicit check.
+        if not probe:
+            await _flush_memory(job["assistant"], why)
         request_end = job["request_end"]
         if callable(request_end):
             request_end(why)

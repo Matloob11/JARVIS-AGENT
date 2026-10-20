@@ -820,13 +820,25 @@ async def notify_transcription(role: str, text: str,
     await notify_event("transcription", payload)
 
 
-async def notify_memory(content: str) -> None:
-    """Sends a new extracted memory to the STONIX UI Bridge."""
-    await notify_event("memory_update", {
-        "id": str(uuid.uuid4()),
-        "content": content,
-        "timestamp": time.time(),
-    })
+MEMORY_UPDATE_CHARS = 500  # K-07: content is at most this long
+
+
+async def notify_memory(content: str, *, memory_id: str | None = None, role: str | None = None,
+                        source: str = "extractor", user_id: str | None = None, ts: float | None = None) -> None:
+    """K-07 (C-52): one saved memory to the bridge as notify 'memory_update' {id, content (<= 500 characters),
+    role? 'user'|'assistant', source 'extractor'|'fact'|'vector', user_id?, ts}; the bridge emits it as 'memory_sync'.
+    MemoryExtractor sends one per saved message, with the message's id and the time it was said."""
+    payload: dict[str, Any] = {
+        "id": memory_id or str(uuid.uuid4()),
+        "content": str(content)[:MEMORY_UPDATE_CHARS],
+        "source": source,
+        "ts": ts if isinstance(ts, (int, float)) and not isinstance(ts, bool) else time.time(),
+    }
+    if role in ("user", "assistant"):
+        payload["role"] = role
+    if user_id:
+        payload["user_id"] = user_id
+    await notify_event("memory_update", payload)
 
 
 TOOL_ACTION_EXTRA_KEYS = ("id", "phase", "status", "progress", "risk", "ts", "message")

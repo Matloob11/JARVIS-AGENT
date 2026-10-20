@@ -324,10 +324,12 @@ async def run_clear_memory(payload: Any, ctx: CommandContext) -> dict[str, Any] 
     """
     ui_command clear_memory {include_vector?: bool = false, confirm?} (K-60): after the owner's medium-risk confirmation
     the conversation memory is cleared WITHOUT a delete (ConversationMemory.clear moves the file to
-    backups/memory/<UTC ts>_<user>_memory.json and empties its cache) and memory_cleared {scope: 'short_term', backup,
-    ts} goes out (never memory_sync). include_vector then asks a second, high-risk confirmation (the vector store has no
-    backup) and wipes it (jarvis_vector_db.clear_memory), followed by memory_cleared {scope: 'all', ...}. Without a
-    confirmation nothing is cleared. Audited (CLEAR_MEMORY). Returns the last memory_cleared payload, else None.
+    backups/memory/<UTC ts>_<user>_memory.json and empties its cache; C-52: through the job's
+    MemoryExtractor.clear_memory, so the messages of this job its memory loop has not written yet never reach the
+    fresh file) and memory_cleared {scope: 'short_term', backup, ts} goes out (never memory_sync). include_vector then
+    asks a second, high-risk confirmation (the vector store has no backup) and wipes it (jarvis_vector_db.clear_memory),
+    followed by memory_cleared {scope: 'all', ...}. Without a confirmation nothing is cleared. Audited (CLEAR_MEMORY).
+    Returns the last memory_cleared payload, else None.
     """
     if not _claim(ctx, "clear_memory"):
         return None
@@ -348,9 +350,8 @@ async def _clear_short_term_memory(payload: Any, ctx: CommandContext) -> dict[st
         logger.info("MEMORY: clear_memory not confirmed (%s); nothing was cleared", reason)
         await _tell(ctx, f"Clear memory not confirmed ({reason}); nothing was cleared.")
         return None
-    memory = getattr(getattr(ctx.assistant, "memory_extractor", None), "memory", None)
     try:
-        backup = _backup_shown(await memory.clear())
+        backup = _backup_shown(await _clear_memory_file(getattr(ctx.assistant, "memory_extractor", None)))
     except Exception as e:  # pylint: disable=broad-exception-caught  # OSError: not moved, the file is kept as it was
         _audit("CLEAR_MEMORY", f"ALLOW=True | SOURCE={source} | REASON={reason} | SCOPE=short_term | "
                                f"RESULT=failed ({type(e).__name__})", "WARNING")
@@ -365,6 +366,17 @@ async def _clear_short_term_memory(payload: Any, ctx: CommandContext) -> dict[st
     if not include_vector:
         return cleared
     return await _clear_vector_memory(payload, ctx, source, cleared)
+
+
+async def _clear_memory_file(extractor: Any) -> str | None:
+    """C-52: the job's MemoryExtractor clears (clear_memory: what this job said before the clear and the memory loop has
+    not written yet is forgotten, then ConversationMemory.clear moves the file), so the loop's next pass never writes
+    it into the fresh file. An extractor without clear_memory: its memory's clear() alone (C-51)."""
+    clear = getattr(extractor, "clear_memory", None)
+    result = clear() if callable(clear) else None
+    if inspect.isawaitable(result):
+        return await result
+    return await getattr(extractor, "memory", None).clear()
 
 
 async def _clear_vector_memory(payload: Any, ctx: CommandContext, first_source: str,

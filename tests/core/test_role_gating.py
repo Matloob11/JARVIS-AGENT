@@ -209,15 +209,24 @@ def test_jarvis_user_id_is_the_memory_identity_in_every_mode(monkeypatch, deskto
     log.warning.assert_not_called()
 
 
-def test_without_jarvis_user_id_the_old_identity_is_kept_with_a_warning(monkeypatch):
+def test_a_participant_identity_is_never_the_memory_key_only_logged(monkeypatch):
+    """C-52 step 1: the memory identity is JARVIS_USER_ID, else the K-69 default; the room's participant identity (which
+    made a new memory file per job before) is never the key, and never in a log line either: only its kind ('owner-*')
+    is logged, at INFO (AGENT-RUNNER's INFO lines reach the UI log panel), never in a WARNING."""
     log = MagicMock()
     monkeypatch.setattr(agent_runner, "logger", log)
-    monkeypatch.setattr(config, "user_id", None)
-    assert agent_runner._resolve_user_id(_room(["owner-1a2b3c4d", "owner-99999999"])) == "owner-1a2b3c4d"
-    assert agent_runner._resolve_user_id(_room([])) == "agent-AJ_1"
-    assert agent_runner._resolve_user_id(_room([], local=None)) == "User"
-    assert log.warning.call_count == 3
-    assert all("owner-" not in str(call) for call in log.warning.call_args_list)  # identities stay out of logs
+    monkeypatch.setattr(config, "user_id", None)  # a config built before C-52's default
+    assert agent_runner._resolve_user_id(_room(["owner-1a2b3c4d", "owner-99999999"])) == "matloob"
+    assert agent_runner._resolve_user_id(_room([])) == "matloob"
+    assert agent_runner._resolve_user_id(_room([], local=None)) == "matloob"
+    log.warning.assert_not_called()
+    infos = [str(call) for call in log.info.call_args_list]
+    assert len(infos) == 3 and "owner-*" in infos[0] and "none yet" in infos[1]
+    monkeypatch.setattr(config, "user_id", "c52-owner")
+    assert agent_runner._resolve_user_id(_room(["owner-1a2b3c4d"])) == "c52-owner"
+    assert agent_runner._resolve_user_id(_room(["web-5e6f7a8b"])) == "c52-owner"
+    lines = [str(call) for call in log.mock_calls]
+    assert not any(raw in line for line in lines for raw in ("1a2b3c4d", "99999999", "5e6f7a8b", "agent-AJ_1"))
 
 
 # ---------------------------------------------------------------- window context provider
