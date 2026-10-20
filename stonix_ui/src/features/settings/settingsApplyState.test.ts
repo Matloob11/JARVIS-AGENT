@@ -4,6 +4,7 @@ import {
   fieldStatusLabel,
   resolveFieldApplyState,
   truncateFieldError,
+  voiceFromSettingsSync,
 } from './settingsApplyState';
 
 describe('resolveFieldApplyState', () => {
@@ -90,5 +91,42 @@ describe('truncateFieldError', () => {
     expect(truncated).toBe(true);
     expect(preview.endsWith('…')).toBe(true);
     expect(preview.length).toBeLessThanOrEqual(FIELD_ERROR_PREVIEW_CHARS + 1);
+  });
+});
+
+describe('voiceFromSettingsSync', () => {
+  const resolve = (raw: unknown, fallback: string) => String(raw ?? fallback);
+
+  it('keeps sync voice when present', () => {
+    expect(
+      voiceFromSettingsSync({
+        settings: { persona: 'anna', voice: 'Puck' },
+        prevVoice: 'Charon',
+        personaDefault: 'Aoede',
+        resolveVoice: resolve,
+      }),
+    ).toBe('Puck');
+  });
+
+  it('drops saved voice on persona-only sync', () => {
+    expect(
+      voiceFromSettingsSync({
+        settings: { persona: 'anna' },
+        prevVoice: 'Charon',
+        personaDefault: 'Aoede',
+        resolveVoice: resolve,
+      }),
+    ).toBe('Aoede');
+  });
+
+  it('leaves voice alone when sync has neither', () => {
+    expect(
+      voiceFromSettingsSync({
+        settings: { language: 'ur' },
+        prevVoice: 'Charon',
+        personaDefault: 'Aoede',
+        resolveVoice: resolve,
+      }),
+    ).toBe('Charon');
   });
 });

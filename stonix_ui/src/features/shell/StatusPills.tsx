@@ -290,7 +290,8 @@ const VoiceStatusPill = forwardRef<
   const agentMuted = useAgentListeningMuted();
   const { status } = useAgentStatusStore();
   const settings = useSettings();
-  const voiceName = getPersona(settings.persona).voice;
+  // Always show the live settings_sync voice, not the persona copy default.
+  const voiceName = settings.voice || getPersona(settings.persona).voice;
   const e2eTick = useE2EVoiceTick();
 
   const copy = useMemo(() => {

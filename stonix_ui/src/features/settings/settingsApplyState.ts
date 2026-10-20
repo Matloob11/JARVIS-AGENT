@@ -2,6 +2,22 @@
 
 export type FieldApplyState = 'applied' | 'pending' | 'unsupported' | 'error' | 'idle';
 
+/**
+ * Voice shown after settings_sync: trust settings.voice when present; a persona-only
+ * update drops the saved voice and uses the persona default (K-61 v39).
+ */
+export function voiceFromSettingsSync(opts: {
+  settings: Record<string, unknown>;
+  prevVoice: string;
+  personaDefault: string;
+  resolveVoice: (raw: unknown, fallback: string) => string;
+}): string {
+  const { settings, prevVoice, personaDefault, resolveVoice } = opts;
+  if ('voice' in settings) return resolveVoice(settings.voice, personaDefault);
+  if ('persona' in settings) return personaDefault;
+  return prevVoice;
+}
+
 /** Long errors.voice lists every Gemini name; keep the badge readable by default. */
 export const FIELD_ERROR_PREVIEW_CHARS = 96;
 

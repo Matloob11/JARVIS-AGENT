@@ -27,6 +27,7 @@ import {
 import { handleUiCommandAck } from '@/features/status/AgentControls';
 import {
   resolveFieldApplyState,
+  voiceFromSettingsSync,
   type FieldApplyState,
 } from '@/features/settings/settingsApplyState';
 
@@ -431,13 +432,20 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   const applySettingsObject = useCallback(
     (settings: Record<string, unknown>, syncMeta?: ReturnType<typeof normalizeSettings>) => {
-      const holdPersona = revertRef.current.has('persona');
-      const persona = holdPersona
-        ? valuesRef.current.persona
-        : asPersona(settings.persona ?? valuesRef.current.persona);
+      // settings_sync is source of truth (K-61): do not invent voice/persona locally.
+      const persona =
+        'persona' in settings
+          ? asPersona(settings.persona)
+          : valuesRef.current.persona;
+      const voice = voiceFromSettingsSync({
+        settings,
+        prevVoice: valuesRef.current.voice,
+        personaDefault: defaultVoiceForPersona(persona),
+        resolveVoice: asVoice,
+      });
       setValues(prev => ({
         persona,
-        voice: asVoice(settings.voice ?? prev.voice, defaultVoiceForPersona(persona)),
+        voice,
         language: String(settings.language ?? prev.language),
         wakeWord: readWakeWord(settings, prev.wakeWord),
         muted: asBool(settings.muted, prev.muted),
@@ -521,7 +529,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
           continue;
         }
         const field = fieldFromPayloadKey(key);
-        if (!field || field === 'persona') continue;
+        if (!field) continue;
         const current =
           field === 'wakeWord'
             ? confirmed.wakeWord
@@ -558,6 +566,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   useSocketEvent('persona_update', (data: unknown) => {
     const row = data as { persona?: Persona };
     if (!row?.persona) return;
+    // Legacy event; settings_sync is authoritative for voice after a persona switch.
     clearRevertTimer('persona');
     setLocalPending(prev => {
       if (!prev.has('persona')) return prev;
@@ -569,7 +578,15 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   });
 
   useSocketEvent('wake_word_update', (active: unknown) => {
+    // Agent also emits this when wake_word changes (alongside settings_sync).
     if (typeof active === 'boolean') {
+      clearRevertTimer('wakeWord');
+      setLocalPending(prev => {
+        if (!prev.has('wakeWord')) return prev;
+        const next = new Set(prev);
+        next.delete('wakeWord');
+        return next;
+      });
       setValues(prev => ({ ...prev, wakeWord: active }));
     }
   });

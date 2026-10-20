@@ -549,7 +549,11 @@ export function SettingsPage({
             boundaryName="Settings Voice"
           >
             <div data-testid="settings-voice-conversation">
-              <SetField label="Voice" field="voice">
+              <SetField
+                label="Voice"
+                field="voice"
+                hint="Applies at the agent's next safe point (end of the current reply)."
+              >
                 <select
                   className="setting-select"
                   data-testid="settings-voice-select"
