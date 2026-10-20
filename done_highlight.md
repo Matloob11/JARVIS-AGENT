@@ -2719,3 +2719,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** full suite 5263 passed; live: compression on, 31 typed sawal, cut 41->40 aur 61->40 (realtime remove only), cut ke baad jawab theek; fixed context ~12.2k tokens naapa
 - **Commit:** `605f961` + (this commit) · **Deploy:** PC worker restart 13:25 PKT
 - **Doosre agent ke liye:** memory flush (step 8) C-52 mein; VPS brain ka dashboard-socket demand wala low C-130 canary mein dekhna.
+
+### ✅ [cursor] C-54-UI · Settings panel tells sync truth · 2026-10-20 16:30 PKT
+- **Kya kiya:** settings_sync.applied unsupported = calm "Saved · abhi active nahi" (kabhi error nahi); pending_restart = pending + restart note; sirf errors.* red (voice list truncate + show all). saved/updated_ts meta only. Panel sync follow karta hai (voice next safe point, persona→voice drop, alloyx error, wake_word_update). Mock-bridge real agent answers + e2e.
+- **Files:** stonix_ui/src/features/settings/*, stonix_ui/src/shared/contracts/events.ts, stonix_ui/tests/mock-bridge/*, stonix_ui/tests/e2e/settings.spec.ts, voice-settings.spec.ts, StatusPills.tsx, index.css
+- **Verify:** vitest settings 17 passed; settings+voice e2e 20 passed; full e2e 281 passed
+- **Commit:** `65e00ae` `86b349d` `1acc0a5` `a60aeb3` · **Deploy:** REQ-DEPLOY frontend
+- **Doosre agent ke liye:** REQ-DEPLOY frontend (C-54 UI panel live truth)
