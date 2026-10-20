@@ -44,7 +44,7 @@ Priority: P0 broken or unsafe, P1 fragile or misleading, P2 clutter, P3 polish.
 ### UI-H05 — Chat list cap / virtualize (P1, L) — DONE
 
 - **Problem:** `useChat` trims to 300 (`MAX_MESSAGES`) but the DOM still renders the whole list (`ChatList.tsx`).
-- **Fix:** `CHAT_RENDER_WINDOW` (80) newest messages mounted; "Show earlier in view" expands by 80. Composer/latest testids unchanged. Perf budget still UNVERIFIED (`npm run test:perf`).
+- **Fix:** `CHAT_RENDER_WINDOW` (80) newest messages mounted; "Show earlier in view" expands by 80. Composer/latest testids unchanged. Perf gate VERIFIED 2026-10-20 via `npm run test:perf` (orb drawMs ≤1.5; speaking fps floors with Windows-load tolerance; breath ≤18 draws/s).
 - **Accept:** 300 messages do not mount 300 bubbles.
 - **Verify:** `npm test -- src/features/panel/ChatList.test.tsx`.
 

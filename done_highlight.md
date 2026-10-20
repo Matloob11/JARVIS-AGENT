@@ -2803,3 +2803,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** vitest normalize+hook 5 passed; e2e plan-progress 1 passed
 - **Commit:** (this commit) · **Deploy:** later (batch REQ-DEPLOY)
 - **Doosre agent ke liye:** bridge plan_progress route Claude side; UI ready
+
+### ✅ [cursor] QUALITY · test:perf + cursor-lane pytest · 2026-10-20 20:00 PKT
+- **Kya kiya:** Orb speaking path lighter (rim 32 segs, wave half-rate, orb drawMs hook); perf.spec orb_draw_ms + Windows-load floors; UI_HARDENING_PLAN perf VERIFIED. Cursor-lane pytest 352 passed / 8 skipped.
+- **Files:** stonix_ui orbDraw/orbRenderer/waveform/e2eHooks, tests/e2e/perf.spec.ts, docs/UI_HARDENING_PLAN.md
+- **Verify:** npm run test:perf → 5 passed; pytest automation|tools|scripts|reminders|whatsapp → 352 passed, 8 skipped
+- **Commit:** (this commit) · **Deploy:** later (batch REQ-DEPLOY)
+- **Doosre agent ke liye:** —

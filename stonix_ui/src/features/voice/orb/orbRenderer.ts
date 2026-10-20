@@ -76,6 +76,8 @@ export class OrbRenderer {
   private loopMode: 'full' | 'breath' | 'stop' = 'stop';
   private drawCount = 0;
   private glowWrites = 0;
+  private drawMsAccum = 0;
+  private drawMsSamples = 0;
 
   private L = 0;
   private prevL = 0;
@@ -182,12 +184,24 @@ export class OrbRenderer {
   }
 
   stats() {
-    return { loop: this.loopMode, draws: this.drawCount, glowWrites: this.glowWrites };
+    return {
+      loop: this.loopMode,
+      draws: this.drawCount,
+      glowWrites: this.glowWrites,
+      /** Mean orb+wave paint ms for samples since last resetDrawMs (perf gate). */
+      drawMs:
+        this.drawMsSamples > 0 ? this.drawMsAccum / this.drawMsSamples : 0,
+    };
   }
 
   resetDrawCount() {
     this.drawCount = 0;
     this.glowWrites = 0;
+  }
+
+  resetDrawMs() {
+    this.drawMsAccum = 0;
+    this.drawMsSamples = 0;
   }
 
   destroy() {
@@ -311,7 +325,8 @@ export class OrbRenderer {
       return;
     }
 
-    if (mode === 'full' && now - this.lastDraw < 12.5) {
+    // Cap ~90 fps on high-refresh panels; leave headroom so 60 Hz still clears the ≥58 gate.
+    if (mode === 'full' && now - this.lastDraw < 11) {
       this.schedule();
       return;
     }
@@ -376,6 +391,7 @@ export class OrbRenderer {
     while (this.ripples.length > 6) this.ripples.shift();
     this.prevL = this.L;
 
+    const paintT0 = performance.now();
     const { ctx, k } = setupOrbCanvas(this.orb, 520, 520, this.orbCssPx, this.phone);
     drawOrbFrame(
       ctx,
@@ -391,12 +407,18 @@ export class OrbRenderer {
     );
 
     const waveMode = this.waveMode();
-    let waveBands: Float32Array | null = null;
-    if (waveMode === 'speaking') waveBands = agent.bands;
-    else if (waveMode === 'listening') waveBands = user.bands;
-    const waveL =
-      waveMode === 'listening' ? this.userL : this.L;
-    this.paintWave(t, waveL, waveBands);
+    // Speaking/listening wave at half rate — bars stay smooth; frees script for the ≥58 fps orb gate.
+    const paintWaveThisFrame =
+      waveMode !== 'speaking' && waveMode !== 'listening'
+        ? true
+        : (this.drawCount & 1) === 0;
+    if (paintWaveThisFrame) {
+      let waveBands: Float32Array | null = null;
+      if (waveMode === 'speaking') waveBands = agent.bands;
+      else if (waveMode === 'listening') waveBands = user.bands;
+      const waveL = waveMode === 'listening' ? this.userL : this.L;
+      this.paintWave(t, waveL, waveBands);
+    }
 
     if (this.state === 'listening' && this.userL > 0.01) {
       this.userRing.hidden = false;
@@ -405,6 +427,8 @@ export class OrbRenderer {
       this.userRing.hidden = true;
     }
 
+    this.drawMsAccum += performance.now() - paintT0;
+    this.drawMsSamples += 1;
     this.drawCount += 1;
     if (this.L > 0.05 || mode === 'full') this.glowWrites += 1;
 

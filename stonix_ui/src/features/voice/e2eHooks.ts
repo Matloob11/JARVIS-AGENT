@@ -38,7 +38,10 @@ type JarvisTestApi = {
     engineLoop: string;
     engineTicks: number;
     commits: number;
+    drawMs: number;
+    hasOrb: boolean;
   };
+  resetDrawMs: () => void;
   readAgentDbfs: () => number;
   readAgentBands: () => number[];
   agentContextState: () => string;
@@ -163,6 +166,7 @@ export function install() {
         loop: 'stop' as const,
         draws: 0,
         glowWrites: 0,
+        drawMs: 0,
       };
       return {
         loop: orb.loop,
@@ -172,7 +176,11 @@ export function install() {
         engineLoop: engine.engineLoop,
         engineTicks: engine.engineTicks,
         commits: dashboardCommits,
+        drawMs: orb.drawMs,
       };
+    },
+    resetDrawMs() {
+      getActiveOrbRenderer()?.resetDrawMs();
     },
     readAgentDbfs() {
       return audioEngine.readAgent().dbfs;
