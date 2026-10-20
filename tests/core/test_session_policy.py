@@ -49,6 +49,14 @@ from livekit.agents.voice.agent_activity import AgentActivity
 from services.utils import jarvis_jobs, jarvis_location
 from src.core import session_policy as sp
 
+RESEED_DEFAULT = sp.RESEED_ENABLED  # the module's own value, before any fixture
+
+
+@pytest.fixture(autouse=True)
+def _reseed_switched_on(monkeypatch):
+    """The re-seed is off in production since 20 Oct (sp.RESEED_ENABLED); these tests keep its rules checked."""
+    monkeypatch.setattr(sp, "RESEED_ENABLED", True)
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _REAL_SLEEP = asyncio.sleep  # the entry fixture swaps asyncio.sleep for one that only yields
 
@@ -708,6 +716,17 @@ class _SeedAgent:
     async def update_chat_ctx(self, ctx: llm.ChatContext) -> None:
         self.updates.append(ctx)
         self._chat_ctx = ctx.copy()
+
+
+async def test_the_reseed_is_off_by_default_and_changes_nothing(records, monkeypatch):
+    """20 Oct live: replayed turns made Gemini Live ignore every typed message of the job, so the re-seed is off
+    until the recall moves into the instructions (C-53)."""
+    assert RESEED_DEFAULT is False
+    monkeypatch.setattr(sp, "RESEED_ENABLED", RESEED_DEFAULT)
+    agent = _SeedAgent(MEMORY)
+    assert await sp.reseed_chat_ctx(agent) == 0
+    assert agent.reads == 0 and agent.updates == [] and agent.chat_ctx.items == []
+    assert "SESSION_POLICY re-seed off (RESEED_ENABLED)" in records.messages
 
 
 async def test_the_reseed_puts_a_memory_note_and_the_turns_before_the_first_start_with_reseed_ids(records):

@@ -377,6 +377,10 @@ RESEED_READ = 80           # memory messages read to find RESEED_TURNS turns aft
 # its opening ones), and only what was saved in the RESEED_WINDOW_S before that newest turn comes back.
 RESEED_MAX_AGE_S = 3600.0
 RESEED_WINDOW_S = 1800.0
+# Off since 20 Oct 2026: live, a job whose context got replayed turns (sent to Gemini as client content at connect)
+# never answered a typed message (generate_reply timed out waiting for generation_created, the C-50 rescue too),
+# while a probe job without them answered at once. The recall comes back through the instructions (C-53).
+RESEED_ENABLED = False
 RESEED_CLOCK_SLACK_S = 120.0   # a save time this far ahead of the clock still counts
 RESEED_TIMEOUT_S = 5.0     # the memory read (a decrypt in a thread) never holds the session start longer
 RESEED_TEXT_MAX = 1500     # characters per replayed turn
@@ -551,6 +555,9 @@ async def reseed_chat_ctx(agent: Any, *, limit: int = RESEED_TURNS, read: int = 
     A context that has them already (a C-33 rebuild, a retried start) is left alone. Logs counts, never a text.
     Returns how many turns went in (the note not counted); never raises.
     """
+    if not RESEED_ENABLED:
+        logger.info("SESSION_POLICY re-seed off (RESEED_ENABLED)")
+        return 0
     turns: list[tuple[str, str]] = []
     age_s = 0.0
     try:
