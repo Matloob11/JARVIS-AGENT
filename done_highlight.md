@@ -2726,3 +2726,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** vitest settings 17 passed; settings+voice e2e 20 passed; full e2e 281 passed
 - **Commit:** `65e00ae` `86b349d` `1acc0a5` `a60aeb3` · **Deploy:** REQ-DEPLOY frontend
 - **Doosre agent ke liye:** REQ-DEPLOY frontend (C-54 UI panel live truth)
+
+### ✅ 🚀 [claude] C-127 · V2a aur V2b: bridge env ke secrets alag (VPS) · 2026-10-20 16:36 PKT
+- **Kya kiya:** V2a: ui-bridge 9197387 deploy (backup ab env layout names darj karta hai), phir rollback mashq: rollback 4acdcaf image par aur wapas 9197387, dono RESULT=ok. V2b: backup_vps.sh pre-env-split, split_bridge_env.py --dry-run phir asli: VPS compose .env se 12 agent secret names hatay (AI, search, weather, email, encryption key, controller token), 17 names baqi (compose ke saare interpolated), bridge.env mein LOG_FILE aur LOG_LEVEL jude; ui-bridge apne GIT_SHA ke saath dobara bana, GATE=ok, check-bridge: NO_AGENT_SECRETS_IN_BRIDGE.
+- **Files:** — (VPS env files only: /opt/jarvis-agent/deploy/hostinger/.env aur bridge.env, dono 600 root)
+- **Verify:** typed jawab 3.1 s aur 2.2 s, voice probe PASS (dono steps ke baad); other apps identical (deploy aur dono rollbacks)
+- **Commit:** `9197387` · **Deploy:** VPS ui-bridge 16:25 PKT, rollback drill 16:30-16:31, env split 16:33 PKT 🚀 (backups /root/jarvis-backups/2026-10-20_1125Z-pre-deploy-9197387, /root/jarvis-backups/2026-10-20_1132Z-pre-env-split, /root/jarvis-backups/env/20261020T113302Z-pre-env-split; undo V2b: `bash /root/jarvis-backups/tools/rollback.sh 2026-10-20_1132Z-pre-env-split --services ui-bridge --with-env` (pehle --dry-run))
+- **Doosre agent ke liye:** bridge ab sirf apne names parhta hai; AI keys VPS par sirf .env.agent mein jayengi (push step).
+
+### ✅ 🚀 [claude] C-127 · Secrets split tools + agent env push (VPS) · 2026-10-20 16:45 PKT
+- **Kya kiya:** Naye tools: split_bridge_env.py (V2b), push_agent_env.py, env-layout wale backup_vps.sh/rollback.sh, DPAPI fallback store (fallback_env.py, --discard), PC ki apni LiveKit pair (livekit_pc_pair.py), rotation guards, aur pre-commit guard ab DPAPI mein band secrets bhi pakadta hai. VPS par V2a + V2b (upar wali entry) ke baad push: backup_vps.sh pre-agent-env, push_agent_env.py --dry-run phir asli: .env.agent (600 root) mein agent ke names; --check: 35 values digest se equal. Laptop node ki signing key bani (%LOCALAPPDATA%\JARVIS\node\keys.dpapi), public key PC .env mein.
+- **Files:** scripts/ops/{split_bridge_env,push_agent_env,fallback_env,livekit_pc_pair,env_remote}.py (naye), scripts/ops/rotate_env_secret.py, rotate_livekit_keys.py, scripts/agent_ctl.py, scripts/coord/precommit.py, deploy/hostinger/{backup_vps.sh,rollback.sh,RUNBOOK.md,docker-compose.yml,.env.example,.env.agent.example}, deploy/windows-local/TOOLS.md, services/utils/jarvis_security.py, .env.example, tests (11 files), docs/CONTRACTS.md (v41)
+- **Verify:** full suite 5439 passed; acceptance: bridge healthy, NO_AGENT_SECRETS_IN_BRIDGE, pre-split rollback --with-env ke bina refuse aur us ke saath planned, PC brain typed + voice
+- **Commit:** `9197387` + (this commit) · **Deploy:** VPS .env.agent 16:37 PKT 🚀 (backup /root/jarvis-backups/2026-10-20_1135Z-pre-agent-env)
+- **Doosre agent ke liye:** push_agent_env --keys abhi baqi: VPS par jarvis-agent:hostinger image ab nahi (bahar ke prune ne hata di), V4 window mein dobara build karke --keys.
