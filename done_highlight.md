@@ -2740,3 +2740,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** full suite 5439 passed; acceptance: bridge healthy, NO_AGENT_SECRETS_IN_BRIDGE, pre-split rollback --with-env ke bina refuse aur us ke saath planned, PC brain typed + voice
 - **Commit:** `9197387` + (this commit) · **Deploy:** VPS .env.agent 16:37 PKT 🚀 (backup /root/jarvis-backups/2026-10-20_1135Z-pre-agent-env)
 - **Doosre agent ke liye:** push_agent_env --keys abhi baqi: VPS par jarvis-agent:hostinger image ab nahi (bahar ke prune ne hata di), V4 window mein dobara build karke --keys.
+
+### ✅ 🔁 [claude] Worker restarts 16:38, 17:05, 17:15 PKT · Agent worker restart (agent_ctl) · 2026-10-20 17:25 PKT
+- **Kya kiya:** `agent_ctl restart` teen dafa: 16:38 (C-127 V2a check: purana Gemini session 55 min khamosh tha, typed ka jawab nahi), 17:05 (C-119 PC brain check), 17:15 (C-114 hotfix: re-seed off). Har dafa health 200 aur agent room mein (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200; typed 6/6 aur voice probe PASS (17:15 ke baad)
+- **Commit:** abhi nahi · **Deploy:** PC agent restarts 16:38, 17:05, 17:15 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🚀 [claude] C-119 + C-54 UI deploy + C-114 hotfix · 2026-10-20 17:25 PKT
+- **Kya kiya:** C-119 (VPS brain ka DesktopLink client aur laptop tool proxies) main mein: 10 review/fix rounds, aakhri low (exec ke controls ke dauran 'ruko') khud theek kiya + test. Cursor ka C-54 settings panel (unsupported = "Saved · abhi active nahi", sirf errors laal) review karke frontend e52ad45 deploy. Live mein pata chala ke C-114 ka memory re-seed job ke saare typed sawal rok deta hai (Gemini generate_reply timeout, 4/4), re-seed off kiya (c800462), uske baad typed 6/6.
+- **Files:** services/ai_core/desktop_link.py, desktop_proxy.py (naye), jarvis_confirm.py, jarvis_plugin_manager.py, services/utils/jarvis_jobs.py, src/core/agent_runner.py, conversation_router.py, src/core/session_policy.py, tests, docs/CONTRACTS.md (v42, v43), docs/ARCHITECTURE_VPS_BRAIN.md
+- **Verify:** full suite 5562 passed (C-119); session_policy + agent_runner 158 passed (hotfix); live typed 6/6, voice probe PASS, probe typed turn PASS
+- **Commit:** `e52ad45`, `c800462` + (this commit) · **Deploy:** VPS frontend 17:02 PKT 🚀 (backup /root/jarvis-backups/2026-10-20_1202Z-pre-deploy-e52ad45; rollback: `bash /root/jarvis-backups/tools/rollback.sh 2026-10-20_1202Z-pre-deploy-e52ad45`)
+- **Doosre agent ke liye:** settings panel live hai; re-seed band hai, purani baat ki yaad C-53 instructions ke zariye laayega.
