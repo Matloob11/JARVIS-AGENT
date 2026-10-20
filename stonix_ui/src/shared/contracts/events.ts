@@ -49,8 +49,15 @@ export interface NormalizedTasks {
   [key: string]: unknown;
 }
 
+/** Meta keys inside settings_sync.settings — never render or send as fields (K-61 v39). */
+export const SETTINGS_META_KEYS = ['saved', 'updated_ts'] as const;
+
 export interface NormalizedSettings {
   settings: Record<string, unknown>;
+  /** Field names the owner really set (from settings.saved); every other value is a default. */
+  savedFields?: string[];
+  /** Agent's last save epoch seconds (0 when none). */
+  updated_ts?: number;
   applied?: unknown;
   enforced?: unknown;
   available_voices?: unknown;
@@ -59,8 +66,44 @@ export interface NormalizedSettings {
   vision_mode?: unknown;
   errors?: unknown;
   pending?: unknown;
+  pending_restart?: unknown;
   restart_required?: unknown;
   [key: string]: unknown;
+}
+
+/** Pull saved/updated_ts out of a settings object; return a copy without those keys. */
+export function stripSettingsMeta(settings: Record<string, unknown>): {
+  settings: Record<string, unknown>;
+  savedFields: string[];
+  updated_ts: number;
+} {
+  const next: Record<string, unknown> = { ...settings };
+  const rawSaved = next.saved;
+  delete next.saved;
+  delete next.updated_ts;
+  const savedFields = Array.isArray(rawSaved)
+    ? rawSaved.map(String).filter(name => name && name !== 'saved' && name !== 'updated_ts')
+    : [];
+  const tsRaw = settings.updated_ts;
+  const updated_ts =
+    typeof tsRaw === 'number' && Number.isFinite(tsRaw)
+      ? tsRaw
+      : typeof tsRaw === 'string' && tsRaw.trim() && Number.isFinite(Number(tsRaw))
+        ? Number(tsRaw)
+        : 0;
+  return { settings: next, savedFields, updated_ts };
+}
+
+/** Drop saved/updated_ts from an outbound settings_update payload. */
+export function omitSettingsMetaKeys(
+  partial: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(partial)) {
+    if (key === 'saved' || key === 'updated_ts') continue;
+    out[key] = value;
+  }
+  return out;
 }
 
 /** Convert epoch seconds (< 1e12) to ms; leave ms alone. */
@@ -107,9 +150,12 @@ export function normalizeMessage(raw: unknown): NormalizedMessage {
 export function normalizeSettings(raw: unknown): NormalizedSettings {
   const data = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   if (data.settings && typeof data.settings === 'object') {
+    const stripped = stripSettingsMeta(data.settings as Record<string, unknown>);
     return {
       ...data,
-      settings: data.settings as Record<string, unknown>,
+      settings: stripped.settings,
+      savedFields: stripped.savedFields,
+      updated_ts: stripped.updated_ts,
       applied: data.applied,
     };
   }
@@ -123,11 +169,15 @@ export function normalizeSettings(raw: unknown): NormalizedSettings {
     vision_mode,
     errors,
     pending,
+    pending_restart,
     restart_required,
     ...rest
   } = data;
+  const stripped = stripSettingsMeta(rest);
   return {
-    settings: rest,
+    settings: stripped.settings,
+    savedFields: stripped.savedFields,
+    updated_ts: stripped.updated_ts,
     applied,
     enforced,
     available_voices,
@@ -136,6 +186,7 @@ export function normalizeSettings(raw: unknown): NormalizedSettings {
     vision_mode,
     errors,
     pending,
+    pending_restart,
     restart_required,
   };
 }

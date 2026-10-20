@@ -10,7 +10,10 @@ import {
   type ReactNode,
 } from 'react';
 import { toast } from '@/toast';
-import { normalizeSettings } from '@/shared/contracts/events';
+import {
+  normalizeSettings,
+  omitSettingsMetaKeys,
+} from '@/shared/contracts/events';
 import { getSocket } from '@/shared/realtime/socket';
 import { useSocketEvent } from '@/shared/realtime/subscriptions';
 import {
@@ -159,6 +162,7 @@ function recordSettingsSyncKeys(
   seen: Set<string>,
 ) {
   for (const key of Object.keys(normalized.settings ?? {})) {
+    if (key === 'saved' || key === 'updated_ts') continue;
     seen.add(key);
   }
   if (normalized.guarded_tools != null) seen.add('guarded_tools');
@@ -334,6 +338,10 @@ interface SettingsContextValue {
   enforcedWakeWord: boolean;
   enforcedVoiceId: boolean;
   restartRequired: string[];
+  /** Names in settings_sync.settings.saved (owner-set); others are defaults. */
+  savedFields: readonly string[];
+  updatedTs: number;
+  isFieldSaved: (field: string) => boolean;
   isAgentUpdatePending: (field: string) => boolean;
   updateAutomation: (partial: Partial<Record<keyof typeof AUTOMATION_PAYLOAD_KEYS, boolean>>) => void;
   update: (partial: SettingsUpdatePayload) => void;
@@ -367,6 +375,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [errorsMap, setErrorsMap] = useState<Record<string, string>>({});
   const [serverPending, setServerPending] = useState<Record<string, unknown>>({});
   const [restartRequired, setRestartRequired] = useState<string[]>([]);
+  const [savedFields, setSavedFields] = useState<string[]>([]);
+  const [updatedTs, setUpdatedTs] = useState(0);
   const [availableVoices, setAvailableVoices] = useState<readonly string[]>(GEMINI_VOICES);
   const [enforcedRaw, setEnforcedRaw] = useState<unknown>(undefined);
   const [syncAppliedAll, setSyncAppliedAll] = useState(false);
@@ -478,8 +488,16 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         const pending = syncMeta.pending;
         setServerPending(pending && typeof pending === 'object' ? (pending as Record<string, unknown>) : {});
 
-        const restart = syncMeta.restart_required;
+        const restart =
+          syncMeta.restart_required ?? syncMeta.pending_restart;
         setRestartRequired(Array.isArray(restart) ? restart.map(String) : []);
+
+        if (Array.isArray(syncMeta.savedFields)) {
+          setSavedFields(syncMeta.savedFields);
+        }
+        if (typeof syncMeta.updated_ts === 'number' && Number.isFinite(syncMeta.updated_ts)) {
+          setUpdatedTs(syncMeta.updated_ts);
+        }
       }
     },
     [],
@@ -590,9 +608,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       }
       markPending(pendingFields, snapshots);
 
+      const payload = omitSettingsMetaKeys(partial);
       getSocket().emit(
         'ui_command',
-        { type: 'settings_update', payload: partial },
+        { type: 'settings_update', payload },
         (ack: UiCommandAck) => {
           handleUiCommandAck(ack);
         },
@@ -682,10 +701,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   const update = useCallback(
     (partial: SettingsUpdatePayload) => {
+      const clean = omitSettingsMetaKeys(partial);
       const pendingFields: string[] = [];
-      for (const key of Object.keys(partial)) {
-        if (key === 'automation' && partial.automation && typeof partial.automation === 'object') {
-          for (const subKey of Object.keys(partial.automation as Record<string, unknown>)) {
+      for (const key of Object.keys(clean)) {
+        if (key === 'automation' && clean.automation && typeof clean.automation === 'object') {
+          for (const subKey of Object.keys(clean.automation as Record<string, unknown>)) {
             const field = automationFieldFromPayloadKey(subKey);
             if (field) pendingFields.push(field);
           }
@@ -695,8 +715,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         if (field) pendingFields.push(field);
       }
       if (!pendingFields.length) return;
-      applyOptimistic(partial);
-      emitSettingsUpdate(partial, pendingFields);
+      applyOptimistic(clean);
+      emitSettingsUpdate(clean, pendingFields);
     },
     [applyOptimistic, emitSettingsUpdate],
   );
@@ -776,6 +796,14 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     [fieldStatus],
   );
 
+  const isFieldSaved = useCallback(
+    (field: string) => {
+      const payloadKey = payloadKeyForField(field);
+      return savedFields.includes(payloadKey) || savedFields.includes(field);
+    },
+    [savedFields],
+  );
+
   const isAgentUpdatePending = useCallback(
     (field: string) =>
       agentKeyGraceElapsed && !isAgentSyncKeyPresent(field, seenSyncKeysRef.current),
@@ -821,6 +849,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       enforcedWakeWord,
       enforcedVoiceId,
       restartRequired,
+      savedFields,
+      updatedTs,
+      isFieldSaved,
       isAgentUpdatePending,
       updateAutomation,
       update,
@@ -841,6 +872,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       enforcedWakeWord,
       enforcedVoiceId,
       restartRequired,
+      savedFields,
+      updatedTs,
+      isFieldSaved,
       guardedTools,
       isAgentUpdatePending,
       updateAutomation,

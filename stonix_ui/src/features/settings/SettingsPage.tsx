@@ -137,10 +137,26 @@ function SetField({
   field?: string;
   children: ReactNode;
 }) {
+  const { isFieldSaved, savedFields } = useSettings();
+  const savedKnown = savedFields.length > 0;
+  const fieldSaved = field && savedKnown ? isFieldSaved(field) : undefined;
   return (
-    <div className="set-field">
+    <div
+      className="set-field"
+      data-saved={fieldSaved == null ? undefined : fieldSaved ? 'true' : 'false'}
+    >
       <div className="set-field__meta">
-        <div className="set-field__label">{label}</div>
+        <div className="set-field__label">
+          {label}
+          {fieldSaved === false ? (
+            <span
+              className="ml-2 text-[10px] uppercase tracking-wide text-command-muted"
+              data-testid={field ? `settings-default-${field}` : undefined}
+            >
+              default
+            </span>
+          ) : null}
+        </div>
         {hint ? <p className="set-field__hint">{hint}</p> : null}
         {field ? (
           <>
