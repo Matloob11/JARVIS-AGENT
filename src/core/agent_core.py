@@ -38,6 +38,7 @@ from services.utils.jarvis_resilience import resilience_manager
 from services.utils.jarvis_security import vortex_guard
 from services.utils.jarvis_telemetry import telemetry
 from src.core.gemini_resume_guard import restart_fresh
+from src.core.session_policy import ChatTruncator  # C-114
 
 try:
     from .bridge_notifier import bridge_notifier
@@ -187,6 +188,8 @@ class BrainAssistant(Agent):
         self._wake_word_mode: bool = True
         self._active_session: AgentSession | None = None
         self._conversation_router: Any = None  # C-42: typed chat goes into the session through it
+        # C-114: cuts the chat context to its last 40 items every 20 conversation items (agent_runner counts them)
+        self.chat_truncator = ChatTruncator(self)
         # C-49: a session update (instructions, voice) waits for a safe point: no reply or tool call running
         self._pending_instructions: str | None = None
         self._pending_voice: str | None = None
@@ -324,39 +327,15 @@ class BrainAssistant(Agent):
 
     async def prune_chat_context(self) -> None:
         """
-        Prunes the chat context to prevent unbounded memory growth.
-        Keeps the system/initial instructions and the last N messages.
+        C-114: the old name, kept as a thin wrapper over the job's ChatTruncator (src/core/session_policy.py), which
+        cuts the chat context for real, under its lock: the live realtime session gets its own copy back truncated to
+        the last 40 items (removals only, so nothing is sent to Gemini again) and this assistant's own copy is set to
+        its own last 40 directly (never pushed through update_chat_ctx); in both, the turns re-seeded from memory go
+        whole with their '[MEMORY]' note or not at all. agent_runner runs it every 20 conversation items in every
+        mode. This method used to edit a copy of the messages (nothing was ever removed) and only ran from
+        on_user_turn_completed, which Gemini's server-side turn detection never calls.
         """
-        if not self._chat_ctx:
-            return
-
-        MAX_MESSAGES = 30
-        chat_ctx = self._chat_ctx
-        if asyncio.iscoroutine(chat_ctx) or hasattr(chat_ctx, "__await__"):
-            chat_ctx = await chat_ctx
-
-        messages = getattr(chat_ctx, "messages", None)
-        if callable(messages):
-            messages = messages()
-        if asyncio.iscoroutine(messages) or hasattr(messages, "__await__"):
-            messages = await messages
-        if not isinstance(messages, list):
-            return
-
-        if len(messages) > MAX_MESSAGES:
-            logger.info("Pruning chat context (Size: %s -> %s)", len(messages), MAX_MESSAGES)
-            instructions = messages[0]
-            recent_messages = messages[-(MAX_MESSAGES - 1):]
-            messages[:] = [instructions] + recent_messages
-        return
-
-        if len(self._chat_ctx.messages) > MAX_MESSAGES:
-            logger.info("🧠 Pruning chat context (Size: %s -> %s)",
-                        len(self._chat_ctx.messages), MAX_MESSAGES)
-            # Keep index 0 (instructions) and the last N-1 messages
-            instructions = self._chat_ctx.messages[0]
-            recent_messages = self._chat_ctx.messages[-(MAX_MESSAGES - 1):]
-            self._chat_ctx.messages[:] = [instructions] + recent_messages
+        await self.chat_truncator.truncate()
 
     async def update_instructions(self, instructions: str) -> None:
         """
@@ -1220,8 +1199,7 @@ class BrainAssistant(Agent):
             # Super call for legacy tool execution
             response = await super().on_user_turn_completed(turn_ctx, new_message)
 
-            # Prune context to avoid memory growth over long sessions
-            await self.prune_chat_context()
+            # C-114: the chat context is cut by the job's ChatTruncator (every 20 conversation items, agent_runner)
 
             # Telemetry is handled in the underlying handle_user_query / process_with_reasoning
             # But we log final UI status here

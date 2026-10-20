@@ -9,6 +9,7 @@ re-exports it and registers the tools list_background_jobs and cancel_background
     ctx.progress(percent | None, message)   throttled: one event per 1.5 s, or a 5-point move
     ctx.cancelled                           True once cancel_job asked for it
     list_jobs(), get_job(job_id), cancel_job(job_id)
+    count_active(loop=None)                 queued or running jobs of one event loop (C-114's idle close waits)
 
 At most MAX_CONCURRENT (2) jobs run per event loop; the rest wait their turn (status 'queued'). Every job emits K-31
 tool_sync events {id, tool, action: title, phase: 'start'|'progress'|'end', status, details, progress?, duration_ms?,
@@ -240,6 +241,19 @@ def get_job(job_id: str) -> dict[str, Any] | None:
     with _jobs_lock:
         job = _jobs.get(str(job_id or ""))
     return job.public() if job is not None else None
+
+
+def count_active(loop: asyncio.AbstractEventLoop | None = None) -> int:
+    """How many jobs are queued or running on `loop` (default: the running loop; 0 outside one). C-114: the LiveKit job
+    whose loop runs them is never idle-closed meanwhile. Another loop's jobs never count: on Windows every LiveKit job
+    has its own thread and loop, and a job left behind by a loop that stopped would otherwise count forever."""
+    if loop is None:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return 0
+    with _jobs_lock:
+        return sum(1 for job in _jobs.values() if job.status in ACTIVE and job.loop is loop)
 
 
 def cancel_job(job_id: str) -> bool:

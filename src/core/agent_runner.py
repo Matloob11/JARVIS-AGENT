@@ -162,6 +162,7 @@ except (ImportError, ValueError):
 
 from src.core import agent_settings  # C-54 (K-61); registers settings_update, settings_bootstrap, request_state
 from src.core import gemini_resume_guard
+from src.core import session_policy  # C-114: compression, truncation, re-seed, context refresh, idle close
 from src.core.jarvis_runtime import JarvisRuntime
 from src.core.voices import persona_voice  # C-50
 from src.core.voice_link import VoiceLink  # C-35; registers ui_command voice_take_over
@@ -412,7 +413,9 @@ def clipboard_tip_text(payload: Any) -> str:
 
 
 async def start_memory_loop(assistant: BrainAssistant | Any, memory_extractor: MemoryExtractor | None = None) -> None:
-    """Continuous memory extraction loop."""
+    """Continuous memory extraction loop. C-114: the turns re-seeded from memory at job start (ids 'reseed-*') are
+    dropped before the extractor sees the window, so a replayed turn is never saved again (C-52 rewrites the
+    extractor)."""
     memory_extractor = memory_extractor or MemoryExtractor(getattr(assistant, "user_id", None))
     while True:
         try:
@@ -438,7 +441,7 @@ async def start_memory_loop(assistant: BrainAssistant | Any, memory_extractor: M
                     elif not hasattr(messages, "__iter__"):
                         messages = []
 
-                history_items = list(messages)[-20:] if messages else []
+                history_items = session_policy.without_reseeded(messages)[-20:] if messages else []
 
             if not history_items:
                 history = getattr(assistant, "history", None)
@@ -447,10 +450,8 @@ async def start_memory_loop(assistant: BrainAssistant | Any, memory_extractor: M
                     items = items()
                 if asyncio.iscoroutine(items) or hasattr(items, "__await__"):
                     items = await items
-                if isinstance(items, list):
-                    history_items = items[-20:]
-                elif items and hasattr(items, "__iter__"):
-                    history_items = list(items)[-20:]
+                if isinstance(items, list) or (items and hasattr(items, "__iter__")):
+                    history_items = session_policy.without_reseeded(items)[-20:]
 
             if history_items:
                 logger.debug("Running memory extraction for %s", getattr(assistant, "user_id", "User"))
@@ -474,12 +475,16 @@ async def start_heartbeat_loop() -> None:
         await asyncio.sleep(30) # Reduced frequency to save resources
 
 
-async def _location_loop(notify_location: Callable[[Any], Awaitable[Any]]) -> None:
+async def _location_loop(notify_location: Callable[[Any], Awaitable[Any]],
+                         on_location: Callable[[Any], Any] | None = None) -> None:
     """Sends the ipinfo location to the UI every 60 s. Local mode only: from the VPS ipinfo answers for
-    the data centre, and the Desktop Node reports the device location instead (K-72)."""
+    the data centre, and the Desktop Node reports the device location instead (K-72). C-114: on_location (the job's
+    SessionPolicy) gets each reading too, so a city change reaches the instructions without a second ipinfo call."""
     while True:
         try:
             loc_data = await get_current_city_data()
+            if on_location is not None:
+                on_location(loc_data)
             await notify_location(loc_data)
         except Exception as e:
             logger.error("Location loop error: %s", e)
@@ -995,10 +1000,14 @@ async def _release_session(session: Any, agent: Any, room: Any) -> None:
 
 # ------------------------------------------------------------------ C-23: the job's session state and its end
 # K-68 v9: the agent mirrors its session in the participant attribute jarvis.session, which the bridge's room owner
-# reads (voice_ready needs 'running'; an agent without the attribute counts as running).
+# reads (voice_ready needs 'running'; an agent without the attribute counts as running). C-114: every write also sets
+# jarvis.session_ts, the write's time in whole epoch seconds as text (LiveKit attributes are strings), in the same
+# set_attributes call; the bridge and the UI read only the keys they know, so they ignore it.
 SESSION_ATTR = "jarvis.session"
+SESSION_TS_ATTR = "jarvis.session_ts"
 SESSION_STARTING, SESSION_RUNNING, SESSION_RESTARTING = "starting", "running", "restarting"
 SESSION_PAUSED, SESSION_CLOSED = "paused", "closed"
+SESSION_IDLE = session_policy.SESSION_IDLE  # C-114: written by the job's SessionPolicy right before an idle close
 SESSION_ATTR_TIMEOUT_S = 5.0
 JOB_END_NOTIFY_S = 3.0                  # notify job_end waits at most this long before ctx.shutdown
 END_PAUSED = "paused_by_owner"          # pause_agent (K-60 v9)
@@ -1007,14 +1016,17 @@ END_SESSION_FAILED = "session_failed"   # every session attempt of this job fail
 END_ROOM_DISCONNECTED = "room_disconnected"  # C-33: the room connection is gone (its event or the liveness check)
 END_SESSION_ERROR = "session_error"          # C-33: the AgentSession closed itself on an unrecoverable error
 END_JOB_SHUTDOWN = "job_shutdown"            # C-33: LiveKit itself shut the job down (e.g. a worker shutdown)
+END_IDLE = session_policy.END_IDLE           # C-114: nobody in the room for JARVIS_IDLE_CLOSE_MIN, or the 24 h recycle
 FRAMEWORK_TEARDOWN_WAIT_S = 8.0              # how long a LiveKit-initiated shutdown waits for our teardown
 
 
 async def _write_session_attr(ctx: Any, value: str) -> bool:
-    """Sets jarvis.session on the agent's own participant (at most SESSION_ATTR_TIMEOUT_S); never raises."""
+    """Sets jarvis.session and, in the same call, jarvis.session_ts (C-114: now in whole epoch seconds, as text) on the
+    agent's own participant (at most SESSION_ATTR_TIMEOUT_S); never raises."""
     try:
         local = ctx.room.local_participant
-        await asyncio.wait_for(local.set_attributes({SESSION_ATTR: value}), SESSION_ATTR_TIMEOUT_S)
+        attributes = {SESSION_ATTR: value, SESSION_TS_ATTR: str(int(time.time()))}
+        await asyncio.wait_for(local.set_attributes(attributes), SESSION_ATTR_TIMEOUT_S)
     except Exception as e:  # pylint: disable=broad-exception-caught  # best effort: the room may be gone (a cancel
         # is a BaseException and passes)
         logger.debug("SESSION attribute %s not set: %s", value, type(e).__name__)
@@ -1086,9 +1098,9 @@ async def _end_job(ctx: Any, ended: str | None, framework_shutdown: bool = False
     """
     C-23 (K-60 v9): after the session loop ends (not on cancel, not in console mode) the job ends instead of staying
     in the room without a session: jarvis.session 'paused' for a pause (else 'closed'), notify job_end, then
-    ctx.shutdown(reason) - 'paused_by_owner', 'ended_by_command', 'session_failed' after the last failed attempt, and
-    (C-33, K-60 v16) 'session_error' or 'room_disconnected'. The bridge then dispatches a fresh job (with backoff), or
-    none while paused. Never JobContext.delete_room.
+    ctx.shutdown(reason) - 'paused_by_owner', 'ended_by_command', 'session_failed' after the last failed attempt,
+    (C-33, K-60 v16) 'session_error' or 'room_disconnected', and (C-114) 'idle'. The bridge then dispatches a fresh job
+    (with backoff), or none while paused. Never JobContext.delete_room.
     framework_shutdown (C-33): LiveKit is already shutting the job down (room gone, worker shutdown). The attribute
     write and the job_end notify are skipped then: the room cannot take them, the bridge's room owner stops counting
     a job whose agent it saw leave, and LiveKit only holds the loop for a few seconds (FRAMEWORK_TEARDOWN_WAIT_S).
@@ -1352,7 +1364,14 @@ async def entrypoint(ctx: agents.JobContext):
     or the liveness check ends the job ('room_disconnected'); the assistant's stop event ends it too (pause_agent:
     'paused_by_owner', K-60). Teardown is bounded and ends in _end_job (jarvis.session 'closed'/'paused', job_end,
     ctx.shutdown); room handlers are registered once per job and removed at the end; each job runs its loops on its
-    own task protector. A cancelled job is cleaned up but never shut down again."""
+    own task protector. A cancelled job is cleaned up but never shut down again. C-114 (src/core/session_policy.py):
+    the RealtimeModel compresses its context, the last turns from memory are re-seeded before the first start, the
+    chat context is cut every 20 conversation items (the re-seeded turns whole with their memory note or not at all),
+    and the job's SessionPolicy refreshes the instructions on a new date or city and ends the job ('idle') when nobody
+    has been in the room (no linked participant and no person the bridge counts: kind STANDARD, not 'agent-*' or
+    'probe-*') and nothing was said for JARVIS_IDLE_CLOSE_MIN minutes (default 30 on the VPS brain, off on the PC
+    brain) or, once it is 24 h old, at its first 10 minutes without conversation; never while work runs, and never in
+    console mode."""
     # K-57 (C-39): a probe or canary job (jarvis-probe-<epoch>, jarvis-canary-<epoch>) sets the suppression before
     # it creates any task: nothing it does reaches the bridge, the UI log, memory or the identity file, and it runs
     # no listener or background loop. The user's own job never sets it.
@@ -1385,8 +1404,8 @@ async def entrypoint(ctx: agents.JobContext):
 
     # Per-job parts, built once after the connect (the first session_factory call) and shared by every session.
     job: dict[str, Any] = {"assistant": None, "router": None, "model": None, "vad": None, "session": None,
-                           "protector": None, "plugin_manager": None, "request_end": None,
-                           "framework_shutdown": False, "cancelled": False}
+                           "protector": None, "plugin_manager": None, "request_end": None, "truncator": None,
+                           "policy": None, "framework_shutdown": False, "cancelled": False}
     entry_task = asyncio.current_task()
 
     async def _build_job_parts() -> None:
@@ -1431,11 +1450,14 @@ async def entrypoint(ctx: agents.JobContext):
             # C-54: the saved voice, else the saved persona's (C-50: JARVIS_VOICE_JARVIS, else Charon)
             voice=job_settings.voice or persona_voice("jarvis"),
             model=_realtime_model_name(),
+            # C-114: Gemini's server-side sliding window (JARVIS_CTX_TRIGGER_TOKENS, default 24000 -> 16000 tokens)
+            context_window_compression=session_policy.compression_config(),
         )
         # 2026-10-06: after a network blip the plugin replayed a stale session-resumption handle on every reconnect
         # (APIError/close 1008 'Requested entity was not found') until the session died. The guard drops the stale
         # handle so the plugin's own retry reconnects fresh.
         gemini_resume_guard.guard_realtime_model(llm_model)
+        session_policy.install_truncate_warning_filter()  # C-114: the plugin's WARNING on every truncation
         user_id = _resolve_user_id(ctx.room)  # memory identity: JARVIS_USER_ID, else the participant identity
         assistant = BrainAssistant(
             chat_ctx=llm.ChatContext(),
@@ -1470,11 +1492,42 @@ async def entrypoint(ctx: agents.JobContext):
         # every transcript message once (conversation_item_added).
         router = ConversationRouter(assistant, spawn=track)
         assistant.attach_router(router)
+        # C-114: the assistant's chat truncator (a stand-in gets its own), its cuts tracked as this job's tasks
+        truncator = getattr(assistant, "chat_truncator", None)
+        if not isinstance(truncator, session_policy.ChatTruncator):
+            truncator = session_policy.ChatTruncator(assistant)
+        truncator.spawn = track
+        if not probe:
+            # C-114: the last turns from memory before the first session.start (once per job: a C-33 rebuild and a
+            # retried start reuse these parts); K-57: a probe or canary job starts empty
+            await session_policy.reseed_chat_ctx(assistant)
+        # C-114: the job's date/city refresh and idle rules, built here so every session's handlers report their
+        # conversation activity to it; its loop runs on the job's protector once the session runs (never in a probe)
+        policy = session_policy.SessionPolicy(
+            assistant,
+            voice_link=voice_link,  # the idle close: its linked participant, and the people of its room (ctx.room)
+            session=lambda: job["session"],
+            request_end=_request_end,
+            set_session_attr=lambda value: _set_session_attr(ctx, value),  # K-68 'idle' before the end
+            now_formatted=get_formatted_datetime,
+            watch_city=True,
+            # local: the location loop feeds it (ipinfo); remote: this module's get_current_city_data is
+            # jarvis_location's (remote_compat), the Desktop Node's location that agent-svc caches (K-72)
+            read_location=None if local else get_current_city_data,
+            # this job's background jobs and any running tool call keep it (ending it would cancel them)
+            background_busy=functools.partial(session_policy.background_work, plugin_manager.running_tools),
+            # console mode keeps its job (C-23), so no idle rules there. The PC brain's bridge ('always' dispatch)
+            # refills an empty room at once: its idle close is off unless JARVIS_IDLE_CLOSE_MIN is set (the 24 h
+            # recycle stays); the VPS brain's on_demand bridge dispatches only on demand: 30 minutes there.
+            idle_close_min=0 if _is_console_job(ctx) else None,
+            idle_close_default_min=0 if local else session_policy.IDLE_CLOSE_DEFAULT_MIN,
+            sleep=asyncio.sleep,  # read now, not at import: tests swap asyncio.sleep
+        )
         # Set to WARNING to see important SDK signals but ignore trivial ones
         logging.getLogger("livekit").setLevel(logging.WARNING)
         _quiet_livekit_agents_logger()
         job.update(assistant=assistant, router=router, model=llm_model, vad=vad, plugin_manager=plugin_manager,
-                   request_end=_request_end)
+                   request_end=_request_end, truncator=truncator, policy=policy)
         runtime.assistant, runtime.router = assistant, router
         # C-54 (K-61): the job's settings service (ui_command settings_update / settings_bootstrap / request_state and
         # the legacy commands reach it as runtime.settings); the saved wake word and persona and the audio-out policy
@@ -1536,7 +1589,9 @@ async def entrypoint(ctx: agents.JobContext):
         # C-42: conversation_item_added is the single source of chat messages (voice user text with the item id,
         # typed text never twice, replies with turn_id); a final transcription is only logged.
         @session.on("user_input_transcribed")
-        def on_user_transcription(event: agents.voice.UserInputTranscribedEvent, _assistant=assistant):
+        def on_user_transcription(event: agents.voice.UserInputTranscribedEvent, _assistant=assistant,
+                                  _policy: session_policy.SessionPolicy = job["policy"]):
+            _policy.note_activity()  # C-114: the user speaks
             if not event.transcript or _assistant.muted:
                 return
             if event.is_final:
@@ -1550,13 +1605,19 @@ async def entrypoint(ctx: agents.JobContext):
 
         @session.on("conversation_item_added")
         def on_conversation_item_added(event: agents.voice.ConversationItemAddedEvent,
-                                       _router: ConversationRouter = router):
+                                       _router: ConversationRouter = router,
+                                       _truncator: session_policy.ChatTruncator = job["truncator"],
+                                       _policy: session_policy.SessionPolicy = job["policy"]):
             _router.on_conversation_item_added(event)
+            _truncator.note_item()  # C-114: every 20 items the chat context is cut to its last 40
+            _policy.note_activity()  # C-114: a voice or typed message or a reply restarts both idle counts
 
         @session.on("agent_state_changed")
-        def on_agent_state_changed(event: agents.voice.AgentStateChangedEvent, _assistant=assistant):
+        def on_agent_state_changed(event: agents.voice.AgentStateChangedEvent, _assistant=assistant,
+                                   _policy: session_policy.SessionPolicy = job["policy"]):
             state = event.new_state
             logger.info("🤖 Agent State: %s", state)
+            _policy.note_activity()  # C-114: the agent listens again, thinks or speaks
             on_state = getattr(_assistant, "on_agent_state", None)
             if callable(on_state):  # C-49: pending instructions reach the session once the agent listens
                 track(on_state(state))
@@ -1666,7 +1727,7 @@ async def entrypoint(ctx: agents.JobContext):
 
             # --- Location and PC vitals loops --- (local mode only, K-72 / K-40; never in a probe, K-57)
             if local and not probe:
-                track(_location_loop(notify_location))
+                track(_location_loop(notify_location, job["policy"].note_location))  # C-114: the city check too
                 track(_pc_vitals_loop(notify_pc_vitals))
 
             _start_loop_watchdog(ctx, track, job["plugin_manager"].running_tools)
@@ -1682,6 +1743,7 @@ async def entrypoint(ctx: agents.JobContext):
                 for bt in bg_tasks:
                     active_tasks.add(bt)
                     bt.add_done_callback(active_tasks.discard)
+                await protector.run_protected("session_policy", job["policy"].run)  # C-114: this job's protector only
 
                 # C-78: the document index warms after a delay, so its walk never overlaps the start-up walks
                 rag_warm_delay = _rag_warm_delay()

@@ -29,11 +29,12 @@ from services.utils.jarvis_config import RuntimeProfile, config
 from src.core import agent_core, agent_runner, vision_handler
 
 # The loops one session started before C-112 (the HEAD code gives the same list under these mocks), plus the
-# K-40 pc_vitals_loop (this laptop's vitals for the UI in the PC brain).
+# K-40 pc_vitals_loop (this laptop's vitals for the UI in the PC brain) and the C-114 session_policy (the job's
+# date/city refresh and idle close, on the job's protector in both modes).
 TODAY_LOCAL_LOOPS = [
     "adaptation_loop", "bug_hunter_loop", "clipboard_monitor", "healing_loop", "heartbeat_loop",
-    "location_loop", "memory_loop", "memory_storage_loop", "pc_vitals_loop", "reminder_loop", "startup_voice",
-    "task_monitor", "ui_command_listener", "window_poller",
+    "location_loop", "memory_loop", "memory_storage_loop", "pc_vitals_loop", "reminder_loop", "session_policy",
+    "startup_voice", "task_monitor", "ui_command_listener", "window_poller",
 ]
 # With the VPS brain the Desktop Node owns the PC sensors and the startup sound; agent-svc owns
 # reminders and tasks (K-72, K-77).

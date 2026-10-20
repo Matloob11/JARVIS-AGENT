@@ -144,6 +144,32 @@ async def test_list_jobs_shows_active_first_and_the_tool_says_restarts_lose_jobs
     await _wait(active_id)
 
 
+async def test_count_active_counts_only_the_queued_and_running_jobs_of_one_loop(events):
+    """C-114: the LiveKit job's idle close waits while its own loop runs a job. Another loop's job (another LiveKit
+    job's thread on Windows), even one its stopped loop left 'running' for ever, never counts."""
+    gate = asyncio.Event()
+
+    async def factory(ctx):
+        await gate.wait()
+        return {"status": "success", "message": "m"}
+
+    assert jarvis_jobs.count_active() == 0
+    ids = [jarvis_jobs.start_job("t", f"j{n}", factory) for n in range(3)]  # two run, one waits its turn
+    await asyncio.sleep(0.05)
+    assert jarvis_jobs.count_active() == 3 == jarvis_jobs.count_active(asyncio.get_running_loop())
+    gone = asyncio.new_event_loop()
+    gone.close()
+    stale = jarvis_jobs._Job(job_id="stale", tool="t", title="left behind",  # pylint: disable=protected-access
+                             status=jarvis_jobs.RUNNING, loop=gone)
+    jarvis_jobs._jobs["stale"] = stale  # pylint: disable=protected-access
+    assert jarvis_jobs.count_active() == 3 and jarvis_jobs.count_active(gone) == 1
+    assert await asyncio.to_thread(jarvis_jobs.count_active) == 0  # no running loop there
+    gate.set()
+    for job_id in ids:
+        await _wait(job_id)
+    assert jarvis_jobs.count_active() == 0
+
+
 # ---------------------------------------------------------------- ui_command job_cancel / open_job_artifact (K-31)
 
 
