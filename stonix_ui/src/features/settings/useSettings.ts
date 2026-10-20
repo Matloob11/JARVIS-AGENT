@@ -22,12 +22,16 @@ import {
   resolveVoiceList,
 } from '@/shared/voices';
 import { handleUiCommandAck } from '@/features/status/AgentControls';
+import {
+  resolveFieldApplyState,
+  type FieldApplyState,
+} from '@/features/settings/settingsApplyState';
 
 export type Persona = 'jarvis' | 'anna';
 
 export type SettingsUpdatePayload = Record<string, unknown>;
 
-export type FieldApplyState = 'applied' | 'pending' | 'error' | 'idle';
+export type { FieldApplyState } from '@/features/settings/settingsApplyState';
 
 const SYNC_TIMEOUT_MS = 5000;
 const AGENT_KEY_GRACE_MS = 10_000;
@@ -344,6 +348,8 @@ interface SettingsContextValue {
   }) => void;
   fieldStatus: (field: string) => FieldApplyState;
   fieldError: (field: string) => string | undefined;
+  /** Raw settings_sync.applied value for the field (applied|pending_restart|unsupported). */
+  fieldAppliedRaw: (field: string) => string | undefined;
   isFieldPending: (field: string) => boolean;
   isPersonaPending: boolean;
   isWakeWordPending: boolean;
@@ -735,20 +741,27 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     [update],
   );
 
+  const fieldAppliedRaw = useCallback(
+    (field: string): string | undefined => {
+      const payloadKey = payloadKeyForField(field);
+      return appliedMap[payloadKey] ?? appliedMap[field];
+    },
+    [appliedMap],
+  );
+
   const fieldStatus = useCallback(
     (field: string): FieldApplyState => {
       const payloadKey = payloadKeyForField(field);
-      if (errorsMap[payloadKey] || errorsMap[field]) return 'error';
-      if (localPending.has(field)) return 'pending';
-      if (serverPending[payloadKey] != null || serverPending[field] != null) return 'pending';
-      const applied = appliedMap[payloadKey] ?? appliedMap[field];
-      if (field in AUTOMATION_PAYLOAD_KEYS && appliedMap.automation === 'applied') {
-        return 'applied';
-      }
-      if (applied === 'applied') return 'applied';
-      if (applied === 'pending_restart' || applied === 'unsupported') return 'error';
-      if (syncAppliedAll && !localPending.has(field)) return 'applied';
-      return 'idle';
+      return resolveFieldApplyState({
+        hasError: Boolean(errorsMap[payloadKey] || errorsMap[field]),
+        localPending: localPending.has(field),
+        serverPending:
+          serverPending[payloadKey] != null || serverPending[field] != null,
+        applied: appliedMap[payloadKey] ?? appliedMap[field],
+        isAutomationField: field in AUTOMATION_PAYLOAD_KEYS,
+        automationApplied: appliedMap.automation === 'applied',
+        syncAppliedAll,
+      });
     },
     [appliedMap, errorsMap, localPending, serverPending, syncAppliedAll],
   );
@@ -817,6 +830,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       updateSettings,
       fieldStatus,
       fieldError,
+      fieldAppliedRaw,
       isFieldPending,
       isPersonaPending: isFieldPending('persona'),
       isWakeWordPending: isFieldPending('wakeWord'),
@@ -837,6 +851,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       updateSettings,
       fieldStatus,
       fieldError,
+      fieldAppliedRaw,
       isFieldPending,
     ],
   );

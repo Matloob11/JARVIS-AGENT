@@ -8,6 +8,10 @@ import {
 import { RefreshCw } from 'lucide-react';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { useSettings } from '@/features/settings/useSettings';
+import {
+  fieldStatusLabel,
+  truncateFieldError,
+} from '@/features/settings/settingsApplyState';
 import { simProviderBannerText } from '@/features/command-center/hooks/useCommandCenter';
 import { useLaptopOnline } from '@/features/overview/useLaptopOnline';
 import { agentHostTitle } from '@/features/status/agentHostLabel';
@@ -68,18 +72,46 @@ function formatExpiry(expires_at: number): string {
 }
 
 function FieldStatusBadge({ field, label }: { field: string; label?: string }) {
-  const { fieldStatus, fieldError } = useSettings();
+  const { fieldStatus, fieldError, fieldAppliedRaw } = useSettings();
+  const [errorExpanded, setErrorExpanded] = useState(false);
   const status = fieldStatus(field);
   if (status === 'idle') return null;
-  const text = status === 'error' ? fieldError(field) || 'error' : status;
+
+  const appliedRaw = fieldAppliedRaw(field);
+  const error = fieldError(field);
+  const baseText = fieldStatusLabel(status, { appliedRaw, error });
+
+  let body: ReactNode = baseText;
+  if (status === 'error' && error) {
+    const { preview, truncated } = truncateFieldError(error);
+    if (truncated && !errorExpanded) {
+      body = (
+        <>
+          <span className="settings-field-status__error-text">{preview}</span>{' '}
+          <button
+            type="button"
+            className="settings-field-status__show-all"
+            data-testid={`settings-error-show-all-${field}`}
+            onClick={() => setErrorExpanded(true)}
+          >
+            show all
+          </button>
+        </>
+      );
+    } else {
+      body = <span className="settings-field-status__error-text">{error}</span>;
+    }
+  }
+
   return (
     <span
       className={`settings-field-status settings-field-status--${status}`}
       data-testid={`settings-status-${field}`}
       data-state={status}
+      data-applied={appliedRaw || undefined}
     >
       {label ? `${label}: ` : ''}
-      {text}
+      {body}
     </span>
   );
 }

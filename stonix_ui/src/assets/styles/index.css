@@ -1097,19 +1097,31 @@ button {
   }
 
   .settings-field-status {
-    @apply mt-1 block text-xs capitalize;
+    @apply mt-1 block text-xs;
   }
 
   .settings-field-status--applied {
-    @apply text-command-accent;
+    @apply capitalize text-command-accent;
   }
 
   .settings-field-status--pending {
     @apply text-command-muted;
   }
 
+  .settings-field-status--unsupported {
+    @apply text-command-muted;
+  }
+
   .settings-field-status--error {
     @apply text-command-danger;
+  }
+
+  .settings-field-status__error-text {
+    @apply whitespace-pre-wrap break-words;
+  }
+
+  .settings-field-status__show-all {
+    @apply ml-1 underline underline-offset-2 text-command-muted hover:text-command-accent;
   }
 
   .settings-connection-chip {
