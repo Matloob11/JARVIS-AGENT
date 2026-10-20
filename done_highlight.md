@@ -2768,3 +2768,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** check-bridge NO_AGENT_SECRETS_IN_BRIDGE (43 names), push_agent_env --check 37 equal + signing key set, files 600 root, PC brain typed jawab theek
 - **Commit:** `70bff62` · **Deploy:** VPS code 18:19, image build 18:19-18:22, keys 18:23, bridge recreate 18:24 PKT 🚀 (backups /root/jarvis-backups/2026-10-20_1319Z-pre-deploy-70bff62, /root/jarvis-backups/2026-10-20_1322Z-pre-agent-keys, /root/jarvis-backups/env/20261020T132311Z-pre-agent-keys)
 - **Doosre agent ke liye:** image phir gaayab ho to builder se 3 min mein dobara banti hai; V4 se pehle 'agent_ctl node update' laptop par agent public key pin karega.
+
+### ✅ [claude] C-124 · VPS hardening ki live jaanch (net_guard, child env) + Before V4 env copy · 2026-10-20 18:45 PKT
+- **Kya kiya:** C-124 ka code (5967b69) VPS ki image par jaancha: compose service agent ke ek one-off container mein (asli env ke saath) net_guard --self-test ok aaya (bridge, LiveKit, Gemini allowed; Docker gateway, public IP aur har mana range refused), harden_process teenon on (net guard, child env, non-dumpable), aur child process ko sirf 9 safe naam mile, .env.agent ka koi naam nahi; yt-dlp aur ffmpeg isi env mein chale. RUNBOOK 'Before V4': PC par deploy/hostinger/.env ki purani copy backup ke baad repo se bahar move ki (cmp ke baad), fallback_env --status mein ab koi PC copy nahi. Correction: 7f1a1b4 wali entry mein 'PC brain typed jawab theek' poora sach nahi tha: 18:24 ke bridge recreate ke baad pehla typed sawal 45 s mein jawab ke baghair raha, doosre par dono ka jawab 15.5 s mein aaya (Gemini ka pehle turn wala flake; RESCUE workflow isi ka ilaaj bana raha hai).
+- **Files:** `plan.md` (C-124 status)
+- **Verify:** pytest test_net_guard, test_vps_arg_hooks, test_rpc_hardening, test_vector_encryption: 131 passed; VPS SELFTEST_EXIT=0, LEAKED none
+- **Commit:** (this commit) · **Deploy:** — (VPS par sirf one-off check containers, --rm)
+- **Doosre agent ke liye:** C-129 (data migration) ab C-124 ki wajah se ruka nahi; V4 se pehle sirf 'agent_ctl node update' baqi hai.
