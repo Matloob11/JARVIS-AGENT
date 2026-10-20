@@ -10,6 +10,7 @@ re-exports it and registers the tools list_background_jobs and cancel_background
     ctx.cancelled                           True once cancel_job asked for it
     list_jobs(), get_job(job_id), cancel_job(job_id)
     count_active(loop=None)                 queued or running jobs of one event loop (C-114's idle close waits)
+    on_job_end(job_id, callback)            callback(final ToolResult) once the job ends (C-119's laptop fallback)
 
 At most MAX_CONCURRENT (2) jobs run per event loop; the rest wait their turn (status 'queued'). Every job emits K-31
 tool_sync events {id, tool, action: title, phase: 'start'|'progress'|'end', status, details, progress?, duration_ms?,
@@ -62,6 +63,7 @@ class _Job:
     loop: asyncio.AbstractEventLoop | None = None
     last_emit: float = float("-inf")
     last_emit_percent: float | None = None
+    end_listeners: list[Callable[[dict[str, Any]], Any]] = field(default_factory=list)
 
     def public(self) -> dict[str, Any]:
         return {"job_id": self.job_id, "tool": self.tool, "title": self.title, "status": self.status,
@@ -198,6 +200,26 @@ async def _run(job: _Job, factory: Callable[[JobContext], Any], timeout: float, 
             await _announce_end(job, status)
         with _jobs_lock:
             _forget_old()
+        _ended(job, status, result)
+
+
+def _ended(job: _Job, status: str, result: Any) -> None:
+    """Hands the job's final ToolResult to its on_job_end listeners: the factory's dict, or {status, message} when
+    it raised, timed out or was cancelled. A listener never fails the job; a coroutine it returns runs as a task."""
+    with _jobs_lock:
+        listeners, job.end_listeners = job.end_listeners, []
+    if not listeners:
+        return
+    final = dict(result) if isinstance(result, dict) else {"status": _SYNC_END[status], "message": job.message}
+    for listener in listeners:
+        try:
+            outcome = listener(dict(final))
+            if inspect.isawaitable(outcome):
+                task = asyncio.ensure_future(outcome)
+                _tasks.add(task)
+                task.add_done_callback(_tasks.discard)
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.warning("job %s end listener failed: %s", job.job_id, type(e).__name__)
 
 
 async def _announce_end(job: _Job, status: str) -> None:
@@ -254,6 +276,17 @@ def count_active(loop: asyncio.AbstractEventLoop | None = None) -> int:
             return 0
     with _jobs_lock:
         return sum(1 for job in _jobs.values() if job.status in ACTIVE and job.loop is loop)
+
+
+def on_job_end(job_id: str, callback: Callable[[dict[str, Any]], Any]) -> bool:
+    """callback(final) once job_id ends, on the job's own loop: final is its ToolResult (the factory's dict, or
+    {status, message} when it raised, timed out or was cancelled). False for an unknown or finished job."""
+    with _jobs_lock:
+        job = _jobs.get(str(job_id or ""))
+        if job is None or job.status not in ACTIVE:
+            return False
+        job.end_listeners.append(callback)
+    return True
 
 
 def cancel_job(job_id: str) -> bool:

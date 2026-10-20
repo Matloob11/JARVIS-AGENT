@@ -693,3 +693,82 @@ async def test_only_the_newest_typed_message_is_rescued(router, quick_rescue):
     await router.handle_text("doosra sawal", "u-2")
     await asyncio.wait_for(asyncio.gather(*router._rescues, return_exceptions=True), 5)
     assert session.calls.count("generate_reply:None") == 1
+
+
+# ---------------------------------------------------------------- C-119 x C-50/C-51: a message a typed hook handled
+
+
+def _stop_hook(handled: str = "desktop band karo", gate: asyncio.Event | None = None) -> Any:
+    """A C-119 typed hook (the stop-desktop phrases): True, once gate opens, for its phrase only."""
+    async def hook(text: str) -> bool:
+        if text != handled:
+            return False
+        if gate is not None:
+            await gate.wait()
+        return True
+    return hook
+
+
+async def test_a_handled_typed_message_arms_no_rescue_and_ends_an_older_ones(router, quick_rescue):
+    """C-119: a typed stop-desktop phrase never reaches the model, so nothing may rescue it; and like the dashboard
+    Stop (C-51) it ends the rescue an older typed message still had armed, which would otherwise ask the model ~12 s
+    later about the work the stop just cancelled."""
+    session = _session()
+    router.attach(session)
+    router.add_typed_hook(_stop_hook())
+    assert await router.handle_text("Jarvis, notepad mein report likho", "u-1") == "accepted"
+    assert list(router._awaiting) == ["u-1"]
+    assert await router.handle_text("desktop band karo", "u-2") == "handled"
+    assert router._awaiting == {}  # neither the handled message nor the older one is watched any more
+    await asyncio.wait_for(asyncio.gather(*router._rescues, return_exceptions=True), 5)
+    await router.drain()
+    assert session.calls == ["interrupt", "generate_reply:[typed] Jarvis, notepad mein report likho"]  # no rescue
+    assert [text for role, text, _kwargs in _sent(router) if role == "user"] == [
+        "Jarvis, notepad mein report likho", "desktop band karo"]  # the handled message is shown once
+
+
+async def test_a_hooks_answer_is_shown_after_sirs_own_message(router):
+    """C-119 review: a hook that answers a handled message itself (the stop-desktop phrase: it says 'laptop ab
+    read-only hai' through the announcer) returns that answer as a follow-up. The router runs it only once Sir's own
+    message went out, so the chat never shows Jarvis's answer above the message it answers; the hook still acts at
+    once (the stop happens before the echo), and a broken follow-up never fails the message."""
+    order: list[str] = []
+    router._notify.side_effect = lambda role, text, **_kwargs: order.append(f"{role}: {text}")
+
+    async def hook(text: str) -> Any:
+        if text not in ("desktop band karo", "stop desktop"):
+            return False
+        order.append("stopped")
+
+        async def answer() -> None:
+            if text == "stop desktop":
+                raise RuntimeError("the announcer is gone")
+            order.append("assistant: laptop ab read-only hai")
+
+        return answer
+
+    session = _session()
+    router.attach(session)
+    router.add_typed_hook(hook)
+    assert await router.handle_text("desktop band karo", "u-1") == "handled"
+    assert order == ["stopped", "user: desktop band karo", "assistant: laptop ab read-only hai"]
+    assert await router.handle_text("stop desktop", "u-2") == "handled"  # its follow-up fails: still handled once
+    await router.drain()
+    assert order[3:] == ["stopped", "user: stop desktop"] and session.calls == []  # never reached the model
+
+
+async def test_a_typed_message_sent_while_a_hook_runs_keeps_its_rescue(router, quick_rescue):
+    """The hook is awaited (it speaks its answer); a newer typed message routed meanwhile is the model's turn now and
+    keeps its own rescue: only what was armed before the handled message ends."""
+    session = _session()
+    router.attach(session)
+    gate = asyncio.Event()
+    router.add_typed_hook(_stop_hook(gate=gate))
+    stopping = asyncio.ensure_future(router.handle_text("desktop band karo", "u-1"))
+    await asyncio.sleep(0)
+    assert await router.handle_text("battery kitni hai?", "u-2") == "accepted"
+    gate.set()
+    assert await stopping == "handled"
+    assert list(router._awaiting) == ["u-2"]
+    await asyncio.wait_for(asyncio.gather(*router._rescues, return_exceptions=True), 5)
+    assert session.calls[-1] == "generate_reply:None"  # its rescue still asked the session once

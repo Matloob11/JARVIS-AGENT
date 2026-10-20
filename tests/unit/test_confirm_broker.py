@@ -12,7 +12,9 @@ import asyncio
 import json
 import logging
 import re
+import sys
 import time
+import types
 from collections.abc import Callable
 from typing import Any
 
@@ -21,6 +23,7 @@ from livekit.agents.llm import function_tool
 from livekit.agents.llm.utils import build_legacy_openai_schema, prepare_function_arguments
 
 from services.ai_core import confirmation, jarvis_confirm, jarvis_plugin_manager as pm_module
+from services.utils import desktop_protocol as dp
 from services.utils import jarvis_audit, jarvis_bridge, jarvis_security
 from services.utils.jarvis_config import config
 from services.utils.jarvis_resilience import resilience_manager
@@ -258,6 +261,78 @@ async def test_an_approved_run_sees_the_dialog_it_was_allowed_under(broker, resu
     assert seen == {"a": shown(first["confirm_id"], "c28_patch", "Patch a as shown"),
                     "b": shown(second["confirm_id"], "c28_patch", "Patch b as shown")}
     assert jarvis_confirm.approved_action.get() is None
+
+
+async def test_an_approved_run_carries_its_dialog_and_its_approval_together(broker, results):
+    """C-83 x C-119: one approved run sets both views of its decision, approved_action (the dialog Sir allowed, C-83)
+    and current_approval() (what a laptop send is checked against, C-119); both end with the run, a run that raises
+    included. A laptop action's approval is bound to its tool and arguments (another item's has no digest, so it
+    covers no laptop send) and is spent when the run ends, so a task the run started, which keeps a copy of the run's
+    context, can never send under it (C-119 F1)."""
+    seen: dict[str, tuple[Any, Any]] = {}
+    children: dict[str, asyncio.Task[Any]] = {}
+    run_over = asyncio.Event()
+
+    async def child() -> Any:
+        await run_over.wait()
+        return jarvis_confirm.current_approval()
+
+    def run_for(fail: bool) -> Callable[[], Any]:
+        async def run() -> dict[str, Any]:
+            shown = jarvis_confirm.approved_action.get()
+            seen[shown.id] = (shown, jarvis_confirm.current_approval())
+            children[shown.id] = asyncio.ensure_future(child())
+            if fail:
+                raise RuntimeError("the run failed")
+            return {"status": "success", "message": "ok"}
+        return run
+
+    asked = {n: await broker.create_pending("c28_both", f"Send {n} as shown", "high", arguments={"n": n},
+                                            run=run_for(n == 2), desktop=n == 1,
+                                            desktop_class="input" if n == 1 else None) for n in (1, 2)}
+    for item in asked.values():
+        await broker.resolve(item["confirm_id"], True, source="ui")
+    await _until(lambda: len(results) == 2)
+    assert {r["confirm_id"]: r["status"] for r in results} == {
+        asked[1]["confirm_id"]: "success", asked[2]["confirm_id"]: "error"}
+    for n, item in asked.items():
+        shown, approval = seen[item["confirm_id"]]
+        assert shown == jarvis_confirm.ApprovedAction(item["confirm_id"], "c28_both", f"Send {n} as shown")
+        assert (approval.confirm_id, approval.tool, approval.channel, approval.risk) == (
+            item["confirm_id"], "c28_both", "ui", "high")
+        digest = dp.args_sha256({"n": n}) if n == 1 else None  # only the laptop action keeps its arguments' digest
+        assert approval.args_sha256 == digest and approval.spent  # its run ended: used up
+    assert jarvis_confirm.approved_action.get() is None and jarvis_confirm.current_approval() is None
+    run_over.set()
+    for n, item in asked.items():
+        late = await asyncio.wait_for(children[item["confirm_id"]], 3)
+        assert late is seen[item["confirm_id"]][1] and not late.covers("c28_both", dp.args_sha256({"n": n}))
+
+
+async def test_only_a_laptop_action_touches_the_k70_protocol_library(broker, monkeypatch):
+    """C-119 review: args_sha256 binds a laptop action's approval to its arguments, so only a laptop action (desktop
+    True) computes it. Any other item, which is every item of the PC brain (local mode) and C-51's guarded control
+    commands, never touches the K-70 protocol library (no import, no hashing). A laptop item whose library cannot load
+    (Smart App Control blocking its native crypto, say) is still asked; only no approval can cover its send then."""
+    touched: list[str] = []
+
+    class Probe(types.ModuleType):
+        """Stands in for services.utils.desktop_protocol and records what the broker asks of it (nothing loads)."""
+
+        def __getattr__(self, name: str) -> Any:
+            if not name.startswith("__"):
+                touched.append(name)
+            raise AttributeError(name)
+
+    monkeypatch.setitem(sys.modules, "services.utils.desktop_protocol", Probe("services.utils.desktop_protocol"))
+    asked = await broker.create_pending("shutdown_agent", "JARVIS ka session band karna hai", "high",
+                                        voice_confirm=False, arguments={"restart": True})
+    assert asked["status"] == "needs_confirmation" and touched == []
+    assert broker._pending[asked["confirm_id"]].args_sha256 is None  # pylint: disable=protected-access
+    laptop = await broker.create_pending("type_text_tool", "Laptop: type_text_tool - text=x", "medium",
+                                         arguments={"text": "x"}, desktop=True, desktop_class="input")
+    assert laptop["status"] == "needs_confirmation" and touched == ["args_sha256"]
+    assert broker._pending[laptop["confirm_id"]].args_sha256 is None  # pylint: disable=protected-access
 
 
 async def test_wait_result_status_reports_the_approved_runs_end_without_touching_the_outcome(

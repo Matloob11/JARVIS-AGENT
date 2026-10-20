@@ -9,13 +9,28 @@ C-29) or by voice (confirm_action). An approved action runs exactly once, in a t
 the tool wrapper (timeout, exclusive lock, kill switch, tool_sync and audit still apply), and its
 result reaches Sir through on_result. Denied and expired actions never run. While the run goes,
 approved_action holds the action as its dialog showed it (id, tool, summary), so a tool body can
-tell which Allow it runs under.
+tell which Allow it runs under (C-83).
+
+C-119 (VPS brain, K-14 v4, K-76): create_pending(desktop=True, desktop_class=...) marks a laptop action. A spoken yes
+approves one only at medium risk, never code_exec, and only when the turn that says yes is voice-ID verified (D20:
+voice_id_verified() is False until enrollment, so laptop actions are dashboard-only for now). A laptop action keeps
+the args_sha256 (K-70 canonical form) of the arguments it was asked with; any other item has none (no approval of it
+can cover a laptop send) and never touches the K-70 protocol library, so the PC brain never loads it here. An
+approved run sees its decision through
+current_approval(), from which services/ai_core/desktop_proxy.py builds the agent-signed approval reference
+{confirm_id, channel, risk, args_sha256}: an Approval covers one exec of its own tool with those arguments, sent while
+its run is in progress, so a task the run started (it inherits the context) never gets a laptop action approved.
+Both views of one approved run (approved_action for the dialog, current_approval() for the laptop send) are set and
+cleared together, by _approved_run only.
 """
+# pylint: disable=too-many-lines  # one broker: delivery, decisions, voice rules, C-119 approvals and the selftest
 
 import asyncio
+import contextlib
 import contextvars
 import functools
 import hashlib
+import hmac
 import inspect
 import json
 import os
@@ -23,7 +38,7 @@ import re
 import time
 import uuid
 from collections import OrderedDict, deque
-from collections.abc import Awaitable, Callable, Coroutine
+from collections.abc import Awaitable, Callable, Coroutine, Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -70,6 +85,17 @@ _NO_UI_MESSAGE = ("Sir, is kaam ke liye screen par Allow zaroori hai magar koi s
                   "dashboard khol kar dobara kahein.")
 _UI_ONLY_MESSAGE = "Sir, yeh kaam sirf screen par Allow dabane se hoga."
 _NO_AFFIRMATION_MESSAGE = "Sir, aap ki haan sunayi nahi di. Haan bolein ya screen par Allow dabayein."
+# What Jarvis says after an approved run (on_result): done, failed, and C-119's other ends of a laptop action.
+_SPOKEN_DONE = "Sir, {tool} ka kaam ho gaya, tafseel chat mein hai."
+_SPOKEN_FAILED = "Sir, {tool} ka kaam nahi ho saka, wajah chat mein hai."
+_SPOKEN_UNKNOWN = "Sir, {tool} ka nateeja maloom nahi ho saka; main ise dobara nahi kar raha, tafseel chat mein hai."
+_SPOKEN_ASKED_AGAIN = "Sir, {tool} ke liye nayi ijazat chahiye, tafseel chat mein hai."
+_SPOKEN_STOPPED = "Sir, {tool} rok diya gaya; agar rokne se pehle ho chuka tha to bata dunga, tafseel chat mein hai."
+# Outcomes of a laptop action that may have run: never spoken as a failure (that would invite a second run).
+_UNKNOWN_OUTCOME_CODES = frozenset({"DESKTOP_RESULT_UNKNOWN", "DESKTOP_TIMEOUT"})
+# Sir's own stop ('ruko', the dashboard's Stop, 'desktop band karo'): a call in flight then may still have run, and
+# the link announces it later if it had ('rokne se pehle ... ho chuka tha'), so it is never spoken as a failure either.
+_STOPPED_CODE = "STOPPED_BY_USER"
 # For the model (K-12 hint).
 _VOICE_HINT = ("Wait for Sir's answer. Call confirm_action(confirm_id) only after he clearly says "
                "haan/yes to this action, or confirm_action(confirm_id, allow=false) if he says "
@@ -96,6 +122,92 @@ _NO = _phrase_pattern(_NO_WORDS)
 # Approved runs, confirm_resolved posts and sweepers, kept referenced until they end.
 _background_tasks: set[asyncio.Task[Any]] = set()
 
+# C-119 (K-76): the classes whose laptop actions a spoken yes never approves.
+_VOICE_NEVER_CLASSES = frozenset({"code_exec"})
+
+
+class _Use:
+    """Whether an Approval is used up; one object shared by every context copy of that Approval."""
+
+    __slots__ = ("spent",)
+
+    def __init__(self) -> None:
+        self.spent = False
+
+
+@dataclass(frozen=True)
+class Approval:
+    """Sir's decision an approved run carries (C-119): which pending action of which tool, on which channel ('ui' for
+    the dashboard Allow, 'voice' for a spoken yes) and at which risk. args_sha256 is the K-70 sha256 of the arguments
+    a laptop action was asked with (None for any other item, or when they have no canonical form); voice_id_verified
+    marks a spoken yes on a voice-ID-verified turn (D20). It covers exactly one laptop exec: its own tool with those
+    arguments, sent while its run is in progress. The first send spends it, and so does the end of its run, so a task
+    the run started, which keeps a copy of the context, can never send under it."""
+
+    confirm_id: str
+    channel: str
+    risk: str
+    args_sha256: str | None = None
+    voice_id_verified: bool = False
+    tool: str | None = None
+    use: _Use = field(default_factory=_Use, init=False, repr=False, compare=False)
+
+    @property
+    def spent(self) -> bool:
+        return self.use.spent
+
+    def spend(self) -> None:
+        """Used up: by the laptop exec sent under it, or by the end of its run."""
+        self.use.spent = True
+
+    def covers(self, tool: str, args_sha256: str | None) -> bool:
+        """True only for the approved call itself: this tool, these arguments (their K-70 sha256), not spent."""
+        if self.spent or self.tool is None or self.tool != tool:
+            return False
+        if not isinstance(self.args_sha256, str) or not isinstance(args_sha256, str):
+            return False
+        return hmac.compare_digest(self.args_sha256.lower().encode("utf-8"), args_sha256.lower().encode("utf-8"))
+
+    def reference(self, args_sha256: str) -> dict[str, Any]:
+        """The approval reference a laptop exec carries inside its signed, encrypted body (K-70 exec, K-76)."""
+        ref: dict[str, Any] = {"confirm_id": self.confirm_id, "channel": self.channel, "risk": self.risk,
+                               "args_sha256": args_sha256}
+        if self.channel == "voice" and self.voice_id_verified:
+            ref["voice_id_verified"] = True
+        return ref
+
+
+_approval_var: contextvars.ContextVar[Approval | None] = contextvars.ContextVar("jarvis_confirm_approval",
+                                                                                default=None)
+
+
+def current_approval() -> Approval | None:
+    """The decision of the approved action whose run is in progress in this context (None outside one)."""
+    return _approval_var.get()
+
+
+def _no_voice_id() -> bool:
+    """D20: no voice-ID-verified turn exists before voice enrollment, so voice never approves a laptop action."""
+    return False
+
+
+def _args_sha256(arguments: Any) -> str | None:
+    """The K-70 args_sha256 of a laptop action's bound arguments, which its Approval is bound to (C-119); None when
+    they are not a mapping or have no canonical form. Only a laptop action (create_pending desktop=True) passes here,
+    so the PC brain (local mode, where none exists) never loads the protocol library for a confirmation. Nothing it
+    meets may fail the item: a protocol library that cannot load (its native crypto blocked) gives None as well, and
+    no laptop send can then be approved (fail closed)."""
+    if not isinstance(arguments, Mapping):
+        return None
+    try:
+        from services.utils.desktop_protocol import args_sha256  # pylint: disable=import-outside-toplevel
+        return args_sha256(arguments)
+    except (ValueError, TypeError):
+        return None
+    except Exception as e:  # pylint: disable=broad-exception-caught  # ImportError (a blocked DLL) and the rest
+        logger.warning("args_sha256 not computed (%s); this item cannot approve a laptop send", type(e).__name__)
+        return None
+
 
 @dataclass(frozen=True)
 class ApprovedAction:
@@ -110,6 +222,28 @@ class ApprovedAction:
 # None outside an approved run.
 approved_action: contextvars.ContextVar[ApprovedAction | None] = contextvars.ContextVar(
     "approved_action", default=None)
+
+
+@contextlib.contextmanager
+def _approved_run(action: "PendingAction", reason: str) -> Iterator[Approval]:
+    """
+    The one run of an approved action (K-14): approved_action shows the dialog Sir allowed (C-83) and
+    current_approval() the decision a laptop send is checked against (C-119); both are set here and
+    cleared together when the run ends, on any exit. The Approval is spent then too, so a task the
+    run started, which keeps a copy of the context, can never send a laptop exec under it.
+    """
+    channel = "voice" if reason == "voice" else "ui"
+    approval = Approval(action.id, channel, action.risk, action.args_sha256,
+                        voice_id_verified=channel == "voice" and action.voice_id_verified,
+                        tool=action.tool)
+    shown = approved_action.set(ApprovedAction(action.id, action.tool, action.summary))
+    decided = _approval_var.set(approval)
+    try:
+        yield approval
+    finally:
+        approval.spend()
+        _approval_var.reset(decided)
+        approved_action.reset(shown)
 
 
 def is_affirmative(text: str) -> bool:
@@ -217,14 +351,25 @@ async def _post_to_bridge(event_type: str, payload: dict[str, Any]) -> Any:
 async def _post_assistant_message(result: dict[str, Any]) -> None:
     """Default on_result (C-55, K-18): the approved action's result through the announcer: the full message in the UI
     chat, spoken (priority high) as a fixed line, because the message can carry tool output that must never reach the
-    model as instructions."""
+    model as instructions. C-119: a laptop action whose outcome is unknown (DESKTOP_RESULT_UNKNOWN, DESKTOP_TIMEOUT)
+    is never spoken as a failure, nor is one Sir stopped (STOPPED_BY_USER: a call in flight may have run, and its
+    late outcome says so), and a run that asked again (needs_confirmation) says a new approval is pending."""
     from services.utils import jarvis_announcer  # pylint: disable=import-outside-toplevel
     tool = str(result.get("tool") or "kaam")
-    ok = result.get("status") in ("success", "started")
-    spoken = (f"Sir, {tool} ka kaam ho gaya, tafseel chat mein hai." if ok
-              else f"Sir, {tool} ka kaam nahi ho saka, wajah chat mein hai.")
+    status = result.get("status")
+    code = result.get("error_code")
+    if status in ("success", "started"):
+        spoken = _SPOKEN_DONE
+    elif status == "needs_confirmation":
+        spoken = _SPOKEN_ASKED_AGAIN
+    elif code in _UNKNOWN_OUTCOME_CODES:
+        spoken = _SPOKEN_UNKNOWN
+    elif code == _STOPPED_CODE:
+        spoken = _SPOKEN_STOPPED
+    else:
+        spoken = _SPOKEN_FAILED
     await jarvis_announcer.announce(str(result.get("message") or ""), priority="high", kind="confirm_result",
-                                    spoken_text=spoken)
+                                    spoken_text=spoken.format(tool=tool))
 
 
 @dataclass(eq=False)
@@ -241,6 +386,10 @@ class PendingAction:
     key: str = ""
     ttl_s: int = 60
     clamped: bool = False  # the bridge raised the risk to its K-45 floor (C-29 part 2)
+    desktop: bool = False  # C-119: a laptop action (voice only at medium, never code_exec, D20)
+    desktop_class: str | None = None
+    args_sha256: str | None = None  # C-119: a laptop action's arguments (K-70 form); its Approval is bound to them
+    voice_id_verified: bool = False  # C-119 (D20): set by a spoken yes on a voice-ID-verified turn, never at creation
     created_at: float = field(default_factory=time.time)
     loop: asyncio.AbstractEventLoop | None = None
     delivered: "asyncio.Future[dict[str, Any]] | None" = None
@@ -278,6 +427,8 @@ class ConfirmationBroker:
         # resolve() keeps returning the first outcome unchanged.
         self._run_tasks: dict[str, asyncio.Task[Any]] = {}
         self._run_finals: OrderedDict[str, dict[str, Any]] = OrderedDict()
+        # C-119 (D20): whether the current voice turn is voice-ID verified; False until enrollment wires it.
+        self.voice_id_verified: Callable[[], bool] = _no_voice_id
 
     # ------------------------------------------------------------ public API
 
@@ -308,11 +459,16 @@ class ConfirmationBroker:
                              voice_confirm: bool | None = None, args_preview: str = "",
                              arguments: Any = None,
                              run: Callable[[], Awaitable[Any]] | None = None,
-                             ttl_s: float | None = None) -> dict[str, Any]:
+                             ttl_s: float | None = None, desktop: bool = False,
+                             desktop_class: str | None = None) -> dict[str, Any]:
         """
         Registers a risky action and asks Sir (confirm_request) instead of running it. Returns a
         K-12 ToolResult: needs_confirmation with the confirm_id (the same id while an identical
         call is pending), else CONFIRM_UI_UNREACHABLE or UI_CONFIRM_REQUIRED; nothing runs.
+        desktop=True (C-119) marks a laptop action of the K-76 class desktop_class: a spoken yes
+        approves it only at medium risk, never code_exec, and only while voice_id_verified() (D20),
+        on this turn (voice_allowed) and again on the turn that says yes (confirm_by_voice). Only
+        such an item keeps the args_sha256 of its arguments (its Approval covers that laptop send).
         """
         loop = asyncio.get_running_loop()
         risk = risk if risk in CONFIRM_RISKS else "high"
@@ -325,12 +481,18 @@ class ConfirmationBroker:
                 return dict(await asyncio.shield(action.delivered))
         ttl = float(ttl_s) if isinstance(ttl_s, (int, float)) and ttl_s > 0 \
             else _confirm_timeout_s()
+        voice = voice_allowed_for(risk, voice_confirm)
+        if desktop:  # D20: offered only on a voice-ID-verified turn; the turn that says yes is checked again
+            voice = (voice and risk == "medium" and desktop_class not in _VOICE_NEVER_CLASSES
+                     and self._voice_id_ok())
         action = PendingAction(
             id=uuid.uuid4().hex, tool=tool, summary=one_line(summary or tool, CONFIRM_SUMMARY_MAX),
-            risk=risk, voice_allowed=voice_allowed_for(risk, voice_confirm),
+            risk=risk, voice_allowed=voice,
             args_preview=one_line(args_preview or "", SYNC_DETAILS_MAX),
             expires_at=time.time() + ttl, run=run, key=key, ttl_s=max(1, round(ttl)), loop=loop,
-            delivered=loop.create_future(), decision=loop.create_future())
+            delivered=loop.create_future(), decision=loop.create_future(), desktop=bool(desktop),
+            desktop_class=desktop_class if desktop else None,
+            args_sha256=_args_sha256(arguments) if desktop else None)  # only a laptop send checks it (C-119)
         self._pending[action.id] = action
         self._start_sweeper(loop)
         logger.info("Confirmation %s asked for %s (risk %s, voice %s)", action.id, tool, risk,
@@ -383,16 +545,24 @@ class ConfirmationBroker:
         if action is None or allow is not True:
             return await self.resolve(key, False, source="voice")
         high_blocked = action.risk == "high" and not getattr(config, "voice_confirm_high", False)
-        if high_blocked or not action.voice_allowed:
+        # C-119 (K-76, D20): a laptop action takes a spoken yes only at medium risk, whatever voice_confirm_high says
+        desktop_blocked = action.desktop and action.risk != "medium"
+        if high_blocked or desktop_blocked or not action.voice_allowed:
             if action.clamped:
                 # K-45: the trail shows the clamp (not Sir) refused this haan; the action stays
                 # pending, so the dashboard Allow can still decide it.
                 _audit_clamp(action, "VOICE_APPROVAL=blocked (spoken haan refused above the "
                                      "clamped gate)")
             return _refusal(TOOL_NAME, "UI_CONFIRM_REQUIRED", _UI_ONLY_MESSAGE, confirm_id=key)
+        if action.desktop and not self._voice_id_ok():
+            # C-119 (D20): judged on the turn that says yes, not on the turn that asked; the action stays pending,
+            # so the dashboard Allow can still decide it
+            return _refusal(TOOL_NAME, "UI_CONFIRM_REQUIRED", _UI_ONLY_MESSAGE, confirm_id=key)
         if not self._user_affirmed(action):
             return _refusal(TOOL_NAME, "NO_USER_AFFIRMATION", _NO_AFFIRMATION_MESSAGE,
                             confirm_id=key)
+        if action.desktop:
+            action.voice_id_verified = True  # this yes came on a voice-ID-verified turn: its approval says so
         return await self.resolve(key, True, source="voice")
 
     async def request(self, tool: str, summary: str, risk: str = "high",
@@ -540,7 +710,8 @@ class ConfirmationBroker:
             action.risk = clamped_risk
             action.clamped = True
             action.voice_allowed = (action.voice_allowed and voice_allowed_for(clamped_risk)
-                                    and answer.get("voice_allowed") is not False)
+                                    and answer.get("voice_allowed") is not False
+                                    and not (action.desktop and clamped_risk != "medium"))
             logger.warning("confirm_request %s for %s: the bridge clamped the risk to %s (K-45 "
                            "floor); voice approval %s", action.id, action.tool, clamped_risk,
                            "stays open" if action.voice_allowed else "is closed")
@@ -619,16 +790,14 @@ class ConfirmationBroker:
         run = action.run
         if run is None:
             return
-        token = approved_action.set(ApprovedAction(action.id, action.tool, action.summary))
         try:
-            result = await run()
+            with _approved_run(action, reason):
+                result = await run()
         except Exception as e:  # pylint: disable=broad-exception-caught
             # The wrapper turns tool errors into results itself; this is the last resort.
             logger.error("Approved %s (%s) failed: %s", action.tool, action.id, e, exc_info=True)
             result = {"status": "error", "tool": action.tool,
                       "message": f"Sir, {action.tool} nahi ho saka."}
-        finally:
-            approved_action.reset(token)
         status = result_status(result)
         logger.info("Approved %s (%s) finished: %s", action.tool, action.id, status)
         # C79-V2-1: the run's final status and whether its result bore 'records' (the tool body
@@ -645,13 +814,24 @@ class ConfirmationBroker:
         if not message:
             message = (f"Sir, {action.tool} ho gaya." if status in ("success", "started")
                        else f"Sir, {action.tool} nahi ho saka.")
+        outcome: dict[str, Any] = {"status": status, "tool": action.tool, "confirm_id": action.id,
+                                   "message": message}
+        code = result.get("error_code") if isinstance(result, dict) else None
+        if isinstance(code, str) and code:
+            outcome["error_code"] = code  # C-119: an unknown laptop outcome is never spoken as a failure
         try:
-            delivered = self.on_result({"status": status, "tool": action.tool,
-                                        "confirm_id": action.id, "message": message})
+            delivered = self.on_result(outcome)
             if inspect.isawaitable(delivered):
                 await delivered
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger.warning("Result of %s (%s) not delivered: %s", action.tool, action.id, e)
+
+    def _voice_id_ok(self) -> bool:
+        """C-119 (D20): the voice-ID hook's answer; a hook that fails counts as not verified (fail closed)."""
+        try:
+            return bool(self.voice_id_verified())
+        except Exception:  # pylint: disable=broad-exception-caught
+            return False
 
     def _user_affirmed(self, action: PendingAction) -> bool:
         """

@@ -323,10 +323,10 @@ A refused exec gets a signed refusal only when it provably never ran and never w
   - Node (executor mode): the laptop-side policy (classes, paths, captures, lock pause, stops), the `desktop_input` lock, redaction before sending, `logs/desktop_audit.jsonl`.
 - **Safety extras:**
   - Repeat guard: the same messaging, code_exec, availability, exposure or typing call within 120 s needs a confirmation.
-  - Ordering: `seq {speech_id, n}` is stamped synchronously when the proxy starts; the node keeps that order within one reply (holds up to 500 ms).
+  - Ordering: the proxy hands a reply's laptop calls to the link synchronously, in call order, naming their LiveKit speech; the link sends them in that order and stamps `seq {speech_id, n}` right before it builds each exec, so only an exec that is sent takes a number (C-119 review); the node keeps that order within one reply (holds up to 500 ms for a missing n).
   - Lost-output note on the next turn.
   - Stop cancels everything in flight and refuses new laptop calls for 3 s.
-- **Fallback:** YT_BOT_CHECK or MAPS_BLOCKED with no side effect → one re-run on the laptop. VPS runs of that tool then back off for 6 h, to protect the shared IP.
+- **Fallback:** YT_BOT_CHECK or MAPS_BLOCKED with no side effect → one re-run on the laptop. VPS runs of that tool then back off for 6 h, to protect the shared IP. The re-run inside the LLM call has origin `llm`; the one after a VPS job ended so has origin `job` (no LLM turn waits for it; D21's presence gate applies).
 - **Laptop offline:** `{status:'error', error_code:'DESKTOP_OFFLINE', message:'Sir, laptop abhi online nahi hai…'}`. Prompt rules: say it once and do not retry; never repeat an action after RESULT_UNKNOWN.
 
 ## 9. Laptop policy (K-76)

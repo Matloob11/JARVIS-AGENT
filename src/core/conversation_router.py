@@ -23,11 +23,21 @@ reply, with no message from the router (the swarm module is the single emitter).
 Every message goes out through one ordered chain (each send waits for the one before it, at most
 EMIT_ORDER_WAIT_S): the typed user echo is sent beside the reply instead of before it, so its bridge round trip
 never delays generate_reply, and the reply still reaches the UI after the echo.
+
+C-119: add_typed_hook(hook) lets a module see typed text before the model (the stop-desktop phrases, matched in the
+agent like 'ruko', K-76). A hook that returns True has handled the message itself: it is shown once and never sent to
+the model ('handled'). A hook may instead return a follow-up (a zero-argument callable, typically saying the hook's
+answer through the announcer): the message is handled the same way, and the follow-up runs only once Sir's own
+message went out, so the chat never shows Jarvis's answer above the message it answers. Such a message never arms
+the C-50 rescue, and it ends the one an older typed message still had armed, as the dashboard Stop does (C-51):
+today it is a stop, and what it stopped is never asked of the model again. A typed message sent while the hooks run
+keeps its own rescue.
 """
 
 from __future__ import annotations
 
 import asyncio
+import inspect
 import re
 import time
 import unicodedata
@@ -83,6 +93,9 @@ NotifyFn = Callable[..., Awaitable[Any]]
 ReasonFn = Callable[[str, list[dict[str, Any]]], Awaitable[Any]]
 DispatchFn = Callable[[str, Any], Awaitable[Any]]
 SpawnFn = Callable[[Coroutine[Any, Any, Any]], "asyncio.Task[Any]"]
+# C-119: hook(text) -> False, True (handled, not for the model) or a follow-up callable (handled; it runs once Sir's
+# message went out), or an awaitable of one of these
+TypedHook = Callable[[str], Any]
 
 
 def normalize_text(text: Any) -> str:
@@ -174,6 +187,39 @@ class ConversationRouter:
         self._emit_tail: asyncio.Task[Any] | None = None  # the newest send of the ordered chain
         self._awaiting: OrderedDict[str, None] = OrderedDict()  # C-50: typed ids with no reply yet
         self._rescues: set[asyncio.Task[Any]] = set()  # never awaited by drain(): each one sleeps first
+        self._typed_hooks: list[TypedHook] = []  # C-119: checked before the model (add_typed_hook)
+
+    def add_typed_hook(self, hook: TypedHook) -> None:
+        """C-119: hook(text) sees every accepted typed message (normalised) before the model; True means it handled
+        the message itself (shown once, never sent to the model), and so does a follow-up callable it returns, which
+        runs once Sir's own message went out (the hook's answer then follows it in the chat). Registering the same
+        hook twice keeps one."""
+        if hook not in self._typed_hooks:
+            self._typed_hooks.append(hook)
+
+    async def _typed_hook_handled(self, text: str) -> Any:
+        """False, or what the first hook that handled text returned: True or its follow-up callable."""
+        for hook in list(self._typed_hooks):
+            try:
+                handled = hook(text)
+                if inspect.isawaitable(handled):
+                    handled = await handled
+            except Exception as e:  # pylint: disable=broad-exception-caught  # a broken hook never loses the message
+                logger.error("CHAT_ROUTER typed hook failed: %s", type(e).__name__)
+                continue
+            if handled is True or callable(handled):
+                return handled
+        return False
+
+    async def _follow_up(self, follow_up: Callable[[], Any], echo: "asyncio.Task[Any] | None") -> None:
+        """A hook's follow-up, once Sir's message (echo) went out; never fails the typed message."""
+        await self._sent(echo)
+        try:
+            result = follow_up()
+            if inspect.isawaitable(result):
+                await result
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.error("CHAT_ROUTER typed hook follow-up failed: %s", type(e).__name__)
 
     # ------------------------------------------------------------------ session
 
@@ -196,8 +242,9 @@ class ConversationRouter:
 
     async def handle_text(self, text: Any, msg_id: Any = None, origin: str = ORIGIN_UI) -> str:
         """
-        Routes one typed message (K-59). Returns its status: 'accepted', 'offline', 'blocked', 'duplicate'
-        or 'empty'. Never raises for a bad message; one 'CHAT_ROUTER <status>' INFO line per message.
+        Routes one typed message (K-59). Returns its status: 'accepted', 'offline', 'blocked', 'duplicate',
+        'empty' or 'handled' (a C-119 typed hook took it). Never raises for a bad message; one
+        'CHAT_ROUTER <status>' INFO line per message.
         """
         user_id = valid_msg_id(msg_id) or str(uuid.uuid4())
         if user_id in self._seen:
@@ -222,6 +269,21 @@ class ConversationRouter:
                 logger.error("CHAT_ROUTER audit failed: %s", type(e).__name__)
             self._log("blocked", user_id, origin, clean)
             return "blocked"
+
+        older = list(self._awaiting)  # a typed message sent while the hooks run arms its own rescue, which stays
+        handled = await self._typed_hook_handled(clean) if self._typed_hooks else False
+        if handled:
+            # never sent to the model, so never rescued; the rescue of an older typed message ends too (C-50 x C-51):
+            # the handled message is a stop, and that rescue would ask the model about what it stopped
+            ended = self._end_rescues(older)
+            echo = self._emit_ordered("user", clean, msg_id=user_id, source="text")
+            self._log_turn(user_id, "user", clean, "text")
+            self._log("handled", user_id, origin, clean)
+            if ended:
+                logger.info("CHAT_ROUTER handled id=%s ended %d typed rescue(s)", user_id, ended)
+            if callable(handled):  # the hook's answer comes after Sir's own message
+                await self._follow_up(handled, echo)
+            return "handled"
 
         swarm_task = swarm_task_of(clean)
         if swarm_task is not None:
@@ -458,6 +520,16 @@ class ConversationRouter:
         for task in list(self._rescues):
             task.cancel()
         return waiting
+
+    def _end_rescues(self, msg_ids: list[str]) -> int:
+        """C-119 x C-50: the rescues of these typed messages end (each one's task returns at its next look without
+        asking the session); a rescue armed for any other message stays. Returns how many were still armed."""
+        ended = 0
+        for msg_id in msg_ids:
+            if msg_id in self._awaiting:
+                del self._awaiting[msg_id]
+                ended += 1
+        return ended
 
     def _watch_reply(self, msg_id: str, session: Any) -> None:
         """C-50: arms the one-time rescue of a typed message (_rescue). Only the newest typed message is watched: a

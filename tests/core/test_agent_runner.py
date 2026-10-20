@@ -1130,6 +1130,48 @@ async def test_an_assistant_without_request_end_still_ends_on_a_framework_shutdo
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("mode, ending", [("remote", "runtime"), ("remote", "framework"), ("local", "runtime")])
+async def test_a_remote_jobs_end_retires_its_desktop_link_before_the_job_shuts_down(job, monkeypatch, mode, ending):
+    """C-119 review: every job of a room is the Desktop Link peer job-<room>, and the bridge keeps one socket per
+    peer, so a link that reconnected from a draining job process would push the next job's link off the bridge. The
+    job's end retires the link (desktop_proxy.end_job, under the job id attach_session used) before ctx.shutdown: on
+    the runtime's end, and on a LiveKit-initiated shutdown at once, before the teardown. The PC brain has no link."""
+    from services.ai_core import desktop_proxy
+
+    monkeypatch.setenv("JARVIS_DESKTOP_MODE", mode)
+    monkeypatch.setattr(job.ar.remote_compat, "install_arg_hooks", lambda _manager: None)
+    monkeypatch.setattr(job.ar.remote_compat, "self_test", lambda: None)
+    monkeypatch.setattr(desktop_proxy, "install", lambda _manager: None)
+    ctx = _FakeJobContext()
+    ctx.job = types.SimpleNamespace(id="AJ_c119end")
+    attached: list[tuple[str, str]] = []
+    ended: list[tuple[str, list[str]]] = []
+    monkeypatch.setattr(desktop_proxy, "attach_session",
+                        lambda _session, _assistant, *, room, job_id: attached.append((room, job_id)))
+    monkeypatch.setattr(desktop_proxy, "end_job", lambda job_id: ended.append((job_id, list(ctx.shutdowns))))
+    if ending == "runtime":
+        job.on_start = lambda agent: asyncio.get_running_loop().call_later(0.05, agent.request_end, "paused_by_owner")
+        await _run_entrypoint(job, ctx)
+    else:
+        entry = asyncio.ensure_future(job.ar.entrypoint(ctx))
+        for _ in range(200):
+            if job.protectors:
+                break
+            await asyncio.sleep(0.005)
+        held = asyncio.ensure_future(ctx.shutdown_callbacks[0]("room disconnected"))
+        await asyncio.sleep(0)
+        assert ended == [("AJ_c119end", [])] and not entry.done()  # at once, while the teardown has yet to run
+        await asyncio.wait_for(held, 5)
+        assert entry.done()
+    assert ctx.shutdowns  # the job still ended
+    if mode == "local":
+        assert attached == [] and ended == []
+        return
+    assert attached == [("jarvis-hybrid", "AJ_c119end")]
+    assert ended and all(item == ("AJ_c119end", []) for item in ended)  # before ctx.shutdown, under the same id
+
+
+@pytest.mark.asyncio
 async def test_each_job_runs_its_loops_on_its_own_protector(job):
     from services.utils.jarvis_autonomous import TaskProtector, autonomous_protector
 

@@ -170,6 +170,42 @@ async def test_count_active_counts_only_the_queued_and_running_jobs_of_one_loop(
     assert jarvis_jobs.count_active() == 0
 
 
+async def test_on_job_end_hands_each_listener_the_final_result_once(events):
+    """C-119: the laptop fallback reads a VPS job's final ToolResult (its error_code and effect) through on_job_end."""
+    seen: list[dict[str, Any]] = []
+    ran: list[str] = []
+
+    async def coroutine_listener(final: dict[str, Any]) -> None:
+        ran.append(final["status"])
+
+    blocked = {"status": "error", "error_code": "YT_BOT_CHECK", "effect": "none", "message": "bot check"}
+    job_id = jarvis_jobs.start_job("download_youtube_media", "yt", lambda ctx: dict(blocked))
+    assert jarvis_jobs.on_job_end(job_id, seen.append) and jarvis_jobs.on_job_end(job_id, coroutine_listener)
+    await _wait(job_id)
+    for _ in range(100):
+        if ran:
+            break
+        await asyncio.sleep(0.01)
+    assert seen == [blocked] and ran == ["error"]  # the factory's own dict, error_code and effect included
+    assert jarvis_jobs.on_job_end(job_id, seen.append) is False  # a finished job takes no listener
+    assert jarvis_jobs.on_job_end("nope", seen.append) is False
+
+    def broken(_final: dict[str, Any]) -> None:
+        raise RuntimeError("listener bug")
+
+    async def boom(ctx):
+        raise ValueError("secret detail")
+
+    failed_id = jarvis_jobs.start_job("t", "bad", boom)
+    assert jarvis_jobs.on_job_end(failed_id, broken) and jarvis_jobs.on_job_end(failed_id, seen.append)
+    assert (await _wait(failed_id))["status"] == "error"  # a broken listener never fails the job
+    for _ in range(100):
+        if len(seen) == 2:
+            break
+        await asyncio.sleep(0.01)
+    assert seen[-1]["status"] == "error" and "error_code" not in seen[-1] and "secret" not in seen[-1]["message"]
+
+
 # ---------------------------------------------------------------- ui_command job_cancel / open_job_artifact (K-31)
 
 

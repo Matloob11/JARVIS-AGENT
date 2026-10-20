@@ -7,7 +7,7 @@ Every interface between the Claude lane and the Cursor lane is defined here: HTT
 - **Versions:** the newest version heading below is the one in force. A change bumps the version (v2, v3, ...), edits the affected contracts in place under it, adds one Changelog line (version, date, contract IDs, what changed, which REQ-CONTRACT it answers) and updates the copy in `plan.md` section 4 in the same commit. Older wording stays in git history.
 - **Public repo:** no secrets, keys, passwords or details of non-JARVIS apps or servers go into this file.
 
-## v41 (2026-10-20)
+## v42 (2026-10-20)
 
 #### K-01 · DASH-UI-RUNTIME (config+http-client) · owner: Claude
 Owner: Cursor (UI), built on Claude's C-AUTH-1 / C-SOCK-1 / C-ORIGIN-1 (infra). Browser base BRIDGE_BASE = VITE_BRIDGE_BASE || VITE_VORTEX_URL || '/vortex' (relative, same origin; the bundle never contains a secret). Every fetch uses credentials 'include': POST /auth/login {password, totp} | {password, recovery_code}; GET /auth/me; POST /auth/logout; GET /livekit/token (a NEW token before every connect and reconnect); GET /messages?before=&cursor=&limit= (K-41 v5); GET /media/<id> and /media/<id>/sign; POST /feedback. Socket.IO: io(origin, {path: BRIDGE_BASE + '/socket.io', withCredentials: true, transports: ['websocket','polling'], tryAllTransports: true, reconnectionAttempts: Infinity, reconnectionDelayMax: 10000}) with no auth payload. Session expiry: on any connect_error or a 'session_expired' {reason} event the UI calls /auth/me, and a 401 shows the login screen, so it never depends on the refusal text. Dev: Vite proxies /vortex (http + ws) to VITE_DEV_BRIDGE: the mock on 5199, the local bridge on 5001 with VITE_DEV_BRIDGE_STRIP=1, or the VPS with the Origin header rewritten. Electron loads JARVIS_UI_URL (default https://jarvis.srv1802669.hstgr.cloud); file:// dist only with JARVIS_ELECTRON_BACKEND=local or JARVIS_UI_OFFLINE=1.
@@ -58,6 +58,10 @@ Owner: Cursor (stonix_ui/tests/mock-bridge, UI-04); checked by Claude (UI-38). s
 - TD-02 (C-24) is merged since 2026-10-01: Cursor modules may use the new kwargs now; an unknown or invalid kwarg logs ERROR and never drops the module's tools.
 - v2 transition: LiveKit passes every LLM argument positionally. An argument with a declared policy (raw_args or arg_policies) gets that policy however it is passed. An argument without one keeps the pre-v2 behaviour (passed positionally: unchanged; by keyword: plain) until every tool module declares its K-16 policies; then Claude makes 'plain' the default for every argument and announces it in plan.md section 11. Declare a policy for every free-text argument now.
 - v4 (VPS brain): in remote mode the laptop tools are K-71 proxies (exclusive None, retry_attempts 0, timeout = the K-70 link cap). The desktop_input lock and the JARVIS_DESKTOP_CONTROL kill switch apply inside the Desktop Node, whose executor runs the real tools through this wrapper without asking again: a confirm-class call runs there only with the agent's ConfirmFlow approval reference (K-76).
+v42 (C-119, as built):
+- A registered function may carry __jarvis_desktop__ (cls and goes_to_laptop(arguments)). For a call it routes to the laptop, the wrapper emits tool_sync with source 'desktop' (K-13 v4) and asks ConfirmFlow with create_pending(desktop=True, desktop_class=cls) (K-14 v42). A route that raises counts as 'plugin'.
+- plugin_manager.tool_time_left(tool_name) -> float | None: the seconds left of the K-11 timeout of that tool's call running in this task. None outside such a call, for another tool's call, or without a timeout.
+- post_tool_sync(call_id, tool, *, phase, status, details='', risk='low', source='plugin', result=None, duration_ms=None) sends one K-13 event outside a wrapper call, fire-and-forget (used for a laptop call's corrected end under its own id). status 'auto' takes the status from result.
 
 #### K-12 · ToolResult (data-schema (every desktop tool return value)) · owner: Claude
 dict {status: 'success'|'error'|'not_found'|'cancelled'|'needs_confirmation'|'degraded'|'started'|'empty', message: str (one short Roman-Urdu sentence Jarvis can speak), tool: str, data?: object (path, url, count, output, elements, job_id, untrusted...), error_code?: UPPER_SNAKE str, hint?: str, confirm_id?: str (only with needs_confirmation)}.
@@ -87,6 +91,7 @@ v38 (C-83, as built): the wrapper reports autonomous_self_repair's 'proposed' an
 v13 (C-79): confirm_request summary and args_preview of a tool listed in jarvis_plugin_manager.SENSITIVE_TOOL_ARGS carry its sensitive argument values only masked (K-34 rule); the broker itself is unchanged — wait_outcome(confirm_id) is the supported way for a caller to hold for Sir's decision without taking it (used by the C-79 dashboard SIM lookup).
 v37 (C-51, as built): ConfirmationBroker.cancel(confirm_id, source) decides one open card as 'cancelled' (confirm_resolved {allow: false, reason: 'cancelled'}); a later Allow finds it decided and nothing runs. The job's end cancels every card its guarded control commands still wait on. A decision made while its card was still being delivered is handed back by create_pending and counts as the owner's answer.
 v38 (C-83, as built): while an approved action runs, services.ai_core.jarvis_confirm.approved_action (a ContextVar) holds ApprovedAction(id, tool, summary) exactly as its dialog showed it, None outside an approved run. autonomous_self_repair with apply writes only the proposal its own dialog named (the summary starts 'Patch proposal <id> (+a -r lines, diff chat mein) <file_path> ...'); another dialog's Allow, a Deny or an expiry never leads to a write.
+v42 (C-119, as built; VPS brain): create_pending(..., desktop=False, desktop_class=None). The K-11 wrapper passes desktop=True and the call's K-76 class for a call that goes to the laptop (a K-71 proxy, or a routed tool's laptop route), and so do the proxy's own items. A desktop item offers voice only when the K-14 voice rule allows it, its risk is medium, its class is not code_exec, and the broker's voice_id_verified() hook says the asking turn is voice-ID verified. confirm_by_voice then takes a spoken yes only at medium risk (whatever voice_confirm_high says) and only when the turn that says yes is verified too; otherwise it answers UI_CONFIRM_REQUIRED and the card stays open for the dashboard Allow. D20: the hook returns False until voice enrollment, so laptop actions are dashboard-only today. A bridge clamp above medium closes a desktop item's voice path. Only a desktop item keeps args_sha256, the K-70 sha256 of its bound arguments. It is None when they have no canonical form or the protocol library cannot load, and then no laptop send can be approved. Other items never load the protocol library, so the PC brain is unchanged. An approved run sets approved_action (v38) and jarvis_confirm.current_approval() together, and clears both when the run ends. Approval {confirm_id, channel 'ui' (dashboard Allow) | 'voice', risk, args_sha256, voice_id_verified, tool} covers exactly one laptop exec: its own tool, those arguments (constant-time digest compare), sent while its run is in progress. The first send spends it, and so does the end of the run, so a task the run started never sends under it. Approval.reference(args_sha256) is the exec's approval {confirm_id, channel, risk, args_sha256, voice_id_verified: true only for a verified spoken yes} (K-70, K-76). The proxy's own items are the repeat guard ('Yeh laptop kaam <N> s pehle bhi bheja tha, dobara karun? ' plus the laptop summary, at least medium) and the node's APPROVAL_REQUIRED ('Laptop ne is kaam ke liye ijazat maangi. ' plus the summary, high). Their approved run re-sends the exec under the same call_id, and the call's tool_sync row (its K-13 id) gets the real end. on_result's outcome now carries the run result's error_code. The default on_result speaks fixed lines: done (success, started); 'nayi ijazat chahiye' (needs_confirmation); 'nateeja maloom nahi ho saka; main ise dobara nahi kar raha' (DESKTOP_RESULT_UNKNOWN, DESKTOP_TIMEOUT); 'rok diya gaya; agar rokne se pehle ho chuka tha to bata dunga' (STOPPED_BY_USER); otherwise failed. An outcome that may have run is never spoken as a failure.
 
 #### K-15 · DesktopConfigKeys (env + config attributes (services/utils/jarvis_config.py, Claude-owned)) · owner: Claude
 deploy/windows-local/.env and root .env get the same keys via scripts/ops/env_set.py (set-if-missing, --secret generates token_urlsafe(32), never prints values). ENV -> attribute (default):
@@ -162,6 +167,11 @@ v37 (C-51, as built): cancel_pending() -> int drops the queued spoken parts and 
 - Cursor callers import lazily and run synchronously when the module is missing.
 - v4 (VPS brain): in vps mode jobs run in the agent container. An artifact under /app/Jarvis_Shared or /app/Jarvis_Outputs also carries {area, relpath, sha256}, and the laptop steps (pc.fetch and open, K-73) run when the job finishes.
 v40 (C-114, as built): count_active(loop=None) -> int returns the jobs queued or running on that event loop (default: the running loop; 0 outside one). Jobs of another loop never count: on Windows every LiveKit job has its own thread and loop. The job's idle close and 24 h recycle (K-60 v40) wait while it is above 0.
+v42 (C-119, as built): on_job_end(job_id, callback) -> bool.
+- callback(final) runs once when the job ends, on the job's own loop. final is the job's ToolResult: the factory's dict, or {status, message} when the job raised, timed out or was cancelled.
+- A coroutine the callback returns runs as a task, and a failing listener never fails the job.
+- It returns False for an unknown or finished job.
+- The K-71 fallback reads a VPS job's final error_code and effect through it.
 
 #### K-21 · ActiveWindowContext (python-api (Cursor-owned function, consumed by Claude's src/core/vision_handler.py:50)) · owner: Claude
 await get_active_window_context() -> {status: 'success'|'not_found'|'error', title: str, is_maximized: bool, is_minimized: bool, message: str, pid?: int, process_name?: str}. The keys status and title must not change. v4 (VPS brain): in vps mode the Desktop Node calls it every 5 s and pushes changes as a K-70 window_context event; the agent caches them (WindowContextProvider) and injects them as untrusted user-side data. v7 (C-124 as built): in every mode the title (at most 200 characters) reaches the model only through desktop_data_message (K-19 v7), with the label 'the user is focused on the window titled' and the title JSON-quoted between '[DESKTOP DATA, untrusted]' and '[END DESKTOP DATA]', as user-side text, never role='system'. In remote mode WindowContextProvider.on_window_context(event) fills the cache from {title, ts} (an event without a title clears it); no agent-side caller feeds it node events yet (open item, as in K-19 v7).
@@ -436,6 +446,12 @@ v31 (C-43, as built): '/swarm <task>' (case-insensitive, after the dedupe and th
 v34 (C-81, as built): ui_command 'swarm' reads payload.task (or a legacy string; an empty or non-string task is ignored) and runs the same job path as start_swarm_mode; without a provider key it posts '[SWARM] <offline message>' as a system message. '/swarm <task>' typed goes the same way.
 v35 (C-50, as built): a typed message that got no reply at all is asked again once: after 12 s with the agent idle (never while it thinks or speaks, given up after 45 s of work, nothing once any reply came or the session changed) the router calls session.generate_reply(), the text already in the context. Seen live: a typed turn reached the session during a voice switch's fresh reconnect, the reconnect failed with 1008 and the plugin dropped the turn's queued generate trigger.
 v37 (C-51, as built): 'stop' also ends the typed-message rescue (v35): ConversationRouter.cancel_rescues(), so a typed reply stopped before its first audio is never asked for again; a newer spoken turn supersedes the rescue too, and only the newest typed message is watched.
+v42 (C-119, as built): ConversationRouter.add_typed_hook(hook), once per hook.
+- hook(text) sees each accepted typed message (normalised, after the dedupe and the threat check, before '/swarm') before the model.
+- It returns False, True (handled: shown once, never sent to the model), a follow-up callable (handled; it runs once Sir's own message went out, so the hook's answer follows it in the chat), or an awaitable of one of these.
+- handle_text then returns 'handled' and logs 'CHAT_ROUTER handled'.
+- A handled message never arms the C-50 rescue, and it ends the rescue an older typed message still had armed. A broken hook never loses the message.
+- C-119 registers the stop-desktop and 'ruko' hook (K-76 v42).
 
 #### K-60 · CT-VC-CONTROL (command-schema+python-api) · owner: Claude
 Registry services/utils/ui_command_registry.py (no project imports): register_ui_command(name), dispatch(); agent_loops re-exports it; other areas register commands from their own modules instead of editing agent_loops. Dedupe per (type, payload.id|client_msg_id), LRU 512; unknown types logged and ignored. 'stop' = interrupt current and queued speech (AgentSession.interrupt; gated mode also activity_start to Gemini); JARVIS keeps listening; v4: 'stop' (or a spoken 'ruko') also cancels every in-flight laptop call and refuses new ones for 3 s with STOPPED_BY_USER, and a spoken or typed stop-desktop phrase ('desktop band karo', 'desktop control band karo' or 'stop desktop') sends desktop_stop, so the laptop goes read-only until its tray switches back to Full (K-74, K-76). 'mute'/'unmute' = session.input.set_audio_enabled(False/True) + pause of the legacy audio tap; typed chat still answered; mute_sync emitted. 'shutdown_agent' {restart?:bool=true, confirm?, confirm_id?} = end the job (runtime.aclose -> ctx.shutdown); restart=false also asks the bridge to pause re-dispatch when supported; needs confirmation (broker when registered, else confirm:true from the authenticated UI) and is audited. 'clear_memory' {include_vector?, confirm?} = medium-risk confirmation, file moved to backups/memory/<ts>_<user>_memory.json, optional vector wipe after a second confirmation; agent emits 'memory_cleared' {scope:'short_term'|'all', backup, ts}. 'voice_take_over' per CT-VC-ROOMIO-LINK. Other areas that used 'stop' for restart or pause must send 'shutdown_agent'.
@@ -769,6 +785,61 @@ Logging
 Rates (message rates, not CPU/RAM limits)
 - exec 10/s burst and 120/min; events and notices 20/s; connects 10/min per IP.
 - Only failed verifications count toward the per-IP limit. An authentic message refused only as stale or future is not a failed verification.
+- v42 (C-119 as built, services/ai_core/desktop_link.py: the agent end):
+  - Process and transport:
+    - one DesktopLink per process, on its own event loop in a daemon thread; every public method is thread-safe and never blocks;
+    - built at the first remote-mode session (desktop_proxy.attach_session -> ensure_link) as peer 'job-<room>' ('svc' for jarvis-agent-svc, K-77), from DESKTOP_AGENT_SIGNING_KEY and DESKTOP_PC_PUBLIC_KEY;
+    - without usable keys (logged once, names only) or with a seen store that cannot open, there is no link, and laptop calls answer DESKTOP_OFFLINE;
+    - '/desktop' on UI_BRIDGE_URL, websocket only, through the node's SocketIOTransport;
+    - reconnection=False with its own loop: 1 -> 30 s doubling plus up to 1 s jitter, forever, back to 1 s after a connection that lasted 60 s;
+    - the signed agent_hello goes in the connect auth on every connect.
+  - Handshake:
+    - the connect agent_hello names no session; the session key comes from the node's hello to this peer;
+    - a hello of a new node session gets an in-band agent_hello that names it, with a new ephemeral key;
+    - node sessions are told apart by arrival, never by the node's ts; a hello of a session this link replaced less than 120 s ago is ignored (a relay may reorder hellos);
+    - after each handshake, in order: the hello's WAL report, a pending desktop_stop, a ping, the process's first sync_request, the waiting controls.
+  - Calls: CallRequest {tool, args, param_schema_sha256, timeout_s, lock_wait_s, origin, seq?, approval?, call_id, label, budget_s?, speech_id?}, kept in a pending map (never sio.call).
+    - Calls are sent one at a time, in the order they were submitted: a FIFO lock is taken first and held until the exec went out.
+    - Answered at once, nothing sent:
+      - CLOCK_SKEW while skew_exceeded(), checked before the offline check;
+      - STOPPED_BY_USER for 3 s after a stop;
+      - DESKTOP_OFFLINE without a node session, or while a desktop_status newer than the session's hello says offline;
+      - DESKTOP_NOT_STARTED for a call_id in flight, for one first sent more than 1 h ago (first-send times are kept 24 h), or when budget_s leaves less than the ack window plus the grace, with a 1 s margin;
+      - BAD_ARGS when the exec cannot be built.
+    - A pending desktop_stop not yet sent in this session, and a stop_all that waited, go out before the exec.
+    - seq: a request that names its speech (speech_id, the seq speech_id form) and has no seq of its own gets {speech_id, n} right before its exec is built. n counts the execs of that speech this link sent, from 0; the last 256 speeches are remembered. A call answered without a send (any case above, a failed send answered DESKTOP_OFFLINE, or a cancelled send) gives its number back, so the node's SeqGate never holds the speech's next call for a number no exec carries. A request with its own seq keeps it. The exec carries seq only when one was stamped.
+  - Outcomes:
+    - no ack in 3 s: cancel, 2 s grace, DESKTOP_RESULT_UNKNOWN;
+    - 30 s without progress: cancel, DESKTOP_TIMEOUT (also when the node answers that cancel with cancelled or not_started);
+    - the whole call, cancel and grace included, ends 1 s before the proxy cap and before budget_s runs out (budget_s is what is left of the caller's K-11 timeout);
+    - DESKTOP_NOT_STARTED after a refusal coded DESKTOP_REJECTED or START_WINDOW_MISSED, a never_started or start_window_missed WAL report, a not_started/effect-none answer to the ack-window cancel, or dl_undeliverable {emitted:false};
+    - every other refusal code is returned as it is;
+    - a WAL 'interrupted' gives DESKTOP_RESULT_UNKNOWN;
+    - a node result with any status but 'completed' and effect 'possible' is DESKTOP_RESULT_UNKNOWN for the model and Sir; the node's status, code and message stay only in data (laptop_status, laptop_error_code, laptop_message);
+    - every other loss gives DESKTOP_RESULT_UNKNOWN;
+    - a laptop code counts only in the K-12 form [A-Z0-9_]{1,64}: a refusal with any other code is DESKTOP_REJECTED, and any other result error_code is not taken as the outcome's code;
+    - an event that lands as its wait runs out is still handled, and a result queued behind a stop or a link loss is the call's outcome.
+  - Reconciliation:
+    - an unknown, timed-out or stopped call stays open for 1 h;
+    - its later result or result_resend, a WAL report (never_started or start_window_missed -> not_started; interrupted), or a refusal ack goes once to the 'late' listeners as LateOutcome {call_id, tool, reason: unknown|timeout|stopped|restart|delivery, state: result|not_started|interrupted|completed, result?, status?, effect?, label};
+    - a WAL 'completed' without its result_resend within 15 s is handed on as 'completed': an end whose outcome is not known;
+    - every result gets a result_ack and is deduped by call_id in the seen store (24 h), except one proving its call never ran (not_started, effect none), because the same call_id may still run after an approval;
+    - a new result of a call this process never waited for goes on once, with reason 'restart'.
+  - Stops:
+    - stop_all(reason, desktop_stop=False) refuses new calls for 3 s, ends every call in flight STOPPED_BY_USER (kept open), and sends the agent-signed control stop_all whenever a call of this peer may still run: one in flight, or one still open that no result or WAL report has ended;
+    - without a session, that stop_all waits for the next handshake, goes before that session's first exec, and is dropped when the hello's WAL report shows nothing left to stop;
+    - a status hint with stop_all: true does the same.
+  - desktop_stop:
+    - the agent-signed control desktop_stop is sent only while the laptop is online; otherwise it goes first at the laptop's next hello, before any exec;
+    - it stays pending until the laptop reports mode read or off (a hello, or a status hint of the online laptop), and is re-sent at every new hello until then;
+    - it is kept in conversations/desktop_stop.json (written atomically, file-locked, shared by the agent processes; an unreadable file counts as pending), so a later agent process sends it;
+    - the file goes once the laptop reported read or off; a stop kept after that report stays;
+    - desktop_stop_persisted is False when the file could not be written: the stop then holds only for this process;
+    - a desktop_stop said while the current session's desktop_status already shows the laptop online in read or off is done once it is sent. Nothing stays pending or on disk, so it never goes out again at a later hello and never undoes a tray Full.
+  - Origins: each exec carries its request's own origin: 'llm' for the model's calls and 'job' for a VPS job's laptop re-run (K-71), 'internal' for jarvis_delivery. Any of them becomes 'canary' in a K-57 probe or canary room (jarvis-probe-<n>, jarvis-canary-<n>).
+  - jarvis_delivery's DesktopSender (C-113): online(), and submit(op, args) for pc.fetch and pc.open_url with exactly their PC_OPERATIONS fields. Errors: DeliveryError BAD_ARGS for anything else, DESKTOP_OFFLINE when offline, DELIVERY_FAILED for any other fast refusal. An end other than success reaches the 'late' listeners (reason 'delivery'); a delivery kept open is reported only by its late outcome.
+  - End of a job: retire(link) closes the link for good, from any thread and without waiting. agent_runner calls it through desktop_proxy.end_job when a remote-mode job ends, also on cancel, and at once when LiveKit shuts the job down. A retired link never reconnects as the room's peer (the bridge keeps one socket per peer), a call in flight ends DESKTOP_RESULT_UNKNOWN, and the link is forgotten as the process's link and delivery sender, so a later job of the process builds its own.
+  - Laptop state comes only from welcome and status hints (agents get no notices). Logs carry call ids, tools, codes and timings, never arguments, results or keys.
 
 #### K-71 · DESKTOP-MANIFEST + PLACEMENT (file-format+python-api) · owner: Claude
 Manifest file
@@ -804,10 +875,10 @@ VPS discovery (JARVIS_DESKTOP_MODE=remote)
 
 Proxies
 - Built in prewarm with the same __name__, __qualname__, __module__, __doc__ and __signature__ (real type objects, nothing eval'd).
-- Registered once per session through register_tool, never through update_tools. Settings: exclusive None, retry_attempts 0, timeout = the K-70 link cap.
+- Registered once per process (the C-32 prewarm) through register_tool, never through update_tools. Settings: exclusive None, retry_attempts 0, timeout = the K-70 link cap.
 - Link errors are returned as K-12 dicts and never count as circuit-breaker failures.
 - Repeat guard: the same messaging, code_exec, availability, exposure or typing call (same args_sha256) within 120 s needs ConfirmFlow.
-- seq is stamped synchronously at entry.
+- seq is stamped by the agent's link right before it builds the exec (v42); only an exec that is sent takes a number.
 
 Drift
 - At exec time the node compares param_schema_sha256: a mismatch gives MANIFEST_MISMATCH and the tool does not run. A docstring-only drift logs WARNING.
@@ -815,6 +886,47 @@ Drift
 - The deploy pre-flight and CI run with JARVIS_MANIFEST_STRICT=1 and refuse a stale committed manifest. tests/unit/test_desktop_manifest.py is advisory otherwise.
 - Fallback: a VPS result with a code in fallback_on and effect none gets one re-run on the laptop. VPS runs of that tool then back off for 6 h.
 v34 (C-81, as built): start_swarm_mode is placed 'vps' (not idempotent). 89 names = vps 36, split 1, routed 2, laptop 50; the manifest lists 85 tools.
+v42 (C-119, as built, services/ai_core/desktop_proxy.py):
+- install(plugin_manager): runs in the C-32 prewarm and on its PREWARM_MISS path, right after discovery and before the VPS argument hooks and the LiveKit conversion; remote mode only.
+  - Every laptop-placed tool of the committed manifest becomes a proxy (placements are taken after the validated JARVIS_TOOL_PLACEMENT_OVERRIDES). The proxy has the manifest's __name__, __qualname__, __module__, __doc__ and __signature__, with real types from the annotation whitelist.
+  - It is registered once through register_tool:
+    - exclusive None, retry_attempts 0;
+    - timeout = the link cap. The tool's own timeout is the placement's timeout_override, else the manifest's, else 15 s; lock_wait is 30 s for every K-16 desktop_input tool;
+    - the manifest's arg_policies, max_output_chars and long_running;
+    - risk = the static risk floor;
+    - confirm_summary = the laptop summary (K-76), prefixed with 'dobara karun?' when the same call was sent within the repeat window.
+  - A laptop tool that an imported module registered is swapped for its proxy. A second install changes nothing, and update_tools is never called.
+  - A param_schema_sha256 mismatch logs ERROR (the proxy follows the manifest). An lk_schema drift logs WARNING (not compared across library versions). A laptop tool missing from the manifest logs ERROR.
+- Routed tools (zip_files, list_generated_media_tool) and VPS tools with a laptop fallback (today download_youtube_media, fallback_on YT_BOT_CHECK) get one K-11 dispatcher.
+  - Per call, a routed tool's route (with the link's online state) or the fallback back-off decides where it runs.
+  - A call that goes to the laptop is asked with the laptop summary; one that stays on the VPS keeps the tool's own summary.
+  - K-11 timeout: max(VPS, cap) for a routed tool, VPS + cap for a fallback tool.
+  - Every proxy and dispatcher carries __jarvis_desktop__ (name, class, route). The K-11 wrapper takes from it tool_sync source 'desktop' (K-13 v4) and create_pending(desktop=True, desktop_class) (K-14 v42).
+- A call:
+  - the K-11 checks run first; the static risk floor is asked before anything is sent (the class floor: code_exec high; messaging, availability and exposure medium; plus the manifest's fixed risk and K-45 through the wrapper);
+  - the exec carries the approval reference only for the approved run's own unused approval of this tool and these arguments. With another tool's approval it carries none, so the node asks; with other arguments the answer is APPROVAL_INVALID and nothing is sent;
+  - the link gets what is left of the K-11 timeout (plugin_manager.tool_time_left) as budget_s;
+  - every link outcome is a K-12 dict, never an exception and never a breaker failure;
+  - the laptop call is never cancelled with its caller;
+  - each call writes one DESKTOP_CALL line to logs/security.log (TOOL, CALL, OUTCOME, CODE in the K-12 form only), never arguments.
+- APPROVAL_REQUIRED from the node (an ack refusal, or the not_started/effect-none result of its pre-run re-check) becomes a desktop ConfirmFlow item at high. Its approval re-sends the exec under the same call_id, with no seq and no budget. An approval below what the node then needs is asked again at high.
+- Repeat guard: the same (tool, args_sha256) within 120 s of a send asks first ('dobara karun?', at least medium). It covers messaging, code_exec, availability and exposure tools, type_text_tool and type_code_animation_tool. A send is recorded right before it goes out, so a parallel call or a retry after a cancelled wait sees it; only an outcome proving the call never ran takes it back.
+- Ordering: the proxy submits the call to the link synchronously in its first step, before its first await, naming its LiveKit speech (CallRequest.speech_id; none when the id is not of the seq speech_id form). The link stamps seq right before it builds the exec (K-70 v42), so only an exec that is sent takes a number. A call answered in the proxy (a fast refusal, the repeat guard's question, APPROVAL_INVALID, BAD_ARGS) never reaches the link. Approved re-sends, the synchronous fallback and a VPS job's re-run carry no seq.
+- Lost outputs and late outcomes:
+  - a completed LLM call whose output did not reach function_tools_executed is announced (result shown, a fixed line spoken). It is checked 2 s after the call ended, then every second while its speech still runs, for at most 120 s;
+  - a late outcome of an unknown, timed-out or stopped call is announced, and its tool_sync end is corrected under its K-13 id;
+  - a stopped call whose late result shows it ended before the stop is announced as done only when that K-12 result says success or started;
+  - a WAL 'completed' without a result is announced as ended with its result unknown (the row ends error, DESKTOP_RESULT_UNKNOWN);
+  - a delivery failure names only a K-12 code and is spoken as a fixed line; a delivery that may have opened is never called a failure.
+- Fallback:
+  - a VPS result with a code in fallback_on and effect none (top level and data) gets one re-run on the laptop inside the same LLM call, with origin 'llm';
+  - VPS runs of that tool then back off for 6 h, kept in conversations/desktop_backoff.json (file-locked, shared by the agent processes; a write that fails keeps the back-off in memory);
+  - a VPS run that started a K-20 job (status 'started' with its job_id) gets the same check on the job's final result, through jarvis_jobs.on_job_end;
+  - that job's re-run has origin 'job' (no LLM turn waits for it; K-76 D21). It carries no approval, K-13 id, budget or seq, and its outcome is announced as what the laptop did: ran there, waits for an Allow, outcome not known yet, or could not run there either.
+- Per job (agent_runner, remote mode):
+  - attach_session runs after every session start. It wires the process's link, the link's late and event listeners on the job's loop, the stop phrases on final voice transcripts and as the router's typed hook, function_tools_executed, and the dashboard Stop (chained once);
+  - node window_context events reach assistant.vision_handler.on_window_context({title, ts}) (C-112);
+  - end_job, called as the job ends, retires the link once no other job of the process uses it; a late session start of an ended job builds no link.
 
 #### K-72 · BRAIN-SWITCH + PLACEMENT-ENV + COMPAT (env+process) · owner: Claude
 Brain switch
@@ -1174,6 +1286,30 @@ K-12 codes added
 - Approvals: CONFIRM_PENDING, APPROVAL_REQUIRED, APPROVAL_INVALID, NO_VOICE_FOR_DESKTOP, STOPPED_BY_USER.
 - Files and media: UPLOAD_FAILED, DELIVERY_FAILED, MEDIA_DISK_LOW.
 - Shared-IP blocks: YT_BOT_CHECK, MAPS_BLOCKED.
+v42 (C-119, as built: the agent side):
+- Approvals (ConfirmFlow before the exec, K-14 v42 and K-71 v42):
+  - the static risk floor is asked first;
+  - the exec's approval {confirm_id, channel, risk, args_sha256, voice_id_verified?} comes only from the approved run's own unused approval of that tool and those arguments;
+  - the node's APPROVAL_REQUIRED (dynamic risk, or the pre-run re-check) becomes a desktop item at high, and the exec is re-sent under the same call_id;
+  - a spoken yes approves a laptop action only at medium risk, never code_exec, and only on a voice-ID-verified turn. D20: there is none before enrollment, so the dashboard Allow is the only path today. It is the only gate for code_exec, and it covers the whole arguments.
+- The summary (at most 300 characters): 'Laptop: <tool> - ', then any path argument first (tagged ' [path]'), then every argument except an empty default (flags at their default are included), as name=value joined by '; '.
+  - Each value is normalised: control, format (bidi, zero-width), private-use, surrogate, unassigned and line/paragraph-separator characters are escaped (\n, \r, \t, \xNN, \uNNNN, \UNNNNNNNN); whitespace runs collapse to one space; the metacharacters & | ; < > ^ % ! ` $ ( ) " ' are marked ⟦c⟧.
+  - Values that do not fit are cut to their head and tail around '…(+N)…'.
+  - A cut never hides a mark or an escape silently. Each one is shown with at least 8 characters around it. When there are too many, the marker names every kind it hides: chaining and redirecting marks and line breaks first, with counts while they take at most half the value ('…(+N: ⟦&⟧×12 \n)…'). A list too long for the whole value says how many kinds it leaves out ('+N aur qism').
+  - Arguments that still do not fit end the summary with ' …(baqi arguments yahan nahi dikh sake)'.
+- Stops in the agent:
+  - 'ruko', 'ruk jao', 'ruko ruko', 'ruk', 'stop', 'stop stop' or 'bas karo', as the whole utterance (fillers such as 'Jarvis', 'sir', 'please' aside), spoken in a final transcript or typed, and the dashboard's Stop (ui_command 'stop', chained once; its C-51 effects stay) end every laptop call that may still run with STOPPED_BY_USER and refuse new ones for 3 s. Typed 'ruko' still goes on to the model.
+  - These stop-desktop phrases: 'desktop band karo', 'desktop band kar do', 'desktop band kardo', 'desktop control band karo', 'desktop control band kar do', 'desktop control band kardo' and 'stop desktop'.
+  - A stop-desktop phrase counts only as the whole utterance (fillers aside). It is matched in Latin, Urdu or Devanagari script, folded so marks and punctuation never split a word, spoken or typed, and before the model. Typed text never reaches the model. A sentence, question or negation that only contains one is Sir's message for the model.
+  - A matched stop-desktop phrase sends the agent-signed desktop_stop and ends in-flight calls the same way. Jarvis says the laptop is read-only until its tray Full. When the laptop is offline, Jarvis says the stop goes at its next connect, or, when the stop file cannot be written, only within this session, and names the dashboard's Stop desktop.
+  - The stop is kept until the laptop reports read or off, across offline spells and job processes (K-70 v42). One said while the laptop already reports read or off is done once sent, so it never undoes a later tray Full.
+  - Typed, Jarvis's answer follows Sir's own message in the chat, and the message ends an older typed message's rescue (K-59).
+- Origins:
+  - 'llm' for the model's calls, the synchronous fallback included;
+  - 'job' for a VPS job's laptop re-run, so D21's JARVIS_ORIGIN_PRESENCE_GATE=1 applies to it;
+  - 'internal' for jarvis_delivery's pc.fetch and pc.open_url;
+  - 'canary' for any of them from a K-57 probe or canary room.
+- An outcome of a laptop action that may have run (DESKTOP_RESULT_UNKNOWN, DESKTOP_TIMEOUT), or that Sir stopped (STOPPED_BY_USER), is never spoken as a failure (K-14 v42 on_result, K-71 v42 late outcomes).
 
 #### K-77 · ALWAYS-ON-SERVICE (process+python-api) · owner: Claude
 Process
@@ -1211,6 +1347,15 @@ Cross-process writes
 
 Heartbeat
 - K-68 fields plus {svc: 'active'|'standby', due_pending, undelivered, last_snapshot_ts, brain}, every 30 s.
+v42 (C-119, as built; the svc's own wiring is C-125): services/ai_core/desktop_link.py serves jarvis-agent-svc too.
+- ensure_link(room, job_id='svc', svc=True) builds that process's link as peer 'svc' (agent:svc), with its own seen-store namespace in conversations/desktop_seen.db.
+- That link also loads a desktop_stop a job process kept in conversations/desktop_stop.json, and sends it at the laptop's next hello.
+- subscribe('event', callback, loop) hands the svc the node's location and log_batch events; subscribe('late', ...) hands it late outcomes.
+- submit_call and run_call take the request's own origin ('scheduler' for K-32 actions, 'internal' for its deliveries), with no seq.
+- A job's end never retires the svc's link: desktop_proxy.end_job retires only the link of the job's own process.
+- Until C-125 lands, nothing builds the svc's link.
+
+Also changed by C-119 (optional lines for the same version):
 
 #### K-78 · HANDOVER (reserved) · owner: Claude
 Reserved for the brain handover protocol between the VPS brain and the PC brain; defined by a later task.
@@ -1258,3 +1403,4 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 - **v39** · 2026-10-20 · K-03, K-46, K-60, K-61 amended · C-54 as built: the agent's settings service (data/settings/agent_settings.json; validate -> apply -> persist -> settings_sync with saved and updated_ts; a failed save stays pending until the next save writes it), settings_bootstrap taken only when newer and only for the saved fields, the turn-gate fields 'unsupported' until the gated runtime exists, and the legacy wake_word_toggle and persona_change through the same validated update.
 - **v40** · 2026-10-20 · K-20, K-40, K-60, K-68, K-69, K-72 amended · C-114 as built: Gemini context compression, a remove-only chat cut, the memory re-seed (newest turn at most 60 min old, the 30 min before it, a '[MEMORY]' note), instructions refreshed only on a new date or city, the idle close counting the bridge's persons and the 24 h recycle (job end 'idle'), jarvis.session 'idle' with jarvis.session_ts, jarvis_jobs.count_active.
 - **v41** · 2026-10-20 · K-29, K-47, K-72, K-75 amended · C-127 as built: the secrets split in two deploys (V2a: the bridge with config.validate('bridge'); V2b: split_bridge_env.py, bridge.env from an allow-list with the bridge settings, the compose .env without agent secrets); push_agent_env.py (.env.agent from the PC, the main LiveKit pair copied on the VPS, the agent link key made on the VPS, HMAC digests only); backup_vps.sh's env.agent and env_layout records; rollback.sh's env layout check and --with-env (live brain and link key lines kept, shared values compared by digest); the DPAPI-wrapped run/fallback.env.dpapi with its in-process readers and the --discard way out; the PC fallback's own LiveKit pair (LIVEKIT_PC_API_KEY/SECRET, the secret masked; create/verify/activate/revoke; the V6 LIVEKIT_KEYS line) and the PC pair guards of rotate_livekit_keys.py.
+- **v42** · 2026-10-20 · K-14, K-70, K-71, K-76, K-77 amended (also K-11, K-20, K-59) · C-119 as built:

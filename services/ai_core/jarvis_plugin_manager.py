@@ -92,6 +92,10 @@ _FAILURE_TEXT = re.compile(r"\s*(?:❌|error\b)", re.IGNORECASE)
 # The LLM tool call running in this context: {'id': K-13 event id, 'tool': name}.
 current_tool_call: contextvars.ContextVar[dict[str, str] | None] = contextvars.ContextVar(
     "jarvis_current_tool_call", default=None)
+# C-119: (tool, time.monotonic() at which its K-11 timeout ends) of the call whose breaker runs in this task, so a
+# laptop call ends with its own K-12 outcome before the wrapper times it out (tool_time_left).
+_tool_deadline: contextvars.ContextVar[tuple[str, float] | None] = contextvars.ContextVar(
+    "jarvis_tool_deadline", default=None)
 
 _running_calls: dict[str, str] = {}  # call id -> tool name (running_tools)
 _running_lock = threading.Lock()
@@ -433,6 +437,15 @@ one_line = _one_line
 result_status = _sync_status
 
 
+def tool_time_left(tool_name: str) -> float | None:
+    """C-119: seconds left of the K-11 timeout of tool_name's call running in this task (its breaker started it);
+    None outside such a call, for another tool's call (a task that inherited the context) or without a timeout."""
+    entry = _tool_deadline.get()
+    if entry is None or entry[0] != tool_name:
+        return None
+    return entry[1] - time.monotonic()
+
+
 class _TemplateArgs(dict):
     """Values of a confirm_summary template; an unknown {field} stays as written."""
 
@@ -464,10 +477,44 @@ async def _confirm_summary(spec: Any, arguments: dict[str, Any], tool_name: str,
 
 
 def _sync_event(call_id: str, tool_name: str, *, phase: str, status: str, details: str,
-                risk: str) -> dict[str, Any]:
+                risk: str, source: str = "plugin") -> dict[str, Any]:
     return {"id": call_id, "tool": tool_name, "action": tool_name, "phase": phase,
-            "status": status, "details": details, "risk": risk, "source": "plugin",
+            "status": status, "details": details, "risk": risk, "source": source,
             "timestamp": time.time()}
+
+
+def _desktop_source(info: Any, arguments: dict[str, Any]) -> str:
+    """K-13 source of one call: 'desktop' when a C-119 laptop proxy (or a routed tool's laptop route) runs it
+    through the K-70 link, else 'plugin'. info is the function's __jarvis_desktop__ (duck-typed)."""
+    if info is None:
+        return "plugin"
+    try:
+        return "desktop" if info.goes_to_laptop(arguments) else "plugin"
+    except Exception:  # pylint: disable=broad-exception-caught  # a broken route never fails the call
+        return "plugin"
+
+
+def _desktop_confirm_options(info: Any, arguments: dict[str, Any]) -> dict[str, Any]:
+    """create_pending options of a call that goes to the laptop (K-14 v4: desktop=True and its K-76 class)."""
+    if _desktop_source(info, arguments) != "desktop":
+        return {}
+    return {"desktop": True, "desktop_class": getattr(info, "cls", None)}
+
+
+def post_tool_sync(call_id: str, tool_name: str, *, phase: str, status: str, details: str = "",
+                   risk: str = "low", source: str = "plugin", result: Any = None,
+                   duration_ms: int | None = None) -> asyncio.Task[None] | None:
+    """One K-13 tool_sync event outside a wrapper call, fire-and-forget (C-119: a laptop call's corrected end under
+    its own id, after a late outcome or an approved re-send). status 'auto' takes it from result."""
+    event = _sync_event(call_id, tool_name, phase=phase,
+                        status=_sync_status(result) if status == "auto" else status, details=details,
+                        risk=risk, source=source)
+    if duration_ms is not None:
+        event["duration_ms"] = int(duration_ms)
+    summary = _result_summary(result) if result is not None else ""
+    if summary:
+        event["result_summary"] = summary
+    return _emit_tool_sync(event)
 
 
 def _emit_tool_sync(payload: dict[str, Any],
@@ -594,6 +641,7 @@ async def _run_confirmed(wrapper: Callable[..., Any], args: tuple[Any, ...],
     """
     _held_exclusive.set(())
     current_tool_call.set(None)
+    _tool_deadline.set(None)
     return await wrapper(*args, **kwargs, **{CONFIRMED_KWARG: True})
 
 
@@ -703,6 +751,8 @@ class JarvisPluginManager:
         exclusive_name = meta["exclusive"]
         is_async = inspect.iscoroutinefunction(func)
         voice_option = None if voice_confirm is None else bool(voice_confirm)
+        # C-119 (VPS brain): a laptop proxy, or a routed/fallback tool, says per call whether it runs on the laptop
+        desktop_info = getattr(func, "__jarvis_desktop__", None)
 
         async def _execute_with_retries(*a: Any, **k: Any) -> Any:
             attempts = 0
@@ -729,6 +779,9 @@ class JarvisPluginManager:
         async def _execute(args: tuple[Any, ...], kwargs: dict[str, Any]) -> tuple[Any, str]:
             # RECOVERY & RESILIENCE ENFORCEMENT
             breaker = resilience_manager.get_breaker(tool_name, execution_timeout=effective_timeout)
+            # C-119: when the breaker's timeout ends, for a laptop call made inside it (tool_time_left)
+            deadline = _tool_deadline.set((tool_name, time.monotonic() + effective_timeout)
+                                          if isinstance(effective_timeout, (int, float)) else None)
             try:
                 # Wrap execution in Circuit Breaker (Self-Healing)
                 raw_result = await breaker.call(_execute_with_retries, *args, **kwargs)
@@ -746,6 +799,8 @@ class JarvisPluginManager:
                     "error_type": type(e).__name__,
                     "message": _redact(str(e)),  # skips validate_tool_output, so mask secrets here (K-29)
                 }, "timeout" if timed_out else "error"
+            finally:
+                _tool_deadline.reset(deadline)
             return result, _sync_status(result)
 
         async def _ask_confirmation(call: tuple[tuple[Any, ...], dict[str, Any]],
@@ -764,7 +819,8 @@ class JarvisPluginManager:
                 result = await broker.create_pending(
                     tool_name, summary, call_risk, voice_confirm=voice_option,
                     args_preview=details, arguments=arguments,
-                    run=functools.partial(_run_confirmed, tool_wrapper, *call))
+                    run=functools.partial(_run_confirmed, tool_wrapper, *call),
+                    **_desktop_confirm_options(desktop_info, arguments))
             except Exception as e:  # pylint: disable=broad-exception-caught
                 logger.error("Confirmation of '%s' failed: %s", tool_name, e, exc_info=True)
                 result = _refusal(tool_name, "CONFIRM_UI_UNREACHABLE", _CONFIRM_FAILED_MESSAGE)
@@ -831,6 +887,7 @@ class JarvisPluginManager:
             start_task: asyncio.Task[None] | None = None
             start_sent = False
             status, result = "error", None
+            sync_source = "plugin"  # K-13 v4: 'desktop' for a call that goes to the laptop (C-119)
             context_token = current_tool_call.set({"id": call_id, "tool": tool_name})
             with _running_lock:
                 _running_calls[call_id] = tool_name
@@ -844,9 +901,10 @@ class JarvisPluginManager:
                     rejected = e
                 call_risk = jarvis_guard.effective_risk(tool_name, _call_risk(level, arguments, label),
                                                         arguments)  # K-45 v22: run_cmd's READ_ONLY calls
+                sync_source = _desktop_source(desktop_info, arguments)
                 start_task = _emit_tool_sync(_sync_event(
                     call_id, tool_name, phase="start", status="running", details=details,
-                    risk=call_risk))
+                    risk=call_risk, source=sync_source))
                 start_sent = True
                 confirm = None
                 if call_risk in CONFIRM_RISKS and not confirmed:
@@ -865,9 +923,9 @@ class JarvisPluginManager:
                 if not start_sent:  # an unexpected error came before the start event
                     start_task = _emit_tool_sync(_sync_event(
                         call_id, tool_name, phase="start", status="running", details=details,
-                        risk=call_risk))
+                        risk=call_risk, source=sync_source))
                 end_event = _sync_event(call_id, tool_name, phase="end", status=status,
-                                        details=details, risk=call_risk)
+                                        details=details, risk=call_risk, source=sync_source)
                 end_event["duration_ms"] = duration_ms
                 summary = _result_summary(result)
                 if summary:

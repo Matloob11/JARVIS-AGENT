@@ -1086,6 +1086,17 @@ async def _report_job_end(ctx: Any, reason: str) -> None:
         logger.debug("JOB END: job_end not reported: %s", type(e).__name__)
 
 
+def _retire_desktop_link(job_id: str) -> None:
+    """C-119 (VPS brain): the job's Desktop Link stops for good as the job ends, before its process drains
+    (desktop_proxy.end_job): every job of a room is the bridge peer job-<room>, so a link that reconnected from a
+    draining process would push the next job's link off the bridge. Never raises."""
+    try:
+        from services.ai_core import desktop_proxy  # pylint: disable=import-outside-toplevel
+        desktop_proxy.end_job(job_id)
+    except Exception as e:  # pylint: disable=broad-exception-caught  # a job always ends
+        logger.error("JOB END: Desktop Link not retired: %s", type(e).__name__)
+
+
 def _is_console_job(ctx: Any) -> bool:
     """livekit-agents' console mode runs a fake job: it is never shut down from here."""
     try:
@@ -1290,6 +1301,8 @@ def prewarm(proc: Any) -> None:
         plugin_manager = JarvisPluginManager()
         plugin_manager.discover_plugins(os.path.join(config.project_root, "services"))
         if desktop_mode() != DESKTOP_MODE_LOCAL:
+            from services.ai_core import desktop_proxy  # pylint: disable=import-outside-toplevel
+            desktop_proxy.install(plugin_manager)  # C-119: laptop proxies, registered once (never update_tools)
             remote_compat.install_arg_hooks(plugin_manager)  # C-124: before the LiveKit conversion
         userdata["tools"] = plugin_manager.get_livekit_tools()
     except Exception as e:
@@ -1386,6 +1399,7 @@ async def entrypoint(ctx: agents.JobContext):
     start_ui_log_shipping()
     net_guard.harden_process()  # C-124: again in the job (PR_SET_DUMPABLE does not survive an exec)
     local = desktop_mode() == DESKTOP_MODE_LOCAL
+    desktop_job = str(getattr(getattr(ctx, "job", None), "id", "") or "")  # C-119: the job id the link is used under
     from services.utils.jarvis_bridge import (  # pylint: disable=import-outside-toplevel
         notify_location,
         notify_pc_vitals,
@@ -1426,6 +1440,8 @@ async def entrypoint(ctx: agents.JobContext):
             logger.warning("PREWARM_MISS key=%s", "tools")
             plugin_manager.discover_plugins(os.path.join(config.project_root, "services"))
             if not local:
+                from services.ai_core import desktop_proxy  # pylint: disable=import-outside-toplevel
+                desktop_proxy.install(plugin_manager)  # C-119: laptop proxies, before the arg hooks
                 remote_compat.install_arg_hooks(plugin_manager)  # C-124: VPS argument hooks
             external_tools = plugin_manager.get_livekit_tools()
             logger.info("🛠️ Discovered %d external tools from plugins.", len(external_tools))
@@ -1584,6 +1600,9 @@ async def entrypoint(ctx: agents.JobContext):
         _enable_voice_confirm_check()  # C-75: confirm_action needs Sir's own spoken yes from now on
         jarvis_announcer.attach(session)  # C-55 (K-18): results, jobs and tips are shown and spoken here
         jarvis_announcer.set_assistant(assistant)
+        if not local:  # C-119: the process's Desktop Link, the stop phrases and the lost-output watch (VPS brain)
+            from services.ai_core import desktop_proxy  # pylint: disable=import-outside-toplevel
+            desktop_proxy.attach_session(session, assistant, room=_job_room_name(ctx), job_id=desktop_job)
 
         # --- Transcript messages (K-58) ---
         # C-42: conversation_item_added is the single source of chat messages (voice user text with the item id,
@@ -1644,6 +1663,8 @@ async def entrypoint(ctx: agents.JobContext):
 
     async def _end_runtime_job(reason: str) -> None:
         """The runtime's end_job hook: the job's own leftovers, then the C-23 end block (skipped on cancel)."""
+        if not local:  # C-119: the Desktop Link never reconnects from this job's process again (also on cancel)
+            _retire_desktop_link(desktop_job)
         settings = getattr(runtime, "settings", None)
         if settings is not None:  # C-54: a voice, persona or wake word a tool changed survives the restart
             await settings.persist_live_state()
@@ -1679,6 +1700,8 @@ async def entrypoint(ctx: agents.JobContext):
     # teardown off. This callback asks the job to end and holds the loop (bounded) until it has.
     async def _hold_for_teardown(reason: str) -> None:
         job["framework_shutdown"] = True
+        if not local:  # C-119: at once, as the teardown may outlast LiveKit's wait (the process then drains)
+            _retire_desktop_link(desktop_job)
         why = END_ROOM_DISCONNECTED if "disconnect" in str(reason).lower() else END_JOB_SHUTDOWN
         request_end = job["request_end"]
         if callable(request_end):
