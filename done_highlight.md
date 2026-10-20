@@ -2782,3 +2782,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** `npx playwright test -c playwright.live.config.ts --list` → 7 tests; without flag → 7 skipped
 - **Commit:** (this commit) · **Deploy:** no (test-only)
 - **Doosre agent ke liye:** owner ek dafa `npm run test:e2e:live:auth` chala kar session banae; phir `$env:JARVIS_LIVE_SMOKE='1'; npm run test:e2e:live`
+
+### ✅ [cursor] C-52-UI · Memory panel K-07 v44 · 2026-10-20 19:20 PKT
+- **Kya kiya:** memory_sync id-dedupe (init+live+reconnect), role/user_id, ts order, max 200, content ≤500; fact/vector bina role/id bhi chalain (uuid + ts fallback); memory_cleared list khaali; fixture + vitest + e2e.
+- **Files:** stonix_ui/src/features/memory/useMemories.ts, useMemories.test.ts, MemoryList.tsx (unchanged UI), tests/mock-bridge/fixtures/memory_sync.json, tests/e2e/memory.spec.ts
+- **Verify:** vitest 6 passed; memory e2e 4 passed
+- **Commit:** (this commit) · **Deploy:** later (batch REQ-DEPLOY)
+- **Doosre agent ke liye:** —

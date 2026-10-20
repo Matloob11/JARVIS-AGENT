@@ -11,10 +11,14 @@ export interface MemoryItem {
   content: string;
   role?: MemoryRole;
   source?: MemorySource;
+  /** Present on extractor rows (K-07 v44); optional for fact|vector. */
+  userId?: string;
   ts: number;
 }
 
 const MAX_ROWS = 200;
+/** Agent sends at most 500 chars (K-07); truncate anything longer. */
+export const MAX_CONTENT_CHARS = 500;
 
 function normalizeRole(raw: unknown): MemoryRole | undefined {
   const r = String(raw ?? '').toLowerCase();
@@ -35,21 +39,43 @@ function contentText(raw: unknown): string {
   return '';
 }
 
+function fallbackMemoryId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `x-${Date.now().toString(16)}${Math.random().toString(16).slice(2, 10)}`;
+}
+
 export function normalizeMemory(raw: unknown): MemoryItem | null {
   if (!raw || typeof raw !== 'object') return null;
   const data = raw as Record<string, unknown>;
-  const id = data.id != null ? String(data.id).trim() : '';
-  if (!id) return null;
-  const content = contentText(data.content);
+  let id = data.id != null ? String(data.id).trim() : '';
+  // fact|vector may omit id; assign a stable-enough uuid so the row still shows (K-07 v44).
+  if (!id) id = fallbackMemoryId();
+  let content = contentText(data.content);
   if (!content.trim()) return null;
+  if (content.length > MAX_CONTENT_CHARS) content = content.slice(0, MAX_CONTENT_CHARS);
   const ts = toEpochMs(data.ts ?? data.timestamp) ?? Date.now();
+  const userRaw = data.user_id ?? data.userId;
+  const userId =
+    typeof userRaw === 'string' && userRaw.trim() ? userRaw.trim() : undefined;
   return {
     id,
     content,
     role: normalizeRole(data.role),
     source: normalizeSource(data.source),
+    userId,
     ts,
   };
+}
+
+/** Pure helpers exported for vitest (C-52 / K-07 v44). */
+export function dedupeMemoriesById(rows: MemoryItem[]): MemoryItem[] {
+  const byId = new Map<string, MemoryItem>();
+  for (const row of sortNewestFirst(rows)) {
+    if (!byId.has(row.id)) byId.set(row.id, row);
+  }
+  return sortNewestFirst([...byId.values()]).slice(0, MAX_ROWS);
 }
 
 function sortNewestFirst(rows: MemoryItem[]): MemoryItem[] {
@@ -62,11 +88,8 @@ function prependRow(prev: MemoryItem[], next: MemoryItem): MemoryItem[] {
 }
 
 function mergeSeed(prev: MemoryItem[], seeded: MemoryItem[]): MemoryItem[] {
-  const byId = new Map<string, MemoryItem>();
-  for (const row of sortNewestFirst([...seeded, ...prev])) {
-    if (!byId.has(row.id)) byId.set(row.id, row);
-  }
-  return sortNewestFirst([...byId.values()]).slice(0, MAX_ROWS);
+  // Seeded (init_state) wins on reconnect for the same id; never duplicate rows.
+  return dedupeMemoriesById([...seeded, ...prev]);
 }
 
 function backupPathFromCleared(payload: Record<string, unknown>): string | null {

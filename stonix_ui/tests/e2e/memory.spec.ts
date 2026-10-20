@@ -108,3 +108,44 @@ test('clear flow emits clear_memory once and handles memory_cleared', async ({ p
   await expect(page.getByTestId('memory-row')).toHaveCount(0);
   await expect(page.getByTestId('memory-empty')).toBeVisible();
 });
+
+test('C-52: duplicate id is deduped; extractor shows role; fact without role still renders', async ({
+  page,
+}) => {
+  const now = Math.floor(Date.now() / 1000);
+  await mockEmit(page, 'memory_sync', {
+    id: 'mem-dup-1',
+    content: 'First version of the same id.',
+    role: 'user',
+    source: 'extractor',
+    user_id: 'matloob',
+    ts: now - 30,
+  });
+  await mockEmit(page, 'memory_sync', {
+    id: 'mem-dup-1',
+    content: 'Updated content for the same id.',
+    role: 'user',
+    source: 'extractor',
+    user_id: 'matloob',
+    ts: now,
+  });
+  await mockEmit(page, 'memory_sync', {
+    id: 'mem-fact-1',
+    content: 'A fact without role or user_id.',
+    source: 'fact',
+    ts: now - 5,
+  });
+
+  await expect(page.locator('[data-testid="memory-row"][data-id="mem-dup-1"]')).toHaveCount(1);
+  await expect(page.locator('[data-testid="memory-row"][data-id="mem-dup-1"]')).toContainText(
+    'Updated content for the same id.',
+  );
+  await expect(page.locator('[data-testid="memory-row"][data-id="mem-dup-1"]')).toContainText(
+    'user',
+  );
+  await expect(page.locator('[data-testid="memory-row"][data-id="mem-fact-1"]')).toBeVisible();
+  await expect(page.locator('[data-testid="memory-row"][data-id="mem-fact-1"]')).toContainText(
+    'unknown',
+  );
+  await expect(page.getByTestId('memory-row')).toHaveCount(2);
+});

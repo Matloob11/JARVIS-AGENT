@@ -3,5 +3,6 @@
   "content": "User prefers Urdu responses.",
   "role": "user",
   "source": "extractor",
+  "user_id": "matloob",
   "ts": 1727700450
 }
