@@ -2789,3 +2789,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** vitest 6 passed; memory e2e 4 passed
 - **Commit:** (this commit) · **Deploy:** later (batch REQ-DEPLOY)
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] UI-H03 · Socket matrix: user_status_change + token_stream · 2026-10-20 19:25 PKT
+- **Kya kiya:** Bridge emit audit; `user_status_change` aur `token_stream` matrix mein intentionally unused (LiveKit ActiveSpeakers / new_message); `desktop_status` subscribed list mein; Vitest guard: har bridge→ui emit matrix mein.
+- **Files:** stonix_ui/src/shared/contracts/socketEventMatrix.ts, socketEventMatrix.test.ts
+- **Verify:** vitest socketEventMatrix 11 passed
+- **Commit:** (this commit) · **Deploy:** later
+- **Doosre agent ke liye:** —

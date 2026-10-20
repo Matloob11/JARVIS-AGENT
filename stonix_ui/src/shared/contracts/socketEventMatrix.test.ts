@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   blockedSocketEvents,
+  BRIDGE_UI_EVENTS,
   SOCKET_EVENT_MATRIX,
   SOCKET_EVENT_NAMES,
   SUBSCRIBED_SOCKET_EVENTS_FROM_SRC,
@@ -14,13 +15,25 @@ import {
 } from './events';
 
 describe('UI-H03 socket event matrix', () => {
-  it('lists every subscribed useSocketEvent name', () => {
+  it('lists every subscribed useSocketEvent / subscribeSocketEvent name', () => {
     const matrix = new Set(SOCKET_EVENT_NAMES);
-    const subscribed = [...SUBSCRIBED_SOCKET_EVENTS_FROM_SRC].sort();
+    const subscribed = [...SUBSCRIBED_SOCKET_EVENTS_FROM_SRC];
     const missing = subscribed.filter(name => !matrix.has(name));
-    const extra = SOCKET_EVENT_NAMES.filter(name => !SUBSCRIBED_SOCKET_EVENTS_FROM_SRC.includes(name));
-    expect(missing, `matrix missing: ${missing.join(', ')}`).toEqual([]);
-    expect(extra, `matrix extra: ${extra.join(', ')}`).toEqual([]);
+    expect(missing, `matrix missing subscribed: ${missing.join(', ')}`).toEqual([]);
+  });
+
+  it('every non-unused matrix row is in the subscribed snapshot', () => {
+    const subscribed = new Set(SUBSCRIBED_SOCKET_EVENTS_FROM_SRC);
+    const orphans = SOCKET_EVENT_MATRIX.filter(
+      row => row.coverage !== 'unused' && !subscribed.has(row.event),
+    ).map(row => row.event);
+    expect(orphans, `matrix rows not subscribed: ${orphans.join(', ')}`).toEqual([]);
+  });
+
+  it('every bridge→ui emit is in the matrix (no silent unknowns)', () => {
+    const matrix = new Set(SOCKET_EVENT_NAMES);
+    const missing = BRIDGE_UI_EVENTS.filter(name => !matrix.has(name));
+    expect(missing, `bridge emits not in matrix: ${missing.join(', ')}`).toEqual([]);
   });
 
   it('has no duplicate event names', () => {
@@ -31,15 +44,17 @@ describe('UI-H03 socket event matrix', () => {
     for (const row of SOCKET_EVENT_MATRIX) {
       expect(row.event.length).toBeGreaterThan(0);
       expect(row.contract.length).toBeGreaterThan(0);
-      expect(['normalizer', 'tolerant', 'builtin', 'blocked']).toContain(row.coverage);
+      expect(['normalizer', 'tolerant', 'builtin', 'blocked', 'unused']).toContain(row.coverage);
     }
   });
 
-  it('blocked events are empty or documented for plan.md §11', () => {
+  it('blocked and unused events carry a note', () => {
     const blocked = blockedSocketEvents();
-    // Accept empty. If any appear, their note must say BLOCKED so §11 can list them.
     for (const row of blocked) {
       expect(row.note, `${row.event} blocked without note`).toBeTruthy();
+    }
+    for (const row of SOCKET_EVENT_MATRIX.filter(r => r.coverage === 'unused')) {
+      expect(row.note, `${row.event} unused without note`).toMatch(/intentionally unused/i);
     }
   });
 });

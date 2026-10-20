@@ -1,15 +1,22 @@
 /**
- * UI-H03: every `useSocketEvent` name under stonix_ui/src mapped to a contract
- * and a Vitest coverage lane. Keep in sync with grep of useSocketEvent(.
+ * UI-H03: every `useSocketEvent` / `subscribeSocketEvent` name under stonix_ui/src
+ * mapped to a contract and a Vitest coverage lane. Also lists bridge→ui emits that
+ * the UI intentionally does not subscribe to (`unused`).
  *
  * coverage:
  * - normalizer — dedicated normalize* Vitest (missing/extra fields)
  * - tolerant   — empty / junk / extra-field payload must not throw in the reader
  * - builtin    — Socket.IO connect/disconnect (no K payload)
  * - blocked    — subscribed but contract gap; must appear in plan.md §11
+ * - unused     — bridge emits to room 'ui'; UI intentionally does not subscribe
  */
 
-export type SocketEventCoverage = 'normalizer' | 'tolerant' | 'builtin' | 'blocked';
+export type SocketEventCoverage =
+  | 'normalizer'
+  | 'tolerant'
+  | 'builtin'
+  | 'blocked'
+  | 'unused';
 
 export type SocketEventRow = {
   event: string;
@@ -18,7 +25,7 @@ export type SocketEventRow = {
   note?: string;
 };
 
-/** Canonical inventory of subscribed socket events (Cursor lane). */
+/** Canonical inventory of socket events (Cursor lane). */
 export const SOCKET_EVENT_MATRIX: readonly SocketEventRow[] = [
   { event: 'connect', contract: 'Socket.IO', coverage: 'builtin' },
   { event: 'disconnect', contract: 'Socket.IO', coverage: 'builtin' },
@@ -66,6 +73,7 @@ export const SOCKET_EVENT_MATRIX: readonly SocketEventRow[] = [
   { event: 'diagnostics_update', contract: 'K-02', coverage: 'tolerant' },
   { event: 'audit_update', contract: 'K-02', coverage: 'tolerant' },
   { event: 'module_health', contract: 'K-02', coverage: 'tolerant' },
+  { event: 'desktop_status', contract: 'K-02/K-74', coverage: 'tolerant' },
   { event: 'sim_panel_open', contract: 'K-02', coverage: 'tolerant' },
   { event: 'sim_data_loading', contract: 'K-02', coverage: 'tolerant' },
   { event: 'sim_data_result', contract: 'K-02', coverage: 'tolerant' },
@@ -78,7 +86,70 @@ export const SOCKET_EVENT_MATRIX: readonly SocketEventRow[] = [
     coverage: 'tolerant',
     note: 'legacy alias of system_alert in useSidebarNavMarks',
   },
+
+  // Bridge emits these to room 'ui'; UI does not subscribe (documented).
+  {
+    event: 'user_status_change',
+    contract: 'K-02/K-40',
+    coverage: 'unused',
+    note:
+      'intentionally unused: UI uses LiveKit ActiveSpeakersChanged for isUserSpeaking (X-50); no user_status_change fallback',
+  },
+  {
+    event: 'token_stream',
+    contract: 'K-40',
+    coverage: 'unused',
+    note:
+      'intentionally unused: legacy notify type token→token_stream; chat uses new_message/update_message',
+  },
 ] as const;
+
+/**
+ * Snapshot of events `emit_ui` / `sio.emit` send to room 'ui' (from src/core read-only audit).
+ * Keep in sync when Claude adds a new UI emit; Vitest fails if one is missing from the matrix.
+ */
+export const BRIDGE_UI_EVENTS: readonly string[] = [
+  'agent_status',
+  'audit_update',
+  'confirm_request',
+  'confirm_resolved',
+  'desktop_status',
+  'init_state',
+  'intelligence_update',
+  'location_update',
+  'memory_cleared',
+  'memory_sync',
+  'mute_update',
+  'new_log',
+  'new_logs',
+  'new_message',
+  'persona_update',
+  'reasoning_update',
+  'session_expired',
+  'settings_sync',
+  'sim_data_loading',
+  'sim_data_result',
+  'sim_panel_open',
+  'status_change',
+  'system_alert',
+  'task_notification',
+  'task_sync',
+  'telemetry_update',
+  'token_stream',
+  'tool_progress',
+  'tool_update',
+  'transcription_update',
+  'turn_rejected',
+  'update_message',
+  'user_status_change',
+  'vitals_pc',
+  'vitals_update',
+  'vitals_vps',
+  'voice_enroll_result',
+  'voice_id_status',
+  'voice_match_update',
+  'wake_word_update',
+];
 
 export const SOCKET_EVENT_NAMES = SOCKET_EVENT_MATRIX.map(row => row.event);
 
@@ -93,6 +164,7 @@ export const SUBSCRIBED_SOCKET_EVENTS_FROM_SRC: readonly string[] = [
   'confirm_request',
   'confirm_resolved',
   'connect',
+  'desktop_status',
   'diagnostics_update',
   'disconnect',
   'init_state',
