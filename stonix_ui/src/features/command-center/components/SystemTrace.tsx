@@ -337,9 +337,46 @@ const ReasoningCard = ({
         </div>
       )}
       {planProgress && (
-        <p className="reasoning-plan-progress" data-testid="trace-plan-progress">
-          Step {planProgress.current}/{planProgress.total} - {planProgress.action} ({planProgress.status})
-        </p>
+        <div
+          className={clsx(
+            'reasoning-plan-progress',
+            planProgress.status === 'FAILED' && 'reasoning-plan-progress--failed',
+            planProgress.status === 'COMPLETED' && 'reasoning-plan-progress--done',
+          )}
+          data-testid="trace-plan-progress"
+          data-status={planProgress.status}
+        >
+          <div className="reasoning-plan-progress__row">
+            <p className="reasoning-plan-progress__label">
+              {planProgress.status === 'FAILED'
+                ? `Plan ruka · ${planProgress.action || 'step'} (${planProgress.current}/${planProgress.total})`
+                : `Step ${planProgress.current}/${planProgress.total} - ${planProgress.action} (${planProgress.status})`}
+            </p>
+            <span className="reasoning-plan-progress__fraction">
+              {planProgress.current}/{planProgress.total}
+            </span>
+          </div>
+          <div
+            className="reasoning-plan-progress__track"
+            data-testid="trace-plan-progress-bar"
+            role="progressbar"
+            aria-valuenow={planProgress.current}
+            aria-valuemin={0}
+            aria-valuemax={planProgress.total}
+          >
+            <div
+              className="reasoning-plan-progress__fill"
+              style={{
+                width: `${Math.min(
+                  100,
+                  Math.round(
+                    (Math.max(0, planProgress.current) / Math.max(1, planProgress.total)) * 100,
+                  ),
+                )}%`,
+              }}
+            />
+          </div>
+        </div>
       )}
       <div className="mt-3 space-y-2">
         {planLines.map((step: string, index: number) => (

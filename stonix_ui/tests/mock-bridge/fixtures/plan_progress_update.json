@@ -1,1 +1,10 @@
-﻿{"current":2,"total":3,"action":"summarize","status":"running"}
+﻿{
+  "type": "plan_progress",
+  "payload": {
+    "current": 2,
+    "total": 3,
+    "action": "Heal",
+    "status": "IN_PROGRESS",
+    "timestamp": "2026-10-20T14:00:05.000Z"
+  }
+}

@@ -3,9 +3,13 @@ import { toast } from '@/toast';
 import {
   normalizeConfirm,
   normalizePlan,
+  normalizePlanProgress,
   toEpochMs,
   type NormalizedPlan,
+  type PlanProgressLine,
 } from '@/shared/contracts/events';
+
+export type { PlanProgressLine };
 import { useChat } from '@/features/chat/useChat';
 import type { ChatMessage } from '@/features/chat/types';
 import { useLiveKit, type LiveKitContextValue } from '@/features/voice/LiveKitProvider';
@@ -110,14 +114,6 @@ export interface VortexLog {
   repeat?: number;
 }
 
-export interface PlanProgressLine {
-  current: number;
-  total: number;
-  action: string;
-  status: string;
-  ts?: number;
-}
-
 export interface SystemFeedEntry {
   kind: 'telemetry' | 'diagnostics' | 'audit';
   summary: string;
@@ -184,30 +180,7 @@ function mergeVortexLogsFromInit(prev: VortexLog[], rawSeed: unknown[]): VortexL
   return merged.slice(0, VORTEX_LOG_CAP);
 }
 
-function normalizePlanProgress(raw: Record<string, unknown>): PlanProgressLine | null {
-  const current =
-    typeof raw.current === 'number'
-      ? raw.current
-      : typeof raw.step_index === 'number'
-        ? raw.step_index
-        : typeof raw.step === 'number'
-          ? raw.step
-          : null;
-  const total =
-    typeof raw.total === 'number'
-      ? raw.total
-      : typeof raw.total_steps === 'number'
-        ? raw.total_steps
-        : null;
-  if (current == null || total == null) return null;
-  return {
-    current,
-    total,
-    action: String(raw.action ?? raw.step_action ?? ''),
-    status: String(raw.status ?? 'IN_PROGRESS'),
-    ts: toEpochMs(raw.ts ?? raw.timestamp),
-  };
-}
+const PLAN_PROGRESS_COMPLETED_HIDE_MS = 3_000;
 
 function turnRejectedToast(data: Record<string, unknown>): string {
   const reason = String(data.reason ?? '');
@@ -426,6 +399,7 @@ export const useCommandCenter = () => {
   const [vortexLogs, setVortexLogs] = useState<VortexLog[]>([]);
   const [logDroppedCount, setLogDroppedCount] = useState(0);
   const [planProgress, setPlanProgress] = useState<PlanProgressLine | null>(null);
+  const planProgressHideRef = useRef<number | null>(null);
   const [reasoningHistory, setReasoningHistory] = useState<ReasoningPlan[]>([]);
   const [systemFeed, setSystemFeed] = useState<SystemFeedEntry[]>([]);
   const traceLogPauseRef = useRef(false);
@@ -776,27 +750,32 @@ export const useCommandCenter = () => {
     ingestLogBatch(data as Record<string, unknown>);
   });
 
-  useSocketEvent('plan_progress', (data: unknown) => {
-    if (!data || typeof data !== 'object') return;
-    const row = data as Record<string, unknown>;
-    const payload =
-      row.payload && typeof row.payload === 'object'
-        ? (row.payload as Record<string, unknown>)
-        : row;
-    const line = normalizePlanProgress(payload);
-    if (line) setPlanProgress(line);
-  });
+  const applyPlanProgress = useCallback((data: unknown) => {
+    const line = normalizePlanProgress(data);
+    if (!line) return;
+    if (planProgressHideRef.current != null) {
+      window.clearTimeout(planProgressHideRef.current);
+      planProgressHideRef.current = null;
+    }
+    setPlanProgress(line);
+    if (line.status === 'COMPLETED') {
+      planProgressHideRef.current = window.setTimeout(() => {
+        planProgressHideRef.current = null;
+        setPlanProgress(null);
+      }, PLAN_PROGRESS_COMPLETED_HIDE_MS);
+    }
+  }, []);
 
-  useSocketEvent('plan_progress_update', (data: unknown) => {
-    if (!data || typeof data !== 'object') return;
-    const row = data as Record<string, unknown>;
-    const payload =
-      row.payload && typeof row.payload === 'object'
-        ? (row.payload as Record<string, unknown>)
-        : row;
-    const line = normalizePlanProgress(payload);
-    if (line) setPlanProgress(line);
-  });
+  useEffect(() => {
+    return () => {
+      if (planProgressHideRef.current != null) {
+        window.clearTimeout(planProgressHideRef.current);
+      }
+    };
+  }, []);
+
+  useSocketEvent('plan_progress', applyPlanProgress);
+  useSocketEvent('plan_progress_update', applyPlanProgress);
 
   useSocketEvent('turn_rejected', (data: unknown) => {
     if (!data || typeof data !== 'object') return;

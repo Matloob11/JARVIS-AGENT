@@ -615,7 +615,39 @@ button {
   }
 
   .reasoning-plan-progress {
-    @apply mt-3 rounded-md border border-acc-banner bg-acc-tint-soft px-2 py-1 text-xs text-command-accent;
+    @apply mt-3 space-y-1.5 rounded-md border border-acc-banner bg-acc-tint-soft px-2 py-2 text-xs text-command-accent;
+  }
+
+  .reasoning-plan-progress--failed {
+    @apply border-white/10 bg-white/[0.04] text-command-muted;
+  }
+
+  .reasoning-plan-progress--done {
+    @apply border-acc-banner bg-acc-tint-soft text-command-accent;
+  }
+
+  .reasoning-plan-progress__row {
+    @apply flex items-center justify-between gap-2;
+  }
+
+  .reasoning-plan-progress__label {
+    @apply min-w-0 flex-1 truncate;
+  }
+
+  .reasoning-plan-progress__fraction {
+    @apply shrink-0 font-mono text-[10px] tabular-nums text-command-muted;
+  }
+
+  .reasoning-plan-progress__track {
+    @apply h-1.5 overflow-hidden rounded-full bg-white/[0.06];
+  }
+
+  .reasoning-plan-progress__fill {
+    @apply h-full rounded-full bg-acc-bar-strong transition-[width] duration-300;
+  }
+
+  .reasoning-plan-progress--failed .reasoning-plan-progress__fill {
+    @apply bg-white/25;
   }
 
   .reasoning-step {

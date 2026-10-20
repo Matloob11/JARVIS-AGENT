@@ -49,6 +49,15 @@ export interface NormalizedTasks {
   [key: string]: unknown;
 }
 
+/** C-86 / tool_report_plan_progress → plan_progress(_update). */
+export interface PlanProgressLine {
+  current: number;
+  total: number;
+  action: string;
+  status: string;
+  ts?: number;
+}
+
 /** Meta keys inside settings_sync.settings — never render or send as fields (K-61 v39). */
 export const SETTINGS_META_KEYS = ['saved', 'updated_ts'] as const;
 
@@ -278,4 +287,49 @@ export function normalizeTasks(raw: unknown): NormalizedTasks {
     return { tasks: raw as unknown[] };
   }
   return { tasks: [] };
+}
+
+/**
+ * Accepts flat {current,total,action,status} or wrapped
+ * {type:'plan_progress', payload:{...}} (agent notify shape).
+ * Also accepts step_index/total_steps aliases.
+ */
+export function normalizePlanProgress(raw: unknown): PlanProgressLine | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const row = raw as Record<string, unknown>;
+  const data =
+    row.payload && typeof row.payload === 'object'
+      ? (row.payload as Record<string, unknown>)
+      : row;
+
+  const current =
+    typeof data.current === 'number'
+      ? data.current
+      : typeof data.step_index === 'number'
+        ? data.step_index
+        : typeof data.step === 'number'
+          ? data.step
+          : null;
+  const total =
+    typeof data.total === 'number'
+      ? data.total
+      : typeof data.total_steps === 'number'
+        ? data.total_steps
+        : null;
+  if (current == null || total == null) return null;
+
+  const tsRaw = data.ts ?? data.timestamp;
+  let ts = toEpochMs(tsRaw);
+  if (ts === undefined && typeof tsRaw === 'string' && tsRaw.trim()) {
+    const ms = Date.parse(tsRaw);
+    if (Number.isFinite(ms)) ts = ms;
+  }
+
+  return {
+    current,
+    total,
+    action: String(data.action ?? data.step_action ?? ''),
+    status: String(data.status ?? 'IN_PROGRESS'),
+    ts,
+  };
 }

@@ -5,6 +5,7 @@ import {
   normalizeConfirm,
   normalizeMessage,
   normalizePlan,
+  normalizePlanProgress,
   normalizeSettings,
   normalizeTasks,
   toEpochMs,
@@ -21,8 +22,8 @@ const EVENT_NORMALIZER: Record<string, (raw: unknown) => unknown> = {
   confirm_request: normalizeConfirm,
   confirm_resolved: normalizeConfirm,
   reasoning_update: normalizePlan,
-  plan_progress: normalizePlan,
-  plan_progress_update: normalizePlan,
+  plan_progress: normalizePlanProgress,
+  plan_progress_update: normalizePlanProgress,
   task_sync: normalizeTasks,
   task_notification: raw => normalizeTasks({ tasks: [raw] }),
 };

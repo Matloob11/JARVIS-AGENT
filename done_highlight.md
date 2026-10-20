@@ -2796,3 +2796,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** vitest socketEventMatrix 11 passed
 - **Commit:** (this commit) · **Deploy:** later
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] C-86-UI · plan_progress bar + fixtures · 2026-10-20 19:25 PKT
+- **Kya kiya:** Agent notify shape `{type,payload:{current,total,action,status,timestamp}}`; progress bar 1/3→3/3; COMPLETED 3s baad hide; FAILED calm (red nahi); plan_progress + plan_progress_update dono.
+- **Files:** events.ts normalizePlanProgress, useCommandCenter, SystemTrace, index.css, fixtures, vitest, e2e plan-progress.spec.ts
+- **Verify:** vitest normalize+hook 5 passed; e2e plan-progress 1 passed
+- **Commit:** (this commit) · **Deploy:** later (batch REQ-DEPLOY)
+- **Doosre agent ke liye:** bridge plan_progress route Claude side; UI ready
