@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# X-60 live smoke: owner session cookies only (never commit)
+.env.e2e.local
+*.storage.json
+tests/live/.auth/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

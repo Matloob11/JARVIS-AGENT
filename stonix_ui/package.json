@@ -18,6 +18,8 @@
     "mock:bridge": "node tests/mock-bridge/server.mjs",
     "dev:mock": "cross-env VITE_DEV_BRIDGE=http://127.0.0.1:5199 concurrently -k \"npm run mock:bridge\" \"npm run vite-dev\"",
     "test:e2e": "playwright test --project=chromium",
+    "test:e2e:live": "playwright test -c playwright.live.config.ts",
+    "test:e2e:live:auth": "node tests/live/auth-setup.mjs",
     "test:refdiff": "cross-env VITE_E2E_HOOKS=1 npm run build && playwright test tests/e2e/refdiff.spec.ts --project=chromium --project=gates",
     "test:perf": "playwright test --project=gates tests/e2e/perf.spec.ts",
     "test:visual": "playwright test --project=gates tests/e2e/visual.spec.ts",

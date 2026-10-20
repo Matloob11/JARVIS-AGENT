@@ -2775,3 +2775,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** pytest test_net_guard, test_vps_arg_hooks, test_rpc_hardening, test_vector_encryption: 131 passed; VPS SELFTEST_EXIT=0, LEAKED none
 - **Commit:** (this commit) · **Deploy:** — (VPS par sirf one-off check containers, --rm)
 - **Doosre agent ke liye:** C-129 (data migration) ab C-124 ki wajah se ruka nahi; V4 se pehle sirf 'agent_ctl node update' baqi hai.
+
+### ✅ [cursor] X-60 · Opt-in live smoke suite (VPS) · 2026-10-20 19:15 PKT
+- **Kya kiya:** Playwright live config + suite against jarvis.srv1802669.hstgr.cloud; default skip; JARVIS_LIVE_SMOKE=1 se read-only checks; headed auth-setup storageState (git-ignored); chat ping sirf JARVIS_LIVE_SMOKE_CHAT=1.
+- **Files:** stonix_ui/playwright.live.config.ts, stonix_ui/tests/live/*, stonix_ui/package.json, stonix_ui/.gitignore
+- **Verify:** `npx playwright test -c playwright.live.config.ts --list` → 7 tests; without flag → 7 skipped
+- **Commit:** (this commit) · **Deploy:** no (test-only)
+- **Doosre agent ke liye:** owner ek dafa `npm run test:e2e:live:auth` chala kar session banae; phir `$env:JARVIS_LIVE_SMOKE='1'; npm run test:e2e:live`
