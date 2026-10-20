@@ -464,15 +464,21 @@ def test_the_change_voice_tool_lists_every_voice_and_alias(assistant):  # pylint
     assert "Zubenelgenubi" in description and "verse=Puck" in description
 
 
-def test_a_job_starts_with_the_configured_jarvis_voice():
-    """agent_runner builds the job's RealtimeModel with persona_voice('jarvis') (JARVIS_VOICE_JARVIS); a source-level
-    check like the resume guard's, because importing agent_runner pulls the whole LiveKit CLI stack in."""
+def test_a_job_starts_with_the_configured_jarvis_voice(monkeypatch):
+    """agent_runner builds the job's RealtimeModel with the saved voice (C-54, K-61), whose default with nothing saved is
+    persona_voice('jarvis') (JARVIS_VOICE_JARVIS, C-50); a source-level check like the resume guard's, because
+    importing agent_runner pulls the whole LiveKit CLI stack in (tests/core/test_agent_settings.py runs the entrypoint
+    with a saved voice)."""
+    from src.core.agent_settings import AgentSettings
+
     tree = ast.parse(AGENT_RUNNER.read_text(encoding="utf-8"))
     builds = [node for node in ast.walk(tree)
               if isinstance(node, ast.Call) and getattr(node.func, "attr", None) == "RealtimeModel"]
     assert len(builds) == 1
     voice = next(keyword.value for keyword in builds[0].keywords if keyword.arg == "voice")
-    assert ast.unparse(voice) == "persona_voice('jarvis')"
+    assert ast.unparse(voice) == "job_settings.voice or persona_voice('jarvis')"
+    monkeypatch.setenv("JARVIS_VOICE_JARVIS", "kore")
+    assert AgentSettings().voice == voices.persona_voice("jarvis") == "Kore"  # nothing saved: the configured voice
 
 
 def test_without_a_model_the_assistant_keeps_the_configured_jarvis_voice(assistant, monkeypatch):

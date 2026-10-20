@@ -123,9 +123,10 @@ class PersonaManager:
         """Returns the name of the currently active persona."""
         return "anna" if self._gf_mode_active else "jarvis"
 
-    async def set_persona(self, is_anna: bool) -> None:
+    async def set_persona(self, is_anna: bool, *, voice: str | None = None) -> None:
         """Switches the assistant's persona. C-50: asking for the persona that is active already tells the dashboard
-        again (persona_update), so a stale dashboard or a UI waiting for it never hangs."""
+        again (persona_update), so a stale dashboard or a UI waiting for it never hangs. C-54: voice (a saved or
+        requested Gemini voice) replaces the persona's own voice in the same switch (one reconnect, not two)."""
         if self._gf_mode_active == is_anna:
             announce = getattr(self._assistant, "announce_persona", None)
             if callable(announce):
@@ -133,15 +134,18 @@ class PersonaManager:
             return
 
         self._gf_mode_active = is_anna
-        await self.update_assistant_persona()
+        if voice:
+            await self.update_assistant_persona(voice=voice)
+        else:
+            await self.update_assistant_persona()
 
-    async def update_assistant_persona(self) -> None:
+    async def update_assistant_persona(self, voice: str | None = None) -> None:
         """Applies current persona settings to the assistant. C-49: both personas get the composed instructions
         (every tool protocol included) and the assistant's update_instructions sends them to the live session.
         C-50: the persona's voice goes in the same update; the assistant tells the dashboard (persona_change) once
-        the switch reached the session."""
+        the switch reached the session. C-54: voice, when given, is used instead of the persona's own."""
         instr = build_instructions(self._assistant, self.active_persona_name)
-        voice = persona_voice(self.active_persona_name)  # C-50: JARVIS_VOICE_JARVIS / JARVIS_VOICE_ANNA
+        voice = voice or persona_voice(self.active_persona_name)  # C-50: JARVIS_VOICE_JARVIS / JARVIS_VOICE_ANNA
 
         update_session = getattr(self._assistant, "update_session", None)
         if callable(update_session):

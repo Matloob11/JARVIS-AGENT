@@ -160,6 +160,7 @@ try:
 except (ImportError, ValueError):
     from agent_core import BrainAssistant  # type: ignore
 
+from src.core import agent_settings  # C-54 (K-61); registers settings_update, settings_bootstrap, request_state
 from src.core import gemini_resume_guard
 from src.core.jarvis_runtime import JarvisRuntime
 from src.core.voices import persona_voice  # C-50
@@ -1330,6 +1331,18 @@ def _realtime_model_name() -> str:
     return (os.getenv("JARVIS_REALTIME_MODEL") or "").strip() or DEFAULT_REALTIME_MODEL
 
 
+async def _load_job_settings() -> agent_settings.AgentSettings:
+    """C-54 (K-61): the saved settings a new job starts with, read in a thread (a probe job reads them too but never
+    writes or syncs, K-57). load() gives the defaults for a missing or broken file; anything else that fails gives
+    them too, with one WARNING, because this runs before the job's session exists and an error here would end every
+    job as 'session_failed' (C-54 review)."""
+    try:
+        return await asyncio.to_thread(agent_settings.load)
+    except Exception as exc:  # pylint: disable=broad-exception-caught  # a settings problem never stops a job
+        logger.warning("SETTINGS not loaded (%s); the job starts with the defaults", type(exc).__name__)
+        return agent_settings.AgentSettings()
+
+
 async def entrypoint(ctx: agents.JobContext):
     """Main job entrypoint (C-33 step B): one JarvisRuntime per job (src/core/jarvis_runtime.py).
 
@@ -1411,10 +1424,12 @@ async def entrypoint(ctx: agents.JobContext):
         if not isinstance(city, str) or not city:
             logger.warning("PREWARM_MISS key=%s", "city")
             city = await get_current_city()
+        job_settings = await _load_job_settings()  # C-54 (K-61): this agent's saved settings, else the defaults
         # One RealtimeModel per job (K-69 JARVIS_REALTIME_MODEL): the assistant (an Agent) holds it as its llm, and
         # every rebuilt AgentSession opens a fresh realtime session from it.
         llm_model = google.realtime.RealtimeModel(
-            voice=persona_voice("jarvis"),  # C-50: JARVIS_VOICE_JARVIS, else Charon (a job starts as JARVIS)
+            # C-54: the saved voice, else the saved persona's (C-50: JARVIS_VOICE_JARVIS, else Charon)
+            voice=job_settings.voice or persona_voice("jarvis"),
             model=_realtime_model_name(),
         )
         # 2026-10-06: after a network blip the plugin replayed a stale session-resumption handle on every reconnect
@@ -1461,6 +1476,11 @@ async def entrypoint(ctx: agents.JobContext):
         job.update(assistant=assistant, router=router, model=llm_model, vad=vad, plugin_manager=plugin_manager,
                    request_end=_request_end)
         runtime.assistant, runtime.router = assistant, router
+        # C-54 (K-61): the job's settings service (ui_command settings_update / settings_bootstrap / request_state and
+        # the legacy commands reach it as runtime.settings); the saved wake word and persona and the audio-out policy
+        # apply here, before session.start (instructions and the model's voice are stored for the session)
+        runtime.settings = agent_settings.SettingsService(runtime, job_settings, probe=probe)
+        await runtime.settings.apply_at_start()
 
     async def _session_factory() -> Any:
         if job["assistant"] is None:
@@ -1563,6 +1583,9 @@ async def entrypoint(ctx: agents.JobContext):
 
     async def _end_runtime_job(reason: str) -> None:
         """The runtime's end_job hook: the job's own leftovers, then the C-23 end block (skipped on cancel)."""
+        settings = getattr(runtime, "settings", None)
+        if settings is not None:  # C-54: a voice, persona or wake word a tool changed survives the restart
+            await settings.persist_live_state()
         router = job["router"]
         if router is not None:
             router.detach()  # typed chat gets the offline answer until the next job attaches

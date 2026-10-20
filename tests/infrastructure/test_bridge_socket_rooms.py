@@ -410,6 +410,28 @@ async def test_an_agent_that_connects_while_paused_gets_pause_agent(owner):
     assert ("agent_command", PAUSE_COMMAND, "sid-canary") not in owner.emitted
 
 
+async def test_an_owner_agent_gets_the_stored_settings_as_settings_bootstrap(owner):
+    """C-54 (K-46): an agent of the owner's room gets the stored settings when it connects (agent_command
+    settings_bootstrap, to its own socket; the agent applies them as a validated update); nothing while none are
+    stored, nothing for another room's peer, and a paused job gets only its pause_agent."""
+    manager = owner.make_owner()
+    await _connect_agent(owner, "sid-first")
+    assert [data for event, data, _room in owner.emitted if event == "agent_command"] == []  # nothing stored yet
+    await owner.store.merge_settings({"voice": "Puck", "wake_word": False}, by="agent")
+    owner.emitted.clear()
+    await _connect_agent(owner, "sid-agent")
+    bootstrap = {"type": "settings_bootstrap", "payload": {"voice": "Puck", "wake_word": False}}
+    assert [(data, room) for event, data, room in owner.emitted if event == "agent_command"] == [
+        (bootstrap, "sid-agent")]
+    owner.emitted.clear()
+    await _connect_agent(owner, "sid-canary", room="canary-room")
+    assert [data for event, data, _room in owner.emitted if event == "agent_command"] == []
+    await manager.set_paused(True, by="ui")
+    owner.emitted.clear()
+    await _connect_agent(owner, "sid-paused")
+    assert [data for event, data, _room in owner.emitted if event == "agent_command"] == [PAUSE_COMMAND]
+
+
 async def test_observe_mode_refuses_pause_agent_and_start_only_heals(owner):
     """R6/LS-1/SEC-2: in observe mode nothing would keep a paused agent out or bring it back on Wake, so pause_agent
     is refused and changes nothing (no flag, nothing forwarded); start is forwarded as before and may only heal an

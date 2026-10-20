@@ -816,6 +816,35 @@ async def test_stored_settings_appear_in_init_state(bridge):
     assert (await _connect_ui(bridge, "sid-1"))["settings"] == {"voice": "Charon"}
 
 
+async def test_the_agents_settings_sync_reaches_the_ui_and_is_stored(bridge):
+    """C-54 (K-40/K-46/K-61): the agent's settings_sync goes to room 'ui' as sent (it was an UNKNOWN EVENT before), and
+    its settings object is stored (updated_by 'agent'): a reloaded UI gets it in init_state.settings and the next agent
+    gets it as settings_bootstrap."""
+    payload = {"settings": {"voice": "Puck", "wake_word": False, "muted": False, "updated_ts": T0},
+               "applied": {"voice": "applied"}, "errors": {}, "pending_restart": [], "restart_required": [],
+               "enforced": {"wake_word": False, "voice_id": False}, "available_voices": ["Puck"],
+               "available_languages": ["auto"], "ts": T0}
+    resp = await _notify(bridge.module, "settings_sync", payload)
+
+    assert resp.status_code == 200 and resp.json() == {"status": "ok"}
+    assert _events(bridge, "settings_sync") == [payload]
+    assert await bridge.store.get_settings() == payload["settings"]
+    assert _query(bridge.path, "SELECT DISTINCT updated_by FROM settings") == [("agent",)]
+    assert (await _connect_ui(bridge, "sid-ui"))["settings"] == payload["settings"]
+    # a flat settings object (K-02) is stored without the keys that describe the update
+    await _notify(bridge.module, "settings_sync", {"persona": "anna", "applied": True, "errors": {}, "ts": T0})
+    stored_now = await bridge.store.get_settings()
+    assert stored_now["persona"] == "anna" and stored_now["voice"] == "Puck" and "applied" not in stored_now
+    # settings.saved (the fields the agent set; its other values are defaults) is replaced by each settings_sync, never
+    # merged: the next settings_bootstrap names only what the agent saved last
+    await _notify(bridge.module, "settings_sync", {"settings": {"voice": "Puck", "saved": ["voice", "wake_word"],
+                                                                "updated_ts": T0 + 1}})
+    await _notify(bridge.module, "settings_sync", {"settings": {"voice": "Aoede", "saved": ["persona"],
+                                                                "updated_ts": T0 + 2}})
+    stored_now = await bridge.store.get_settings()
+    assert (stored_now["saved"], stored_now["voice"], stored_now["updated_ts"]) == (["persona"], "Aoede", T0 + 2)
+
+
 async def test_unknown_socket_token_is_refused_without_init_state(bridge):
     assert await bridge.module.handle_connect("sid-x", {"QUERY_STRING": "token=wrong"}, None) is False
     assert await bridge.module.handle_connect("sid-y", {}, {"token": "wrong"}) is False

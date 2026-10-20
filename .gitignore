@@ -16,6 +16,7 @@ secrets.json
 # Personal/private artifacts
 CV/
 data/identity/
+data/settings/
 conversations/
 *.wav
 # Generated UI sounds are not private (X-02 chime); recordings elsewhere stay ignored.

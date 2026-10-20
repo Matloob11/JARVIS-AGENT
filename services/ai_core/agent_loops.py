@@ -370,10 +370,12 @@ async def open_job_artifact(payload: Any) -> bool:
 
 # K-03: types the bridge forwards (ui_bridge.UI_COMMAND_TYPES) that no agent handler takes yet. They are ignored at
 # DEBUG instead of logging 'Unknown UI command' to the dashboard, until a module registers one (the registry wins).
-# shutdown_agent has its handler since C-51.
+# shutdown_agent has its handler since C-51; settings_update, request_state and the bridge's own settings_bootstrap
+# have theirs in src/core/agent_settings.py since C-54 (listed here for a process that never imported it).
 FORWARDED_UNHANDLED: frozenset[str] = frozenset({
     "start", "settings_update", "desktop_stop", "notification_ack", "task_cancel",
     "tasks_refresh", "voice_take_over", "voice_enroll", "voice_enroll_start", "feedback", "request_state",
+    "settings_bootstrap",
 })
 
 
@@ -395,22 +397,52 @@ def _spawn_for(assistant: Any, coro: Any) -> asyncio.Task[Any]:
     return task
 
 
+def _settings_service(ctx: CommandContext) -> Any:
+    """C-54 (K-61): the job's settings service (src/core/agent_settings, runtime.settings), else None (an old
+    integration or a test without a runtime: the legacy path)."""
+    from src.core.agent_settings import settings_service_of  # pylint: disable=import-outside-toplevel
+    return settings_service_of(ctx)
+
+
+def _sync_settings_soon(ctx: CommandContext, reason: str, applied: dict[str, str] | None = None) -> None:
+    """C-54: settings_sync from the job's settings service, in its own task (the handler and the connect stay quick)."""
+    service = _settings_service(ctx)
+    if service is not None:
+        _spawn_for(ctx.assistant, service.sync(reason=reason, applied=applied))
+
+
 @register_ui_command("mute")
 def _cmd_mute(_payload: Any, ctx: CommandContext) -> None:
     ctx.assistant.set_muted(True)
     logger.info("🔇 Agent MUTED via UI.")
+    _sync_settings_soon(ctx, "mute", {"muted": "applied"})  # C-54 (K-61): mute also produces settings_sync
 
 
 @register_ui_command("unmute")
 def _cmd_unmute(_payload: Any, ctx: CommandContext) -> None:
     ctx.assistant.set_muted(False)
     logger.info("🔊 Agent UNMUTED via UI.")
+    _sync_settings_soon(ctx, "unmute", {"muted": "applied"})
 
 
 @register_ui_command("wake_word_toggle")
-def _cmd_wake_word_toggle(payload: Any, ctx: CommandContext) -> None:
+async def _cmd_wake_word_toggle(payload: Any, ctx: CommandContext) -> None:
+    # K-03: a bool is the mode and no payload (None) toggles it. Any other payload (the string 'false', a number, an
+    # object) is no mode: it reaches the settings service's validation as it came (errors.wake_word) and changes
+    # nothing (C-54 review: it toggled, and the toggle was saved).
+    service = _settings_service(ctx)
+    if payload is not None and not isinstance(payload, bool):
+        logger.info("🎤 wake_word_toggle without true or false (%s): nothing changes", type(payload).__name__)
+        if service is not None:
+            await service.update({"wake_word": payload}, source="wake_word_toggle")
+        return
     new_mode = payload if isinstance(payload, bool) else (not ctx.assistant.wake_word_mode)
-    ctx.assistant.set_wake_word_mode(new_mode)
+    if service is not None:
+        # C-54 (K-61): through the settings service: set_wake_word_mode (wake_word_sync still goes out), saved, and
+        # settings_sync
+        await service.update({"wake_word": new_mode}, source="wake_word_toggle")
+    else:
+        ctx.assistant.set_wake_word_mode(new_mode)
     logger.info("🎤 Wake word mode set to %s via UI.", new_mode)
 
 
@@ -450,10 +482,33 @@ def _cmd_pause_agent(payload: Any, ctx: CommandContext) -> None:
     logger.warning("PAUSE: the owner paused the agent; this job ends (paused_by_owner)")
 
 
+_LEGACY_PERSONAS = ("jarvis", "anna")
+
+
+def _legacy_persona(payload: Any) -> tuple[str | None, Any]:
+    """persona_change's payload (K-03: 'jarvis' | 'anna'; an old client may send another case or {persona: ...}):
+    (the persona, the value as sent). The persona is None for anything that is not 'jarvis' or 'anna'."""
+    value = payload.get("persona") if isinstance(payload, dict) else payload
+    text = value.strip().lower() if isinstance(value, str) else None
+    return (text if text in _LEGACY_PERSONAS else None), value
+
+
 @register_ui_command("persona_change")
 async def _cmd_persona_change(payload: Any, ctx: CommandContext) -> None:
-    logger.info("🎭 Switching persona to: %s", payload)
-    await ctx.assistant.tool_toggle_gf_mode(payload == "anna")
+    persona, value = _legacy_persona(payload)
+    if persona is not None:
+        logger.info("🎭 Switching persona to: %s", persona)
+    else:
+        logger.info("🎭 persona_change without 'jarvis' or 'anna' (%s): nothing changes", type(payload).__name__)
+    service = _settings_service(ctx)
+    if service is not None:
+        # C-54 (K-61): through the settings service (persona_manager.set_persona, saved, settings_sync). Anything but
+        # 'jarvis' or 'anna' reaches its validation as it came: errors.persona, nothing changes (C-54 review: every
+        # payload but the exact 'anna' was JARVIS, so a malformed one switched ANNA off and dropped her saved voice)
+        await service.update({"persona": persona if persona is not None else value}, source="persona_change")
+        return
+    if persona is not None:
+        await ctx.assistant.tool_toggle_gf_mode(persona == "anna")
 
 
 @register_ui_command("clear_memory")
@@ -771,6 +826,7 @@ class UIBridgeListener:
         self._is_reconnecting = False
         logger.info("✅ UI Bridge Connected. (auth %s)", self._auth_kind)
         wake_retry_queue()  # the bridge is back: send the notifies that wait for a retry now
+        _sync_settings_soon(self._ctx, "bridge_connect")  # C-54 (K-61): the dashboard gets this job's settings
 
     async def on_disconnect(self) -> None:
         logger.warning("❌ UI Bridge Disconnected. Retrying...")

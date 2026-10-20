@@ -192,6 +192,9 @@ class BrainAssistant(Agent):
         self._pending_voice: str | None = None
         # C-50: the persona this job last sent the dashboard (persona_change); None until the job's first announce
         self._notified_persona: str | None = None
+        # C-54 (K-61): set by the job's settings service (agent_settings.SettingsService.note_live_change); a tool or a
+        # spoken wake word that changes persona, voice or wake word calls it, so the change is saved and synced at once
+        self.on_live_settings_change: Any = None
         # C-23 (K-60 v9): set by request_end; the job's entrypoint waits on it and then ends the job. Made with the
         # assistant, so a pause_agent that arrives before the entrypoint waits is never lost.
         self._stop_event: asyncio.Event = asyncio.Event()
@@ -248,15 +251,21 @@ class BrainAssistant(Agent):
                                        execution_timeout=ANALYZE_SURROUNDINGS_TIMEOUT_S)
 
         # --- Wrap internal tools within this scope to capture 'self' ---
+        # C-54 (K-61): each of these three tools tells the job's settings service afterwards (_live_settings_changed),
+        # so a voice, persona or wake word the model changed is saved and reaches the bridge's copy at once
         @resilient_tool("set_wake_word_mode")
         async def wrap_set_wake_word_mode(active: bool) -> dict[str, Any]:
             """Toggle the strict wake word enforcement mode."""
-            return await self.tool_set_wake_word_mode(active)
+            result = await self.tool_set_wake_word_mode(active)
+            self._live_settings_changed("set_wake_word_mode")
+            return result
 
         @resilient_tool("change_voice")
         async def wrap_change_voice(voice_name: str) -> dict[str, Any]:
             """Change the AI's speaking voice (from the next reply)."""
-            return await self.tool_change_voice(voice_name)
+            result = await self.tool_change_voice(voice_name)
+            self._live_settings_changed("change_voice")
+            return result
 
         # C-50: the model sees every real Gemini voice and the OpenAI-style aliases
         wrap_change_voice.__doc__ = f"Change the AI's speaking voice (from the next reply). {voices_help()}"
@@ -264,7 +273,9 @@ class BrainAssistant(Agent):
         @resilient_tool("toggle_persona")
         async def wrap_toggle_gf_mode(active: bool) -> dict[str, Any]:
             """Toggle between JARVIS (Butler) and ANNA (Persona) modes."""
-            return await self.persona_manager.set_persona(active)
+            result = await self.persona_manager.set_persona(active)
+            self._live_settings_changed("toggle_persona")
+            return result
 
         @resilient_tool("analyze_surroundings")
         async def wrap_analyze_surroundings(query: str = "Describe the current camera view in detail.") -> dict[str, Any]:
@@ -688,10 +699,13 @@ class BrainAssistant(Agent):
         pauses and restarts it."""
         self._audio_tap = tap
 
-    def set_wake_word_mode(self, active: bool) -> None:
-        """Toggle the strict wake word enforcement mode."""
+    def set_wake_word_mode(self, active: bool, *, refresh: bool = True) -> None:
+        """Toggle the strict wake word enforcement mode; wake_word_sync tells the dashboard. C-54: refresh=False leaves
+        the instructions to the caller (a job's start composes them once, with the saved persona, so the dashboard is
+        told only the persona the job runs as)."""
         self._wake_word_mode = active
-        self._run_back(self.refresh_instructions())  # C-49: the prompt follows the mode
+        if refresh:
+            self._run_back(self.refresh_instructions())  # C-49: the prompt follows the mode
         status = "active" if active else "disabled"
         logger.info("Wake word mode set to: %s", status)
         self._run_back(self.bridge_notifier.notify_wake_word(active))
@@ -917,11 +931,27 @@ class BrainAssistant(Agent):
             return "Sir, main madad karne ke liye ready hun."
 
     async def _handle_persona_switch(self, is_anna, is_jarvis):
-        """Logic to switch personas dynamically."""
+        """Logic to switch personas dynamically. C-54: a spoken switch is saved and synced at once (the settings
+        service's hook), like the toggle_persona tool."""
         if is_anna and not self.persona_manager.is_anna:
             await self.persona_manager.set_persona(True)
+            self._live_settings_changed("wake_word_persona")
         elif is_jarvis and self.persona_manager.is_anna:
             await self.persona_manager.set_persona(False)
+            self._live_settings_changed("wake_word_persona")
+
+    def _live_settings_changed(self, reason: str) -> None:
+        """C-54 (K-61): a tool or a spoken wake word changed the persona, voice or wake word of the live session only.
+        The job's settings service (on_live_settings_change, src/core/agent_settings) saves it and sends settings_sync
+        in a task of its own, so the bridge's copy never falls behind the live state and a later settings_bootstrap
+        cannot undo it. Nothing without a service; never raises."""
+        hook = getattr(self, "on_live_settings_change", None)
+        if not callable(hook):
+            return
+        try:
+            hook(reason)  # pylint: disable=not-callable  # checked just above
+        except Exception as e:  # pylint: disable=broad-exception-caught  # never breaks the tool or the turn
+            logger.debug("SETTINGS live change not passed on (%s)", type(e).__name__)
 
     def _extract_text_from_message(self, message: Any) -> str:
         """Safely extracts text."""

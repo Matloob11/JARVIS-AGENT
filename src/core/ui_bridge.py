@@ -791,6 +791,36 @@ async def _route_job_event(payload: Any) -> None:
         await emit_ui("tool_progress", remember_job(event))
 
 
+# settings_sync keys that describe the update, not a setting (K-02 / K-61): never stored as settings
+_SETTINGS_SYNC_META = frozenset({"applied", "errors", "pending", "pending_restart", "restart_required", "enforced",
+                                 "available_voices", "available_languages", "guarded_tools", "ts"})
+
+
+async def _store_agent_settings(payload: Any) -> None:
+    """C-54 (K-46/K-61): the settings object of the agent's settings_sync ({settings, ...}, or a flat one) merged into
+    the settings table (updated_by 'agent'): init_state.settings shows it and the next settings_bootstrap carries it."""
+    if not isinstance(payload, Mapping):
+        return
+    settings = payload.get("settings")
+    if not isinstance(settings, Mapping):
+        settings = {key: value for key, value in payload.items() if key not in _SETTINGS_SYNC_META}
+    if settings:
+        await stored("settings", store.merge_settings(settings, by="agent"), {})
+
+
+async def _send_settings_bootstrap(sid: str) -> None:
+    """C-54 (K-46): an agent of the owner's room gets the stored settings when it connects, as agent_command
+    settings_bootstrap; the agent takes them as a validated update (never a blind overwrite). Nothing while none are
+    stored."""
+    try:
+        settings = await store.get_settings()
+    except Exception:  # pylint: disable=broad-exception-caught  # a failing store never blocks the connect
+        _log_store_error("settings read")
+        return
+    if isinstance(settings, dict) and settings:
+        await sio.emit("agent_command", {"type": "settings_bootstrap", "payload": settings}, to=sid)
+
+
 @app.post("/notify")
 async def notify_bridge(request: Request) -> Any:
     """
@@ -926,6 +956,9 @@ async def notify_bridge(request: Request) -> Any:
     elif event_type == "memory_cleared":  # C-44 (K-58): the bridge forgets its stored short-term memories too
         await stored("memory clear", store.delete_events(EVENT_MEMORY), 0)
         await emit_ui("memory_cleared", payload)
+    elif event_type == "settings_sync":  # C-54 (K-46/K-61): stored for init_state and settings_bootstrap, then shown
+        await _store_agent_settings(payload)
+        await emit_ui("settings_sync", payload)
     elif event_type == "sim_data_result":
         records: list[Any] = payload.get("records", []) if isinstance(payload, dict) else []
         query_masked: str = payload.get("phone", "") if isinstance(payload, dict) else ""
@@ -1962,6 +1995,8 @@ async def handle_connect(sid: str, environ: dict[str, Any], auth: dict[str, Any]
             if rooms.paused and rooms.mode != bridge_rooms.MODE_OBSERVE:
                 # K-38 v9: a job that starts while the owner paused JARVIS ends at once
                 await sio.emit("agent_command", dict(bridge_rooms.PAUSE_COMMAND), to=sid)
+            else:
+                await _send_settings_bootstrap(sid)  # C-54 (K-46): the stored settings, as a validated update
             rooms.kick("agent_connect")
             await _publish_agent_status()
         return True
