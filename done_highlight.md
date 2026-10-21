@@ -2831,3 +2831,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** full suite 5634 passed, 45 skipped; live: MEMORY_SUMMARY injected n=9 chars=634 persona=jarvis session start se pehle; "pichli dafa" ka jawab pichla topic (math sawal) bataya; typed 4 mein se 3 ka jawab aaya (ek Gemini flake)
 - **Commit:** `1a29099` · **Deploy:** PC worker restart 12:17 PKT 🔁
 - **Doosre agent ke liye:** UI mein kuch nahi badla. Khula: LOOP_LAG max 1806 ms worker start ke pehle ~35 s mein (shayad torch DLL import GIL pakadta hai); follow-up.
+
+### ✅ 🔁 [claude] RESCUE live check · Agent worker restart (agent_ctl) · 2026-10-21 13:15 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 1992) band, naya pid 37460; health 200 (44.8 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 13:15 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] RESCUE (C-50 escalation) · Typed message ka jawab na bane to fresh restart + dobara bhejna · 2026-10-21 13:25 PKT
+- **Kya kiya:** Typed message ka rescue bhi jawab na laye to router ek dafa Gemini session fresh restart karta hai (safe point par, job mein ek minute mein ek restart) aur message ek dafa dobara bhejta hai; phir bhi na bane to 12 s grace ke baad ek Roman Urdu note (source 'system', turn_id), taake der se aane wala jawab note ke saath na takraye. 30 min idle ke baad typed message se pehle fresh restart; typed messages ek ek karke order mein jaate hain; stop ya C-119 handled message waiting message ko 'stopped' kar deta hai, aawaz ka purana transcript nahi. Contracts v46 (K-59).
+- **Files:** `src/core/conversation_router.py`, `src/core/gemini_resume_guard.py`, `tests/core/test_conversation_router.py`, `tests/unit/test_gemini_resume_guard.py`, `docs/CONTRACTS.md`, `plan.md`
+- **Verify:** full suite 5672 passed (1 desktop clock timing test load ke neeche fail, akele 3/3 aur poori file 42 passed); live: restart ke baad 14/14 typed sawalon ka jawab (pehla rescue se 15 s mein, baqi 2-5 s), phir 4/4 aur
+- **Commit:** `09b5f32` · **Deploy:** PC worker restart 13:15 PKT 🔁
+- **Doosre agent ke liye:** note ka shape K-59 v46 mein hai (Cursor prompt ka B4). Pata chala: naye Gemini session ka pehla turn 10-15 s mein shuru hota hai (bada system prompt + 89 tools; voice link ki wajah se nahi, test kiya), baad wale 2-3 s; follow-up: job start par session warm-up. LOOP_LAG 2.8 s session.start ke dauran hai, vector ke dauran nahi (label gumraah karta hai).
