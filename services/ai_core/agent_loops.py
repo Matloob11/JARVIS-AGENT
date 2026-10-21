@@ -681,6 +681,50 @@ async def _cmd_tasks_refresh(_payload: Any, _ctx: CommandContext) -> None:
     logger.info("TASKS refresh via UI: %s", await _publish_task_list_logged())
 
 
+# C-125 (K-77 ladder step 1): jarvis-agent-svc asks the live job, through the bridge's agent_command 'announce', to
+# show and speak a due reminder or task. Only the bridge sends it (svc_deliver; never a UI command). The job answers
+# with notify announce_result {id, delivered, reason?}: delivered only while a participant is linked to the voice
+# session (somebody is in the room); else 'no_participant', and the svc goes on to the laptop. Ids, never text, are
+# logged. The PC brain never gets it (agent-svc is in standby there).
+ANNOUNCE_TEXT_MAX = 1000
+ANNOUNCE_KINDS = ("reminder", "task")
+
+
+def _announce_linked(ctx: CommandContext) -> bool:
+    voice_link = getattr(ctx.runtime, "voice_link", None)
+    linked = getattr(voice_link, "linked_identity", None)
+    if not callable(linked):
+        return False
+    try:
+        return linked() is not None
+    except Exception:  # pylint: disable=broad-exception-caught  # a broken link is no participant
+        return False
+
+
+@register_ui_command("announce")
+async def _cmd_announce(payload: Any, ctx: CommandContext) -> None:
+    from services.utils import jarvis_announcer  # pylint: disable=import-outside-toplevel
+
+    data = payload if isinstance(payload, dict) else {}
+    attempt_id, text = data.get("id"), data.get("text")
+    if not (isinstance(attempt_id, str) and 0 < len(attempt_id) <= 128 and attempt_id.isprintable()):
+        logger.debug("announce without a usable id ignored")
+        return
+    clean = " ".join(str(text or "").split())[:ANNOUNCE_TEXT_MAX]
+    if not clean:
+        await notify_event("announce_result", {"id": attempt_id, "delivered": False, "reason": "bad_text"})
+        return
+    kind = data.get("kind") if data.get("kind") in ANNOUNCE_KINDS else "reminder"
+    if not _announce_linked(ctx):
+        logger.info("ANNOUNCE %s not delivered: no participant in the room", attempt_id)
+        await notify_event("announce_result", {"id": attempt_id, "delivered": False, "reason": "no_participant"})
+        return
+    label = "Reminder" if kind == "reminder" else "Scheduled task"
+    await jarvis_announcer.announce(f"{label}: {clean}", priority="high", kind=kind)
+    logger.info("ANNOUNCE %s delivered (%s)", attempt_id, kind)
+    await notify_event("announce_result", {"id": attempt_id, "delivered": True})
+
+
 class UIBridgeListener:
     """The job's Socket.IO link to the UI bridge (K-38): one AsyncClient per job, commands through the registry
     (C-34, K-60) with the (type, id) dedupe, and aclose() ends it with the job (no reconnect afterwards)."""

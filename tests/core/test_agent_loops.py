@@ -753,3 +753,53 @@ def test_each_job_gets_its_own_client(monkeypatch):
     monkeypatch.setattr(agent_loops.socketio, "AsyncClient", lambda **_k: clients.append(MagicMock()) or clients[-1])
     first, second = agent_loops.UIBridgeListener(MagicMock()), agent_loops.UIBridgeListener(MagicMock())
     assert first.sio is clients[0] and second.sio is clients[1] and first.sio is not second.sio
+
+
+# ---------------------------------------------------------------- C-125 (K-77 step 1): agent_command 'announce'
+
+
+def _announce_ctx(linked: str | None) -> Any:
+    voice_link = SimpleNamespace(linked_identity=lambda: linked)
+    return agent_loops.CommandContext(assistant=MagicMock(), runtime=SimpleNamespace(voice_link=voice_link))
+
+
+@pytest.mark.asyncio
+async def test_announce_with_a_linked_participant_is_shown_spoken_and_reported(monkeypatch):
+    from services.utils import jarvis_announcer
+    from services.utils.ui_command_registry import reset_dedupe
+
+    reset_dedupe()
+    announced, results = [], []
+    monkeypatch.setattr(jarvis_announcer, "announce",
+                        AsyncMock(side_effect=lambda text, **kw: announced.append((text, kw))))
+    monkeypatch.setattr(agent_loops, "notify_event", AsyncMock(side_effect=lambda t, p: results.append((t, p))))
+    payload = {"id": "r:rem_1:ab#a1", "text": " pani\n peena ", "kind": "reminder"}
+    assert await agent_loops.dispatch("announce", payload, _announce_ctx("owner-1a2b3c4d")) is True
+    assert announced == [("Reminder: pani peena", {"priority": "high", "kind": "reminder"})]
+    assert results == [("announce_result", {"id": "r:rem_1:ab#a1", "delivered": True})]
+
+
+@pytest.mark.asyncio
+async def test_announce_without_a_participant_reports_no_participant(monkeypatch):
+    from services.utils import jarvis_announcer
+    from services.utils.ui_command_registry import reset_dedupe
+
+    reset_dedupe()
+    results = []
+    monkeypatch.setattr(jarvis_announcer, "announce", AsyncMock(side_effect=AssertionError("spoken to nobody")))
+    monkeypatch.setattr(agent_loops, "notify_event", AsyncMock(side_effect=lambda t, p: results.append((t, p))))
+    await agent_loops.dispatch("announce", {"id": "t:7:aa#a1", "text": "x", "kind": "task"}, _announce_ctx(None))
+    await agent_loops.dispatch("announce", {"id": "t:7:aa#a2", "text": "x"}, agent_loops.CommandContext())
+    await agent_loops.dispatch("announce", {"id": "", "text": "x"}, _announce_ctx("owner-1"))
+    await agent_loops.dispatch("announce", {"id": "t:7:aa#a3", "text": "  "}, _announce_ctx("owner-1"))
+    assert results == [
+        ("announce_result", {"id": "t:7:aa#a1", "delivered": False, "reason": "no_participant"}),
+        ("announce_result", {"id": "t:7:aa#a2", "delivered": False, "reason": "no_participant"}),
+        ("announce_result", {"id": "t:7:aa#a3", "delivered": False, "reason": "bad_text"}),
+    ]
+
+
+def test_announce_results_are_retried_by_id():
+    assert "announce_result" in jarvis_bridge.CRITICAL_TYPES
+    assert jarvis_bridge._idempotent("announce_result", {"id": "r:1#a1"})
+    assert not jarvis_bridge._idempotent("announce_result", {})

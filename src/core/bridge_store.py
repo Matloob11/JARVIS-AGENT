@@ -77,6 +77,9 @@ KV_NODE_VITALS = "desktop_vitals_pc"      # the last vitals_pc notice, as emitte
 KV_NODE_STATE = "desktop_state"           # {mode, locked, panic, ts}
 KV_NODE_POWER = "desktop_power"           # {state, ts}
 KV_NODE_ID = "desktop_node_id"            # str: a different node_id raises the new-node alert
+# C-125 (K-77): the live job's announce results for agent-svc ({attempt id: {delivered, reason?, ts}}, at most 1 h
+# old and 500 entries), kept across a bridge restart so a delivered announce is never spoken on the laptop as well.
+KV_SVC_ANNOUNCE = "svc_announce_results"
 
 SEEN_DESKTOP = "desktop"  # a 24 h scope; K-70 envelope ids live in the relay's own desktop_seen.db (C-116)
 SEEN_NOTIFY = "notify"    # C-NOTIFY-1 nonces

@@ -9,6 +9,7 @@ the live bridge or a real env file, and no real secret is read or printed.
 from __future__ import annotations
 
 import asyncio
+import collections
 import hashlib
 import hmac
 import importlib
@@ -16,6 +17,7 @@ import json
 import logging
 import os
 import secrets
+import sqlite3
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -880,3 +882,308 @@ def test_compose_runs_the_bridge_role_with_env_only_origins():
         "/vortex", "1", "/app/data/bridge.db")
     assert "UI_BRIDGE_URL" not in env
     assert "187.127.123.235" not in json.dumps(env)
+
+
+# ---------------------------------------------------------------- C-125 (K-77): agent-svc's delivery ladder
+
+SVC_TEXT = "PRIVATE-REMINDER-TEXT-5519"
+
+
+@pytest.fixture
+def svc_bridge(bridge, monkeypatch):
+    """The bridge fixture with no sockets, no announce results (none merged in from the kv yet) and a fresh UI
+    connect counter."""
+    monkeypatch.setattr(bridge.module, "_clients", {})
+    monkeypatch.setattr(bridge.module, "_announce_results", collections.OrderedDict())
+    monkeypatch.setattr(bridge.module, "_announce_results_loaded", False)
+    monkeypatch.setattr(bridge.module, "_ui_connects", 0)
+    return bridge
+
+
+def _restart_bridge(ns: Any, monkeypatch: Any) -> None:
+    """A bridge restart as the svc sees it: the process memory (announce results, connect counter, boot id) starts
+    again, bridge.db stays."""
+    monkeypatch.setattr(ns.module, "_announce_results", collections.OrderedDict())
+    monkeypatch.setattr(ns.module, "_announce_results_loaded", False)
+    monkeypatch.setattr(ns.module, "_ui_connects", 0)
+    monkeypatch.setattr(ns.module, "_SVC_BOOT_ID", secrets.token_hex(8))
+
+
+def _add_sockets(ns: Any, *, ui: int = 0, agents: int = 0, other_room: int = 0) -> None:
+    module = ns.module
+    for n in range(ui):
+        module._clients[f"ui-{n}"] = module.SocketClient(role="ui", ip="127.0.0.1")
+    for n in range(agents):
+        module._clients[f"agent-{n}"] = module.SocketClient(role="agent", ip="10.0.0.5", room=module._owner_room(),
+                                                            job_id=f"job-{n}")
+    for n in range(other_room):
+        module._clients[f"canary-{n}"] = module.SocketClient(role="agent", ip="10.0.0.6", room="jarvis-canary-1",
+                                                             job_id=f"canary-{n}")
+
+
+async def _svc_notify(ns: Any, event_type: str, payload: Any) -> dict[str, Any]:
+    raw = _body(event_type, payload)
+    resp = await _post(ns, raw, _agent_headers(raw))
+    assert resp.status_code == 200
+    return resp.json()
+
+
+async def test_step_3_stores_reminder_due_until_the_ui_acknowledges_it(svc_bridge):
+    _add_sockets(svc_bridge, ui=1)
+    note = {"step": "notify", "id": "r:rem_1:ab12cd34", "description": f"  {SVC_TEXT}\n", "due_at": 1760000000.0,
+            "source": "reminder", "kind": "reminder", "extra": "dropped"}
+    answer = await _svc_notify(svc_bridge, "svc_deliver", note)
+    assert answer == {"status": "ok", "stored": "new", "acked": False, "ui_clients": 1}
+    [(event, data, room)] = svc_bridge.emitted
+    assert (event, room) == ("reminder_due", "ui") and data["description"] == SVC_TEXT
+    assert set(data) == {"id", "description", "due_at", "source", "kind", "spoken", "ts"} and data["spoken"] is False
+    assert [row["id"] for row in await svc_bridge.store.list_notifications()] == ["r:rem_1:ab12cd34"]
+
+    again = await _svc_notify(svc_bridge, "svc_deliver", note)  # agent-svc's retry on a UI connect: emitted again
+    assert again["stored"] == "exists" and len(svc_bridge.emitted) == 2
+    poll = await _svc_notify(svc_bridge, "svc_poll", {"ids": ["r:rem_1:ab12cd34"]})
+    assert poll["acks"] == {}
+
+    await svc_bridge.module._ack_notification({"id": "r:rem_1:ab12cd34"})  # ui_command notification_ack
+    poll = await _svc_notify(svc_bridge, "svc_poll", {"ids": ["r:rem_1:ab12cd34", "unknown"]})
+    assert poll == {"status": "ok", "boot": svc_bridge.module._SVC_BOOT_ID, "ui_clients": 1, "ui_connects": 0,
+                    "agents": 0, "acks": {"r:rem_1:ab12cd34": {"by": "ui", "delivered": True}}}
+    acked = await _svc_notify(svc_bridge, "svc_deliver", note)
+    assert acked["acked"] is True and len(svc_bridge.emitted) == 2  # never shown again once acknowledged
+    assert await svc_bridge.store.list_notifications() == []
+
+
+async def test_a_bad_svc_delivery_is_rejected(svc_bridge):
+    for payload in ({"step": "notify", "id": "x"}, {"step": "notify", "description": "x"},
+                    {"step": "announce", "id": "x", "text": ""}, {"step": "other"}, "junk"):
+        answer = await _svc_notify(svc_bridge, "svc_deliver", payload)
+        assert answer["status"] == "rejected"
+    assert svc_bridge.emitted == []
+
+
+async def test_step_1_announce_goes_only_to_owner_room_agents_and_the_result_reaches_the_svc(svc_bridge):
+    _add_sockets(svc_bridge, other_room=1)
+    announce = {"step": "announce", "id": "r:rem_1:ab12cd34#a1", "text": SVC_TEXT, "kind": "reminder"}
+    assert await _svc_notify(svc_bridge, "svc_deliver", announce) == {"status": "no_agent", "agents": 0}
+    assert svc_bridge.emitted == []
+
+    _add_sockets(svc_bridge, agents=1)
+    assert await _svc_notify(svc_bridge, "svc_deliver", announce) == {"status": "sent", "agents": 1}
+    [(event, data, room)] = svc_bridge.emitted
+    assert (event, room) == ("agent_command", "agent-0")  # that owner-room agent's own socket
+    assert data == {"type": "announce", "payload": {"id": "r:rem_1:ab12cd34#a1", "text": SVC_TEXT,
+                                                    "kind": "reminder"}}
+
+    assert await _svc_notify(svc_bridge, "announce_result",
+                             {"id": "r:rem_1:ab12cd34#a1", "delivered": False, "reason": "no_participant"}) == {
+        "status": "ok"}
+    poll = await _svc_notify(svc_bridge, "svc_poll", {"ids": ["r:rem_1:ab12cd34#a1"]})
+    assert poll["agents"] == 1 and poll["acks"] == {
+        "r:rem_1:ab12cd34#a1": {"by": "agent", "delivered": False, "reason": "no_participant"}}
+    assert len(svc_bridge.emitted) == 1  # an announce_result reaches no UI
+
+
+async def test_an_announce_goes_only_to_the_newest_owner_room_agent(svc_bridge):
+    """A draining job (its voice link closed) and the new job both connected: only the new one gets the announce, so
+    the draining job's instant no_participant can never be read before the live job's delivered."""
+    module = svc_bridge.module
+    room = module._owner_room()
+    module._clients["sid-draining"] = module.SocketClient(role="agent", ip="10.0.0.5", room=room, job_id="job-old",
+                                                          since=1000.0)
+    module._clients["sid-new"] = module.SocketClient(role="agent", ip="10.0.0.5", room=room, job_id="job-new",
+                                                     since=2000.0)
+    module._clients["sid-canary"] = module.SocketClient(role="agent", ip="10.0.0.6", room="jarvis-canary-1",
+                                                        job_id="canary", since=3000.0)
+    answer = await _svc_notify(svc_bridge, "svc_deliver",
+                               {"step": "announce", "id": "r:1:aa#a1", "text": SVC_TEXT, "kind": "reminder"})
+    assert answer == {"status": "sent", "agents": 2}
+    assert [(event, to) for event, _data, to in svc_bridge.emitted] == [("agent_command", "sid-new")]
+
+
+async def test_a_delivered_announce_result_is_never_replaced_by_a_not_delivered_one(svc_bridge):
+    attempt = "r:1:aa#a1"
+    await _svc_notify(svc_bridge, "announce_result", {"id": attempt, "delivered": True})
+    await _svc_notify(svc_bridge, "announce_result", {"id": attempt, "delivered": False, "reason": "no_participant"})
+    poll = await _svc_notify(svc_bridge, "svc_poll", {"ids": [attempt]})
+    assert poll["acks"] == {attempt: {"by": "agent", "delivered": True}}
+
+    later = "r:1:aa#a2"  # a not-delivered result is still replaced by a delivered one
+    await _svc_notify(svc_bridge, "announce_result", {"id": later, "delivered": False, "reason": "no_participant"})
+    await _svc_notify(svc_bridge, "announce_result", {"id": later, "delivered": True})
+    poll = await _svc_notify(svc_bridge, "svc_poll", {"ids": [later]})
+    assert poll["acks"] == {later: {"by": "agent", "delivered": True}}
+
+
+async def test_announce_results_outlive_a_bridge_restart(svc_bridge, monkeypatch):
+    """A deploy restarts the bridge and agent-svc while an announce is open: the job's delivered result, reported
+    before the restart, still reaches the restarted svc (else it would time the announce out and the laptop would
+    speak the item a second time), and stays sticky against another job's not-delivered one."""
+    attempt = "r:1:aa#a1"
+    await _svc_notify(svc_bridge, "announce_result", {"id": attempt, "delivered": True})
+    _restart_bridge(svc_bridge, monkeypatch)
+    poll = await _svc_notify(svc_bridge, "svc_poll", {"ids": [attempt, "r:1:aa#a2"]})
+    assert poll["acks"] == {attempt: {"by": "agent", "delivered": True}}
+
+    _restart_bridge(svc_bridge, monkeypatch)
+    await _svc_notify(svc_bridge, "announce_result", {"id": attempt, "delivered": False, "reason": "no_participant"})
+    poll = await _svc_notify(svc_bridge, "svc_poll", {"ids": [attempt]})
+    assert poll["acks"] == {attempt: {"by": "agent", "delivered": True}}
+    kept = await svc_bridge.store.kv_get(svc_bridge.module.KV_SVC_ANNOUNCE)
+    assert set(kept) == {attempt} and kept[attempt]["delivered"] is True and SVC_TEXT not in json.dumps(kept)
+
+
+async def test_kept_announce_results_older_than_an_hour_are_dropped(svc_bridge, monkeypatch):
+    module = svc_bridge.module
+    now = time.time()
+    await svc_bridge.store.kv_set(module.KV_SVC_ANNOUNCE, {
+        "r:1:aa#a1": {"delivered": True, "ts": now - module.ANNOUNCE_RESULT_TTL_S - 5},
+        "r:2:bb#a1": {"delivered": False, "reason": "no_participant", "ts": now - 60},
+        "r:3:cc#a1": "junk"})
+    _restart_bridge(svc_bridge, monkeypatch)
+    poll = await _svc_notify(svc_bridge, "svc_poll", {"ids": ["r:1:aa#a1", "r:2:bb#a1", "r:3:cc#a1"]})
+    assert poll["acks"] == {"r:2:bb#a1": {"by": "agent", "delivered": False, "reason": "no_participant"}}
+
+
+async def test_the_svc_answer_carries_a_boot_id_that_changes_with_a_bridge_restart(svc_bridge, monkeypatch):
+    first = await _svc_notify(svc_bridge, "svc_poll", {})
+    again = await _svc_notify(svc_bridge, "svc_heartbeat", {"svc": "active"})
+    assert isinstance(first["boot"], str) and len(first["boot"]) >= 8 and again["boot"] == first["boot"]
+    _restart_bridge(svc_bridge, monkeypatch)
+    assert (await _svc_notify(svc_bridge, "svc_poll", {}))["boot"] != first["boot"]
+
+
+async def test_svc_poll_acknowledges_items_delivered_elsewhere_by_svc(svc_bridge):
+    await svc_bridge.store.add_notification({"id": "t:7:aa", "description": "x"}, "reminder_due")
+    poll = await _svc_notify(svc_bridge, "svc_poll", {"ids": ["t:7:aa"], "ack_ids": ["t:7:aa"]})
+    assert poll["acks"] == {"t:7:aa": {"by": "svc", "delivered": True}}
+    assert (await svc_bridge.store.get_notification("t:7:aa"))["acked_by"] == "svc"
+    assert svc_bridge.emitted == []
+
+
+async def _store_fails(*_args: Any, **_kwargs: Any) -> Any:
+    raise sqlite3.OperationalError("database is locked")  # a busy or broken bridge.db
+
+
+async def test_svc_poll_is_unsure_while_the_kept_announce_results_cannot_be_read(svc_bridge, monkeypatch):
+    """After a bridge restart the announce results exist only in the kv: while it cannot be read, an asked id with no
+    result in memory and no stored notification is answered 'unsure' (agent-svc then settles nothing and speaks
+    nothing), never 'ok' without its result; once the kv can be read again the answer carries it."""
+    attempt = "r:1:aa#a1"
+    await _svc_notify(svc_bridge, "announce_result", {"id": attempt, "delivered": True})
+    await svc_bridge.store.add_notification({"id": "r:2:bb", "description": "x"}, "reminder_due")
+    _restart_bridge(svc_bridge, monkeypatch)
+    readable = svc_bridge.store.kv_get
+    monkeypatch.setattr(svc_bridge.store, "kv_get", _store_fails)
+    poll = await _svc_notify(svc_bridge, "svc_poll", {"ids": [attempt]})
+    assert poll["status"] == "unsure" and poll["acks"] == {}
+    poll = await _svc_notify(svc_bridge, "svc_poll", {"ids": ["r:2:bb"]})  # a stored notification answers for itself
+    assert poll["status"] == "ok" and poll["acks"] == {}
+    assert (await _svc_notify(svc_bridge, "svc_heartbeat", {"svc": "active"}))["status"] == "ok"  # asks for nothing
+    monkeypatch.setattr(svc_bridge.store, "kv_get", readable)
+    poll = await _svc_notify(svc_bridge, "svc_poll", {"ids": [attempt]})
+    assert poll["status"] == "ok" and poll["acks"] == {attempt: {"by": "agent", "delivered": True}}
+
+
+async def test_svc_poll_is_unsure_when_a_notification_or_an_svc_ack_fails_in_the_store(svc_bridge, monkeypatch):
+    await svc_bridge.store.add_notification({"id": "r:1:aa", "description": "x"}, "reminder_due")
+    await svc_bridge.module._ack_notification({"id": "r:1:aa"})  # the dashboard acknowledged it
+    monkeypatch.setattr(svc_bridge.store, "get_notification", _store_fails)
+    poll = await _svc_notify(svc_bridge, "svc_poll", {"ids": ["r:1:aa"]})
+    assert poll["status"] == "unsure" and poll["acks"] == {}  # never 'ok' without the dashboard's ack
+    monkeypatch.setattr(svc_bridge.store, "ack_notification", _store_fails)
+    poll = await _svc_notify(svc_bridge, "svc_poll", {"ack_ids": ["r:3:cc"]})
+    assert poll["status"] == "unsure"  # the 'svc' ack was not recorded: agent-svc keeps it and sends it again
+
+
+async def test_step_3_of_a_stored_notification_whose_ack_cannot_be_read_is_not_emitted_again(svc_bridge, monkeypatch):
+    _add_sockets(svc_bridge, ui=1)
+    note = {"step": "notify", "id": "r:1:aa", "description": SVC_TEXT}
+    assert (await _svc_notify(svc_bridge, "svc_deliver", note))["stored"] == "new"
+    await svc_bridge.module._ack_notification({"id": "r:1:aa"})  # the dashboard acknowledged it
+    monkeypatch.setattr(svc_bridge.store, "get_notification", _store_fails)
+    answer = await _svc_notify(svc_bridge, "svc_deliver", note)  # agent-svc's retry on a UI connect
+    assert answer == {"status": "unsure", "stored": "exists", "acked": False, "ui_clients": 0}
+    assert len(svc_bridge.emitted) == 1  # not shown again: it may have been acknowledged
+
+
+async def test_the_svc_heartbeat_keeps_counts_only_and_shows_in_status(svc_bridge):
+    _add_sockets(svc_bridge, ui=2, agents=1)
+    payload = {"svc": "active", "brain": "vps", "due_pending": 2, "due_reminders": 1, "due_tasks": 1,
+               "undelivered": 1, "last_snapshot_ts": 1760000000.0, "pid": 1, "since": 1759990000.0,
+               "git_sha": "abc123", "link": {"online": True}, "description": SVC_TEXT, "due_at": 1.0}
+    answer = await _svc_notify(svc_bridge, "svc_heartbeat", payload)
+    assert answer == {"status": "ok", "boot": svc_bridge.module._SVC_BOOT_ID, "ui_clients": 2, "ui_connects": 0,
+                      "agents": 1, "acks": {}}
+    status = svc_bridge.module.bridge_manager.state["svc_status"]
+    assert SVC_TEXT not in json.dumps(status) and "due_at" not in status
+    assert status["undelivered"] == 1 and status["svc"] == "active" and status["link"] == {"online": True}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=svc_bridge.module.app),
+                                 base_url="http://bridge.test") as client:
+        resp = await client.get("/status", headers={"X-Vortex-Token": LEGACY_TOKEN})
+    assert resp.status_code == 200 and resp.json()["svc"]["due_pending"] == 2
+
+
+async def test_a_ui_connect_moves_the_svc_counter_and_an_agent_connect_does_not(svc_bridge, monkeypatch):
+    async def fake_enter_room(*_args: Any, **_kwargs: Any) -> None:
+        return None
+
+    monkeypatch.setattr(svc_bridge.module.sio, "enter_room", fake_enter_room)
+    assert await svc_bridge.module.handle_connect("sid-legacy", {}, {"token": LEGACY_TOKEN}) is True
+    assert await svc_bridge.module.handle_connect("sid-agent", {}, {"agent_token": AGENT_TOKEN}) is True
+    poll = await _svc_notify(svc_bridge, "svc_poll", {})
+    assert poll["ui_connects"] == 1 and poll["ui_clients"] == 1
+
+
+async def test_reminder_due_and_announce_logs_carry_ids_not_text(svc_bridge):
+    captured: list[logging.LogRecord] = []
+
+    class _Keep(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            captured.append(record)
+
+    log = logging.getLogger("UI-BRIDGE")
+    handler = _Keep(level=logging.DEBUG)
+    log.addHandler(handler)
+    try:
+        _add_sockets(svc_bridge, ui=1, agents=1)
+        await _svc_notify(svc_bridge, "svc_deliver", {"step": "notify", "id": "r:1:aa", "description": SVC_TEXT})
+        await _svc_notify(svc_bridge, "svc_deliver", {"step": "announce", "id": "r:1:aa#a1", "text": SVC_TEXT})
+        await _svc_notify(svc_bridge, "announce_result", {"id": "r:1:aa#a1", "delivered": True})
+    finally:
+        log.removeHandler(handler)
+    lines = [record.getMessage() for record in captured]
+    assert any("REMINDER_DUE r:1:aa" in line for line in lines) and any("ANNOUNCE r:1:aa#a1" in line for line in lines)
+    assert all(SVC_TEXT not in line for line in lines)
+
+
+async def test_agent_svc_notifies_are_no_contact_of_the_voice_agent(svc_bridge):
+    module = svc_bridge.module
+    module.bridge_manager.state["last_runner_contact"] = 1000.0
+    for event_type, payload in (
+            ("svc_poll", {"ids": ["r:1:aa"]}), ("svc_heartbeat", {"svc": "active", "undelivered": 1}),
+            ("svc_deliver", {"step": "notify", "id": "r:1:aa", "description": SVC_TEXT}),
+            ("vortex_log_batch", {"items": [{"text": "node line"}], "dropped": 0, "source": "desktop"})):
+        await _svc_notify(svc_bridge, event_type, payload)
+    # in vps mode with no job connected the agent card keeps the agent's own last contact, not the svc's
+    assert _contact(svc_bridge) == 1000.0 and module.build_agent_status()["last_heartbeat"] == 1000.0
+    await _svc_notify(svc_bridge, "announce_result", {"id": "r:1:aa#a1", "delivered": True})  # the live job's
+    assert _contact(svc_bridge) > 1000.0
+    module.bridge_manager.state["last_runner_contact"] = 1000.0
+    await _svc_notify(svc_bridge, "vortex_log_batch", {"items": [{"text": "agent line"}], "source": "agent"})
+    assert _contact(svc_bridge) > 1000.0
+
+
+async def test_the_svc_location_relay_is_no_contact_of_the_voice_agent(svc_bridge):
+    """agent-svc relays the laptop's location (K-08 kind 'device', source 'device') every 600 s and after each node
+    hello: in vps mode with no job connected the agent card must not show 'last seen' minutes ago."""
+    module = svc_bridge.module
+    module.bridge_manager.state["last_runner_contact"] = 1000.0
+    relay = {"city": "Testabad", "lat": 31.5, "lng": 74.3, "kind": "device", "source": "device", "ts": time.time()}
+    assert await _svc_notify(svc_bridge, "location_sync", relay) == {"status": "ok"}
+    assert _contact(svc_bridge) == 1000.0 and module.build_agent_status()["last_heartbeat"] == 1000.0
+    assert [(event, room) for event, _data, room in svc_bridge.emitted] == [("location_update", "ui")]  # still shown
+    for own in ({"city": "Testabad", "lat": 31.5, "lng": 74.3},  # the voice agent's own location loop (local mode)
+                {"city": "Testabad", "lat": 31.5, "lng": 74.3, "kind": "map", "source": "geocode"}):  # the map tool
+        module.bridge_manager.state["last_runner_contact"] = 1000.0
+        await _svc_notify(svc_bridge, "location_sync", own)
+        assert _contact(svc_bridge) > 1000.0

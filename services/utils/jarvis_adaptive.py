@@ -1,15 +1,31 @@
+"""
+# services/utils/jarvis_adaptive.py
+The adaptive engine: the load tiers (analyze_system_load, cgroup-aware in a container) and the learning state
+(conversations/learning_state.json: A/B results, intent weights, successful patterns).
+
+Cross-process (C-125 step 1, K-77): every change of the learning state is one read-modify-write under the file lock
+(services.utils.jarvis_filelock.locked, '<file>.lock'): the file is read again when another process changed it (its
+mtime, inode or size differ from what this process last saw), the change is applied and the whole file is written
+through a temp file and a replace. Readers (select_strategy, get_intent_adjustment) reload on such a change too.
+File access goes through pathlib only (tests swap this module's os and time names).
+"""
 import asyncio
 import json
 import os
 import random
+import secrets
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
+from services.utils.jarvis_filelock import locked
 from services.utils.jarvis_logger import setup_logger
 
 logger = setup_logger("JARVIS-ADAPTIVE")
+
+FileStamp = tuple[int, int, int]  # (st_mtime_ns, st_ino, st_size)
 
 _CGROUP_ROOT = Path("/sys/fs/cgroup")
 LOAD_WARN_REPEAT_S = 600.0  # UI-CLEAN: the same stress level is logged again at most every 10 min
@@ -84,6 +100,7 @@ class JarvisAdaptiveEngine:
         self.data_path: Path = Path(data_path)
         if self.data_path.parent:
             self.data_path.parent.mkdir(parents=True, exist_ok=True)
+        self._stamp: FileStamp | None = None
         self.state: dict[str, Any] = self._load_state()
         self.stress_level: str = "NORMAL" # NORMAL, STRESSED, CRITICAL
         # K-72: in a container the engine reads only its own cgroup and never cancels loops (the host's
@@ -93,29 +110,96 @@ class JarvisAdaptiveEngine:
         self._cpu_sample: tuple[float, float] | None = None
         self._load_logged: tuple[str, float] | None = None  # (level, monotonic time) of the last load WARNING
 
-    def _load_state(self) -> dict[str, Any]:
-        """Loads persistent learning state."""
-        if self.data_path.exists():
-            try:
-                with self.data_path.open(encoding="utf-8") as f:
-                    return cast(dict[str, Any], json.load(f))
-            except (OSError, json.JSONDecodeError):
-                logger.warning("Failed to load learning state. resetting.")
-
+    @staticmethod
+    def _default_state() -> dict[str, Any]:
         return {
             "intent_weights": {},
             "ab_results": {},
             "successful_patterns": [],
         }
 
-    def _save_state(self) -> None:
-        """Persists learning state with thread-safety."""
+    def _file_stamp(self) -> FileStamp | None:
+        try:
+            st = self.data_path.stat()
+        except OSError:
+            return None
+        return (st.st_mtime_ns, st.st_ino, st.st_size)
+
+    def _load_state(self) -> dict[str, Any]:
+        """Loads persistent learning state."""
+        if self.data_path.exists():
+            stamp = self._file_stamp()
+            try:
+                with self.data_path.open(encoding="utf-8") as f:
+                    loaded = json.load(f)
+                if isinstance(loaded, dict):
+                    self._stamp = stamp
+                    state = self._default_state()
+                    state.update(loaded)
+                    return state
+            except (OSError, json.JSONDecodeError):
+                pass
+            logger.warning("Failed to load learning state. resetting.")
+
+        return self._default_state()
+
+    def _refresh(self) -> None:
+        """Reloads the learning state when another process changed the file since this one last read or wrote it
+        (an unreadable file keeps the state in memory)."""
+        stamp = self._file_stamp()
+        if stamp is None or stamp == self._stamp:
+            return
+        try:
+            with self.data_path.open(encoding="utf-8") as f:
+                loaded = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return
+        if isinstance(loaded, dict):
+            state = self._default_state()
+            state.update(loaded)
+            self.state = state
+            self._stamp = stamp
+            logger.info("Learning state reloaded: the file changed on disk.")
+
+    def _write_state(self) -> None:
+        """Writes the state whole through a temp file and a replace; the caller holds both locks."""
+        temp = self.data_path.with_name(f".{self.data_path.name}.{secrets.token_hex(4)}.tmp")
+        try:
+            with temp.open("w", encoding="utf-8") as f:
+                json.dump(self.state, f, indent=2)
+            temp.replace(self.data_path)
+        except OSError as e:
+            logger.error("Failed to save learning state: %s", type(e).__name__)
+            try:
+                temp.unlink()
+            except OSError:
+                pass
+            return
+        self._stamp = self._file_stamp()
+
+    def _change(self, change: Callable[[dict[str, Any]], Any]) -> Any:
+        """One read-modify-write of the learning state: this process's lock, then the file lock (C-125 step 1);
+        reload on a change by another process, apply change, write. A file lock that stays busy applies the change
+        in memory only."""
         with self._lock:
             try:
-                with self.data_path.open("w", encoding="utf-8") as f:
-                    json.dump(self.state, f, indent=2)
-            except OSError as e:
-                logger.error("Failed to save learning state: %s", e)
+                with locked(self.data_path):
+                    self._refresh()
+                    result = change(self.state)
+                    self._write_state()
+                    return result
+            except TimeoutError:
+                logger.error("Failed to save learning state: its lock stayed busy")
+                return change(self.state)
+
+    def _save_state(self) -> None:
+        """Persists learning state with thread-safety (kept for older callers)."""
+        with self._lock:
+            try:
+                with locked(self.data_path):
+                    self._write_state()
+            except TimeoutError:
+                logger.error("Failed to save learning state: its lock stayed busy")
 
     def analyze_system_load(self) -> str:
         """
@@ -204,6 +288,7 @@ class JarvisAdaptiveEngine:
         Used for autonomous A/B testing of behaviors.
         """
         strategies: list[str] = ["strategy_a", "strategy_b"]
+        self._refresh()
         history: dict[str, float] = self.state["ab_results"].get(intent_name, {"a": 0.0, "b": 0.0})
 
         # 1. Exploration phase (if no data, randomize)
@@ -215,21 +300,23 @@ class JarvisAdaptiveEngine:
 
     def record_feedback(self, intent_name: str, strategy: str, score: float) -> None:
         """Updates internal weights based on interaction score."""
-        if intent_name not in self.state["ab_results"]:
-            self.state["ab_results"][intent_name] = {"a": 0.0, "b": 0.0}
+        def change(state: dict[str, Any]) -> float:
+            ab_results = state.setdefault("ab_results", {})
+            if intent_name not in ab_results:
+                ab_results[intent_name] = {"a": 0.0, "b": 0.0}
 
-        strat_key: str = "a" if strategy == "strategy_a" else "b"
-        self.state["ab_results"][intent_name][strat_key] += score
+            strat_key: str = "a" if strategy == "strategy_a" else "b"
+            ab_results[intent_name][strat_key] += score
 
-        # Update General Intent Weight
-        current_weight: float = float(self.state["intent_weights"].get(intent_name, 1.0))
-        new_weight: float = current_weight + (0.05 * score)
-        self.state["intent_weights"][intent_name] = max(
-            0.2, min(2.0, new_weight))
+            # Update General Intent Weight
+            weights = state.setdefault("intent_weights", {})
+            current_weight: float = float(weights.get(intent_name, 1.0))
+            new_weight: float = current_weight + (0.05 * score)
+            weights[intent_name] = max(0.2, min(2.0, new_weight))
+            return float(weights[intent_name])
 
-        logger.info("Adaptive update for %s: Weight=%.2f",
-                    intent_name, self.state["intent_weights"][intent_name])
-        self._save_state()
+        weight = self._change(change)
+        logger.info("Adaptive update for %s: Weight=%.2f", intent_name, weight)
 
     # pylint: disable=too-many-arguments,too-many-positional-arguments
     async def log_interaction(self, _session_id: str, _user_input: str,
@@ -240,16 +327,20 @@ class JarvisAdaptiveEngine:
             "has_response": response is not None,
             "error": error_message,
         }
-        if success:
-            patterns: list[dict[str, Any]] = cast(list[dict[str, Any]], self.state["successful_patterns"])
-            patterns.append(pattern)
-            if len(patterns) > 1000:
-                patterns.pop(0)
 
-        await asyncio.to_thread(self._save_state)
+        def change(state: dict[str, Any]) -> None:
+            if success:
+                patterns: list[dict[str, Any]] = cast(list[dict[str, Any]],
+                                                      state.setdefault("successful_patterns", []))
+                patterns.append(pattern)
+                if len(patterns) > 1000:
+                    patterns.pop(0)
+
+        await asyncio.to_thread(self._change, change)
 
     def get_intent_adjustment(self, intent_name: str) -> float:
         """Returns a multiplier for intent confidence scoring."""
+        self._refresh()
         return float(self.state["intent_weights"].get(intent_name, 1.0))
 
 

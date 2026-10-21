@@ -13,8 +13,9 @@ jarvis_search.get_current_city / get_current_city_data and their by-value consum
 coroutines below, until X-64 gives jarvis_search its own hook (get_device_location()).
 
 The cache file is {"city": str, "lat": float, "lng": float, "ts": epoch s}. save_device_location()
-(agent-svc's writer, C-125) writes it whole through os.replace, so a reader never sees half a file.
-Importing this module reads nothing.
+(agent-svc's writer, C-125) writes it whole through os.replace, so a reader never sees half a file, and
+holds the K-77 file lock (services.utils.jarvis_filelock, '<file>.lock') while it writes, so two writers
+never interleave. Readers need no lock. Importing this module reads nothing.
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ from contextlib import suppress
 from typing import Any
 
 from services.utils.jarvis_config import config
+from services.utils.jarvis_filelock import locked
 from services.utils.jarvis_logger import setup_logger
 
 logger = setup_logger("JARVIS-LOCATION")
@@ -159,14 +161,15 @@ def save_device_location(city: str, lat: float, lng: float, *, ts: float | None 
     path = path or location_path()
     folder = os.path.dirname(os.path.abspath(path))
     os.makedirs(folder, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(prefix=".location-", suffix=".tmp", dir=folder)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump({key: location[key] for key in ("city", "lat", "lng", "ts")}, handle,
-                      ensure_ascii=False)
-        os.replace(tmp, path)
-    except BaseException:
-        with suppress(OSError):
-            os.unlink(tmp)
-        raise
+    with locked(path):  # K-77 cross-process writes (C-125 step 1)
+        fd, tmp = tempfile.mkstemp(prefix=".location-", suffix=".tmp", dir=folder)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump({key: location[key] for key in ("city", "lat", "lng", "ts")}, handle,
+                          ensure_ascii=False)
+            os.replace(tmp, path)
+        except BaseException:
+            with suppress(OSError):
+                os.unlink(tmp)
+            raise
     return location

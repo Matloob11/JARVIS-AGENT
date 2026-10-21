@@ -54,6 +54,7 @@ counts, never a task's, plan's or place's text (K-29).
 
 import asyncio
 import copy
+import functools
 import ipaddress
 import json
 import math
@@ -103,6 +104,7 @@ from src.core.bridge_store import (
     EVENT_MEMORY,
     EVENT_TOOL,
     KV_DESKTOP_LINK,
+    KV_SVC_ANNOUNCE,
     MEMORY_MAX_ROWS,
     MESSAGE_PAGE_MAX,
     SEEN_NOTIFY,
@@ -749,6 +751,291 @@ def _internal_notify_body(raw: bytes | None) -> dict[str, Any]:
     return data
 
 
+# ------------------------------------------------------------------ C-125 (K-77): agent-svc's delivery ladder
+# jarvis-agent-svc talks to the bridge only through authenticated notifies (the agent's own auth) whose answer it
+# reads; none of them is emitted to the UI as it came:
+# - svc_deliver {step: 'announce', id, text, kind}: ladder step 1. One live job of the owner's room (the newest
+#   owner-room agent socket, so a draining job never answers for an attempt the live job delivers) gets
+#   agent_command 'announce' {id, text, kind}; answer {status: 'sent'|'no_agent', agents}. The job reports back with
+#   notify announce_result {id, delivered, reason?}, kept here for ANNOUNCE_RESULT_TTL_S, also across a bridge restart
+#   (the C-13 kv, KV_SVC_ANNOUNCE); a delivered result is never replaced by a not-delivered one.
+# - svc_deliver {step: 'notify', id, description, due_at?, source, kind}: ladder step 3. Stored as a UI notification
+#   (bridge_store, kept until notification_ack) and emitted as 'reminder_due'; answer {status: 'ok', stored:
+#   'new'|'exists', acked, ui_clients}. A notification acknowledged before is not emitted again; one stored before
+#   whose ack cannot be read (a bridge.db error) is not emitted either: {status: 'unsure', stored: 'exists',
+#   acked: false, ui_clients: 0}.
+# - svc_poll {ids?, ack_ids?} and svc_heartbeat {K-68/K-77 counts, ids?, ack_ids?}: ack_ids are acknowledged
+#   by 'svc' (delivered on another channel, so no UI shows them again); the answer {status, boot, ui_clients,
+#   ui_connects, agents, acks: {id: {by: 'ui'|'svc'|'agent', delivered, reason?}}} tells which ids were acknowledged,
+#   how many UI sockets and owner-room agents are connected, and ui_connects (UI connects since the bridge started)
+#   with boot (a random id of this bridge start), which the svc compares to retry on the next UI connect: after a
+#   bridge restart the counter starts again from 0, and a new boot tells the svc that every UI connected now came
+#   after it. svc_heartbeat also keeps its counts for GET /status 'svc'. The status is 'unsure' instead of 'ok' when
+#   bridge.db could not tell what was asked: an 'svc' ack it could not record, a notification it could not read, or
+#   an asked id with neither a result in memory nor a stored notification while the kept announce results (the kv)
+#   could not be read in. agent-svc reads 'unsure' as no answer: it settles nothing and speaks nothing on it.
+SVC_NOTIFY_TYPES = frozenset({"svc_poll", "svc_heartbeat", "svc_deliver"})
+SVC_UNSURE = "unsure"
+SVC_IDS_MAX = 100
+SVC_ID_MAX_LEN = 128
+SVC_TEXT_MAX = 1000
+ANNOUNCE_RESULTS_MAX = 500
+ANNOUNCE_RESULT_TTL_S = 3600.0
+_SVC_KINDS = ("reminder", "task")
+_SVC_STATUS_NUMBERS = ("due_pending", "undelivered", "last_snapshot_ts", "since", "pid", "due_reminders",
+                       "due_tasks")
+_SVC_STATUS_LABELS = ("svc", "brain", "git_sha")
+_ui_connects = 0  # UI and legacy socket connects since this bridge started (svc_poll ui_connects)
+_SVC_BOOT_ID = secrets.token_hex(8)  # a new id with every bridge start (svc_poll boot)
+_announce_results: "OrderedDict[str, dict[str, Any]]" = OrderedDict()  # announce attempt id -> {delivered, ...}
+_announce_results_loaded = False  # the kv copy (KV_SVC_ANNOUNCE) was merged in after this bridge started
+
+
+def _agent_contact(event_type: Any, payload: Any) -> bool:
+    """True for a notify that shows the voice agent is alive (agent_status.last_heartbeat, K-02). agent-svc uses the
+    agent's own auth, but its svc_poll (every 5 s while anything is open), svc_heartbeat (30 s), svc_deliver, its
+    relay of the laptop's log lines (vortex_log_batch source 'desktop' or 'svc', K-40 v5) and of the laptop's
+    location (location_sync kind 'device' with source 'device', every 600 s and after each node hello, K-08; the
+    voice agent's own location_sync has no kind, or kind 'map') are no contact of the agent: in vps mode with no job
+    connected, the agent card would show 'offline' and 'last seen' minutes ago."""
+    if event_type in SVC_NOTIFY_TYPES:
+        return False
+    if event_type == "vortex_log_batch" and isinstance(payload, Mapping):
+        return payload.get("source") not in ("svc", "desktop")
+    if event_type == "location_sync" and isinstance(payload, Mapping):
+        return not (payload.get("kind") == "device" and payload.get("source") == "device")
+    return True
+
+
+def _svc_id(value: Any) -> str | None:
+    if isinstance(value, str) and 0 < len(value) <= SVC_ID_MAX_LEN and value.isprintable():
+        return value
+    return None
+
+
+def _svc_ids(values: Any) -> list[str]:
+    if not isinstance(values, list):
+        return []
+    return [clean for clean in (_svc_id(value) for value in values[:SVC_IDS_MAX]) if clean is not None]
+
+
+def _owner_agent_count() -> int:
+    return sum(1 for client in _clients.values() if _is_owner_agent(client))
+
+
+def _announce_target() -> str | None:
+    """The sid of the newest owner-room agent socket, or None. An announce goes to this one job only: with a draining
+    job (its voice link closed) and the new one both connected, both would answer, and the draining job's instant
+    no_participant could be read before the live job's delivered and make agent-svc speak it on the laptop too."""
+    owners = [(client.since, sid) for sid, client in _clients.items() if _is_owner_agent(client)]
+    return max(owners)[1] if owners else None
+
+
+def _ui_client_count() -> int:
+    return sum(1 for client in _clients.values() if client.role in (ROLE_UI, ROLE_LEGACY))
+
+
+def _announce_entry(value: Any, now: float) -> dict[str, Any] | None:
+    """A kept announce result {delivered, ts, reason?} in its clean form, or None when it is malformed or older than
+    ANNOUNCE_RESULT_TTL_S."""
+    if not isinstance(value, Mapping):
+        return None
+    ts = value.get("ts")
+    if isinstance(ts, bool) or not isinstance(ts, (int, float)) or not math.isfinite(ts):
+        return None
+    if now - ts > ANNOUNCE_RESULT_TTL_S:
+        return None
+    clean: dict[str, Any] = {"delivered": value.get("delivered") is True, "ts": float(ts)}
+    reason = value.get("reason")
+    if isinstance(reason, str) and reason:
+        clean["reason"] = _short(reason)[:40]
+    return clean
+
+
+async def _load_announce_results() -> None:
+    """Merges the announce results kept in the C-13 kv (KV_SVC_ANNOUNCE) in, once per bridge start, so a result the
+    live job reported before a bridge restart (a deploy that restarts the bridge and agent-svc while an announce is
+    open) still reaches the svc: without it the svc would time that announce out and the laptop would speak the item
+    a second time. Results older than ANNOUNCE_RESULT_TTL_S are dropped and a delivered one stays sticky. A store
+    that cannot be read is tried again on the next call."""
+    global _announce_results_loaded  # pylint: disable=global-statement
+    if _announce_results_loaded:
+        return
+    kept = await stored("announce results", store.kv_get(KV_SVC_ANNOUNCE, {}), None)
+    if kept is None:
+        return
+    _announce_results_loaded = True
+    now = time.time()
+    merged: dict[str, dict[str, Any]] = {}
+    for attempt_id, value in (kept.items() if isinstance(kept, Mapping) else ()):
+        clean = _announce_entry(value, now)
+        if _svc_id(attempt_id) is not None and clean is not None:
+            merged[attempt_id] = clean
+    for attempt_id, result in _announce_results.items():
+        if not (merged.get(attempt_id, {}).get("delivered") is True and result.get("delivered") is not True):
+            merged[attempt_id] = result
+    ordered = sorted(merged.items(), key=lambda pair: pair[1]["ts"])[-ANNOUNCE_RESULTS_MAX:]
+    _announce_results.clear()
+    _announce_results.update(ordered)
+
+
+async def _handle_announce_result(payload: Any) -> dict[str, str]:
+    """C-125 (K-77 step 1): the live job's answer to agent_command 'announce' is kept for agent-svc's poll."""
+    await _record_announce_result(payload)
+    return {"status": "ok"}
+
+
+async def _record_announce_result(payload: Any) -> None:
+    """notify announce_result {id, delivered, reason?} from the live job (K-77 step 1), kept in memory and in the C-13
+    kv (KV_SVC_ANNOUNCE, so it outlives a bridge restart). A delivered result is sticky: a later not-delivered one
+    for the same attempt (another job's no_participant) never replaces it, else agent-svc would read 'not
+    delivered' and speak the item on the laptop as well."""
+    data = payload if isinstance(payload, Mapping) else {}
+    attempt_id = _svc_id(data.get("id"))
+    if attempt_id is None:
+        return
+    await _load_announce_results()
+    now = time.time()
+    result: dict[str, Any] = {"delivered": data.get("delivered") is True, "ts": now}
+    reason = data.get("reason")
+    if isinstance(reason, str) and reason:
+        result["reason"] = _short(reason)[:40]
+    previous = _announce_results.get(attempt_id)
+    if not result["delivered"] and previous is not None and previous.get("delivered") is True:
+        logger.info("ANNOUNCE result %s: delivered=False ignored (delivered before)", attempt_id)
+        return
+    _announce_results[attempt_id] = result
+    _announce_results.move_to_end(attempt_id)
+    while _announce_results and (len(_announce_results) > ANNOUNCE_RESULTS_MAX or
+                                 now - next(iter(_announce_results.values()))["ts"] > ANNOUNCE_RESULT_TTL_S):
+        _announce_results.popitem(last=False)
+    if _announce_results_loaded:  # never over kept results that could not be read in (a store error)
+        await stored("announce results", store.kv_set(KV_SVC_ANNOUNCE, dict(_announce_results)), None)
+    logger.info("ANNOUNCE result %s: delivered=%s", attempt_id, result["delivered"])
+
+
+async def _store_read(action: str, call: Awaitable[T]) -> tuple[bool, T | None]:
+    """(True, value) of one store call, or (False, None) when it failed (logged as stored() logs it): for an answer
+    that must not pass a store error off as a fact (C-125: the svc_poll and step 3 answers)."""
+    try:
+        return True, await call
+    except Exception:  # pylint: disable=broad-exception-caught
+        _log_store_error(action)
+        return False, None
+
+
+async def _svc_answer(payload: Any) -> dict[str, Any]:
+    """The svc_poll / svc_heartbeat answer (see the block comment above): status 'unsure' instead of 'ok' when
+    bridge.db could not tell what was asked, which agent-svc reads as no answer."""
+    data = payload if isinstance(payload, Mapping) else {}
+    unsure = False
+    for notification_id in _svc_ids(data.get("ack_ids")):
+        recorded, _ = await _store_read("notification ack", store.ack_notification(notification_id, "svc"))
+        unsure = unsure or not recorded  # agent-svc keeps that ack and sends it again
+    await _load_announce_results()
+    acks: dict[str, dict[str, Any]] = {}
+    for item_id in _svc_ids(data.get("ids")):
+        result = _announce_results.get(item_id)
+        if result is not None:
+            acks[item_id] = {"by": "agent", **{k: v for k, v in result.items() if k != "ts"}}
+            continue
+        read, note = await _store_read("notification", store.get_notification(item_id))
+        if not read:
+            unsure = True  # a dashboard's ack may be in the row that could not be read
+        elif isinstance(note, Mapping):
+            if note.get("acked_ts") is not None:
+                acks[item_id] = {"by": _short(note.get("acked_by")) or "ui", "delivered": True}
+        elif not _announce_results_loaded:
+            unsure = True  # no notification: it may be an announce attempt whose kept result could not be read in
+    return {"status": SVC_UNSURE if unsure else "ok", "boot": _SVC_BOOT_ID, "ui_clients": _ui_client_count(),
+            "ui_connects": _ui_connects, "agents": _owner_agent_count(), "acks": acks}
+
+
+def _svc_status(payload: Any) -> dict[str, Any]:
+    """The counts of an svc_heartbeat (numbers and short labels only, never text) for GET /status 'svc'."""
+    data = payload if isinstance(payload, Mapping) else {}
+    status: dict[str, Any] = {"received_ts": round(time.time(), 3)}
+    for name in _SVC_STATUS_NUMBERS:
+        value = data.get(name)
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value):
+            status[name] = value
+    for name in _SVC_STATUS_LABELS:
+        value = data.get(name)
+        if isinstance(value, str) and value:
+            status[name] = _short(value)[:40]
+    link = data.get("link")
+    if isinstance(link, Mapping) and isinstance(link.get("online"), bool):
+        status["link"] = {"online": link["online"]}
+    return status
+
+
+def _reminder_due_payload(data: Mapping[str, Any]) -> dict[str, Any] | None:
+    """The stored and emitted 'reminder_due' {id, description, due_at?, source, kind, spoken, ts} (the shape the UI's
+    task notifications read), or None without an id or a description."""
+    item_id = _svc_id(data.get("id"))
+    description = " ".join(str(data.get("description") or "").split())[:SVC_TEXT_MAX]
+    if item_id is None or not description:
+        return None
+    kind = data.get("kind") if data.get("kind") in _SVC_KINDS else "reminder"
+    clean: dict[str, Any] = {"id": item_id, "description": description, "source": kind, "kind": kind,
+                             "spoken": False, "ts": round(time.time(), 3)}
+    due_at = data.get("due_at")
+    if isinstance(due_at, (int, float)) and not isinstance(due_at, bool) and math.isfinite(due_at):
+        clean["due_at"] = due_at
+    return clean
+
+
+async def _svc_deliver(payload: Any) -> dict[str, Any]:
+    data = payload if isinstance(payload, Mapping) else {}
+    step = data.get("step")
+    if step == "announce":
+        attempt_id = _svc_id(data.get("id"))
+        text = " ".join(str(data.get("text") or "").split())[:SVC_TEXT_MAX]
+        if attempt_id is None or not text:
+            return {"status": "rejected", "reason": "bad_payload"}
+        target = _announce_target()
+        if target is None:
+            return {"status": "no_agent", "agents": 0}
+        agents = _owner_agent_count()
+        kind = data.get("kind") if data.get("kind") in _SVC_KINDS else "reminder"
+        await sio.emit("agent_command", {"type": "announce",
+                                         "payload": {"id": attempt_id, "text": text, "kind": kind}}, to=target)
+        logger.info("ANNOUNCE %s sent to the newest of %d owner-room agent(s)", attempt_id, agents)
+        return {"status": "sent", "agents": agents}
+    if step == "notify":
+        return await _svc_notify_step(data)
+    return {"status": "rejected", "reason": "bad_step"}
+
+
+async def _svc_notify_step(data: Mapping[str, Any]) -> dict[str, Any]:
+    """svc_deliver step 'notify' (ladder step 3, see the block comment above)."""
+    clean = _reminder_due_payload(data)
+    if clean is None:
+        return {"status": "rejected", "reason": "bad_payload"}
+    outcome, kept = await stored("notification", store.add_notification(clean, "reminder_due"), ("error", clean))
+    if outcome == "error":
+        return {"status": "error", "reason": "store"}
+    acked = False  # a notification stored just now cannot have been acknowledged yet
+    if outcome != "new":
+        read, note = await _store_read("notification", store.get_notification(clean["id"]))
+        if not read:  # a dashboard may have acknowledged it: never shown again on a guess
+            logger.info("REMINDER_DUE %s stored before; its ack could not be read, not emitted", clean["id"])
+            return {"status": SVC_UNSURE, "stored": outcome, "acked": False, "ui_clients": 0}
+        acked = isinstance(note, Mapping) and note.get("acked_ts") is not None
+    if not acked:
+        await emit_ui("reminder_due", kept)
+    logger.info("REMINDER_DUE %s stored (%s, acked=%s, ui=%d)", clean["id"], outcome, acked, _ui_client_count())
+    return {"status": "ok", "stored": outcome, "acked": acked, "ui_clients": _ui_client_count()}
+
+
+async def _handle_svc_notify(event_type: str, payload: Any) -> dict[str, Any]:
+    if event_type == "svc_deliver":
+        return await _svc_deliver(payload)
+    if event_type == "svc_heartbeat":
+        await bridge_manager.update_state("svc_status", _svc_status(payload))
+    return await _svc_answer(payload)
+
+
 # ------------------------------------------------------------------ C-58 (K-31): job progress routing
 JOBS_MAX = 20
 _JOB_STATUS = {"queued": "queued", "running": "running", "start": "running", "success": "done", "done": "done",
@@ -1009,10 +1296,10 @@ async def notify_bridge(request: Request) -> Any:
         return JSONResponse({"error": exc.error}, status_code=exc.status, headers=exc.headers)
 
     health_monitor.record_heartbeat("ui_bridge")
-    await bridge_manager.update_state("last_runner_contact", time.time())
-
     raw_type: Any = data.get("type")
     event_type: str | None = raw_type if isinstance(raw_type, str) else None
+    if _agent_contact(event_type, data.get("payload")):
+        await bridge_manager.update_state("last_runner_contact", time.time())
     refused = _notify_rate_limited(request, event_type, data.get("payload"))
     if refused is not None:
         return refused
@@ -1061,6 +1348,9 @@ async def notify_bridge(request: Request) -> Any:
         "location_sync": _handle_location_sync,  # K-08: a map focus never replaces the device location
         "map_focus": _route_map_focus,
         "vortex_log_batch": _handle_log_batch,
+        "announce_result": _handle_announce_result,  # C-125 (K-77 step 1): the live job's answer to 'announce'
+        # C-125 (K-77): agent-svc's delivery ladder reads the answer
+        **{svc_type: functools.partial(_handle_svc_notify, svc_type) for svc_type in SVC_NOTIFY_TYPES},
     }
     answer: Any | None = answering.get(event_type)
     if answer:
@@ -1364,6 +1654,8 @@ async def get_status(request: Request) -> Any:
         "ui_clients": sum(1 for client in _clients.values() if client.role in (ROLE_UI, ROLE_LEGACY)),
         "brain": active_brain(),
         "desktop": desktop.status(),
+        # C-125 (K-77): agent-svc's last heartbeat (counts only), None before the first one
+        "svc": copy.deepcopy(bridge_manager.state.get("svc_status")),
     }
 
 
@@ -2176,6 +2468,8 @@ async def handle_connect(sid: str, environ: dict[str, Any], auth: dict[str, Any]
             rooms.kick("agent_connect")
             await _publish_agent_status()
         return True
+    global _ui_connects  # pylint: disable=global-statement
+    _ui_connects += 1  # C-125 (K-77): agent-svc retries an undelivered reminder on the next UI connect
     if role == ROLE_UI:  # a legacy socket may be an old agent, so only a real UI session counts as the owner
         await desktop.note_owner_activity()
     state: dict[str, Any] = await build_init_state()

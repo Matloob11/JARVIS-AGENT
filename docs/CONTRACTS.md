@@ -7,7 +7,7 @@ Every interface between the Claude lane and the Cursor lane is defined here: HTT
 - **Versions:** the newest version heading below is the one in force. A change bumps the version (v2, v3, ...), edits the affected contracts in place under it, adds one Changelog line (version, date, contract IDs, what changed, which REQ-CONTRACT it answers) and updates the copy in `plan.md` section 4 in the same commit. Older wording stays in git history.
 - **Public repo:** no secrets, keys, passwords or details of non-JARVIS apps or servers go into this file.
 
-## v48 (2026-10-21)
+## v49 (2026-10-21)
 
 #### K-01 · DASH-UI-RUNTIME (config+http-client) · owner: Claude
 Owner: Cursor (UI), built on Claude's C-AUTH-1 / C-SOCK-1 / C-ORIGIN-1 (infra). Browser base BRIDGE_BASE = VITE_BRIDGE_BASE || VITE_VORTEX_URL || '/vortex' (relative, same origin; the bundle never contains a secret). Every fetch uses credentials 'include': POST /auth/login {password, totp} | {password, recovery_code}; GET /auth/me; POST /auth/logout; GET /livekit/token (a NEW token before every connect and reconnect); GET /messages?before=&cursor=&limit= (K-41 v5); GET /media/<id> and /media/<id>/sign; POST /feedback. Socket.IO: io(origin, {path: BRIDGE_BASE + '/socket.io', withCredentials: true, transports: ['websocket','polling'], tryAllTransports: true, reconnectionAttempts: Infinity, reconnectionDelayMax: 10000}) with no auth payload. Session expiry: on any connect_error or a 'session_expired' {reason} event the UI calls /auth/me, and a 401 shows the login screen, so it never depends on the refusal text. Dev: Vite proxies /vortex (http + ws) to VITE_DEV_BRIDGE: the mock on 5199, the local bridge on 5001 with VITE_DEV_BRIDGE_STRIP=1, or the VPS with the Origin header rewritten. Electron loads JARVIS_UI_URL (default https://jarvis.srv1802669.hstgr.cloud); file:// dist only with JARVIS_ELECTRON_BACKEND=local or JARVIS_UI_OFFLINE=1.
@@ -1336,31 +1336,68 @@ v42 (C-119, as built: the agent side):
 
 #### K-77 · ALWAYS-ON-SERVICE (process+python-api) · owner: Claude
 Process
-- jarvis-agent-svc runs src/core/agent_services.py with JARVIS_ROLE=svc.
-- It is active only when JARVIS_BRAIN=vps. Otherwise it stays in standby with health only (127.0.0.1:8083/health).
+- jarvis-agent-svc runs src/core/agent_services.py (python -m src.core.agent_services) with JARVIS_ROLE=svc; any other role exits 2.
+- It calls net_guard.harden_process() first. On SIGTERM/SIGINT the loops are cancelled, a running snapshot is aborted (its partial file removed), the Desktop Link is retired and it exits 0 inside the 60 s stop grace.
+- It is active only when JARVIS_BRAIN=vps. With any other brain it stays in standby with health only, so the PC brain works exactly as before.
+- GET 127.0.0.1:8083/health -> {status, role, brain, state, pid, uptime_s, git_sha, due {reminders, tasks}, due_pending, undelivered, last_snapshot_ts, snapshot {enabled, next_ts}, loops {name: {alive, last_tick_age_s}}, link {started, online}, ts}: 200 while healthy; 503 when a loop died or stalled, or when config.validate('svc') failed (then no duty starts). Never a secret or a reminder, task or location text.
 - In vps mode, LiveKit jobs are conversation-only: they never run the reminder loop, the task monitor or the scheduler.
 
-Due checks and delivery
-- Reminders are checked every 30 s and tasks.db every 45 s.
-- Reminders are read under services.utils.jarvis_filelock.locked. After X-66 they are written only through Cursor's list_due_reminders / mark_reminder_delivered; until then the svc never writes reminders.json and keeps delivery state only in its ledger.
-- The ledger is conversations/delivery_ledger.json (file-locked): {id, kind, due_at, attempts[], delivered_at?, channel?}.
-- Delivery ladder:
-  1. the live job, through the bridge agent_command 'announce' (K-66);
-  2. the laptop: pc.speak_local plus a toast, when no participant is linked;
-  3. a bridge-stored UI notification plus the 'reminder_due' event;
-  4. an optional email to the owner's own address after JARVIS_REMINDER_EMAIL_AFTER_MIN (0 = off).
-- A reminder counts as delivered only on an ack (ui_command notification_ack, the node's speak_local result, or the live job's announce result). Otherwise it is retried on the next UI or node connect. It is never delivered twice.
+Due checks
+- Reminders every 30 s through Cursor's X-66 functions: list_due_reminders (read under jarvis_filelock.locked) and mark_reminder_delivered(id). mark is called only after a delivery, and only while load_reminders shows the delivered reminder as the first pending one with its id in file order (two reminders set for the same second share an id).
+- A reminder entry is closed as gone only once its reminder is no longer pending in reminders.json, never because it is not due right now.
+- tasks.db every 45 s through Cursor's TaskManager (get_due_tasks marks rows triggered; busy_timeout 5 s). A row is completed only after its delivery (C-56). Rows left triggered are picked up again after a restart.
+
+Ledger
+- conversations/delivery_ledger.json. Every read and write holds jarvis_filelock.locked; it is written through a temp file and os.replace, and only on a change.
+- Shape: {v: 1, items: {id: {id, kind, ref, due_at, due_ts, first_seen, attempts [{step, outcome, ts, ref?}] (the last 40), notified?, notify_unknown?, notified_at?, ui_emit_ts?, ui_emit_clients?, announce_seq?, announce_call? {id, ts}, laptop_call? {id, ts}, delivered_at?, channel?, bridge_ack?, closed_at?, close_reason?, source_marked?, emailed_at?, synthetic?, text? (the svc's own lines only)}}}.
+- Keys: 'r:<reminder id>:<8 hex of id, created_at, time>', 't:<task id>:<8 hex of id, created_at>', and 's:...' for the svc's own lines. A reminder's or task's text stays in its source.
+- The ledger is the truth, also across restarts. An item it marks delivered is never delivered again: only its source is marked, again on each tick while it is still due there, and such an entry is never dropped.
+- Finished entries whose source is marked are dropped after 30 days. A file that is not JSON is renamed aside, never deleted.
+
+Delivery ladder
+  1. The live job: svc_deliver {step: 'announce', id: '<item id>#a<n>', text, kind}. The bridge sends agent_command 'announce' to the newest owner-room agent socket (K-66), and the job answers notify announce_result {id, delivered, reason?}; ack = delivered true.
+     The attempt id is in the ledger (announce_call) before it is sent and is never announced again. It stays open until its result is read or its 45 s window ends, also when its answer was lost or a restart cut the wait. It is settled as a timeout only after a poll the bridge answered without a result, and the item is neither spoken nor stored at the bridge meanwhile.
+  2. The laptop: pc.speak_local (it speaks and shows a local notice) through the svc DesktopLink (peer 'svc', origin 'internal'). Ack = the node's success result, also a late one (DesktopLink 'late', or a 'restart' late outcome matched by its call id). The call id is in the ledger (laptop_call) before it is submitted.
+     An item stored at the bridge is asked there first. One a dashboard acknowledged is delivered on the UI (channel 'ui') and not spoken. One sent to a connected UI less than 5 s ago is held until that dashboard's ack could land; this is measured on the monotonic clock, and a ledger stamp from before a restart that lies ahead of the wall clock counts as elapsed.
+  3. The bridge: svc_deliver {step: 'notify', id, description, due_at?, source, kind} -> a stored UI notification plus 'reminder_due'; ack = ui_command notification_ack.
+     It counts as stored from before it is sent (notified, notify_unknown). A lost answer is sent again (idempotent at the bridge) until the bridge answers; only an answer proving it was not stored takes that back.
+  4. Optional: JARVIS_REMINDER_EMAIL_AFTER_MIN minutes after the due time (0 = off, the default), one e-mail to the owner's own address (EMAIL_USER, over SMTP_HOST/SMTP_PORT with STARTTLS) for an item still open, also while the bridge is down. It is no ack: the item stays open.
+     It is in the ledger (emailed_at) before it is sent. Only a send that surely did not reach the server (it failed before DATA, or the server refused the message) is tried again, at most 3 times. One the server took (a failed QUIT afterwards changes nothing), or whose connection broke during DATA, is never sent again.
+- An item counts as delivered only on an ack, written in the same ledger write as the attempt row that acknowledged it.
+- An item delivered on another channel after step 3 is acknowledged at the bridge by 'svc' at once (svc_poll ack_ids), so no dashboard shows it again.
+- Retries: an open item is retried on the next UI connect (step 3 again; a new bridge boot id counts as a connect of every UI connected after it) and on the next laptop hello (step 2).
+- An item held at either retry is tried again after each wait (30 s plus 2 s) while it stays held, until the longest hold (11 min plus 30 s) has passed. Each new hold starts that again; after it, the next connect tries the item.
+- A speak whose outcome is not known (unknown, or cut by a restart) holds the item on every channel: no announce, no step 3 (also not on a UI connect) and no speak. The hold lasts until its late outcome, or 30 s after the laptop's last hello.
+- A restarted svc holds such an item until its first node hello plus 30 s, at most 11 min after the call. After the hold, the next ladder run goes on to step 3, and a UI connect held meanwhile gets its step 3.
+- A stored time that lies ahead of the wall clock (the clock stepped back) never stretches a retry throttle or the UI grace.
+- It is never delivered twice.
+
+Bridge notifies
+- All use the agent's own auth. None is emitted to the UI as it came, and none counts as contact of the voice agent.
+- svc_poll {ids?, ack_ids?} and svc_heartbeat {heartbeat fields, ids?, ack_ids?} answer {status: 'ok'|'unsure', boot, ui_clients, ui_connects, agents, acks: {id: {by: 'ui'|'svc'|'agent', delivered, reason?}}}.
+  - ack_ids are acknowledged by 'svc'.
+  - boot is a random id of each bridge start; ui_connects counts UI and legacy socket connects since that start.
+- status 'unsure' means bridge.db could not tell what was asked: an 'svc' ack it could not record, a notification it could not read, or an asked id with neither a result in memory nor a stored notification while the kept announce results could not be read in. The svc reads it as no answer: it settles, acknowledges and speaks nothing on it.
+- svc_deliver step 'announce' -> {status: 'sent'|'no_agent', agents}; any other answer counts as not sent.
+- svc_deliver step 'notify' -> {status: 'ok', stored: 'new'|'exists', acked, ui_clients}. A notification acknowledged before is not emitted again.
+- One stored before whose ack cannot be read is not emitted either: {status: 'unsure', stored: 'exists', acked: false, ui_clients: 0}. The svc treats it as stored with an unknown outcome.
+- announce_result {id, delivered, reason?} from the live job is kept 1 h (at most 500 results), also across a bridge restart (the bridge.db kv). A delivered result is never replaced by a not-delivered one.
+- GET /status carries 'svc': the last heartbeat's counts (null before the first one).
 
 Scheduled actions
-- K-32 is hosted here (C-80). Desktop actions use the svc DesktopLink with origin 'scheduler'; when the laptop is offline they wait 15 min, then the failure is announced.
+- K-32 is hosted here (C-80). SchedulerHost.run_desktop_action sends the tool through the svc DesktopLink with origin 'scheduler' and the approval recorded at scheduling time.
+- While the laptop is offline it waits up to 15 min, checking every 15 s. Then the failure is announced through the ladder and DESKTOP_OFFLINE is returned. The tool is never run twice.
+- Until C-80 sets action_runner, a due task with an action is announced and completed after delivery without running the action.
 
-Location
-- The svc writes conversations/location.json (≤ 30 min old counts as fresh) from node location events. services.utils.jarvis_location reads it.
+Node events
+- location -> conversations/location.json through jarvis_location.save_device_location (file-locked; at most 30 min old counts as fresh), and notify location_sync {kind 'device', source 'device'} (K-08). services.utils.jarvis_location reads the file.
+- log_batch -> at most 50 items, redacted (K-29), posted as vortex_log_batch with source 'desktop'; the rest count as dropped.
+- Vitals, desktop_state, power and alerts are notices the bridge reads itself; the svc forwards none of them.
 
 Snapshot
-- Daily at 03:30 PKT: SQLite online copies plus a tar of conversations, data and chroma.
-- Sealed to BACKUP_RECIPIENT_PUBLIC_KEY with X25519 + HKDF + ChaCha20-Poly1305; the PC holds the private key.
-- Written to /app/snapshots/daily/<date>.tar.enc. No env files or keys inside; never auto-deleted.
+- Daily at 03:30 PKT, and once 10 min after a start that finds none from the last 26 h: SQLite online copies plus every other file of conversations, data and chroma_db, as one tar.
+- Sealed to BACKUP_RECIPIENT_PUBLIC_KEY with X25519 + HKDF-SHA256 + ChaCha20-Poly1305 (services.utils.backup_crypto); the PC holds the private key. Without a usable key there is no snapshot and one warning.
+- Written to /app/snapshots/jarvis_snapshot_<PKT date>.tar.enc (JARVIS_SNAPSHOTS_DIR; the jarvis_agent_snapshots volume). Env files, keys, locks and temp files are never inside; never auto-deleted.
 - The node pulls the newest one daily (K-73).
 
 Cross-process writes
@@ -1369,16 +1406,18 @@ Cross-process writes
 - Only the job serving jarvis-hybrid opens Chroma.
 
 Heartbeat
-- K-68 fields plus {svc: 'active'|'standby', due_pending, undelivered, last_snapshot_ts, brain}, every 30 s.
+- notify svc_heartbeat every 30 s: {svc: 'active'|'standby'|'config_error', brain, due_pending, due_reminders, due_tasks, undelivered, last_snapshot_ts, pid, since, git_sha, link {online}, ts}. Never text.
+
+Logs
+- ids, kinds, steps and counts only; never reminder, task, message or location text, or secrets (K-29).
 v42 (C-119, as built; the svc's own wiring is C-125): services/ai_core/desktop_link.py serves jarvis-agent-svc too.
 - ensure_link(room, job_id='svc', svc=True) builds that process's link as peer 'svc' (agent:svc), with its own seen-store namespace in conversations/desktop_seen.db.
 - That link also loads a desktop_stop a job process kept in conversations/desktop_stop.json, and sends it at the laptop's next hello.
-- subscribe('event', callback, loop) hands the svc the node's location and log_batch events; subscribe('late', ...) hands it late outcomes.
+- subscribe('event', callback, loop) hands the svc the node's location and log_batch events; subscribe('session', ...) its hellos and drops; subscribe('late', ...) late outcomes.
 - submit_call and run_call take the request's own origin ('scheduler' for K-32 actions, 'internal' for its deliveries), with no seq.
 - A job's end never retires the svc's link: desktop_proxy.end_job retires only the link of the job's own process.
-- Until C-125 lands, nothing builds the svc's link.
-
-Also changed by C-119 (optional lines for the same version):
+- The svc builds its link when it goes active (C-125).
+v49 (C-125, as built): the K-77 text above is the always-on service as built and replaces the design text of v4: process and health, due checks through Cursor's X-66 functions and the task manager, the file-locked ledger, the four-step delivery ladder with its acks, holds and retries (an item is never delivered twice, also across restarts, lost answers and clock steps), the svc notifies on the bridge (svc_poll, svc_heartbeat, svc_deliver with 'unsure' when bridge.db cannot tell, announce_result kept 1 h across a bridge restart, agent_command 'announce' to the newest owner-room agent), the scheduler hook for C-80, node location and log relay, the sealed daily snapshot at /app/snapshots/jarvis_snapshot_<PKT date>.tar.enc, cross-process file locks and the heartbeat. Known gaps: a speak's late success that arrives while the node-hello retry holds the ladder lock for more than 30 s can be spoken a second time; the unknown-speak hold is measured on the wall clock.
 
 #### K-78 · HANDOVER (reserved) · owner: Claude
 Reserved for the brain handover protocol between the VPS brain and the PC brain; defined by a later task.
@@ -1433,3 +1472,4 @@ Reserved for the brain handover protocol between the VPS brain and the PC brain;
 - **v46** · 2026-10-21 · K-59 amended · C-50 escalation as built: one fresh restart and one re-send for a typed message whose rescue also got no reply (at safe points; at most one router restart a minute, checked again before the restart); a newer typed message waiting to be sent ends the escalation and the rescue; the note (source 'system', turn_id) only after a 12 s grace with no reply or speech; a typed message after 30 min idle restarts fresh first; typed messages go out one at a time and in order, 'stopped' for one ended by stop or a C-119 handled message while it waited (a spoken item no longer ends it).
 - **v47** · 2026-10-21 · K-02, K-03, K-07, K-12, K-33, K-39, K-40, K-42 amended · C-86 route audit as built with its review fixes: plan_progress routed and answered {status:'ok', emitted:'plan_progress'} (the tool succeeds only with that answer); task_sync routed with due_at as epoch seconds and kept in init_state.tasks, a due task dropped from it, task_cancel and tasks_refresh handled by the agent; map focus kept apart from the device location; status values other than START/STOP ignored; memory events capped at 200 and init_state.memories the last 10 (K-07's '50' corrected); notify_event outcomes, notify_answered, and no credential to :5002 without the v2 keys; UI_NOTIFY_FAILED, UI_SUPPRESSED, INVALID_ARG.
 - **v48** · 2026-10-21 · K-69, K-72, K-75 amended · C-129 as built: scripts/ops/migrate_agent_data.py moves the agent data between the laptop and the VPS with the agents stopped (--merge-local into the one owner memory file, --pre/--final PC to VPS, --reverse VPS to PC, --verify counts, --dry-run plans): SQLite online copies, Chroma documents sealed per C-124 in the copy, one-off uid 10001 containers of the service agent only, a key probe instead of moving any key, existing targets renamed .pre-<ts> and nothing deleted on either side.
+- **v49** · 2026-10-21 · K-77 rewritten as built · C-125: jarvis-agent-svc (standby unless JARVIS_BRAIN=vps, health on 127.0.0.1:8083), reminders every 30 s and tasks every 45 s, a file-locked delivery ledger, the four-step ladder (live job announce, laptop speak, stored UI notification, optional owner e-mail) delivered only on an ack and never twice, svc_poll/svc_heartbeat/svc_deliver and announce_result on the bridge, the C-80 scheduler hook, node location and log relay, a sealed daily snapshot, file locks for identity, learning state and location; the stray 'Also changed by C-119' line under K-77 removed.

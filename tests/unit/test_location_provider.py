@@ -122,7 +122,8 @@ def test_save_writes_the_whole_cache_through_a_replace(cache):
         "city": "Islamabad", "lat": 33.6844, "lng": 73.0479, "ts": NOW}
     loc.save_device_location("Karachi", 24.8607, 67.0011, ts=NOW + 600)
     assert loc.get_device_location(now=NOW + 600)["city"] == "Karachi"
-    assert [path.name for path in cache.parent.iterdir()] == ["location.json"]  # no temporary file left
+    # no temporary file left; the K-77 sidecar lock (C-125 step 1) stays, as every jarvis_filelock user's does
+    assert sorted(path.name for path in cache.parent.iterdir()) == ["location.json", "location.json.lock"]
 
 
 @pytest.mark.parametrize("bad", [

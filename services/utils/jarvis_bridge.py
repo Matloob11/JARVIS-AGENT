@@ -79,7 +79,7 @@ CONFIRM_NOTIFY_TIMEOUT_S = 5.0  # K-14: each ConfirmFlow try takes at most 5 s
 # K-39: these types are retried (up to RETRY_MAX times, backoff 1 -> 30 s) from a queue of at most
 # RETRY_QUEUE_MAX events; every other type is sent once and a failure is logged at DEBUG.
 CRITICAL_TYPES = frozenset({"transcription", "confirm_request", "settings_sync", "tool_sync",
-                            "agent_heartbeat"})
+                            "agent_heartbeat", "announce_result"})
 RETRY_QUEUE_MAX = 500
 RETRY_MAX = 5
 RETRY_FIRST_S = 1.0
@@ -282,7 +282,8 @@ def _idempotent(event_type: str, payload: Any) -> bool:
     the bridge may have it."""
     if event_type in ("settings_sync", "agent_heartbeat"):
         return True
-    if event_type in ("transcription", "confirm_request"):
+    if event_type in ("transcription", "confirm_request", "announce_result"):
+        # C-125: the bridge keeps one announce_result per attempt id (agent-svc's delivery ladder reads it)
         return isinstance(payload, dict) and bool(payload.get("id"))
     return False
 
@@ -375,7 +376,7 @@ def post_notify_blocking(event_type: str, payload: Any, *, client: httpx.Client,
 
 # K-39 v10: the retried types whose order matters per key: updates of one message, confirmation or tool call by id,
 # and the settings and heartbeat snapshots by type. Everything else has no key and is never held back by another.
-_ORDER_BY_ID = frozenset({"transcription", "confirm_request", "tool_sync"})
+_ORDER_BY_ID = frozenset({"transcription", "confirm_request", "tool_sync", "announce_result"})
 _ORDER_BY_TYPE = frozenset({"settings_sync", "agent_heartbeat"})
 
 
@@ -728,6 +729,24 @@ async def _notify_with_answer(event_type: str, payload: Any, timeout: float = CO
                                          timeout=timeout)
     response.raise_for_status()
     return response.json()
+
+
+async def notify_with_answer(event_type: str, payload: Any, timeout: float = CONFIRM_NOTIFY_TIMEOUT_S) -> Any:
+    """One POST /notify that returns the bridge's parsed JSON answer and raises on any failure (no retry queue): for
+    callers that read the answer, such as jarvis-agent-svc's delivery ladder (C-125, K-77: svc_poll, svc_deliver,
+    svc_heartbeat). Signed like notify_event; inside a probe or canary job it sends nothing."""
+    return await _notify_with_answer(event_type, payload, timeout)
+
+
+def notify_never_handled(exc: BaseException) -> bool:
+    """True when a failure of notify_with_answer proves that no bridge handler ran for that notify, by the same rules
+    as the retry queue: it was never sent (a connect, pool, proxy or write error, or a local protocol error), or the
+    bridge or its proxy refused it first (429, 502, 503, or any other answer below 500 but 409, which means an earlier
+    copy was accepted). A read timeout, a dropped connection, another 5xx or an answer that is not JSON may come after
+    a handler ran (C-125: agent-svc keeps such an announce open until the job's result or the end of its window)."""
+    if isinstance(exc, httpx.HTTPStatusError):
+        return _status_outcome(exc.response.status_code) in (_RETRY, _FAILED)
+    return isinstance(exc, httpx.HTTPError) and _error_outcome(exc) in (_RETRY, _FAILED)
 
 
 async def notify_confirm_request(payload: dict[str, Any]) -> Any:

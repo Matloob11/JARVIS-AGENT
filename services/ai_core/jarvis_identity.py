@@ -1,17 +1,28 @@
 """
 # jarvis_identity.py
 Manages persistent identity and background context for the User and their "Sir".
+
+Cross-process (C-125 step 1, K-77): on the VPS a job and jarvis-agent-svc share conversations/identity.json, and on
+the PC several job threads can change it. Every change is one read-modify-write under the file lock
+(services.utils.jarvis_filelock.locked, '<file>.lock'): the file is read again when it changed since this process last
+saw it, the change is applied, and the whole file is written through a temp file and os.replace. Readers
+(get_context, get_anna_state) reload when the file's mtime, inode or size changed, so a change made by another
+process shows up in the next prompt. An unreadable file keeps the data last read (and is never moved aside).
 """
 import asyncio
 import json
 import os
-from typing import TypedDict, cast
+from collections.abc import Callable
+from typing import Any, TypedDict, cast
 
 from services.ai_core.jarvis_plugin_manager import jarvis_tool
+from services.utils.jarvis_filelock import locked
 from services.utils.jarvis_logger import setup_logger
 from services.utils.probe_context import bridge_suppressed  # K-57 (C-39)
 
 logger = setup_logger("JARVIS-IDENTITY")
+
+FileStamp = tuple[int, int, int]  # (st_mtime_ns, st_ino, st_size): a change of any means another writer
 
 class AnnaState(TypedDict):
     """Structured emotional state for the Anna persona."""
@@ -28,57 +39,121 @@ class IdentityData(TypedDict):
     anna_mood: str
     is_upset: bool
 
+def _default_data() -> IdentityData:
+    return {
+        "user_background": "User background not set yet.",
+        "sir_background": "Sir's background not set yet.",
+        "sageer_background": "Sir's friend/mentor background not set yet.",
+        "facts": [],
+        "relationships": {
+            "sageer": "User's close friend and mentor (BSCS student).",
+        },
+        "anna_mood": "loving",
+        "is_upset": False,
+    }
+
+
 class IdentityManager:
     """Manages persistent facts about the user and their associates."""
 
     def __init__(self, storage_path: str = "conversations/identity.json") -> None:
         self.storage_path = storage_path
-        self.data: IdentityData = {
-            "user_background": "User background not set yet.",
-            "sir_background": "Sir's background not set yet.",
-            "sageer_background": "Sir's friend/mentor background not set yet.",
-            "facts": [],
-            "relationships": {
-                "sageer": "User's close friend and mentor (BSCS student).",
-            },
-            "anna_mood": "loving",
-            "is_upset": False,
-        }
+        self.data: IdentityData = _default_data()
         self.lock = asyncio.Lock()
+        self._stamp: FileStamp | None = None
         self._load_sync()
+
+    # -- disk (C-125 step 1) -----------------------------------------------------------------------------------
+
+    def _file_stamp(self) -> FileStamp | None:
+        try:
+            st = os.stat(self.storage_path)
+        except OSError:
+            return None
+        return (st.st_mtime_ns, st.st_ino, st.st_size)
+
+    def _read_file(self) -> bool:
+        """Reads the file into data (defaults first, then the stored fields) and remembers its stamp. False when it
+        is missing or unreadable; data then stays as it was."""
+        stamp = self._file_stamp()
+        if stamp is None:
+            return False
+        try:
+            with open(self.storage_path, encoding='utf-8') as f:
+                loaded = json.load(f)
+        except (OSError, ValueError) as e:
+            logger.error("Failed to load identity file: %s", type(e).__name__)
+            return False
+        if not isinstance(loaded, dict):
+            logger.error("Failed to load identity file: not an object")
+            return False
+        data = _default_data()
+        data.update(cast(IdentityData, loaded))
+        self.data = data
+        self._stamp = stamp
+        return True
 
     def _load_sync(self) -> None:
         """Initial load from disk."""
-        if os.path.exists(self.storage_path):
-            try:
-                with open(self.storage_path, encoding='utf-8') as f:
-                    loaded = cast(IdentityData, json.load(f))
-                    self.data.update(loaded)
-                logger.info("Identity context loaded from disk.")
-            except (OSError, json.JSONDecodeError) as e:
-                logger.error("Failed to load identity file: %s", e)
+        if self._read_file():
+            logger.info("Identity context loaded from disk.")
+
+    def _refresh(self) -> None:
+        """Reloads the file when another writer changed it since this process last read or wrote it."""
+        stamp = self._file_stamp()
+        if stamp is None or stamp == getattr(self, "_stamp", None):
+            return
+        if self._read_file():
+            logger.info("Identity context reloaded: the file changed on disk.")
+
+    def _write_file(self) -> None:
+        """Writes data whole (temp file + os.replace); the caller holds the file lock."""
+        os.makedirs(os.path.dirname(self.storage_path) or ".", exist_ok=True)
+        temp_path = self.storage_path + ".tmp"
+        with open(temp_path, 'w', encoding='utf-8') as f:
+            json.dump(self.data, f, indent=4, ensure_ascii=False)
+        os.replace(temp_path, self.storage_path)  # atomic: a reader sees the old or the new file
+        self._stamp = self._file_stamp()
+
+    def _change_sync(self, change: Callable[[IdentityData], tuple[Any, bool]]) -> Any:
+        """One read-modify-write under the file lock: reload if another process changed the file, apply change
+        (which returns (result, changed)), write when it changed. A failed write is logged and the change stays in
+        memory (as before C-125); a lock that stays busy past its timeout applies the change in memory only."""
+        try:
+            with locked(self.storage_path):
+                self._refresh()
+                result, changed = change(self.data)
+                if changed:
+                    try:
+                        self._write_file()
+                    except OSError as e:
+                        logger.error("Failed to save identity file: %s", type(e).__name__)
+                return result
+        except TimeoutError:
+            logger.error("Failed to save identity file: its lock stayed busy")
+            return change(self.data)[0]
+
+    async def _change(self, change: Callable[[IdentityData], tuple[Any, bool]]) -> Any:
+        async with self.lock:
+            return await asyncio.to_thread(self._change_sync, change)
 
     async def save(self) -> None:
-        """Persist data to disk asynchronously."""
+        """Persist data to disk asynchronously (under the file lock)."""
         if bridge_suppressed.get():
             return  # K-57: a probe or canary job never writes the identity file
         async with self.lock:
             try:
-                os.makedirs(os.path.dirname(self.storage_path), exist_ok=True)
-
                 def _write() -> None:
-                    temp_path = self.storage_path + ".tmp"
-                    with open(temp_path, 'w', encoding='utf-8') as f:
-                        json.dump(self.data, f, indent=4, ensure_ascii=False)
-                    # Use os_replace for atomic operation
-                    os.replace(temp_path, self.storage_path)
+                    with locked(self.storage_path):
+                        self._write_file()
                 await asyncio.to_thread(_write)
                 logger.info("Identity context saved.")
-            except OSError as e:
-                logger.error("Failed to save identity file: %s", e)
+            except (OSError, TimeoutError) as e:
+                logger.error("Failed to save identity file: %s", type(e).__name__)
 
     def get_context(self) -> str:
         """Returns a formatted string for the system prompt."""
+        self._refresh()
         facts_str = "\n".join([f"- {f}" for f in self.data.get("facts", [])])
         rels = cast(dict[str, str], self.data.get("relationships", {}))
         rels_str = "\n".join([f"- {k}: {v}" for k, v in rels.items()])
@@ -98,80 +173,75 @@ class IdentityManager:
         """Adds a new fact to the persistent memory with lock protection."""
         if bridge_suppressed.get():
             return "Probe job: nothing stored (K-57)."
-        async with self.lock:
-            facts = self.data["facts"]
-            if fact not in facts:
-                facts.append(fact)
-                await self._save_internal()
-                return f"Fact stored: {fact}"
-            return "Fact already exists."
+
+        def change(data: IdentityData) -> tuple[str, bool]:
+            facts = data["facts"]
+            if fact in facts:
+                return "Fact already exists.", False
+            facts.append(fact)
+            return f"Fact stored: {fact}", True
+        return cast(str, await self._change(change))
 
     async def update_relationship(self, person: str, info: str) -> str:
         """Updates relationship info for a specific person with lock protection."""
         if bridge_suppressed.get():
             return "Probe job: nothing stored (K-57)."
-        async with self.lock:
-            relationships = self.data["relationships"]
-            relationships[person.lower()] = info
-            await self._save_internal()
-            return f"Relationship info updated for {person}."
+
+        def change(data: IdentityData) -> tuple[str, bool]:
+            data["relationships"][person.lower()] = info
+            return f"Relationship info updated for {person}.", True
+        return cast(str, await self._change(change))
+
+    async def _set_fields(self, fields: dict[str, Any], message: str) -> str:
+        def change(data: IdentityData) -> tuple[str, bool]:
+            data.update(cast(IdentityData, fields))
+            return message, True
+        return cast(str, await self._change(change))
 
     async def update_user_background(self, info: str) -> str:
         """Updates user background info with lock protection."""
         if bridge_suppressed.get():
             return "Probe job: nothing stored (K-57)."
-        async with self.lock:
-            self.data["user_background"] = info
-            await self._save_internal()
-            return "Aapka background update ho gaya hai, Sir."
+        return await self._set_fields({"user_background": info}, "Aapka background update ho gaya hai, Sir.")
 
     async def update_sir_background(self, info: str) -> str:
         """Updates 'Sir' background info with lock protection."""
         if bridge_suppressed.get():
             return "Probe job: nothing stored (K-57)."
-        async with self.lock:
-            self.data["sir_background"] = info
-            await self._save_internal()
-            return "Aapke Sir ka background update ho gaya hai."
+        return await self._set_fields({"sir_background": info}, "Aapke Sir ka background update ho gaya hai.")
 
     async def update_sageer_background(self, info: str) -> str:
         """Updates Sageer's background info with lock protection."""
         if bridge_suppressed.get():
             return "Probe job: nothing stored (K-57)."
-        async with self.lock:
-            self.data["sageer_background"] = info
-            await self._save_internal()
-            return "Sageer bhai ka background update ho gaya hai."
+        return await self._set_fields({"sageer_background": info}, "Sageer bhai ka background update ho gaya hai.")
 
     async def set_anna_mood(self, mood: str, is_upset: bool = False) -> str:
         """Updates Anna's emotional state with lock protection."""
         if bridge_suppressed.get():
             return "Probe job: nothing stored (K-57)."
-        async with self.lock:
-            self.data["anna_mood"] = mood
-            self.data["is_upset"] = is_upset
-            await self._save_internal()
-            return f"Anna's mood updated to {mood}. Upset status: {is_upset}"
+        return await self._set_fields({"anna_mood": mood, "is_upset": is_upset},
+                                      f"Anna's mood updated to {mood}. Upset status: {is_upset}")
 
     async def _save_internal(self) -> None:
-        """Internal save - MUST be called while holding the lock."""
+        """Internal save (kept for older callers): the whole file under the file lock. Call it while holding
+        self.lock."""
         if bridge_suppressed.get():
             return  # K-57: a probe or canary job never writes the identity file
+
+        def _write() -> None:
+            with locked(self.storage_path):
+                self._write_file()
         try:
-            os.makedirs(os.path.dirname(self.storage_path), exist_ok=True)
-            def _write() -> None:
-                temp_path = self.storage_path + ".tmp"
-                with open(temp_path, 'w', encoding='utf-8') as f:
-                    json.dump(self.data, f, indent=4, ensure_ascii=False)
-                os.replace(temp_path, self.storage_path)
             await asyncio.to_thread(_write)
-        except OSError as e:
-            logger.error("Failed to save identity file: %s", e)
+        except (OSError, TimeoutError) as e:
+            logger.error("Failed to save identity file: %s", type(e).__name__)
 
     # Consolidated into standard public save method
 
     def get_anna_state(self) -> AnnaState:
         """Returns Anna's current emotional state."""
+        self._refresh()
         return {
             "mood": cast(str, self.data.get("anna_mood", "loving")),
             "is_upset": cast(bool, self.data.get("is_upset", False)),
