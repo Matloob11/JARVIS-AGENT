@@ -429,7 +429,8 @@ const MessageBubble = ({
   onFeedback?: (messageId: string, score: 1 | -1) => void;
 }) => {
   const isUser = message.role === 'user';
-  const isSystem = message.role === 'system';
+  // RESCUE / K-59: assistant + source 'system' is a calm system note (not a red error).
+  const isSystem = message.role === 'system' || message.source === 'system';
   const msgPersona = asPersonaKey(message.persona ?? fallbackPersona);
   const meta = sourceMeta(message.source);
   const SrcIcon = meta.icon;

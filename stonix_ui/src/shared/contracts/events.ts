@@ -329,7 +329,22 @@ export function normalizePlanProgress(raw: unknown): PlanProgressLine | null {
     current,
     total,
     action: String(data.action ?? data.step_action ?? ''),
-    status: String(data.status ?? 'IN_PROGRESS'),
+    status: normalizePlanProgressStatus(data.status),
     ts,
   };
+}
+
+/** Map COMPLETE/DONE/SUCCESS → COMPLETED; FAIL/ERROR → FAILED; else IN_PROGRESS. */
+export function normalizePlanProgressStatus(raw: unknown): string {
+  const s = String(raw ?? 'IN_PROGRESS').trim().toUpperCase();
+  if (s === 'COMPLETED' || s === 'COMPLETE' || s === 'DONE' || s === 'SUCCESS') {
+    return 'COMPLETED';
+  }
+  if (s === 'FAILED' || s === 'FAIL' || s === 'ERROR') {
+    return 'FAILED';
+  }
+  if (s === 'IN_PROGRESS' || s === 'RUNNING' || s === 'PROGRESS') {
+    return 'IN_PROGRESS';
+  }
+  return s || 'IN_PROGRESS';
 }

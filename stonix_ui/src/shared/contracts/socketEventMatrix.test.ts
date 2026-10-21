@@ -6,6 +6,7 @@ import {
   SOCKET_EVENT_NAMES,
   SUBSCRIBED_SOCKET_EVENTS_FROM_SRC,
 } from './socketEventMatrix';
+import { scanBridgeUiEmits, scanSubscribedSocketEventsFromSrc } from './scanBridgeUiEmits';
 import {
   normalizeConfirm,
   normalizeMessage,
@@ -17,9 +18,18 @@ import {
 describe('UI-H03 socket event matrix', () => {
   it('lists every subscribed useSocketEvent / subscribeSocketEvent name', () => {
     const matrix = new Set(SOCKET_EVENT_NAMES);
+    const live = scanSubscribedSocketEventsFromSrc();
+    const missingLive = live.filter(name => !matrix.has(name));
+    expect(missingLive, `matrix missing live subscribed: ${missingLive.join(', ')}`).toEqual([]);
     const subscribed = [...SUBSCRIBED_SOCKET_EVENTS_FROM_SRC];
-    const missing = subscribed.filter(name => !matrix.has(name));
-    expect(missing, `matrix missing subscribed: ${missing.join(', ')}`).toEqual([]);
+    const missingSnap = subscribed.filter(name => !matrix.has(name));
+    expect(missingSnap, `matrix missing snapshot subscribed: ${missingSnap.join(', ')}`).toEqual([]);
+  });
+
+  it('subscribed snapshot matches a live scan of stonix_ui/src', () => {
+    const live = scanSubscribedSocketEventsFromSrc();
+    const snap = [...SUBSCRIBED_SOCKET_EVENTS_FROM_SRC].sort();
+    expect(snap, 'update SUBSCRIBED_SOCKET_EVENTS_FROM_SRC to match live scan').toEqual(live);
   });
 
   it('every non-unused matrix row is in the subscribed snapshot', () => {
@@ -30,10 +40,30 @@ describe('UI-H03 socket event matrix', () => {
     expect(orphans, `matrix rows not subscribed: ${orphans.join(', ')}`).toEqual([]);
   });
 
-  it('every bridge→ui emit is in the matrix (no silent unknowns)', () => {
+  it('every bridge→ui emit (hand list + live Python scan) is in the matrix', () => {
     const matrix = new Set(SOCKET_EVENT_NAMES);
-    const missing = BRIDGE_UI_EVENTS.filter(name => !matrix.has(name));
-    expect(missing, `bridge emits not in matrix: ${missing.join(', ')}`).toEqual([]);
+    const scanned = scanBridgeUiEmits();
+    const missingScan = scanned.filter(name => !matrix.has(name));
+    expect(missingScan, `live bridge emits not in matrix: ${missingScan.join(', ')}`).toEqual([]);
+    const missingHand = BRIDGE_UI_EVENTS.filter(name => !matrix.has(name));
+    expect(missingHand, `hand BRIDGE_UI_EVENTS not in matrix: ${missingHand.join(', ')}`).toEqual(
+      [],
+    );
+  });
+
+  it('subscribed rows without a bridge emitter carry a note or awaiting_emitter', () => {
+    const emitters = new Set([...scanBridgeUiEmits(), 'connect', 'disconnect']);
+    const lacking = SOCKET_EVENT_MATRIX.filter(
+      row =>
+        row.coverage !== 'unused' &&
+        row.coverage !== 'builtin' &&
+        !emitters.has(row.event) &&
+        !(row.note && /awaiting_emitter|legacy|alias/i.test(row.note)),
+    ).map(row => row.event);
+    expect(
+      lacking,
+      `subscribed without emitter need a note: ${lacking.join(', ')}`,
+    ).toEqual([]);
   });
 
   it('has no duplicate event names', () => {

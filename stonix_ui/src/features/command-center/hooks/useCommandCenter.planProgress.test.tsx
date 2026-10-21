@@ -205,7 +205,7 @@ describe('useCommandCenter plan_progress (C-86)', () => {
     expect(hook.result.current.planProgress?.current).toBe(3);
   });
 
-  it('hides COMPLETED after a few seconds and keeps FAILED visible', () => {
+  it('hides COMPLETED after a few seconds; FAILED after ~60s; IN_PROGRESS after ~3min stale', () => {
     const hook = renderHook(() => useCommandCenter());
     act(() => {
       bus.fire('plan_progress', wrapped(3, 'Verify', 'COMPLETED'));
@@ -227,8 +227,25 @@ describe('useCommandCenter plan_progress (C-86)', () => {
     });
     expect(hook.result.current.planProgress?.status).toBe('FAILED');
     act(() => {
-      vi.advanceTimersByTime(10_000);
+      vi.advanceTimersByTime(59_999);
     });
     expect(hook.result.current.planProgress?.status).toBe('FAILED');
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(hook.result.current.planProgress).toBeNull();
+
+    act(() => {
+      bus.fire('plan_progress', wrapped(1, 'Scan', 'IN_PROGRESS'));
+    });
+    expect(hook.result.current.planProgress?.status).toBe('IN_PROGRESS');
+    act(() => {
+      vi.advanceTimersByTime(3 * 60_000 - 1);
+    });
+    expect(hook.result.current.planProgress?.status).toBe('IN_PROGRESS');
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(hook.result.current.planProgress).toBeNull();
   });
 });

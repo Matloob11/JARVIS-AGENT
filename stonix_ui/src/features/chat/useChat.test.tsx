@@ -127,4 +127,33 @@ describe('useChat awaitingReply', () => {
     });
     expect(hook.result.current.awaitingReply).toBe(false);
   });
+
+  it('RESCUE: assistant + source system + turn_id clears awaitingReply', async () => {
+    const hook = await sendOne();
+    const userId = hook.result.current.messages.find(row => row.role === 'user')?.id;
+    expect(userId).toBeTruthy();
+    act(() => {
+      bus.fire('new_message', {
+        id: 'rescue-1',
+        role: 'assistant',
+        source: 'system',
+        text: 'Sir, maazrat, is message ka jawab nahi ban saka.',
+        turn_id: userId,
+        ts: Date.now(),
+      });
+    });
+    expect(hook.result.current.awaitingReply).toBe(false);
+    const note = hook.result.current.messages.find(row => row.id === 'rescue-1');
+    expect(note?.source).toBe('system');
+  });
+
+  it('RESCUE: clearChatAwaitingOnStop clears awaitingReply', async () => {
+    const { clearChatAwaitingOnStop } = await import('./awaitingClear');
+    const hook = await sendOne();
+    expect(hook.result.current.awaitingReply).toBe(true);
+    act(() => {
+      clearChatAwaitingOnStop();
+    });
+    expect(hook.result.current.awaitingReply).toBe(false);
+  });
 });

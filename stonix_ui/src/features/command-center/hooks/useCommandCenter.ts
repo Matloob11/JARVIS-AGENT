@@ -181,6 +181,10 @@ function mergeVortexLogsFromInit(prev: VortexLog[], rawSeed: unknown[]): VortexL
 }
 
 const PLAN_PROGRESS_COMPLETED_HIDE_MS = 3_000;
+/** IN_PROGRESS with no update for this long → hide (receipt clock, reset each update). */
+const PLAN_PROGRESS_STALE_MS = 3 * 60_000;
+/** FAILED stays visible briefly then clears. */
+const PLAN_PROGRESS_FAILED_HIDE_MS = 60_000;
 
 function turnRejectedToast(data: Record<string, unknown>): string {
   const reason = String(data.reason ?? '');
@@ -400,6 +404,7 @@ export const useCommandCenter = () => {
   const [logDroppedCount, setLogDroppedCount] = useState(0);
   const [planProgress, setPlanProgress] = useState<PlanProgressLine | null>(null);
   const planProgressHideRef = useRef<number | null>(null);
+  const planProgressLastTsRef = useRef(0);
   const [reasoningHistory, setReasoningHistory] = useState<ReasoningPlan[]>([]);
   const [systemFeed, setSystemFeed] = useState<SystemFeedEntry[]>([]);
   const traceLogPauseRef = useRef(false);
@@ -750,21 +755,47 @@ export const useCommandCenter = () => {
     ingestLogBatch(data as Record<string, unknown>);
   });
 
-  const applyPlanProgress = useCallback((data: unknown) => {
-    const line = normalizePlanProgress(data);
-    if (!line) return;
+  const clearPlanProgress = useCallback(() => {
     if (planProgressHideRef.current != null) {
       window.clearTimeout(planProgressHideRef.current);
       planProgressHideRef.current = null;
     }
-    setPlanProgress(line);
-    if (line.status === 'COMPLETED') {
-      planProgressHideRef.current = window.setTimeout(() => {
-        planProgressHideRef.current = null;
-        setPlanProgress(null);
-      }, PLAN_PROGRESS_COMPLETED_HIDE_MS);
-    }
+    planProgressLastTsRef.current = 0;
+    setPlanProgress(null);
   }, []);
+
+  const schedulePlanProgressHide = useCallback((ms: number) => {
+    if (planProgressHideRef.current != null) {
+      window.clearTimeout(planProgressHideRef.current);
+    }
+    planProgressHideRef.current = window.setTimeout(() => {
+      planProgressHideRef.current = null;
+      setPlanProgress(null);
+    }, ms);
+  }, []);
+
+  const applyPlanProgress = useCallback(
+    (data: unknown) => {
+      const line = normalizePlanProgress(data);
+      if (!line) return;
+      // Ignore out-of-order / older lines (ts is epoch ms from normalizePlanProgress).
+      const lineTs = line.ts ?? 0;
+      if (lineTs > 0 && planProgressLastTsRef.current > 0 && lineTs < planProgressLastTsRef.current) {
+        return;
+      }
+      if (lineTs > 0) planProgressLastTsRef.current = lineTs;
+      setPlanProgress(line);
+      if (line.status === 'COMPLETED') {
+        schedulePlanProgressHide(PLAN_PROGRESS_COMPLETED_HIDE_MS);
+      } else if (line.status === 'FAILED') {
+        schedulePlanProgressHide(PLAN_PROGRESS_FAILED_HIDE_MS);
+      } else {
+        // IN_PROGRESS: staleness from receipt time; each update resets the clock.
+        schedulePlanProgressHide(PLAN_PROGRESS_STALE_MS);
+      }
+    },
+    [schedulePlanProgressHide],
+  );
 
   useEffect(() => {
     return () => {
@@ -776,6 +807,10 @@ export const useCommandCenter = () => {
 
   useSocketEvent('plan_progress', applyPlanProgress);
   useSocketEvent('plan_progress_update', applyPlanProgress);
+  // Socket drop / reconnect: clear so a stale bar does not survive a new session.
+  useSocketEvent('disconnect', () => {
+    clearPlanProgress();
+  });
 
   useSocketEvent('turn_rejected', (data: unknown) => {
     if (!data || typeof data !== 'object') return;
@@ -902,6 +937,10 @@ export const useCommandCenter = () => {
     }
     if (data.online === true && data.restarting !== true) {
       setSessionRestartBanner(prev => (prev ? false : prev));
+    }
+    // Offline or paused: drop plan bar (no live runner to finish it).
+    if (data.online === false || data.paused === true) {
+      clearPlanProgress();
     }
   });
 

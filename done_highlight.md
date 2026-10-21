@@ -2866,3 +2866,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** tests 204 passed; PC par --merge-local --dry-run (308 conversations / 340 messages, karne ko kuch nahi) aur --pre --dry-run (9 files, decrypt ok, ssh nahi)
 - **Commit:** (this commit) · **Deploy:** — (VPS steps V4 window mein)
 - **Doosre agent ke liye:** —
+
+### ✅ [cursor] REQ-FIX + RESCUE + X-60 · Orb/plan/memory/matrix/live + Stop awaiting · 2026-10-21 16:30 PKT
+- **Kya kiya:** REQ-FIX (1)-(12) aur RESCUE: orb dual blit + swirl; plan bar timers/a11y; memory [] clear + code-point truncate; bridge emit Vitest scan; X-60 live step-2 checks; Stop clears awaitingReply; system-source calm bubble. Honest 4x perf ≥18 (REQ-PERF).
+- **Files:** stonix_ui/src/features/voice/orb/*, plan progress/SystemTrace/useCommandCenter, useMemories, socketEventMatrix+scan, live.spec, perf.spec, chat awaitingClear, ChatList, plan.md, done_highlight.md
+- **Verify:** vitest 65 passed; e2e chromium 283 passed; electron 5; test:perf 5; live --list 9
+- **Commit:** (this commit) · **Deploy:** REQ-DEPLOY frontend
+- **Doosre agent ke liye:** REQ-PERF 4x ≥18; frontend deploy ek dafa

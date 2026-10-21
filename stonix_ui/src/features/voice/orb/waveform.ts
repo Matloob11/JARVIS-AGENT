@@ -100,14 +100,9 @@ export function drawWave(
         ? (b[3] as number) - WAVE_PAGE_Y0
         : WAVE_CY) -
       h / 2;
-    // Reactive modes use fillRect (faster than roundRect) for the perf gate script budget.
-    if (mode === 'speaking' || mode === 'listening' || mode === 'thinking') {
-      ctx.fillRect(x0, y0, BAR_W, h);
-    } else {
-      const r = Math.min(BAR_W / 2, h / 2);
-      ctx.beginPath();
-      ctx.roundRect(x0, y0, BAR_W, h, r);
-      ctx.fill();
-    }
+    const r = Math.min(BAR_W / 2, h / 2);
+    ctx.beginPath();
+    ctx.roundRect(x0, y0, BAR_W, h, r);
+    ctx.fill();
   });
 }

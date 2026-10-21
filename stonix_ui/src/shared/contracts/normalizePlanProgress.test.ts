@@ -41,4 +41,25 @@ describe('normalizePlanProgress (C-86)', () => {
     expect(normalizePlanProgress({ current: 1 })).toBeNull();
     expect(normalizePlanProgress(null)).toBeNull();
   });
+
+  it('normalizes status synonyms to COMPLETED / FAILED / IN_PROGRESS', () => {
+    expect(
+      normalizePlanProgress({ current: 1, total: 1, action: 'x', status: 'complete' })?.status,
+    ).toBe('COMPLETED');
+    expect(
+      normalizePlanProgress({ current: 1, total: 1, action: 'x', status: ' done ' })?.status,
+    ).toBe('COMPLETED');
+    expect(
+      normalizePlanProgress({ current: 1, total: 1, action: 'x', status: 'success' })?.status,
+    ).toBe('COMPLETED');
+    expect(
+      normalizePlanProgress({ current: 1, total: 1, action: 'x', status: 'fail' })?.status,
+    ).toBe('FAILED');
+    expect(
+      normalizePlanProgress({ current: 1, total: 1, action: 'x', status: 'error' })?.status,
+    ).toBe('FAILED');
+    expect(
+      normalizePlanProgress({ current: 1, total: 1, action: 'x', status: 'running' })?.status,
+    ).toBe('IN_PROGRESS');
+  });
 });

@@ -38,7 +38,7 @@ async function measureSpeakingFps(
   };
 }
 
-test.describe.configure({ mode: 'serial', timeout: 180_000, retries: 2 });
+test.describe.configure({ mode: 'serial', timeout: 180_000, retries: 0 });
 
 test.describe('@gate performance', () => {
   test.beforeEach(({}, testInfo) => {
@@ -69,8 +69,7 @@ test.describe('@gate performance', () => {
       type: 'perf',
       description: `dpr1 fps_med=${med.toFixed(1)} fps_best=${best.toFixed(1)} orb_draw_ms_med=${scriptMed.toFixed(2)} channel=chromium`,
     });
-    // Target ≥58 on a cool host; allow ≥50 median / ≥55 best under Windows background load.
-    expect(med >= 58 || (med >= 50 && best >= 55)).toBe(true);
+    expect(med, `dpr1 fps_med=${med.toFixed(1)} best=${best.toFixed(1)}`).toBeGreaterThanOrEqual(58);
     expect(scriptMed).toBeLessThanOrEqual(1.5);
   });
 
@@ -92,10 +91,12 @@ test.describe('@gate performance', () => {
       type: 'perf',
       description: `dpr2 fps_med=${med.toFixed(1)} fps_best=${best.toFixed(1)}`,
     });
-    expect(med >= 58 || (med >= 50 && best >= 55)).toBe(true);
+    expect(med, `dpr2 fps_med=${med.toFixed(1)} best=${best.toFixed(1)}`).toBeGreaterThanOrEqual(58);
   });
 
-  test('DPR2 4x CPU ≥50 fps', async ({ page }) => {
+  // Honest 4× floor (REQ-PERF in plan.md §11): CDP Emulation.setCPUThrottlingRate(4)
+  // stacks with Windows load; dual-blit orb lands ~20 fps here, not 50.
+  test('DPR2 4x CPU ≥18 fps', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     const cdp = await page.context().newCDPSession(page);
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
@@ -114,11 +115,10 @@ test.describe('@gate performance', () => {
       type: 'perf',
       description: `dpr2-4x fps_med=${med.toFixed(1)} fps_best=${best.toFixed(1)}`,
     });
-    // 4× CPU target ≥50; floor ≥18 median (Playwright throttle stacks with host load).
     expect(med, `dpr2-4x fps_med=${med.toFixed(1)} best=${best.toFixed(1)}`).toBeGreaterThanOrEqual(18);
   });
 
-  test('phone 390 DPR3 4x CPU ≥50 fps', async ({ page }) => {
+  test('phone 390 DPR3 4x CPU ≥18 fps', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => {
       Object.defineProperty(window, 'devicePixelRatio', { configurable: true, get: () => 3 });
@@ -140,7 +140,6 @@ test.describe('@gate performance', () => {
       type: 'perf',
       description: `phone-4x fps_med=${med.toFixed(1)} fps_best=${best.toFixed(1)}`,
     });
-    // Phone + DPR3 redefine + 4× CPU is the heaviest gate; floor ≥18 keeps a live loop under load.
     expect(med, `phone-4x fps_med=${med.toFixed(1)} best=${best.toFixed(1)}`).toBeGreaterThanOrEqual(18);
   });
 
@@ -153,15 +152,14 @@ test.describe('@gate performance', () => {
     await page.waitForTimeout(1000);
     let b = await stats(page);
     const idleRate = b.draws - a.draws;
-    // Breath loop targets ~15 draws/s; allow ≤18 for timer/RAF jitter.
-    expect(idleRate).toBeLessThanOrEqual(18);
+    expect(idleRate).toBeLessThanOrEqual(16);
 
     await page.evaluate(() => window.__jarvisTest?.setVoiceState('mic off'));
     await page.waitForTimeout(400);
     a = await stats(page);
     await page.waitForTimeout(1000);
     b = await stats(page);
-    expect(b.draws - a.draws).toBeLessThanOrEqual(18);
+    expect(b.draws - a.draws).toBeLessThanOrEqual(16);
 
     for (const st of ['muted', 'offline', 'joining', 'agent absent', 'audio blocked'] as const) {
       await page.evaluate(s => window.__jarvisTest?.setVoiceState(s), st);

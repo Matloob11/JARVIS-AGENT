@@ -4,6 +4,7 @@ import { getSocket } from '@/shared/realtime/socket';
 import { useLiveKit } from '@/features/voice/LiveKitProvider';
 import { useSettings } from '@/features/settings/useSettings';
 import { getPersona, stopTitle } from '@/shared/persona';
+import { clearChatAwaitingOnStop } from '@/features/chat/awaitingClear';
 import { useAgentListeningMuted, handleUiCommandAck } from '@/features/status/AgentControls';
 import { listeningMutedTitle } from '@/shared/persona';
 import { Card } from '@/shared/ui/Card';
@@ -67,6 +68,7 @@ export function VoiceWakeCard() {
   };
 
   const onStop = () => {
+    clearChatAwaitingOnStop();
     getSocket().emit('ui_command', { type: 'stop', payload: {} }, (ack: Parameters<typeof handleUiCommandAck>[0]) => {
       handleUiCommandAck(ack);
     });

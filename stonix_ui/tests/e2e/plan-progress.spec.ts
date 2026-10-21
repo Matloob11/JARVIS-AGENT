@@ -37,18 +37,24 @@ test('plan_progress bar advances 1/3 → 2/3 → 3/3; COMPLETED hides; FAILED is
   await expect(bar).toBeVisible();
   await expect(bar).toHaveAttribute('data-status', 'IN_PROGRESS');
   await expect(bar).toContainText('Step 1/3');
-  await expect(page.getByTestId('trace-plan-progress-bar')).toHaveAttribute('aria-valuenow', '1');
+  // 1-based current at step start → fill/aria (current-1): 0, 1, 2, then COMPLETED → total.
+  await expect(page.getByTestId('trace-plan-progress-bar')).toHaveAttribute('aria-valuenow', '0');
+  await expect(page.getByTestId('trace-plan-progress-bar')).toHaveAttribute(
+    'aria-labelledby',
+    'trace-plan-progress-label',
+  );
 
   await emit(page, 'plan_progress_update', stepPayload(2, 'Heal', 'IN_PROGRESS'));
   await expect(bar).toContainText('Step 2/3');
-  await expect(page.getByTestId('trace-plan-progress-bar')).toHaveAttribute('aria-valuenow', '2');
+  await expect(page.getByTestId('trace-plan-progress-bar')).toHaveAttribute('aria-valuenow', '1');
 
   await emit(page, 'plan_progress', stepPayload(3, 'Verify', 'IN_PROGRESS'));
   await expect(bar).toContainText('Step 3/3');
-  await expect(page.getByTestId('trace-plan-progress-bar')).toHaveAttribute('aria-valuenow', '3');
+  await expect(page.getByTestId('trace-plan-progress-bar')).toHaveAttribute('aria-valuenow', '2');
 
   await emit(page, 'plan_progress', stepPayload(3, 'Verify', 'COMPLETED'));
   await expect(bar).toHaveAttribute('data-status', 'COMPLETED');
+  await expect(page.getByTestId('trace-plan-progress-bar')).toHaveAttribute('aria-valuenow', '3');
   await expect(bar).toBeHidden({ timeout: 5_000 });
 
   await emit(page, 'plan_progress_update', stepPayload(2, 'Heal', 'FAILED'));

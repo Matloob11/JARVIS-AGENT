@@ -18,12 +18,8 @@ const STORAGE =
   process.env.E2E_STORAGE_STATE ||
   resolve(LIVE_DIR, '.auth/storageState.json');
 
-/** Core init_state keys the dashboard expects (K-02); others are optional. */
-const INIT_STATE_EXPECTED_KEYS = [
-  'agent_status',
-  'settings',
-  'server_time',
-] as const;
+/** Core init_state keys (K-02). `settings` is optional. */
+const INIT_STATE_EXPECTED_KEYS = ['agent_status', 'server_time'] as const;
 
 function skipUnlessLive(reasonExtra?: string): void {
   test.skip(
@@ -115,18 +111,11 @@ test.describe('X-60 live smoke (VPS)', () => {
   });
 
   test('init_state keys arrive over the socket', async ({ page }) => {
+    // Websocket listener BEFORE navigation so the first init_state is not missed.
     const capture = await attachInitStateCapture(page);
     try {
       await page.goto('/', { waitUntil: 'domcontentloaded' });
       await expect(page.getByTestId('app-ready')).toBeVisible({ timeout: 45_000 });
-      // Force a fresh init_state if the first frame was missed during navigation.
-      await page.evaluate(() => {
-        const w = window as unknown as {
-          __jarvisRequestState?: () => void;
-        };
-        // Best-effort: click nothing; rely on connect + optional request_state via composer unused.
-        void w;
-      });
       await expect
         .poll(() => capture.keys(), {
           timeout: 45_000,
@@ -146,24 +135,21 @@ test.describe('X-60 live smoke (VPS)', () => {
     }
   });
 
-  test('agent_status chip is present and readable', async ({ page }) => {
+  test('agent chip is online within 60s', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId('app-ready')).toBeVisible({ timeout: 45_000 });
     const chip = page.getByTestId('chip-agent');
     await expect(chip, 'FAIL: agent_status — chip-agent missing').toBeVisible({
       timeout: 30_000,
     });
-    const label = (await chip.innerText()).trim();
-    expect(
-      label.length,
-      'FAIL: agent_status — chip-agent has empty label',
-    ).toBeGreaterThan(0);
+    await expect(
+      chip,
+      'FAIL: agent_status — chip-agent data-active not true within 60s',
+    ).toHaveAttribute('data-active', 'true', { timeout: 60_000 });
   });
 
   test('settings panel loads without sending settings_update', async ({ page }) => {
-    await page.goto('/', { waitUntil: 'domcontentloaded' });
-    await expect(page.getByTestId('app-ready')).toBeVisible({ timeout: 45_000 });
-
+    // Attach websocket listener before navigation / click.
     const updates: unknown[] = [];
     page.on('websocket', ws => {
       ws.on('framesent', frame => {
@@ -172,13 +158,15 @@ test.describe('X-60 live smoke (VPS)', () => {
       });
     });
 
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByTestId('app-ready')).toBeVisible({ timeout: 45_000 });
+
     await page.getByTitle('Settings').click();
     await expect(
       page.getByTestId('settings-drawer'),
       'FAIL: settings panel — settings-drawer did not open',
     ).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('settings-voice-select')).toBeVisible({ timeout: 10_000 });
-    // Read-only: wait briefly and assert no settings_update left the browser.
     await page.waitForTimeout(1500);
     expect(
       updates,
@@ -193,18 +181,23 @@ test.describe('X-60 live smoke (VPS)', () => {
       page.getByTestId('chat-panel'),
       'FAIL: chat history — chat-panel missing',
     ).toBeVisible({ timeout: 30_000 });
-    // Either prior messages or the empty state — both prove the list mounted.
-    const msgs = page.getByTestId('chat-msg');
-    const empty = page.getByTestId('chat-empty');
-    const hasMsgs = (await msgs.count()) > 0;
-    const hasEmpty = await empty.isVisible().catch(() => false);
-    expect(
-      hasMsgs || hasEmpty,
-      'FAIL: chat history — neither chat-msg rows nor chat-empty rendered',
-    ).toBe(true);
+    // Poll past empty-state race while history hydrates.
+    await expect
+      .poll(
+        async () => {
+          const msgs = await page.getByTestId('chat-msg').count();
+          const empty = await page.getByTestId('chat-empty').isVisible().catch(() => false);
+          return msgs > 0 || empty;
+        },
+        {
+          timeout: 30_000,
+          message: 'FAIL: chat history — neither chat-msg rows nor chat-empty rendered',
+        },
+      )
+      .toBe(true);
   });
 
-  test('typed ping gets an assistant reply within 60s', async ({ page }) => {
+  test('typed ping: exactly one user bubble + assistant sibling within 45s', async ({ page }) => {
     test.skip(
       !LIVE_CHAT,
       'SKIP: set JARVIS_LIVE_SMOKE_CHAT=1 to send a live typed ping (spends agent quota)',
@@ -216,25 +209,79 @@ test.describe('X-60 live smoke (VPS)', () => {
       timeout: 60_000,
     });
 
-    const before = await page.getByTestId('chat-msg').locator('[data-role="assistant"]').count();
     const ping = `live-smoke ping ${Date.now()}`;
     await page.getByTestId('chat-composer-input').fill(ping);
     await page.getByTestId('chat-composer-send').click();
 
+    const userRows = page
+      .locator('[data-testid="chat-msg"][data-role="user"]')
+      .filter({ hasText: ping });
+    await expect(userRows, 'FAIL: chat ping — user bubble with ping text did not appear').toHaveCount(
+      1,
+      { timeout: 15_000 },
+    );
+    const userId = await userRows.first().getAttribute('data-id');
+    expect(userId, 'FAIL: chat ping — user row missing data-id').toBeTruthy();
+
+    // Exactly-once: still one user row with this ping text.
+    await expect(userRows).toHaveCount(1);
+
+    // Sibling assistant after that user row (data-role is on the row itself).
+    const assistantAfter = page.locator(
+      `[data-testid="chat-msg"][data-role="user"][data-id="${userId}"] ~ [data-testid="chat-msg"][data-role="assistant"]`,
+    );
     await expect(
-      page.getByTestId('chat-msg').filter({ hasText: ping }).first(),
-      'FAIL: chat ping — user bubble with ping text did not appear',
-    ).toBeVisible({ timeout: 15_000 });
+      assistantAfter.first(),
+      'FAIL: chat ping — no assistant sibling within 45s after typed ping',
+    ).toBeVisible({ timeout: 45_000 });
+  });
+
+  test('3 mic toggles keep the same LiveKit identity (?debug=1)', async ({ page }) => {
+    await page.goto('/?debug=1', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByTestId('app-ready')).toBeVisible({ timeout: 45_000 });
 
     await expect
       .poll(
-        async () => page.getByTestId('chat-msg').locator('[data-role="assistant"]').count(),
+        async () =>
+          page.evaluate(() => (window as unknown as { __jarvisDebug?: { identity?: string } }).__jarvisDebug?.identity ?? ''),
         {
           timeout: 60_000,
-          message:
-            'FAIL: chat ping — no new assistant chat-msg within 60s after typed ping',
+          message: 'FAIL: mic identity — window.__jarvisDebug.identity empty with ?debug=1',
         },
       )
-      .toBeGreaterThan(before);
+      .not.toBe('');
+
+    const before = await page.evaluate(
+      () => (window as unknown as { __jarvisDebug?: { identity?: string } }).__jarvisDebug?.identity ?? '',
+    );
+
+    // Mic toggle lives in the voice popover.
+    await page.getByTestId('chip-voice').click();
+    const mic = page.getByTestId('topbar-mic-toggle');
+    await expect(mic, 'FAIL: mic identity — topbar-mic-toggle missing').toBeVisible({
+      timeout: 15_000,
+    });
+    for (let i = 0; i < 3; i += 1) {
+      await mic.click();
+      await page.waitForTimeout(400);
+    }
+
+    const after = await page.evaluate(
+      () => (window as unknown as { __jarvisDebug?: { identity?: string } }).__jarvisDebug?.identity ?? '',
+    );
+    expect(after, 'FAIL: mic identity — identity changed after 3 toggles').toBe(before);
+  });
+
+  test('logout returns to the login form', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByTestId('app-ready')).toBeVisible({ timeout: 45_000 });
+
+    await page.getByTitle('Settings').click();
+    await expect(page.getByTestId('settings-drawer')).toBeVisible({ timeout: 15_000 });
+    await page.getByTestId('settings-logout').click();
+    await expect(
+      page.getByTestId('login-password'),
+      'FAIL: logout — login form did not appear',
+    ).toBeVisible({ timeout: 30_000 });
   });
 });

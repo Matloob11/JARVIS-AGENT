@@ -336,48 +336,59 @@ const ReasoningCard = ({
           ))}
         </div>
       )}
-      {planProgress && (
-        <div
-          className={clsx(
-            'reasoning-plan-progress',
-            planProgress.status === 'FAILED' && 'reasoning-plan-progress--failed',
-            planProgress.status === 'COMPLETED' && 'reasoning-plan-progress--done',
-          )}
-          data-testid="trace-plan-progress"
-          data-status={planProgress.status}
-        >
-          <div className="reasoning-plan-progress__row">
-            <p className="reasoning-plan-progress__label">
-              {planProgress.status === 'FAILED'
-                ? `Plan ruka · ${planProgress.action || 'step'} (${planProgress.current}/${planProgress.total})`
-                : `Step ${planProgress.current}/${planProgress.total} - ${planProgress.action} (${planProgress.status})`}
-            </p>
-            <span className="reasoning-plan-progress__fraction">
-              {planProgress.current}/{planProgress.total}
-            </span>
-          </div>
+      {planProgress && (() => {
+        const labelId = 'trace-plan-progress-label';
+        const labelText =
+          planProgress.status === 'FAILED'
+            ? `Plan ruka · ${planProgress.action || 'step'} (${planProgress.current}/${planProgress.total})`
+            : `Step ${planProgress.current}/${planProgress.total} - ${planProgress.action} (${planProgress.status})`;
+        // current is 1-based at step start: fill (current-1)/total until COMPLETED → 100%.
+        const valueNow =
+          planProgress.status === 'COMPLETED'
+            ? planProgress.total
+            : Math.max(0, planProgress.current - 1);
+        const widthPct =
+          planProgress.status === 'COMPLETED'
+            ? 100
+            : Math.min(
+                100,
+                Math.round((valueNow / Math.max(1, planProgress.total)) * 100),
+              );
+        return (
           <div
-            className="reasoning-plan-progress__track"
-            data-testid="trace-plan-progress-bar"
-            role="progressbar"
-            aria-valuenow={planProgress.current}
-            aria-valuemin={0}
-            aria-valuemax={planProgress.total}
+            className={clsx(
+              'reasoning-plan-progress',
+              planProgress.status === 'FAILED' && 'reasoning-plan-progress--failed',
+              planProgress.status === 'COMPLETED' && 'reasoning-plan-progress--done',
+            )}
+            data-testid="trace-plan-progress"
+            data-status={planProgress.status}
           >
+            <div className="reasoning-plan-progress__row">
+              <p className="reasoning-plan-progress__label" id={labelId}>
+                {labelText}
+              </p>
+              <span className="reasoning-plan-progress__fraction">
+                {planProgress.current}/{planProgress.total}
+              </span>
+            </div>
             <div
-              className="reasoning-plan-progress__fill"
-              style={{
-                width: `${Math.min(
-                  100,
-                  Math.round(
-                    (Math.max(0, planProgress.current) / Math.max(1, planProgress.total)) * 100,
-                  ),
-                )}%`,
-              }}
-            />
+              className="reasoning-plan-progress__track"
+              data-testid="trace-plan-progress-bar"
+              role="progressbar"
+              aria-labelledby={labelId}
+              aria-valuenow={valueNow}
+              aria-valuemin={0}
+              aria-valuemax={planProgress.total}
+            >
+              <div
+                className="reasoning-plan-progress__fill"
+                style={{ width: `${widthPct}%` }}
+              />
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
       <div className="mt-3 space-y-2">
         {planLines.map((step: string, index: number) => (
           <div key={`${step}-${index}`} className="reasoning-step" data-testid="trace-reasoning-step">

@@ -58,6 +58,20 @@ describe('normalizeMemory (K-07 v44)', () => {
     });
     expect(row!.content).toHaveLength(MAX_CONTENT_CHARS);
   });
+
+  it('truncates by Unicode code points (not UTF-16 code units)', () => {
+    const emoji = '😀'; // one code point, two UTF-16 units
+    const content = emoji.repeat(MAX_CONTENT_CHARS + 10);
+    const row = normalizeMemory({
+      id: 'emoji',
+      content,
+      source: 'extractor',
+      role: 'user',
+      ts: 1,
+    });
+    expect(Array.from(row!.content)).toHaveLength(MAX_CONTENT_CHARS);
+    expect(row!.content).not.toMatch(/\uD800|\uDFFF/);
+  });
 });
 
 describe('dedupeMemoriesById', () => {

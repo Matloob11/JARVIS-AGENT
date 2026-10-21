@@ -498,34 +498,23 @@ function drawOrbFast(ctx: CanvasRenderingContext2D, k: number, t: number, L: num
   const live = mode === 'speaking' || mode === 'listening' || mode === 'thinking';
   const pulse = 1 + .06 * L, pull = mode === 'listening' ? 1 - .07 * (look.pull || 0) : 1;
   let jx = 0, jy = 0;
-  if (L > .3 && mode === 'speaking') {
-    // Deterministic micro-jitter (no Math.random) keeps script cost flat under the 1.5 ms budget.
-    const j = (L - .3) * .03 * R * (persona === 'anna' ? .6 : 1);
-    jx = Math.sin(t * 37.1) * j;
-    jy = Math.cos(t * 29.7) * j;
-  }
+  if (L > .3 && mode === 'speaking') { const j = (L - .3) * .03 * R * (persona === 'anna' ? .6 : 1); jx = (Math.random() - .5) * 2 * j; jy = (Math.random() - .5) * 2 * j; }
   ctx.save();
   ctx.translate(OCX + jx, OCY + jy);
   const spin = live ? t * .012 : 0, spinR = t * (mode === 'speaking' || mode === 'thinking' ? .5 : live ? .03 : 0);
   if (!live && L < .01) {
     blit(ctx, C.back, dim);                                   // breathing: the whole back layer in one draw
   } else {
-    const glowScale = 1 + .1 * L;
-    blit(ctx, C.glow, dim, glowScale);
-    if (L > .12) blit(ctx, C.glow, dim * .8 * L, glowScale, 0, 'lighter');
+    blit(ctx, C.glow, dim, 1 + .1 * L);
+    if (L > .01) blit(ctx, C.glow, dim * .8 * L, 1 + .1 * L, 0, 'lighter');
     const f = clamp(L, 0, 1), sp = (1 + .06 * L) * pull;
-    if (f < .98) {
-      blit(ctx, C.inB, dim * (1 - f), sp, spin, 'lighter');
-      blit(ctx, C.outB, dim * (1 - f), sp, -spin, 'lighter');
-    }
-    if (f > .02) {
-      blit(ctx, C.inF, dim * f, sp / (1 + .06), spin, 'lighter');
-      blit(ctx, C.outF, dim * f, sp / (1 + .06), -spin, 'lighter');
-    }
-    const ringAlpha = Math.min(1, dim * (1 + .55 * L));
+    blit(ctx, C.inB, dim * (1 - f), sp, spin, 'lighter'); blit(ctx, C.outB, dim * (1 - f), sp, -spin, 'lighter');
+    if (f > .01) { blit(ctx, C.inF, dim * f, sp / (1 + .06), spin, 'lighter'); blit(ctx, C.outF, dim * f, sp / (1 + .06), -spin, 'lighter'); }
     C.rings.forEach((b, i) => {
       if (!b) return;
-      blit(ctx, b, ringAlpha, pulse * pull, spinR * (i % 2 ? -1 : 1), 'lighter');
+      const a = spinR * (i % 2 ? -1 : 1);
+      blit(ctx, b, dim, pulse * pull, a, 'lighter');
+      if (L > .01) blit(ctx, b, dim * .6 * L, pulse * pull, a, 'lighter');
     });
   }
   // glass + inner line, swirl (clipped to the glass), streak, core
@@ -534,16 +523,14 @@ function drawOrbFast(ctx: CanvasRenderingContext2D, k: number, t: number, L: num
   ctx.save(); ctx.scale(pulse, pulse); ctx.beginPath(); ctx.arc(0, 0, R - 1.5, 0, TAU); ctx.clip();
   const sa = (mode === 'idle' || mode === 'mic-off' || live) ? Math.sin(t * .11) * .05 + t * (L * .02 + (mode === 'thinking' ? .03 : 0)) : 0;
   const swA = dim * Math.min(1.4, .85 + .5 * L);
-  // Soft swirl only when idle/thinking; speaking skips the blur blit to stay ≤1.5 ms/frame.
-  if (OP.swglow > .02 && mode !== 'speaking') {
-    blit(ctx, C.swirlBlur, Math.min(1, OP.swglow * swA), 1, sa, 'lighter');
-  }
+  // Same swirl layers on fast + exact paths (speaking must keep the blur copy — no flicker on pause).
+  if (OP.swglow > .02) blit(ctx, C.swirlBlur, Math.min(1, OP.swglow * swA), 1, sa, 'lighter');
   blit(ctx, C.swirl, Math.min(1, swA), 1, sa, 'lighter');
   ctx.restore();
   const sI = (1 + .45 * L) * dim;
   ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.rotate(OP.axis * DEG); ctx.scale(1 + .5 * L, 1);
-  ctx.globalAlpha = Math.min(1, dim * (1 + .35 * L));
-  ctx.drawImage(C.streak.cv, -C.streak.r, -C.streak.r, C.streak.r * 2, C.streak.r * 2);
+  ctx.globalAlpha = Math.min(1, dim); ctx.drawImage(C.streak.cv, -C.streak.r, -C.streak.r, C.streak.r * 2, C.streak.r * 2);
+  if (L > .01) { ctx.globalAlpha = Math.min(1, .45 * L * dim); ctx.drawImage(C.streak.cv, -C.streak.r, -C.streak.r, C.streak.r * 2, C.streak.r * 2); }
   ctx.restore();
   ctx.save(); ctx.globalCompositeOperation = 'lighter';
   const cr = OP.core[0] * (1 + .25 * L) * (1 + .06 * breath), ca = OP.core[1] * sI * (1 + .14 * breath);
@@ -552,34 +539,25 @@ function drawOrbFast(ctx: CanvasRenderingContext2D, k: number, t: number, L: num
   g.addColorStop(.36, rgba(C.core[2], .5 * ca)); g.addColorStop(.62, rgba(C.core[3], .18 * ca)); g.addColorStop(1, rgba(C.core[3], 0));
   ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, cr, 0, TAU); ctx.fill();
   ctx.restore();
-  // rim: glow (pre-blurred) + line; the line wobbles with speech (≤48 segments, one stroke)
-  if (C.rimGlow) blit(ctx, C.rimGlow, Math.min(1, dim * (1 + .4 * L)), pulse, 0, 'lighter');
+  // rim: glow (pre-blurred) + line; the line wobbles with speech
+  if (C.rimGlow) { blit(ctx, C.rimGlow, dim, pulse, 0, 'lighter'); if (L > .01) blit(ctx, C.rimGlow, dim * .5 * L, pulse, 0, 'lighter'); }
   if (L > .02 && mode === 'speaking') {
-    const rr0 = C.rimRing.r * pulse, anna = persona === 'anna', N = 32;
-    const amp = .035 * L;
-    if (!env.rimGrad) env.rimGrad = ringStroke(ctx, C.rimRing, OP.ringGain[C.ri], 0);
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.strokeStyle = env.rimGrad!;
-    ctx.lineWidth = C.rimRing.fwhm * OP.ringW[C.ri];
-    ctx.globalAlpha = Math.min(1, dim * (1 + .2 * L));
-    ctx.beginPath();
+    const rr0 = C.rimRing.r * pulse, anna = persona === 'anna', rim = new Path2D(), N = 120;
     for (let i = 0; i <= N; i++) {
-      const th = (i / N) * TAU;
-      const wobble = anna
-        ? Math.sin(2 * th + t * 3) * .45 + Math.sin(3 * th - t * 4.3) * .3 + Math.sin(5 * th + t * 5.6) * .25
-        : Math.sin(3 * th + t * 5) * .5 + Math.sin(5 * th - t * 7) * .3 + Math.sin(7 * th + t * 11) * .2;
-      const rr = rr0 * (1 + amp * wobble);
-      const x = Math.cos(th) * rr;
-      const y = Math.sin(th) * rr;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
+      const th = i / N * TAU;
+      const rr = rr0 * (1 + .035 * L * (anna ? Math.sin(2 * th + t * 3) * .45 + Math.sin(3 * th - t * 4.3) * .3 + Math.sin(5 * th + t * 5.6) * .25
+        : Math.sin(3 * th + t * 5) * .5 + Math.sin(5 * th - t * 7) * .3 + Math.sin(7 * th + t * 11) * .2));
+      i ? rim.lineTo(Math.cos(th) * rr, Math.sin(th) * rr) : rim.moveTo(Math.cos(th) * rr, Math.sin(th) * rr);
     }
-    ctx.closePath();
-    ctx.stroke();
+    if (!env.rimGrad) env.rimGrad = ringStroke(ctx, C.rimRing, OP.ringGain[C.ri], 0);
+    const rimGrad = env.rimGrad!;
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = rimGrad; ctx.lineWidth = C.rimRing.fwhm * OP.ringW[C.ri];
+    ctx.globalAlpha = dim; ctx.stroke(rim);
+    ctx.globalAlpha = Math.min(1, dim * .25 * L); ctx.stroke(rim);
     ctx.restore();
   } else {
-    blit(ctx, C.rimLine, Math.min(1, dim * (1 + .25 * L)), pulse, 0, 'lighter');
+    blit(ctx, C.rimLine, dim, pulse, 0, 'lighter');
+    if (L > .01) blit(ctx, C.rimLine, dim * .25 * L, pulse, 0, 'lighter');
   }
   ctx.globalAlpha = 1;
   drawOrbOverlays(ctx, t, look, false, ripples);

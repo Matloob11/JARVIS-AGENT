@@ -4,6 +4,7 @@ import { toast } from '@/toast';
 import { getSocket } from '@/shared/realtime/socket';
 import { useLiveKit } from '@/features/voice/LiveKitProvider';
 import { useSettings } from '@/features/settings/useSettings';
+import { clearChatAwaitingOnStop } from '@/features/chat/awaitingClear';
 import { useAgentListeningMuted } from '@/features/status/agentListeningStore';
 import { listeningMutedTitle, stopTitle } from '@/shared/persona';
 import { Switch } from '@/shared/ui/Switch';
@@ -44,6 +45,7 @@ export { useAgentListeningMuted } from '@/features/status/agentListeningStore';
 function useStopSpeaking() {
   const handleAck = useUiCommandAck();
   return () => {
+    clearChatAwaitingOnStop();
     getSocket().emit('ui_command', { type: 'stop', payload: {} }, (ack: UiCommandAck) => {
       handleAck(ack);
     });

@@ -14,6 +14,7 @@ import { deriveVoicePillCopy } from '../voicePillState';
 import { useE2EVoiceTick } from '@/features/voice/voiceState';
 import { useAgentStatusStore } from '@/features/status/agentStatusStore';
 import { useAgentListeningMuted } from '@/features/status/agentListeningStore';
+import { clearChatAwaitingOnStop } from '@/features/chat/awaitingClear';
 import {
   handleUiCommandAck,
   MicToggleSwitch,
@@ -69,6 +70,7 @@ export function VoicePopover({
   );
 
   const onStop = () => {
+    clearChatAwaitingOnStop();
     getSocket().emit('ui_command', { type: 'stop', payload: {} }, (ack: UiCommandAck) => {
       handleUiCommandAck(ack);
     });

@@ -6,6 +6,7 @@ import { useSocketEvent } from '@/shared/realtime/subscriptions';
 import { useSettings } from '@/features/settings/useSettings';
 import { useLiveKit } from '@/features/voice/LiveKitProvider';
 import { asPersonaKey, replyStatusHint } from '@/shared/persona';
+import { registerAwaitingClearer } from './awaitingClear';
 import { registerLiveCaptions } from './liveCaptions';
 import type { ChatMessage, LiveCaption } from './types';
 
@@ -114,6 +115,11 @@ export function useChat() {
     setAwaitingReply(false);
     syncFromMap();
   }, [syncFromMap]);
+
+  useEffect(() => {
+    registerAwaitingClearer(clearAllAwaiting);
+    return () => registerAwaitingClearer(null);
+  }, [clearAllAwaiting]);
 
   const armAwaiting = useCallback(
     (id: string) => {

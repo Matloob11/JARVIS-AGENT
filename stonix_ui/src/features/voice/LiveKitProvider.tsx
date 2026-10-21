@@ -1,6 +1,12 @@
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, type ReactNode } from 'react';
 import type { Room } from 'livekit-client';
 import { useVoiceRoom, type AgentState, type VoiceRoomState } from './useVoiceRoom';
+
+declare global {
+  interface Window {
+    __jarvisDebug?: { identity?: string };
+  }
+}
 
 export type LiveKitContextValue = {
   roomState: VoiceRoomState;
@@ -34,6 +40,13 @@ const LiveKitContext = createContext<LiveKitContextValue | null>(null);
 
 export function LiveKitProvider({ children }: { children: ReactNode }) {
   const voice = useVoiceRoom();
+
+  // X-60: expose LiveKit identity only with ?debug=1 (any page, not only Settings).
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!new URLSearchParams(window.location.search).has('debug')) return;
+    window.__jarvisDebug = { ...window.__jarvisDebug, identity: voice.identity || undefined };
+  }, [voice.identity]);
 
   return <LiveKitContext.Provider value={voice}>{children}</LiveKitContext.Provider>;
 }

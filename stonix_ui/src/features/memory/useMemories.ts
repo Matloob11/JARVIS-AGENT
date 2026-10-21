@@ -54,7 +54,11 @@ export function normalizeMemory(raw: unknown): MemoryItem | null {
   if (!id) id = fallbackMemoryId();
   let content = contentText(data.content);
   if (!content.trim()) return null;
-  if (content.length > MAX_CONTENT_CHARS) content = content.slice(0, MAX_CONTENT_CHARS);
+  // Agent (Python) counts Unicode code points; avoid splitting surrogate pairs.
+  const codePoints = Array.from(content);
+  if (codePoints.length > MAX_CONTENT_CHARS) {
+    content = codePoints.slice(0, MAX_CONTENT_CHARS).join('');
+  }
   const ts = toEpochMs(data.ts ?? data.timestamp) ?? Date.now();
   const userRaw = data.user_id ?? data.userId;
   const userId =
@@ -127,12 +131,21 @@ export function useMemories(emitCommand: (type: string, payload?: unknown) => vo
   }, []);
 
   const seedFromInit = useCallback((state: Record<string, unknown>) => {
+    // Explicit memories: [] clears (missed memory_cleared). Missing key → leave rows alone.
+    if (!Object.prototype.hasOwnProperty.call(state, 'memories')) return;
     const list = state.memories;
-    if (!Array.isArray(list) || list.length === 0) return;
+    if (!Array.isArray(list)) return;
+    if (list.length === 0) {
+      setRows([]);
+      return;
+    }
     const seeded = list
       .map(raw => normalizeMemory(raw))
       .filter((row): row is MemoryItem => row != null);
-    if (!seeded.length) return;
+    if (!seeded.length) {
+      setRows([]);
+      return;
+    }
     setRows(prev => mergeSeed(prev, seeded));
     const newest = seeded.reduce((max, row) => (row.ts > max ? row.ts : max), seeded[0].ts);
     setLastMemorySyncMs(prev => (prev == null || newest > prev ? newest : prev));

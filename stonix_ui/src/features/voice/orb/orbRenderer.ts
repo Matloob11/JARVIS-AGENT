@@ -325,8 +325,7 @@ export class OrbRenderer {
       return;
     }
 
-    // Cap ~90 fps on high-refresh panels; leave headroom so 60 Hz still clears the ≥58 gate.
-    if (mode === 'full' && now - this.lastDraw < 11) {
+    if (mode === 'full' && now - this.lastDraw < 12.5) {
       this.schedule();
       return;
     }
@@ -407,18 +406,11 @@ export class OrbRenderer {
     );
 
     const waveMode = this.waveMode();
-    // Speaking/listening wave at half rate — bars stay smooth; frees script for the ≥58 fps orb gate.
-    const paintWaveThisFrame =
-      waveMode !== 'speaking' && waveMode !== 'listening'
-        ? true
-        : (this.drawCount & 1) === 0;
-    if (paintWaveThisFrame) {
-      let waveBands: Float32Array | null = null;
-      if (waveMode === 'speaking') waveBands = agent.bands;
-      else if (waveMode === 'listening') waveBands = user.bands;
-      const waveL = waveMode === 'listening' ? this.userL : this.L;
-      this.paintWave(t, waveL, waveBands);
-    }
+    let waveBands: Float32Array | null = null;
+    if (waveMode === 'speaking') waveBands = agent.bands;
+    else if (waveMode === 'listening') waveBands = user.bands;
+    const waveL = waveMode === 'listening' ? this.userL : this.L;
+    this.paintWave(t, waveL, waveBands);
 
     if (this.state === 'listening' && this.userL > 0.01) {
       this.userRing.hidden = false;
