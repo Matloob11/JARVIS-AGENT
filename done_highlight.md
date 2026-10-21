@@ -2914,3 +2914,31 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** vitest 73; e2e 282(+1 re-pass); electron 5; test:perf 5; pytest cursor-lane 352; live --list 9
 - **Commit:** (this commit) · **Deploy:** REQ-DEPLOY frontend
 - **Doosre agent ke liye:** REQ-PERF fps_med=19.4 @ DPR2×4; deploy HOLD (1) clear; C-60 wait
+
+### ✅ 🔁 [claude] C-60 live check · Agent worker restart (agent_ctl) · 2026-10-21 22:31 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 12444) band, naya pid 36068; health 200 (41.6 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 22:31 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] C-60 offline queue check · Agent worker stop (agent_ctl) · 2026-10-21 22:32 PKT
+- **Kya kiya:** `agent_ctl stop` se worker band kiya: pid 36068 (Ctrl+Break, 1.6 s).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent stop 22:32 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🔁 [claude] C-60 offline queue check · Agent worker start (agent_ctl) · 2026-10-21 22:36 PKT
+- **Kya kiya:** `agent_ctl start` se worker chala: pid 48356, health 200 (8.0 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent start 22:36 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🚀 [claude] C-60 · Settings bridge par (revision ke saath), offline queue, camera limits · 2026-10-21 22:40 PKT
+- **Kya kiya:** Bridge ab owner ki settings khud check karke store karta hai, apne revision ke saath (har bridge.db ka ek epoch, counter sirf badhta hai aur agent ke bade echo par aage chala jata hai), aur agent ka purana sync owner ki nayi tabdeeli par nahi likh sakta; C-54 ka clock-skew gap band. GET /vortex/settings. Agent band ho to chat, settings aur clear_memory 10 minute tak queue mein (order mein, dedupe, max 100) aur agent aate hi bootstrap ke baad flush. Camera frames sirf command lene wale agent ko. Legacy-token socket agent tabhi jab khud role 'agent' bataye. agent-svc ka announce sirf usi job ko jo command le sakti ho. Chaar rounds ke baad revision scheme saada kiya (per-start series hata kar Lamport catch-up). Contracts v51.
+- **Files:** `src/core/bridge_settings.py`, `src/core/ui_bridge.py`, `src/core/bridge_store.py`, `src/core/bridge_rooms.py`, `src/core/agent_settings.py`, `services/ai_core/agent_loops.py`, tests, `docs/CONTRACTS.md`, `plan.md`
+- **Verify:** full suite 6227 passed; live: GET /settings 200 (revision, epoch), language change 'sent' + agent echo revision 1, worker band par typed message 'queued' aur start ke foran baad jawab ("4")
+- **Commit:** `988c645` · **Deploy:** ui-bridge 988c645 22:30 PKT 🚀 (RESULT=ok, other apps identical, backup /root/jarvis-backups/2026-10-21_1730Z-pre-deploy-988c645); PC worker restart 22:31, stop 22:32, start 22:36 PKT 🔁
+- **Doosre agent ke liye:** UI ke liye: queued row ko 'agent ka intezar' dikhao aur agent ke echo par resolve karo, source 'bridge' settings_sync par pending 'queued', mock bridge ki offline semantics aur revision fields, GET /vortex/settings (handoff line section 11 mein). Known gap: restore ke baad pehle agent sync se pehle ki owner tabdeeli.
