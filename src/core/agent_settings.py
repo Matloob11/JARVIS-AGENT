@@ -39,6 +39,21 @@ updated_ts and saved (the names of the fields that were set and are in the file)
 it back as settings_bootstrap, so a default never comes back as a saved value and an echo of this agent's own state
 (the same updated_ts) never undoes a live change.
 
+Bridge revisions (C-60, K-61 v51): the bridge stamps every settings change with a revision of its own counter (never
+an agent clock), and revision_epoch names its database (made once; a bridge restart or a restored backup keeps it).
+Its settings_update carries revision and revision_epoch, its settings_bootstrap also revisions {field: {rev, by,
+src?}}. This agent keeps the revision of every field it took, for one epoch, in the file's 'bridge' block, and the
+file's random 'instance' id; each settings_sync echoes revision, revision_epoch, revisions and instance at its top
+level. With the epoch of its record, a field is taken only at a revision newer than the one taken before (a queued
+copy of a change the bootstrap brought already is left out, and an update left out whole sends no settings_sync) and
+never when it is this agent's own change coming back (src = instance), so a PC/VPS brain switch does not depend on the
+agents' clocks. A copy of another epoch comes from another or a recreated bridge database: every field it has a
+revision for is followed (the same own-change, control and saved-list rules apply) and the record starts again with
+that epoch and those revisions. A copy without revisions (an older bridge) keeps the clock rule. This agent never
+lowers its record within one epoch: when the bridge's database went back (restored or copied), the echo above the
+bridge's newest revision makes the bridge catch its counter up (bridge_settings.caught_up), so its later changes are
+newer than this record again.
+
 How each field applies (update):
     voice                 BrainAssistant.request_voice: the live session gets it at the next safe point (C-50), never
                           in the middle of a reply; a persona change in the same update carries it (one reconnect)
@@ -63,6 +78,7 @@ registers its commands from its own module); agent_loops routes wake_word_toggle
 after mute/unmute; agent_core's toggle_persona, change_voice and set_wake_word_mode tools and its spoken wake-word
 persona switch call the on_live_settings_change hook.
 """
+# pylint: disable=too-many-lines  # one service: the K-61 fields, the file, the bridge revisions and the handlers
 from __future__ import annotations
 
 import asyncio
@@ -78,6 +94,7 @@ import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+from secrets import token_hex
 from typing import Any
 
 from services.ai_core.jarvis_prompt import normalize_turn_mode
@@ -135,6 +152,52 @@ _READ_TRIES = 3  # a file that is there but cannot be read is read again (a Wind
 # copy.deepcopy (every update and sync copies the settings), the json encoder and a section's check all recurse.
 MAX_FILE_DEPTH = 32
 REMOVE: Any = object()  # in save() changes: drop a saved field (its default applies again)
+# C-60 (K-61 v51): the bridge's settings revisions. A settings_update and a settings_bootstrap carry revision (an int
+# the bridge owns) and revision_epoch (its database); this agent keeps the revision of every field it took, for one
+# epoch, in the file's 'bridge' block ({epoch, revs}), and its settings_sync echoes them with its 'instance' (the
+# file's id).
+REVISION_FIELDS = ("revision", "revision_epoch", "revisions")
+_EPOCH_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")
+_INSTANCE_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")
+MAX_BRIDGE_REVS = 64  # fields with a revision kept (the K-61 fields and sections are far fewer)
+
+
+def _revision(value: Any) -> int | None:
+    """A bridge revision: a non-negative int, never a bool."""
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+
+
+def _clean_bridge(raw: Any) -> tuple[str, dict[str, int]]:
+    """(epoch, {field: revision}) of a file's 'bridge' block; ('', {}) when there is none or it is not usable."""
+    if not isinstance(raw, Mapping):
+        return "", {}
+    epoch = raw.get("epoch")
+    if not (isinstance(epoch, str) and _EPOCH_RE.fullmatch(epoch)):
+        return "", {}
+    revs_raw = raw.get("revs")
+    revs: dict[str, int] = {}
+    for name, value in (revs_raw.items() if isinstance(revs_raw, Mapping) else ()):
+        rev = _revision(value)
+        if isinstance(name, str) and 0 < len(name) <= 64 and rev is not None and len(revs) < MAX_BRIDGE_REVS:
+            revs[name] = rev
+    return epoch, revs
+
+
+def _merge_bridge(file_block: Any, given: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    """The 'bridge' block a save writes: the given one, merged field by field (the higher revision) with the file's
+    when both name the same epoch (another job of this file may have taken other fields; within one epoch a revision
+    only grows); else the given one (another epoch replaces the file's record)."""
+    file_epoch, file_revs = _clean_bridge(file_block)
+    if given is None:
+        return {"epoch": file_epoch, "revs": file_revs} if file_epoch else None
+    epoch, revs = _clean_bridge(given)
+    if not epoch:
+        return {"epoch": file_epoch, "revs": file_revs} if file_epoch else None
+    if epoch == file_epoch:
+        for name, rev in file_revs.items():
+            if rev > revs.get(name, -1) and (name in revs or len(revs) < MAX_BRIDGE_REVS):
+                revs[name] = rev
+    return {"epoch": epoch, "revs": revs}
 
 
 def _printable(value: Any, limit: int) -> str:
@@ -385,6 +448,11 @@ class AgentSettings:
     updated: dict[str, dict[str, Any]] = field(default_factory=dict)
     updated_ts: float = 0.0
     extra: dict[str, Any] = field(default_factory=dict)
+    # C-60 (K-61 v51): this settings file's id (echoed as 'instance': the bridge marks this agent's own changes with
+    # it, so a settings_bootstrap never brings them back), and the bridge revision of every field taken, for one epoch
+    instance: str = ""
+    bridge_epoch: str = ""
+    bridge_revs: dict[str, int] = field(default_factory=dict)
 
     validate = staticmethod(validate)
 
@@ -403,11 +471,16 @@ class AgentSettings:
         updated_raw = data.get("updated")
         updated = {key: dict(value) for key, value in (updated_raw.items() if isinstance(updated_raw, Mapping) else ())
                    if key in saved and isinstance(value, Mapping)}
-        return cls(saved=saved, updated=updated, updated_ts=_number(data.get("updated_ts")) or 0.0, extra=extra)
+        instance = data.get("instance")
+        epoch, revs = _clean_bridge(data.get("bridge"))
+        return cls(saved=saved, updated=updated, updated_ts=_number(data.get("updated_ts")) or 0.0, extra=extra,
+                   instance=instance if isinstance(instance, str) and _INSTANCE_RE.fullmatch(instance) else "",
+                   bridge_epoch=epoch, bridge_revs=revs)
 
     def copy(self) -> "AgentSettings":
         return AgentSettings(saved=copy.deepcopy(self.saved), updated=copy.deepcopy(self.updated),
-                             updated_ts=self.updated_ts, extra=copy.deepcopy(self.extra))
+                             updated_ts=self.updated_ts, extra=copy.deepcopy(self.extra), instance=self.instance,
+                             bridge_epoch=self.bridge_epoch, bridge_revs=dict(self.bridge_revs))
 
     def get(self, name: str) -> Any:
         """The value of a field or section: the saved one, else its default (a saved voice, else the persona's)."""
@@ -566,8 +639,9 @@ def _write_atomic(path: Path, body: Mapping[str, Any]) -> None:
                 pass
 
 
-def save(changes: Mapping[str, Any], by: str, path: str | os.PathLike[str] | None = None, *,
-         now: float | None = None, by_field: Mapping[str, str] | None = None) -> float:
+def save(changes: Mapping[str, Any], by: str, path: str | os.PathLike[str] | None = None, *,  # noqa: PLR0913
+         now: float | None = None, by_field: Mapping[str, str] | None = None,
+         bridge: Mapping[str, Any] | None = None, instance: str | None = None) -> float:
     """
     Merges changes ({field: value}; REMOVE drops a saved field) into the file under the process-wide lock: only these
     fields change, so another job's newer fields are kept. The folder is created when missing; a broken file (no JSON
@@ -576,6 +650,9 @@ def save(changes: Mapping[str, Any], by: str, path: str | os.PathLike[str] | Non
     holds for the job and stays pending for its next save). Each field is recorded as set by `by`, or by its
     by_field entry (a change an earlier failed save left pending keeps who made it). Writes atomically (ASCII JSON)
     and returns the new updated_ts (epoch seconds).
+    C-60 (K-61 v51): bridge {epoch, revs} is merged into the file's 'bridge' block (_merge_bridge: field by field for
+    the same epoch, replacing it for another) and instance is written when the file has none (the file's own id
+    wins). A save with no changes writes only those and keeps the file's updated_ts, which it returns.
     """
     target = Path(path) if path is not None else Path(SETTINGS_PATH)
     when = round(time.time() if now is None else now, 3)
@@ -599,7 +676,18 @@ def save(changes: Mapping[str, Any], by: str, path: str | os.PathLike[str] | Non
             else:
                 saved[name] = value
                 updated[name] = {"by": by_field.get(name, by), "ts": when}
-        _write_atomic(target, {"version": FILE_VERSION, "updated_ts": when, "settings": saved, "updated": updated})
+        if not changes:  # only the bridge block or the instance: the last save of settings keeps its stamp
+            when = _number(data.get("updated_ts")) or 0.0
+        body: dict[str, Any] = {"version": FILE_VERSION, "updated_ts": when, "settings": saved, "updated": updated}
+        file_instance = data.get("instance")
+        if isinstance(file_instance, str) and _INSTANCE_RE.fullmatch(file_instance):
+            body["instance"] = file_instance
+        elif isinstance(instance, str) and _INSTANCE_RE.fullmatch(instance):
+            body["instance"] = instance
+        bridge_block = _merge_bridge(data.get("bridge"), bridge)
+        if bridge_block is not None:
+            body["bridge"] = bridge_block
+        _write_atomic(target, body)
     return when
 
 
@@ -655,6 +743,11 @@ class SettingsService:
         # {field: (value or REMOVE, by)}: changes in force here that the file does not hold yet (a failed save, or the
         # save in flight); changed only by _commit, under the service lock
         self._pending: dict[str, tuple[Any, str]] = {}
+        # C-60 (K-61 v51): the file's id (made here for a new file, written with its next save), and whether a bridge
+        # revision was taken that the file does not hold yet
+        if not self.settings.instance:
+            self.settings.instance = token_hex(8)
+        self._bridge_dirty = False
         assistant = self.assistant
         if assistant is not None:
             try:
@@ -735,21 +828,71 @@ class SettingsService:
         """
         if changes:
             self.settings.apply_changes(changes, by)
-        if self.probe or is_probe_job() or not (changes or (retry and self._pending)):
+        if self.probe or is_probe_job() or not (changes or (retry and self._pending) or self._bridge_dirty):
             return False
         pending = {name: entry for name, entry in self._pending.items() if name not in changes}
         pending.update((name, (value, by)) for name, value in changes.items())
         self._pending = pending  # until the file holds them, even while the save is in flight
         try:
-            self.settings.updated_ts = await asyncio.to_thread(
+            when = await asyncio.to_thread(
                 save, {name: value for name, (value, _by) in pending.items()}, by, self.path,
-                by_field={name: who for name, (_value, who) in pending.items()})
+                by_field={name: who for name, (_value, who) in pending.items()}, bridge=self._bridge_block(),
+                instance=self.settings.instance)
         except Exception as exc:  # pylint: disable=broad-exception-caught
             logger.warning("SETTINGS not saved (%s); kept for this job and the next save: %s", type(exc).__name__,
-                           ",".join(sorted(pending)))
+                           ",".join(sorted(pending)) or "bridge revisions")
             return False
+        if pending:
+            self.settings.updated_ts = when
         self._pending = {}
+        self._bridge_dirty = False
         return True
+
+    # ---- the bridge's revisions (C-60, K-61 v51)
+    def _bridge_block(self) -> dict[str, Any] | None:
+        settings = self.settings
+        return {"epoch": settings.bridge_epoch, "revs": dict(settings.bridge_revs)} if settings.bridge_epoch else None
+
+    def _bridge_rev(self, name: str, epoch: str) -> int:
+        """The bridge revision of a field this agent took with that epoch; -1 when none (or another epoch: another or
+        a recreated bridge database, whose every field is new here)."""
+        if epoch != self.settings.bridge_epoch:
+            return -1
+        return self.settings.bridge_revs.get(name, -1)
+
+    def _note_bridge(self, epoch: str, revs: Mapping[str, int]) -> None:
+        """Records that this agent took (or saw as its own) these fields at these revisions of the bridge's database;
+        another epoch starts the record again with these revisions (never lowered within one epoch). Saved with the
+        next save (_commit)."""
+        settings = self.settings
+        if epoch != settings.bridge_epoch:
+            settings.bridge_epoch, settings.bridge_revs = epoch, {}
+            self._bridge_dirty = True
+        for name, rev in revs.items():
+            if rev > settings.bridge_revs.get(name, -1) and (name in settings.bridge_revs
+                                                            or len(settings.bridge_revs) < MAX_BRIDGE_REVS):
+                settings.bridge_revs[name] = rev
+                self._bridge_dirty = True
+
+    @staticmethod
+    def _split_revision(payload: Mapping[str, Any]) -> tuple[dict[str, Any], int | None, str]:
+        """(the payload without the bridge's revision fields, the revision, its epoch); (payload, None, '') when it
+        carries no usable revision (an older bridge, a legacy command)."""
+        rest = {key: value for key, value in payload.items() if key not in REVISION_FIELDS}
+        revision, epoch = _revision(payload.get("revision")), payload.get("revision_epoch")
+        if revision is None or not (isinstance(epoch, str) and _EPOCH_RE.fullmatch(epoch)):
+            return rest, None, ""
+        return rest, revision, epoch
+
+    def _echo(self) -> dict[str, Any]:
+        """K-61 v51: what this agent applied of the bridge's revisions, at the top level of every settings_sync:
+        revision (the newest), revision_epoch, revisions {field: rev} and instance (this file's id). A fresh agent
+        echoes an empty record, so the bridge keeps every owner change it has not taken yet; a record above the
+        bridge's newest revision (its database went back) makes the bridge catch its counter up."""
+        settings = self.settings
+        return {"revision": max(settings.bridge_revs.values(), default=0) if settings.bridge_epoch else 0,
+                "revision_epoch": settings.bridge_epoch, "revisions": dict(settings.bridge_revs),
+                "instance": settings.instance}
 
     def snapshot(self, applied: Mapping[str, str] | None = None,
                  errors: Mapping[str, str] | None = None) -> dict[str, Any]:
@@ -779,6 +922,7 @@ class SettingsService:
             "available_voices": list(GEMINI_VOICES),
             "available_languages": list(LANGUAGES),
             "ts": round(time.time(), 3),
+            **self._echo(),
         }
 
     async def _send(self, payload: dict[str, Any]) -> None:
@@ -803,16 +947,36 @@ class SettingsService:
         changes nothing; the valid ones of the same update still apply. An unknown key is 'unsupported'. With
         changes_only (a bootstrap) only fields that differ from the settings in force apply, nothing is sent when none
         does, and errors are only logged. Returns the settings_sync payload (None when nothing was sent).
+        C-60 (K-61 v51): the bridge's settings_update carries revision and revision_epoch (never settings). A field this
+        agent took at that revision or a newer one already with the same epoch (the settings_bootstrap of its connect,
+        a queued copy of the same change) is left out; every other field of the update (all of them with another epoch:
+        another or a recreated bridge database, whose revisions start the record again) is recorded at that revision,
+        whatever its outcome, and the settings_sync echoes it. An update whose every field was left out is no news:
+        nothing is sent (None), so the outcomes the bootstrap reported stay the UI's last word (it replaces its applied
+        and errors maps with every settings_sync), and the echo of those revisions went out with the bootstrap's or goes
+        with the next settings_sync.
         """
         if not isinstance(partial, Mapping):
             logger.info("SETTINGS_UPDATE source=%s ignored: the payload is no object", source)
             if changes_only:
                 return None
             return await self._send_snapshot(errors={"settings": "settings_update needs an object of settings"})
-        clean, errors = validate(partial)
-        applied: dict[str, str] = {} if changes_only else {key: UNSUPPORTED for key in unknown_keys(partial)}
+        partial, revision, epoch = self._split_revision(partial)
         async with self._lock:
+            skipped: list[str] = []
+            if revision is not None:
+                names = {_canonical(key) for key in partial} - {None}
+                skipped = sorted(name for name in names if self._bridge_rev(name, epoch) >= revision)
+                partial = {key: value for key, value in partial.items() if _canonical(key) not in skipped}
+                self._note_bridge(epoch, {name: revision for name in names if name not in skipped})
+            clean, errors = validate(partial)
+            applied: dict[str, str] = {} if changes_only else {key: UNSUPPORTED for key in unknown_keys(partial)}
             clean = await self._update_locked(clean, applied, errors, source, changes_only=changes_only)
+        if skipped:
+            logger.info("SETTINGS_UPDATE revision %d: %s taken at that revision or a newer one already%s", revision,
+                        ",".join(skipped), "" if partial else " (nothing else in it: no settings_sync)")
+            if not partial:
+                return None
         return await self._report(clean, applied, errors, source, changes_only=changes_only)
 
     async def _update_locked(self, clean: dict[str, Any], applied: dict[str, str], errors: dict[str, str],
@@ -968,6 +1132,13 @@ class SettingsService:
         are validated (read-only, control and unknown keys dropped) and only the ones that differ from the settings in
         force apply, plus the copy's voice beside a persona that differs (a persona switch resets the voice, so it goes
         into the same switch: _update_locked).
+        C-60 (K-46/K-61 v51): a copy with revision, revision_epoch and revisions ({field: {rev, by, src?}}) is judged by
+        the bridge's revisions instead of the clocks: a field is taken when its revision is newer than the one this
+        agent took of it with that epoch (any revision, with another epoch: another or a recreated bridge database) and
+        it is not this agent's own change coming back (src = this file's instance); every field's revision is recorded
+        either way (another epoch starts the record again). Fields the copy has no revision for (stored before C-60)
+        still follow the clock rule above. So a brain switch between agents whose clocks differ never drops the owner's
+        change.
         """
         if not isinstance(payload, Mapping) or not payload:
             logger.debug("settings_bootstrap without settings ignored")
@@ -976,6 +1147,8 @@ class SettingsService:
             await self._commit(self._live_changes(), "live")
             partial = self._bootstrap_fields(payload)
             if not partial:
+                if self._bridge_dirty:
+                    await self._commit({}, "bootstrap")  # the revisions it recorded
                 return None
             clean, errors = validate(partial)
             applied: dict[str, str] = {}
@@ -983,20 +1156,67 @@ class SettingsService:
         return await self._report(clean, applied, errors, "bootstrap", changes_only=True)
 
     def _bootstrap_fields(self, payload: Mapping[str, Any]) -> dict[str, Any]:
-        """The fields of a settings_bootstrap copy this agent may take: {} unless the copy is strictly newer than its
-        own last save, then the ones the copy's `saved` names (no `saved` list: none), without control and read-only
-        keys."""
+        """The fields of a settings_bootstrap copy this agent may take: by the bridge's revisions when the copy carries
+        them (_revision_fields), else by the clock rule (_clock_fields)."""
+        revision, epoch = self._split_revision(payload)[1:]
+        revisions = payload.get("revisions")
+        if revision is None or not isinstance(revisions, Mapping):
+            return self._clock_fields(payload)
+        return self._revision_fields(payload, epoch, revisions)
+
+    def _revision_fields(self, payload: Mapping[str, Any], epoch: str, revisions: Mapping[str, Any]) -> dict[str, Any]:
+        """C-60: the fields newer than this agent took them and not its own, plus the clock rule's fields among those
+        the copy has no revision for; every revision in the copy is recorded. A field the owner set (by 'ui') counts
+        whatever the copy's saved list says; another agent's value only when that list names it (C-54 review: its other
+        values are that agent's defaults, its env's included, never saved values here). With another epoch than this
+        agent's record (another or a recreated bridge database) every such field is followed and the record starts
+        again with the copy's epoch and revisions; with the same epoch the record never goes down (a copy older than
+        it, from a bridge.db that went back, takes only its newer fields)."""
+        another_epoch = bool(self.settings.bridge_epoch) and epoch != self.settings.bridge_epoch
+        taken: dict[str, Any] = {}
+        noted: dict[str, int] = {}
+        own: list[str] = []
+        names = payload.get("saved")
+        saved = {_canonical(name) for name in names if isinstance(name, str)} if isinstance(names, (list, tuple)) \
+            else set()
+        for raw_key, entry in revisions.items():
+            key = _canonical(raw_key)
+            rev = _revision(entry.get("rev")) if isinstance(entry, Mapping) else None
+            if key is None or rev is None:
+                continue
+            noted[key] = rev
+            if key in CONTROL_FIELDS or key in READ_ONLY_FIELDS or raw_key not in payload:
+                continue
+            if entry.get("src") == self.settings.instance:
+                own.append(key)  # this agent's own change coming back: never taken again
+                continue
+            if entry.get("by") != "ui" and key not in saved:
+                continue  # another agent's default
+            if rev > self._bridge_rev(key, epoch):
+                taken[key] = payload[raw_key]
+        clock = {key: value for key, value in self._clock_fields(payload, quiet=True).items()
+                 if _canonical(key) not in noted}
+        self._note_bridge(epoch, noted)
+        logger.info("SETTINGS bootstrap revision %s%s: %d field(s) newer here, %d of this agent's own%s",
+                    payload.get("revision"), " of another bridge database (the record starts again)" if another_epoch
+                    else "", len(taken), len(own), f", {len(clock)} by the clock rule" if clock else "")
+        return {**clock, **taken}
+
+    def _clock_fields(self, payload: Mapping[str, Any], *, quiet: bool = False) -> dict[str, Any]:
+        """The clock rule (C-54): {} unless the copy is strictly newer than this agent's own last save, then the
+        fields the copy's `saved` names (no `saved` list: none), without control and read-only keys."""
         theirs, mine = _number(payload.get("updated_ts")), self.settings.updated_ts
+        log = logger.debug if quiet else logger.info
         if theirs is None or theirs <= mine:
             if theirs == mine:
                 logger.debug("settings_bootstrap not taken: the copy is this agent's own last settings_sync")
             else:
-                logger.info("SETTINGS bootstrap not taken: the bridge's copy is %s", "unstamped" if theirs is None
-                            else "older than this agent's saved settings")
+                log("SETTINGS bootstrap not taken: the bridge's copy is %s", "unstamped" if theirs is None
+                    else "older than this agent's saved settings")
             return {}
         names = payload.get("saved")
         if not isinstance(names, (list, tuple)):
-            logger.info("SETTINGS bootstrap not taken: the bridge's copy does not say which fields were saved")
+            log("SETTINGS bootstrap not taken: the bridge's copy does not say which fields were saved")
             return {}
         saved = {_canonical(name) for name in names if isinstance(name, str)}
         return {key: value for key, value in payload.items()

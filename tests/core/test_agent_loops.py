@@ -279,7 +279,9 @@ def test_with_the_v2_keys_the_public_bridge_gets_the_agent_token(v2_keys, monkey
 def test_without_the_v2_keys_the_legacy_token_stays(v2_keys, monkeypatch, missing):
     monkeypatch.setattr(config, missing, None)
     listener = _listener(monkeypatch)
-    assert listener._auth("https://jarvis.example/vortex") == {"token": LEGACY_TOKEN}
+    # C-60 review (K-38 v51): it declares the agent role beside the token; the bridge takes a legacy-token socket for
+    # the owner's agent only then (tests/infrastructure/test_bridge_settings.py)
+    assert listener._auth("https://jarvis.example/vortex") == {"token": LEGACY_TOKEN, "role": "agent"}
 
 
 def test_the_agent_version_comes_from_git_sha_when_set(monkeypatch):

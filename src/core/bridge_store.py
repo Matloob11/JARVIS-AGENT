@@ -80,6 +80,14 @@ KV_NODE_ID = "desktop_node_id"            # str: a different node_id raises the 
 # C-125 (K-77): the live job's announce results for agent-svc ({attempt id: {delivered, reason?, ts}}, at most 1 h
 # old and 500 entries), kept across a bridge restart so a delivered announce is never spoken on the laptop as well.
 KV_SVC_ANNOUNCE = "svc_announce_results"
+# C-60 (K-46 v51): the settings copy's revision, owned by the bridge and never an agent clock. {epoch: a random id of
+# this database, made once when the kv has none and never changed after (a bridge restart and a second process keep
+# it, and so does a restored backup), revision: the newest revision (int, only ever grows: each settings change takes
+# the next one, and an agent echo above it raises it first, the Lamport catch-up of bridge_settings.agent_merge),
+# delivered: the newest revision sent to an agent socket, keys: {key: {rev, by: 'ui'|'agent', src: the agent instance
+# or ''}}}.
+KV_SETTINGS_REV = "settings_revision"
+SETTINGS_EPOCH_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")
 
 SEEN_DESKTOP = "desktop"  # a 24 h scope; K-70 envelope ids live in the relay's own desktop_seen.db (C-116)
 SEEN_NOTIFY = "notify"    # C-NOTIFY-1 nonces
@@ -452,6 +460,39 @@ def _deep_merge(base: Mapping[str, Any], update: Mapping[str, Any]) -> dict[str,
         else:
             merged[key] = value
     return merged
+
+
+def _new_settings_meta() -> dict[str, Any]:
+    """A database's revision record (C-60), made once: a fresh epoch, so an agent never compares its revisions with
+    another database's (a corrupt bridge.db renamed aside, the PC's local bridge)."""
+    return {"epoch": secrets.token_hex(8), "revision": 0, "delivered": 0, "keys": {}}
+
+
+def _count(value: Any) -> int | None:
+    """A non-negative int (never a bool), else None."""
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+
+
+def _clean_settings_meta(raw: Any) -> dict[str, Any] | None:
+    """The stored revision meta (KV_SETTINGS_REV) as the code reads it, or None when it is not usable (missing,
+    hand-edited, no epoch or revision): then a new record with a new epoch is made, so a revision is never reused
+    within one epoch."""
+    if not isinstance(raw, Mapping):
+        return None
+    epoch, revision = raw.get("epoch"), _count(raw.get("revision"))
+    if not (isinstance(epoch, str) and SETTINGS_EPOCH_RE.fullmatch(epoch)) or revision is None:
+        return None
+    keys: dict[str, dict[str, Any]] = {}
+    raw_keys = raw.get("keys")
+    for key, entry in (raw_keys.items() if isinstance(raw_keys, Mapping) else ()):
+        if not isinstance(key, str) or not isinstance(entry, Mapping):
+            continue
+        rev, by, src = _count(entry.get("rev")), entry.get("by"), entry.get("src", "")
+        if rev is None or by not in ("ui", "agent"):
+            continue
+        keys[key] = {"rev": min(rev, revision), "by": by, "src": src[:64] if isinstance(src, str) else ""}
+    delivered = _count(raw.get("delivered")) or 0
+    return {"epoch": epoch, "revision": revision, "delivered": min(delivered, revision), "keys": keys}
 
 
 def _extra_of(msg: Mapping[str, Any]) -> dict[str, Any]:
@@ -874,6 +915,74 @@ class BridgeStore:  # pylint: disable=too-many-public-methods  # one flat facade
                 current[key] = value
         return current
 
+    async def settings_with_meta(self) -> tuple[dict[str, Any], dict[str, Any]]:
+        """(the stored settings object, its revision meta) in one read (C-60). The meta is made the first time (a new
+        epoch, revision 0) and its epoch never changes after: a bridge restart, a second process's store and a backup
+        restored over the file keep it. Only a database without a usable record (a fresh or replaced file, a
+        hand-edited record) gets a new epoch."""
+        return await self._run(self._settings_with_meta)
+
+    async def transact_settings(
+            self, fn: Callable[[dict[str, Any], dict[str, Any]], tuple[Mapping[str, Any], Mapping[str, Any], str, T]],
+    ) -> tuple[dict[str, Any], dict[str, Any], T]:
+        """C-60: one settings change as a single transaction. fn(current settings, current meta) returns (writes
+        {key: full new value}, the new meta, updated_by, result); the writes are stored as given (fn merges), the
+        meta replaces the stored one. The new meta keeps the epoch and never lowers the revision (ValueError, nothing
+        stored); it may raise the revision past every revision it hands out, which is how an agent echo above the
+        bridge's newest revision catches the counter up in the same transaction (bridge_settings.agent_merge).
+        Returns (the stored settings after it, the meta after it, result)."""
+        return await self._run(self._transact_settings, fn)
+
+    async def note_settings_delivered(self, revision: int) -> None:
+        """C-60: the newest settings revision sent to an agent socket (meta 'delivered' only grows)."""
+        await self._run(self._note_settings_delivered, int(revision))
+
+    def _settings_meta(self, conn: sqlite3.Connection) -> dict[str, Any]:
+        """The revision meta; a missing or unusable one is replaced by a new record (a new epoch), written at once."""
+        row = conn.execute("SELECT value FROM kv WHERE key = ?", (KV_SETTINGS_REV,)).fetchone()
+        meta = _clean_settings_meta(_loads(row["value"]) if row is not None else None)
+        if meta is None:
+            if row is not None:
+                logger.warning("Bridge DB: the settings revision record is not usable; a new one starts (a new epoch)")
+            meta = _new_settings_meta()
+            conn.execute("INSERT INTO kv (key, value, updated_ts) VALUES (?, ?, ?) ON CONFLICT(key)"
+                         " DO UPDATE SET value = excluded.value, updated_ts = excluded.updated_ts",
+                         (KV_SETTINGS_REV, _dumps(meta), self._clock()))
+        return meta
+
+    def _settings_with_meta(self, conn: sqlite3.Connection) -> tuple[dict[str, Any], dict[str, Any]]:
+        with _transaction(conn):
+            return self._get_settings(conn), self._settings_meta(conn)
+
+    def _transact_settings(self, conn: sqlite3.Connection, fn: Callable[..., Any]) -> tuple[Any, Any, Any]:
+        now = self._clock()
+        with _transaction(conn):
+            current = self._get_settings(conn)
+            meta = self._settings_meta(conn)
+            writes, new_meta, by, result = fn(dict(current), meta)
+            clean = _clean_settings_meta(new_meta)
+            if clean is None or clean["epoch"] != meta["epoch"] or clean["revision"] < meta["revision"]:
+                raise ValueError("a settings change keeps the epoch and never lowers the revision")
+            for key, value in writes.items():
+                conn.execute(
+                    "INSERT INTO settings (key, value, updated_by, updated_ts) VALUES (?, ?, ?, ?)"
+                    " ON CONFLICT(key) DO UPDATE SET value = excluded.value,"
+                    " updated_by = excluded.updated_by, updated_ts = excluded.updated_ts",
+                    (str(key), _dumps(value), str(by), now))
+                current[str(key)] = value
+            conn.execute("UPDATE kv SET value = ?, updated_ts = ? WHERE key = ?",
+                         (_dumps(clean), now, KV_SETTINGS_REV))
+        return current, clean, result
+
+    def _note_settings_delivered(self, conn: sqlite3.Connection, revision: int) -> None:
+        with _transaction(conn):
+            meta = self._settings_meta(conn)
+            delivered = min(max(meta["delivered"], revision), meta["revision"])
+            if delivered != meta["delivered"]:
+                meta["delivered"] = delivered
+                conn.execute("UPDATE kv SET value = ?, updated_ts = ? WHERE key = ?",
+                             (_dumps(meta), self._clock(), KV_SETTINGS_REV))
+
     # ------------------------------------------------------------------ kv
 
     async def kv_get(self, key: str, default: Any = None) -> Any:
@@ -1124,6 +1233,72 @@ class BridgeStore:  # pylint: disable=too-many-public-methods  # one flat facade
         return int(conn.execute("SELECT COUNT(*) FROM pending_commands WHERE expires_ts > ?",
                                 (self._clock(),)).fetchone()[0])
 
+    async def queue_command(self, cmd_type: str, payload: Any, *, ttl_s: float, cap: int,
+                            dedupe_id: str | None = None) -> dict[str, Any]:
+        """C-60 (K-03 v51): keeps a UI command for an offline agent, in one transaction. Expired commands go first;
+        a command of the same type whose payload id equals dedupe_id (a chat retried while queued) is not queued
+        twice; at cap the oldest are dropped to make room. Returns {queued, duplicate, dropped, expired, waiting}."""
+        return await self._run(self._queue_command, str(cmd_type), payload, ttl_s=float(ttl_s), cap=int(cap),
+                               dedupe_id=dedupe_id)
+
+    async def take_pending(self) -> tuple[list[dict[str, Any]], int]:
+        """C-60: takes every queued command at once: (the unexpired ones, oldest first, as {type, payload,
+        created_ts, expires_ts, seq}; the number of expired ones that were dropped)."""
+        return await self._run(self._take_pending)
+
+    async def restore_pending(self, entries: Sequence[Mapping[str, Any]]) -> int:
+        """C-60 review: puts commands take_pending gave out back where they were, at the head of the queue in their
+        order, with their own expiry (the agent socket left before the flush sent them). Each keeps its seq: the
+        queue never reuses one (AUTOINCREMENT) and take_pending took everything older. Returns how many."""
+        return await self._run(self._restore_pending, [dict(entry) for entry in entries])
+
+    def _queue_command(self, conn: sqlite3.Connection, cmd_type: str, payload: Any, *, ttl_s: float, cap: int,
+                       dedupe_id: str | None) -> dict[str, Any]:
+        now = self._clock()
+        with _transaction(conn):
+            expired = conn.execute("DELETE FROM pending_commands WHERE expires_ts <= ?", (now,)).rowcount
+            if dedupe_id is not None:
+                for row in conn.execute("SELECT payload FROM pending_commands WHERE type = ?", (cmd_type,)):
+                    queued = _loads(row["payload"])
+                    if isinstance(queued, Mapping) and queued.get("id") == dedupe_id:
+                        waiting = int(conn.execute("SELECT COUNT(*) FROM pending_commands").fetchone()[0])
+                        return {"queued": False, "duplicate": True, "dropped": 0, "expired": expired,
+                                "waiting": waiting}
+            waiting = int(conn.execute("SELECT COUNT(*) FROM pending_commands").fetchone()[0])
+            dropped = max(0, waiting - cap + 1) if cap > 0 else 0
+            if dropped:
+                conn.execute("DELETE FROM pending_commands WHERE seq IN"
+                             " (SELECT seq FROM pending_commands ORDER BY seq LIMIT ?)", (dropped,))
+            conn.execute("INSERT INTO pending_commands (type, payload, created_ts, expires_ts) VALUES (?, ?, ?, ?)",
+                         (cmd_type, _dumps(payload), now, now + ttl_s))
+        return {"queued": True, "duplicate": False, "dropped": dropped, "expired": expired,
+                "waiting": waiting - dropped + 1}
+
+    def _take_pending(self, conn: sqlite3.Connection) -> tuple[list[dict[str, Any]], int]:
+        now = self._clock()
+        with _transaction(conn):
+            rows = conn.execute("SELECT seq, type, payload, created_ts, expires_ts"
+                                " FROM pending_commands ORDER BY seq").fetchall()
+            if rows:
+                conn.execute("DELETE FROM pending_commands WHERE seq <= ?", (rows[-1]["seq"],))
+        live = [{"type": row["type"], "payload": _loads(row["payload"]), "created_ts": row["created_ts"],
+                 "expires_ts": row["expires_ts"], "seq": row["seq"]}
+                for row in rows if row["expires_ts"] > now]
+        return live, len(rows) - len(live)
+
+    def _restore_pending(self, conn: sqlite3.Connection, entries: list[dict[str, Any]]) -> int:
+        rows = []
+        for entry in entries:
+            seq = _count(entry.get("seq"))
+            created, expires = entry.get("created_ts"), entry.get("expires_ts")
+            if seq is None or not isinstance(created, (int, float)) or not isinstance(expires, (int, float)):
+                raise ValueError("restore_pending takes the entries take_pending gave out")
+            rows.append((seq, str(entry.get("type")), _dumps(entry.get("payload")), float(created), float(expires)))
+        with _transaction(conn):
+            conn.executemany("INSERT INTO pending_commands (seq, type, payload, created_ts, expires_ts)"
+                             " VALUES (?, ?, ?, ?, ?)", rows)
+        return len(rows)
+
     # ------------------------------------------------------------------ seen ids (K-70, C-NOTIFY-1)
 
     async def mark_seen(self, scope: str, item_id: str, ttl_s: float | None = None) -> bool:
@@ -1215,7 +1390,8 @@ class BridgeStore:  # pylint: disable=too-many-public-methods  # one flat facade
     async def init_snapshot(self, kv_keys: Iterable[str] = ()) -> dict[str, Any]:
         """Everything init_state (C-STATE-1) reads from the DB, in one locked read: messages
         (last 100, ascending, with legacy aliases), logs (30), memories (10), tool_logs (20),
-        settings, unacknowledged notifications and the stored values of kv_keys ('kv')."""
+        settings with their revision meta ('settings_meta', C-60), unacknowledged notifications and the
+        stored values of kv_keys ('kv')."""
         return await self._run(self._init_snapshot, list(kv_keys))
 
     async def stats(self) -> dict[str, Any]:
@@ -1230,6 +1406,7 @@ class BridgeStore:  # pylint: disable=too-many-public-methods  # one flat facade
             "memories": self._recent_events(conn, EVENT_MEMORY, INIT_MEMORIES),
             "tool_logs": self._recent_events(conn, EVENT_TOOL, INIT_TOOL_LOGS),
             "settings": self._get_settings(conn),
+            "settings_meta": self._settings_meta(conn),
             "notifications": self._list_notifications(conn, False, INIT_NOTIFICATIONS),
             "kv": self._kv_get_many(conn, kv_keys),
         }

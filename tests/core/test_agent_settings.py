@@ -395,7 +395,9 @@ async def test_the_settings_sync_payload_matches_k61(sent):
     service = _service(sent)
     payload = await service.sync("test")
     assert set(payload) == {"settings", "applied", "errors", "pending_restart", "restart_required", "enforced",
-                            "available_voices", "available_languages", "ts"}
+                            "available_voices", "available_languages", "ts",
+                            "revision", "revision_epoch", "revisions", "instance"}  # C-60: the K-61 v51 echo
+    assert (payload["revision"], payload["revision_epoch"], payload["revisions"]) == (0, "", {})  # nothing taken yet
     assert set(payload["settings"]) == K61_FIELDS | {"muted", "voice_id_enrolled", "updated_ts", "saved"}
     assert payload["available_voices"] == list(voices.GEMINI_VOICES) and len(payload["available_voices"]) == 30
     assert payload["available_languages"] == ["auto", "ur", "hi", "en"]

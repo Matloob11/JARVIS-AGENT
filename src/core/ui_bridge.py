@@ -35,6 +35,34 @@ refused elsewhere (observe mode, the PC's local bridge); stop is only forwarded.
 room owner a job is over. agent_status is always the whole K-02 v9 object, built in one place (build_agent_status)
 for the event, init_state and GET /status.
 
+Settings and the offline queue (C-60, K-03/K-46/K-61 v51, src/core/bridge_settings.py): settings_update and the legacy
+persona_change / wake_word_toggle are checked, stored on top of the K-46 defaults with a revision the bridge owns
+(never an agent clock) and sent to the agent as settings_update with that revision; the agent's settings_sync never
+overwrites a key the owner changed at a revision it has not applied (its echo). The revision counter belongs to the
+database (one epoch, made once: a bridge restart or a restored backup keeps it) and only grows: an agent echo above
+the bridge's newest revision (a restored or copied bridge.db) first raises the counter to it in the same transaction
+(the Lamport catch-up), so no revision is handed out twice after it. GET /settings (owner session or agent
+credentials) returns the stored object with defaults and revisions; init_state.settings and settings_bootstrap carry
+the revision too. While no agent can take a command (none connected but the sender itself, or a pause the room owner
+holds), chat, settings_update and clear_memory wait in bridge.db's pending_commands (10 min, in order, deduped by chat
+id, capped); an agent peer (an owner-room agent socket, or a legacy agent: a legacy-token socket whose handshake
+declares auth.role 'agent', the agent's fallback without the agent link v2 keys) gets its settings_bootstrap and then
+them, under one send lock with the live commands and the room owner's pause_agent. A socket that leaves while its
+connect waits for that lock is forgotten and gets nothing, and what a flush had not sent when its socket left goes back
+to the head of the queue. When bridge.db cannot give the queue (busy or locked), the peer takes no live command while
+the flush is tried again (a few times, then it takes them anyway), and a queue left behind goes before the next live
+command. A job that pause_agent reached is ending and never takes a command or the queue again, even while its socket
+is still connected: live commands and camera frames skip it (and every peer whose start has not finished); what waits
+then goes to the next job at its connect. Whenever the pause stops keeping the agent out (Wake, the admin CLI's
+unpause, a switch to observe mode: the room owner's on_resume), the legacy agents that waited get their bootstrap and
+what was queued goes out. Other types are answered 'agent_offline'. Every other legacy-token socket (an old dashboard
+tab, a Python tool such as test_chat_once.py in its legacy mode) is a UI socket that joins room 'ui' only: it never
+gets agent_command or agent_vision_frame, never takes the queue and never counts as an agent (C-60 review: missing
+browser headers made such tools agents); a declaration from a browser handshake (an Origin header or a browser
+User-Agent) does not count either. A legacy agent in turn is no UI client (agent-svc's ui_clients and ui_connects, the
+room owner's on_demand demand, GET /status), and agent-svc's announce goes only to an owner-room job that takes
+commands now, under the same send lock (C-125 under C-60's delivery rules).
+
 Log pipeline (C-64, K-39/K-40 v10): an authenticated /notify passes one of three global rate buckets (critical 50/s,
 logs 10/s, others 20/s; over it 429 {error: 'rate_limited', class} with Retry-After), so a log flood never throttles a
 transcript. vortex_log_batch items are normalized (bridge_store.normalize_log_batch), stored in one transaction and
@@ -90,7 +118,15 @@ from services.utils.plan_progress import (
     plan_progress_from_notify,
 )
 from services.utils.task_items import task_sync_payload
-from src.core import bridge_auth, bridge_desktop, bridge_media, bridge_rooms, bridge_security, confirm_policy
+from src.core import (
+    bridge_auth,
+    bridge_desktop,
+    bridge_media,
+    bridge_rooms,
+    bridge_security,
+    bridge_settings,
+    confirm_policy,
+)
 from src.core.bridge_security import (
     NOTIFY_MAX_BYTES,
     NonceCache,
@@ -171,6 +207,20 @@ VISION_FRAMES_PER_S = 1.0
 AGENT_HELLOS_PER_S = 1.0
 AGENT_HELLO_BURST = 5.0
 VISION_FRAME_MAX_CHARS = 600 * 1024
+# C-60 (K-03/K-46 v51): the settings commands are checked, stored with a bridge revision and travel to the agent as
+# settings_update (the legacy persona_change and wake_word_toggle too); while no agent can take them, these types wait
+# in the offline queue (bridge.db pending_commands, PENDING_TTL_S, in order, at most PENDING_MAX with the oldest
+# dropped) and every other forwarded type is answered 'agent_offline'.
+SETTINGS_COMMAND_TYPES = frozenset({"settings_update", "persona_change", "wake_word_toggle"})
+QUEUED_COMMAND_TYPES = frozenset({"chat", "settings_update", "clear_memory"})
+PENDING_TTL_S = 600.0
+PENDING_MAX = 100
+PENDING_PAYLOAD_MAX_BYTES = 32 * 1024  # a chat is at most 4000 characters (K-59); bridge.db never holds a flood
+# C-60 review: a queue flush whose take_pending failed (bridge.db busy, locked or unreadable) is tried again after each
+# of these delays while the agent peer takes no live command; after the last one it takes them anyway (a broken
+# bridge.db never keeps a connected agent from live commands) and the queue goes before the next live command.
+QUEUE_RETRY_DELAYS_S = (1.0, 3.0, 10.0)
+LEGACY_SETTINGS_KV = ("active_persona", "wake_word_active", "muted")  # the agent's last persona/wake/mute notifies
 _SHORT_TEXT = 64
 _ROOM_NAME = re.compile(r"[A-Za-z0-9._:-]{1,64}")  # a LiveKit room as K-70 writes it
 PUBLIC_PORT = 5001  # nginx /vortex/ -> 127.0.0.1:5101 -> this port; the internal one is bridge_desktop.INTERNAL_PORT
@@ -367,7 +417,8 @@ rooms: bridge_rooms.RoomManager = bridge_rooms.RoomManager(
     agent_job_sockets=lambda: _agent_job_sockets(),
     ui_presence=lambda: _ui_presence(),
     on_status=lambda: _publish_agent_status(),
-    desktop=lambda: desktop)
+    desktop=lambda: desktop,
+    on_resume=lambda: _flush_after_unpause())
 # pylint: enable=unnecessary-lambda
 
 # The single media path (C-117, K-73 / DASH-C21): the index and files from the read-only jarvis_shared and
@@ -755,8 +806,10 @@ def _internal_notify_body(raw: bytes | None) -> dict[str, Any]:
 # jarvis-agent-svc talks to the bridge only through authenticated notifies (the agent's own auth) whose answer it
 # reads; none of them is emitted to the UI as it came:
 # - svc_deliver {step: 'announce', id, text, kind}: ladder step 1. One live job of the owner's room (the newest
-#   owner-room agent socket, so a draining job never answers for an attempt the live job delivers) gets
-#   agent_command 'announce' {id, text, kind}; answer {status: 'sent'|'no_agent', agents}. The job reports back with
+#   owner-room agent socket that takes commands now, so a draining job never answers for an attempt the live job
+#   delivers; C-60: never a job a pause_agent of the bridge ended or one whose connect has not finished, and none
+#   while the room owner holds a pause) gets agent_command 'announce' {id, text, kind} under the send lock; answer
+#   {status: 'sent'|'no_agent', agents: the owner-room agents that take commands}. The job reports back with
 #   notify announce_result {id, delivered, reason?}, kept here for ANNOUNCE_RESULT_TTL_S, also across a bridge restart
 #   (the C-13 kv, KV_SVC_ANNOUNCE); a delivered result is never replaced by a not-delivered one.
 # - svc_deliver {step: 'notify', id, description, due_at?, source, kind}: ladder step 3. Stored as a UI notification
@@ -767,7 +820,8 @@ def _internal_notify_body(raw: bytes | None) -> dict[str, Any]:
 # - svc_poll {ids?, ack_ids?} and svc_heartbeat {K-68/K-77 counts, ids?, ack_ids?}: ack_ids are acknowledged
 #   by 'svc' (delivered on another channel, so no UI shows them again); the answer {status, boot, ui_clients,
 #   ui_connects, agents, acks: {id: {by: 'ui'|'svc'|'agent', delivered, reason?}}} tells which ids were acknowledged,
-#   how many UI sockets and owner-room agents are connected, and ui_connects (UI connects since the bridge started)
+#   how many UI sockets (C-60: a legacy agent is none) and owner-room agents are connected, and ui_connects (UI
+#   connects since the bridge started)
 #   with boot (a random id of this bridge start), which the svc compares to retry on the next UI connect: after a
 #   bridge restart the counter starts again from 0, and a new boot tells the svc that every UI connected now came
 #   after it. svc_heartbeat also keeps its counts for GET /status 'svc'. The status is 'unsure' instead of 'ok' when
@@ -785,7 +839,7 @@ _SVC_KINDS = ("reminder", "task")
 _SVC_STATUS_NUMBERS = ("due_pending", "undelivered", "last_snapshot_ts", "since", "pid", "due_reminders",
                        "due_tasks")
 _SVC_STATUS_LABELS = ("svc", "brain", "git_sha")
-_ui_connects = 0  # UI and legacy socket connects since this bridge started (svc_poll ui_connects)
+_ui_connects = 0  # UI socket connects since this bridge started (svc_poll ui_connects; never a legacy agent's)
 _SVC_BOOT_ID = secrets.token_hex(8)  # a new id with every bridge start (svc_poll boot)
 _announce_results: "OrderedDict[str, dict[str, Any]]" = OrderedDict()  # announce attempt id -> {delivered, ...}
 _announce_results_loaded = False  # the kv copy (KV_SVC_ANNOUNCE) was merged in after this bridge started
@@ -823,16 +877,29 @@ def _owner_agent_count() -> int:
     return sum(1 for client in _clients.values() if _is_owner_agent(client))
 
 
-def _announce_target() -> str | None:
-    """The sid of the newest owner-room agent socket, or None. An announce goes to this one job only: with a draining
-    job (its voice link closed) and the new one both connected, both would answer, and the draining job's instant
-    no_participant could be read before the live job's delivered and make agent-svc speak it on the laptop too."""
-    owners = [(client.since, sid) for sid, client in _clients.items() if _is_owner_agent(client)]
-    return max(owners)[1] if owners else None
+def _announce_target() -> tuple[str | None, int]:
+    """(the sid of the newest owner-room agent socket that takes commands now, how many owner-room agent sockets take
+    commands); (None, 0) while the room owner keeps the agent out (a pause) or none takes commands. An announce goes to
+    this one job only: with a draining job (its voice link closed) and the new one both connected, both would answer,
+    and the draining job's instant no_participant could be read before the live job's delivered and make agent-svc
+    speak it on the laptop too. C-60's delivery rules (_takes_commands) apply as for a live command: a job a pause_agent
+    of the bridge ended never gets it, nor a socket whose connect (its bootstrap and queue flush) has not finished. The
+    caller holds the send lock."""
+    if _kept_out():
+        return None, 0
+    takers = [(client.since, sid) for sid, client in _clients.items()
+              if _is_owner_agent(client) and _takes_commands(client)]
+    return (max(takers)[1] if takers else None), len(takers)
+
+
+def _is_ui_socket(client: "SocketClient") -> bool:
+    """A dashboard socket: role 'ui', or a legacy-token socket that is no legacy agent (C-60: a legacy agent is the
+    owner's agent on the legacy token, never a UI client)."""
+    return client.role == ROLE_UI or (client.role == ROLE_LEGACY and not client.legacy_agent)
 
 
 def _ui_client_count() -> int:
-    return sum(1 for client in _clients.values() if client.role in (ROLE_UI, ROLE_LEGACY))
+    return sum(1 for client in _clients.values() if _is_ui_socket(client))
 
 
 def _announce_entry(value: Any, now: float) -> dict[str, Any] | None:
@@ -989,22 +1056,34 @@ async def _svc_deliver(payload: Any) -> dict[str, Any]:
     data = payload if isinstance(payload, Mapping) else {}
     step = data.get("step")
     if step == "announce":
-        attempt_id = _svc_id(data.get("id"))
-        text = " ".join(str(data.get("text") or "").split())[:SVC_TEXT_MAX]
-        if attempt_id is None or not text:
-            return {"status": "rejected", "reason": "bad_payload"}
-        target = _announce_target()
-        if target is None:
-            return {"status": "no_agent", "agents": 0}
-        agents = _owner_agent_count()
-        kind = data.get("kind") if data.get("kind") in _SVC_KINDS else "reminder"
-        await sio.emit("agent_command", {"type": "announce",
-                                         "payload": {"id": attempt_id, "text": text, "kind": kind}}, to=target)
-        logger.info("ANNOUNCE %s sent to the newest of %d owner-room agent(s)", attempt_id, agents)
-        return {"status": "sent", "agents": agents}
+        return await _svc_announce_step(data)
     if step == "notify":
         return await _svc_notify_step(data)
     return {"status": "rejected", "reason": "bad_step"}
+
+
+async def _svc_announce_step(data: Mapping[str, Any]) -> dict[str, Any]:
+    """svc_deliver step 'announce' (ladder step 1, see the block comment above), under C-60's delivery rules: picked
+    and emitted under the send lock (never in the middle of a connect's bootstrap and queue flush, or a pause_agent),
+    to the newest owner-room job that takes commands (_announce_target). With none, or while the room owner holds a
+    pause, the answer is 'no_agent' with nothing emitted, so agent-svc settles the attempt at once and goes on to the
+    laptop."""
+    attempt_id = _svc_id(data.get("id"))
+    text = " ".join(str(data.get("text") or "").split())[:SVC_TEXT_MAX]
+    if attempt_id is None or not text:
+        return {"status": "rejected", "reason": "bad_payload"}
+    kind = data.get("kind") if data.get("kind") in _SVC_KINDS else "reminder"
+    async with _send_lock():
+        target, agents = _announce_target()
+        if target is not None:
+            await sio.emit("agent_command", {"type": "announce",
+                                             "payload": {"id": attempt_id, "text": text, "kind": kind}}, to=target)
+    if target is None:
+        logger.info("ANNOUNCE %s not sent: %s", attempt_id, "the owner paused the agent" if _kept_out()
+                    else f"no owner-room agent takes commands now ({_owner_agent_count()} connected)")
+        return {"status": "no_agent", "agents": 0}
+    logger.info("ANNOUNCE %s sent to the newest of %d owner-room agent(s) that take commands", attempt_id, agents)
+    return {"status": "sent", "agents": agents}
 
 
 async def _svc_notify_step(data: Mapping[str, Any]) -> dict[str, Any]:
@@ -1239,34 +1318,81 @@ async def _drop_due_task(task_id: Any) -> None:
         await emit_ui("task_sync", {"tasks": remaining})
 
 
-# settings_sync keys that describe the update, not a setting (K-02 / K-61): never stored as settings
+# settings_sync keys that describe the update, not a setting (K-02 / K-61), and the agent's revision echo (K-61 v51):
+# never stored as settings
 _SETTINGS_SYNC_META = frozenset({"applied", "errors", "pending", "pending_restart", "restart_required", "enforced",
-                                 "available_voices", "available_languages", "guarded_tools", "ts"})
+                                 "available_voices", "available_languages", "guarded_tools", "ts", "source",
+                                 *bridge_settings.ECHO_KEYS})
 
 
-async def _store_agent_settings(payload: Any) -> None:
-    """C-54 (K-46/K-61): the settings object of the agent's settings_sync ({settings, ...}, or a flat one) merged into
-    the settings table (updated_by 'agent'): init_state.settings shows it and the next settings_bootstrap carries it."""
+async def _store_agent_settings(payload: Any) -> dict[str, Any]:
+    """C-54/C-60 (K-46/K-61 v51): the settings object of the agent's settings_sync ({settings, ...}, or a flat one)
+    merged into the settings table (updated_by 'agent'): init_state.settings shows it and the next settings_bootstrap
+    carries it. An echo of this database above the bridge's newest revision (bridge.db was restored or copied) first
+    raises the revision counter to it in the same transaction (the Lamport catch-up, bridge_settings.caught_up; logged
+    at WARNING), so no revision that agent took is handed out again. A key the owner changed at a revision newer than
+    the agent says it applied (its echo; without one, the newest revision sent to an agent) is kept as the owner set
+    it, so a stale value never overwrites a change the agent has not taken yet. A value that changes the copy takes a
+    new revision stamped with the agent's instance. Returns the kept keys with their stored values."""
     if not isinstance(payload, Mapping):
-        return
+        return {}
     settings = payload.get("settings")
     if not isinstance(settings, Mapping):
         settings = {key: value for key, value in payload.items() if key not in _SETTINGS_SYNC_META}
-    if settings:
-        await stored("settings", store.merge_settings(settings, by="agent"), {})
+    settings = bridge_settings.strip_meta(settings)
+    if not settings:
+        return {}
+    echo = bridge_settings.parse_echo(payload)
+    catch_up: list[tuple[int, int]] = []  # (before, after) of the merge the store ran last (again on a repaired file)
+
+    def merge(current: dict[str, Any], meta: dict[str, Any]) -> Any:
+        catch_up[:] = [(int(meta["revision"]), bridge_settings.caught_up(meta, echo))]
+        return bridge_settings.agent_merge(current, meta, settings, echo)
+
+    result = await stored("settings", store.transact_settings(merge), None)
+    if result is None:
+        return {}
+    if catch_up and catch_up[0][1] > catch_up[0][0]:
+        logger.warning("SETTINGS revision caught up from %d to %d: an agent echoed revisions this bridge.db never "
+                       "reached (restored from a backup or copied); later changes take revisions above them",
+                       *catch_up[0])
+    kept: dict[str, Any] = result[2]
+    if kept:
+        logger.info("SETTINGS agent sync: the owner's newer %s kept (the agent has not applied it yet)",
+                    ",".join(sorted(kept)))
+    return kept
 
 
-async def _send_settings_bootstrap(sid: str) -> None:
-    """C-54 (K-46): an agent of the owner's room gets the stored settings when it connects, as agent_command
-    settings_bootstrap; the agent takes them as a validated update (never a blind overwrite). Nothing while none are
-    stored."""
+async def _send_settings_bootstrap(sid: str, client: "SocketClient") -> None:
+    """C-54/C-60 (K-46 v51): an agent peer gets the stored settings when it starts (its connect, or Wake for a legacy
+    agent that connected during a pause), as agent_command settings_bootstrap with revision, revision_epoch and the
+    per-key revisions; the agent takes the fields newer than the ones it took (never a blind overwrite, never its own
+    change back). A legacy-token agent gets it too (C-60 review: else an owner change whose queued copy expired never
+    reached it, and its syncs left the owner's value in the bridge's copy as if in force). Nothing while none are
+    stored, and nothing (no delivery counted) once the socket has left during the read."""
     try:
-        settings = await store.get_settings()
+        settings, meta = await store.settings_with_meta()
     except Exception:  # pylint: disable=broad-exception-caught  # a failing store never blocks the connect
         _log_store_error("settings read")
         return
-    if isinstance(settings, dict) and settings:
-        await sio.emit("agent_command", {"type": "settings_bootstrap", "payload": settings}, to=sid)
+    payload = bridge_settings.bootstrap_payload(settings, meta)
+    if payload is None or _clients.get(sid) is not client:
+        return
+    await sio.emit("agent_command", {"type": "settings_bootstrap", "payload": payload}, to=sid)
+    if meta["revision"]:
+        await stored("settings delivered", store.note_settings_delivered(meta["revision"]), None)
+
+
+async def _settings_view_now(legacy: Mapping[str, Any] | None = None, *,
+                             with_revisions: bool = False) -> dict[str, Any] | None:
+    """The settings view (K-46 v51: defaults, the stored object, revision) from the store; None when it fails."""
+    result = await stored("settings read", store.settings_with_meta(), None)
+    if result is None:
+        return None
+    if legacy is None:
+        legacy = await stored("legacy settings", store.kv_get_many(LEGACY_SETTINGS_KV), {})
+    settings, meta = result
+    return bridge_settings.settings_view(settings, meta, legacy, with_revisions=with_revisions)
 
 
 @app.post("/notify")
@@ -1416,9 +1542,9 @@ async def notify_bridge(request: Request) -> Any:
     elif event_type == "memory_cleared":  # C-44 (K-58): the bridge forgets its stored short-term memories too
         await stored("memory clear", store.delete_events(EVENT_MEMORY), 0)
         await emit_ui("memory_cleared", payload)
-    elif event_type == "settings_sync":  # C-54 (K-46/K-61): stored for init_state and settings_bootstrap, then shown
-        await _store_agent_settings(payload)
-        await emit_ui("settings_sync", payload)
+    elif event_type == "settings_sync":  # C-54/C-60 (K-46/K-61): stored (the owner's newer keys kept), then shown
+        kept = await _store_agent_settings(payload)
+        await emit_ui("settings_sync", bridge_settings.relay_agent_sync(payload, kept))
     elif event_type == "sim_data_result":
         records: list[Any] = payload.get("records", []) if isinstance(payload, dict) else []
         query_masked: str = payload.get("phone", "") if isinstance(payload, dict) else ""
@@ -1651,12 +1777,31 @@ async def get_status(request: Request) -> Any:
         "db": {"ok": db_ok, "size_bytes": db_size},
         "agent": agent,
         "livekit": livekit,
-        "ui_clients": sum(1 for client in _clients.values() if client.role in (ROLE_UI, ROLE_LEGACY)),
+        "ui_clients": _ui_client_count(),  # C-60: UI and legacy dashboard sockets, never a legacy agent
         "brain": active_brain(),
         "desktop": desktop.status(),
         # C-125 (K-77): agent-svc's last heartbeat (counts only), None before the first one
         "svc": copy.deepcopy(bridge_manager.state.get("svc_status")),
     }
+
+
+@app.get("/settings")
+async def get_settings(request: Request) -> Any:
+    """
+    GET /vortex/settings (K-36/K-46 v51, C-60): the stored settings object with the K-46 defaults, revision,
+    revision_epoch and the per-key revisions ({key: {rev, by, src?}}). Auth: the owner session (public listener only)
+    or agent credentials (the internal listener, as for GET /status, or the C-NOTIFY-1 signed headers over b''),
+    nothing else (no legacy header, no PC signature); 401 {error: 'auth_required'} otherwise, 503 {error:
+    'store_unavailable'} when bridge.db cannot be read.
+    """
+    if not (bridge_desktop.is_internal_scope(request.scope)
+            or await owner_auth.session_from_request(request) is not None
+            or await _agent_request_ok(request)):
+        return JSONResponse({"error": "auth_required"}, status_code=401)
+    view = await _settings_view_now(with_revisions=True)
+    if view is None:
+        return JSONResponse({"error": "store_unavailable"}, status_code=503)
+    return view
 
 
 async def _media_auth(request: Request) -> bool:
@@ -2233,9 +2378,11 @@ async def build_init_state() -> dict[str, Any]:
         state["memories"] = snapshot["memories"]
         state["tool_logs"] = snapshot["tool_logs"]
         state["notifications"] = snapshot["notifications"]
-        if snapshot["settings"]:
-            # Only a stored object: an empty one would hide persona/muted from the settings panel.
-            state["settings"] = snapshot["settings"]
+        if snapshot["settings"] and snapshot.get("settings_meta"):
+            # Only a stored object: an empty one would hide persona/muted from the settings panel. C-60 (K-46 v51):
+            # with the K-46 defaults under it and the bridge's revision and revision_epoch.
+            state["settings"] = bridge_settings.settings_view(snapshot["settings"], snapshot["settings_meta"],
+                                                              snapshot["kv"])
     state["agent_status"] = build_agent_status()  # K-02/K-42 v9: the whole object; a late UI never shows 'Unknown'
     # C-29: a reloaded UI shows a still-pending confirmation again (the requests as they were sent).
     state["confirmations"] = [record["payload"] for record in
@@ -2262,12 +2409,60 @@ class SocketClient:
     job_id: str = ""
     internal: bool = False  # came in on the internal listener (jarvis-network)
     session_id: str = ""    # role 'ui': the owner session of the jarvis_session cookie (C-19)
+    # role 'legacy': the handshake declared the agent role (auth.role 'agent' beside the legacy token: the agent's
+    # fallback without the agent link v2 keys) and came from no browser tab. Only such a socket serves as the owner's
+    # agent; every other legacy socket (an old dashboard, a Python tool) joins room 'ui' only, never gets agent_command
+    # or agent_vision_frame and never takes the queue (C-60 review: a missing Origin and User-Agent made it an agent)
+    legacy_agent: bool = False
+    # an agent peer takes live commands only once its pause or bootstrap and the queued commands went out (C-60)
+    ready: bool = True
+    # the queue flush to this agent peer failed (bridge.db busy, locked or unreadable): what waited may still be in
+    # bridge.db, so it goes before this peer's live commands (C-60 review); retrying: a retry task runs for it
+    flush_owed: bool = False
+    retrying: bool = False
+    # the bridge's pause_agent reached this agent peer (at its connect while paused, or the room-wide one): its job
+    # ends (K-60 v9), so it never takes a command or the queue again (C-60)
+    ending: bool = False
+    # an agent peer whose connect waits for the send lock: registered (so a disconnect meanwhile forgets it) but in no
+    # room yet, so a room-wide pause_agent and Wake leave it to its own start, which follows them (C-60 review)
+    connecting: bool = False
+    frame_warned: bool = False  # an oversize camera frame was logged once at WARNING for this socket
     commands: TokenBucket = field(default_factory=lambda: TokenBucket(UI_COMMANDS_PER_S))
     frames: TokenBucket = field(default_factory=lambda: TokenBucket(VISION_FRAMES_PER_S))
     hellos: TokenBucket = field(default_factory=lambda: TokenBucket(AGENT_HELLOS_PER_S, AGENT_HELLO_BURST))
 
 
 _clients: dict[str, SocketClient] = {}
+
+
+class _LoopLock:  # pylint: disable=too-few-public-methods
+    """One asyncio.Lock per running event loop (the bridge has one; the tests run one per test)."""
+
+    def __init__(self) -> None:
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._lock: asyncio.Lock | None = None
+
+    def get(self) -> asyncio.Lock:
+        loop = asyncio.get_running_loop()
+        if self._loop is not loop or self._lock is None:
+            self._loop, self._lock = loop, asyncio.Lock()
+        return self._lock
+
+
+# C-60: everything that reaches an agent socket in order (a live ui_command, a queue flush, an agent peer's connect)
+# runs under this lock, so a live command never overtakes a queued one and nothing is queued after a flush took the
+# queue.
+_agent_send = _LoopLock()
+
+
+def _send_lock() -> asyncio.Lock:
+    return _agent_send.get()
+
+
+# C-60 review: the background retries of a failed queue flush (_retry_queue_flush), kept until they end
+_queue_retries: set[asyncio.Task[None]] = set()
+
+
 # Audit rows for refused sockets: a steady trickle, so a flood of bad connects cannot fill the disk.
 _refusal_audit = TokenBucket(1.0, 30.0)
 
@@ -2361,10 +2556,85 @@ def _agent_room(auth: Mapping[str, Any], internal: bool) -> str:
     return "" if internal else _owner_room()
 
 
+def _browser_handshake(environ: Mapping[str, Any]) -> bool:
+    """C-60: a handshake from a browser tab (an old dashboard). It carries an Origin header (a cross-origin or
+    websocket handshake) or a browser User-Agent ('Mozilla/...'): a browser leaves Origin off a same-origin GET, so the
+    Engine.IO polling handshake of a tab served by the bridge itself has none, but every browser and Electron sends that
+    User-Agent. The agent's python-socketio client (aiohttp: 'Python/... aiohttp/...') sends neither. A legacy socket's
+    declaration of the agent role never counts from such a handshake (_legacy_agent)."""
+    if environ.get("HTTP_ORIGIN"):
+        return True
+    return str(environ.get("HTTP_USER_AGENT") or "").lstrip().startswith("Mozilla/")
+
+
+def _declares_agent(auth: Any) -> bool:
+    """The handshake's auth says it is the agent: role 'agent' (the agent's legacy-token fallback sends it beside the
+    token, services/ai_core/agent_loops.py UIBridgeListener._auth; on the public listener it counts only together with
+    the legacy token, never as a credential of its own)."""
+    return isinstance(auth, Mapping) and auth.get("role") == ROLE_AGENT
+
+
+def _legacy_agent(sid: str, environ: Mapping[str, Any], auth: Any) -> bool:
+    """C-60 review: a legacy-token socket serves as the owner's agent only when it says so (_declares_agent) and comes
+    from no browser tab (_browser_handshake). Missing headers never make an agent: a Python tool on the legacy token
+    (test_chat_once.py in its legacy mode, a production test script, an old dashboard client) is a UI socket."""
+    if not _declares_agent(auth):
+        return False
+    if _browser_handshake(environ):
+        logger.warning("Socket %s: a legacy-token handshake from a browser declares the agent role; it is taken as a "
+                       "UI socket", sid)
+        return False
+    return True
+
+
+def _agent_peer(client: SocketClient) -> bool:
+    """A socket that may serve as the owner's agent: an agent socket of the owner's room, or a legacy agent (a
+    legacy-token socket that declared the agent role while LEGACY_TOKEN_AUTH=1; _legacy_agent)."""
+    return _is_owner_agent(client) or (client.role == ROLE_LEGACY and client.legacy_agent)
+
+
+def _takes_commands(client: SocketClient) -> bool:
+    """An agent peer that is ready (connected, past its bootstrap and queue flush) and was not told to end (C-60)."""
+    return client.ready and not client.ending and _agent_peer(client)
+
+
+def _kept_out() -> bool:
+    """The owner paused the agent and the room owner keeps it out (always or on_demand mode, K-44 v9): nothing is
+    delivered to an agent, the queued types wait (C-60)."""
+    return rooms.paused and rooms.mode != bridge_rooms.MODE_OBSERVE
+
+
+def _deliverable(exclude: str | None = None) -> bool:
+    """An agent can take a command now: an agent peer that takes commands (ready, and no job the bridge's pause_agent
+    ended), and no pause keeps it out. exclude: the sender's sid. A legacy agent counts as an agent peer, but never for
+    its own command (C-60 review: a legacy socket with no agent connected had its chat answered 'sent' and emitted past
+    itself to nobody, instead of 'queued')."""
+    return not _kept_out() and any(_takes_commands(client) for sid, client in _clients.items() if sid != exclude)
+
+
+def _live_skip(sender: str) -> str | list[str]:
+    """skip_sid for a live command or camera frame to room 'agent': the sender, and every agent peer in that room that
+    takes no command now, a job the bridge's pause_agent ended (its socket stays connected while it tears down), a
+    legacy agent still waiting for the end of the pause or a peer waiting for a queue flush that failed (C-60 review: a
+    room-wide emit reached the ending job beside the next one, which could run the turn or the tool a second time).
+    Just the sender when no peer is held back, as before C-60."""
+    held = [sid for sid, client in _clients.items()
+            if sid != sender and _agent_peer(client) and not _takes_commands(client)]
+    return [sender, *held] if held else sender
+
+
 async def _join_rooms(sid: str, client: SocketClient) -> None:
     """Puts the socket in its role's rooms and records the role in its Socket.IO session. An agent socket that
-    serves another room than JARVIS_ROOM_NAME joins none, so it never receives a ui_command or a camera frame."""
-    socket_rooms = ROLE_ROOMS[client.role] if client.role != ROLE_AGENT or _is_owner_agent(client) else ()
+    serves another room than JARVIS_ROOM_NAME joins none, so it never receives a ui_command or a camera frame. A legacy
+    socket joins room 'agent' too only as a legacy agent (it declared the agent role from no browser tab,
+    _legacy_agent); every other one (a dashboard tab, a Python tool) joins room 'ui' only and gets no agent_command or
+    agent_vision_frame (C-60)."""
+    if client.role == ROLE_LEGACY and not client.legacy_agent:
+        socket_rooms: tuple[str, ...] = (ROOM_UI,)
+    elif client.role != ROLE_AGENT or _is_owner_agent(client):
+        socket_rooms = ROLE_ROOMS[client.role]
+    else:
+        socket_rooms = ()
     try:
         for room in socket_rooms:
             await sio.enter_room(sid, room)
@@ -2408,9 +2678,36 @@ async def _publish_agent_status() -> None:
     await emit_ui("agent_status", status)
 
 
+def _bridge_pause(data: Any) -> bool:
+    """The room owner's own pause_agent (payload.by 'bridge', K-38/K-60 v9): the job that gets it ends."""
+    if not isinstance(data, Mapping):
+        return False
+    payload = data.get("payload")
+    return bool(data.get("type") == "pause_agent" and isinstance(payload, Mapping)
+                and payload.get("by") == bridge_rooms.PAUSE_BY_BRIDGE)
+
+
 async def _send_agent_command(data: Any, sid: str | None = None) -> None:
-    """The room owner's agent_command (pause_agent): to one socket, else to room 'agent' (owner-room agents)."""
-    await sio.emit("agent_command", data, to=sid or ROOM_AGENT)
+    """The room owner's agent_command (pause_agent from Pause, a repeated Pause, the admin CLI's pause or a mode that
+    leaves observe while paused): to one socket, else to room 'agent' (the agent peers). C-60: under the send lock,
+    so it never lands in the middle of a connect's bootstrap and queue flush, and the bridge's pause_agent first marks
+    every agent peer it reaches as ending (not ready): those jobs end, so no live command, no Wake flush and no
+    'sent' ack goes to them; what waits meanwhile reaches the next job at its connect. A socket whose connect still
+    waits for the lock is in no room, so a room-wide pause_agent never reaches it and it is not marked here (else a
+    peer that was never told would count as ending for good): its own start, right after this, sees the pause, and
+    an owner-room job then gets its own pause_agent while a legacy agent waits for the end of the pause."""
+    async with _send_lock():
+        if _bridge_pause(data):
+            told = 0
+            for client_sid, client in _clients.items():
+                reached = client_sid == sid if sid is not None else not client.connecting
+                if reached and _agent_peer(client) and not client.ending:
+                    client.ending, client.ready = True, False
+                    told += 1
+            if told:
+                logger.info("PAUSE %d agent socket(s) told to end: no command and no queued command goes to them",
+                            told)
+        await sio.emit("agent_command", data, to=sid or ROOM_AGENT)
 
 
 def _agent_job_sockets() -> dict[str, float]:
@@ -2419,8 +2716,9 @@ def _agent_job_sockets() -> dict[str, float]:
 
 
 def _ui_presence() -> tuple[int, float | None]:
-    """(UI sockets now, epoch s of the last UI socket): the room owner's on_demand demand (K-44 v9)."""
-    count = sum(1 for client in _clients.values() if client.role in (ROLE_UI, ROLE_LEGACY))
+    """(UI sockets now, epoch s of the last UI socket): the room owner's on_demand demand (K-44 v9). A legacy agent is
+    an agent, never demand (C-60)."""
+    count = _ui_client_count()
     return count, (time.time() if count else _ui_last_seen)
 
 
@@ -2429,9 +2727,15 @@ async def handle_connect(sid: str, environ: dict[str, Any], auth: dict[str, Any]
     """
     Socket.IO roles (C-SOCK-1): auth.agent_token = AGENT_TOKEN -> 'agent' (room 'agent'); a valid
     jarvis_session cookie in the handshake -> 'ui' (room 'ui', C-19); auth.token or ?token= =
-    VORTEX_SECURITY_TOKEN -> 'legacy' in both rooms while LEGACY_TOKEN_AUTH=1.
+    VORTEX_SECURITY_TOKEN -> 'legacy' while LEGACY_TOKEN_AUTH=1: in both rooms only as a legacy agent (auth.role
+    'agent' beside the token, from no browser tab: _legacy_agent), else a UI socket in room 'ui' only (C-60 review).
     Anything else is refused (False) and audited as 'socket_auth_failed'. UI and legacy sockets get
-    init_state; the first agent socket turns agent_status online.
+    init_state; the first agent socket turns agent_status online. An agent peer (an owner-room agent or a legacy
+    agent) gets its pause or settings_bootstrap and the queued commands before any live one
+    (C-60). It is registered before it waits for the send lock: python-socketio runs a socket's disconnect handler
+    while its connect handler is suspended, so a socket that leaves during that wait or during its start is forgotten,
+    gets nothing more and is refused (False) instead of staying in the table as an agent that takes commands (C-60
+    review).
     """
     internal = bridge_desktop.is_internal_environ(environ)
     session: bridge_auth.Principal | None = None
@@ -2455,23 +2759,37 @@ async def handle_connect(sid: str, environ: dict[str, Any], auth: dict[str, Any]
     if role == ROLE_AGENT and isinstance(auth, dict):
         client.host, client.version = _short(auth.get("agent_id")), _short(auth.get("version"))
         client.room, client.job_id = _agent_room(auth, internal), _short(auth.get("job_id"))
-    _clients[sid] = client
-    await _join_rooms(sid, client)
-    logger.info("✅ Socket connected: role=%s sid=%s from %s%s%s", role, sid, ip,
-                f" host={client.host}" if client.host else "",
+    if role == ROLE_LEGACY:
+        client.legacy_agent = _legacy_agent(sid, environ, auth)
+    if _agent_peer(client):
+        # C-60: the peer becomes ready only after its pause or settings_bootstrap and the queued commands, all under
+        # the send lock: no live command overtakes a queued one, and none is queued after this flush took the queue.
+        # Registered first, so handle_disconnect can forget it while this waits for the lock (C-60 review).
+        client.ready, client.connecting = False, True
+        _clients[sid] = client
+        async with _send_lock():
+            client.connecting = False
+            if _clients.get(sid) is client:
+                await _join_rooms(sid, client)
+                await _start_agent_peer(sid, client)
+        if _clients.get(sid) is not client:  # it left while waiting for the lock or during its start
+            logger.info("Socket %s (role=%s) left during its connect: nothing more is sent to it", sid, role)
+            return False
+    else:
+        _clients[sid] = client
+        await _join_rooms(sid, client)
+    logger.info("✅ Socket connected: role=%s sid=%s from %s%s%s", f"{role} (agent)" if client.legacy_agent else role,
+                sid, ip, f" host={client.host}" if client.host else "",
                 f" room={client.room or '-'}{' (internal)' if internal else ''}" if role == ROLE_AGENT else "")
     if role == ROLE_AGENT:
         if _is_owner_agent(client):
-            if rooms.paused and rooms.mode != bridge_rooms.MODE_OBSERVE:
-                # K-38 v9: a job that starts while the owner paused JARVIS ends at once
-                await sio.emit("agent_command", dict(bridge_rooms.PAUSE_COMMAND), to=sid)
-            else:
-                await _send_settings_bootstrap(sid)  # C-54 (K-46): the stored settings, as a validated update
             rooms.kick("agent_connect")
             await _publish_agent_status()
         return True
-    global _ui_connects  # pylint: disable=global-statement
-    _ui_connects += 1  # C-125 (K-77): agent-svc retries an undelivered reminder on the next UI connect
+    if _is_ui_socket(client):
+        global _ui_connects  # pylint: disable=global-statement
+        _ui_connects += 1  # C-125 (K-77): agent-svc retries an undelivered reminder on the next UI connect (C-60: a
+        # legacy agent's connect is no UI connect)
     if role == ROLE_UI:  # a legacy socket may be an old agent, so only a real UI session counts as the owner
         await desktop.note_owner_activity()
     state: dict[str, Any] = await build_init_state()
@@ -2486,7 +2804,7 @@ async def handle_disconnect(sid: str, *_reason: Any) -> None:
     global _ui_last_seen  # pylint: disable=global-statement
     client = _clients.pop(sid, None)
     logger.info("Socket disconnected: role=%s sid=%s", client.role if client else "unknown", sid)
-    if client is not None and client.role in (ROLE_UI, ROLE_LEGACY):
+    if client is not None and _is_ui_socket(client):
         _ui_last_seen = time.time()
     if client is not None and _is_owner_agent(client):
         await _publish_agent_status()
@@ -2518,7 +2836,320 @@ async def _ack_notification(payload: Any) -> None:
         await stored("notification ack", store.ack_notification(notification_id, "ui"), False)
 
 
-async def _sim_lookup_command(client: SocketClient, payload: Any) -> dict[str, str]:
+# ---------------------------------------------------------------- C-60: delivery, the offline queue, settings
+
+
+async def _start_agent_peer(sid: str, client: SocketClient) -> None:
+    """An agent peer that just connected (the caller holds the send lock). While the room owner keeps the agent out,
+    an owner-room job gets only pause_agent (K-38 v9) and counts as ending: nothing queued goes to a job that ends; a
+    legacy agent (never told to end at connect) waits, not ready, until the pause ends (_flush_after_unpause).
+    Otherwise every agent peer, a legacy agent too, gets settings_bootstrap (C-54), then the queued commands in
+    order, and only then takes live commands. When bridge.db cannot give the queue, the peer stays not ready while the
+    flush is tried again (_queue_flush_failed, C-60 review)."""
+    if _kept_out():
+        if _is_owner_agent(client):
+            # K-38 v9: a job that starts while the owner paused JARVIS ends at once
+            client.ending = True
+            await sio.emit("agent_command", dict(bridge_rooms.PAUSE_COMMAND), to=sid)
+        return
+    try:
+        await _send_settings_bootstrap(sid, client)  # C-54/C-60 (K-46): the stored settings with their revisions
+        flushed = await _flush_pending(sid, client)
+    except BaseException:
+        client.ready = True  # a failed send never leaves a connected agent without live commands
+        raise
+    if flushed is None:
+        _queue_flush_failed(sid, client)
+        return
+    client.ready = True
+    if _clients.get(sid) is client:
+        _queue_flushed()
+
+
+async def _flush_pending(sid: str, client: SocketClient) -> int | None:
+    """C-60 (K-03 v51): every queued command to this agent socket, oldest first (the caller holds the send lock).
+    Expired ones were dropped by the store and are counted in the log. The socket can leave while this runs (its
+    disconnect handler runs while this one waits on bridge.db or a send): then nothing is taken, or what was not sent
+    yet goes back to the head of the queue, in order, for the next agent (C-60 review: it went to the gone socket and
+    was lost). Returns how many went out, or None when bridge.db could not give the queue (take_pending failed: busy,
+    locked or unreadable), which then stays where it was (C-60 review: the peer was marked ready anyway, so later live
+    commands overtook the queued ones, which waited for the next connect or end of a pause and could expire unsent)."""
+    if _clients.get(sid) is not client:
+        return 0
+    taken = await stored("queue flush", store.take_pending(), None)
+    if taken is None:
+        return None
+    entries, expired = taken
+    if expired:
+        logger.info("QUEUE %d queued command(s) expired (older than %d s) and dropped", expired, int(PENDING_TTL_S))
+    newest_settings = 0
+    kinds: dict[str, int] = {}
+    for index, entry in enumerate(entries):
+        if _clients.get(sid) is not client:
+            await _requeue(entries[index:])
+            break
+        payload = entry.get("payload")
+        if entry.get("type") == "chat" and isinstance(payload, dict):
+            bridge_manager.remember_chat_id(payload.get("id"))  # its transcription defaults to source 'text'
+        if entry.get("type") == "settings_update" and isinstance(payload, dict):
+            revision = payload.get("revision")
+            if isinstance(revision, int) and not isinstance(revision, bool):
+                newest_settings = max(newest_settings, revision)
+        await sio.emit("agent_command", {"type": entry.get("type"), "payload": payload}, to=sid)
+        kinds[str(entry.get("type"))] = kinds.get(str(entry.get("type")), 0) + 1
+    sent = sum(kinds.values())
+    if sent:
+        logger.info("QUEUE %d queued command(s) sent to the agent in order (%s)", sent,
+                    ", ".join(f"{name} {count}" for name, count in kinds.items()))
+    if newest_settings:
+        await stored("settings delivered", store.note_settings_delivered(newest_settings), None)
+    return sent
+
+
+async def _requeue(entries: list[dict[str, Any]]) -> None:
+    """The queued commands a flush took but did not send (its socket left): back at the head of the queue, in order,
+    each with its own expiry (C-60 review)."""
+    restored = await stored("queue restore", store.restore_pending(entries), None)
+    if restored is None:
+        logger.warning("QUEUE the agent socket left during the queue flush and %d queued command(s) could not be "
+                       "kept (bridge store unavailable)", len(entries))
+    else:
+        logger.info("QUEUE the agent socket left during the queue flush: %d queued command(s) back at the head of the "
+                    "queue for the next agent", restored)
+
+
+def _queue_flushed() -> None:
+    """The queue went out to an agent peer that is still connected: no peer waits for it any more (C-60 review). A peer
+    whose own flush had failed takes live commands now (its bootstrap went out at its start and the queue is empty)."""
+    for client in _clients.values():
+        if client.flush_owed:
+            client.flush_owed = False
+            if not client.ending and not client.connecting:
+                client.ready = True
+
+
+async def _queue_retry_wait(delay: float) -> None:
+    """The wait before each retry of a failed queue flush (a test drives the retries through it)."""
+    await asyncio.sleep(delay)
+
+
+def _queue_flush_failed(sid: str, client: SocketClient) -> None:
+    """C-60 review: the queue flush to this agent peer failed (take_pending: bridge.db busy, locked or unreadable), so
+    what waited is still in bridge.db. The peer takes no live command meanwhile (a queued type waits behind the others,
+    any other type is answered 'agent_offline', as while it connects) and the flush is tried again in the background
+    (_retry_queue_flush, one task per peer). The caller holds the send lock."""
+    client.ready, client.flush_owed = False, True
+    if client.retrying:
+        return
+    client.retrying = True
+    logger.warning("QUEUE the queued commands could not be read (bridge store unavailable): the agent takes live "
+                   "commands once they went out (tried again after %s s)",
+                   ", ".join(f"{delay:g}" for delay in QUEUE_RETRY_DELAYS_S))
+    task = asyncio.get_running_loop().create_task(_retry_queue_flush(sid, client))
+    _queue_retries.add(task)
+    task.add_done_callback(_queue_retries.discard)
+
+
+async def _retry_queue_flush(sid: str, client: SocketClient) -> None:
+    """C-60 review: the flush _queue_flush_failed left owed, tried again after each of QUEUE_RETRY_DELAYS_S under the
+    send lock. Once it works the peer takes live commands, after what it just got. It stops when the socket left, its
+    job was told to end (the next job gets the queue at its connect) or the queue went out to another peer meanwhile
+    (_queue_flushed readied this one); during a pause it never flushes (the end of the pause readies the peer and
+    flushes, _flush_after_unpause). After the last failure the peer takes live commands anyway, so a broken bridge.db
+    never keeps a connected agent from them (WARNING); the queue stays owed, so the next live command tries it first
+    (_flush_owed), as do the next connect and the next end of a pause."""
+    try:
+        for delay in QUEUE_RETRY_DELAYS_S:
+            await _queue_retry_wait(delay)
+            async with _send_lock():
+                if _clients.get(sid) is not client or client.ending or not client.flush_owed:
+                    return
+                if _kept_out():
+                    continue
+                if await _flush_pending(sid, client) is not None:
+                    if _clients.get(sid) is client:
+                        _queue_flushed()
+                        logger.info("QUEUE the queued commands went out on a retry: the agent takes live commands now")
+                    return
+        async with _send_lock():
+            if (_clients.get(sid) is client and client.flush_owed and not client.ready and not client.ending
+                    and not _kept_out()):
+                client.ready = True
+                logger.warning("QUEUE still unreadable after %d tries: the agent takes live commands now, and the "
+                               "queued commands go before the next one once bridge.db answers",
+                               len(QUEUE_RETRY_DELAYS_S))
+    finally:
+        client.retrying = False
+
+
+async def _flush_owed() -> None:
+    """C-60 review: before a live command goes out (the caller holds the send lock and found an agent peer that takes
+    commands), a queue that a failed flush left in bridge.db goes first, to such a peer. When the store still cannot
+    give it, the live command goes anyway (it could not be queued behind what the store cannot read either) and the
+    queue stays owed for the next try."""
+    if not any(client.flush_owed for client in _clients.values()):
+        return
+    target = next(((sid, client) for sid, client in _clients.items() if _takes_commands(client)), None)
+    if target is not None and await _flush_pending(*target) is not None and _clients.get(target[0]) is target[1]:
+        _queue_flushed()
+
+
+async def _emit_live(sid: str, data: Any) -> None:
+    """A live agent_command to room 'agent' (the caller holds the send lock and checked _deliverable): a queue that a
+    failed flush left owed goes first (_flush_owed), then the command, never back to the sender and only to the agent
+    peers that take commands (_live_skip)."""
+    await _flush_owed()
+    await sio.emit("agent_command", data, to=ROOM_AGENT, skip_sid=_live_skip(sid))
+
+
+async def _flush_after_unpause() -> None:
+    """C-60: the owner's pause stopped keeping the agent out (Wake, the admin CLI's unpause, or a switch to observe
+    mode while paused: the room owner's on_resume). Every legacy agent socket that connected during the pause (the
+    room owner never sends it pause_agent at connect, so it waits not ready) gets its settings_bootstrap and takes
+    commands again, and what was queued meanwhile goes to an agent peer that takes commands now. A job the bridge's
+    pause_agent reached (the room-wide one of the pause, or the one at its connect while paused) is ending, even while
+    its socket is still connected, so it never gets them: the next job does, when it connects. A socket whose connect
+    still waits for the send lock is left to its own start, which runs after this. A peer whose queue flush failed and
+    that still waits for it is readied the same way (it had its bootstrap); when bridge.db cannot give the queue now,
+    the peer that should take it waits again while the flush is tried again (_queue_flush_failed, C-60 review)."""
+    async with _send_lock():
+        if _kept_out():
+            return
+        waited = [(sid, client) for sid, client in _clients.items()
+                  if not client.ready and not client.ending and not client.connecting and _agent_peer(client)
+                  and (client.role == ROLE_LEGACY or client.flush_owed)]
+        for sid, client in waited:
+            try:
+                if not client.flush_owed:  # a legacy agent that connected during the pause: its start was left here
+                    await _send_settings_bootstrap(sid, client)
+            finally:
+                client.ready = True
+        target = next(((sid, client) for sid, client in _clients.items() if _takes_commands(client)), None)
+        if target is None:
+            return
+        flushed = await _flush_pending(*target)
+        if flushed is None:
+            _queue_flush_failed(*target)
+        elif _clients.get(target[0]) is target[1]:
+            _queue_flushed()
+
+
+async def _queue_command(data: Mapping[str, Any]) -> dict[str, str]:
+    """C-60 (K-03 v51): keeps a command for the agent in bridge.db (the caller holds the send lock): 10 min, in
+    order, a chat whose id is queued already not twice, at most PENDING_MAX with the oldest dropped (WARNING), a
+    payload over PENDING_PAYLOAD_MAX_BYTES refused ('too_large'). Ack 'queued'; 'agent_offline' when the store cannot
+    keep it (the UI then sends it again once the agent is online). The room owner's loop is woken (never while
+    paused): in on_demand mode the connected dashboard is demand already, so this only makes the next pass come
+    sooner."""
+    cmd_type = str(data.get("type"))
+    payload = data.get("payload")
+    if len(json.dumps(payload, ensure_ascii=False, default=str).encode("utf-8")) > PENDING_PAYLOAD_MAX_BYTES:
+        logger.warning("QUEUE %s not kept: its payload is over %d KB", cmd_type, PENDING_PAYLOAD_MAX_BYTES // 1024)
+        return _rejected("too_large")
+    dedupe = payload.get("id") if cmd_type == "chat" and isinstance(payload, dict) else None
+    result = await stored("queue", store.queue_command(
+        cmd_type, payload, ttl_s=PENDING_TTL_S, cap=PENDING_MAX,
+        dedupe_id=dedupe if isinstance(dedupe, str) and dedupe else None), None)
+    if result is None:
+        logger.warning("QUEUE %s not kept (bridge store unavailable): answered agent_offline", cmd_type)
+        return {"status": "agent_offline"}
+    if result["dropped"]:
+        logger.warning("QUEUE full (%d): the %d oldest queued command(s) dropped", PENDING_MAX, result["dropped"])
+    if result["duplicate"]:
+        logger.info("QUEUE %s with this id is queued already: not queued twice", cmd_type)
+    else:
+        logger.info("QUEUE %s kept for the agent (%d waiting)", cmd_type, result["waiting"])
+    if not rooms.paused:
+        rooms.kick("queued_command")
+    return {"status": "queued"}
+
+
+async def _deliver(sid: str, data: dict[str, Any], *, queue: bool = False,
+                   bridge_done: bool = False) -> dict[str, str]:
+    """A ui_command to room 'agent' (C-SOCK-1; never back to the sender, and only to the agent peers that take
+    commands: _live_skip, after a queue a failed flush left owed: _emit_live) while an agent other than the sender can
+    take it. Otherwise (K-03 v51): a queued type waits ('queued'), a command the bridge carried out itself
+    (desktop_stop, notification_ack, Wake) is answered 'sent', anything else 'agent_offline'."""
+    async with _send_lock():
+        if _deliverable(exclude=sid):
+            await _emit_live(sid, data)
+            return {"status": "sent"}
+        if queue:
+            return await _queue_command(data)
+    return {"status": "sent"} if bridge_done else {"status": "agent_offline"}
+
+
+def _settings_refused(exc: bridge_settings.SettingsRejected) -> dict[str, str]:
+    ack = {"status": "rejected", "reason": exc.reason}
+    if exc.field:
+        ack["field"] = _short(exc.field)
+    return ack
+
+
+async def _settings_command(sid: str, client: SocketClient, cmd_type: str, payload: Any) -> dict[str, str]:
+    """
+    C-60 (K-46/K-03 v51): settings_update, and the legacy persona_change and wake_word_toggle, the same way. The
+    payload is checked (known keys and types only, aliases mapped; junk is refused with a reason and the sender gets
+    settings_sync errors), merged into the stored copy on top of the K-46 defaults with a new bridge revision (one
+    transaction, updated_by 'ui', even with no agent connected) and audited by key names. An agent that can take it
+    gets settings_update with the checked fields plus revision and revision_epoch; otherwise it waits in the queue and
+    every UI gets a settings_sync from the bridge (the stored view, source 'bridge', pending {field: 'queued'}).
+    bridge.db, init_state and GET /settings keep the value either way. The panel does not keep every field yet: it
+    sets the persona only on persona_update (C-50), which only an agent sends, so until the UI clears a field's revert
+    timer on pending 'queued' (Cursor request, C-60) the persona falls back after the panel's 5 s sync timeout while
+    the stored copy keeps the new one. A toggle without a payload flips the stored wake-word mode.
+    """
+    legacy = await stored("legacy settings", store.kv_get_many(LEGACY_SETTINGS_KV), {})
+    try:
+        if cmd_type == "settings_update":
+            partial: dict[str, Any] | None = bridge_settings.parse_settings_update(payload)
+        elif cmd_type == "persona_change":
+            partial = bridge_settings.parse_persona_change(payload)
+        else:
+            bridge_settings.wake_word_partial(payload, True)  # refuses anything but a bool or nothing
+            partial = None  # the toggle is resolved against the stored copy, inside the transaction
+    except bridge_settings.SettingsRejected as exc:
+        logger.info("SETTINGS %s refused (%s%s)", cmd_type, exc.reason, f" {_short(exc.field)}" if exc.field else "")
+        view = await _settings_view_now(legacy)
+        if view is not None:
+            await sio.emit("settings_sync", bridge_settings.bridge_sync(
+                view, errors={_short(exc.field) if exc.field else "settings": exc.message}, ts=time.time()), to=sid)
+        return _settings_refused(exc)
+
+    def change(current: dict[str, Any], meta: dict[str, Any]) -> Any:
+        fields = partial if partial is not None else bridge_settings.wake_word_partial(
+            payload, bridge_settings.current_wake_word(current, legacy))
+        writes, new_meta, by, revision = bridge_settings.ui_merge(current, meta, fields)
+        return writes, new_meta, by, (revision, fields)
+
+    async with _send_lock():
+        result = await stored("settings update", store.transact_settings(change), None)
+        if result is None:  # no revision without the store: the agent still gets the change, as before C-60
+            fields = partial if partial is not None else bridge_settings.wake_word_partial(
+                payload, bridge_settings.current_wake_word({}, legacy))
+            if _deliverable(exclude=sid):
+                await _emit_live(sid, {"type": "settings_update", "payload": fields})
+                return {"status": "sent"}
+            return {"status": "agent_offline"}
+        stored_now, meta, (revision, fields) = result
+        keys = ",".join(sorted(fields))
+        await stored("audit", store.audit(client.role, "settings_update",
+                                          {"keys": sorted(fields), "revision": revision, "via": cmd_type},
+                                          client.ip), 0)
+        command = bridge_settings.forwarded_update(fields, revision, meta["epoch"])
+        if _deliverable(exclude=sid):
+            await _emit_live(sid, command)
+            await stored("settings delivered", store.note_settings_delivered(revision), None)
+            logger.info("SETTINGS rev %d from the owner (%s): sent to the agent", revision, keys)
+            return {"status": "sent"}
+        ack = await _queue_command(command)
+    logger.info("SETTINGS rev %d from the owner (%s): stored; the agent takes it when it connects", revision, keys)
+    view = bridge_settings.settings_view(stored_now, meta, legacy)
+    await emit_ui("settings_sync", bridge_settings.bridge_sync(view, pending=fields, ts=time.time()))
+    return ack
+
+
+async def _sim_lookup_command(client: SocketClient, payload: Any, sid: str = "") -> dict[str, str]:
     """ui_command sim_lookup (C-79, K-03/K-34): only the owner's authenticated UI socket searches, the
     payload is validated (legacy string or {query, purpose}; the query an 11-digit 03x number or a
     13-digit CNIC after normalization, the purpose required when the dialog was told so), the accepted
@@ -2552,16 +3183,22 @@ async def _sim_lookup_command(client: SocketClient, payload: Any) -> dict[str, s
     await stored("audit", store.audit("owner", "sim_lookup",
                                       {"query_masked": masked, "purpose_chars": purpose_chars},
                                       client.ip), 0)
-    logger.info("sim_lookup forwarded for %s (purpose %s)", masked, "set" if purpose_chars else "none")
-    await sio.emit("agent_command", {"type": "sim_lookup", "payload": clean}, to=ROOM_AGENT)
-    return {"status": "sent"}
+    ack = await _deliver(sid, {"type": "sim_lookup", "payload": clean})
+    outcome = "forwarded" if ack["status"] == "sent" else "not forwarded (no agent)"
+    logger.info("sim_lookup %s for %s (purpose %s)", outcome, masked, "set" if purpose_chars else "none")
+    return ack
 
 
 @sio.on('ui_command') # type: ignore[untyped-decorator]
+# pylint: disable-next=too-many-return-statements  # one ack per command kind, each answered where it is handled
 async def handle_ui_command(sid: str, data: Any) -> dict[str, str]:
     """
     Relays a dashboard command to room 'agent' (C-SOCK-1): only from UI or legacy sockets, at most 10 a
-    second per socket, and only the allow-listed types. Ack {status: 'sent'} or {status: 'rejected', reason}.
+    second per socket, and only the allow-listed types. Ack {status: 'sent'|'queued'|'agent_offline'} or
+    {status: 'rejected', reason}. C-60 (K-03 v51): the settings commands are stored with a bridge revision and travel
+    as settings_update; with no agent other than the sender that can take it, chat, settings_update (persona_change
+    and wake_word_toggle as one) and clear_memory are queued, a command the bridge carried out itself is still 'sent',
+    anything else is 'agent_offline'.
     """
     client = _clients.get(sid)
     if client is None or client.role not in (ROLE_UI, ROLE_LEGACY):
@@ -2580,13 +3217,24 @@ async def handle_ui_command(sid: str, data: Any) -> dict[str, str]:
     if cmd_type == "desktop_stop":
         # K-74 tighten-only Stop desktop: persisted, sent to the laptop and to the agent peers (stop_all).
         await desktop.ui_desktop_stop(by=client.role)
-    elif cmd_type == "notification_ack":
+        return await _deliver(sid, data, bridge_done=True)
+    if cmd_type == "notification_ack":
         await _ack_notification(data.get("payload"))
-    elif cmd_type == "confirm_response":  # C-29: checked, audited and forwarded there, never as received
+        return await _deliver(sid, data, bridge_done=True)
+    if cmd_type == "confirm_response":  # C-29: checked, audited and forwarded there, never as received
         return await _confirm_response(client, data.get("payload"))
-    elif cmd_type == "sim_lookup":  # C-79: validated, audited and forwarded there, never as received
-        return await _sim_lookup_command(client, data.get("payload"))
-    elif cmd_type == "pause_agent":
+    if cmd_type == "sim_lookup":  # C-79: validated, audited and forwarded there, never as received
+        return await _sim_lookup_command(client, data.get("payload"), sid)
+    if cmd_type in SETTINGS_COMMAND_TYPES:  # C-60: checked, stored with a revision, sent or queued there
+        return await _settings_command(sid, client, cmd_type, data.get("payload"))
+    if cmd_type == "request_state":
+        ack = await _deliver(sid, data)
+        if ack["status"] == "agent_offline":  # K-03 v39 answers it with settings_sync: with no agent, the bridge's copy
+            view = await _settings_view_now()
+            if view is not None:
+                await sio.emit("settings_sync", bridge_settings.bridge_sync(view, ts=time.time()), to=sid)
+        return ack
+    if cmd_type == "pause_agent":
         # K-03/K-44 v9: only the room owner (always or on_demand mode) can hold a pause. It sets the flag and sends
         # its own pause_agent (payload.by 'bridge', the only one that ends the agent's job, K-60 v9); the UI's
         # command itself is never forwarded. Elsewhere (observe mode, the PC's local bridge) nothing would keep
@@ -2597,33 +3245,60 @@ async def handle_ui_command(sid: str, data: Any) -> dict[str, str]:
             return _rejected(bridge_rooms.PAUSE_UNAVAILABLE)
         await rooms.set_paused(True, by=client.role)
         return {"status": "sent"}
-    elif cmd_type == "start" and rooms.enabled:
+    if cmd_type == "start" and rooms.enabled:
         # K-03/K-44 v9: Wake clears the paused flag and runs an explicit ensure; in observe mode the flag is left
         # alone and Wake may only heal a room without an agent (the old token route's heal, never a delete). It is
         # still forwarded below. stop is only forwarded: it interrupts speech, never pauses.
         if rooms.mode != bridge_rooms.MODE_OBSERVE:
+            # C-60: ending the pause runs the room owner's on_resume (_flush_after_unpause): what waited during the
+            # pause goes to an agent that can take it now, before this start is forwarded
             await rooms.set_paused(False, by=client.role)
         else:
             rooms.kick(bridge_rooms.REASON_START, explicit=True, skip_confirm=True)
-    await sio.emit('agent_command', data, to=ROOM_AGENT)
-    return {"status": "sent"}
+        return await _deliver(sid, data, bridge_done=True)
+    return await _deliver(sid, data, queue=cmd_type in QUEUED_COMMAND_TYPES)
+
+
+def _frame_event(data: Any, frame: str | bytes) -> Any:
+    """The agent_vision_frame an agent gets (K-05): {frame, ts?, command?} of a dict, a legacy plain frame as sent."""
+    if not isinstance(data, dict):
+        return frame
+    event: dict[str, Any] = {"frame": frame}
+    ts = data.get("ts")
+    if isinstance(ts, (int, float)) and not isinstance(ts, bool) and math.isfinite(ts):
+        event["ts"] = ts
+    command = data.get("command")
+    if isinstance(command, str) and command:
+        event["command"] = _short(command)
+    return event
 
 
 @sio.on('vision_frame') # type: ignore[untyped-decorator]
 async def handle_vision_frame(sid: str, data: Any) -> dict[str, str]:
     """
-    Relays a camera frame to room 'agent' (C-SOCK-1, K-05): only from UI or legacy sockets, at most one a
-    second per socket and at most 600 KB of frame data.
+    Relays a camera frame to the agent sockets only (C-SOCK-1, K-05; room 'agent', which holds no dashboard tab since
+    C-60, never back to the sender and never to an agent peer that takes no commands now: _live_skip): only from UI or
+    legacy sockets, a non-empty frame string, at most one a second per socket and at most 600 KB of frame data (an
+    oversize frame is dropped, logged at WARNING once per socket). With no agent other than the sender that can take
+    it the frame is dropped ('agent_offline').
     """
     client = _clients.get(sid)
     if client is None or client.role not in (ROLE_UI, ROLE_LEGACY):
         return _rejected("not_allowed")
     frame = data.get("frame") if isinstance(data, dict) else data
-    if isinstance(frame, (str, bytes)) and len(frame) > VISION_FRAME_MAX_CHARS:
+    if not isinstance(frame, (str, bytes)) or not frame:
+        return _rejected("bad_payload")
+    if len(frame) > VISION_FRAME_MAX_CHARS:
+        if not client.frame_warned:
+            client.frame_warned = True
+            logger.warning("vision_frame over %d KB dropped (sid %s); later ones from this socket are dropped quietly",
+                           VISION_FRAME_MAX_CHARS // 1024, sid)
         return _rejected("too_large")
     if not client.frames.take():
         return _rejected("rate_limited")
-    await sio.emit('agent_vision_frame', data, to=ROOM_AGENT)
+    if not _deliverable(exclude=sid):
+        return {"status": "agent_offline"}
+    await sio.emit('agent_vision_frame', _frame_event(data, frame), to=ROOM_AGENT, skip_sid=_live_skip(sid))
     return {"status": "sent"}
 
 

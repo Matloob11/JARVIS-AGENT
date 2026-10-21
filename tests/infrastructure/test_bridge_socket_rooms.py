@@ -131,7 +131,10 @@ async def test_the_legacy_token_joins_both_rooms_and_gets_init_state(direct, env
     assert await direct.module.handle_connect("sid-legacy", environ, auth) is True
 
     assert direct.module._clients["sid-legacy"].role == "legacy"
+    # C-60 review (K-38 v51): both rooms only for a legacy agent (auth.role 'agent' beside the token); every other
+    # legacy socket joins room 'ui' only (tests/infrastructure/test_bridge_settings.py)
     assert direct.module.ROLE_ROOMS["legacy"] == ("ui", "agent")
+    assert not direct.module._clients["sid-legacy"].legacy_agent
     [(event, state, room)] = direct.emitted
     assert (event, room) == ("init_state", "sid-legacy") and state["persona"] == "jarvis"
 
@@ -224,6 +227,8 @@ async def test_only_allow_listed_command_types_are_forwarded(direct):
 async def test_ui_command_is_limited_to_10_a_second_per_socket(direct):
     await _connect_legacy(direct, "sid-a")
     await _connect_legacy(direct, "sid-b")
+    # C-60 (K-03 v51): 'sent' needs an agent that takes the command; a legacy socket that declares nothing is a UI
+    await _connect_agent(direct, "sid-agent")
     clock = FakeClock()
     direct.module._clients["sid-a"].commands = TokenBucket(10.0, clock=clock)
     command = {"type": "mute", "payload": {}}
@@ -343,7 +348,8 @@ def owner(direct, monkeypatch):
             send_agent_command=lambda data, sid=None: module._send_agent_command(data, sid),
             agent_job_sockets=module._agent_job_sockets, ui_presence=module._ui_presence,
             on_status=module._publish_agent_status,
-            api_factory=lambda: pytest.fail("no LiveKit call expected"))
+            api_factory=lambda: pytest.fail("no LiveKit call expected"),
+            on_resume=lambda: module._flush_after_unpause())  # as ui_bridge wires its room owner (C-60)
         monkeypatch.setattr(module, "rooms", manager)
         return manager
 
@@ -379,6 +385,9 @@ async def test_pause_agent_sets_the_paused_flag_and_the_status_and_sends_the_bri
 async def test_stop_never_pauses(owner):
     manager = owner.make_owner()
     await _connect_legacy(owner, "sid-ui")
+    # C-60 review (K-03 v51): a legacy socket never counts as the agent for its own command, so stop needs a real one
+    await _connect_agent(owner, "sid-agent")
+    manager._take_kick()  # the agent connect's kick
     owner.emitted.clear()
     assert await owner.module.handle_ui_command("sid-ui", {"type": "stop", "payload": {}}) == {"status": "sent"}
     assert not manager.paused and await owner.store.kv_get("paused") is None
@@ -420,7 +429,11 @@ async def test_an_owner_agent_gets_the_stored_settings_as_settings_bootstrap(own
     await owner.store.merge_settings({"voice": "Puck", "wake_word": False}, by="agent")
     owner.emitted.clear()
     await _connect_agent(owner, "sid-agent")
-    bootstrap = {"type": "settings_bootstrap", "payload": {"voice": "Puck", "wake_word": False}}
+    # C-60 (K-46 v51): the copy carries the bridge's revision, its epoch and the per-key revisions (none were stamped
+    # for values stored before C-60, so the agent keeps its clock rule for them)
+    epoch = (await owner.store.settings_with_meta())[1]["epoch"]
+    bootstrap = {"type": "settings_bootstrap", "payload": {"voice": "Puck", "wake_word": False, "revision": 0,
+                                                           "revision_epoch": epoch, "revisions": {}}}
     assert [(data, room) for event, data, room in owner.emitted if event == "agent_command"] == [
         (bootstrap, "sid-agent")]
     owner.emitted.clear()
@@ -457,6 +470,7 @@ async def test_the_local_bridge_without_a_room_owner_refuses_pause_agent(direct)
     agent would end its job for good (SEC-2), so the command is refused; start and stop are forwarded as before."""
     assert not direct.module.rooms.enabled
     await _connect_legacy(direct, "sid-ui")
+    await _connect_agent(direct, "sid-agent")  # C-60 review: the sender never counts as the agent for its own command
     direct.emitted.clear()
     command = {"type": "pause_agent", "payload": {}}
     assert await direct.module.handle_ui_command("sid-ui", command) == {"status": "rejected",
@@ -573,12 +587,13 @@ async def test_rooms_end_to_end(live):
     ui, old_agent, agent = live.peer(), live.peer(), live.peer()
     # today's dashboard: auth.token, polling first and then the websocket upgrade (socket.io-client defaults)
     await ui.connect(live.url, {"token": LEGACY_TOKEN}, transports=("polling", "websocket"))
-    await old_agent.connect(live.url, {"token": LEGACY_TOKEN})       # today's PC agent, not yet on C-15
+    # the PC agent without the agent link v2 keys: the legacy token with the agent role declared (K-38 v51, C-60 review)
+    await old_agent.connect(live.url, {"token": LEGACY_TOKEN, "role": "agent"})
     await ui.wait_for("init_state")
     await agent.connect(live.url, {"agent_token": AGENT_TOKEN, "agent_id": "pc-host", "version": "abc123"})
     assert (await ui.wait_for("agent_status"))["online"] is True
 
-    # ui_command reaches room 'agent': the agent socket and, while legacy auth is on, every legacy socket
+    # ui_command reaches room 'agent': the agent socket and, while legacy auth is on, the legacy agent (never the UI)
     command = {"type": "chat", "payload": {"id": "u-42", "text": "salam"}}
     assert await ui.sio.call("ui_command", command, timeout=5) == {"status": "sent"}
     assert await agent.wait_for("agent_command") == command
@@ -602,6 +617,8 @@ async def test_rooms_end_to_end(live):
 
     await asyncio.sleep(0.3)  # anything misrouted would have arrived by now
     assert not {"init_state", "new_message", "transcription_update", "agent_status"} & set(agent.names())
+    # the dashboard on the legacy token declares nothing: a UI socket, never an agent (C-60 review)
+    assert not {"agent_command", "agent_vision_frame"} & set(ui.names())
 
     await agent.sio.disconnect()
     for _ in range(200):

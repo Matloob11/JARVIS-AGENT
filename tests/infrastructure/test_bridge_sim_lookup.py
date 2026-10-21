@@ -61,6 +61,10 @@ async def bridge(monkeypatch, tmp_path):
 
 def _owner_ui(ns: Any, sid: str = "sid-ui") -> None:
     ns.module._clients[sid] = ns.module.SocketClient(role="ui", ip="203.0.113.7", session_id="s-1")
+    # C-60 (K-03 v51): a forwarded search needs an agent that can take it (else 'agent_offline', nothing forwarded;
+    # tests/infrastructure/test_bridge_settings.py covers that), so these tests run with the owner room's agent
+    ns.module._clients["sid-owner-agent"] = ns.module.SocketClient(role="agent", ip="10.0.0.3",
+                                                                   room=ns.module._owner_room())
 
 
 def _legacy(ns: Any, sid: str = "sid-legacy") -> None:

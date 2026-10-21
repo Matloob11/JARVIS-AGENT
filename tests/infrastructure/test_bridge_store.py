@@ -560,6 +560,86 @@ async def test_pending_commands_are_fifo_and_expire(store, clock):
     assert await store.pop_pending() == [] and await store.count_pending() == 0
 
 
+async def test_the_settings_epoch_is_made_once_and_every_open_keeps_it(db_path, clock):
+    """C-60 (K-46 v51): the settings revision record belongs to the database. Its epoch is made once (the first read
+    finds no record) and never changes after: a bridge restart (a new store on the same file, any number of times) and
+    a second process's store (an admin CLI) keep the epoch, the revision, the per-key stamps and 'delivered', and a
+    queued settings_update keeps its revision and epoch untouched (no row is ever moved)."""
+    first = BridgeStore(db_path, clock=clock)
+    _settings, fresh = await first.settings_with_meta()
+    assert (fresh["revision"], fresh["delivered"], fresh["keys"]) == (0, 0, {})
+
+    def change(_current: Any, meta: Any) -> Any:
+        keys = {**meta["keys"], "voice": {"rev": meta["revision"] + 1, "by": "ui", "src": ""}}
+        return {"voice": "Puck"}, {**meta, "revision": meta["revision"] + 1, "keys": keys}, "ui", None
+
+    _settings, meta, _result = await first.transact_settings(change)
+    assert meta["epoch"] == fresh["epoch"] and meta["revision"] == 1
+    await first.note_settings_delivered(1)
+    queued = {"voice": "Puck", "revision": 1, "revision_epoch": meta["epoch"]}
+    await first.queue_command("settings_update", queued, ttl_s=600, cap=100)
+    await first.close()
+    expected = {**meta, "delivered": 1}
+
+    cli = BridgeStore(db_path, clock=clock, repair=False)  # e.g. 'python -m src.core.bridge_auth audit-summary'
+    assert (await cli.settings_with_meta())[1] == expected
+    await cli.close()
+    for _restart in range(3):  # the bridge process starts again, and again
+        again = BridgeStore(db_path, clock=clock)
+        assert await again.settings_with_meta() == ({"voice": "Puck"}, expected)
+        await again.close()
+    last = BridgeStore(db_path, clock=clock)
+    entries, _expired = await last.take_pending()
+    assert [entry["payload"] for entry in entries] == [queued]
+    await last.close()
+
+
+async def test_a_settings_change_keeps_the_epoch_and_never_lowers_the_revision(store):
+    """C-60 (K-46 v51): transact_settings refuses a new meta of another epoch or with a lower revision (nothing is
+    stored); a raised revision (the Lamport catch-up of an agent echo above the counter) is stored with the change in
+    the same transaction, and the next change goes on from it."""
+    _settings, meta = await store.settings_with_meta()
+
+    def bad(new_meta: Any) -> Any:
+        def fn(_current: Any, _meta: Any) -> Any:
+            return {"voice": "Kore"}, new_meta, "agent", None
+        return fn
+
+    for wrong in ({**meta, "epoch": "another00001"}, {**meta, "revision": -1}, {"keys": {}}):
+        with pytest.raises(ValueError):
+            await store.transact_settings(bad(wrong))
+    assert await store.settings_with_meta() == ({}, meta)
+
+    def catch_up(_current: Any, current_meta: Any) -> Any:
+        return {}, {**current_meta, "revision": 80}, "agent", None
+
+    _settings, raised, _result = await store.transact_settings(catch_up)
+    assert raised["revision"] == 80 and (await store.settings_with_meta())[1]["revision"] == 80
+
+    def change(_current: Any, current_meta: Any) -> Any:
+        revision = current_meta["revision"] + 1
+        keys = {**current_meta["keys"], "persona": {"rev": revision, "by": "ui", "src": ""}}
+        return {"persona": "anna"}, {**current_meta, "revision": revision, "keys": keys}, "ui", None
+
+    settings, after, _result = await store.transact_settings(change)
+    assert settings == {"persona": "anna"} and after["revision"] == 81 and after["epoch"] == meta["epoch"]
+
+
+async def test_an_unusable_settings_revision_record_gets_a_new_epoch(store, bridge_log, request):
+    """A hand-edited record (no epoch or no revision) is replaced by a new one under a new epoch, logged once: an agent
+    then takes the copy as another database's and follows it, so no revision is ever reused within one epoch."""
+    log = logging.getLogger("UI-BRIDGE")  # its level depends on which bridge module set it up first
+    request.addfinalizer(lambda level=log.level: log.setLevel(level))
+    log.setLevel(logging.INFO)
+    _settings, meta = await store.settings_with_meta()
+    await store.kv_set(bridge_store.KV_SETTINGS_REV, {"epoch": meta["epoch"], "revision": "12"})
+    _settings, replaced = await store.settings_with_meta()
+    assert replaced["epoch"] != meta["epoch"] and replaced["revision"] == 0
+    assert (await store.settings_with_meta())[1] == replaced  # made once, then kept
+    assert sum("the settings revision record is not usable" in record.getMessage()
+               for record in bridge_log.records if record.levelno == logging.WARNING) == 1
+
+
 # ---------------------------------------------------------------- seen ids and notifications (v4)
 
 
@@ -711,9 +791,16 @@ async def _notify(module: Any, event_type: str, payload: Any) -> httpx.Response:
         return await client.post("/notify", json=body, headers=headers)
 
 
+# C-60 (K-03/K-38 v51): a legacy-token dashboard (here a browser tab, by its User-Agent) is a UI socket; only a legacy
+# socket that declares the agent role (auth.role 'agent', from no browser tab) is taken for the old PC agent
+BROWSER_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 "
+              "Safari/537.36")
+
+
 async def _connect_ui(ns: Any, sid: str) -> dict[str, Any]:
     ns.emitted.clear()
-    assert await ns.module.handle_connect(sid, {"QUERY_STRING": f"token={TOKEN}"}, None) is True
+    environ = {"QUERY_STRING": f"token={TOKEN}", "HTTP_USER_AGENT": BROWSER_UA}
+    assert await ns.module.handle_connect(sid, environ, None) is True
     [(event, state, room)] = ns.emitted
     assert (event, room) == ("init_state", sid)
     return state
@@ -739,8 +826,11 @@ async def test_agent_transcription_is_stored_and_emitted_as_assistant(bridge):
     assert update["id"] == "v1" and update["text"] == "Salam!" and update["role"] == "assistant"
 
 
-async def test_typed_exchange_survives_restart_and_reload_with_the_same_ids(bridge):
+async def test_typed_exchange_survives_restart_and_reload_with_the_same_ids(bridge, monkeypatch):
     await _connect_ui(bridge, "sid-ui")  # since C-14 only an authenticated UI socket may send ui_command
+    # C-60 (K-03 v51): 'sent' needs an agent that takes it (else the chat is 'queued'): the owner room's agent
+    monkeypatch.setitem(bridge.module._clients, "sid-agent",
+                        bridge.module.SocketClient(role="agent", ip="10.0.0.3", room=bridge.module._owner_room()))
     ack = await bridge.module.handle_ui_command("sid-ui", {"type": "chat",
                                                            "payload": {"id": "u-123", "text": "hello"}})
     assert ack == {"status": "sent"}  # C-SOCK-1 ack (was 'success' before C-14)
@@ -823,7 +913,11 @@ async def test_every_legacy_event_still_emits_and_its_state_persists(bridge):
 async def test_stored_settings_appear_in_init_state(bridge):
     await bridge.store.merge_settings({"voice": "Charon"}, by="ui")
 
-    assert (await _connect_ui(bridge, "sid-1"))["settings"] == {"voice": "Charon"}
+    # C-60 (K-46 v51): on top of the K-46 defaults, with the bridge's revision and its epoch
+    epoch = (await bridge.store.settings_with_meta())[1]["epoch"]
+    assert (await _connect_ui(bridge, "sid-1"))["settings"] == {
+        "voice": "Charon", "voice_id": True, "wake_word": True, "persona": "jarvis", "revision": 0,
+        "revision_epoch": epoch}
 
 
 async def test_the_agents_settings_sync_reaches_the_ui_and_is_stored(bridge):
@@ -840,7 +934,11 @@ async def test_the_agents_settings_sync_reaches_the_ui_and_is_stored(bridge):
     assert _events(bridge, "settings_sync") == [payload]
     assert await bridge.store.get_settings() == payload["settings"]
     assert _query(bridge.path, "SELECT DISTINCT updated_by FROM settings") == [("agent",)]
-    assert (await _connect_ui(bridge, "sid-ui"))["settings"] == payload["settings"]
+    # C-60 (K-46 v51): init_state.settings is that object on top of the K-46 defaults, with the bridge's revision (the
+    # agent's values changed the copy: revision 1)
+    in_state = (await _connect_ui(bridge, "sid-ui"))["settings"]
+    assert {key: in_state[key] for key in payload["settings"]} == payload["settings"]
+    assert (in_state["persona"], in_state["voice_id"], in_state["revision"]) == ("jarvis", True, 1)
     # a flat settings object (K-02) is stored without the keys that describe the update
     await _notify(bridge.module, "settings_sync", {"persona": "anna", "applied": True, "errors": {}, "ts": T0})
     stored_now = await bridge.store.get_settings()

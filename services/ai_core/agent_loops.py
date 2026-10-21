@@ -968,7 +968,10 @@ class UIBridgeListener:
         this job's room (K-38 v4). Any other URL gets the agent_token with this host and version (role
         'agent', C-SOCK-1) when the agent link v2 keys are set, else today's legacy token. The agent_token
         auth declares the room and job too: K-38 v4 sends ui_command only to agent sockets whose declared
-        room is JARVIS_ROOM_NAME, and a bridge that predates that ignores the extra keys."""
+        room is JARVIS_ROOM_NAME, and a bridge that predates that ignores the extra keys. The legacy token
+        declares the agent role beside it (K-38 v51, C-60 review): the bridge takes a legacy-token socket
+        for the owner's agent only when it says so, and every other one (a dashboard, a Python tool) for a
+        UI socket; a bridge that predates that ignores the extra key."""
         if is_internal_listener(url):
             room, job_id = _job_identity()
             self._auth_kind = "internal"
@@ -980,7 +983,7 @@ class UIBridgeListener:
             return {"agent_token": config.agent_token, "agent_id": agent_id, "version": version,
                     "room": room, "job_id": job_id}
         self._auth_kind = "legacy token"
-        return {'token': config.security_token}
+        return {'token': config.security_token, 'role': 'agent'}
 
     async def _close(self) -> None:
         """Drops a live or half-open connection; never raises."""

@@ -667,9 +667,10 @@ async def test_the_internal_listener_has_no_owner_login(bridge):
     assert resp.status_code == 404
 
 
-# The owner's routes. GET /status is left out: the internal listener itself is its agent credential (K-43).
+# The owner's routes. GET /status and GET /settings (C-60, K-46 v51) are left out: the internal listener itself is
+# their agent credential (K-43); tests/infrastructure/test_bridge_settings.py checks GET /settings there.
 INTERNAL_IGNORES_COOKIE = [("GET", "/messages"), ("GET", "/livekit/token"), ("GET", "/telemetry/production"),
-                           ("POST", "/feedback"), ("GET", "/settings"), ("GET", "/media/index?area=shared")]
+                           ("POST", "/feedback"), ("GET", "/media/index?area=shared")]
 
 
 async def test_a_valid_session_cookie_is_ignored_on_the_internal_listener(bridge, monkeypatch, tmp_path):

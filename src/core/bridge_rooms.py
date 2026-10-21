@@ -42,7 +42,9 @@ concurrent token ensures share one pass.
 Pause: only the owner (always or on_demand mode) holds a pause. Its pause_agent carries payload.by 'bridge', and the
 agent ends its job only for such a command (K-60 v9), so an older bridge that forwards the UI's own pause_agent ends
 nothing. In observe mode the admin CLI's pause is kept and reported (it stops every new dispatch, the PC's
-ensure_room.py included) but nothing is sent to an agent until the mode leaves observe.
+ensure_room.py included) but nothing is sent to an agent until the mode leaves observe. Whenever the pause stops
+keeping the agent out (Wake, the admin CLI's unpause, a switch to observe mode while paused) on_resume runs, so the
+bridge sends what waited for an agent meanwhile (C-60).
 
 Logs (logger UI-BRIDGE) carry one 'ROOM ...' line per decision change, dispatch, removal, mode or pause change; never
 a person's identity, a key, a token or a worker id. Job and dispatch ids are fine.
@@ -487,8 +489,10 @@ class RoomManager:  # pylint: disable=too-many-instance-attributes,too-many-publ
     emit_ui(event, data) to the UI sockets; send_agent_command(data, sid=None) to the owner room's agent sockets;
     agent_job_sockets() -> {job_id: since} of the connected owner-room agent sockets; ui_presence() -> (UI sockets now,
     epoch s of the last UI socket or None); on_status() after every status change (ui_bridge emits agent_status);
-    desktop() -> the DesktopLink (vps mode: set_active_job). api_factory() returns a LiveKitAPI-like object (tests
-    inject a fake), receiver_factory() a WebhookReceiver; mono and wall are the clocks.
+    on_resume() whenever the owner's pause stops keeping the agent out: Wake, the admin CLI's unpause, or a switch to
+    observe mode while paused (ui_bridge readies the agent peers that waited and sends what was queued meanwhile,
+    C-60); desktop() -> the DesktopLink (vps mode: set_active_job). api_factory() returns a LiveKitAPI-like object
+    (tests inject a fake), receiver_factory() a WebhookReceiver; mono and wall are the clocks.
     """
 
     def __init__(self, settings: RoomSettings, *, store: Callable[[], BridgeStore] | None = None,
@@ -500,7 +504,8 @@ class RoomManager:  # pylint: disable=too-many-instance-attributes,too-many-publ
                  desktop: Callable[[], Any] | None = None,
                  api_factory: Callable[[], Any] | None = None,
                  receiver_factory: Callable[[], Any] | None = None,
-                 mono: Callable[[], float] = time.monotonic, wall: Callable[[], float] = time.time) -> None:
+                 mono: Callable[[], float] = time.monotonic, wall: Callable[[], float] = time.time,
+                 on_resume: Callable[[], Any] | None = None) -> None:
         self.settings = settings
         self._store = store
         self._emit_ui_fn = emit_ui
@@ -508,6 +513,7 @@ class RoomManager:  # pylint: disable=too-many-instance-attributes,too-many-publ
         self._job_sockets_fn = agent_job_sockets
         self._ui_presence_fn = ui_presence
         self._on_status_fn = on_status
+        self._on_resume_fn = on_resume
         self._desktop_fn = desktop
         self._api_factory = api_factory or default_api_factory(settings)
         self._receiver_factory = receiver_factory
@@ -1281,6 +1287,8 @@ class RoomManager:  # pylint: disable=too-many-instance-attributes,too-many-publ
         logger.warning("ROOM %s by %s", "paused" if flag else "unpaused", by)
         if flag and notify_agents and self.mode != MODE_OBSERVE:
             await self._send_agent_command(dict(PAUSE_COMMAND))
+        elif not flag and self.mode != MODE_OBSERVE:
+            await self._resumed()  # the pause kept the agent out until now (Wake, the admin CLI's unpause)
 
     async def _send_agent_command(self, data: Mapping[str, Any], sid: str | None = None) -> None:
         if self._send_agent_command_fn is None:
@@ -1289,6 +1297,15 @@ class RoomManager:  # pylint: disable=too-many-instance-attributes,too-many-publ
             await _maybe_await(self._send_agent_command_fn(dict(data), sid))
         except Exception:  # pylint: disable=broad-exception-caught
             logger.debug("ROOM agent_command not sent", exc_info=True)
+
+    async def _resumed(self) -> None:
+        """on_resume: the owner's pause no longer keeps the agent out (C-60: what waited for an agent goes out now)."""
+        if self._on_resume_fn is None:
+            return
+        try:
+            await _maybe_await(self._on_resume_fn())
+        except Exception as exc:  # pylint: disable=broad-exception-caught  # never stops an unpause or a kv poll
+            logger.warning("ROOM resume callback failed (%s)", type(exc).__name__)
 
     # ------------------------------------------------------------ webhooks
 
@@ -1509,6 +1526,9 @@ class RoomManager:  # pylint: disable=too-many-instance-attributes,too-many-publ
                     # a pause kept while observing takes effect now: the agents are told (the removals follow)
                     self._paused_seen, self._pause_baseline = {}, None
                     await self._send_agent_command(dict(PAUSE_COMMAND))
+                elif self.mode == MODE_OBSERVE and self._paused:
+                    # the pause is kept and reported, but observe keeps no agent out: what waited goes out now
+                    await self._resumed()
                 self.kick("mode")
         await self._status_maybe_changed()
 

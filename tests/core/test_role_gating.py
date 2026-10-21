@@ -369,12 +369,15 @@ def test_the_internal_listener_gets_the_agent_role_with_the_job_room(monkeypatch
                                                           "job_id": "AJ_c112"}
 
 
-def test_any_other_url_keeps_todays_token_auth(monkeypatch):
+def test_any_other_url_keeps_the_legacy_token_and_declares_the_agent_role(monkeypatch):
     listener = _listener(monkeypatch, MagicMock())
     monkeypatch.setattr(config, "security_token", "c112-fake-token")
     monkeypatch.setattr(config, "agent_token", None)  # C-15: with AGENT_TOKEN set it sends that instead
     for url in ("http://203.0.113.10:5101", "https://jarvis.example/vortex"):
-        assert listener._auth(url) == {"token": "c112-fake-token"}
+        # C-60 review (K-38 v51): the legacy token goes with auth.role 'agent'; the bridge takes a legacy-token socket
+        # for the owner's agent only then (a dashboard tab or a Python tool on the token is a UI socket), and a bridge
+        # that predates it ignores the extra key (tests/core/test_agent_loops.py has the same check)
+        assert listener._auth(url) == {"token": "c112-fake-token", "role": "agent"}
 
 
 @pytest.mark.asyncio
