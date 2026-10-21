@@ -2873,3 +2873,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** vitest 65 passed; e2e chromium 283 passed; electron 5; test:perf 5; live --list 9
 - **Commit:** (this commit) · **Deploy:** REQ-DEPLOY frontend
 - **Doosre agent ke liye:** REQ-PERF 4x ≥18; frontend deploy ek dafa
+
+### ✅ 🔁 [claude] C-125 bridge routes + svc wiring · Agent worker restart (agent_ctl) · 2026-10-21 16:55 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 20432) band, naya pid 34916; health 200 (48.2 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 16:55 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🚀 [claude] C-125 · Always-on jarvis-agent-svc (reminders/tasks ladder, snapshot, heartbeat) · 2026-10-21 17:00 PKT
+- **Kya kiya:** `src/core/agent_services.py`: VPS brain ki hamesha chalne wali service (JARVIS_BRAIN=vps na ho to sirf standby + health 8083). Reminders har 30 s aur tasks har 45 s Cursor ke X-66 functions se; file-locked delivery ledger; K-77 ka 4-step ladder (live job announce, laptop speak, bridge par stored notification + reminder_due, optional owner e-mail), sirf ack par delivered aur kabhi do dafa nahi (restart, kho gaye jawab aur clock step ke baad bhi); C-80 ka scheduler hook; node ki location aur log relay; roz 03:30 PKT ka sealed snapshot (X25519 + ChaCha20-Poly1305) aur PC par key/decrypt tool (`scripts/ops/backup_key.py`); identity, learning state aur location par file locks. Bridge par svc_poll/svc_heartbeat/svc_deliver, announce_result (bridge restart ke baad bhi), boot id. Contracts v49 (K-77 as built).
+- **Files:** `src/core/agent_services.py`, `services/utils/backup_crypto.py`, `scripts/ops/backup_key.py`, `src/core/ui_bridge.py`, `src/core/bridge_store.py`, `services/ai_core/agent_loops.py`, `services/utils/jarvis_bridge.py`, `services/ai_core/jarvis_identity.py`, `services/utils/jarvis_adaptive.py`, `services/utils/jarvis_location.py`, tests, `docs/CONTRACTS.md`, `plan.md`
+- **Verify:** full suite 6090 passed; live (PC brain, svc standby): restart ke baad typed jawab, task_sync, aur plan_progress 1/3, 2/3 dashboard tak (C-86 routes); model ne pehle step ke baad bol diya aur 3/3/COMPLETED report nahi kiye (realtime model ki aadat, known limitation)
+- **Commit:** `c9ba9cc` · **Deploy:** ui-bridge c9ba9cc 16:54 PKT 🚀 (RESULT=ok; smoke ne ek doosri app ka thode der wala container gaayab dekha, jo hamari deploy ka nahi tha; backup /root/jarvis-backups/2026-10-21_1154Z-pre-deploy-c9ba9cc); PC worker restart 16:55 PKT 🔁
+- **Doosre agent ke liye:** reminder_due ka retry same id dobara bhejta hai jab tak notification_ack na mile (Cursor prompt ka B5); jarvis_reminders ki unique ids aur task manager ka thread-safe publish (B6/B7) ab bhi khule hain.
