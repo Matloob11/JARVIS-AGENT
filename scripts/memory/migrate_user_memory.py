@@ -8,18 +8,22 @@ Usage (from the repo root, with the project venv; the worker stopped unless --dr
 Every <dir>/*_memory.json (default dir: the configured conversations/ folder) is read the way
 services/ai_core/memory_store.py reads it (Fernet with JARVIS_ENCRYPTION_KEY, else a legacy plain JSON list) and merged
 into <dir>/<user>_memory.json (user: --user, else JARVIS_USER_ID, else matloob; K-69). A message is kept once: by its
-id when it has one, else by its role, its text and its conversation's save time (content + timestamp); a
-conversation left without messages goes, a record without messages is kept once, and the conversations are sorted
-by their save time (stable; one without a readable time first). The result is encrypted with the same key, read back
+id when it has one, else by its role, its text, its conversation's save time (content + timestamp) and its copy
+number in its file (a conversation that says the same thing twice keeps both, the same conversation in two files is
+kept once, and a rerun over the merged file changes nothing); a conversation left without messages goes, a record
+without messages is kept once, and the conversations are sorted by their save time (stable; one without a readable
+time first). The result is encrypted with the same key, read back
 and written through a temporary file; the old target file is kept beside it as <name>.pre-<ts>. The other files stay
 where they are (the originals are kept) unless --archive moves them to backups/memory/legacy/ (never over an existing
-file). --dry-run reads, merges and reports, and writes, renames and moves nothing.
+file). --dry-run reads, merges and reports, and writes, renames and moves nothing. migrate(originals='rename') is
+C-129's --merge-local (scripts/ops/migrate_agent_data.py): every other original is renamed <name>.pre-<ts> in place.
 
 Refuses (exit 4, nothing written) when a file cannot be read or holds no list, or one message id has two different
 texts; refuses while the agent worker holds run/agent.lock (exit 3; not for --dry-run) and without
 JARVIS_ENCRYPTION_KEY (exit 2: jarvis_crypto would invent a session key and nothing could be read). Output: counts
-and file names only, never a message text. Exit codes: 0 ok (or nothing to change), 2 usage or configuration,
-3 worker running, 4 refused.
+and file names only, never a message text. Exit codes: 0 ok (or nothing to change), 1 the merged file was written but
+an original could not be renamed (originals='rename'; it is named, a rerun merges it again without a duplicate),
+2 usage or configuration, 3 worker running, 4 refused.
 """
 from __future__ import annotations
 
@@ -30,6 +34,7 @@ import shutil
 import sys
 import tempfile
 import time
+from collections import Counter
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
@@ -39,9 +44,12 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-EXIT_OK, EXIT_USAGE, EXIT_RUNNING, EXIT_REFUSED = 0, 2, 3, 4
+EXIT_OK, EXIT_FAILED, EXIT_USAGE, EXIT_RUNNING, EXIT_REFUSED = 0, 1, 2, 3, 4
 SUFFIX = "_memory.json"
 LEGACY_SUBDIR = ("memory", "legacy")  # under the configured backups/ folder
+# What happens to the merged per-job files: kept where they are (default), moved to the legacy folder (--archive) or
+# renamed <name>.pre-<ts> in place (C-129 --merge-local).
+ORIGINALS_MODES = ("keep", "archive", "rename")
 
 
 class MigrateRefused(Exception):
@@ -89,12 +97,18 @@ def count_messages(conversations: list[Any]) -> int:
 
 def merge(lists: list[tuple[str, list[Any]]]) -> tuple[list[Any], dict[str, int]]:
     """(merged conversations sorted by save time, counts). The first list's entries win a duplicate. Refuses one
-    message id with two different texts."""
+    message id with two different texts. A message without an id is keyed by its role, its text, its conversation's
+    save time and its copy number: how many messages of its file with that role, text and save time came before it.
+    So a conversation that says the same thing twice keeps both (memory_store.message_id keeps them apart by their
+    place), while the same conversation in another file is a copy. The count runs over the whole file, not one entry:
+    a merged file can hold one conversation as two entries of one save time (a later file brought only its new
+    messages), and a rerun over it keeps every repeat."""
     seen: set[tuple[Any, ...]] = set()
     text_of: dict[str, str] = {}
     merged: list[Any] = []
     stats = {"conversations_in": 0, "messages_in": 0, "duplicates": 0, "messages_out": 0}
     for name, entries in lists:
+        copies: Counter[tuple[str, str, str]] = Counter()  # this file's messages without an id so far, by key basis
         for entry in entries:
             stats["conversations_in"] += 1
             messages = entry.get("messages") if isinstance(entry, dict) else None
@@ -120,8 +134,10 @@ def merge(lists: list[tuple[str, list[Any]]]) -> tuple[list[Any], dict[str, int]
                         raise MigrateRefused(f"{name}: message id {msg_id[:12]}... has two different texts")
                     text_of[msg_id] = text
                     key = ("id", msg_id)
-                else:
-                    key = ("text", message.get("role"), text, entry.get("timestamp"))
+                else:  # role and time stamp as JSON text, like the text: any value of a hand-built file is a key
+                    basis = (_fingerprint(message.get("role")), text, _fingerprint(entry.get("timestamp")))
+                    key = ("text", *basis, copies[basis])
+                    copies[basis] += 1
                 if key in seen:
                     stats["duplicates"] += 1
                     continue
@@ -146,7 +162,13 @@ def _free_name(path: Path) -> Path:
 
 def migrate(directory: Path, user_id: str, encrypt: Callable[[str], bytes], decrypt: Callable[[bytes], str], *,
             dry_run: bool = False, archive: bool = False, legacy_dir: Path | None = None, now: float | None = None,
-            out: Callable[[str], Any] = print) -> int:
+            out: Callable[[str], Any] = print, originals: str | None = None) -> int:
+    """Merges every <directory>/*_memory.json into <directory>/<user_id>_memory.json (see the module docstring).
+    originals: 'keep' (the default), 'archive' (the default when archive is True: moved to legacy_dir) or 'rename'
+    (each merged per-job file renamed <name>.pre-<ts> where it is, C-129)."""
+    mode = originals or ("archive" if archive else "keep")
+    if mode not in ORIGINALS_MODES:
+        raise ValueError(f"originals must be one of {', '.join(ORIGINALS_MODES)}")
     target = directory / f"{user_id}{SUFFIX}"
     sources = sorted(p for p in directory.glob(f"*{SUFFIX}") if p.is_file())
     if not sources:
@@ -169,9 +191,10 @@ def migrate(directory: Path, user_id: str, encrypt: Callable[[str], bytes], decr
         out(f"MIGRATE nothing to change: only {target.name}, no duplicates")
         return EXIT_OK
     if dry_run:
-        out(f"MIGRATE dry run: nothing written; a real run keeps the old {target.name} as a .pre- copy and "
-            + (f"moves {len(others)} original(s) to the legacy folder" if archive
-               else f"keeps {len(others)} original(s) where they are"))
+        fate = {"archive": f"moves {len(others)} original(s) to the legacy folder",
+                "rename": f"renames {len(others)} original(s) to <name>.pre-<ts> where they are",
+                "keep": f"keeps {len(others)} original(s) where they are"}[mode]
+        out(f"MIGRATE dry run: nothing written; a real run keeps the old {target.name} as a .pre- copy and {fate}")
         return EXIT_OK
     payload = encrypt(json.dumps(merged, indent=2, ensure_ascii=False, default=str))
     check = json.loads(decrypt(payload))  # never write what this key cannot read back
@@ -192,9 +215,21 @@ def migrate(directory: Path, user_id: str, encrypt: Callable[[str], bytes], decr
         if os.path.exists(tmp):
             os.unlink(tmp)
         raise
-    if not archive:
+    if mode == "keep":
         out(f"MIGRATE done: {target.name} written ({stats['messages_out']} messages); {len(others)} original(s) "
             "kept where they are")
+        return EXIT_OK
+    if mode == "rename":
+        for done, path in enumerate(others):
+            try:
+                path.rename(_free_name(path.with_name(f"{path.name}.pre-{stamp}")))
+            except OSError as exc:  # the merged file holds its messages; a rerun merges it again without a duplicate
+                out(f"MIGRATE {target.name} written ({stats['messages_out']} messages), but {path.name} could not be "
+                    f"renamed ({type(exc).__name__}); {done} of {len(others)} original(s) renamed to *.pre-{stamp}: "
+                    "rename the rest by hand")
+                return EXIT_FAILED
+        out(f"MIGRATE done: {target.name} written ({stats['messages_out']} messages); {len(others)} original(s) "
+            f"renamed to <name>.pre-{stamp}")
         return EXIT_OK
     legacy = legacy_dir if legacy_dir is not None else directory / "legacy"  # main() passes backups/memory/legacy
     legacy.mkdir(parents=True, exist_ok=True)

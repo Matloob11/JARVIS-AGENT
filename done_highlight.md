@@ -2859,3 +2859,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** full suite 5880 passed (sirf woh flaky test, jo ab sakht kar diya: file 3/3 dafa 42 passed); VPS par task_zone Asia/Karachi; live: tasks_refresh ke baad task_sync aaya ('TASKS refresh via UI: 0 pending task(s) published (delivered)'). 3-step plan ka live check laptop ki RAM khatam hone ki wajah se adhoora (MEM 96.9%, LOOP_LAG 5.9 s, Gemini ne <ctrl46> tokens diye): RAM khaali hone par dobara
 - **Commit:** `cea912b` + `74ad734` · **Deploy:** ui-bridge 74ad734 15:53 PKT 🚀 (RESULT=ok, other apps identical, backup /root/jarvis-backups/2026-10-21_1053Z-pre-deploy-74ad734); PC worker restart 15:55 PKT 🔁
 - **Doosre agent ke liye:** section 11 ki C-86 routes line dekho (plan_progress flat shape, task_sync due_at epoch ya null, map_focus_update, voice enroll progress voice_id_status mein, task manager ke liye do backend requests).
+
+### ✅ [claude] C-129 · Agent data migration tool (laptop ↔ VPS, agents band hon to) · 2026-10-21 16:15 PKT
+- **Kya kiya:** `scripts/ops/migrate_agent_data.py`: --merge-local (per-job memory files ko ek owner file mein, migrate_user_memory ke zariye; originals .pre-<ts>), --pre/--final (PC se VPS), --reverse (VPS se PC, 'brain pc' ke liye), --verify (dono taraf counts), --dry-run (sirf plan). SQLite online copies, Chroma documents copy mein C-124 ke mutabiq seal, VPS par sirf service agent ke one-off uid 10001 containers, koi key safar nahi karti (key probe), purani files .pre-<ts> naam se rakhi jaati hain, kuch delete nahi hota. migrate_user_memory ka merge ab id ke baghair dohraye gaye message ko nahi girata. Contracts v48 (K-69, K-72, K-75).
+- **Files:** `scripts/ops/migrate_agent_data.py`, `scripts/memory/migrate_user_memory.py`, `tests/unit/test_migrate_agent_data.py`, `tests/unit/test_memory_scripts.py`, `docs/CONTRACTS.md`, `plan.md`
+- **Verify:** tests 204 passed; PC par --merge-local --dry-run (308 conversations / 340 messages, karne ko kuch nahi) aur --pre --dry-run (9 files, decrypt ok, ssh nahi)
+- **Commit:** (this commit) · **Deploy:** — (VPS steps V4 window mein)
+- **Doosre agent ke liye:** —

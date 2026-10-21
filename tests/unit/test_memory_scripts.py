@@ -134,6 +134,44 @@ def test_an_ambiguous_or_unreadable_input_is_refused_and_nothing_is_written(tmp_
     assert not (conversations / "matloob_memory.json").exists()
 
 
+def test_a_message_said_twice_without_an_id_is_kept_and_a_rerun_changes_nothing(tmp_path, fernet):
+    conversations = tmp_path / "conversations"
+    conversations.mkdir()
+    early = _conv("2026-10-01T07:00:00", _msg("SALAM-A"), _msg("JAWAB-A", "assistant"))
+    later = _conv("2026-10-01T07:00:00", _msg("SALAM-A"), _msg("JAWAB-A", "assistant"), _msg("SALAM-A"),
+                  _msg("NAYA-B", "assistant"))  # the same conversation saved later, SALAM-A said again (no ids)
+    _write(fernet, conversations / "a-job_memory.json", [early])
+    _write(fernet, conversations / "b-job_memory.json", [later])
+    encrypt, decrypt = _crypto(fernet)
+    lines: list[str] = []
+    assert mig.migrate(conversations, "matloob", encrypt, decrypt, archive=True, legacy_dir=tmp_path / "legacy",
+                       now=0, out=lines.append) == mig.EXIT_OK
+    merged = json.loads(fernet.decrypt((conversations / "matloob_memory.json").read_bytes()))
+    # b-job brings only its new messages: the second SALAM-A (a repeat, not a copy of the first) and NAYA-B
+    assert [[m["content"] for m in c["messages"]] for c in merged] == [["SALAM-A", "JAWAB-A"], ["SALAM-A", "NAYA-B"]]
+    assert "6 messages in, 2 duplicates dropped, 2 conversations / 4 messages" in "\n".join(lines)
+    # a rerun over the merged file alone: the conversation split into two entries of one save time keeps both copies
+    before = (conversations / "matloob_memory.json").read_bytes()
+    lines.clear()
+    assert mig.migrate(conversations, "matloob", encrypt, decrypt, now=1, out=lines.append) == mig.EXIT_OK
+    assert "0 duplicates dropped" in "\n".join(lines) and "nothing to change" in lines[-1]
+    assert (conversations / "matloob_memory.json").read_bytes() == before
+    # and with b-job's file back (as after a rename that failed): every message of it is there already
+    _write(fernet, conversations / "b-job_memory.json", [later])
+    lines.clear()
+    assert mig.migrate(conversations, "matloob", encrypt, decrypt, now=2, out=lines.append) == mig.EXIT_OK
+    assert json.loads(fernet.decrypt((conversations / "matloob_memory.json").read_bytes())) == merged
+    assert "4 duplicates dropped" in "\n".join(lines)
+    assert not any(word in "\n".join(lines) for word in ("SALAM", "JAWAB", "NAYA"))
+
+
+def test_merge_takes_any_json_role_or_time_stamp_of_a_message_without_an_id():
+    said = {"role": ["user"], "content": "x"}  # a hand-built file: neither value can go into a set as it is
+    odd = [{"timestamp": {"at": 1}, "messages": [said, dict(said)]}]
+    merged, stats = mig.merge([("a_memory.json", odd), ("b_memory.json", odd)])
+    assert merged == odd and stats["duplicates"] == 2  # the repeat stays, b's copy goes
+
+
 def test_main_refuses_without_the_key_or_while_the_worker_runs(tmp_path, monkeypatch, capsys):
     conversations = tmp_path / "conversations"
     conversations.mkdir()
