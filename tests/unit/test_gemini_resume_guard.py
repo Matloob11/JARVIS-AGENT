@@ -218,3 +218,41 @@ def test_a_fresh_reconnect_carries_the_new_instruction_and_replays_the_history()
     main = inspect.getsource(session._main_task)
     assert "self._build_connect_config()" in main and "send_client_content(" in main and "self._chat_ctx" in main
     assert "LiveClientContent(" in inspect.getsource(session.update_instructions)  # still an appended turn
+
+
+# ---------------------------------------------------------------- C-50 escalation: the fresh connection
+
+
+def test_reconnected_tells_when_the_fresh_connection_is_up():
+    """The typed-message escalation sends the message again only after restart_fresh's new connection is up, so the
+    turn never reaches Gemini twice (in the replayed history and as its own client content)."""
+    old = object()
+    rt = SimpleNamespace(_active_session=old)
+    before = guard.connection_of(rt)
+    assert before is old and guard.reconnected(rt, before) is False  # restart flagged, old connection still marked
+    rt._active_session = None
+    assert guard.reconnected(rt, before) is False  # closed, not connected yet
+    rt._active_session = object()
+    assert guard.reconnected(rt, before) is True
+    assert guard.reconnected(SimpleNamespace(_active_session=object()), None) is True  # none before: any counts
+
+
+def test_reconnected_cannot_tell_without_the_pinned_member():
+    assert guard.connection_of(None) is None and guard.connection_of(SimpleNamespace()) is None
+    assert guard.reconnected(None, None) is None and guard.reconnected(SimpleNamespace(), None) is None
+
+
+def test_the_pinned_connection_member_still_exists():
+    """reconnected() reads livekit-plugins-google 1.4.6's RealtimeSession._active_session: set to the new connection
+    inside the main task's connect, under the session lock that also covers the history replay, and cleared when the
+    old connection closes; _mark_restart_needed gives later sends a new channel. An upgrade that changes this must
+    fail HERE."""
+    import inspect
+
+    from livekit.plugins.google.realtime import realtime_api
+
+    session = realtime_api.RealtimeSession
+    main = inspect.getsource(session._main_task)
+    assert "self._active_session = session" in main and "async with self._session_lock:" in main
+    assert "self._active_session = None" in inspect.getsource(session._close_active_session)
+    assert "self._msg_ch = utils.aio.Chan" in inspect.getsource(session._mark_restart_needed)

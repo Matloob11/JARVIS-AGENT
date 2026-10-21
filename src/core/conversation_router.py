@@ -35,11 +35,41 @@ keeps its own rescue.
 
 C-52: turn_log (the last TURN_LOG_MAX messages of both sides, each with its message id) is what the job's memory
 extractor saves; every assistant entry records the persona that answered (reply_persona).
+
+C-50 escalation (live 20 Oct: Gemini Live sometimes never starts a reply to a typed turn, 'RealtimeError:
+generate_reply timed out waiting for generation_created event', and the rescue's own generate_reply times out the same
+way; a session idle ~55 minutes answered no typed message until a fresh session): when the rescue's reply ends without
+any reply (its speech handle finished with no chat item and not interrupted, or generate_reply raised anything but the
+closing session's RuntimeError) and the message still waits, the router restarts the realtime session fresh once
+(gemini_resume_guard.restart_fresh 'typed_rescue', as C-51's stop does) at a safe point (no reply, tool call or user
+speech; session_policy.session_busy, the plugin's session lock free), waits for the new connection and sends the typed
+message once more as a new user turn. At most one escalation per message, at most one router restart per
+FRESH_RESTART_GAP_S for the whole job, checked when the escalation starts and again right before its restart (a router
+restart that came while it waited for the safe point is never repeated: that restart's new connection is awaited
+instead); a reply that arrives meanwhile, C-51's stop (cancel_rescues), a newer spoken turn, a newer typed message (as
+soon as it waits to be sent, _queued, so the escalation never restarts or sends again under it) and a C-119 handled
+message end it with nothing more sent. If even that fails, one short assistant note (source 'system', turn_id = the
+typed id, K-58) says the reply could not be made, but only after NOTE_GRACE_S in which the message still waited and the
+session never looked busy: livekit-agents 1.4.6 still plays a generation that arrives after generate_reply's 5 s
+timeout, as a server-initiated speech whose reply carries turn_id = the typed id, so a reply or speech that comes
+meanwhile ends the escalation silently. A typed message after IDLE_FRESH_AFTER_S without any session activity (no
+spoken user item or reply from the server, no attach, no restart; the typed user items livekit adds locally do not
+count) restarts fresh first, at a safe point and inside the same rate limit. Typed messages reach the session one at a
+time, in the order they came (one send lock per router around the idle restart, the interrupt and generate_reply), so a
+message typed during that restart's wait is sent after the earlier one instead of overtaking it, and the newest is the
+one watched. A message is registered as waiting (_queued) before any of those waits: C-51's stop (cancel_rescues,
+counted) and a C-119 handled message that come meanwhile end it before it is sent ('stopped': shown, never sent to the
+model). A spoken user item does not (in the pinned google plugin it comes only once that spoken turn's generation
+completes, so one that arrives during these short waits is the late transcript of an earlier turn), a reply to
+something else does not either, and a session that went away meanwhile gives the offline answer. Logs carry ids,
+counts and reasons only, never the text (K-29).
 """
+# pylint: disable=too-many-lines  # one router: typed input, the transcript, the rescue and its escalation
 
 from __future__ import annotations
 
 import asyncio
+import functools
 import inspect
 import re
 import time
@@ -56,6 +86,7 @@ from services.utils.jarvis_logger import setup_logger
 from services.utils.jarvis_security import vortex_guard
 from services.utils.ui_command_registry import CommandContext
 from services.utils.ui_command_registry import dispatch as dispatch_ui_command
+from src.core import gemini_resume_guard, session_policy
 from src.core.bridge_notifier import bridge_notifier
 
 logger = setup_logger("CHAT-ROUTER")
@@ -86,7 +117,27 @@ PERSONAS = ("jarvis", "anna")  # C-52: an assistant entry of the turn log record
 RESCUE_AFTER_S = 12.0
 RESCUE_POLL_S = 5.0      # while the agent thinks or speaks the rescue looks again this often
 RESCUE_GIVE_UP_S = 45.0  # and gives up after this long: a long tool call is never cut into (the UI offers a retry)
+# C-50 escalation: the rescue's (and the re-send's) reply is watched this long for a reply that never started (the
+# plugin itself gives up after 5 s without generation_created; a handle still running then is a reply under way)
+RESCUE_WATCH_S = 30.0
+WATCH_POLL_S = 0.25
+FRESH_RESTART_GAP_S = 60.0   # at most one fresh restart by the router per this long, for the whole job
+SAFE_POINT_WAIT_S = 15.0     # the escalation waits this long at most for a safe point, then gives up ('busy')
+RECONNECT_WAIT_S = 8.0       # and this long at most for the fresh connection (then it sends anyway)
+NOTE_GRACE_S = 12.0          # a failed escalation's note first waits this long for a late reply (_note_owed)
+IDLE_FRESH_AFTER_S = 1800.0  # a typed message after this long without session activity restarts fresh first
+RESCUE_FAILED_TEXT = "Sir, maazrat, is message ka jawab nahi ban saka. Meherbani karke dobara bhej dein."
 PREVIEW_CHARS = 60
+
+# Results of the escalation's waits (_wait_until): a reason that reaches the log, never a text
+_OK = "ok"
+_ENDED = "ended"        # the typed message no longer waits: a reply came, a stop, a newer turn, a handled message
+_SESSION = "session"    # the session changed (a C-33 rebuild)
+_FAILED = "failed"      # the reply's speech handle ended without any reply
+_UNKNOWN = "unknown"    # a handle that cannot tell, an interrupted one, or a reply still under way
+_TIMEOUT = "timeout"
+_RUNNING = "running"
+_BUSY = "busy"          # a reply, a tool call or user speech is under way (no safe point, no note)
 
 # Control characters (C0, DEL, C1) except tab and newline; CR is folded into newline first.
 _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
@@ -170,11 +221,41 @@ def _agent_busy(session: Any) -> bool:
     return callable(done) and not done()
 
 
+def _handle_state(handle: Any) -> str:
+    """
+    C-50 escalation: what a generate_reply speech handle (livekit-agents 1.4.6 SpeechHandle, public members only) says.
+    _RUNNING while not done; _FAILED when it finished without any chat item and was not interrupted (its reply task
+    raised, e.g. RealtimeError 'generate_reply timed out waiting for generation_created event', or nothing was
+    generated); _UNKNOWN for anything else (an interrupted handle, one with items, or one that cannot tell).
+    """
+    done = getattr(handle, "done", None)
+    try:
+        finished = done() if callable(done) else None
+    except Exception:  # pylint: disable=broad-exception-caught
+        return _UNKNOWN
+    if finished is False:
+        return _RUNNING
+    if finished is not True or getattr(handle, "interrupted", None) is True:
+        return _UNKNOWN
+    items = getattr(handle, "chat_items", None)
+    if not isinstance(items, list):
+        return _UNKNOWN
+    return _UNKNOWN if items else _FAILED
+
+
 @dataclass
 class _Pending:
     msg_id: str
     origin: str
     since: float
+
+
+@dataclass
+class _Typed:
+    """A typed message the rescue may send again (C-50 escalation): the text the model got and its pending key."""
+    text: str
+    origin: str
+    key: str
 
 
 class ConversationRouter:
@@ -199,9 +280,19 @@ class ConversationRouter:
         self._turn_source = "voice"
         self._tasks: set[asyncio.Task[Any]] = set()
         self._emit_tail: asyncio.Task[Any] | None = None  # the newest send of the ordered chain
-        self._awaiting: OrderedDict[str, None] = OrderedDict()  # C-50: typed ids with no reply yet
+        self._awaiting: OrderedDict[str, _Typed | None] = OrderedDict()  # C-50: typed ids with no reply yet
+        # C-50 escalation: typed ids not sent yet (waiting for the send lock, the idle restart or the interrupt); a
+        # stop or a C-119 handled message removes them, and handle_text then never sends them
+        self._queued: OrderedDict[str, None] = OrderedDict()
+        self._send_lock = asyncio.Lock()  # typed messages reach the session one at a time, in the order they came
         self._rescues: set[asyncio.Task[Any]] = set()  # never awaited by drain(): each one sleeps first
         self._typed_hooks: list[TypedHook] = []  # C-119: checked before the model (add_typed_hook)
+        # C-50 escalation: the router's last fresh restart (job-wide rate limit) and the session's last activity
+        self._last_fresh_restart: float | None = None
+        self._fresh_restart: tuple[Any, Any] | None = None  # that restart: (realtime session, its connection before)
+        self._last_activity: float | None = None
+        self.rescue_counts: dict[str, int] = dict.fromkeys(
+            ("rescues", "escalations", "restarts", "resends", "notes", "idle_restarts", "rate_limited"), 0)
 
     def add_typed_hook(self, hook: TypedHook) -> None:
         """C-119: hook(text) sees every accepted typed message (normalised) before the model; True means it handled
@@ -240,10 +331,13 @@ class ConversationRouter:
     def attach(self, session: Any) -> None:
         """The session typed text goes into (after session.start)."""
         self.session = session
+        self._last_activity = self._clock()  # a new session is a new connection
+        self._fresh_restart = None  # an old session's restart (the job-wide rate limit itself stays)
 
     def detach(self) -> None:
         """No session any more: typed text gets the offline answer until the next attach()."""
         self.session = None
+        self._fresh_restart = None
         self._awaiting.clear()
         for task in list(self._rescues):
             task.cancel()
@@ -257,8 +351,9 @@ class ConversationRouter:
     async def handle_text(self, text: Any, msg_id: Any = None, origin: str = ORIGIN_UI) -> str:
         """
         Routes one typed message (K-59). Returns its status: 'accepted', 'offline', 'blocked', 'duplicate',
-        'empty' or 'handled' (a C-119 typed hook took it). Never raises for a bad message; one
-        'CHAT_ROUTER <status>' INFO line per message.
+        'empty', 'handled' (a C-119 typed hook took it) or 'stopped' (C-51's stop or a C-119 handled message ended
+        it before it was sent, _send_typed). Never raises for a bad message; one 'CHAT_ROUTER <status>' INFO line
+        per message.
         """
         user_id = valid_msg_id(msg_id) or str(uuid.uuid4())
         if user_id in self._seen:
@@ -284,7 +379,8 @@ class ConversationRouter:
             self._log("blocked", user_id, origin, clean)
             return "blocked"
 
-        older = list(self._awaiting)  # a typed message sent while the hooks run arms its own rescue, which stays
+        # waiting for a reply or to be sent; a message typed while the hooks run arms its own rescue, which stays
+        older = list(self._awaiting) + list(self._queued)
         handled = await self._typed_hook_handled(clean) if self._typed_hooks else False
         if handled:
             # never sent to the model, so never rescued; the rescue of an older typed message ends too (C-50 x C-51):
@@ -312,9 +408,42 @@ class ConversationRouter:
             self._log("offline", user_id, origin, clean)
             return "offline"
 
+        self._queued[user_id] = None  # registered before any wait: what ends a typed message ends it here too
+        try:
+            async with self._send_lock:  # C-50 escalation: never overtakes an earlier typed message still waiting
+                status = await self._send_typed(clean, user_id, origin)
+        finally:
+            self._queued.pop(user_id, None)
+        if status == "offline":  # the template answer is given outside the lock: it never holds a later message
+            await self._offline(clean, user_id)
+        elif status == "accepted":
+            self.emit_reasoning(clean, "text", user_id)
+        self._log(status, user_id, origin, clean)
+        return status
+
+    async def _send_typed(self, clean: str, user_id: str, origin: str) -> str:
+        """
+        Under the send lock: the idle restart (C-50 escalation), session.interrupt() and generate_reply, then the
+        rescue is armed. 'accepted'; 'offline' (no session any more, or generate_reply raised); or 'stopped': while it
+        waited (behind an earlier typed message, for the idle restart's new connection or for the interrupt) C-51's
+        stop (cancel_rescues) or a C-119 handled message ended it, so the model never gets it. A spoken user item
+        meanwhile does not: it is usually the late transcript of an earlier spoken turn (on_conversation_item_added).
+        """
+        session = self.session
+        if session is not None and user_id in self._queued:
+            await self._fresh_after_idle(session, user_id)  # a long idle session is restarted fresh first
+        if user_id not in self._queued:
+            return "stopped"
+        session = self.session  # a C-33 rebuild (or the job's end) may have replaced it meanwhile
+        if session is None:
+            return "offline"
         key = _match_key(clean)
         self._add_pending(key, user_id, origin)
         await self._interrupt(session)
+        if user_id not in self._queued:
+            self._drop_pending(key, user_id)
+            return "stopped"
+        self._queued.pop(user_id, None)  # from here on it is the session's turn (and the rescue's)
         try:
             session.generate_reply(user_input=TYPED_PREFIX + clean)
         except Exception as e:  # pylint: disable=broad-exception-caught
@@ -322,13 +451,8 @@ class ConversationRouter:
             level = logger.info if isinstance(e, RuntimeError) else logger.error
             level("CHAT_ROUTER generate_reply unavailable (%s): offline answer", type(e).__name__)
             self._drop_pending(key, user_id)
-            await self._offline(clean, user_id)
-            self._log("offline", user_id, origin, clean)
             return "offline"
-
-        self._watch_reply(user_id, session)
-        self.emit_reasoning(clean, "text", user_id)
-        self._log("accepted", user_id, origin, clean)
+        self._watch_reply(user_id, session, _Typed(clean, origin, key))
         return "accepted"
 
     async def text_input_cb(self, _session: Any, event: Any) -> None:
@@ -365,9 +489,14 @@ class ConversationRouter:
                 self._turn_id = pending.msg_id if pending is not None else None
                 self._turn_source = "text"
                 logger.debug("CHAT_ROUTER typed item %s not emitted again (turn %s)", item_id, self._turn_id)
-                return None
+                return None  # added locally by livekit, not by the server: no session activity
+            self._last_activity = self._clock()  # C-50 escalation: the server transcribed a spoken turn
             self._turn_id, self._turn_source = item_id, "voice"
             self._awaiting.clear()  # C-51: a newer spoken turn (a 'ruko' too) supersedes a typed message's rescue
+            # A typed message not sent yet (_queued) stays: the pinned google plugin adds a spoken turn's user item only
+            # when that turn's generation completes (and the server keeps generating after an interrupt, C-51), so one
+            # that arrives during a typed message's short wait (the interrupt, the send lock, the idle reconnect) is
+            # the late transcript of an earlier spoken turn, not a stop. The dashboard Stop and C-119 still end it.
             if getattr(self.assistant, "muted", False) is True:
                 return None  # muted: no voice bubble, as before
             self._log_turn(item_id, "user", text, "voice")
@@ -377,6 +506,7 @@ class ConversationRouter:
             return self._emit_ordered("user", text, msg_id=item_id, source="voice")
 
         self._awaiting.clear()  # C-50: the model answers again; no typed message needs a rescue
+        self._last_activity = self._clock()  # C-50 escalation: the session answers
         turn_id, source = self._turn_id, self._turn_source
         self._log_turn(item_id, "assistant", text, source, turn_id)
         logger.info("CHAT_ROUTER reply id=%s turn=%s source=%s chars=%d: %s", item_id, turn_id or "-", source,
@@ -385,9 +515,11 @@ class ConversationRouter:
         return self._emit_ordered("assistant", text, msg_id=item_id, source=source, turn_id=turn_id)
 
     async def drain(self) -> None:
-        """Waits for the emits on_conversation_item_added started (tests, shutdown)."""
-        while self._tasks:
-            await asyncio.gather(*list(self._tasks), return_exceptions=True)
+        """Waits for the emits on_conversation_item_added started (tests, shutdown). Only unfinished tasks are awaited:
+        gather() of tasks that are all done completes without yielding to the loop, so a set holding only finished
+        tasks whose done callbacks (_tasks.discard) were still queued made the old 'while self._tasks' spin forever."""
+        while pending := [task for task in self._tasks if not task.done()]:
+            await asyncio.gather(*pending, return_exceptions=True)
 
     # ------------------------------------------------------------------ C-43: reasoning and '/swarm'
 
@@ -534,28 +666,35 @@ class ConversationRouter:
     def cancel_rescues(self) -> int:
         """C-51: 'stop' (K-60) ends what the owner stopped. A stop before a typed reply's first audio adds no assistant
         item, so without this the rescue would ask the session again ~12 s later and answer the stopped question (or
-        run its cancelled tool call). Returns how many typed messages were still waiting."""
-        waiting = len(self._awaiting)
+        run its cancelled tool call). A typed message not sent yet (_queued: waiting for an earlier one, the idle
+        restart or the interrupt) is never sent. Returns how many typed messages were still waiting."""
+        waiting = len(self._awaiting) + len(self._queued)
         self._awaiting.clear()
+        self._queued.clear()
         for task in list(self._rescues):
             task.cancel()
         return waiting
 
     def _end_rescues(self, msg_ids: list[str]) -> int:
         """C-119 x C-50: the rescues of these typed messages end (each one's task returns at its next look without
-        asking the session); a rescue armed for any other message stays. Returns how many were still armed."""
+        asking the session), and those not sent yet (_queued) are never sent; a rescue armed for any other message
+        stays. Returns how many were still armed or waiting."""
         ended = 0
         for msg_id in msg_ids:
-            if msg_id in self._awaiting:
-                del self._awaiting[msg_id]
-                ended += 1
+            found = False
+            for waiting in (self._awaiting, self._queued):
+                if msg_id in waiting:
+                    del waiting[msg_id]
+                    found = True
+            ended += found
         return ended
 
-    def _watch_reply(self, msg_id: str, session: Any) -> None:
+    def _watch_reply(self, msg_id: str, session: Any, typed: _Typed | None = None) -> None:
         """C-50: arms the one-time rescue of a typed message (_rescue). Only the newest typed message is watched: a
-        rescue asks the session to answer its context, whose last user turn is that message."""
+        rescue asks the session to answer its context, whose last user turn is that message. typed is what the
+        escalation sends again."""
         self._awaiting.clear()
-        self._awaiting[msg_id] = None
+        self._awaiting[msg_id] = typed
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:  # no running loop: nothing to watch with
@@ -569,14 +708,17 @@ class ConversationRouter:
         C-50: a typed message that got no reply at all is asked again once with session.generate_reply(), its text
         already in the context. Seen live: a typed turn 0.3 s after a voice switch's fresh reconnect, which then
         failed with 1008, so the plugin dropped what was queued for the connection (the turn's generate trigger
-        included) and nothing answered. Nothing when any reply came, the session changed or RESCUE_GIVE_UP_S passed
-        while the agent was busy; never while it thinks or speaks.
+        included) and nothing answered. Nothing when any reply came, the session changed, a newer typed message waits
+        to be sent or RESCUE_GIVE_UP_S passed while the agent was busy; never while it thinks or speaks. When that ask
+        ends without any reply too, the escalation (_escalate) takes over once; the message keeps waiting (in
+        _awaiting) until the rescue is over.
         """
         waited, delay = 0.0, RESCUE_AFTER_S
         while True:
             await asyncio.sleep(delay)
             waited += delay
-            if msg_id not in self._awaiting or self.session is not session:
+            if self._typed_gone(msg_id, session) is not None:  # a reply, a stop, a newer turn, a rebuild
+                self._awaiting.pop(msg_id, None)  # (a newer typed message waiting to be sent is the one watched next)
                 return
             if not _agent_busy(session):
                 break
@@ -586,12 +728,247 @@ class ConversationRouter:
                             waited)
                 return
             delay = RESCUE_POLL_S
-        self._awaiting.pop(msg_id, None)
+        typed = self._awaiting.get(msg_id)
+        self.rescue_counts["rescues"] += 1
         logger.warning("CHAT_ROUTER no reply for typed id=%s after %.0f s: asking the session again", msg_id, waited)
         try:
-            session.generate_reply()
-        except Exception as e:  # pylint: disable=broad-exception-caught  # RuntimeError: the session is closing
+            handle = session.generate_reply()
+        except RuntimeError as e:  # the session is not running or is closing: its rebuild or the job's end follows
+            self._awaiting.pop(msg_id, None)
             logger.info("CHAT_ROUTER rescue unavailable (%s)", type(e).__name__)
+            return
+        except Exception as e:  # pylint: disable=broad-exception-caught  # RealtimeError and the like
+            failure = type(e).__name__
+        else:
+            outcome = await self._reply_outcome(msg_id, session, handle)
+            if outcome != _FAILED:  # a reply, a stop, a newer turn, a rebuild, or a handle that cannot tell
+                self._awaiting.pop(msg_id, None)
+                return
+            failure = "no_generation"
+        await self._escalate(msg_id, session, typed, failure)
+
+    # ------------------------------------------------------------------ C-50 escalation
+
+    async def _escalate(self, msg_id: str, session: Any, typed: _Typed | None, failure: str) -> None:
+        """The rescue's ask failed too: one fresh restart, then the typed message once more (_restart_and_resend);
+        when that fails as well, the note (_post_rescue_failed), once _note_owed saw no late reply. Runs inside the
+        rescue's task, so C-51's stop (cancel_rescues) and detach() cancel it; a reply, a newer turn (a typed one as
+        soon as it waits to be sent) or a C-119 handled message end it at its next look. Only reasons and counts are
+        logged."""
+        self.rescue_counts["escalations"] += 1
+        logger.warning("CHAT_ROUTER rescue for typed id=%s failed (%s): one fresh restart, then the message once more",
+                       msg_id, failure)
+        problem = await self._restart_and_resend(msg_id, session, typed)
+        owed = problem is not None and await self._note_owed(msg_id, session)
+        self._awaiting.pop(msg_id, None)
+        if problem is not None:
+            if owed:
+                await self._post_rescue_failed(msg_id, problem)
+            else:
+                logger.info("CHAT_ROUTER typed id=%s after the escalation (%s): a reply came or is under way, or the "
+                            "message no longer waits: no note", msg_id, problem)
+        logger.info("CHAT_ROUTER typed rescue counts: %s",
+                    " ".join(f"{name}={count}" for name, count in self.rescue_counts.items()))
+
+    async def _restart_and_resend(self, msg_id: str, session: Any, typed: _Typed | None) -> str | None:
+        """None when nothing more is owed (a reply came or is under way, or the message stopped waiting), else the
+        reason the note gives the log. Steps: a safe point, the fresh restart and its new connection, a safe point
+        again (the replayed history holds the plugin's lock), then the message once more. The job's rate limit is
+        checked here and again right before the restart (_restart_and_reconnect)."""
+        if typed is None:
+            return "no_text"
+        if self._restart_too_soon():
+            self.rescue_counts["rate_limited"] += 1
+            return "rate_limited"
+        steps = (functools.partial(self._wait_safe_point, msg_id, session),
+                 functools.partial(self._restart_and_reconnect, msg_id, session),
+                 functools.partial(self._wait_safe_point, msg_id, session),
+                 functools.partial(self._resend, msg_id, session, typed))
+        for step in steps:
+            result = await step()
+            if result is not None:  # the step ends the escalation
+                return None if result == _ENDED else result
+        return None
+
+    async def _wait_safe_point(self, msg_id: str, session: Any) -> str | None:
+        """None at a safe point; else _ENDED, _SESSION or 'busy' (none came within SAFE_POINT_WAIT_S)."""
+        result = await self._wait_until(lambda: self._typed_gone(msg_id, session) or self._safe_now(session),
+                                        SAFE_POINT_WAIT_S)
+        if result == _OK:
+            return None
+        return _BUSY if result == _TIMEOUT else result
+
+    async def _restart_and_reconnect(self, msg_id: str, session: Any) -> str | None:
+        """None once the fresh connection is up (or after RECONNECT_WAIT_S: the plugin queues what is sent for it);
+        else _ENDED, _SESSION, 'no_restart' (the session offers no restart) or 'rate_limited'. The job's rate limit is
+        checked again first: a router restart that came while the escalation waited for its safe point is never
+        followed by a second one (the plugin would drop what was queued for the first one's connection); that
+        restart's new connection is awaited instead."""
+        if self._restart_too_soon():
+            restart = self._fresh_restart
+            if restart is None:  # no longer kept (an old session's): still never a second restart
+                self.rescue_counts["rate_limited"] += 1
+                return "rate_limited"
+            logger.info("CHAT_ROUTER a fresh restart came while typed id=%s waited: no second one, its connection is "
+                        "used", msg_id)
+        else:
+            restart = self._restart_fresh(self._realtime_of(session), "typed_rescue")
+            if restart is None:
+                return "no_restart"
+        result = await self._wait_until(
+            lambda: self._typed_gone(msg_id, session) or self._reconnected(*restart), RECONNECT_WAIT_S)
+        if result == _TIMEOUT:
+            logger.info("CHAT_ROUTER fresh connection not up after %.0f s for typed id=%s: sending anyway",
+                        RECONNECT_WAIT_S, msg_id)
+        return None if result in (_OK, _TIMEOUT) else result
+
+    async def _resend(self, msg_id: str, session: Any, typed: _Typed) -> str:
+        """The typed message once more as a new user turn (its user item is not shown again and the reply carries
+        turn_id = this message); _ENDED when nothing more is owed, else why it failed."""
+        self._add_pending(typed.key, msg_id, typed.origin)
+        try:
+            handle = session.generate_reply(user_input=TYPED_PREFIX + typed.text)
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            self._drop_pending(typed.key, msg_id)
+            return f"resend_{type(e).__name__}"
+        self.rescue_counts["resends"] += 1
+        logger.info("CHAT_ROUTER typed id=%s sent again after a fresh restart", msg_id)
+        outcome = await self._reply_outcome(msg_id, session, handle)
+        if outcome == _FAILED:
+            return "resend_no_generation"
+        return _SESSION if outcome == _SESSION else _ENDED
+
+    async def _note_owed(self, msg_id: str, session: Any) -> bool:
+        """
+        Whether the note goes out after a failed escalation. livekit-agents 1.4.6 gives up on generate_reply after a
+        fixed 5 s ('generate_reply timed out waiting for generation_created event'), yet a generation that arrives
+        later still plays, as a server-initiated speech (google plugin _start_new_generation, user_initiated False);
+        its reply carries turn_id = this message (its typed user item is the router's last user turn). So the note
+        waits NOTE_GRACE_S first: True when the message still waited all along and the session never looked busy
+        (session_policy.session_busy: no reply, tool call or user speech under way), or when the session changed
+        (nothing can answer it there any more); False once the message stopped waiting (a reply, a stop, a newer turn)
+        or a speech was under way: the escalation then ends silently, as the rescue does when a reply is in progress
+        (the UI still offers its retry), so a note never contradicts a reply that follows, and Sir is never asked to
+        send again what a late reply (and its tool call) already does.
+        """
+        def check() -> str | None:
+            gone = self._typed_gone(msg_id, session)
+            if gone is not None:
+                return gone
+            return _BUSY if session_policy.session_busy(session) else None
+
+        return await self._wait_until(check, NOTE_GRACE_S) in (_TIMEOUT, _SESSION)
+
+    async def _post_rescue_failed(self, msg_id: str, reason: str) -> None:
+        """One short assistant note (K-58: source 'system', turn_id = the typed message) instead of silence; never in
+        the turn log, so memory keeps the unanswered message as it was."""
+        self.rescue_counts["notes"] += 1
+        logger.warning("CHAT_ROUTER no reply for typed id=%s even after the escalation (%s): note posted", msg_id,
+                       reason)
+        await self._sent(self._emit_ordered("assistant", RESCUE_FAILED_TEXT, msg_id=str(uuid.uuid4()),
+                                            source="system", turn_id=msg_id))
+
+    async def _reply_outcome(self, msg_id: str, session: Any, handle: Any) -> str:
+        """How the reply a generate_reply started went: _ENDED (the message no longer waits: a reply came, a stop, a
+        newer turn), _SESSION (the session changed), _FAILED (its handle ended without any reply) or _UNKNOWN (a handle
+        that cannot tell, an interrupted one, one with items, or one still running after RESCUE_WATCH_S)."""
+        if _handle_state(handle) not in (_RUNNING, _FAILED):
+            return _UNKNOWN  # e.g. a test double or a future livekit: nothing to watch, as before the escalation
+
+        def check() -> str | None:
+            gone = self._typed_gone(msg_id, session)
+            if gone is not None:
+                return gone
+            state = _handle_state(handle)
+            return None if state == _RUNNING else state
+
+        result = await self._wait_until(check, RESCUE_WATCH_S)
+        return _UNKNOWN if result == _TIMEOUT else result
+
+    async def _fresh_after_idle(self, session: Any, msg_id: str) -> None:
+        """A typed message after IDLE_FRESH_AFTER_S without any session activity: one fresh restart before it is sent
+        (live: a session idle ~55 minutes answered no typed message, a fresh one at once), at a safe point and inside
+        the job's rate limit; it waits for the new connection at most RECONNECT_WAIT_S, less when the message stops
+        waiting (_queued) or the session changes. Runs under the send lock. Never fails the message."""
+        last = self._last_activity
+        if last is None:
+            return
+        idle = self._clock() - last
+        if idle < IDLE_FRESH_AFTER_S or self._restart_too_soon():
+            return
+        if self._safe_now(session) is None:
+            logger.info("CHAT_ROUTER typed message after %.0f min without session activity: the session is busy, "
+                        "no fresh restart", idle / 60)
+            return
+        restart = self._restart_fresh(self._realtime_of(session), "typed_after_idle")
+        if restart is None:
+            return
+        self.rescue_counts["idle_restarts"] += 1
+        logger.info("CHAT_ROUTER typed message after %.0f min without session activity: fresh restart first",
+                    idle / 60)
+        result = await self._wait_until(
+            lambda: self._typed_gone(msg_id, session, self._queued) or self._reconnected(*restart), RECONNECT_WAIT_S)
+        if result == _TIMEOUT:
+            logger.info("CHAT_ROUTER fresh connection not up after %.0f s: sending anyway", RECONNECT_WAIT_S)
+
+    def _typed_gone(self, msg_id: str, session: Any, waiting: dict[str, Any] | None = None) -> str | None:
+        """_ENDED once msg_id no longer waits (in _awaiting, or in waiting when given) or, for a sent message (no
+        waiting given: its rescue and escalation), once a newer typed message waits to be sent (_queued): that one is
+        watched next, and its interrupt would cut whatever was asked for this one meanwhile. _SESSION once the session
+        changed, else None."""
+        if msg_id not in (self._awaiting if waiting is None else waiting):
+            return _ENDED
+        if waiting is None and self._queued:
+            return _ENDED
+        return _SESSION if self.session is not session else None
+
+    def _safe_now(self, session: Any) -> str | None:
+        """_OK at a safe point for a fresh restart: the agent neither thinks nor speaks, no speech (a tool call
+        included) is running, the user is not speaking (session_policy.session_busy, agent_core's C-49 rule) and the
+        plugin's session lock is free (no reconnect or context update under way); else None."""
+        if session_policy.session_busy(session):
+            return None
+        return None if session_policy.realtime_lock_busy(self._realtime_of(session)) else _OK
+
+    @staticmethod
+    def _reconnected(rt_session: Any, before: Any) -> str | None:
+        """_OK once the realtime session holds a connection other than before, or when it cannot tell."""
+        return None if gemini_resume_guard.reconnected(rt_session, before) is False else _OK
+
+    def _realtime_of(self, session: Any) -> Any:
+        """The live Gemini session behind the AgentSession (the assistant's activity, else the session's own)."""
+        return session_policy.realtime_session(self.assistant) or session_policy.realtime_session(session)
+
+    def _restart_too_soon(self) -> bool:
+        last = self._last_fresh_restart
+        return last is not None and self._clock() - last < FRESH_RESTART_GAP_S
+
+    def _restart_fresh(self, rt_session: Any, reason: str) -> tuple[Any, Any] | None:
+        """One fresh reconnect (C-49 restart_fresh; it logs SESSION_RESTART_FRESH reason=<reason>), counted for the
+        job's rate limit. Returns (rt_session, the connection it held before), what _reconnected tells the new
+        connection by, and keeps it for an escalation that finds this restart came while it waited; None when the
+        session offers no restart."""
+        before = gemini_resume_guard.connection_of(rt_session)
+        if not gemini_resume_guard.restart_fresh(rt_session, reason):
+            return None
+        self._last_fresh_restart = self._last_activity = self._clock()
+        self._fresh_restart = (rt_session, before)
+        self.rescue_counts["restarts"] += 1
+        return self._fresh_restart
+
+    @staticmethod
+    async def _wait_until(check: Callable[[], str | None], limit: float) -> str:
+        """check() every WATCH_POLL_S until it returns a result (returned) or limit seconds passed on the loop's clock
+        (_TIMEOUT; a sleep can last longer than asked, e.g. Windows' ~16 ms timer)."""
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + limit
+        while True:
+            result = check()
+            if result is not None:
+                return result
+            if loop.time() >= deadline:
+                return _TIMEOUT
+            await asyncio.sleep(WATCH_POLL_S)
 
     async def _interrupt(self, session: Any) -> None:
         """Stops the current and queued speech before the typed reply; never fails the typed message."""

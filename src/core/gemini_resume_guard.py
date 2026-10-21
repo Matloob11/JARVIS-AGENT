@@ -154,6 +154,29 @@ def restart_fresh(rt_session: Any, reason: str) -> bool:
     return True
 
 
+_CONNECTION_ATTR = "_active_session"  # pinned private member: RealtimeSession._active_session (the live connection)
+
+
+def connection_of(rt_session: Any) -> Any:
+    """The live connection a RealtimeSession holds right now (None between connections or for a session without
+    one); taken before restart_fresh, so reconnected() can tell when the fresh connection is up."""
+    return getattr(rt_session, _CONNECTION_ATTR, None) if rt_session is not None else None
+
+
+def reconnected(rt_session: Any, before: Any) -> bool | None:
+    """
+    C-50 escalation: True once rt_session holds a live connection other than before (the plugin's main task closed the
+    old one and connected again; it then replays the chat history while holding its session lock, which
+    session_policy.realtime_lock_busy sees), False while it does not yet, None when it cannot tell (no session, or one
+    without the pinned member). A turn added to the context while the old connection is still marked live can reach
+    Gemini twice (in the replayed history and as its own client content); waiting for this avoids that.
+    """
+    if rt_session is None or not hasattr(rt_session, _CONNECTION_ATTR):
+        return None
+    now = getattr(rt_session, _CONNECTION_ATTR, None)
+    return now is not None and now is not before
+
+
 def guard_realtime_model(model: Any) -> Any:
     """
     Arms the guard for model (google.realtime.RealtimeModel): installs the log hook and wraps the
