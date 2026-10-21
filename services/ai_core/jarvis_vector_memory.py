@@ -21,6 +21,16 @@ prefix (every memory written before, or without a key) is plain text and is reca
 does not decrypt (another key) is returned as stored, with a WARNING, never dropped. On POSIX the
 process that opens the PersistentClient holds an exclusive fcntl lock on chroma_db/.jarvis.lock; another
 process runs without vector recall. Windows keeps the single worker of the agent_ctl runtime lock.
+
+C-53: add_memory stores the memory's own id (memory_id: the message id of C-52, else the document id) and its source
+(source, else metadata['source'], else 'unknown') in the metadata, and drops metadata values Chroma refuses (None)
+or stores as text (anything not str, int, float or bool); the query API is unchanged. add_memories adds several at once
+(the new messages of a save): once the memory is ready one worker thread writes them one after another, so a save never
+takes more than one executor worker, and before that all of them are queued for the start-up thread together (writes
+run one at a time in the process, _WRITE_LOCK). The worker's prewarm hook calls
+warm_model() (the import and the model, never Chroma); the job serving jarvis-hybrid calls prewarm(), and its loop-lag
+sampler (services/utils/jarvis_loopwatch.sample_loop_lag) runs while lag_watch_needed(): during the start-up and,
+once it worked, until the first write of the process has finished.
 """
 
 import asyncio
@@ -31,7 +41,7 @@ import os
 import threading
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Mapping
 from typing import Any
 
 import chromadb
@@ -98,6 +108,9 @@ ENC_PREFIX = "jarvis-fernet:v1:"
 LOCK_FILE = ".jarvis.lock"
 # After another process was found holding chroma_db, the next try waits this long.
 LOCK_RETRY_S = 60.0
+DEFAULT_SOURCE = "unknown"  # C-53: the metadata source of a memory added without one
+METADATA_TEXT_MAX = 500  # C-53: a metadata value that is not str/int/float/bool is stored as text, this long at most
+_WRITE_LOCK = threading.Lock()  # C-53: collection.add runs one at a time in the process (VectorMemory._write)
 _warned: set[str] = set()
 
 
@@ -160,6 +173,25 @@ class SentenceTransformerEmbeddingFunction(_ChromaSentenceTransformer):
 
     def __call__(self, input: Any) -> Any:  # pylint: disable=redefined-builtin
         return super().__call__([open_document(text) for text in input])
+
+
+def chroma_metadata(metadata: dict[str, Any] | None, *, memory_id: str, source: Any = None) -> dict[str, Any]:
+    """
+    C-53: the metadata a memory is stored with: the caller's (str keys; None values left out, as Chroma refuses them;
+    a value that is not str, int, float or bool stored as text, at most METADATA_TEXT_MAX characters), plus 'id' (the
+    memory's own id) and 'source' (source, else the caller's 'source', else DEFAULT_SOURCE).
+    """
+    clean: dict[str, Any] = {}
+    for key, value in (metadata or {}).items():
+        if not isinstance(key, str) or value is None:
+            continue
+        clean[key] = value if isinstance(value, (str, int, float, bool)) else str(value)[:METADATA_TEXT_MAX]
+    clean["id"] = memory_id
+    if isinstance(source, str) and source.strip():
+        clean["source"] = source.strip()
+    elif not (isinstance(clean.get("source"), str) and clean["source"].strip()):
+        clean["source"] = DEFAULT_SOURCE
+    return clean
 
 
 def _running_future() -> concurrent.futures.Future[bool]:
@@ -240,12 +272,35 @@ class VectorMemory:
         self._lock_handle: Any = None
         self._lock_refused_until = 0.0
         self._disabled: str | None = None
+        # C-53: resolved once the first write of this process has finished (stored or not), from any thread
+        self._first_write: concurrent.futures.Future[bool] = _running_future()
 
     @property
     def warming_up(self) -> bool:
         """True while the background start-up runs."""
         future = self._init_future
         return future is not None and not future.done()
+
+    def _note_write_done(self) -> None:
+        """C-53: a write has finished (stored or not); the first one ends the loop-lag watch. Any thread, idempotent."""
+        if not self._first_write.done():
+            try:
+                self._first_write.set_result(True)
+            except concurrent.futures.InvalidStateError:  # another thread noted it first
+                pass
+
+    def lag_watch_needed(self) -> bool:
+        """
+        C-53: True while the job's loop-lag sampler should run: the start-up runs, or it worked and the first write of
+        this process has not finished yet. False when the start-up never began in this process (a job that does not
+        open Chroma, a test's stand-in) or failed, and once the first write is done.
+        """
+        start = self._init_future
+        if start is None:
+            return False
+        if not start.done():
+            return True
+        return self.collection is not None and not self._first_write.done()
 
     @staticmethod
     def _start(name: str, target: Callable[[concurrent.futures.Future[bool]], None]
@@ -371,6 +426,8 @@ class VectorMemory:
                                    len(queued))
                 for memory, outcome in queued:
                     outcome.set_result(collection is not None and self._write(collection, memory))
+                if queued:
+                    self._note_write_done()
             finally:
                 if collection is not None:
                     future.set_result(True)  # after the queued writes, so a recall then finds them
@@ -388,51 +445,105 @@ class VectorMemory:
         """Waits, without blocking the event loop, until the start-up has succeeded or failed."""
         await self._wait_ready()
 
-    def _queue_write(self, memory: dict[str, Any]) -> concurrent.futures.Future[bool] | None:
+    def _queue_writes(self, memories: list[dict[str, Any]]
+                      ) -> list[concurrent.futures.Future[bool]] | None:
         """
-        Queues a write for the start-up thread, starting the start-up when needed: the write's
-        outcome. None when the memory is ready (the caller then writes it itself).
+        Queues writes for the start-up thread, starting the start-up when needed: each write's
+        outcome, in order. None when the memory is ready (the caller then writes them itself). C-53:
+        one decision for all the writes of a save, under one hold of the lock, so they all go one way.
         """
         self.prewarm()
         with self._init_lock:
             if self.collection is not None:
                 return None
-            outcome = _running_future()
+            outcomes = [_running_future() for _ in memories]
             start = self._init_future
             if start is not None and not start.done():
-                self._queued_writes.append((memory, outcome))
-                return outcome
+                self._queued_writes.extend(zip(memories, outcomes))
+                return outcomes
         # The start-up has just failed or could not start.
-        logger.warning("Vector Memory not initialized. Skipping add_memory.")
-        outcome.set_result(False)
-        return outcome
+        logger.warning("Vector Memory not initialized. Skipping %d write(s).", len(memories))
+        for outcome in outcomes:
+            outcome.set_result(False)
+        return outcomes
 
     @staticmethod
     def _write(collection: Any, memory: dict[str, Any]) -> bool:
-        """collection.add for one memory (blocking): True once it is stored."""
+        """collection.add for one memory (blocking): True once it is stored. C-53: one write at a time in the process
+        (_WRITE_LOCK): the writes of one save run in one thread (_write_all), but two saves, or a save and the
+        start-up's queued writes, may run at once, and two embeddings must never share the model's tokenizer at the
+        same moment."""
         try:
-            collection.add(**memory)
+            with _WRITE_LOCK:
+                collection.add(**memory)
             return True
         except Exception as e:
-            logger.error("Error adding to Vector Memory: %s", e)
+            logger.error("Error adding to Vector Memory: %s", type(e).__name__)
             return False
 
-    async def add_memory(self, text: str, metadata: dict[str, Any] | None = None) -> bool:
-        """Add a piece of text to the semantic memory asynchronously."""
-        if not text or not text.strip():
-            return False
+    def _write_all(self, collection: Any, memories: list[dict[str, Any]]) -> list[bool]:
+        """C-53: _write for each memory in turn (blocking), in the calling thread: one worker writes a whole save."""
+        return [self._write(collection, memory) for memory in memories]
 
+    @staticmethod
+    def _write_of(item: Mapping[str, Any]) -> dict[str, Any] | None:
+        """The collection.add arguments of one memory given as add_memory's arguments (text, and optionally metadata,
+        memory_id, source); None for an empty text."""
+        text = item.get("text")
+        if not isinstance(text, str) or not text.strip():
+            return None
+        doc_id = str(uuid.uuid4())
+        memory_id = item.get("memory_id")
+        own_id = memory_id if isinstance(memory_id, str) and memory_id.strip() else doc_id
         # C-124: stored encrypted on the VPS brain with JARVIS_ENCRYPTION_KEY; the embedding function
         # embeds the plain text (SentenceTransformerEmbeddingFunction above).
-        memory = {"documents": [seal_document(text)], "metadatas": [metadata or {}],
-                  "ids": [str(uuid.uuid4())]}
-        queued = self._queue_write(memory)
+        return {"documents": [seal_document(text)],
+                "metadatas": [chroma_metadata(item.get("metadata"), memory_id=own_id, source=item.get("source"))],
+                "ids": [doc_id]}
+
+    async def add_memory(self, text: str, metadata: dict[str, Any] | None = None, *,
+                         memory_id: str | None = None, source: str | None = None) -> bool:
+        """Add a piece of text to the semantic memory asynchronously. C-53: the metadata also holds the memory's own id
+        (memory_id, e.g. the C-52 message id; else the new document id) and its source (source, else
+        metadata['source'], else 'unknown'); see chroma_metadata. add_memories with this one memory."""
+        (stored,) = await self.add_memories([{"text": text, "metadata": metadata, "memory_id": memory_id,
+                                              "source": source}])
+        return stored
+
+    async def add_memories(self, memories: Iterable[Mapping[str, Any]]) -> list[bool]:
+        """
+        C-53: adds several memories at once (the new messages of a save), each given as add_memory's arguments ({text,
+        metadata?, memory_id?, source?}), and returns whether each one was stored, in order (False for an empty text,
+        which is skipped). Once the memory is ready one worker thread writes them all, one after another (_write_all):
+        a save takes one executor worker however many messages it holds, never one per message waiting on _WRITE_LOCK
+        while the job's other to_thread calls (memory file reads, recalls, tool IO) queue behind them. Before it is
+        ready all of them are queued for the start-up thread at once, so a job's loop that stops meanwhile loses none.
+        """
+        items = list(memories)
+        stored = [False] * len(items)
+        places: list[int] = []
+        writes: list[dict[str, Any]] = []
+        for place, item in enumerate(items):
+            write = self._write_of(item)
+            if write is not None:
+                places.append(place)
+                writes.append(write)
+        if not writes:
+            return stored
+        queued = self._queue_writes(writes)
         if queued is None:
-            # collection.add is blocking, run in thread
-            return await asyncio.to_thread(self._write, self.collection, memory)
-        # The start-up thread makes the write once the memory is ready, so it is made even when this
-        # job's loop stops or this caller is cancelled meanwhile; here we only await its outcome.
-        return await _await_future(queued)
+            # collection.add is blocking: the whole save in one worker thread
+            try:
+                outcomes = await asyncio.to_thread(self._write_all, self.collection, writes)
+            finally:
+                self._note_write_done()
+        else:
+            # The start-up thread makes the writes once the memory is ready, so they are made even when
+            # this job's loop stops or this caller is cancelled meanwhile; here we only await the outcomes.
+            outcomes = [await _await_future(outcome) for outcome in queued]
+        for place, outcome in zip(places, outcomes):
+            stored[place] = outcome
+        return stored
 
     async def query_memory(self, query_text: str, n_results: int = 5) -> list[dict[str, Any]]:
         """

@@ -362,8 +362,11 @@ async def test_memory_still_writes_and_recalls_after_the_off_loop_start(clients,
     assert vm.client is client and vm.collection is client.collection and vm.embedding_func is embedding
 
     hits = await vm.query_memory("favourite color", n_results=2)
+    # C-53: the metadata also holds the memory's own id (here its document id) and its source
+    memory_id = hits[0]["metadata"].get("id")
+    assert isinstance(memory_id, str) and memory_id
     assert hits[0] == {"document": "Sir Matloob ka favourite color black hai.",
-                       "metadata": {"user": "c137"}, "score": 1.0}
+                       "metadata": {"user": "c137", "id": memory_id, "source": jvm.DEFAULT_SOURCE}, "score": 1.0}
     assert len(hits) == 2 and await vm.get_count() == 3
 
 

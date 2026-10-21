@@ -326,7 +326,8 @@ async def run_clear_memory(payload: Any, ctx: CommandContext) -> dict[str, Any] 
     the conversation memory is cleared WITHOUT a delete (ConversationMemory.clear moves the file to
     backups/memory/<UTC ts>_<user>_memory.json and empties its cache; C-52: through the job's
     MemoryExtractor.clear_memory, so the messages of this job its memory loop has not written yet never reach the
-    fresh file) and memory_cleared {scope: 'short_term', backup, ts} goes out (never memory_sync). include_vector then
+    fresh file; C-53: the job's RECENT MEMORY block leaves its instructions too, _forget_recall) and memory_cleared
+    {scope: 'short_term', backup, ts} goes out (never memory_sync). include_vector then
     asks a second, high-risk confirmation (the vector store has no backup) and wipes it (jarvis_vector_db.clear_memory),
     followed by memory_cleared {scope: 'all', ...}. Without a confirmation nothing is cleared. Audited (CLEAR_MEMORY).
     Returns the last memory_cleared payload, else None.
@@ -358,6 +359,7 @@ async def _clear_short_term_memory(payload: Any, ctx: CommandContext) -> dict[st
         logger.error("MEMORY: clear_memory failed (%s); nothing was deleted", type(e).__name__)
         await _tell(ctx, "Clear memory failed: the memory file could not be moved; nothing was deleted.")
         return None
+    await _forget_recall(getattr(ctx, "assistant", None))  # C-53: the cleared messages leave the instructions too
     _audit("CLEAR_MEMORY", f"ALLOW=True | SOURCE={source} | REASON={reason} | SCOPE=short_term | "
                            f"BACKUP={backup or 'none'}", "WARNING")
     cleared: dict[str, Any] = {"scope": "short_term", "backup": backup, "ts": time.time()}
@@ -377,6 +379,22 @@ async def _clear_memory_file(extractor: Any) -> str | None:
     if inspect.isawaitable(result):
         return await result
     return await getattr(extractor, "memory", None).clear()
+
+
+async def _forget_recall(assistant: Any) -> None:
+    """C-53: after a clear that worked, the job's RECENT MEMORY block (the newest saved messages, put into its
+    instructions at job start by src/core/memory_recall.py) goes too (BrainAssistant.forget_memory_summary), so no
+    later composition and no rebuilt session carries the cleared messages. An assistant without it (a stand-in) is
+    left alone; never raises (the clear itself worked)."""
+    forget = getattr(assistant, "forget_memory_summary", None)
+    if not callable(forget):
+        return
+    try:
+        result = forget()
+        if inspect.isawaitable(result):
+            await result
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.warning("MEMORY: the recall block was not dropped from the instructions (%s)", type(e).__name__)
 
 
 async def _clear_vector_memory(payload: Any, ctx: CommandContext, first_source: str,

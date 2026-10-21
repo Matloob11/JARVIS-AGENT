@@ -142,7 +142,7 @@ from services.utils.jarvis_config import (
     runtime_profile,
 )
 from services.utils.jarvis_logger import setup_logger, start_ui_log_shipping
-from services.utils.jarvis_loopwatch import LoopWatchdog
+from services.utils.jarvis_loopwatch import LoopWatchdog, sample_loop_lag  # C-31, C-53
 from services.utils.jarvis_security import redact_secrets
 from dotenv import dotenv_values
 
@@ -164,6 +164,7 @@ except (ImportError, ValueError):
 from src.core import agent_settings  # C-54 (K-61); registers settings_update, settings_bootstrap, request_state
 from src.core import gemini_resume_guard
 from src.core import session_policy  # C-114: compression, truncation, re-seed, context refresh, idle close
+from src.core import memory_recall  # C-53: the RECENT MEMORY block in the instructions at job start
 from src.core.jarvis_runtime import JarvisRuntime
 from src.core.voices import persona_voice  # C-50
 from src.core.voice_link import VoiceLink  # C-35; registers ui_command voice_take_over
@@ -673,7 +674,11 @@ def _start_loop_watchdog(ctx: agents.JobContext,
     return watchdog
 
 
-def _prewarm_vector_memory(room_name: str | None = None) -> None:
+VECTOR_LAG_LABEL = "vector_startup_and_first_write"
+
+
+def _prewarm_vector_memory(room_name: str | None = None,
+                           spawn: Callable[[Coroutine[Any, Any, Any]], Any] | None = None) -> None:
     """
     C-137: starts the vector memory (Chroma, the sentence-transformers import and its model) in its
     background thread at job start, so no event loop runs that import and the first recall or write
@@ -681,6 +686,9 @@ def _prewarm_vector_memory(room_name: str | None = None) -> None:
     so it runs here in the job (K-69); a worker's prewarm hook may only call warm_model().
     C-124: in remote mode only the job serving JARVIS_ROOM_NAME (jarvis-hybrid) opens Chroma; a job for
     another room (canary, probe) runs without vector recall.
+    C-53: spawn (the job's task tracker) runs the loop-lag sampler while the start-up runs and until the
+    first write of the process has finished ('LOOP_LAG max_ms=<n>', jarvis_loopwatch.sample_loop_lag);
+    a job that finds the memory ready and written to already samples nothing.
     """
     try:
         from services.ai_core.jarvis_vector_memory import (  # pylint: disable=import-outside-toplevel
@@ -691,8 +699,35 @@ def _prewarm_vector_memory(room_name: str | None = None) -> None:
             jarvis_vector_db.disable("this job does not serve the JARVIS room")
             return
         jarvis_vector_db.prewarm()
+        watch = getattr(jarvis_vector_db, "lag_watch_needed", None)
+        if spawn is not None and callable(watch) and watch() is True:
+            spawn(sample_loop_lag(lambda: not watch(), label=VECTOR_LAG_LABEL, log=logger))
     except Exception as e:  # the memory then starts at its first use, still off the loop
         logger.warning("VECTOR_PREWARM not started: %s", e)
+
+
+def _vector_model_prewarm_allowed() -> bool:
+    """False under pytest: a test that runs the worker prewarm hook never loads the real embedding model (the conftest
+    stand-in covers only VectorMemory.prewarm)."""
+    return "pytest" not in sys.modules and "PYTEST_CURRENT_TEST" not in os.environ
+
+
+def _prewarm_vector_model() -> None:
+    """
+    C-53 step 2 (K-69, C-32's 'Prewarm loads MiniLM ... but never opens Chroma'): the worker's prewarm hook starts the
+    embedding model's load (the slow sentence-transformers import and all-MiniLM-L6-v2) in its own background thread
+    (VectorMemory.warm_model) and never waits for it, so the job that serves jarvis-hybrid finds the import done and
+    opens Chroma in its own start-up thread. Never opens Chroma; never raises.
+    """
+    if not _vector_model_prewarm_allowed():
+        return
+    try:
+        from services.ai_core.jarvis_vector_memory import (  # pylint: disable=import-outside-toplevel
+            jarvis_vector_db,
+        )
+        jarvis_vector_db.warm_model()
+    except Exception as e:  # pylint: disable=broad-exception-caught  # the job's start-up loads it instead
+        logger.warning("VECTOR_MODEL prewarm not started: %s", type(e).__name__)
 
 
 def _prewarm_voice_id(room_name: str | None = None) -> None:
@@ -1319,7 +1354,8 @@ def _prewarm_city() -> str:
 def prewarm(proc: Any) -> None:
     """C-32: fills JobProcess.userdata['tools'|'vad'|'city'] once per executor. Each part is
     independent: a failed one is logged and left unset, and that job boots inline (PREWARM_MISS) —
-    a broken prewarm must never keep the worker from serving jobs."""
+    a broken prewarm must never keep the worker from serving jobs. C-53: it also starts the vector
+    memory's embedding model load in a background thread (_prewarm_vector_model; never Chroma)."""
     started = time.monotonic()
     userdata = proc.userdata
     try:
@@ -1345,6 +1381,7 @@ def prewarm(proc: Any) -> None:
     except Exception as e:
         logger.warning("PREWARM vad failed (the job loads inline): %s", e)
     userdata["city"] = _prewarm_city()
+    _prewarm_vector_model()  # C-53: the embedding model loads in its own thread (never Chroma, K-69); not awaited
     logger.info("PREWARM_DONE tools=%d in %.1fs", len(userdata.get("tools") or ()), time.monotonic() - started)
 
 
@@ -1412,7 +1449,9 @@ async def entrypoint(ctx: agents.JobContext):
     has been in the room (no linked participant and no person the bridge counts: kind STANDARD, not 'agent-*' or
     'probe-*') and nothing was said for JARVIS_IDLE_CLOSE_MIN minutes (default 30 on the VPS brain, off on the PC
     brain) or, once it is 24 h old, at its first 10 minutes without conversation; never while work runs, and never in
-    console mode."""
+    console mode. C-53: the re-seed is off (v43); before the first session.start the job's instructions get a RECENT
+    MEMORY data block instead (src/core/memory_recall.py: the newest saved messages of the persona the job runs as),
+    and the vector memory's start-up is watched by a loop-lag sampler."""
     # K-57 (C-39): a probe or canary job (jarvis-probe-<epoch>, jarvis-canary-<epoch>) sets the suppression before
     # it creates any task: nothing it does reaches the bridge, the UI log, memory or the identity file, and it runs
     # no listener or background loop. The user's own job never sets it.
@@ -1452,8 +1491,9 @@ async def entrypoint(ctx: agents.JobContext):
 
     async def _build_job_parts() -> None:
         logger.info("✅ Connected to room: %s", ctx.room.name)
-        # C-137: loads in its own thread while the session starts (C-124: the JARVIS room's job only)
-        _prewarm_vector_memory(getattr(ctx.room, "name", None))
+        # C-137: loads in its own thread while the session starts (C-124: the JARVIS room's job only); C-53: the job's
+        # loop-lag sampler runs meanwhile and until the first write (a task of this job)
+        _prewarm_vector_memory(getattr(ctx.room, "name", None), track)
         # C-72: speaker-ID model loads in its own thread (C-124: the JARVIS room's job only)
         _prewarm_voice_id(getattr(ctx.room, "name", None))
         # Now perform secondary initialization (the date is computed locally — no network call)
@@ -1579,6 +1619,12 @@ async def entrypoint(ctx: agents.JobContext):
         # apply here, before session.start (instructions and the model's voice are stored for the session)
         runtime.settings = agent_settings.SettingsService(runtime, job_settings, probe=probe)
         await runtime.settings.apply_at_start()
+        if not probe:
+            # C-53: the recall of earlier turns (the re-seed is off since v43) goes into the instructions instead: the
+            # newest saved messages as a RECENT MEMORY data block, read and built off the loop, composed with the
+            # persona the job now runs as and stored for the first session.start (never into a running session, so it
+            # never costs a Gemini reconnect); K-57: a probe or canary job starts without it
+            await memory_recall.inject_memory_summary(assistant)
 
     async def _session_factory() -> Any:
         if job["assistant"] is None:

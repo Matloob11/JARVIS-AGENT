@@ -13,6 +13,11 @@ logged as EVENT_LOOP_RESUME and never counted as a stall, and neither is a loop 
 (run_until_complete() returned) with the heartbeat pending. The watcher thread ends with the
 heartbeat, or once its loop is closed or the loop's thread has ended (a LiveKit job thread ends
 that way). Importing this module starts nothing.
+
+C-53: sample_loop_lag(until) measures the loop's drift every 100 ms while until() is False (the vector memory's
+start-up and its first write) and logs 'LOOP_LAG max_ms=<n> during=<label> samples=<n>' once, at WARNING from
+LOOP_LAG_WARN_MS on. Like the watchdog it never counts a pause of the whole process as lag (its watcher thread beside
+the sampler); such a pause is noted at the end of the line as 'paused_ms=<n>'.
 """
 
 import asyncio
@@ -434,3 +439,96 @@ class LoopWatchdog:
         except Exception:  # pylint: disable=broad-exception-caught
             self._log.exception("Loop watchdog action %s failed",
                                 getattr(action, "__name__", type(action).__name__))
+
+
+LAG_TAG = "LOOP_LAG"
+LOOP_LAG_INTERVAL_S = 0.1
+LOOP_LAG_MAX_S = 300.0  # the sampler stops after this long whatever until() says
+LOOP_LAG_WARN_MS = 200
+
+
+class _PauseWatcher(_Watcher):
+    """
+    C-53: the watchdog's watcher thread beside sample_loop_lag, for its pause detection only: it keeps the spans in
+    which it could not run either while the process used almost no CPU (a pause of the whole process), which
+    paused_within() reads. It captures no stall and reports nothing critical.
+    """
+
+    def _observe(self, now: float) -> None:
+        return None
+
+
+def _start_pause_watcher(loop: asyncio.AbstractEventLoop, *, interval_s: float, threshold_s: float,
+                         log: logging.Logger, label: str) -> _PauseWatcher | None:
+    """The started _PauseWatcher of a sample_loop_lag run, None when no thread can start (then a pause of the whole
+    process is taken off only where the wall clock shows it)."""
+    watcher = _PauseWatcher(loop=loop, loop_thread=threading.current_thread(), interval_s=interval_s,
+                            threshold_s=threshold_s, critical_s=None, tools=lambda: (),
+                            on_critical=lambda _stall: None, log=log, name=f"lag-{label}")
+    try:
+        watcher.thread.start()
+    except RuntimeError as e:
+        log.debug("%s pause watcher not started (%s)", LAG_TAG, e)
+        return None
+    return watcher
+
+
+async def sample_loop_lag(until: Callable[[], bool], *, label: str, interval_s: float = LOOP_LAG_INTERVAL_S,
+                          max_s: float = LOOP_LAG_MAX_S, log: logging.Logger | None = None) -> int:
+    """
+    C-53: sleeps interval_s in a loop on the running event loop while until() is False (at most max_s) and measures
+    how late each wake-up is: the loop could not run callbacks meanwhile. A pause of the whole process (laptop sleep or
+    Modern Standby, a debugger) is never counted as lag. On Windows time.monotonic counts a system sleep
+    (GetTickCount64 in Python 3.12), so the loop wakes late by the sleep's length: as in LoopWatchdog, a watcher thread
+    runs beside the sampler, and the time in which it could not run either while the process used almost no CPU is
+    taken off the sample it fell into (a GIL-holding busy call or a blocking wait stays lag). Where the monotonic clock
+    skips a sleep, the wall clock running ahead of it is only noted. Logs once, when it stops (also when it is
+    cancelled at the job's end): 'LOOP_LAG max_ms=<worst drift> during=<label> samples=<n>', followed by
+    ' paused_ms=<n> (...)' when such a pause fell into the sampling, at INFO, or at WARNING from LOOP_LAG_WARN_MS on;
+    nothing when until() held from the start. A failing until() stops the sampling. Returns the worst drift in ms.
+    """
+    out = log or logger
+
+    def finished() -> bool:
+        try:
+            return bool(until())
+        except Exception:  # pylint: disable=broad-exception-caught
+            return True
+
+    if finished():
+        return 0  # nothing to watch: no sample, no watcher thread, no line
+    threshold_s = LOOP_LAG_WARN_MS / 1000
+    watcher = _start_pause_watcher(asyncio.get_running_loop(), interval_s=interval_s, threshold_s=threshold_s,
+                                   log=out, label=label)
+    worst = 0.0
+    paused_total = 0.0
+    samples = 0
+    started = time.monotonic()  # the clock of the watcher's spans (and of the default event loops)
+    try:
+        while not finished() and time.monotonic() - started < max_s:
+            start, wall, cpu = time.monotonic(), _wall_clock(), _cpu_clock()
+            await asyncio.sleep(interval_s)
+            end = time.monotonic()
+            lag = end - start - interval_s
+            ahead = (_wall_clock() - wall) - (end - start)
+            paused = ahead if ahead >= _WALL_JUMP_S else 0.0  # skipped by the monotonic clock: none of it is lag
+            if lag >= threshold_s and watcher is not None:
+                frozen = watcher.paused_within(start, end, _cpu_clock() - cpu)
+                lag -= frozen
+                paused = max(paused, frozen)
+            worst = max(worst, lag)
+            paused_total += paused
+            samples += 1
+    finally:
+        if watcher is not None:
+            watcher.halt.set()
+        if samples:
+            worst_ms = int(round(worst * 1000))
+            paused_ms = int(round(paused_total * 1000))
+            level = logging.WARNING if worst_ms >= LOOP_LAG_WARN_MS else logging.INFO
+            if paused_ms:
+                out.log(level, "%s max_ms=%d during=%s samples=%d paused_ms=%d (the whole process was paused, e.g. "
+                        "sleep or standby; not counted as lag)", LAG_TAG, worst_ms, label, samples, paused_ms)
+            else:
+                out.log(level, "%s max_ms=%d during=%s samples=%d", LAG_TAG, worst_ms, label, samples)
+    return int(round(worst * 1000))

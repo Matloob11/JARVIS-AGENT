@@ -69,9 +69,10 @@ TYPED_MARK = "[typed]"   # conversation_router.TYPED_PREFIX without its trailing
 RESEED_ID_PREFIX = "reseed-"  # src/core/session_policy.RESEED_ID_PREFIX: a turn replayed from memory (C-114)
 # Lines that were never a real turn: injected context, proactive and bug-hunter lines, laptop data, a re-seed note
 # (session_policy.RESEED_SKIP_PREFIXES, which never replays them, minus the router's '[offline] ' answer: a chat
-# message the user saw, so it is saved, though never replayed as the model's turn).
+# message the user saw, so it is saved, though never replayed as the model's turn). C-53: a line that starts with the
+# RECENT MEMORY block's data tag ('[MEMORY DATA', src/core/memory_recall.py) is memory read back, never a new turn.
 INJECTED_PREFIXES = ("[JARVIS CONTEXT]", "[SYSTEM", "[LOG DATA", "System error detected", "[DESKTOP DATA",
-                     "[MEMORY]")
+                     "[MEMORY]", "[MEMORY DATA")
 MESSAGE_MAX_CHARS = 8000  # one saved message (a typed one is at most 4000, K-59)
 ID_MAX_CHARS = 128
 # After a failed save run() writes again only this long after it (the memory loop's 10 s, doubled), doubling with every

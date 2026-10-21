@@ -65,12 +65,27 @@ def add_context_note(turn_ctx: Any, text: str, role: str = "assistant") -> str:
     return append_turn_note(turn_ctx, llm.ChatMessage(role=role, content=[text]))
 
 
+def memory_summary_of(assistant: Any, persona: str) -> str:
+    """C-53: the assistant's RECENT MEMORY block for a composition of `persona` (BrainAssistant.memory_summary_for),
+    '' for an assistant without one (a stand-in, a mock) or when it fails."""
+    getter = getattr(type(assistant), "memory_summary_for", None)
+    if not callable(getter):
+        return ""
+    try:
+        summary = getter(assistant, persona)
+    except Exception:  # pylint: disable=broad-exception-caught  # the instructions never fail for the recall
+        return ""
+    return summary if isinstance(summary, str) else ""
+
+
 def build_instructions(assistant: Any, persona: str, *, wake_word: bool | None = None) -> str:
     """
     C-49: the assistant's full instructions for a persona ('jarvis' | 'anna') from
     jarvis_prompt.compose_instructions with its live context: date and city, identity facts, the wake-word mode
     (wake_word, else the assistant's), JARVIS_TURN_MODE, the outputs folder, JARVIS_CV_PATH, and for ANNA her mood
-    and the user and Sir backgrounds from the identity store.
+    and the user and Sir backgrounds from the identity store. C-53: the assistant's RECENT MEMORY block
+    (memory_summary_for(persona): set once at job start, only for the persona the job started as) goes in as
+    memory_summary; without one the composition is exactly as before.
     """
     anna_context = None
     if persona == "anna":
@@ -86,6 +101,7 @@ def build_instructions(assistant: Any, persona: str, *, wake_word: bool | None =
         current_city=getattr(assistant, "current_city", None) or "",
         project_age_days=project_age_days(),
         identity_context=jarvis_id.get_context(),
+        memory_summary=memory_summary_of(assistant, persona),
         turn_mode=runtime_turn_mode(),
         wake_word=wake_word,
         outputs_dir=getattr(config, "outputs_dir", None) or "Jarvis_Outputs",

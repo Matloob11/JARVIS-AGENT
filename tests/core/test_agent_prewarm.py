@@ -109,6 +109,20 @@ def test_a_failing_part_leaves_its_key_unset_and_never_raises(prewarm_env, monke
     assert proc.userdata["city"] == "Lahore"
 
 
+def test_prewarm_starts_the_vector_model_load_and_never_opens_chroma(prewarm_env, monkeypatch):
+    """C-53 step 2 (K-69): the hook starts the embedding model's load (VectorMemory.warm_model, its own thread) and
+    never the vector start-up (VectorMemory.prewarm, which opens Chroma)."""
+    from services.ai_core import jarvis_vector_memory as jvm
+
+    calls: list[str] = []
+    monkeypatch.setattr(ar, "_vector_model_prewarm_allowed", lambda: True)
+    monkeypatch.setattr(jvm.jarvis_vector_db, "warm_model", lambda: calls.append("warm_model"))
+    monkeypatch.setattr(jvm.jarvis_vector_db, "prewarm", lambda: calls.append("prewarm"))
+    proc = _proc()
+    ar.prewarm(proc)
+    assert calls == ["warm_model"] and len(proc.userdata["tools"]) == 79
+
+
 # ------------------------------------------------------------------ the entrypoint's userdata reads
 
 

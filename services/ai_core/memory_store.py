@@ -27,6 +27,18 @@ timestamp, user_id}.
   (a save that started before a clear by another job and lands after it, the merge path included).
 - A save that fails is logged at ERROR once per failure streak (with its cause, never a content), later failures of
   the streak at DEBUG; the extractor logs the streak's end.
+
+C-53:
+- read_conversations(user_id) reads the memory file without changing it (no cache, no corrupt-file move): the
+  RECENT MEMORY summary at job start (src/core/memory_recall.py) and other read-only callers use it.
+- Each new message of a save goes to the vector memory with its own id and source in the metadata, all of a save's
+  messages in one VectorMemory.add_memories call: once the vector memory is ready one worker thread writes them one
+  after another (a save never holds more than one executor worker), and before that they are all queued for its
+  start-up thread at once, so a job's loop that ends meanwhile loses none.
+- A vector-sync task whose event loop has stopped (a job's loop ended while its write waited for the vector start-up,
+  which makes the write anyway), or one that finished but whose done callback never ran (the loop stopped in the
+  iteration it finished), is dropped from _background_tasks (drop_stopped_loop_tasks, also run before every new sync
+  task); before, such tasks stayed referenced for the life of the worker process.
 """
 
 import asyncio
@@ -81,6 +93,71 @@ NEVER_CLEARED = (0, 0.0)
 def memory_backup_dir() -> str:
     """<project_root>/backups/memory (config.backups_dir), where clear() keeps the previous memory file."""
     return os.path.join(config.backups_dir, MEMORY_BACKUP_SUBDIR)
+
+
+def _loop_running(task: asyncio.Task[Any]) -> bool:
+    try:
+        return task.get_loop().is_running()
+    except Exception:  # pylint: disable=broad-exception-caught  # an odd task object counts as stopped
+        return False
+
+
+def drop_stopped_loop_tasks() -> int:
+    """
+    C-53: forgets the vector-sync tasks (_sync_to_vector_db) that can never leave _background_tasks by themselves:
+    - one whose event loop no longer runs: a job's loop that ends while such a task waits never finishes it, so its
+      done callback never removes it; the write itself is made by the vector start-up thread anyway (C-137). It is
+      never cancelled (its loop is gone) and never reported as 'destroyed but pending';
+    - one that is done but still here: its done callback (_background_tasks.discard) is queued with call_soon, and a
+      job's loop that stops in the iteration the task finished never runs it (on the Windows worker every job is a
+      thread of one process, so such a task would keep its closed job loop alive for the life of the process).
+    Returns how many were dropped.
+    """
+    stale = [task for task in list(_background_tasks) if task.done() or not _loop_running(task)]
+    pending = 0
+    for task in stale:
+        _background_tasks.discard(task)
+        if task.done():
+            continue
+        pending += 1
+        try:
+            task._log_destroy_pending = False  # type: ignore[attr-defined]  # pylint: disable=protected-access
+        except (AttributeError, TypeError):
+            pass
+    if pending:
+        logger.debug("Dropped %d vector sync task(s) of a stopped event loop", pending)
+    return len(stale)
+
+
+def memory_file_path(user_id: str, storage_path: str | None = None) -> str:
+    """<storage_path or config.conversations_dir>/<user_id>_memory.json, the file ConversationMemory(user_id) uses."""
+    return os.path.join(storage_path or config.conversations_dir, f"{user_id}_memory.json")
+
+
+def read_conversations(user_id: str, storage_path: str | None = None) -> list[Any]:
+    """
+    C-53: the conversations of the user's memory file, read only (blocking: run it in a thread). [] when there is no
+    file or it is empty. Under the file's process lock like every reader; decrypted with jarvis_crypto, else read as a
+    legacy plain JSON file. Unlike ConversationMemory.load_memory it never moves a file aside and touches no cache: a
+    file that is neither raises InvalidToken, one that cannot be read raises OSError, and the caller decides.
+    """
+    path = memory_file_path(user_id, storage_path)
+    with _file_lock(path):
+        try:
+            with open(path, 'rb') as f:
+                data = f.read()
+        except FileNotFoundError:
+            return []
+    if not data:
+        return []
+    try:
+        loaded = json.loads(jarvis_crypto.decrypt(data))
+    except (ValueError, RuntimeError, InvalidToken, TypeError):
+        try:
+            loaded = json.loads(data.decode("utf-8"))
+        except (ValueError, UnicodeError):
+            raise InvalidToken("Undecryptable memory") from None
+    return loaded if isinstance(loaded, list) else []
 
 
 def _remove_quietly(path: str) -> None:
@@ -437,7 +514,9 @@ class ConversationMemory:
                     return []
                 self.cache.extend(fresh)
                 if fresh:
-                    # Vector DB Sync (Background task to avoid blocking)
+                    # Vector DB Sync (Background task to avoid blocking). C-53: the leftovers of a stopped job loop
+                    # go first, so the set never keeps tasks that cannot finish.
+                    drop_stopped_loop_tasks()
                     t = asyncio.create_task(self._sync_to_vector_db(entry))
                     _background_tasks.add(t)
                     t.add_done_callback(_background_tasks.discard)
@@ -505,24 +584,34 @@ class ConversationMemory:
         self._read_state = _file_state(self.memory_file)
 
     async def _sync_to_vector_db(self, conversation_dict: dict[str, Any]) -> None:
-        """Sync messages to Vector DB in background coroutine."""
+        """Sync messages to Vector DB in background coroutine. C-53: each message goes with its own id (C-52) and source
+        in the metadata (and the persona of a reply), all of them in one VectorMemory.add_memories call: once the vector
+        memory is ready one worker thread writes them one after another (a save never holds more than one executor
+        worker), and before that they are queued for its start-up thread at once, so a job's loop that stops meanwhile
+        loses none."""
+        memories: list[dict[str, Any]] = []
+        for msg in conversation_dict.get('messages') or []:
+            if not isinstance(msg, dict):
+                continue
+            content = msg.get('content', '')
+            if not isinstance(content, str) or len(content) <= 5:  # Skip short filler
+                continue
+            metadata: dict[str, Any] = {
+                "user_id": self.user_id,
+                "role": msg.get('role', 'user'),
+                "timestamp": conversation_dict.get('timestamp'),
+            }
+            if isinstance(msg.get("persona"), str):
+                metadata["persona"] = msg["persona"]
+            source = msg.get("source")
+            memories.append({"text": content, "metadata": metadata, "memory_id": msg.get("id"),
+                             "source": source if isinstance(source, str) and source else "conversation"})
+        if not memories:
+            return
         try:
-            if conversation_dict.get('messages'):
-                for msg in conversation_dict['messages']:
-                    content = msg.get('content', '')
-                    role = msg.get('role', 'user')
-                    if content and len(content) > 5:  # Skip short filler
-                        # Call async vector DB directly
-                        await jarvis_vector_db.add_memory(
-                            text=content,
-                            metadata={
-                                "user_id": self.user_id,
-                                "role": role,
-                                "timestamp": conversation_dict.get('timestamp'),
-                            },
-                        )
+            await jarvis_vector_db.add_memories(memories)  # a write that fails is logged there (its error type)
         except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.error("Vector DB sync failed: %s", e)
+            logger.error("Vector DB sync failed for %d message(s): %s", len(memories), type(e).__name__)
 
     def add_flush_hook(self, hook: Callable[[], Awaitable[Any]]) -> None:
         """C-52: save_to_disk() runs hook (MemoryExtractor.flush registers itself) and counts what it wrote."""

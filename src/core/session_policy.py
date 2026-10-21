@@ -393,8 +393,9 @@ RESEED_NOTE = MEMORY_TAG + " Pichli baat-cheet ka hissa (taqreeban {minutes} min
 # (C-52, whose extractor saves the router's turn log) the router's '[offline] ' template answer of a typed message
 # that came while no session ran: saved as a chat message, never replayed as the model's own turn.
 OFFLINE_MARK = "[offline]"  # conversation_router.OFFLINE_PREFIX without its trailing space
+MEMORY_DATA_MARK = "[MEMORY DATA"  # C-53: the RECENT MEMORY block's data tag (memory_recall): memory read back
 RESEED_SKIP_PREFIXES = ("[JARVIS CONTEXT]", "[SYSTEM", "[LOG DATA", "System error detected", "[DESKTOP DATA",
-                        MEMORY_TAG, OFFLINE_MARK)
+                        MEMORY_TAG, OFFLINE_MARK, MEMORY_DATA_MARK)
 TYPED_MARK = "[typed]"     # conversation_router.TYPED_PREFIX without its trailing space
 REPLAY_ROLES = ("user", "assistant")
 PERSONAS = ("jarvis", "anna")  # C-52: the persona MemoryExtractor records on every saved reply ('unknown' otherwise)

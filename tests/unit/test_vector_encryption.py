@@ -121,7 +121,10 @@ async def test_the_vps_round_trip_is_encrypted_on_disk_and_recalls_by_meaning(mo
     assert await memory.add_memory(SECRET_FACT, {"user": "c124"})
     assert await memory.add_memory(OTHER_FACT, {"user": "c124"})
     hits = await memory.query_memory("bank PIN favourite colour", n_results=2)
-    assert hits[0]["document"] == SECRET_FACT and hits[0]["metadata"] == {"user": "c124"}
+    # C-53: the metadata also holds the memory's own id and its source (never the text)
+    assert hits[0]["document"] == SECRET_FACT and hits[0]["metadata"] == {
+        "user": "c124", "id": hits[0]["metadata"].get("id"), "source": jvm.DEFAULT_SOURCE}
+    assert isinstance(hits[0]["metadata"]["id"], str) and hits[0]["metadata"]["id"]
     assert hits[0]["score"] > hits[1]["score"]
     stored = memory.collection.get(include=["documents"])["documents"]
     assert all(doc.startswith(jvm.ENC_PREFIX) for doc in stored)

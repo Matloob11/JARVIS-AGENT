@@ -185,6 +185,11 @@ class BrainAssistant(Agent):
         self._pending_voice: str | None = None
         # C-50: the persona this job last sent the dashboard (persona_change); None until the job's first announce
         self._notified_persona: str | None = None
+        # C-53: the RECENT MEMORY block (src/core/memory_recall.py), set once before the job's first session.start, and
+        # the persona it was built for (only that persona's compositions carry it); a confirmed clear_memory drops it
+        # (forget_memory_summary)
+        self._memory_summary: str = ""
+        self._memory_summary_persona: str | None = None
         # C-54 (K-61): set by the job's settings service (agent_settings.SettingsService.note_live_change); a tool or a
         # spoken wake word that changes persona, voice or wake word calls it, so the change is saved and synced at once
         self.on_live_settings_change: Any = None
@@ -509,6 +514,72 @@ class BrainAssistant(Agent):
         """C-49: composes the active persona's instructions again (after the wake-word mode changed) and sends them
         to the live session."""
         await self.update_instructions(build_instructions(self, self.persona_manager.active_persona_name))
+
+    def memory_summary_for(self, persona: str) -> str:
+        """C-53: the RECENT MEMORY block for a composition of `persona`: the one set at job start when it was built for
+        that persona (its replies are the only ones in it), else ''. persona_manager.build_instructions reads it, so
+        every later composition (a wake-word toggle, a date or city refresh, a switch back) keeps the same block, until
+        a confirmed clear_memory drops it (forget_memory_summary)."""
+        summary = getattr(self, "_memory_summary", "")
+        if summary and persona == getattr(self, "_memory_summary_persona", None):
+            return summary
+        return ""
+
+    async def set_memory_summary(self, summary: str, persona: str) -> bool:
+        """
+        C-53: keeps the RECENT MEMORY block (memory_recall.build_memory_summary) for compositions of `persona` and,
+        when that is the active persona, composes the instructions again and stores them for the first session.start
+        (livekit only stores them while no session runs; no persona_change goes out, so C-54's single announce at the
+        session start stays the only one). Before the job's first session.start only: with a session running it changes
+        nothing (a mid-session update would cost a Gemini reconnect). Returns True when the stored instructions now
+        carry the block.
+        """
+        if getattr(self, "_activity", None) is not None:
+            logger.info("MEMORY_SUMMARY not set: a session already runs (only before the first session.start)")
+            return False
+        text = summary.strip() if isinstance(summary, str) else ""
+        self._memory_summary = text
+        self._memory_summary_persona = persona if persona in ("jarvis", "anna") else None
+        active = self.persona_manager.active_persona_name
+        if not text or self._memory_summary_persona != active:
+            return False
+        instructions = build_instructions(self, active)
+        self._instructions = instructions
+        self._pending_instructions = None  # what is stored now replaces anything still pending (as update_session)
+        await self._store_for_next_session(instructions, None, active)
+        return True
+
+    async def forget_memory_summary(self) -> bool:
+        """
+        C-53: after the owner's confirmed clear_memory (services/ai_core/control_commands.py) the RECENT MEMORY block
+        goes, so no later composition (a wake-word toggle, a persona switch, a date or city refresh) carries the cleared
+        messages. When the active persona's instructions carried it they are composed again without it and stored at
+        once, so a rebuilt session (C-33) starts without it and an update still waiting for a safe point goes out
+        without it. A running session is never updated for this alone: that would cost a fresh Gemini reconnect, which
+        replays the chat as client content. It keeps the system instruction it has (a fresh reconnect that brings no
+        update, such as a stop that cuts a reply server side, reuses it) until the next instruction update reaches it
+        (a wake-word toggle, a persona switch, a date or city refresh) or the session is rebuilt. Returns True when the
+        instructions were composed again.
+        """
+        active = self.persona_manager.active_persona_name
+        had = bool(getattr(self, "_memory_summary", ""))
+        live = self.memory_summary_for(active)
+        self._memory_summary = ""
+        self._memory_summary_persona = None
+        if not live:
+            if had:
+                logger.info("MEMORY_SUMMARY dropped (clear_memory); the %s instructions never carried it", active)
+            return False
+        instructions = build_instructions(self, active)
+        self._instructions = instructions
+        if getattr(self, "_activity", None) is None:
+            self._pending_instructions = None  # what is stored now replaces anything still pending (as update_session)
+            await self._store_for_next_session(instructions, None, active)
+        elif self._pending_instructions is not None:
+            self._pending_instructions = instructions  # the deferred update now goes out without the block
+        logger.info("MEMORY_SUMMARY dropped (clear_memory): the %s instructions composed again without it (chars=%d)",
+                    active, len(instructions))
+        return True
 
     async def tool_toggle_gf_mode(self, active: bool) -> dict[str, Any]:
         """Toggle GF (Anna) persona mode."""
