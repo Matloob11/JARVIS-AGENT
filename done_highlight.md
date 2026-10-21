@@ -2887,3 +2887,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** full suite 6090 passed; live (PC brain, svc standby): restart ke baad typed jawab, task_sync, aur plan_progress 1/3, 2/3 dashboard tak (C-86 routes); model ne pehle step ke baad bol diya aur 3/3/COMPLETED report nahi kiye (realtime model ki aadat, known limitation)
 - **Commit:** `c9ba9cc` · **Deploy:** ui-bridge c9ba9cc 16:54 PKT 🚀 (RESULT=ok; smoke ne ek doosri app ka thode der wala container gaayab dekha, jo hamari deploy ka nahi tha; backup /root/jarvis-backups/2026-10-21_1154Z-pre-deploy-c9ba9cc); PC worker restart 16:55 PKT 🔁
 - **Doosre agent ke liye:** reminder_due ka retry same id dobara bhejta hai jab tak notification_ack na mile (Cursor prompt ka B5); jarvis_reminders ki unique ids aur task manager ka thread-safe publish (B6/B7) ab bhi khule hain.
+
+### ✅ 🔁 [claude] K-59 note marker (3f089bf) · Agent worker restart (agent_ctl) · 2026-10-21 17:46 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 34916) band, naya pid 12444; health 200 (50.6 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 17:46 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ [claude] Review of Cursor f655520 + K-59 note marker + init_state degraded · 2026-10-21 17:50 PKT
+- **Kya kiya:** Cursor ke f655520 (REQ-FIX, RESCUE UI, X-60, REQ-PERF) ka adversarial review: 21 findings confirm. Orb ka look sahi wapas aaya, lekin ek naya regression mila: har source 'system' message (C-83 diffs, '[offline]' jawab, announcements) grey centred note ban jata tha, isliye frontend deploy hold aur REQ-FIX-2 section 11 mein (ebca900). REQ-PERF: interim liveness floor ke taur par shart ke saath qubool (DPR2 4x test asal mein DPR1 par chalta tha). Meri taraf: router ka 'jawab nahi ban saka' note ab kind 'typed_no_reply' bhejta hai (sirf yahi system line bane), aur bridge.db na parha ja sake to init_state khaali lists ki jagah lists chhod kar degraded ['store'] bhejta hai (memory panel galti se nahi mitega). Contracts v50 (K-42, K-59).
+- **Files:** `src/core/conversation_router.py`, `src/core/ui_bridge.py`, `tests/core/test_conversation_router.py`, `tests/infrastructure/test_bridge_store.py`, `tests/infrastructure/test_bridge_notify.py`, `docs/CONTRACTS.md`, `plan.md`
+- **Verify:** router 96, bridge infrastructure 783 passed; worker restart ke baad marker live (bridge use pehle se pass karta hai)
+- **Commit:** `3f089bf` (+ `ebca900` REQ-FIX-2) · **Deploy:** PC worker restart 17:46 PKT 🔁; bridge ka degraded hissa agle ui-bridge deploy (C-60) ke saath
+- **Doosre agent ke liye:** section 11 ki REQ-FIX-2 (17:30): pehla nukta ChatList isSystem = role 'system' ya kind 'typed_no_reply'.
