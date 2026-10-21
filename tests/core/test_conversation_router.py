@@ -1086,6 +1086,7 @@ async def test_a_message_that_fails_even_after_the_restart_gets_one_note(router,
     ((role, text, kwargs),) = _notes(router)
     assert role == "assistant" and text == cr.RESCUE_FAILED_TEXT and "jawab nahi ban saka" in text
     assert kwargs["source"] == "system" and kwargs["turn_id"] == "u-1" and kwargs["msg_id"] != "u-1"
+    assert kwargs["extra"] == {"kind": cr.RESCUE_NOTE_KIND} == {"kind": "typed_no_reply"}  # K-59 v50: the UI's marker
     assert session.rt.restarts == 1 and router.rescue_counts["resends"] == 1 and router.rescue_counts["notes"] == 1
     assert cr.RESCUE_FAILED_TEXT not in [entry["text"] for entry in router.turn_log]
     assert router._awaiting == {}

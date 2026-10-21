@@ -472,6 +472,24 @@ async def test_items_past_fifty_count_as_dropped_and_init_state_keeps_the_last_3
     assert state["vortex_logs"] == state["logs"]
 
 
+async def test_an_unreadable_store_leaves_the_stored_lists_out_of_init_state(bridge, monkeypatch):
+    """K-42 v50: when bridge.db cannot be read, init_state carries degraded ['store'] and no stored list at all, so a
+    UI keeps what it shows; an empty memories list would read as a clear and wipe the memory panel."""
+    async def unreadable(*_args: Any, **_kwargs: Any) -> Any:
+        raise RuntimeError("database is locked")
+
+    with monkeypatch.context() as patch:  # only this patch: the fixture's own patches stay in place
+        patch.setattr(bridge.store, "init_snapshot", unreadable)
+        state = await bridge.module.build_init_state()
+    assert state["degraded"] == ["store"]
+    for key in ("messages", "logs", "vortex_logs", "memories", "tool_logs", "notifications", "settings"):
+        assert key not in state, key
+    assert state["persona"] in ("jarvis", "anna") and "agent_status" in state  # the volatile part is still sent
+
+    healthy = await bridge.module.build_init_state()
+    assert "degraded" not in healthy and healthy["memories"] == [] and healthy["messages"] == []
+
+
 async def test_a_batch_without_lines_or_drops_emits_nothing_and_a_bad_payload_is_ignored(bridge):
     assert (await _signed(bridge, "vortex_log_batch", {"items": [], "dropped": 0})).json() == {"status": "ok"}
     assert (await _signed(bridge, "vortex_log_batch", {"items": "nope", "dropped": -5})).json() == {"status": "ok"}

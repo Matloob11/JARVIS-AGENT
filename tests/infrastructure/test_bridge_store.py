@@ -122,6 +122,16 @@ def test_normalize_maps_legacy_agent_fields():
                    "final": False, "ts": T0 + 0.5}
 
 
+def test_normalize_keeps_the_typed_no_reply_marker_for_the_ui():
+    """K-59 v50: the router's 'jawab nahi ban saka' note carries kind 'typed_no_reply' as an extra field; the bridge
+    keeps it next to source 'system' and turn_id, so the dashboard styles only this note as a system line."""
+    msg = normalize_message({"id": "n1", "role": "assistant", "text": "Sir, maazrat", "source": "system",
+                             "turn_id": "u-1", "kind": "typed_no_reply", "ts": T0})
+
+    assert msg["kind"] == "typed_no_reply" and msg["source"] == "system" and msg["role"] == "assistant"
+    assert msg["turn_id"] == "u-1"
+
+
 def test_normalize_defaults():
     msg = normalize_message({}, now=T0)
 
@@ -934,7 +944,8 @@ async def test_a_failing_store_never_blocks_live_events(bridge, monkeypatch):
     assert msg["id"] == "v9" and msg["role"] == "assistant" and msg["timestamp"] == msg["ts"]
     assert _events(bridge, "mute_update") == [True] and _events(bridge, "new_log") == [{"text": "log"}]
     state = await _connect_ui(bridge, "sid-1")
-    assert state["persona"] == "jarvis" and state["messages"] == []
+    # K-42 v50: an unreadable store leaves the stored lists out (a UI keeps what it shows) instead of sending them empty
+    assert state["persona"] == "jarvis" and "messages" not in state and state["degraded"] == ["store"]
 
 
 async def test_retention_task_prunes_with_the_env_value(bridge, monkeypatch):

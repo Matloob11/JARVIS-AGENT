@@ -127,6 +127,9 @@ RECONNECT_WAIT_S = 8.0       # and this long at most for the fresh connection (t
 NOTE_GRACE_S = 12.0          # a failed escalation's note first waits this long for a late reply (_note_owed)
 IDLE_FRESH_AFTER_S = 1800.0  # a typed message after this long without session activity restarts fresh first
 RESCUE_FAILED_TEXT = "Sir, maazrat, is message ka jawab nahi ban saka. Meherbani karke dobara bhej dein."
+# K-59 v50: the note's own marker (a K-58 extra field the bridge keeps), so the dashboard styles only this note as a
+# system line; the other source 'system' messages (offline answers, self-repair diffs, announcements) stay replies.
+RESCUE_NOTE_KIND = "typed_no_reply"
 PREVIEW_CHARS = 60
 
 # Results of the escalation's waits (_wait_until): a reason that reaches the log, never a text
@@ -866,7 +869,7 @@ class ConversationRouter:
         logger.warning("CHAT_ROUTER no reply for typed id=%s even after the escalation (%s): note posted", msg_id,
                        reason)
         await self._sent(self._emit_ordered("assistant", RESCUE_FAILED_TEXT, msg_id=str(uuid.uuid4()),
-                                            source="system", turn_id=msg_id))
+                                            source="system", turn_id=msg_id, extra={"kind": RESCUE_NOTE_KIND}))
 
     async def _reply_outcome(self, msg_id: str, session: Any, handle: Any) -> str:
         """How the reply a generate_reply started went: _ENDED (the message no longer waits: a reply came, a stop, a

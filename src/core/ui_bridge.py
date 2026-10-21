@@ -2210,10 +2210,7 @@ async def build_init_state() -> dict[str, Any]:
     snapshot: dict[str, Any] | None = await stored(
         "init_state read", store.init_snapshot(PERSISTED_DEFAULTS), None)
     persisted = copy.deepcopy(PERSISTED_DEFAULTS)
-    if snapshot is None:
-        snapshot = {"messages": [], "logs": [], "memories": [], "tool_logs": [], "settings": {},
-                    "notifications": []}
-    else:
+    if snapshot is not None:
         persisted.update(snapshot["kv"])
     state.update(persisted)
     since = bridge_manager.sim_loading_since
@@ -2225,15 +2222,20 @@ async def build_init_state() -> dict[str, Any]:
             state["sim_status"], state["sim_message"] = "idle", ""
     # Frontend expects 'persona' key, not 'active_persona'
     state["persona"] = state.get("active_persona", "jarvis")
-    state["messages"] = snapshot["messages"]
-    state["vortex_logs"] = snapshot["logs"]
-    state["logs"] = snapshot["logs"]
-    state["memories"] = snapshot["memories"]
-    state["tool_logs"] = snapshot["tool_logs"]
-    state["notifications"] = snapshot["notifications"]
-    if snapshot["settings"]:
-        # Only a stored object: an empty one would hide persona/muted from the settings panel.
-        state["settings"] = snapshot["settings"]
+    if snapshot is None:
+        # K-42 v50: bridge.db could not be read. The stored lists are left out rather than sent empty, because a UI
+        # reads an empty list as authoritative (an empty memories list is how a clear looks): it keeps what it shows.
+        state["degraded"] = ["store"]
+    else:
+        state["messages"] = snapshot["messages"]
+        state["vortex_logs"] = snapshot["logs"]
+        state["logs"] = snapshot["logs"]
+        state["memories"] = snapshot["memories"]
+        state["tool_logs"] = snapshot["tool_logs"]
+        state["notifications"] = snapshot["notifications"]
+        if snapshot["settings"]:
+            # Only a stored object: an empty one would hide persona/muted from the settings panel.
+            state["settings"] = snapshot["settings"]
     state["agent_status"] = build_agent_status()  # K-02/K-42 v9: the whole object; a late UI never shows 'Unknown'
     # C-29: a reloaded UI shows a still-pending confirmation again (the requests as they were sent).
     state["confirmations"] = [record["payload"] for record in
