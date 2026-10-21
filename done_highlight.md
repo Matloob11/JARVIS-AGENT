@@ -2845,3 +2845,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** full suite 5672 passed (1 desktop clock timing test load ke neeche fail, akele 3/3 aur poori file 42 passed); live: restart ke baad 14/14 typed sawalon ka jawab (pehla rescue se 15 s mein, baqi 2-5 s), phir 4/4 aur
 - **Commit:** `09b5f32` · **Deploy:** PC worker restart 13:15 PKT 🔁
 - **Doosre agent ke liye:** note ka shape K-59 v46 mein hai (Cursor prompt ka B4). Pata chala: naye Gemini session ka pehla turn 10-15 s mein shuru hota hai (bada system prompt + 89 tools; voice link ki wajah se nahi, test kiya), baad wale 2-3 s; follow-up: job start par session warm-up. LOOP_LAG 2.8 s session.start ke dauran hai, vector ke dauran nahi (label gumraah karta hai).
+
+### ✅ 🔁 [claude] C-86 routes live check · Agent worker restart (agent_ctl) · 2026-10-21 15:55 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 37460) band, naya pid 20432; health 200 (45.2 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 15:55 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ 🚀 [claude] C-86 follow-up · Bridge routes: plan_progress, task_sync, map focus, memory cap · 2026-10-21 16:05 PKT
+- **Kya kiya:** Review mein mila ke plan_progress kabhi dashboard tak nahi pahunchta tha (planner purane legacy token se bhejta tha, internal listener 401 deta tha, aur bridge mein route hi nahi tha). Ab planner jarvis_bridge se signed bhejta hai, bridge 'plan_progress' route karta hai, aur tool sirf tab 'success' kehta hai jab line sach mein dikhi. Audit mein aur bhi mila: task_sync 'UNKNOWN EVENT' mein girta tha (ab route hota hai, due_at epoch mein, init_state.tasks mein), panel ka Cancel/Refresh ab kaam karta hai, map search device location ko overwrite nahi karta (map_focus_update), task text INFO logs se bahar, memory events 200 par cap, aur v2 keys ke baghair internal listener ko koi credential nahi. Contracts v47. Saath: desktop clock wala round-trip test load ke neeche flaky tha, ab dono taraf se dobara ping karta hai.
+- **Files:** `services/ai_core/autonomous_planner.py`, `services/utils/plan_progress.py`, `services/utils/task_items.py`, `services/utils/jarvis_bridge.py`, `services/utils/jarvis_logger.py`, `services/ai_core/agent_loops.py`, `src/core/ui_bridge.py`, `src/core/bridge_store.py`, `src/core/agent_core.py`, `deploy/windows-local/TOOLS.md`, tests, `docs/CONTRACTS.md`, `plan.md`
+- **Verify:** full suite 5880 passed (sirf woh flaky test, jo ab sakht kar diya: file 3/3 dafa 42 passed); VPS par task_zone Asia/Karachi; live: tasks_refresh ke baad task_sync aaya ('TASKS refresh via UI: 0 pending task(s) published (delivered)'). 3-step plan ka live check laptop ki RAM khatam hone ki wajah se adhoora (MEM 96.9%, LOOP_LAG 5.9 s, Gemini ne <ctrl46> tokens diye): RAM khaali hone par dobara
+- **Commit:** `cea912b` + `74ad734` · **Deploy:** ui-bridge 74ad734 15:53 PKT 🚀 (RESULT=ok, other apps identical, backup /root/jarvis-backups/2026-10-21_1053Z-pre-deploy-74ad734); PC worker restart 15:55 PKT 🔁
+- **Doosre agent ke liye:** section 11 ki C-86 routes line dekho (plan_progress flat shape, task_sync due_at epoch ya null, map_focus_update, voice enroll progress voice_id_status mein, task manager ke liye do backend requests).
