@@ -2817,3 +2817,17 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** vitest 59 passed; e2e chromium 283 passed; test:electron 5 passed; test:perf 5; pytest cursor-lane 352/8 skip
 - **Commit:** c55cbc0..177d465 · **Deploy:** REQ-DEPLOY frontend (batch)
 - **Doosre agent ke liye:** C-60 / RESCUE / C-125 UI waits for Claude §11 lines
+
+### ✅ 🔁 [claude] C-53 live check · Agent worker restart (agent_ctl) · 2026-10-21 12:17 PKT
+- **Kya kiya:** `agent_ctl restart`: purana worker (pid 45420) band, naya pid 1992; health 200 (45.5 s me), ensure_room.py: OK, an agent of the current worker is in the room (bridge).
+- **Files:** —
+- **Verify:** `.venv_312/Scripts/python.exe scripts/agent_ctl.py status` → health 200
+- **Commit:** abhi nahi · **Deploy:** PC agent restart 12:17 PKT
+- **Doosre agent ke liye:** —
+
+### ✅ [claude] C-53 · Pichli baat-cheet ki yaad instructions ke zariye (re-seed ki jagah) · 2026-10-21 12:30 PKT
+- **Kya kiya:** Job ke shuru mein memory file se '[MEMORY DATA, untrusted] RECENT MEMORY' block instructions mein jata hai (7 din ke newest 12 messages, sirf usi persona ke jawab jis mein job chal rahi hai, max 2,500 chars; JARVIS mein owner 'Sir', ANNA mein 'Matloob'); chat items kabhi nahi, isliye v43 wala typed masla wapas nahi aata. clear_memory par block hat jata hai. Worker prewarm MiniLM load karta hai magar Chroma nahi kholta; vector start-up ke dauran loop-lag sampler; vector metadata mein id, source, persona. Contracts v45 (K-07, K-19, K-60, K-69).
+- **Files:** `src/core/memory_recall.py`, `src/core/agent_core.py`, `src/core/agent_runner.py`, `src/core/persona_manager.py`, `src/core/session_policy.py`, `services/ai_core/memory_store.py`, `services/ai_core/jarvis_vector_memory.py`, `services/ai_core/agent_memory.py`, `services/ai_core/control_commands.py`, `services/utils/jarvis_loopwatch.py`, tests, `docs/CONTRACTS.md`, `plan.md`
+- **Verify:** full suite 5634 passed, 45 skipped; live: MEMORY_SUMMARY injected n=9 chars=634 persona=jarvis session start se pehle; "pichli dafa" ka jawab pichla topic (math sawal) bataya; typed 4 mein se 3 ka jawab aaya (ek Gemini flake)
+- **Commit:** `1a29099` · **Deploy:** PC worker restart 12:17 PKT 🔁
+- **Doosre agent ke liye:** UI mein kuch nahi badla. Khula: LOOP_LAG max 1806 ms worker start ke pehle ~35 s mein (shayad torch DLL import GIL pakadta hai); follow-up.
