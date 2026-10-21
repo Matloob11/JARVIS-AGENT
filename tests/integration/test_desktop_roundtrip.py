@@ -79,6 +79,22 @@ async def first_clock_sample(link: dl.DesktopLink, timeout: float = 5.0) -> None
             await link.ping()
 
 
+async def both_clocks_measured_again(link: dl.DesktopLink, node: Any, timeout: float = 5.0) -> None:
+    """Waits until neither the link's nor the node's clock shows the old skew. The pings right after the new session's
+    handshake measure both again; on a loaded machine the 15.6 ms clock tick can make an estimator drop such an
+    in-process sample (see first_clock_sample), so each side whose clock still shows the skew pings again every 0.1 s,
+    as it would at its next ping."""
+    deadline = time.monotonic() + timeout
+    while link.clock.skew_exceeded() or node.clock.skew_exceeded():
+        if time.monotonic() > deadline:
+            raise AssertionError("timed out waiting for both clocks measured again")
+        await asyncio.sleep(0.1)
+        if link.clock.skew_exceeded():
+            await link.ping()
+        if node.clock.skew_exceeded():
+            await node.link.ping()
+
+
 # --- the fake bridge --------------------------------------------------------------------------------------------
 
 class End:
@@ -1400,8 +1416,7 @@ async def test_a_new_node_session_after_the_laptop_clock_was_set_back_is_joined_
     w.node_clock["skew"] = 0.0  # the clock fix: the laptop's clock steps back 90 s
     w.relay.drop_node()  # and the node reconnects with a new session
     await until(lambda: link.session is not None and link.session.sess != old, what="the new session joined")
-    await until(lambda: not link.clock.skew_exceeded() and not w.node.clock.skew_exceeded(),
-                what="both clocks measured again")
+    await both_clocks_measured_again(link, w.node)
     assert link.clock.offset_s is not None and abs(link.clock.offset_s) < 5.0
     outcome = await link.run_call(request("get_laptop_info"))
     assert outcome.kind == dl.RESULT and outcome.status == "completed"
