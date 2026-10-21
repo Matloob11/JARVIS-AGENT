@@ -205,6 +205,25 @@ describe('useCommandCenter plan_progress (C-86)', () => {
     expect(hook.result.current.planProgress?.current).toBe(3);
   });
 
+  it('clears plan bar on manual reconnectBridge', async () => {
+    const hook = renderHook(() => useCommandCenter());
+    act(() => {
+      bus.fire('plan_progress', wrapped(1, 'Scan', 'IN_PROGRESS'));
+    });
+    expect(hook.result.current.planProgress?.status).toBe('IN_PROGRESS');
+    await act(async () => {
+      await hook.result.current.reconnectBridge(
+        {
+          roomState: 'idle' as const,
+          connectRoom: async () => undefined,
+          setMicOff: async () => undefined,
+        },
+        { online: true },
+      );
+    });
+    expect(hook.result.current.planProgress).toBeNull();
+  });
+
   it('hides COMPLETED after a few seconds; FAILED after ~60s; IN_PROGRESS after ~3min stale', () => {
     const hook = renderHook(() => useCommandCenter());
     act(() => {

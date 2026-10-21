@@ -329,7 +329,7 @@ export function SettingsPage({
 
   const debugMode =
     typeof window !== 'undefined' &&
-    new URLSearchParams(window.location.search).has('debug');
+    new URLSearchParams(window.location.search).get('debug') === '1';
 
   useEffect(() => {
     if (!debugMode) return;

@@ -80,7 +80,7 @@ export const SOCKET_EVENT_MATRIX: readonly SocketEventRow[] = [
     event: 'reminder_due',
     contract: 'K-02/K-77',
     coverage: 'tolerant',
-    note: 'awaiting_emitter: task_notification carries due reminders today',
+    note: 'C-125 live: bridge emits reminder_due until notification_ack',
   },
   { event: 'location_update', contract: 'K-02', coverage: 'tolerant' },
   { event: 'map_focus_update', contract: 'K-02', coverage: 'tolerant' },

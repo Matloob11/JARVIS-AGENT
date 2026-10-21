@@ -2901,3 +2901,16 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** router 96, bridge infrastructure 783 passed; worker restart ke baad marker live (bridge use pehle se pass karta hai)
 - **Commit:** `3f089bf` (+ `ebca900` REQ-FIX-2) · **Deploy:** PC worker restart 17:46 PKT 🔁; bridge ka degraded hissa agle ui-bridge deploy (C-60) ke saath
 - **Doosre agent ke liye:** section 11 ki REQ-FIX-2 (17:30): pehla nukta ChatList isSystem = role 'system' ya kind 'typed_no_reply'.
+### 🟡 [cursor] X-60 · PARTIAL correction (16:30 over-claim) · 2026-10-21 18:30 PKT
+- **Kya kiya:** 16:30 entry ne X-60 DONE kaha; Claude REQ-FIX-2 (10) se wapas DOING (fake mic / logout opt-in / exactly-once settle / debug===1). Ab gaps band: live config fake media + `assets/audio/silent-live-smoke.wav`, logout `JARVIS_LIVE_SMOKE_LOGOUT=1`, settle exactly-once, README warning.
+- **Files:** stonix_ui/playwright.live.config.ts, tests/live/live.spec.ts, tests/live/README.md, assets/audio/silent-live-smoke.wav, LiveKitProvider, SettingsPage
+- **Verify:** `npx playwright test -c playwright.live.config.ts --list` → 9 tests
+- **Commit:** (this commit) · **Deploy:** no (live smoke opt-in)
+- **Doosre agent ke liye:** VPS live run owner storageState ke baad; logout session revoke karta hai
+
+### ✅ [cursor] REQ-FIX-2 · ChatList K-59 + Stop/Retry/memory/plan/orb/perf/matrix/X-60/routes/C-125/audit · 2026-10-21 18:30 PKT
+- **Kya kiya:** REQ-FIX-2 (1)-(13): isSystem typed_no_reply only; Stop/Retry; memory seed; plan reconnect clear; orb phases; real DPR2 perf (med 19.4 @4×); matrix fail-closed; X-60; flat plan fixtures; tasks/reminders/task_manager; 18 VPS tools audit.
+- **Files:** stonix_ui/** (ChatList, useChat, useMemories, useCommandCenter, orb*, perf, live, matrix scan, fixtures), services/automation/jarvis_{reminders,task_manager}.py, assets/qa-vps-tools-readiness-2026-10-21.md, assets/audio/silent-live-smoke.wav, plan.md
+- **Verify:** vitest 73; e2e 282(+1 re-pass); electron 5; test:perf 5; pytest cursor-lane 352; live --list 9
+- **Commit:** (this commit) · **Deploy:** REQ-DEPLOY frontend
+- **Doosre agent ke liye:** REQ-PERF fps_med=19.4 @ DPR2×4; deploy HOLD (1) clear; C-60 wait

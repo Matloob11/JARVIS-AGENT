@@ -1056,6 +1056,7 @@ export const useCommandCenter = () => {
       agent: { online: boolean; paused?: boolean },
     ) => {
       try {
+        clearPlanProgress();
         const lkStateBefore = liveKit.roomState;
         disconnectSocket();
         setIsConnected(false);
@@ -1083,7 +1084,7 @@ export const useCommandCenter = () => {
         toast.error('Reconnect failed');
       }
     },
-    [waitForSocketConnect],
+    [clearPlanProgress, waitForSocketConnect],
   );
 
   useEffect(() => {

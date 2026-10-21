@@ -34,6 +34,7 @@ function rawToChatMessage(raw: unknown, existing?: ChatMessage): ChatMessage {
     ts: n.ts,
     source: n.source ?? existing?.source,
     turn_id: n.turn_id ?? existing?.turn_id,
+    kind: n.kind ?? existing?.kind,
     final: n.final ?? existing?.final,
     status: existing?.status,
     statusHint: existing?.statusHint,
@@ -72,6 +73,8 @@ export function useChat() {
   const resendWhenOnlineRef = useRef(new Set<string>());
   const captionTimersRef = useRef(new Map<'user' | 'assistant', number>());
   const agentOnlineRef = useRef(true);
+  /** Stop pressed: later 'sent' ack / echo marks delivered but must not armAwaiting. */
+  const stoppedRef = useRef(false);
   const voice = useLiveKit();
   const { persona } = useSettings();
   const personaRef = useRef(persona);
@@ -103,6 +106,7 @@ export function useChat() {
   );
 
   const clearAllAwaiting = useCallback(() => {
+    stoppedRef.current = true;
     for (const id of awaitingReplyRef.current) {
       const row = mapRef.current.get(id);
       if (row?.statusHint && row.status !== 'failed') {
@@ -113,6 +117,19 @@ export function useChat() {
     replyTimersRef.current.clear();
     awaitingReplyRef.current.clear();
     setAwaitingReply(false);
+    // Rows still waiting for ack: clear timers; mark delivered without arming reply wait.
+    for (const [id, timer] of pendingDeliveryRef.current) {
+      window.clearTimeout(timer);
+      const row = mapRef.current.get(id);
+      if (row && row.status !== 'failed') {
+        mapRef.current.set(id, {
+          ...row,
+          status: 'delivered',
+          statusHint: undefined,
+        });
+      }
+    }
+    pendingDeliveryRef.current.clear();
     syncFromMap();
   }, [syncFromMap]);
 
@@ -202,7 +219,7 @@ export function useChat() {
           status: 'delivered',
           statusHint: replyStatusHint(personaRef.current),
         };
-        armAwaiting(next.id);
+        if (!stoppedRef.current) armAwaiting(next.id);
       }
 
       if (next.role !== 'user' && next.turn_id && awaitingReplyRef.current.has(next.turn_id)) {
@@ -337,7 +354,7 @@ export function useChat() {
               status: 'delivered',
               statusHint: 'Delivered ✓',
             });
-            armAwaiting(id);
+            if (!stoppedRef.current) armAwaiting(id);
             syncFromMap();
             return;
           }
@@ -411,6 +428,7 @@ export function useChat() {
     (text: string) => {
       const trimmed = text.trim();
       if (!trimmed) return;
+      stoppedRef.current = false;
       sendInternal(crypto.randomUUID(), trimmed);
     },
     [sendInternal],
@@ -420,9 +438,18 @@ export function useChat() {
     (id: string) => {
       const row = mapRef.current.get(id);
       if (!row || row.role !== 'user') return;
+      stoppedRef.current = false;
+      // K-59 dedupe: reply-timeout retries need a fresh id; delivery failures keep the same id.
+      if (row.statusHint === REPLY_TIMEOUT_HINT || row.statusHint?.startsWith('Jawab nahi aaya')) {
+        mapRef.current.delete(id);
+        clearAwaiting(id);
+        syncFromMap();
+        sendInternal(crypto.randomUUID(), row.text);
+        return;
+      }
       sendInternal(id, row.text);
     },
-    [sendInternal],
+    [clearAwaiting, sendInternal, syncFromMap],
   );
 
   const loadOlderMessages = useCallback(async () => {

@@ -82,6 +82,8 @@ export class OrbRenderer {
   private L = 0;
   private prevL = 0;
   private userL = 0;
+  /** Integrated animation clock (only advances on animated frames — not wall age). */
+  private animT = 0;
   private ripples: Ripple[] = [];
   private look: OrbLook = {};
   private env: DrawEnv = {
@@ -115,6 +117,14 @@ export class OrbRenderer {
     const cfg = STATE_CFG[state];
     setPaletteTargets(persona, cfg.grey, cfg.dim);
     this.look = { ...cfg.look };
+    // Drop speech energy so idle/mic-off enter breath (~15 dps) instead of
+    // staying on full RAF while ripples/L from the previous speaking bout settle.
+    if (state === 'idle' || state === 'mic-off') {
+      this.L = 0;
+      this.prevL = 0;
+      this.userL = 0;
+      this.ripples.length = 0;
+    }
     if (this.reducedMotion) {
       this.drawStatic();
       return;
@@ -245,7 +255,9 @@ export class OrbRenderer {
     }
     if (mode === 'breath') {
       if (!this.breathTimer) {
-        const delay = Math.max(0, 66 - (performance.now() - this.lastDraw));
+        // ~13–14 dps target: 75 ms leaves margin under the ≤16 draws/s gate
+        // (66 ms + timer jitter could land on 17 in a 1 s window).
+        const delay = Math.max(0, 75 - (performance.now() - this.lastDraw));
         this.breathTimer = setTimeout(() => {
           this.breathTimer = null;
           if (!this.raf && this.orbOnScreen()) {
@@ -337,10 +349,24 @@ export class OrbRenderer {
       (this.state === 'listening' && user.level <= 0.02 && this.L <= 0.02);
 
     if (levelStill && (this.state === 'speaking' || this.state === 'listening')) {
+      // Freeze on integrated phases (not wall t=0) so pause does not yank rings/swirl.
+      // Clear ripples so settling() does not keep us on full RAF while quiet.
+      this.ripples.length = 0;
       audioEngine.setRate('coarse');
       const { ctx, k } = setupOrbCanvas(this.orb, 520, 520, this.orbCssPx, this.phone);
-      drawOrbExact(ctx, k, 0, 0, this.state, this.persona, true, this.look, [], this.env);
-      this.paintWave(0, 0, null);
+      drawOrbExact(
+        ctx,
+        k,
+        this.animT,
+        0,
+        this.state,
+        this.persona,
+        true,
+        this.look,
+        [],
+        this.env,
+      );
+      this.paintWave(this.animT, 0, null);
       this.drawCount += 1;
       this.schedule();
       return;
@@ -349,6 +375,7 @@ export class OrbRenderer {
     const dt = Math.min(0.1, (now - this.lastFrame) / 1000);
     this.lastFrame = now;
     this.lastDraw = now;
+    this.animT += dt;
 
     stepPalette(dt);
     audioEngine.setRate(mode === 'full' ? 'frame' : 'coarse');
@@ -395,7 +422,7 @@ export class OrbRenderer {
     drawOrbFrame(
       ctx,
       k,
-      t,
+      this.animT,
       this.L,
       this.state,
       this.persona,
@@ -410,7 +437,7 @@ export class OrbRenderer {
     if (waveMode === 'speaking') waveBands = agent.bands;
     else if (waveMode === 'listening') waveBands = user.bands;
     const waveL = waveMode === 'listening' ? this.userL : this.L;
-    this.paintWave(t, waveL, waveBands);
+    this.paintWave(this.animT, waveL, waveBands);
 
     if (this.state === 'listening' && this.userL > 0.01) {
       this.userRing.hidden = false;

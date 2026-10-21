@@ -67,6 +67,31 @@ _LOCAL_FORBIDDEN_ACTIONS = {"confirm_action", "schedule_task", "cancel_scheduled
 
 # Background publish tasks kept alive until they finish (K-13 _emit_tool_sync pattern).
 _publish_tasks: "set[asyncio.Task[None]]" = set()
+# First loop that ran publish — used from worker threads (C-125 B7 / C-86 routes).
+_publish_loop: Optional[asyncio.AbstractEventLoop] = None
+
+
+def _due_at_epoch_seconds(scheduled_time: Any) -> Optional[float]:
+    """Convert stored scheduled_time (ISO naive in scheduling TZ) to epoch seconds."""
+    if scheduled_time is None:
+        return None
+    if isinstance(scheduled_time, (int, float)):
+        return float(scheduled_time)
+    text = str(scheduled_time).strip()
+    if not text:
+        return None
+    try:
+        dt = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    tz_name = (os.getenv("TZ") or _DEFAULT_TZ).strip() or _DEFAULT_TZ
+    try:
+        tz = ZoneInfo(tz_name)
+    except Exception:  # pylint: disable=broad-exception-caught
+        tz = ZoneInfo(_DEFAULT_TZ)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=tz)
+    return dt.timestamp()
 
 # X-66: busy_timeout (ms) every connection waits for a lock held by another process/thread before raising
 # "database is locked", on top of WAL journalling (readers never block writers, and vice versa).
@@ -128,7 +153,7 @@ async def _post_task_sync(tasks: List[Dict[str, Any]]) -> None:
                 {
                     "id": row.get("id"),
                     "description": row.get("description"),
-                    "due_at": row.get("scheduled_time"),
+                    "due_at": _due_at_epoch_seconds(row.get("scheduled_time")),
                     "source": "task",
                     "kind": row.get("kind") or "task",
                     "status": row.get("status"),
@@ -382,18 +407,32 @@ class TaskManager:
             conn.commit()
 
     def _publish(self) -> None:
-        """EXT DASH-U13: fire-and-forget task_sync; a no-op without a running loop."""
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            return
+        """EXT DASH-U13: fire-and-forget task_sync; safe from worker threads (C-125 B7)."""
+        global _publish_loop
         try:
             snapshot = self.list_pending_tasks()
         except Exception:  # pylint: disable=broad-exception-caught
             snapshot = []
-        task = loop.create_task(_post_task_sync(snapshot))
-        _publish_tasks.add(task)
-        task.add_done_callback(_publish_tasks.discard)
+        try:
+            loop = asyncio.get_running_loop()
+            _publish_loop = loop
+            task = loop.create_task(_post_task_sync(snapshot))
+            _publish_tasks.add(task)
+            task.add_done_callback(_publish_tasks.discard)
+            return
+        except RuntimeError:
+            pass
+        loop = _publish_loop
+        if loop is not None and loop.is_running():
+            asyncio.run_coroutine_threadsafe(_post_task_sync(snapshot), loop)
+
+    async def publish_snapshot(self) -> None:
+        """Public async publish for the agent loop (same payload as _publish)."""
+        try:
+            snapshot = self.list_pending_tasks()
+        except Exception:  # pylint: disable=broad-exception-caught
+            snapshot = []
+        await _post_task_sync(snapshot)
 
     def _set_status(self, task_id: int, status: str, **extra_cols: Any) -> None:
         now = scheduling_now().isoformat()

@@ -9,7 +9,8 @@ interface TasksPanelProps {
   onRefresh: () => void;
 }
 
-function formatDueClock(dueMs: number): string {
+function formatDueClock(dueMs: number | null): string {
+  if (dueMs == null) return 'koi waqt nahi';
   return new Date(dueMs).toLocaleString('en-US', {
     month: 'short',
     day: 'numeric',
@@ -59,7 +60,14 @@ const TasksPanel = ({
     return () => window.clearInterval(timer);
   }, []);
 
-  const sorted = useMemo(() => [...rows].sort((a, b) => a.due_at - b.due_at), [rows]);
+  const sorted = useMemo(() => {
+    return [...rows].sort((a, b) => {
+      if (a.due_at == null && b.due_at == null) return 0;
+      if (a.due_at == null) return 1;
+      if (b.due_at == null) return -1;
+      return a.due_at - b.due_at;
+    });
+  }, [rows]);
 
   const requestCancel = (id: string, source: TaskSource) => {
     setPendingCancel({ id, source });
@@ -119,8 +127,9 @@ const TasksPanel = ({
         <div className="space-y-2" data-testid="tasks-list">
           {sorted.map(row => {
             const cancellable =
-              !row.status ||
-              ['pending', 'scheduled', 'queued'].includes(String(row.status).toLowerCase());
+              row.source !== 'reminder' &&
+              (!row.status ||
+                ['pending', 'scheduled', 'queued'].includes(String(row.status).toLowerCase()));
             return (
               <div
                 key={row.id}
@@ -135,7 +144,7 @@ const TasksPanel = ({
                     <span className={statusPill(row.status)}>{row.status}</span>
                   ) : null}
                   <span className="task-row__countdown" data-testid="task-countdown">
-                    {formatTaskCountdown(row.due_at, nowMs)}
+                    {row.due_at == null ? 'koi waqt nahi' : formatTaskCountdown(row.due_at, nowMs)}
                   </span>
                   <span className="task-row__due">{formatDueClock(row.due_at)}</span>
                 </div>

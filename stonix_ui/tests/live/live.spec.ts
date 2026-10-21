@@ -10,10 +10,12 @@ const LIVE_DIR = dirname(fileURLToPath(import.meta.url));
  * Default: every test skips with a clear reason.
  * Enable: JARVIS_LIVE_SMOKE=1 (and storageState from npm run test:e2e:live:auth).
  * Chat ping: also set JARVIS_LIVE_SMOKE_CHAT=1.
+ * Logout: also set JARVIS_LIVE_SMOKE_LOGOUT=1 (revokes the saved session).
  */
 
 const LIVE = process.env.JARVIS_LIVE_SMOKE === '1';
 const LIVE_CHAT = process.env.JARVIS_LIVE_SMOKE_CHAT === '1';
+const LIVE_LOGOUT = process.env.JARVIS_LIVE_SMOKE_LOGOUT === '1';
 const STORAGE =
   process.env.E2E_STORAGE_STATE ||
   resolve(LIVE_DIR, '.auth/storageState.json');
@@ -61,7 +63,7 @@ async function attachInitStateCapture(page: Page): Promise<{
       }
     });
   } catch {
-    /* CDP unavailable — keys() stays null; test will fail with a clear message */
+    /* CDP unavailable */
   }
   return {
     keys: () => initKeys,
@@ -111,7 +113,6 @@ test.describe('X-60 live smoke (VPS)', () => {
   });
 
   test('init_state keys arrive over the socket', async ({ page }) => {
-    // Websocket listener BEFORE navigation so the first init_state is not missed.
     const capture = await attachInitStateCapture(page);
     try {
       await page.goto('/', { waitUntil: 'domcontentloaded' });
@@ -149,7 +150,6 @@ test.describe('X-60 live smoke (VPS)', () => {
   });
 
   test('settings panel loads without sending settings_update', async ({ page }) => {
-    // Attach websocket listener before navigation / click.
     const updates: unknown[] = [];
     page.on('websocket', ws => {
       ws.on('framesent', frame => {
@@ -174,14 +174,14 @@ test.describe('X-60 live smoke (VPS)', () => {
     ).toHaveLength(0);
   });
 
-  test('chat history renders', async ({ page }) => {
+  test('chat history renders after hydration', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId('app-ready')).toBeVisible({ timeout: 45_000 });
     await expect(
       page.getByTestId('chat-panel'),
       'FAIL: chat history — chat-panel missing',
     ).toBeVisible({ timeout: 30_000 });
-    // Poll past empty-state race while history hydrates.
+    // Wait past the first empty-state paint until history or empty settles.
     await expect
       .poll(
         async () => {
@@ -190,8 +190,8 @@ test.describe('X-60 live smoke (VPS)', () => {
           return msgs > 0 || empty;
         },
         {
-          timeout: 30_000,
-          message: 'FAIL: chat history — neither chat-msg rows nor chat-empty rendered',
+          timeout: 45_000,
+          message: 'FAIL: chat history — neither chat-msg rows nor chat-empty after hydration',
         },
       )
       .toBe(true);
@@ -223,10 +223,6 @@ test.describe('X-60 live smoke (VPS)', () => {
     const userId = await userRows.first().getAttribute('data-id');
     expect(userId, 'FAIL: chat ping — user row missing data-id').toBeTruthy();
 
-    // Exactly-once: still one user row with this ping text.
-    await expect(userRows).toHaveCount(1);
-
-    // Sibling assistant after that user row (data-role is on the row itself).
     const assistantAfter = page.locator(
       `[data-testid="chat-msg"][data-role="user"][data-id="${userId}"] ~ [data-testid="chat-msg"][data-role="assistant"]`,
     );
@@ -234,16 +230,35 @@ test.describe('X-60 live smoke (VPS)', () => {
       assistantAfter.first(),
       'FAIL: chat ping — no assistant sibling within 45s after typed ping',
     ).toBeVisible({ timeout: 45_000 });
+
+    // Exactly-once after settle: still one user row with this ping + this data-id.
+    await page.waitForTimeout(1500);
+    await expect(userRows).toHaveCount(1);
+    expect(await userRows.first().getAttribute('data-id')).toBe(userId);
   });
 
   test('3 mic toggles keep the same LiveKit identity (?debug=1)', async ({ page }) => {
+    const wsFrames: string[] = [];
+    page.on('websocket', ws => {
+      ws.on('framesent', frame => {
+        const data = typeof frame.payload === 'string' ? frame.payload : '';
+        if (data.includes('ui_command') || data.includes('settings_update')) {
+          wsFrames.push(data);
+        }
+      });
+    });
+
     await page.goto('/?debug=1', { waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId('app-ready')).toBeVisible({ timeout: 45_000 });
 
     await expect
       .poll(
         async () =>
-          page.evaluate(() => (window as unknown as { __jarvisDebug?: { identity?: string } }).__jarvisDebug?.identity ?? ''),
+          page.evaluate(
+            () =>
+              (window as unknown as { __jarvisDebug?: { identity?: string } }).__jarvisDebug
+                ?.identity ?? '',
+          ),
         {
           timeout: 60_000,
           message: 'FAIL: mic identity — window.__jarvisDebug.identity empty with ?debug=1',
@@ -252,27 +267,47 @@ test.describe('X-60 live smoke (VPS)', () => {
       .not.toBe('');
 
     const before = await page.evaluate(
-      () => (window as unknown as { __jarvisDebug?: { identity?: string } }).__jarvisDebug?.identity ?? '',
+      () =>
+        (window as unknown as { __jarvisDebug?: { identity?: string } }).__jarvisDebug?.identity ??
+        '',
     );
 
-    // Mic toggle lives in the voice popover.
     await page.getByTestId('chip-voice').click();
     const mic = page.getByTestId('topbar-mic-toggle');
     await expect(mic, 'FAIL: mic identity — topbar-mic-toggle missing').toBeVisible({
       timeout: 15_000,
     });
     for (let i = 0; i < 3; i += 1) {
+      const beforeToggle = await mic.getAttribute('data-enabled');
       await mic.click();
-      await page.waitForTimeout(400);
+      await expect
+        .poll(async () => mic.getAttribute('data-enabled'), {
+          timeout: 8_000,
+          message: `FAIL: mic toggle ${i + 1} — data-enabled did not flip from ${beforeToggle}`,
+        })
+        .not.toBe(beforeToggle);
+      await page.waitForTimeout(300);
     }
 
     const after = await page.evaluate(
-      () => (window as unknown as { __jarvisDebug?: { identity?: string } }).__jarvisDebug?.identity ?? '',
+      () =>
+        (window as unknown as { __jarvisDebug?: { identity?: string } }).__jarvisDebug?.identity ??
+        '',
     );
     expect(after, 'FAIL: mic identity — identity changed after 3 toggles').toBe(before);
+    // Signalling should not thrash with settings_update on mic toggles.
+    expect(
+      wsFrames.filter(f => f.includes('settings_update')),
+      'FAIL: mic toggles should not emit settings_update',
+    ).toHaveLength(0);
   });
 
-  test('logout returns to the login form', async ({ page }) => {
+  test('logout returns to the login form (opt-in)', async ({ page }) => {
+    test.skip(
+      !LIVE_LOGOUT,
+      'SKIP: set JARVIS_LIVE_SMOKE_LOGOUT=1 (revokes storageState session — re-run live:auth after)',
+    );
+
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId('app-ready')).toBeVisible({ timeout: 45_000 });
 

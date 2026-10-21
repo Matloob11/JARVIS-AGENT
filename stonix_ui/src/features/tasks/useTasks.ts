@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { toast } from '@/toast';
 import { normalizeTasks, toEpochMs } from '@/shared/contracts/events';
 import { useSocketEvent } from '@/shared/realtime/subscriptions';
@@ -9,7 +9,8 @@ export type TaskSource = 'task' | 'reminder';
 export interface TaskItem {
   id: string;
   description: string;
-  due_at: number;
+  /** Epoch ms, or null when the bridge sent no due time ("koi waqt nahi"). */
+  due_at: number | null;
   source: TaskSource;
   kind: string;
   status?: string;
@@ -41,7 +42,11 @@ export function normalizeTaskItem(raw: unknown): TaskItem | null {
   const description =
     String(data.description ?? data.text ?? '').trim() || '(no description)';
   const dueRaw = data.due_at ?? data.dueAt ?? data.scheduled_time;
-  const due_at = toEpochMs(dueRaw) ?? Date.now();
+  // null/missing → no due (never coerce to Date.now() / "Due now").
+  const due_at =
+    dueRaw == null || dueRaw === ''
+      ? null
+      : toEpochMs(dueRaw) ?? null;
   const source = normalizeSource(data.source ?? data.kind);
   const kind = String(data.kind ?? source).toLowerCase();
   const status = data.status != null ? String(data.status) : undefined;
@@ -65,7 +70,12 @@ export function normalizeTaskNotification(raw: unknown): TaskNotification | null
 }
 
 function sortByDueAsc(rows: TaskItem[]): TaskItem[] {
-  return [...rows].sort((a, b) => a.due_at - b.due_at);
+  return [...rows].sort((a, b) => {
+    if (a.due_at == null && b.due_at == null) return 0;
+    if (a.due_at == null) return 1;
+    if (b.due_at == null) return -1;
+    return a.due_at - b.due_at;
+  });
 }
 
 function prependNotification(prev: TaskNotification[], next: TaskNotification): TaskNotification[] {
@@ -115,6 +125,9 @@ export function useTasks(emitCommand: (type: string, payload?: unknown) => void)
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [notifications, setNotifications] = useState<TaskNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  // C-125 B5: known / acked reminder ids must not re-toast or bump unread.
+  const knownNotifIdsRef = useRef(new Set<string>());
+  const seededPendingAckRef = useRef(new Set<string>());
 
   const applyTaskSync = useCallback((raw: unknown) => {
     const normalized = normalizeTasks(raw);
@@ -127,6 +140,13 @@ export function useTasks(emitCommand: (type: string, payload?: unknown) => void)
   const applyNotification = useCallback((raw: unknown) => {
     const note = normalizeTaskNotification(raw);
     if (!note) return;
+    const known = knownNotifIdsRef.current.has(note.id);
+    if (known) {
+      // Re-delivery of same id: ack again, no toast / browser / unread.
+      sendNotificationAck(note.id);
+      return;
+    }
+    knownNotifIdsRef.current.add(note.id);
     setNotifications(prev => prependNotification(prev, note));
     setUnreadCount(c => c + 1);
     showTaskToast(note);
@@ -135,7 +155,7 @@ export function useTasks(emitCommand: (type: string, payload?: unknown) => void)
   }, []);
 
   const seedFromInit = useCallback((state: Record<string, unknown>) => {
-    if (Array.isArray(state.tasks) && state.tasks.length) {
+    if (Array.isArray(state.tasks)) {
       applyTaskSync({ tasks: state.tasks });
     }
     const seedNotes = state.notifications;
@@ -145,6 +165,10 @@ export function useTasks(emitCommand: (type: string, payload?: unknown) => void)
       .filter((row): row is TaskNotification => row != null)
       .slice(0, MAX_NOTIFICATIONS);
     if (seeded.length) {
+      for (const row of seeded) {
+        knownNotifIdsRef.current.add(row.id);
+        seededPendingAckRef.current.add(row.id);
+      }
       setNotifications(prev => {
         const byId = new Map<string, TaskNotification>();
         for (const row of [...seeded, ...prev]) {
@@ -173,6 +197,11 @@ export function useTasks(emitCommand: (type: string, payload?: unknown) => void)
   const openTaskBell = useCallback(() => {
     if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
       void Notification.requestPermission();
+    }
+    // C-125 B5: ack seeded init_state.notifications when the bell (toast surface) opens.
+    for (const id of [...seededPendingAckRef.current]) {
+      sendNotificationAck(id);
+      seededPendingAckRef.current.delete(id);
     }
     clearUnread();
   }, [clearUnread]);

@@ -19,6 +19,8 @@ export interface MemoryItem {
 const MAX_ROWS = 200;
 /** Agent sends at most 500 chars (K-07); truncate anything longer. */
 export const MAX_CONTENT_CHARS = 500;
+/** Bridge init_state.memories is at most this many (K-42); treat as full replace. */
+export const INIT_MEMORIES = 10;
 
 function normalizeRole(raw: unknown): MemoryRole | undefined {
   const r = String(raw ?? '').toLowerCase();
@@ -146,7 +148,12 @@ export function useMemories(emitCommand: (type: string, payload?: unknown) => vo
       setRows([]);
       return;
     }
-    setRows(prev => mergeSeed(prev, seeded));
+    // Interim: a non-empty seed ≤ INIT_MEMORIES is the bridge's full set — replace, don't merge.
+    if (seeded.length <= INIT_MEMORIES) {
+      setRows(dedupeMemoriesById(seeded));
+    } else {
+      setRows(prev => mergeSeed(prev, seeded));
+    }
     const newest = seeded.reduce((max, row) => (row.ts > max ? row.ts : max), seeded[0].ts);
     setLastMemorySyncMs(prev => (prev == null || newest > prev ? newest : prev));
   }, []);

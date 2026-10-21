@@ -41,10 +41,10 @@ const LiveKitContext = createContext<LiveKitContextValue | null>(null);
 export function LiveKitProvider({ children }: { children: ReactNode }) {
   const voice = useVoiceRoom();
 
-  // X-60: expose LiveKit identity only with ?debug=1 (any page, not only Settings).
+  // X-60: expose LiveKit identity only with ?debug=1 (value must be exactly "1").
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (!new URLSearchParams(window.location.search).has('debug')) return;
+    if (new URLSearchParams(window.location.search).get('debug') !== '1') return;
     window.__jarvisDebug = { ...window.__jarvisDebug, identity: voice.identity || undefined };
   }, [voice.identity]);
 

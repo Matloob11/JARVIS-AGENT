@@ -10,6 +10,8 @@ export interface NormalizedMessage {
   role: 'user' | 'assistant' | 'system';
   text: string;
   source?: 'voice' | 'text' | 'system';
+  /** K-59 v50 rescue note marker (bridge keeps this extra field). */
+  kind?: string;
   final?: boolean;
   ts: number;
   turn_id?: string;
@@ -150,6 +152,7 @@ export function normalizeMessage(raw: unknown): NormalizedMessage {
     role,
     text: String(data.text ?? ''),
     source: data.source as NormalizedMessage['source'],
+    kind: data.kind != null ? String(data.kind) : undefined,
     final: finalFlag,
     ts,
     turn_id: data.turn_id != null ? String(data.turn_id) : undefined,

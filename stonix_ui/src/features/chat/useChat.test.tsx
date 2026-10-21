@@ -128,7 +128,7 @@ describe('useChat awaitingReply', () => {
     expect(hook.result.current.awaitingReply).toBe(false);
   });
 
-  it('RESCUE: assistant + source system + turn_id clears awaitingReply', async () => {
+  it('RESCUE: kind typed_no_reply + turn_id clears awaitingReply', async () => {
     const hook = await sendOne();
     const userId = hook.result.current.messages.find(row => row.role === 'user')?.id;
     expect(userId).toBeTruthy();
@@ -137,6 +137,7 @@ describe('useChat awaitingReply', () => {
         id: 'rescue-1',
         role: 'assistant',
         source: 'system',
+        kind: 'typed_no_reply',
         text: 'Sir, maazrat, is message ka jawab nahi ban saka.',
         turn_id: userId,
         ts: Date.now(),
@@ -144,6 +145,7 @@ describe('useChat awaitingReply', () => {
     });
     expect(hook.result.current.awaitingReply).toBe(false);
     const note = hook.result.current.messages.find(row => row.id === 'rescue-1');
+    expect(note?.kind).toBe('typed_no_reply');
     expect(note?.source).toBe('system');
   });
 
@@ -155,5 +157,50 @@ describe('useChat awaitingReply', () => {
       clearChatAwaitingOnStop();
     });
     expect(hook.result.current.awaitingReply).toBe(false);
+  });
+
+  it('Stop: pending ack does not arm awaiting after clearChatAwaitingOnStop', async () => {
+    const { clearChatAwaitingOnStop } = await import('./awaitingClear');
+    const hook = renderHook(() => useChat());
+    await act(async () => {
+      await Promise.resolve();
+    });
+    // Emit without completing ack — leave in pendingDelivery.
+    act(() => {
+      hook.result.current.send('pending stop test');
+    });
+    const userId = hook.result.current.messages.find(r => r.role === 'user')?.id;
+    expect(userId).toBeTruthy();
+    act(() => {
+      clearChatAwaitingOnStop();
+    });
+    expect(hook.result.current.awaitingReply).toBe(false);
+    // Late echo must not re-arm.
+    act(() => {
+      bus.fire('new_message', {
+        id: userId,
+        role: 'user',
+        text: 'pending stop test',
+        ts: Date.now(),
+      });
+    });
+    expect(hook.result.current.awaitingReply).toBe(false);
+  });
+
+  it('REPLY_TIMEOUT retry uses a new message id', async () => {
+    const hook = await sendOne();
+    const oldId = hook.result.current.messages.find(r => r.role === 'user')?.id;
+    expect(oldId).toBeTruthy();
+    await act(async () => {
+      vi.advanceTimersByTime(60_000);
+    });
+    const failed = hook.result.current.messages.find(r => r.id === oldId);
+    expect(failed?.statusHint).toBe('Jawab nahi aaya — Retry');
+    act(() => {
+      hook.result.current.retrySend(oldId!);
+    });
+    const users = hook.result.current.messages.filter(r => r.role === 'user');
+    expect(users.every(r => r.id !== oldId)).toBe(true);
+    expect(users.some(r => r.text === 'What is 9 times 6?')).toBe(true);
   });
 });

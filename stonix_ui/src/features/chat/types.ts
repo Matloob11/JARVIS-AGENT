@@ -10,6 +10,11 @@ export interface ChatMessage {
   ts: number;
   source?: 'voice' | 'text' | 'system';
   turn_id?: string;
+  /**
+   * K-59 v50: only `typed_no_reply` is a calm centre system note.
+   * Other source 'system' messages (diffs, offline, swarm) stay assistant bubbles.
+   */
+  kind?: string;
   final?: boolean;
   status?: ChatMessageStatus;
   /** Persona that spoke (assistant rows keep their original persona). */

@@ -32,9 +32,19 @@ function buildRenderBlocks(messages: ChatMessage[]): RenderBlock[] {
   };
 
   for (const message of messages) {
-    if (message.role === 'assistant' && message.turn_id) {
+    // K-59 v50: typed_no_reply notes stay alone (never join an assistant turn_id group).
+    const groupable =
+      message.role === 'assistant' &&
+      Boolean(message.turn_id) &&
+      message.kind !== 'typed_no_reply';
+    if (groupable) {
       const last = group[group.length - 1];
-      if (last && last.role === 'assistant' && last.turn_id === message.turn_id) {
+      if (
+        last &&
+        last.role === 'assistant' &&
+        last.kind !== 'typed_no_reply' &&
+        last.turn_id === message.turn_id
+      ) {
         group.push(message);
         continue;
       }
@@ -429,8 +439,8 @@ const MessageBubble = ({
   onFeedback?: (messageId: string, score: 1 | -1) => void;
 }) => {
   const isUser = message.role === 'user';
-  // RESCUE / K-59: assistant + source 'system' is a calm system note (not a red error).
-  const isSystem = message.role === 'system' || message.source === 'system';
+  // K-59 v50: only role system or kind typed_no_reply — not every source 'system' (diffs stay assistant).
+  const isSystem = message.role === 'system' || message.kind === 'typed_no_reply';
   const msgPersona = asPersonaKey(message.persona ?? fallbackPersona);
   const meta = sourceMeta(message.source);
   const SrcIcon = meta.icon;

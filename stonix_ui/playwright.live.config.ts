@@ -15,6 +15,8 @@ const ROOT = dirname(fileURLToPath(import.meta.url));
 const BASE_URL = process.env.E2E_BASE_URL || 'https://jarvis.srv1802669.hstgr.cloud';
 const STORAGE = process.env.E2E_STORAGE_STATE
   || resolve(ROOT, 'tests/live/.auth/storageState.json');
+// Root .gitignore allows assets/audio/*.wav (not tests/**/*.wav).
+const SILENT_WAV = resolve(ROOT, '../assets/audio/silent-live-smoke.wav');
 
 const httpCredentials =
   process.env.E2E_BASIC_USER && process.env.E2E_BASIC_PASS
@@ -42,6 +44,16 @@ export default defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     ...(httpCredentials ? { httpCredentials } : {}),
+    permissions: ['microphone'],
+    launchOptions: {
+      args: [
+        '--use-fake-ui-for-media-stream',
+        '--use-fake-device-for-media-stream',
+        ...(existsSync(SILENT_WAV)
+          ? [`--use-file-for-fake-audio-capture=${SILENT_WAV}`]
+          : []),
+      ],
+    },
   },
   projects: [
     {

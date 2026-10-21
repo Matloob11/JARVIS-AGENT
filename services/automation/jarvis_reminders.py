@@ -18,6 +18,7 @@ instead of silently dropping it). The PC brain's own loop keeps using check_due_
 import asyncio
 import json
 import os
+import secrets
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -103,7 +104,8 @@ async def set_reminder(time_str: str, message: str) -> str:
     relative (e.g., '10 minutes', 'das minute baad'); see jarvis_task_manager.parse_when.
     message is the text JARVIS should say when the reminder triggers.
     """
-    logger.info("Setting reminder: %s at %s", message, time_str)
+    # C-125 B6: never log reminder text at INFO (PII / chat content).
+    logger.info("Setting reminder at %s", time_str)
 
     now = _now_local()
 
@@ -117,7 +119,7 @@ async def set_reminder(time_str: str, message: str) -> str:
             )
 
         new_reminder = {
-            "id": f"rem_{int(target_time.timestamp())}",
+            "id": f"rem_{int(target_time.timestamp())}_{secrets.token_hex(2)}",
             "time": target_time.isoformat(),
             "message": message,
             "status": "pending",
@@ -204,20 +206,29 @@ def list_due_reminders() -> list[dict]:
     return due
 
 
-def mark_reminder_delivered(reminder_id: str) -> bool:
-    """Agent-svc (X-66): marks one reminder delivered (status 'triggered', the same terminal status
+def mark_reminder_delivered(
+    reminder_id: str,
+    created_at: str | None = None,
+    time: str | None = None,
+) -> bool:
+    """Agent-svc (X-66 / C-125 B6): marks one reminder delivered (status 'triggered', the same terminal status
     check_due_reminders uses, plus a 'delivered_at' timestamp), under the lock, only after it was actually
-    announced. True when a pending reminder with this id was found and changed; False for an unknown id or one
-    that is no longer pending (already delivered, triggered by the PC loop, or cancelled elsewhere)."""
+    announced. Optional created_at/time disambiguate when ids collide. True when a pending reminder with this
+    id was found and changed; False for an unknown id or one that is no longer pending."""
     with locked(REMINDERS_FILE):
         reminders = load_reminders()
         changed = False
         for r in reminders:
-            if r.get("id") == reminder_id and r.get("status") == "pending":
-                r["status"] = "triggered"
-                r["delivered_at"] = _now_local().isoformat()
-                changed = True
-                break
+            if r.get("id") != reminder_id or r.get("status") != "pending":
+                continue
+            if created_at is not None and r.get("created_at") != created_at:
+                continue
+            if time is not None and r.get("time") != time:
+                continue
+            r["status"] = "triggered"
+            r["delivered_at"] = _now_local().isoformat()
+            changed = True
+            break
         if changed:
             save_reminders(reminders)
     return changed

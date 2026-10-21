@@ -11,6 +11,15 @@ async function stats(page: Page): Promise<JarvisStats> {
   });
 }
 
+async function orbCanvasCssWidth(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const canvas = document.querySelector(
+      '[data-testid="speaker-orb"] canvas',
+    ) as HTMLCanvasElement | null;
+    return canvas?.clientWidth ?? 0;
+  });
+}
+
 async function setSpeaking(page: Page) {
   await page.evaluate(() => {
     window.__jarvisTest?.setVoiceState('speaking');
@@ -21,7 +30,7 @@ async function setSpeaking(page: Page) {
 async function measureSpeakingFps(
   page: Page,
   durationMs = 2000,
-): Promise<{ fps: number; scriptMs: number }> {
+): Promise<{ fps: number; scriptMs: number; cdpMsPerFrame?: number }> {
   // Let DPR / fast-cache rebuild settle before measuring.
   await page.waitForTimeout(400);
   await page.evaluate(() => window.__jarvisTest?.resetDrawMs());
@@ -33,7 +42,7 @@ async function measureSpeakingFps(
   const frames = Math.max(1, end.draws - startDraws);
   return {
     fps: frames / elapsed,
-    // Orb paint mean (not whole-page CDP ScriptDuration — that counts React/socket too).
+    // Orb+wave paint mean (drawMs), not whole-page CDP ScriptDuration.
     scriptMs: end.drawMs,
   };
 }
@@ -52,7 +61,7 @@ test.describe('@gate performance', () => {
     await expect(page.locator('[data-testid="speaker-orb"] canvas').first()).toBeVisible();
   });
 
-  test('1440x900 DPR1 speaking ≥58 fps ≤1.5 ms script', async ({ page }) => {
+  test('1440x900 DPR1 speaking ≥58 fps; orb+wave paint (drawMs) ≤1.5 ms', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.evaluate(() => {
       Object.defineProperty(window, 'devicePixelRatio', { configurable: true, get: () => 1 });
@@ -67,13 +76,13 @@ test.describe('@gate performance', () => {
     const scriptMed = [...samples.map(s => s.scriptMs)].sort((a, b) => a - b)[1]!;
     test.info().annotations.push({
       type: 'perf',
-      description: `dpr1 fps_med=${med.toFixed(1)} fps_best=${best.toFixed(1)} orb_draw_ms_med=${scriptMed.toFixed(2)} channel=chromium`,
+      description: `dpr1 fps_med=${med.toFixed(1)} fps_best=${best.toFixed(1)} orb_wave_draw_ms_med=${scriptMed.toFixed(2)} channel=chromium`,
     });
     expect(med, `dpr1 fps_med=${med.toFixed(1)} best=${best.toFixed(1)}`).toBeGreaterThanOrEqual(58);
     expect(scriptMed).toBeLessThanOrEqual(1.5);
   });
 
-  test('1440x900 DPR2 speaking ≥58 fps', async ({ page }) => {
+  test('1440x900 DPR2 speaking ≥58 fps; orb+wave paint (drawMs) ≤1.5 ms', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.evaluate(() => {
       Object.defineProperty(window, 'devicePixelRatio', { configurable: true, get: () => 2 });
@@ -87,34 +96,44 @@ test.describe('@gate performance', () => {
     const fpsSorted = [...samples.map(s => s.fps)].sort((a, b) => a - b);
     const med = fpsSorted[1]!;
     const best = fpsSorted[2]!;
+    const scriptMed = [...samples.map(s => s.scriptMs)].sort((a, b) => a - b)[1]!;
+    const orbW = await orbCanvasCssWidth(page);
     test.info().annotations.push({
       type: 'perf',
-      description: `dpr2 fps_med=${med.toFixed(1)} fps_best=${best.toFixed(1)}`,
+      description: `dpr2 fps_med=${med.toFixed(1)} fps_best=${best.toFixed(1)} orb_wave_draw_ms_med=${scriptMed.toFixed(2)} orb_css_w=${orbW}`,
     });
     expect(med, `dpr2 fps_med=${med.toFixed(1)} best=${best.toFixed(1)}`).toBeGreaterThanOrEqual(58);
+    expect(scriptMed).toBeLessThanOrEqual(1.5);
   });
 
-  // Honest 4× floor (REQ-PERF in plan.md §11): CDP Emulation.setCPUThrottlingRate(4)
-  // stacks with Windows load; dual-blit orb lands ~20 fps here, not 50.
-  test('DPR2 4x CPU ≥18 fps', async ({ page }) => {
+  // REQ-PERF interim liveness floor: real DPR2 + CDP 4× (not DPR1). Floor from measured median.
+  // Target ≥50 remains the product goal; interim floor documents host+throttle reality.
+  test('DPR2 4x CPU ≥18 fps (real devicePixelRatio=2)', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
+    await page.evaluate(() => {
+      Object.defineProperty(window, 'devicePixelRatio', { configurable: true, get: () => 2 });
+    });
     const cdp = await page.context().newCDPSession(page);
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
     await setSpeaking(page);
-    const samples = [
-      await measureSpeakingFps(page, 2500),
-      await measureSpeakingFps(page, 2500),
-      await measureSpeakingFps(page, 2500),
-    ];
+    await page.waitForTimeout(600);
+    const orbW = await orbCanvasCssWidth(page);
+    const samples: { fps: number; scriptMs: number }[] = [];
+    // 5+ runs so section 11 can quote a real DPR2 4× median.
+    for (let i = 0; i < 5; i += 1) samples.push(await measureSpeakingFps(page, 2500));
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
     await cdp.detach();
     const fpsSorted = [...samples.map(s => s.fps)].sort((a, b) => a - b);
-    const med = fpsSorted[1]!;
-    const best = fpsSorted[2]!;
+    const med = fpsSorted[Math.floor(fpsSorted.length / 2)]!;
+    const best = fpsSorted[fpsSorted.length - 1]!;
+    const scriptMed = [...samples.map(s => s.scriptMs)].sort((a, b) => a - b)[
+      Math.floor(samples.length / 2)
+    ]!;
     test.info().annotations.push({
       type: 'perf',
-      description: `dpr2-4x fps_med=${med.toFixed(1)} fps_best=${best.toFixed(1)}`,
+      description: `dpr2-4x fps_med=${med.toFixed(1)} fps_best=${best.toFixed(1)} orb_wave_draw_ms_med=${scriptMed.toFixed(2)} orb_css_w=${orbW} n=${samples.length}`,
     });
+    // Interim liveness floor (REQ-PERF accepted with conditions); ≥50 remains the target.
     expect(med, `dpr2-4x fps_med=${med.toFixed(1)} best=${best.toFixed(1)}`).toBeGreaterThanOrEqual(18);
   });
 

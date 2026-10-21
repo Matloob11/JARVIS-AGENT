@@ -2,6 +2,11 @@
 
 Opt-in only. Normal `npm run test:e2e` and CI never run these.
 
+Fake media: `playwright.live.config.ts` grants microphone permission and launches
+Chromium with `--use-fake-ui-for-media-stream`, `--use-fake-device-for-media-stream`,
+and a committed silent WAV (`assets/audio/silent-live-smoke.wav`) so mic toggles work
+without a real device.
+
 ## One-time auth (owner)
 
 ```bash
@@ -20,8 +25,9 @@ No password or TOTP seed is stored.
 $env:JARVIS_LIVE_SMOKE='1'; npm run test:e2e:live
 ```
 
-Checks: login state, socket connect, `init_state` keys, agent chip, settings
-panel open (no `settings_update`), chat history render.
+Checks: login state, socket connect, `init_state` keys, agent chip online (60 s),
+settings panel open (no `settings_update`), chat history after hydration, mic×3
+identity (`?debug=1`).
 
 ## Optional typed ping
 
@@ -29,7 +35,17 @@ panel open (no `settings_update`), chat history render.
 $env:JARVIS_LIVE_SMOKE='1'; $env:JARVIS_LIVE_SMOKE_CHAT='1'; npm run test:e2e:live
 ```
 
-Sends one "live-smoke ping …" and expects an assistant reply within 60 s.
+Sends one "live-smoke ping …" and expects exactly one user bubble + assistant
+sibling within 45 s (settle window re-checks exactly-once).
+
+## Optional logout
+
+```bash
+$env:JARVIS_LIVE_SMOKE='1'; $env:JARVIS_LIVE_SMOKE_LOGOUT='1'; npm run test:e2e:live
+```
+
+**Warning:** logout revokes the saved `storageState` session. Re-run
+`npm run test:e2e:live:auth` before the next live smoke.
 
 ## List without running
 

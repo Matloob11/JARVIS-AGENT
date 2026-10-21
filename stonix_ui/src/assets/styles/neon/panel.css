@@ -554,6 +554,11 @@
   text-align: center;
 }
 
+/* Safety net: pre/lists inside a system note stay left-aligned (K-59 / REQ-FIX-2). */
+.chat-msg-row--system .chat-msg-md :is(pre, ul, ol) {
+  text-align: left;
+}
+
 .chat-msg-row--grouped {
   grid-template-columns: 45px minmax(0, 1fr);
 }
