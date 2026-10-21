@@ -8,7 +8,13 @@ Retried types (CRITICAL_TYPES) that fail are retried from a bounded per-event-lo
 (K-39 v10, C-64): updates of one message, confirmation or tool call (and each settings or heartbeat snapshot) go out
 one at a time in the order they were sent, while different keys go out side by side; and while older events wait
 for a retry, or a 429's Retry-After window is open, a new one queues behind them.
-Without those keys the legacy X-Vortex headers are sent as before, with one WARNING per process.
+Without those keys the legacy X-Vortex headers are sent as before, with one WARNING per process, except to the
+internal :5002 listener (the VPS brain, K-39 v4): it takes unsigned notifies and refuses the legacy token (401
+bad_token), so there the body goes without any credential.
+notify_event returns what happened (NOTIFY_DELIVERED, NOTIFY_QUEUED, NOTIFY_SUPPRESSED or NOTIFY_FAILED), so a caller
+that tells the model or the owner never claims a delivery it did not get (C-86). A 2xx does not prove the bridge routed
+the type (an older bridge answers an unknown type {status: 'ok'}): notify_answered returns the bridge's answer for a
+caller that must check the route's own reply (the plan progress line).
 UI log lines do not come through here: jarvis_logger's shipper thread posts them as vortex_log_batch with
 post_notify_blocking() (C-64).
 """
@@ -26,6 +32,7 @@ from collections import deque
 from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 from httpx import create_ssl_context as _create_ssl_context
@@ -80,6 +87,14 @@ RETRY_MAX_S = 30.0
 NOTIFY_MAX_BYTES = 256 * 1024  # the bridge answers 413 above this, so a larger body is never queued
 _WARN_EVERY_S = 60.0
 LOG_BATCH_MAX = 50  # K-40 v10: items in one vortex_log_batch
+# K-38/K-39 v4: the bridge's internal listener (jarvis-network only): agent role and unsigned notifies, no legacy token.
+INTERNAL_LISTENER_PORT = 5002
+
+# What notify_event returns (C-86). Failures keep their log levels (a failed non-critical type at DEBUG).
+NOTIFY_DELIVERED = "delivered"    # the bridge answered 2xx (or 409: this very request was accepted already)
+NOTIFY_QUEUED = "queued"          # a critical type waits in the retry queue: it may still arrive
+NOTIFY_SUPPRESSED = "suppressed"  # a probe or canary job (K-57): nothing was sent
+NOTIFY_FAILED = "failed"          # not sent, refused, or its answer was lost: the bridge may not have it
 
 
 class BridgePayload(TypedDict):
@@ -133,6 +148,23 @@ def _get_headers(signature: str) -> dict[str, str]:
         "X-Vortex-Token": token,
         "X-Vortex-Signature": signature,
     }
+
+
+def is_internal_listener(url: str) -> bool:
+    """True for the bridge's internal :5002 listener (the VPS brain, e.g. http://jarvis-bridge:5002)."""
+    try:
+        return urlsplit(str(url or "").strip()).port == INTERNAL_LISTENER_PORT
+    except ValueError:
+        return False
+
+
+def _fallback_headers(body: Any) -> dict[str, str]:
+    """The headers of a notify sent without the agent link v2 keys: none on the internal listener (K-39 v4: the jarvis
+    network is the agent's credential there, and the bridge answers the legacy token with 401 bad_token), else the
+    legacy X-Vortex pair, its HMAC (keyed with the legacy token) over the sorted JSON of body."""
+    if is_internal_listener(config.bridge_url):
+        return {}
+    return _get_headers(security_manager.generate_signature(json.dumps(body, sort_keys=True)))
 
 
 async def get_http_client() -> httpx.AsyncClient:
@@ -307,13 +339,12 @@ async def _post_signed(raw: bytes) -> tuple[str, str, float | None]:
 
 def _request_parts(raw: bytes) -> tuple[str, dict[str, str]]:
     """The URL and headers of one POST /notify of exactly raw, with the credential notify_event would use: the
-    C-NOTIFY-1 v2 headers (built anew for every attempt) with the agent link v2 keys, else the legacy X-Vortex
-    headers (HMAC over the sorted JSON, as the bridge checks it). Raises RuntimeError when v2 headers cannot be
-    built."""
+    C-NOTIFY-1 v2 headers (built anew for every attempt) with the agent link v2 keys, else none on the internal
+    listener and the legacy X-Vortex headers anywhere else (HMAC over the sorted JSON, as the bridge checks it).
+    Raises RuntimeError when v2 headers cannot be built."""
     if agent_link_v2():
         return _notify_url(), signed_headers(raw)
-    signature = security_manager.generate_signature(json.dumps(json.loads(raw), sort_keys=True))
-    return _notify_url(), {"Content-Type": "application/json", **_get_headers(signature)}
+    return _notify_url(), {"Content-Type": "application/json", **_fallback_headers(json.loads(raw))}
 
 
 def post_notify_blocking(event_type: str, payload: Any, *, client: httpx.Client,
@@ -533,16 +564,16 @@ async def _in_order(queue: _RetryQueue, key: str | None) -> AsyncIterator[None]:
             del queue.locks[key]
 
 
-def _enqueue(queue: _RetryQueue, item: _Queued, reason: str | None) -> None:
+def _enqueue(queue: _RetryQueue, item: _Queued, reason: str | None) -> bool:
     """Puts a critical event at the end of its loop's queue: after its send failed (reason), or unsent
     behind older waiting events (reason None). When the queue is full the oldest waiting event makes room
-    (never the one being sent right now)."""
+    (never the one being sent right now). False when the event could not wait (dropped and reported)."""
     dropped = 0
     while len(queue.items) >= RETRY_QUEUE_MAX:
         oldest = next((queued for queued in queue.items if queued is not queue.in_flight), None)
         if oldest is None:  # only the event in flight is left: this one cannot wait
             _report_failure(item.event_type, "retry queue full", len(queue.items), dropped + 1)
-            return
+            return False
         _discard(queue, oldest)
         dropped += 1
     queue.items.append(item)
@@ -556,6 +587,7 @@ def _enqueue(queue: _RetryQueue, item: _Queued, reason: str | None) -> None:
         queue.wait_s = max(RETRY_FIRST_S, min(queue.hold_until - time.monotonic(), RETRY_MAX_S))
         queue.task = asyncio.get_running_loop().create_task(_flush(queue), name="bridge-notify-retry")
         queue.task.add_done_callback(functools.partial(_flusher_done, queue))
+    return True
 
 
 async def _wait_before_retry(queue: _RetryQueue) -> None:
@@ -604,11 +636,12 @@ async def _flush(queue: _RetryQueue) -> None:
             logger.info("Bridge notify: %d queued critical event(s) delivered after a retry", delivered)
 
 
-async def _notify_critical(event_type: str, payload: Any, raw: bytes) -> None:
+async def _notify_critical(event_type: str, payload: Any, raw: bytes) -> str:
     """Sends a critical event in order (K-39 v10): events of one key (_order_key: a message, confirmation or tool
     call id, or a snapshot type) go out one at a time, while other keys go out side by side; and while older events
     wait for a retry, or a 429's Retry-After window is open, a new one queues behind them instead of overtaking them
-    (the bridge and the UI keep the last event per id, so a late retry would roll the state back)."""
+    (the bridge and the UI keep the last event per id, so a late retry would roll the state back). Returns
+    NOTIFY_DELIVERED, NOTIFY_QUEUED (it waits in the retry queue) or NOTIFY_FAILED."""
     loop = asyncio.get_running_loop()
     queue = _queue_for(loop)
     queue.users += 1
@@ -618,63 +651,66 @@ async def _notify_critical(event_type: str, payload: Any, raw: bytes) -> None:
             if queue.items or _holding(queue):
                 if len(raw) > NOTIFY_MAX_BYTES:
                     _report_failure(event_type, "body over the bridge limit", len(queue.items), 1)
-                else:
-                    _enqueue(queue, _Queued(event_type, raw, idempotent, attempts=0), None)
-                return
+                    return NOTIFY_FAILED
+                queued = _enqueue(queue, _Queued(event_type, raw, idempotent, attempts=0), None)
+                return NOTIFY_QUEUED if queued else NOTIFY_FAILED
             outcome, reason, retry_after = await _post_signed(raw)
             if outcome == _DELIVERED:
-                return
+                return NOTIFY_DELIVERED
             _hold(queue, retry_after)
             if len(raw) <= NOTIFY_MAX_BYTES and _retryable(outcome, idempotent):
-                _enqueue(queue, _Queued(event_type, raw, idempotent), reason)
-            else:
-                _report_failure(event_type, reason, len(queue.items), 1)
+                queued = _enqueue(queue, _Queued(event_type, raw, idempotent), reason)
+                return NOTIFY_QUEUED if queued else NOTIFY_FAILED
+            _report_failure(event_type, reason, len(queue.items), 1)
+            return NOTIFY_FAILED
     finally:
         queue.users -= 1
         _release_if_idle(loop, queue)
 
 
-async def _notify_signed(event_type: str, payload: Any) -> None:
+async def _notify_signed(event_type: str, payload: Any) -> str:
     try:
         raw = encode_event(event_type, payload)
     except Exception as e:  # pylint: disable=broad-exception-caught  # NaN, RecursionError ...: never raise
         logger.debug("Bridge Notification failed for %s: %s", event_type, e)
-        return
+        return NOTIFY_FAILED
     if event_type in CRITICAL_TYPES:
-        await _notify_critical(event_type, payload, raw)
-        return
+        return await _notify_critical(event_type, payload, raw)
     outcome, reason, _ = await _post_signed(raw)
     if outcome == _DELIVERED:
         wake_retry_queue()  # the bridge answers again: no need to wait out the backoff
-    else:
-        logger.debug("Bridge Notification failed for %s: %s", event_type, reason)
+        return NOTIFY_DELIVERED
+    logger.debug("Bridge Notification failed for %s: %s", event_type, reason)
+    return NOTIFY_FAILED
 
 
-async def _notify_legacy(event_type: str, payload: Any) -> None:
-    """The pre-v2 notify, unchanged: X-Vortex headers and an HMAC over the sorted JSON, sent once."""
+async def _notify_legacy(event_type: str, payload: Any) -> str:
+    """The pre-v2 notify, sent once and never retried: the legacy X-Vortex headers (an HMAC over the sorted JSON),
+    or no credential at all on the internal listener (_fallback_headers). The answer is checked (C-86): only a 2xx
+    is NOTIFY_DELIVERED; a refusal (a 401 included) is NOTIFY_FAILED, logged at DEBUG as before."""
+    payload_data: BridgePayload = {
+        "type": event_type,
+        "payload": payload,
+    }
     async with _get_semaphore():
         try:
             client = await get_http_client()
-            url = f"{config.bridge_url}/notify"
-            payload_data: BridgePayload = {
-                "type": event_type,
-                "payload": payload,
-            }
-
-            # FAANG standard: Guaranteed key ordering for signature stability
-            json_payload = json.dumps(payload_data, sort_keys=True)
-            signature = security_manager.generate_signature(json_payload)
-
-            headers = _get_headers(signature)
-            await client.post(url, json=payload_data, headers=headers, timeout=2.0)
+            response = await client.post(_notify_url(), json=payload_data, headers=_fallback_headers(payload_data),
+                                         timeout=NOTIFY_TIMEOUT_S)
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger.debug("Bridge Notification failed for %s: %s", event_type, e)
+            return NOTIFY_FAILED
+    outcome, reason, _ = _response_outcome(response)
+    if outcome == _DELIVERED:
+        return NOTIFY_DELIVERED
+    logger.debug("Bridge Notification failed for %s: %s", event_type, reason)
+    return NOTIFY_FAILED
 
 
 async def _notify_with_answer(event_type: str, payload: Any, timeout: float = CONFIRM_NOTIFY_TIMEOUT_S) -> Any:
     """One POST /notify that returns the bridge's parsed answer and raises on any failure (no retry queue: the
     ConfirmFlow broker does its own tries and reads the answer, K-14). Signed with the agent link v2 keys,
-    else with the legacy headers, like notify_event."""
+    else with the legacy headers (none on the internal listener), like notify_event."""
     if bridge_suppressed.get():  # K-57: a probe never reaches the dashboard; with no UI a confirmation is denied
         logger.debug("PROBE suppressed %s", event_type)
         return {"status": "suppressed", "ui_clients": 0}
@@ -686,10 +722,9 @@ async def _notify_with_answer(event_type: str, payload: Any, timeout: float = CO
             response = await client.post(_notify_url(), content=raw, headers=headers, timeout=timeout)
     else:
         body = {"type": event_type, "payload": payload}
-        headers = _get_headers(security_manager.generate_signature(json.dumps(body, sort_keys=True)))
         async with _get_semaphore():
             client = await get_http_client()
-            response = await client.post(f"{config.bridge_url}/notify", json=body, headers=headers,
+            response = await client.post(_notify_url(), json=body, headers=_fallback_headers(body),
                                          timeout=timeout)
     response.raise_for_status()
     return response.json()
@@ -706,21 +741,46 @@ async def notify_confirm_resolved(payload: dict[str, Any]) -> Any:
     return await _notify_with_answer("confirm_resolved", payload)
 
 
-async def notify_event(event_type: str, payload: Any) -> None:
+async def notify_event(event_type: str, payload: Any) -> str:
     """
     Sends one event to the STONIX UI Bridge (POST /notify, C-NOTIFY-1); never raises. With the agent link
     v2 keys the body is signed as sent, and a failed critical type (CRITICAL_TYPES) goes to the retry queue
     (one WARNING a minute while that fails); critical types reach the bridge in the order they were sent.
-    Any other failure is logged at DEBUG. Without the keys the legacy headers are used, as before. Inside a probe
-    or canary job (K-57) nothing is sent.
+    Any other failure is logged at DEBUG. Without the keys the legacy headers are used, as before (none on the
+    internal listener). Inside a probe or canary job (K-57) nothing is sent.
+    Returns what happened (C-86): NOTIFY_DELIVERED (the bridge answered 2xx), NOTIFY_QUEUED (a critical type waits
+    for a retry), NOTIFY_SUPPRESSED (a probe or canary job) or NOTIFY_FAILED (not sent, refused, or the answer was
+    lost). Callers that only fire and forget may ignore it. A 2xx says only that the bridge took the request: it
+    answers a type it does not route (or a payload it ignores) with 200 too, so a caller that must know the event was
+    shown uses notify_answered and reads the route's own answer.
     """
     if bridge_suppressed.get():
         logger.debug("PROBE suppressed %s", event_type)
-        return
+        return NOTIFY_SUPPRESSED
     if agent_link_v2():
-        await _notify_signed(event_type, payload)
-    else:
-        await _notify_legacy(event_type, payload)
+        return await _notify_signed(event_type, payload)
+    return await _notify_legacy(event_type, payload)
+
+
+async def notify_answered(event_type: str, payload: Any, timeout: float = NOTIFY_TIMEOUT_S) -> tuple[str, Any]:
+    """One POST /notify whose answer the caller reads (C-86 review): sent once, never queued or retried, never
+    raises; the credentials notify_event uses (the agent link v2 keys, else the legacy headers, none on the internal
+    listener). Returns (outcome, answer): (NOTIFY_DELIVERED, the bridge's parsed JSON answer) for a 2xx answer;
+    (NOTIFY_SUPPRESSED, None) in a probe or canary job (K-57: nothing is sent); (NOTIFY_FAILED, None) when it was not
+    sent, was refused, timed out or got an answer that is not JSON (a proxy's page). A failure is logged at DEBUG with
+    its status or exception name, never the payload or the answer. The caller decides from the answer whether the
+    bridge routed the event (an older bridge answers an unknown type {status: 'ok'})."""
+    if bridge_suppressed.get():
+        logger.debug("PROBE suppressed %s", event_type)
+        return NOTIFY_SUPPRESSED, None
+    try:
+        answer = await _notify_with_answer(event_type, payload, timeout)
+    except Exception as exc:  # pylint: disable=broad-exception-caught  # never raises (CancelledError still does)
+        reason = (f"HTTP {exc.response.status_code}" if isinstance(exc, httpx.HTTPStatusError)
+                  else type(exc).__name__)
+        logger.debug("Bridge Notification failed for %s: %s", event_type, reason)
+        return NOTIFY_FAILED, None
+    return NOTIFY_DELIVERED, answer
 
 
 async def notify_ui(status: str, payload: dict[str, Any] | None = None) -> None:

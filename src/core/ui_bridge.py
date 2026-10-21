@@ -40,6 +40,15 @@ logs 10/s, others 20/s; over it 429 {error: 'rate_limited', class} with Retry-Af
 transcript. vortex_log_batch items are normalized (bridge_store.normalize_log_batch), stored in one transaction and
 emitted as new_log each, with new_logs {items: [], dropped} for the UI's dropped counter; audit_event becomes
 audit_update (not stored).
+
+Routes added by the C-86 audit (K-02/K-08/K-40): plan_progress -> plan_progress (the flat line, normalized by
+services/utils/plan_progress, live only; answered {status: 'ok', emitted: 'plan_progress'} so the agent knows it was
+shown); task_sync (the task manager's name) like task_update -> task_sync plus init_state.tasks, every item's due_at
+as epoch seconds (services/utils/task_items: the task manager sends a naive local ISO string); a task_alert also drops
+that task from init_state.tasks and emits the rest as task_sync; a location_sync with kind 'map' or a 'map_focus' ->
+map_focus_update plus init_state.map_focus, never the device location; a status other than START/STOP changes nothing.
+Memory events are capped at the newest MEMORY_MAX_ROWS (K-07) by the retention loop. INFO lines carry ids, types and
+counts, never a task's, plan's or place's text (K-29).
 """
 # pylint: disable=too-many-lines  # the bridge app: every HTTP endpoint and Socket.IO handler of one process
 
@@ -73,6 +82,13 @@ from services.utils.jarvis_config import ROLE_BRIDGE, active_brain, config, runt
 from services.utils.jarvis_health import health_monitor
 from services.utils.jarvis_logger import setup_logger
 from services.utils.jarvis_telemetry import telemetry
+from services.utils.plan_progress import (
+    PLAN_PROGRESS_ANSWER,
+    PLAN_PROGRESS_EVENT,
+    PlanProgressError,
+    plan_progress_from_notify,
+)
+from services.utils.task_items import task_sync_payload
 from src.core import bridge_auth, bridge_desktop, bridge_media, bridge_rooms, bridge_security, confirm_policy
 from src.core.bridge_security import (
     NOTIFY_MAX_BYTES,
@@ -87,6 +103,7 @@ from src.core.bridge_store import (
     EVENT_MEMORY,
     EVENT_TOOL,
     KV_DESKTOP_LINK,
+    MEMORY_MAX_ROWS,
     MESSAGE_PAGE_MAX,
     SEEN_NOTIFY,
     BridgeStore,
@@ -251,6 +268,8 @@ class BridgeStateManager:
     """Thread-safe manager of the bridge's volatile state; persisted state lives in `store`."""
     def __init__(self) -> None:
         self.lock: asyncio.Lock = asyncio.Lock()
+        # init_state.tasks (kv 'tasks'): a task_sync and a task_alert's drop never interleave their read and write
+        self.tasks_lock: asyncio.Lock = asyncio.Lock()
         self.state: dict[str, Any] = {
             "speaking": False,
             "user_speaking": False,
@@ -376,6 +395,9 @@ PERSISTED_DEFAULTS: dict[str, Any] = {
     "sim_provider": "",
     "sim_provider_configured": False,
     "sim_requires_purpose": False,
+    # K-08: the last map focus (map_focus_update), apart from the device location; K-02: the last task_sync list.
+    "map_focus": None,
+    "tasks": [],
 }
 # A SIM lookup answers within the provider's 10 s timeout. A stored loading state that this process
 # did not see start, or that is older than this, lost its sim_data_result.
@@ -663,7 +685,11 @@ async def _handle_audit_event(payload: Any) -> None:
 
 
 async def _handle_status_event(payload: Any) -> None:
-    """Handle general status events."""
+    """status 'START'|'STOP' (K-40) -> status_change {speaking, thinking}. Any other value (the healing loop's
+    'HEARTBEAT' pulse) is runner contact only, already counted before the dispatch: it never clears the speaking
+    state."""
+    if payload not in ("START", "STOP"):
+        return
     if payload == "START":
         desktop.note_voice_activity()
     await bridge_manager.update_state("speaking", payload == "START")
@@ -791,6 +817,141 @@ async def _route_job_event(payload: Any) -> None:
         await emit_ui("tool_progress", remember_job(event))
 
 
+# ------------------------------------------------------------------ C-86 (K-02/K-40): the plan progress line
+async def _handle_plan_progress(payload: Any) -> dict[str, Any]:
+    """notify 'plan_progress' {current, total, action, status, timestamp} from tool_report_plan_progress, normalized by
+    the agent's own rules (services/utils/plan_progress: 1 <= current <= total <= 100, status IN_PROGRESS | COMPLETED
+    | FAILED, action at most 200 characters) and emitted to room 'ui' as 'plan_progress' with the same flat payload.
+    One emit: the UI's plan_progress_update listener is a legacy alias. Live only, never stored. The answer names the
+    emit (PLAN_PROGRESS_ANSWER {status: 'ok', emitted: 'plan_progress'}): a bridge without this route answers an
+    unknown type {status: 'ok'} too, so the agent counts a line as shown only with this answer. An unusable payload is
+    ignored with a WARNING naming the bad field, never the action text (K-29)."""
+    try:
+        line = plan_progress_from_notify(payload)
+    except PlanProgressError as exc:
+        logger.warning("plan_progress ignored: bad %s", exc.field)
+        return {"status": "ignored", "reason": "bad_payload"}
+    await emit_ui(PLAN_PROGRESS_EVENT, line)
+    return dict(PLAN_PROGRESS_ANSWER)
+
+
+# ------------------------------------------------------------------ K-08: map focus apart from the device location
+MAP_QUERY_MAX = 200
+MAP_NAME_MAX = 300
+MAP_ZOOM_RANGE = (1, 20)
+
+
+def _finite(value: Any) -> float | None:
+    """A finite number from a number or numeric string; None for anything else (a bool, text, NaN, an infinity)."""
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return None
+    try:
+        number = float(value)
+    except (ValueError, OverflowError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _coordinate(value: Any, limit: float) -> float | None:
+    """A latitude (limit 90) or longitude (limit 180); None when unusable or out of range."""
+    number = _finite(value)
+    return number if number is not None and -limit <= number <= limit else None
+
+
+def is_map_focus(payload: Any) -> bool:
+    """K-08: a location_sync with kind 'map' (what the map tool sends today) is a map focus; a missing kind is the
+    device location."""
+    kind = payload.get("kind") if isinstance(payload, Mapping) else None
+    return isinstance(kind, str) and kind.strip().lower() == "map"
+
+
+def map_focus_event(payload: Any) -> dict[str, Any] | None:
+    """K-08's map_focus_update {query, display_name, lat, lng, zoom?, ts}: query from query|city, display_name from
+    display_name|label (the map tool sends city and label), zoom a whole number within MAP_ZOOM_RANGE, ts epoch seconds
+    (else now). None without a usable lat and lng."""
+    if not isinstance(payload, Mapping):
+        return None
+    lat, lng = _coordinate(payload.get("lat"), 90.0), _coordinate(payload.get("lng"), 180.0)
+    if lat is None or lng is None:
+        return None
+    event: dict[str, Any] = {
+        "query": _printable(payload.get("query") or payload.get("city") or "", MAP_QUERY_MAX),
+        "display_name": _printable(payload.get("display_name") or payload.get("label") or "", MAP_NAME_MAX),
+        "lat": lat, "lng": lng,
+    }
+    zoom = _finite(payload.get("zoom"))
+    if zoom is not None:
+        event["zoom"] = min(max(int(zoom), MAP_ZOOM_RANGE[0]), MAP_ZOOM_RANGE[1])
+    event["ts"] = round(epoch_seconds(payload.get("ts", payload.get("timestamp"))) or time.time(), 3)
+    return event
+
+
+async def _route_map_focus(payload: Any) -> dict[str, Any]:
+    """notify 'map_focus', or a location_sync with kind 'map': map_focus_update and init_state.map_focus (kv
+    'map_focus'); the device location and its location_update stay untouched (K-08). No log line: a place is private
+    (K-29)."""
+    event = map_focus_event(payload)
+    if event is None:
+        return {"status": "ignored", "reason": "bad_payload"}
+    await stored("map focus", store.kv_set("map_focus", event), None)
+    await emit_ui("map_focus_update", event)
+    return {"status": "ok"}
+
+
+async def _handle_location_sync(payload: Any) -> dict[str, Any]:
+    """location_sync (K-08): the device location (kind 'device', or none) is kept for init_state.location and emitted
+    as location_update; one with kind 'map' is a map focus instead."""
+    if is_map_focus(payload):
+        return await _route_map_focus(payload)
+    await stored("location", store.kv_set("location", payload), None)
+    await emit_ui("location_update", payload)
+    return {"status": "ok"}
+
+
+# ------------------------------------------------------------------ K-02/K-40: the task list
+TASKS_KEPT = 200  # init_state.tasks holds at most this many of the last task_sync's tasks
+
+
+def task_sync_event(payload: Any) -> tuple[Any, list[dict[str, Any]] | None]:
+    """(the task_sync payload to emit, the list init_state.tasks keeps) of a task_sync/task_update payload (K-02:
+    {tasks} or {pending}, or a bare list): every item's due time as due_at in epoch seconds (task_items.task_item: the
+    task manager sends a naive local ISO string, which the dashboard would show as due now), the shape kept, the list
+    kept at most TASKS_KEPT items; (payload, None) when it carries no list."""
+    emitted, tasks = task_sync_payload(payload)
+    return emitted, None if tasks is None else tasks[:TASKS_KEPT]
+
+
+async def _route_task_list(payload: Any) -> None:
+    """task_sync (the task manager's name) and task_update (K-40): emitted to room 'ui' as task_sync with every due_at
+    in epoch seconds, and the list kept for init_state.tasks. A payload without a list is emitted as it came and leaves
+    the kept list alone. No log line: the items carry the owner's own words (K-29)."""
+    emitted, tasks = task_sync_event(payload)
+    async with bridge_manager.tasks_lock:
+        if tasks is not None:
+            await stored("tasks", store.kv_set("tasks", tasks), None)
+        await emit_ui("task_sync", emitted)
+
+
+async def _drop_due_task(task_id: Any) -> None:
+    """A due task (task_alert) has left the pending list (K-33: get_due_tasks marks it triggered), but the agent's task
+    monitor marks it in a worker thread, where the task manager cannot publish the new list. So the bridge drops that
+    id from init_state.tasks itself and emits the rest as task_sync {tasks}. An id the kept list does not hold changes
+    nothing and emits nothing."""
+    if task_id is None or isinstance(task_id, bool) or task_id == "":
+        return
+    key = str(task_id)
+    async with bridge_manager.tasks_lock:
+        kept = await stored("tasks read", store.kv_get("tasks", []), [])
+        if not isinstance(kept, list):
+            return
+        remaining = [item for item in kept
+                     if not (isinstance(item, Mapping) and item.get("id") is not None and str(item.get("id")) == key)]
+        if len(remaining) == len(kept):
+            return
+        await stored("tasks", store.kv_set("tasks", remaining), None)
+        await emit_ui("task_sync", {"tasks": remaining})
+
+
 # settings_sync keys that describe the update, not a setting (K-02 / K-61): never stored as settings
 _SETTINGS_SYNC_META = frozenset({"applied", "errors", "pending", "pending_restart", "restart_required", "enforced",
                                  "available_voices", "available_languages", "guarded_tools", "ts"})
@@ -893,14 +1054,20 @@ async def notify_bridge(request: Request) -> Any:
         "confirm_resolved": _handle_confirm_resolved,
     }
 
-    if event_type == "confirm_request":  # K-14: the agent's broker reads the answer (ui_clients)
-        return await _handle_confirm_request(payload)
+    # Handlers whose own answer the bridge returns: ignored payloads, and the ui_clients the agent's broker reads.
+    answering: dict[str, Any] = {
+        "confirm_request": _handle_confirm_request,  # K-14: the agent's broker reads the answer (ui_clients)
+        PLAN_PROGRESS_EVENT: _handle_plan_progress,  # C-86: the plan progress line
+        "location_sync": _handle_location_sync,  # K-08: a map focus never replaces the device location
+        "map_focus": _route_map_focus,
+        "vortex_log_batch": _handle_log_batch,
+    }
+    answer: Any | None = answering.get(event_type)
+    if answer:
+        return await answer(payload)
     handler: Any | None = handlers.get(event_type)
     if handler:
         await handler(payload)
-    elif event_type == "location_sync":
-        await stored("location", store.kv_set("location", payload), None)
-        await emit_ui("location_update", payload)
     elif event_type == "mute_sync":
         await stored("mute", store.kv_set("muted", payload), None)
         await emit_ui("mute_update", payload)
@@ -910,8 +1077,6 @@ async def notify_bridge(request: Request) -> Any:
     elif event_type == "vortex_log":
         await stored("log", store.append_event(EVENT_LOG, payload), 0)
         await emit_ui("new_log", payload)
-    elif event_type == "vortex_log_batch":
-        return await _handle_log_batch(payload)
     elif event_type == "audit_event":
         await _handle_audit_event(payload)
     elif event_type == "user_speaking_sync":
@@ -928,12 +1093,17 @@ async def notify_bridge(request: Request) -> Any:
         await stored("persona", store.kv_set("active_persona", payload), None)
         await emit_ui("persona_update", {"persona": payload})
     elif event_type == "task_alert":
-        # Proactive task notification for the UI
-        logger.info("🔔 Notifying UI of due task: %s", payload.get('description'))
+        # Proactive task notification for the UI. K-29: the task's id and the length of its text, never the text.
+        task = payload if isinstance(payload, Mapping) else {}
+        description = task.get("description")
+        logger.info("🔔 task_alert id=%s (%d chars) -> task_notification", _short(task.get("id")) or "-",
+                    len(description) if isinstance(description, str) else 0)
         await emit_ui("task_notification", payload)
-    elif event_type == "task_update":
-        # General task list sync
-        await emit_ui("task_sync", payload)
+        await _drop_due_task(task.get("id"))  # the due task leaves init_state.tasks and the panel's list
+    elif event_type in ("task_update", "task_sync"):
+        # K-40 task_update, and task_sync as the task manager sends it (K-02 {tasks}|{pending}): the list goes to the UI
+        # as task_sync with due_at in epoch seconds, and the last one is kept for init_state.tasks
+        await _route_task_list(payload)
     elif event_type == "memory_update":
         await stored("memory", store.append_event(EVENT_MEMORY, payload), 0)
         await emit_ui("memory_sync", payload)
@@ -993,7 +1163,7 @@ async def notify_bridge(request: Request) -> Any:
             await stored("sim provider", store.kv_set_many(updates), None)
         await emit_ui("sim_panel_open", payload)
     else:
-        logger.warning("⚠️ UNKNOWN EVENT: %s", event_type)
+        logger.warning("⚠️ UNKNOWN EVENT: %s", _short(event_type))
 
     return {"status": "ok"}
 
@@ -1527,7 +1697,7 @@ async def record_user_feedback(data: dict[str, Any],
 
     if intent and strategy:
         adaptive_engine.record_feedback(intent, strategy, score)
-        logger.info("Feedback recorded: %s (Score: %s)", intent, score)
+        logger.info("Feedback recorded: %s (Score: %s)", _short(intent), _printable(score, 16))
 
     return {"status": "recorded"}
 
@@ -1684,12 +1854,14 @@ async def open_store() -> None:
 async def store_retention_loop() -> None:
     """Hourly: deletes event/log rows older than BRIDGE_EVENT_RETENTION_DAYS (0, the default, keeps them
     forever), caps the log feed at BRIDGE_LOG_MAX_ROWS newest rows (C-64 review LS-2: bridge.db stays bounded
-    even with retention 0; 0 removes the cap) and drops expired seen ids. Chat messages are never pruned."""
+    even with retention 0; 0 removes the cap), caps the memory events at the newest MEMORY_MAX_ROWS (K-07: with
+    C-52 every saved message adds one; init_state.memories still shows the last INIT_MEMORIES and memory_cleared
+    still empties them) and drops expired seen ids. Chat messages are never pruned."""
     retention_days = event_retention_days()
     log_cap = log_max_rows()
-    logger.info("Event/log retention: %s; log feed capped at %s rows",
+    logger.info("Event/log retention: %s; log feed capped at %s rows; memory events capped at %d rows",
                 f"{retention_days:g} days" if retention_days else "kept forever (BRIDGE_EVENT_RETENTION_DAYS=0)",
-                log_cap if log_cap else "no cap (BRIDGE_LOG_MAX_ROWS=0)")
+                log_cap if log_cap else "no cap (BRIDGE_LOG_MAX_ROWS=0)", MEMORY_MAX_ROWS)
     while True:
         try:
             deleted = await store.prune_events(retention_days)
@@ -1700,6 +1872,10 @@ async def store_retention_loop() -> None:
             if capped:
                 logger.info("Retention: deleted %d log rows beyond the newest %d (BRIDGE_LOG_MAX_ROWS)",
                             capped, log_cap)
+            capped = await store.cap_events(EVENT_MEMORY, MEMORY_MAX_ROWS)
+            if capped:
+                logger.info("Retention: deleted %d memory rows beyond the newest %d (K-07)", capped,
+                            MEMORY_MAX_ROWS)
             await store.prune_seen()
         except asyncio.CancelledError:
             logger.info("Store retention task cancelled.")

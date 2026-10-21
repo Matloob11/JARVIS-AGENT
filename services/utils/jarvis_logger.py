@@ -233,11 +233,10 @@ PRIVATE_INFO_TEMPLATES: frozenset[str] = frozenset({
     "Semantic search initiated for query: %s",
     "\U0001f6e0️ Tool: analyze_surroundings called with query: %s",
     "RAG-OPT: Searching for '%s' (Filter: %s)",
-    # reminder and task text (set_reminder's message, and the same text when it falls due)
+    # reminder and task text (set_reminder's message, and the same text when it falls due); a due task's lines in
+    # agent_core and the bridge log its id and length only since C-86, so they need no template here
     "Setting reminder: %s at %s",
     "\U0001f514 Triggering proactive reminder: %s",
-    "\U0001f514 Task Due: %s",
-    "\U0001f514 Notifying UI of due task: %s",
     # locations
     "City ke liye weather fetch kiya ja raha hai: %s (forecast=%s)",
     "Attempting weather fallback via search for: %s",

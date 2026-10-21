@@ -224,9 +224,12 @@ def event_retention_days() -> float:
 
 
 # C-64 review LS-2: even with BRIDGE_EVENT_RETENTION_DAYS=0 the log feed must not grow bridge.db without
-# bound (init_state only ever shows the last 30 lines). Only EVENT_LOG rows are capped; memories, tools and
-# chat messages keep the user's retention decision.
+# bound (init_state only ever shows the last 30 lines). EVENT_LOG rows are capped at BRIDGE_LOG_MAX_ROWS and
+# EVENT_MEMORY rows at MEMORY_MAX_ROWS; tools and chat messages keep the user's retention decision.
 DEFAULT_LOG_MAX_ROWS = 20_000
+# K-07: the bridge keeps the newest 200 memory events (with C-52 every saved message adds one); the hourly
+# retention loop deletes older ones. init_state.memories shows the last INIT_MEMORIES of them.
+MEMORY_MAX_ROWS = 200
 
 
 def log_max_rows() -> int:

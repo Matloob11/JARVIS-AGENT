@@ -932,3 +932,182 @@ async def test_the_real_bridge_keeps_the_final_text_when_an_earlier_update_neede
     assert [status for _request, status in real_bridge.state.responses] == [503, 200, 200]
     messages, _ = await real_bridge.store.list_messages()
     assert [(m["id"], m["text"], m["final"]) for m in messages] == [("m-1", "Ji Sir, main dekh raha hoon.", True)]
+
+
+# ---------------------------------------------------------------- C-86: what notify_event says, the internal listener
+
+
+@pytest.mark.parametrize("script, outcome", [
+    ([200], jarvis_bridge.NOTIFY_DELIVERED), ([409], jarvis_bridge.NOTIFY_DELIVERED),
+    ([401], jarvis_bridge.NOTIFY_FAILED), ([429], jarvis_bridge.NOTIFY_FAILED), ([500], jarvis_bridge.NOTIFY_FAILED),
+    ([_down()], jarvis_bridge.NOTIFY_FAILED), ([httpx.ReadTimeout("slow")], jarvis_bridge.NOTIFY_FAILED),
+])
+async def test_notify_event_says_whether_a_non_critical_event_arrived(link, monkeypatch, script, outcome):
+    bridge = Bridge(monkeypatch, script)
+    assert await jarvis_bridge.notify_event("plan_progress", {"current": 1, "total": 3}) == outcome
+    assert len(bridge.requests) == 1 and jarvis_bridge.retry_queue_size() == 0  # sent once, never queued
+    await bridge.client.aclose()
+
+
+async def test_a_critical_event_that_waits_for_a_retry_is_queued_not_delivered(link, monkeypatch):
+    gate = _hold(monkeypatch)
+    bridge = Bridge(monkeypatch, [_down()])
+    assert await jarvis_bridge.notify_event("transcription", {"id": "u-1", "role": "user", "text": "salam"}) == (
+        jarvis_bridge.NOTIFY_QUEUED)  # refused once: it waits for a retry
+    assert await jarvis_bridge.notify_event("transcription", {"id": "u-2", "role": "user", "text": "hi"}) == (
+        jarvis_bridge.NOTIFY_QUEUED)  # behind the waiting one, unsent
+    big = {"id": "u-3", "role": "user", "text": "x" * jarvis_bridge.NOTIFY_MAX_BYTES}
+    assert await jarvis_bridge.notify_event("transcription", big) == jarvis_bridge.NOTIFY_FAILED  # never queued
+    assert await jarvis_bridge.notify_event("tool_sync", {"id": "t", "x": float("nan")}) == jarvis_bridge.NOTIFY_FAILED
+    assert jarvis_bridge.retry_queue_size() == 2
+    gate.set()
+    await _drained()
+    assert [body["payload"]["id"] for body in bridge.bodies()] == ["u-1", "u-1", "u-2"]
+    assert await jarvis_bridge.notify_transcription("user", "later", msg_id="u-4") is None  # the helpers: unchanged
+    await bridge.client.aclose()
+
+
+async def test_a_suppressed_context_reports_suppressed(link, monkeypatch):
+    monkeypatch.setattr(jarvis_bridge, "get_http_client", lambda: pytest.fail("no HTTP from a probe"))
+    token = jarvis_bridge.bridge_suppressed.set(True)
+    try:
+        assert await jarvis_bridge.notify_event("plan_progress", {}) == jarvis_bridge.NOTIFY_SUPPRESSED
+    finally:
+        jarvis_bridge.bridge_suppressed.reset(token)
+
+
+@pytest.mark.parametrize("status, outcome", [(200, jarvis_bridge.NOTIFY_DELIVERED), (401, jarvis_bridge.NOTIFY_FAILED),
+                                             (403, jarvis_bridge.NOTIFY_FAILED)])
+async def test_without_the_v2_keys_the_legacy_answer_is_checked(link, monkeypatch, bridge_log, status, outcome):
+    monkeypatch.setattr(config, "agent_token", None)
+    bridge = Bridge(monkeypatch, [status])
+    assert await jarvis_bridge.notify_event("plan_progress", {"current": 1, "total": 3}) == outcome
+    assert bridge.requests[0].headers["x-vortex-token"] == LEGACY_TOKEN  # the public path keeps the legacy pair
+    if outcome == jarvis_bridge.NOTIFY_FAILED:
+        assert any(r.levelno == logging.DEBUG and f"HTTP {status}" in r.getMessage() for r in bridge_log.records)
+    _no_secret_in(bridge_log)
+    await bridge.client.aclose()
+
+
+@pytest.mark.parametrize("url, internal", [
+    ("http://jarvis-bridge:5002", True), ("http://jarvis-bridge:5002/", True), ("http://10.0.0.5:5002", True),
+    ("https://jarvis.srv1802669.hstgr.cloud/vortex", False), ("http://127.0.0.1:5001", False), ("", False),
+    (None, False), ("http://bad:port", False),
+])
+def test_only_the_5002_listener_counts_as_internal(url, internal):
+    assert jarvis_bridge.is_internal_listener(url) is internal
+
+
+async def test_the_internal_listener_never_gets_the_legacy_token(link, monkeypatch):
+    """K-39 v4: :5002 takes unsigned notifies and answers the legacy token with 401 bad_token, so without the v2 keys
+    notify_event, the answered notify (ConfirmFlow) and the log shipper send no credential there at all."""
+    monkeypatch.setattr(config, "agent_token", None)
+    monkeypatch.setattr(config, "bridge_url", "http://jarvis-bridge:5002")
+    bridge = Bridge(monkeypatch)
+    assert await jarvis_bridge.notify_event("plan_progress", {"current": 1, "total": 3}) == (
+        jarvis_bridge.NOTIFY_DELIVERED)
+    assert await jarvis_bridge.notify_confirm_resolved({"id": "c-1", "allow": True}) == {"status": "ok"}
+    for request in bridge.requests:
+        assert str(request.url) == "http://jarvis-bridge:5002/notify"
+        assert not {"x-vortex-token", "x-vortex-signature", "x-agent-token"} & set(request.headers)
+        assert json.loads(request.content)["type"] in ("plan_progress", "confirm_resolved")
+    shipped: list[httpx.Request] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        shipped.append(request)
+        return httpx.Response(200, json={"status": "ok"})
+
+    with httpx.Client(transport=httpx.MockTransport(answer)) as client:
+        assert jarvis_bridge.post_notify_blocking("vortex_log_batch", {"items": []}, client=client)[0] == "delivered"
+    assert not {"x-vortex-token", "x-vortex-signature"} & set(shipped[0].headers)
+    await bridge.client.aclose()
+
+
+async def test_with_the_v2_keys_the_internal_listener_gets_signed_bytes(link, monkeypatch):
+    monkeypatch.setattr(config, "bridge_url", "http://jarvis-bridge:5002")
+    bridge = Bridge(monkeypatch)
+    assert await jarvis_bridge.notify_event("plan_progress", {"current": 2, "total": 3}) == (
+        jarvis_bridge.NOTIFY_DELIVERED)
+    [request] = bridge.requests
+    assert request.headers["x-agent-token"] == AGENT_TOKEN and "x-vortex-token" not in request.headers
+    assert jarvis_security.verify_notify(request.headers["x-agent-timestamp"], request.headers["x-agent-nonce"],
+                                         request.content, request.headers["x-agent-signature"])
+    await bridge.client.aclose()
+
+
+# ---------------------------------------------------------------- C-86 review: notify_answered (the caller reads the answer)
+
+
+async def _shown(_request: httpx.Request) -> httpx.Response:
+    return httpx.Response(200, json={"status": "ok", "emitted": "plan_progress"})
+
+
+async def _proxy_page(_request: httpx.Request) -> httpx.Response:
+    return httpx.Response(200, content=b"<html><body>JARVIS</body></html>", headers={"content-type": "text/html"})
+
+
+async def test_notify_answered_returns_the_bridges_own_answer(link, monkeypatch):
+    bridge = Bridge(monkeypatch, [_shown, 200])
+    assert await jarvis_bridge.notify_answered("plan_progress", {"current": 1, "total": 3}) == (
+        jarvis_bridge.NOTIFY_DELIVERED, {"status": "ok", "emitted": "plan_progress"})
+    # a bridge without the route answers ok as well: the outcome is 'delivered' with that answer, and the caller
+    # (the planner) decides from the answer that nothing was shown
+    assert await jarvis_bridge.notify_answered("plan_progress", {"current": 2, "total": 3}) == (
+        jarvis_bridge.NOTIFY_DELIVERED, {"status": "ok"})
+    first = bridge.requests[0]
+    assert first.headers["x-agent-token"] == AGENT_TOKEN
+    assert jarvis_security.verify_notify(first.headers["x-agent-timestamp"], first.headers["x-agent-nonce"],
+                                         first.content, first.headers["x-agent-signature"])
+    assert json.loads(first.content) == {"type": "plan_progress", "payload": {"current": 1, "total": 3}}
+    await bridge.client.aclose()
+
+
+@pytest.mark.parametrize("step, reason", [
+    (401, "HTTP 401"), (409, "HTTP 409"), (429, "HTTP 429"), (500, "HTTP 500"), (503, "HTTP 503"),
+    (_down(), "ConnectError"), (httpx.ReadTimeout("slow"), "ReadTimeout"), (_proxy_page, "JSONDecodeError"),
+])
+async def test_notify_answered_fails_without_a_json_2xx_and_never_retries(link, monkeypatch, bridge_log, step,
+                                                                          reason):
+    bridge = Bridge(monkeypatch, [step])
+    assert await jarvis_bridge.notify_answered("plan_progress", {"current": 1, "total": 3}) == (
+        jarvis_bridge.NOTIFY_FAILED, None)
+    assert len(bridge.requests) == 1 and jarvis_bridge.retry_queue_size() == 0  # sent once, never queued
+    debug = [r.getMessage() for r in bridge_log.records if r.levelno == logging.DEBUG]
+    assert any(f"Bridge Notification failed for plan_progress: {reason}" in line for line in debug)
+    assert not any("JARVIS</body>" in line for line in debug)  # never the answer's body
+    _no_secret_in(bridge_log)
+    await bridge.client.aclose()
+
+
+async def test_notify_answered_never_raises_and_sends_nothing_it_cannot_encode(link, monkeypatch):
+    bridge = Bridge(monkeypatch)
+    assert await jarvis_bridge.notify_answered("plan_progress", {"current": float("nan")}) == (
+        jarvis_bridge.NOTIFY_FAILED, None)
+    assert bridge.requests == []
+    await bridge.client.aclose()
+
+
+async def test_notify_answered_sends_nothing_from_a_probe(link, monkeypatch):
+    monkeypatch.setattr(jarvis_bridge, "get_http_client", lambda: pytest.fail("no HTTP from a probe"))
+    token = jarvis_bridge.bridge_suppressed.set(True)
+    try:
+        assert await jarvis_bridge.notify_answered("plan_progress", {}) == (jarvis_bridge.NOTIFY_SUPPRESSED, None)
+    finally:
+        jarvis_bridge.bridge_suppressed.reset(token)
+
+
+@pytest.mark.parametrize("url, legacy", [("http://jarvis-bridge:5002", False), ("http://bridge.test/vortex", True)])
+async def test_notify_answered_without_the_v2_keys_uses_the_fallback_headers(link, monkeypatch, url, legacy):
+    """No credential on the internal listener (K-39 v4: the legacy token is refused there), the legacy pair on the
+    public one, as notify_event does."""
+    monkeypatch.setattr(config, "agent_token", None)
+    monkeypatch.setattr(config, "bridge_url", url)
+    bridge = Bridge(monkeypatch, [_shown])
+    assert (await jarvis_bridge.notify_answered("plan_progress", {"current": 1, "total": 3}))[0] == (
+        jarvis_bridge.NOTIFY_DELIVERED)
+    [request] = bridge.requests
+    assert str(request.url) == f"{url}/notify" and "x-agent-token" not in request.headers
+    assert ("x-vortex-token" in request.headers) is legacy
+    if legacy:
+        assert request.headers["x-vortex-token"] == LEGACY_TOKEN
+    await bridge.client.aclose()

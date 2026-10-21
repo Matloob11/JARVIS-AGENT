@@ -25,6 +25,7 @@ from services.utils.jarvis_adaptive import adaptive_engine
 from services.utils.jarvis_autonomous import TaskProtector, autonomous_protector
 from services.utils.jarvis_bridge import (
     agent_link_v2,
+    is_internal_listener,
     notify_event,
     notify_log,
     notify_sim_loading,
@@ -43,6 +44,7 @@ from services.utils.jarvis_bug_hunter import monitor_logs
 from services.utils.jarvis_config import config
 from services.utils.jarvis_logger import setup_logger
 from services.utils.jarvis_security import vortex_guard
+from services.utils.task_items import task_item_from_row, task_zone
 
 if TYPE_CHECKING:
     from livekit.agents import AgentSession
@@ -178,8 +180,9 @@ RECONNECT_MAX_S = 10.0
 _STABLE_CONNECTION_S = 30.0  # a connection that lasted this long starts the next backoff at 1 s again
 _CONNECT_WAIT_S = 10  # how long connect() waits for the bridge to accept the namespace
 _RETRY_LOG_EVERY_S = 60.0
-# K-38 v4: the bridge takes the agent role only on its internal listener (jarvis-network, never published).
-INTERNAL_LISTENER_PORT = 5002
+# K-38 v4: the bridge takes the agent role only on its internal listener (jarvis-network, never published);
+# is_internal_listener (port jarvis_bridge.INTERNAL_LISTENER_PORT) lives in services.utils.jarvis_bridge, whose
+# notifies use it too.
 
 
 def bridge_socket_target(url: str) -> tuple[str, str]:
@@ -191,14 +194,6 @@ def bridge_socket_target(url: str) -> tuple[str, str]:
     if path == "vortex" or path.endswith("/vortex"):
         return base, f"{path}/socket.io"
     return base, "socket.io"
-
-
-def is_internal_listener(url: str) -> bool:
-    """True for the bridge's internal :5002 listener (the VPS brain, e.g. http://jarvis-bridge:5002)."""
-    try:
-        return urlsplit(url.strip()).port == INTERNAL_LISTENER_PORT
-    except ValueError:
-        return False
 
 
 def _job_identity() -> tuple[str, str]:
@@ -373,11 +368,11 @@ async def open_job_artifact(payload: Any) -> bool:
 # K-03: types the bridge forwards (ui_bridge.UI_COMMAND_TYPES) that no agent handler takes yet. They are ignored at
 # DEBUG instead of logging 'Unknown UI command' to the dashboard, until a module registers one (the registry wins).
 # shutdown_agent has its handler since C-51; settings_update, request_state and the bridge's own settings_bootstrap
-# have theirs in src/core/agent_settings.py since C-54 (listed here for a process that never imported it).
+# have theirs in src/core/agent_settings.py since C-54 (listed here for a process that never imported it); task_cancel
+# and tasks_refresh have theirs below since the C-86 review.
 FORWARDED_UNHANDLED: frozenset[str] = frozenset({
-    "start", "settings_update", "desktop_stop", "notification_ack", "task_cancel",
-    "tasks_refresh", "voice_take_over", "voice_enroll", "voice_enroll_start", "feedback", "request_state",
-    "settings_bootstrap",
+    "start", "settings_update", "desktop_stop", "notification_ack", "voice_take_over", "voice_enroll",
+    "voice_enroll_start", "feedback", "request_state", "settings_bootstrap",
 })
 
 
@@ -594,6 +589,96 @@ def _cmd_job_cancel(payload: Any, _ctx: CommandContext) -> None:
 @register_ui_command("open_job_artifact")
 async def _cmd_open_job_artifact(payload: Any, _ctx: CommandContext) -> None:
     await open_job_artifact(payload)
+
+
+# ------------------------------------------------------------------ K-03: the Tasks panel's Cancel and Refresh
+# C-86 review: since the bridge routes task_sync the panel lists the scheduled tasks; both buttons used to be ignored
+# here (FORWARDED_UNHANDLED). Reminders are not in that list (the task manager's task_sync carries tasks only).
+TASK_DONE_STATUSES = ("completed", "cancelled")  # cancel_scheduled_task's rule (K-33): these are never cancelled
+_TASK_ID_MAX_DIGITS = 18
+
+
+def _task_manager() -> Any:
+    """The process's TaskManager (K-33), imported when a command first needs it."""
+    from services.automation.jarvis_task_manager import task_manager  # pylint: disable=import-outside-toplevel
+    return task_manager
+
+
+def _task_row_id(value: Any) -> int | None:
+    """A tasks.db row id from the panel's id: a positive int, or a string of at most 18 ASCII digits; None else."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value > 0 else None
+    text = value.strip() if isinstance(value, str) else ""
+    if text.isascii() and text.isdigit() and len(text) <= _TASK_ID_MAX_DIGITS and int(text) > 0:
+        return int(text)
+    return None
+
+
+def _cancel_task_row(manager: Any, task_id: int) -> str:
+    """Runs in a worker thread: cancels a scheduled task that has not finished, as cancel_scheduled_task does (K-33).
+    The task manager's own publish does nothing in a worker thread, so the caller publishes the list. Returns the
+    outcome for the log."""
+    existing = manager.get_task(task_id)
+    if existing is None:
+        return "not found"
+    status = str(existing.get("status") or "")
+    if status in TASK_DONE_STATUSES:
+        return f"already {status}"
+    manager.cancel_task(task_id)
+    return "cancelled"
+
+
+async def publish_task_list(manager: Any) -> tuple[int, str]:
+    """notify task_sync {tasks: [TaskItem]} of the pending scheduled tasks (K-02), read in a worker thread
+    (TaskManager.list_pending_tasks) and sent from the event loop, with due_at in epoch seconds in the task manager's
+    own zone (services/utils/task_items). Returns (the number of tasks, notify_event's outcome)."""
+    rows = await asyncio.to_thread(manager.list_pending_tasks)
+    zone = task_zone()
+    items = [task_item_from_row(row, zone) for row in rows or () if isinstance(row, dict)]
+    return len(items), await notify_event("task_sync", {"tasks": items})
+
+
+async def _publish_task_list_logged(manager: Any = None) -> str:
+    """publish_task_list (of manager, else the process's TaskManager) for a command's log line: 'N pending task(s)
+    published (outcome)', or why it was not. Never raises (a locked or broken tasks.db ends up in that line)."""
+    try:
+        count, sent = await publish_task_list(manager if manager is not None else _task_manager())
+    except Exception as exc:  # pylint: disable=broad-exception-caught  # never raised into the command registry
+        return f"the list was not published ({type(exc).__name__})"
+    return f"{count} pending task(s) published ({sent})"
+
+
+@register_ui_command("task_cancel")
+async def _cmd_task_cancel(payload: Any, _ctx: CommandContext) -> None:
+    """K-03 task_cancel {id, source 'task'|'reminder'}: the Tasks panel's Cancel, after the panel's own confirm. A
+    scheduled task that has not finished is cancelled (cancel_scheduled_task's rule), and the pending list is published
+    again either way, so a row that is already gone leaves the panel too. A reminder cannot be cancelled here yet
+    (reminders.json has no cancel; C-62). Logs carry the id, the outcome and counts, never the task's text (K-29)."""
+    data = payload if isinstance(payload, dict) else {}
+    source = str(data.get("source") or "task").strip().lower()
+    if source != "task":
+        logger.info("TASK cancel via UI: a %s cannot be cancelled from the panel yet (C-62)",
+                    "reminder" if source == "reminder" else "row of another kind")
+        return
+    task_id = _task_row_id(data.get("id"))
+    if task_id is None:
+        logger.info("TASK cancel via UI refused: the id is not a task id")
+        return
+    try:
+        manager = _task_manager()
+        outcome = await asyncio.to_thread(_cancel_task_row, manager, task_id)
+    except Exception as exc:  # pylint: disable=broad-exception-caught  # a locked or broken tasks.db: logged only
+        logger.warning("TASK cancel via UI: id=%d failed (%s)", task_id, type(exc).__name__)
+        return
+    logger.info("TASK cancel via UI: id=%d %s; %s", task_id, outcome, await _publish_task_list_logged(manager))
+
+
+@register_ui_command("tasks_refresh")
+async def _cmd_tasks_refresh(_payload: Any, _ctx: CommandContext) -> None:
+    """K-03 tasks_refresh: the Tasks panel's Refresh publishes the pending scheduled tasks again (task_sync)."""
+    logger.info("TASKS refresh via UI: %s", await _publish_task_list_logged())
 
 
 class UIBridgeListener:

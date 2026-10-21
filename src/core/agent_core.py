@@ -906,7 +906,9 @@ class BrainAssistant(Agent):
             try:
                 due_tasks = await asyncio.to_thread(task_manager.get_due_tasks)
                 for task in due_tasks:
-                    logger.info("🔔 Task Due: %s", task['description'])
+                    # K-29: the task's id and the length of its text, never the text (INFO reaches the UI log panel)
+                    logger.info("🔔 Task due: id=%s (%d chars)", task.get('id'),
+                                len(str(task.get('description') or '')))
                     
                     # Notify UI Bridge
                     await self.bridge_notifier.notify_event("task_alert", {

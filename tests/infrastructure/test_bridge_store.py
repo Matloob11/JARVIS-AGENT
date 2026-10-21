@@ -956,6 +956,38 @@ async def test_retention_task_prunes_with_the_env_value(bridge, monkeypatch):
     assert await bridge.store.recent_events(EVENT_LOG) == [{"n": "fresh"}]
 
 
+async def test_the_retention_loop_keeps_the_newest_200_memory_events(bridge, monkeypatch):
+    """K-07 (C-86): with C-52 every saved message adds a memory event, so the hourly loop caps them at the newest
+    MEMORY_MAX_ROWS (even with BRIDGE_EVENT_RETENTION_DAYS=0); init_state.memories still shows the last 10, other
+    kinds are untouched, and memory_cleared still empties them."""
+    assert (bridge_store.MEMORY_MAX_ROWS, bridge_store.INIT_MEMORIES) == (200, 10)
+    monkeypatch.delenv("BRIDGE_EVENT_RETENTION_DAYS", raising=False)
+    await bridge.store.append_events(EVENT_MEMORY, [{"id": f"m{n}", "content": "x"} for n in range(230)])
+    await bridge.store.append_events(EVENT_LOG, [{"text": f"l{n}"} for n in range(5)])
+    await bridge.store.append_events(EVENT_TOOL, [{"tool": f"t{n}"} for n in range(250)])
+
+    task = asyncio.create_task(bridge.module.store_retention_loop())
+    try:
+        for _ in range(200):
+            if len(await bridge.store.recent_events(EVENT_MEMORY, 1000)) == 200:
+                break
+            await asyncio.sleep(0.01)
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+    kept = await bridge.store.recent_events(EVENT_MEMORY, 1000)
+    assert [row["id"] for row in kept] == [f"m{n}" for n in range(30, 230)]  # the newest 200, oldest first
+    assert len(await bridge.store.recent_events(EVENT_LOG, 100)) == 5
+    assert len(await bridge.store.recent_events(EVENT_TOOL, 1000)) == 250
+    state = await _connect_ui(bridge, "sid-mem")
+    assert [row["id"] for row in state["memories"]] == [f"m{n}" for n in range(220, 230)]
+    await _notify(bridge.module, "memory_cleared", {"scope": "short_term", "ts": T0})
+    assert await bridge.store.recent_events(EVENT_MEMORY, 1000) == []
+    source = (ROOT / "src" / "core" / "ui_bridge.py").read_text(encoding="utf-8")
+    loop = source.partition("async def store_retention_loop")[2].partition("async def _expire_ui_sessions")[0]
+    assert "cap_events(EVENT_MEMORY, MEMORY_MAX_ROWS)" in loop
+
+
 async def test_lifespan_opens_and_closes_the_store(bridge, monkeypatch):
     async def idle() -> None:
         await asyncio.Event().wait()
