@@ -192,10 +192,11 @@ def current_agent() -> tuple[str, str]:
     return "", f"{AGENT_ENV}={shown} is not valid (use claude, cursor or user)"
 
 
-def git_blob(spec: str) -> str | None:
-    """Text of 'HEAD:<path>' or ':<path>' (the staged copy); None when it does not exist."""
+def git_blob(spec: str, errors: str = "replace") -> str | None:
+    """Text of 'HEAD:<path>' or ':<path>' (the staged copy); None when it does not exist. errors='surrogateescape'
+    keeps each byte that is not UTF-8 as itself, so it never compares equal to a U+FFFD written in its place."""
     proc = subprocess.run(["git", "cat-file", "blob", spec], capture_output=True, cwd=ROOT, check=False)
-    return proc.stdout.decode("utf-8", errors="replace") if proc.returncode == 0 else None
+    return proc.stdout.decode("utf-8", errors=errors) if proc.returncode == 0 else None
 
 
 def commit_lanes() -> tuple[check_lane.Lanes | None, str]:
@@ -246,7 +247,9 @@ def append_only_check(changed: list[str], lanes: check_lane.Lanes | None) -> lis
     findings = []
     for rel in lanes.append_only:
         if rel in changed:
-            old, new = git_blob("HEAD:" + rel) or "", git_blob(":" + rel) or ""
+            # The committed bytes count: a legacy cp1252 byte saved back as U+FFFD is a changed line (c4ca586)
+            old = git_blob("HEAD:" + rel, errors="surrogateescape") or ""
+            new = git_blob(":" + rel, errors="surrogateescape") or ""
             findings += [f"{rel}:{span} APPEND_ONLY" for span in line_spans(check_lane.removed_lines(old, new))]
     return findings
 

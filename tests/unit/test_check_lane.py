@@ -416,6 +416,24 @@ def test_edited_done_highlight_line_is_rejected_for_every_agent(sandbox):
 
 
 @needs_git
+def test_a_committed_ansi_byte_saved_back_as_a_replacement_char_is_rejected(sandbox):
+    """Seen in c4ca586: older done_highlight.md lines hold raw cp1252 bytes (0xB7 for a middle dot), and an editor
+    that saved the file as UTF-8 turned them into U+FFFD. Decoding both sides with errors='replace' made the
+    lines look unchanged, so the edit passed. The committed bytes must count: the line was changed."""
+    log = sandbox / "done_highlight.md"
+    log.write_bytes(b"# log\n\n### entry 1\n- first \xb7 more\n")  # the legacy line, committed by plumbing
+    blob = _git(sandbox, "hash-object", "-w", "done_highlight.md").stdout.strip()
+    assert _git(sandbox, "update-index", "--cacheinfo", f"100644,{blob},done_highlight.md").returncode == 0
+    tree = _git(sandbox, "write-tree").stdout.strip()
+    commit = _git(sandbox, "commit-tree", tree, "-p", "HEAD", "-m", "legacy line").stdout.strip()
+    assert _git(sandbox, "update-ref", "HEAD", commit).returncode == 0
+    log.write_bytes(b"# log\n\n### entry 1\n- first \xef\xbf\xbd more\n### entry 2\n")
+    code, out, moved = _commit(sandbox, "done_highlight.md", agent="cursor")
+    assert code != 0 and not moved
+    assert "done_highlight.md:4 APPEND_ONLY" in out
+
+
+@needs_git
 def test_appending_to_done_highlight_passes(sandbox):
     _append(sandbox / "done_highlight.md", "\n### entry 2\n- second\n")
     code, out, moved = _commit(sandbox, "done_highlight.md", agent="cursor")
