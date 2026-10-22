@@ -89,16 +89,30 @@ def _write(path: Path, text: str, mode: int | None = None) -> Path:
 # --------------------------------------------------------------------------- fakes
 
 FAKE_DOCKER_PY = r'''
-"""Fake docker CLI for tests/unit/test_deploy_tooling.py; state in $FAKE_STATE/docker_state.json."""
+"""Fake docker CLI for tests/unit/test_deploy_tooling.py; state in $FAKE_STATE/docker_state.json.
+
+C-128 (tests/infrastructure/test_agent_deploy.py): 'exec', 'compose run', 'cp', 'logs', 'volume' and 'image ls' too. A
+container (or a one-off 'compose run' of a service, state 'service_roots') may have a file system in the sandbox ('root'
+for Python, 'root_sh' for bash): 'python -c CODE ...' and 'sh -c SCRIPT' then really run there, with /app/... and
+/tmp/jarvis-backup-... arguments moved into it, and 'python -m MODULE ...' runs the module of the image's code (state
+'code_root': this repo) the same way; anything else answers from the state's 'exec' list.
+A container's log (state 'logs') is a string (lines without a time: every 'logs' call prints them) or a list of
+[RFC 3339 time, line] entries, which 'logs --since' filters as docker does. A new container gets the real start time,
+and one of a service in state 'registers' ({service: agent name}) logs its LiveKit 'worker registered' line at that
+time unless its image is broken."""
+import calendar
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
+import time
 
 STATE_DIR = os.environ["FAKE_STATE"]
 STATE_FILE = os.path.join(STATE_DIR, "docker_state.json")
 VALUE_FLAGS = {"--format", "--policy", "--pull", "--filter", "-f", "-p", "--project-directory", "--env-file",
-               "--profile", "-t", "--timeout"}
+               "--profile", "-t", "--timeout", "--since", "--tail"}
 sys.stdout.reconfigure(newline="\n")   # bash reads it: no CRLF on Windows
 
 
@@ -115,6 +129,29 @@ def save(state):
 def new_id(state, width):
     state["counter"] += 1
     return ("%0" + str(width) + "x") % (0xC0FFEE000 + state["counter"])
+
+
+def now_rfc3339():
+    """Now, as docker prints .State.StartedAt (nanoseconds, UTC)."""
+    ns = time.time_ns()
+    return time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(ns // 10 ** 9)) + ".%09dZ" % (ns % 10 ** 9)
+
+
+def rfc3339_epoch(text):
+    m = re.match(r"^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)(?:\.(\d+))?Z$", text)
+    if not m:
+        raise ValueError("not an RFC 3339 UTC time: %r" % text)
+    return calendar.timegm(tuple(int(x) for x in m.groups()[:6])) + (float("0." + m.group(7)) if m.group(7) else 0.0)
+
+
+def since_epoch(value):
+    """'docker logs --since': an RFC 3339 time, a Unix time, or a Go duration (15m, 60s, 1h) back from now."""
+    m = re.match(r"^(\d+(?:\.\d+)?)(ms|s|m|h)$", value)
+    if m:
+        return time.time() - float(m.group(1)) * {"ms": 0.001, "s": 1, "m": 60, "h": 3600}[m.group(2)]
+    if re.match(r"^\d+(?:\.\d+)?$", value):
+        return float(value)
+    return rfc3339_epoch(value)
 
 
 def compose_services(text):
@@ -216,17 +253,126 @@ def status_text(c):
 
 
 def render(fmt, name, c):
-    out = fmt.replace("{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}", c.get("health", "none"))
+    health = c.get("health", "none")
+    out = re.sub(r"\{\{if \.State\.Health\}\}\{\{\.State\.Health\.Status\}\}\{\{else\}\}(.*?)\{\{end\}\}",
+                 lambda m: health if health != "none" else m.group(1), fmt)
+    out = out.replace("{{if .State.Health}}{{.State.Health.Status}}{{end}}", "" if health == "none" else health)
     out = out.replace("{{range .Config.Env}}{{println .}}{{end}}", "".join(e + "\n" for e in c.get("env", [])))
     out = re.sub(r"\{\{range \.Mounts\}\}.*?\{\{end\}\}", "", out)
     pairs = {"{{.Name}}": "/" + name, "{{.Names}}": name, "{{.Config.Image}}": c["ref"], "{{.Image}}": c["image"],
              "{{.ID}}": c["id"], "{{.Id}}": c["id"], "{{.State.Status}}": c["status"],
+             "{{.State.Running}}": "true" if c["status"] == "running" else "false",
              "{{.State.StartedAt}}": c["started"], "{{.RestartCount}}": str(c["restarts"]),
              '{{.Label "com.docker.compose.project"}}': c.get("project", ""), "{{.Status}}": status_text(c),
              "{{.Ports}}": c.get("ports", ""), "{{.Service}}": c.get("service", "")}
     for key, val in pairs.items():
         out = out.replace(key, val)
     return out
+
+
+def label_of(state, img, fmt):
+    """'{{index .Config.Labels "<key>"}}' of an image (state 'labels': {image id: {key: value}})."""
+    m = re.search(r'\{\{index \.Config\.Labels "([^"]+)"\}\}', fmt)
+    return state.get("labels", {}).get(img, {}).get(m.group(1), "") if m else None
+
+
+def unmangle(arg):
+    """Git Bash rewrites a native program's argument /app/x into <Git>/app/x and /tmp/x into %TEMP%/x: back to the
+    container path for the two container prefixes the scripts use."""
+    flat = arg.replace("\\", "/")
+    msys = os.environ.get("FAKE_MSYS_ROOT", "").replace("\\", "/").rstrip("/")
+    if msys and (flat.lower() == msys.lower() + "/app" or flat.lower().startswith(msys.lower() + "/app/")):
+        return flat[len(msys):]
+    temp = os.environ.get("TEMP", "").replace("\\", "/").rstrip("/")
+    if temp and flat.lower().startswith((temp + "/jarvis-backup-").lower()):
+        return "/tmp/" + flat[len(temp) + 1:]
+    return arg
+
+
+def inside(root, arg):
+    """A container path argument moved into the container's sandbox folder."""
+    arg = unmangle(arg)
+    if root and (arg == "/app" or arg.startswith("/app/") or arg.startswith("/tmp/jarvis-backup-")):
+        return root + arg
+    return arg
+
+
+KEEP_ENV = ("PATH", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "USERPROFILE", "COMSPEC", "PATHEXT", "FAKE_STATE",
+            "FAKE_STATE_SH", "FAKE_MSYS_ROOT", "LC_ALL")
+
+
+def run_inside(state, root, root_sh, argv, extra_env):
+    """One command 'inside' a container: canned answers first, then python -c / sh -c / test / rm in its folder."""
+    env = dict(os.environ)
+    if argv[:2] == ["env", "-i"]:
+        argv = argv[2:]
+        assigned = {}
+        while argv and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", argv[0]):
+            key, value = argv[0].split("=", 1)
+            assigned[key] = value
+            argv = argv[1:]
+        env = {k: v for k, v in env.items() if k.upper() in KEEP_ENV}
+        env.update({k: v for k, v in assigned.items() if k not in ("PATH", "HOME")})
+    env.update(extra_env)
+    joined = " ".join(argv)
+    for pat, rc, out in state.get("exec", []):
+        if pat in joined:
+            sys.stdout.write(out)
+            sys.stdout.flush()
+            return rc
+    sys.stdout.flush()
+    if argv[:2] in (["python", "-c"], ["python3", "-c"]) and len(argv) >= 3:
+        return subprocess.call([sys.executable, "-c", argv[2]] + [inside(root, a) for a in argv[3:]], env=env)
+    if argv[:2] in (["python", "-m"], ["python3", "-m"]) and len(argv) >= 3 and state.get("code_root"):
+        # the image's own code (/app/services, /app/src, /app/scripts) is this repo (state 'code_root'): '-m' finds the
+        # module from the working folder, as from /app in the image ('docker exec -w /app ... env -i ... python -m')
+        return subprocess.call([sys.executable, "-m", argv[2]] + [inside(root, a) for a in argv[3:]], env=env,
+                               cwd=state["code_root"])
+    if argv[:2] == ["sh", "-c"] and len(argv) >= 3 and root_sh:
+        prefix = 'cd() { case "$1" in /*) builtin cd "$FAKE_ROOT$1" ;; *) builtin cd "$@" ;; esac; }\n'
+        env["FAKE_ROOT"] = root_sh
+        return subprocess.call([shutil.which("bash") or "bash", "-c", prefix + argv[2]] + argv[3:], env=env, cwd=root)
+    if argv[:2] == ["test", "-f"] and len(argv) == 3:
+        return 0 if os.path.isfile(inside(root, argv[2])) else 1
+    if argv[:1] == ["rm"]:
+        for arg in argv[1:]:
+            path = inside(root, arg)
+            if path != arg and os.path.isfile(path):
+                os.remove(path)
+        return 0
+    sys.stderr.write("fake docker: no answer inside the container for: %s\n" % joined[:200])
+    return 127
+
+
+def compose_run(state, svcs, rest):
+    """'compose run --rm --no-deps -T [-e K=V] [--entrypoint E] ... <service> [args]': a one-off container."""
+    i, extra, entry = 0, {}, None
+    while i < len(rest) and rest[i].startswith("-"):
+        a = rest[i]
+        if a in ("-e", "--env"):
+            key, value = rest[i + 1].split("=", 1)
+            extra[key] = value
+            i += 2
+        elif a in ("--entrypoint", "--user", "-u", "-v", "--volume", "--cap-add", "--name", "-w", "--workdir"):
+            if a == "--entrypoint":
+                entry = rest[i + 1]
+            i += 2
+        else:
+            i += 1
+    svc, args = rest[i], rest[i + 1:]
+    if svc not in svcs:
+        sys.stderr.write("no such service: %s\n" % svc)
+        return 1
+    if image_of(svc, svcs[svc]) not in state["tags"]:
+        sys.stderr.write("no such image %s\n" % image_of(svc, svcs[svc]))
+        return 1
+    with open(os.path.join(STATE_DIR, "runs.log"), "a", encoding="utf-8") as fh:
+        fh.write(svc + "\n")
+    root = state.get("service_roots", {}).get(svc) or {}
+    if not root:
+        name, c = find(state, svcs[svc]["container"])
+        root = {"root": (c or {}).get("root"), "root_sh": (c or {}).get("root_sh")}
+    return run_inside(state, root.get("root"), root.get("root_sh"), ([entry] if entry else []) + args, extra)
 
 
 def find(state, ref):
@@ -241,11 +387,13 @@ def update_phase(state):
     bad = set(state.get("bad_images", []))
     running_bad = any(c["image"] in bad for c in state["containers"].values()
                       if c.get("project") == "jarvis" and c["status"] == "running")
-    marker = os.path.join(STATE_DIR, "phase_bad")
-    if running_bad and "regress" in state.get("bad_effects", []):
-        open(marker, "w", encoding="utf-8").close()
-    elif os.path.exists(marker):
-        os.remove(marker)
+    # 'regress': another app's site turns 5xx; 'change' (C-128): one changes without a regression (301 -> 200)
+    for effect, name in (("regress", "phase_bad"), ("change", "phase_changed")):
+        marker = os.path.join(STATE_DIR, name)
+        if running_bad and effect in state.get("bad_effects", []):
+            open(marker, "w", encoding="utf-8").close()
+        elif os.path.exists(marker):
+            os.remove(marker)
 
 
 def compose(state, args):
@@ -274,6 +422,8 @@ def compose(state, args):
     else:
         sys.stderr.write("no compose file %s\n" % cfile)
         return 1
+    if sub == "run":
+        return compose_run(state, svcs, rest)
     flags, values, pos = split(rest)
     for s in pos:
         if s not in svcs:
@@ -347,10 +497,17 @@ def compose(state, args):
             health = "none" if s in state.get("no_healthcheck", []) else "healthy"
             if img in state.get("bad_images", []) and "unhealthy" in state.get("bad_effects", []):
                 health = "unhealthy"
+            started = now_rfc3339()
             state["containers"][cname] = {
                 "id": new_id(state, 12), "service": s, "project": "jarvis", "ref": ref, "image": img,
-                "status": "running", "health": health, "started": "2026-10-02T09:%02d:00Z" % (state["counter"] % 60),
+                "status": "running", "health": health, "started": started,
                 "restarts": 0, "env": env, "ports": old["ports"] if old else ""}
+            agent_name = state.get("registers", {}).get(s)
+            if agent_name and health != "unhealthy":   # its worker registers with LiveKit once it runs
+                livekit_log = state.setdefault("logs", {}).setdefault("jarvis-livekit", [])
+                if isinstance(livekit_log, list):
+                    livekit_log.append([started, 'INFO\tlivekit\tworker registered\t{"agentName": "%s", "workerID": '
+                                                 '"AW_%s"}\n' % (agent_name, new_id(state, 6))])
         update_phase(state)
         save(state)
         return 0
@@ -375,6 +532,8 @@ def main():
     cmd, rest = argv[0], argv[1:]
     if cmd == "compose":
         return compose(state, rest)
+    if cmd == "container" and rest[:1] == ["inspect"]:
+        cmd, rest = "inspect", rest[1:]
     if cmd == "inspect":
         _, values, pos = split(rest)
         fmt, rc = values.get("-f", ["{{.Name}}"])[-1], 0
@@ -395,8 +554,67 @@ def main():
                 sys.stderr.write("Error: No such image: %s\n" % ref)
                 rc = 1
                 continue
-            print(img if values.get("-f") else '[{"Id": "%s"}]' % img)
+            label = label_of(state, img, values.get("-f", [""])[-1])
+            print(label if label is not None else img if values.get("-f") else '[{"Id": "%s"}]' % img)
         return rc
+    if cmd == "image" and rest[:1] == ["ls"]:
+        _, values, _ = split(rest[1:])
+        fmt = values.get("--format", ["{{.Repository}}:{{.Tag}}"])[-1]
+        for ref, img in sorted(state["tags"].items()):
+            repo, _, tag = ref.rpartition(":")
+            print(fmt.replace("{{.Repository}}", repo).replace("{{.Tag}}", tag).replace("{{.ID}}", img[7:19])
+                  .replace("{{.CreatedAt}}", "2026-10-01 00:00:00 +0000 UTC").replace("{{.Size}}", "1GB"))
+        return 0
+    if cmd == "exec":
+        i, extra = 0, {}
+        while i < len(rest) and rest[i].startswith("-"):
+            if rest[i] in ("-e", "--env"):
+                key, value = rest[i + 1].split("=", 1)
+                extra[key] = value
+                i += 2
+            elif rest[i] in ("-u", "--user", "-w", "--workdir"):
+                i += 2
+            else:
+                i += 1
+        name, c = find(state, rest[i])
+        if c is None or c["status"] != "running":
+            sys.stderr.write("Error: container %s is not running\n" % rest[i])
+            return 1
+        if name in state.get("exec_fails", []):   # running, but it cannot take an exec (a restart loop)
+            sys.stderr.write("OCI runtime exec failed: container is restarting\n")
+            return 126
+        return run_inside(state, c.get("root"), c.get("root_sh"), rest[i + 1:], extra)
+    if cmd == "cp":
+        name, _, path = rest[0].partition(":")
+        _, c = find(state, name)
+        src = inside((c or {}).get("root"), path)
+        if c is None or src == path or not os.path.isfile(src):
+            sys.stderr.write("Error: no such file in %s: %s\n" % (name, path))
+            return 1
+        shutil.copyfile(src, rest[1])
+        return 0
+    if cmd == "logs":
+        _, values, pos = split(rest)
+        log = state.get("logs", {}).get(pos[-1], "")
+        if isinstance(log, str):   # lines without a time: printed whatever --since says
+            sys.stdout.write(log)
+            return 0
+        since = since_epoch(values["--since"][-1]) if "--since" in values else None
+        for ts, line in log:       # docker's own time of each line
+            if since is None or rfc3339_epoch(ts) >= since:
+                sys.stdout.write(line)
+        return 0
+    if cmd == "volume" and rest[:1] == ["inspect"]:
+        missing = [v for v in rest[1:] if v not in state.get("volumes", [])]
+        for v in missing:
+            sys.stderr.write("Error: No such volume: %s\n" % v)
+        return 1 if missing else 0
+    if cmd == "volume" and rest[:1] == ["ls"]:
+        _, values, _ = split(rest[1:])
+        fmt = values.get("--format", ["{{.Name}}"])[-1]
+        for v in state.get("volumes", []):
+            print(fmt.replace("{{.Name}}", v))
+        return 0
     if cmd == "tag":
         img = state["tags"].get(rest[0]) or (rest[0] if rest[0] in state["images"] else None)
         if img is None:
@@ -447,7 +665,15 @@ case "${1:-}" in
 esac
 exit 0
 ''',
-    "systemctl": '#!/usr/bin/env bash\nprintf \'systemctl %s\\n\' "$*" >> "$FAKE_STATE_SH/systemctl_calls.log"\n',
+    # systemctl_reload_fails: the next 'systemctl reload' fails once (after an 'nginx -t' that passed)
+    "systemctl": r'''#!/usr/bin/env bash
+printf 'systemctl %s\n' "$*" >> "$FAKE_STATE_SH/systemctl_calls.log"
+if [[ ${1:-} == reload && -f $FAKE_STATE_SH/systemctl_reload_fails ]]; then
+  rm -f -- "$FAKE_STATE_SH/systemctl_reload_fails"
+  echo "Job for nginx.service failed because the control process exited with error code." >&2
+  exit 1
+fi
+''',
     "certbot": '#!/usr/bin/env bash\nprintf \'certbot %s\\n\' "$*" >> "$FAKE_STATE_SH/certbot_calls.log"\n',
     "ss": '#!/usr/bin/env bash\ncat "$FAKE_STATE_SH/ss.txt"\n',
     "flock": '#!/usr/bin/env bash\n[[ -f $FAKE_STATE_SH/flock_busy ]] && exit 1\nexit 0\n',
@@ -456,6 +682,7 @@ exit 0
     "df": r'''#!/usr/bin/env bash
 avail=104857600
 [[ -f $FAKE_STATE_SH/df_low ]] && avail=1048576
+[[ -f $FAKE_STATE_SH/df_gb ]] && avail=$(( $(cat "$FAKE_STATE_SH/df_gb") * 1048576 ))
 printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\nfake 209715200 1 %s 50%% /\n' "$avail"
 ''',
     "curl": r'''#!/usr/bin/env bash
@@ -471,6 +698,7 @@ done
 printf 'curl %s\n' "$url" >> "$FAKE_STATE_SH/curl_calls.log"
 codes="$FAKE_STATE_SH/curl_codes.txt"
 [[ -f $FAKE_STATE_SH/phase_bad ]] && codes="$FAKE_STATE_SH/curl_codes_bad.txt"
+[[ -f $FAKE_STATE_SH/phase_changed ]] && codes="$FAKE_STATE_SH/curl_codes_changed.txt"
 code=000
 while read -r pat c; do
   if [[ -n $pat && $url == *"$pat"* ]]; then code=$c; break; fi
@@ -494,8 +722,15 @@ fi
 if [[ $cmd == *deploy.sh* ]]; then
   echo "[deploy] == preflight"
   echo "[deploy] BACKUP=2026-10-02_0901Z-pre-deploy-fake"
+  [[ -f $FAKE_STATE_SH/ssh_deploy_extra ]] && cat "$FAKE_STATE_SH/ssh_deploy_extra"
   echo "[deploy] RESULT=ok"
   exit "$(cat "$FAKE_STATE_SH/ssh_deploy_rc" 2>/dev/null || echo 0)"
+fi
+if [[ $cmd == *RUN_RC=* ]]; then   # deploy_from_pc.sh --attach: the run's whole log, then its exit code
+  [[ -f $FAKE_STATE_SH/attach_log ]] && cat "$FAKE_STATE_SH/attach_log"
+  rc="$(cat "$FAKE_STATE_SH/attach_rc" 2>/dev/null || echo 0)"
+  echo "RUN_RC=$rc"
+  exit "$rc"
 fi
 echo "unexpected ssh command" >&2
 exit 97
@@ -560,6 +795,13 @@ COMPOSE_WITH_AGENT = COMPOSE_NEW + """  agent:
     depends_on:
       - livekit
 """
+# C-128: what the VPS brain's gate reads inside a healthy agent container and in the LiveKit log (fake docker answers)
+AGENT_GATE_FAKES = {
+    "exec": [["127.0.0.1:8081/worker", 0, '{"agent_name": "jarvis", "worker_type": "JT_ROOM"}'],
+             ["net_guard --self-test", 0, '{\n  "failures": [],\n  "ok": true\n}\n'],
+             ["check_models.py", 0, "MODELS_OK\n"]],
+    "logs": {"jarvis-livekit": 'INFO\tworker registered\t{"agentName": "jarvis", "workerID": "AW_t"}\n'},
+}
 
 NGINX_T = """# configuration file /etc/nginx/nginx.conf:
 user www-data;
@@ -692,6 +934,8 @@ class Sandbox:  # pylint: disable=too-many-instance-attributes
         _write(self.state / "curl_codes.txt", CURL_CODES)
         _write(self.state / "curl_codes_bad.txt", CURL_CODES.replace("site-one.example.test 200",
                                                                       "site-one.example.test 502"))
+        _write(self.state / "curl_codes_changed.txt", CURL_CODES.replace("site-two.example.test 301",
+                                                                          "site-two.example.test 200"))
         self.stage()
 
     # ------------------------------------------------------------ setup
@@ -793,7 +1037,8 @@ class Sandbox:  # pylint: disable=too-many-instance-attributes
         assert BASH is not None
         env["PATH"] = os.pathsep.join([str(self.fakebin), str(Path(BASH).parent), *extra_path])
         env.update(HOME=str(self.home), LC_ALL="C", JARVIS_DEPLOY_SANDBOX=self.posix_root,
-                   FAKE_STATE=str(self.state), FAKE_STATE_SH=self.sh(self.state), TMPDIR=self.sh(self.tmp))
+                   FAKE_STATE=str(self.state), FAKE_STATE_SH=self.sh(self.state), TMPDIR=self.sh(self.tmp),
+                   FAKE_MSYS_ROOT=str(Path(BASH).parents[2]) if os.name == "nt" else "")
         env.update(extra)
         return env
 
@@ -890,7 +1135,12 @@ def test_compose_commands_always_name_services() -> None:
             assert not re.search(r"\b(system|image|volume|builder|container|network) prune\b", code), name + ": " + code
             assert "compose down" not in code and " rmi " not in code, name + ": " + code
             assert "restart nginx" not in code and "restart docker" not in code, name + ": " + code
-    assert ups == 3   # deploy, automatic rollback, rollback.sh
+    # deploy's recreate, and recreate_in_rounds (C-128: per round of image tags), which the automatic rollback and
+    # rollback.sh both call
+    assert ups == 2
+    deploy_src, rollback_src = ((HOSTINGER / name).read_text(encoding="utf-8") for name in ("deploy.sh", "rollback.sh"))
+    assert deploy_src.count('recreate_in_rounds "$B/deploy-images.txt"') == 1
+    assert rollback_src.count('recreate_in_rounds "$B/restore-images.txt"') == 1
 
     ctl = _agent_ctl()
     assert ctl.VPS_COMPOSE_UP == ("up", "-d", "--no-deps", "--no-build", "--pull", "never")
@@ -1305,6 +1555,23 @@ def test_deploy_nginx_change_reloads_once(sb: Sandbox) -> None:
     assert "site-one.example.test" in (backup / "nginx-test.txt").read_text(encoding="utf-8")
 
 
+def test_a_failed_nginx_reload_also_puts_the_rebuilt_image_tag_back(sb: Sandbox) -> None:
+    """The build re-tagged jarvis-bridge:hostinger, then 'systemctl reload nginx' failed (after 'nginx -t' passed), so no
+    container was recreated yet. The automatic rollback puts jarvis.conf back and the bridge tag too: the next
+    'up -d --no-build ui-bridge' (agent_ctl's bridge recreate, for one) must never start a build that passed no gate."""
+    (sb.state / "systemctl_reload_fails").touch()
+    before = sb.load_state()["tags"]
+    proc = sb.deploy("--services", "ui-bridge", "--nginx", "--foreground")
+    out = _out(proc)
+    assert proc.returncode == 2 and "FAIL: systemctl reload nginx failed" in out and "RESULT=rolled-back" in out, out
+    assert any(c.endswith("build ui-bridge") for c in sb.calls()) and not any(" up -d" in c for c in sb.calls())
+    _assert_tags(sb, before, {})   # jarvis-bridge:hostinger is back on B_OLD
+    assert sb.load_state()["containers"]["jarvis-bridge"]["image"] == B_OLD
+    assert sb.nginx_conf.read_text(encoding="utf-8").startswith("# jarvis.conf v1 (live)")
+    assert sb.calls("systemctl") == ["systemctl reload nginx", "systemctl reload nginx"]   # the change, the restore
+    _assert_no_other_names(out)
+
+
 def test_deploy_lock_busy_refuses(sb: Sandbox) -> None:
     (sb.state / "flock_busy").touch()
     proc = sb.deploy("--services", "ui-bridge", "--foreground")
@@ -1329,9 +1596,16 @@ def test_deploy_detached_run_streams_its_log(sb: Sandbox) -> None:
     assert (sb.run_dir / "rc").read_text(encoding="utf-8").strip() == "0"
 
 
+def _pc_brain_env(sb: Sandbox) -> None:
+    """The VPS .env since C-126 always says the brain; the idle gate of an agent deploy gates an unreadable one as vps."""
+    env_file = sb.hostinger / ".env"
+    _write(env_file, env_file.read_text(encoding="utf-8") + "JARVIS_BRAIN=pc\n")
+
+
 @e2e
 def test_deploy_new_service_is_stopped_by_the_rollback(sb: Sandbox) -> None:
     sb.stage(compose=COMPOSE_WITH_AGENT)
+    _pc_brain_env(sb)
     sb.tweak(bad_build_services=["agent"], bad_effects=["unhealthy"])
     proc = sb.deploy("--services", "agent", "--foreground")
     out = _out(proc)
@@ -1457,7 +1731,10 @@ def test_rollback_to_a_plain_backup_after_a_livekit_upgrade(sb: Sandbox) -> None
 def test_rollback_undo_brings_a_new_service_back(sb: Sandbox) -> None:
     """Rolling back a deploy that created a service stops it; the undo it prints must start it again."""
     sb.stage(compose=COMPOSE_WITH_AGENT)
-    assert sb.deploy("--services", "agent", "--foreground").returncode == 0
+    _pc_brain_env(sb)
+    sb.tweak(**AGENT_GATE_FAKES)   # C-128: 'agent' gets the VPS brain's gate
+    proc = sb.deploy("--services", "agent", "--foreground")
+    assert proc.returncode == 0, _out(proc)
     tools = sb.base / "tools" / "rollback.sh"
     proc = sb.run(tools, "--foreground")
     assert proc.returncode == 0, _out(proc)
@@ -1503,7 +1780,7 @@ def test_rollback_usage_and_refusals(sb: Sandbox) -> None:
 def test_rollback_refuses_an_old_deploy_library(sb: Sandbox) -> None:
     shutil.copy(HOSTINGER / "rollback.sh", sb.hostinger / "rollback.sh")   # next to the old v1 deploy.sh
     proc = sb.run(sb.hostinger / "rollback.sh", "--foreground")
-    assert proc.returncode == 1 and "not the deploy.sh v2 library" in _out(proc)
+    assert proc.returncode == 1 and "not the deploy.sh v3 library" in _out(proc)
     assert "V1_DEPLOY_RAN" not in _out(proc) and not sb.calls()
 
 
@@ -1958,8 +2235,8 @@ def _run_env_functions(sb: Sandbox, backup: Path, services: str, *, env_compose:
     script goes into a file: MSYS bash cuts a 'bash -c' script argument longer than about 8 KB without a word."""
     lib = sb.sh(sb.run_dir / "tree" / "deploy" / "hostinger" / "deploy.sh")
     functions = "".join(_shell_function("rollback.sh", name) for name in (
-        "layout_copy_name", "layout_readers", "env_dest", "plan_env_files", "print_env_plan", "live_env_line",
-        "keep_env_line", "restore_env", "env_value_digest", "check_shared_values"))
+        "layout_copy_name", "env_copy", "layout_readers", "env_dest", "plan_env_files", "env_put_has", "print_env_plan",
+        "live_env_line", "keep_env_line", "restore_env", "env_value_digest", "check_shared_values"))
     script = (f'source "{lib}"\n{functions}{_rollback_constants()}LAYOUT_FILES=(.env bridge.env .env.agent)\n'
               f'CODE_OPT=0\nENV_COMPOSE={int(env_compose)}\nSHARED_OK=0\nSHARED_NOTE=""\n'
               f'ENV_TB="{sb.sh(backup)}"\nread -r -a SERVICES <<< "{services}"\n'
@@ -2121,7 +2398,9 @@ def test_backup_vps_records_the_env_layout_in_its_manifest(tmp_path: Path) -> No
                            "env_layout:    bridge.env present AGENT_TOKEN\n"
                            "env_layout:    .env.agent absent -\n")
     source = (HOSTINGER / "backup_vps.sh").read_text(encoding="utf-8")
-    assert 'copy_private "$HOSTINGER_DIR/.env.agent" env.agent 0' in source
+    # C-128: the env copies sit in their own folder (env/), .env.agent as env/env.agent
+    assert 'copy_private "$HOSTINGER_DIR/.env.agent" "$ENV_DIR/env.agent" 0' in source
+    assert "readonly ENV_DIR=env" in source
     assert source.index("env_layout_lines") < source.index('} > "$B/MANIFEST.txt"')
 
 
@@ -2160,8 +2439,10 @@ def test_runbook_mirror_and_newest_backup_never_take_the_agent_env_or_another_to
     mirror = text[text.index("### Mirror VPS backups to the PC"):text.index("### Restore drill")]
     copies = [line for line in mirror.splitlines() if "/root/jarvis-backups" in line and not line.startswith("The ")]
     assert copies and not any("scp" in line for line in copies), copies   # scp -r would take env.agent along
-    assert all("--exclude=$TS/env.agent" in line for line in copies if "tar -C /root/jarvis-backups" in line)
-    assert "ls -1d 2*/MANIFEST.txt" in mirror and "grep -v '  env\\.agent$' SHA256SUMS" in mirror
+    # C-128: env.agent of a v1 folder and env/env.agent of a v2 one (the env copies' own folder)
+    assert all("--exclude=$TS/env.agent --exclude=$TS/env/env.agent" in line for line in copies
+               if "tar -C /root/jarvis-backups" in line)
+    assert "ls -1d 2*/MANIFEST.txt" in mirror and "grep -v -E '  (env/)?env\\.agent$' SHA256SUMS" in mirror
     assert "jarvis-backups/2* | tail" not in text and 'grep "^2"' not in text
     assert text.count("ls -1d /root/jarvis-backups/2*/MANIFEST.txt | tail -1") == 2   # restore drill, archives
 

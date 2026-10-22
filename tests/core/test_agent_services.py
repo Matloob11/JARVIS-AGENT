@@ -2031,6 +2031,38 @@ async def test_run_snapshot_writes_a_sealed_file(tmp_path):
     assert MARKER.encode() in bc.open_bytes(sealed, key)
 
 
+def test_the_snapshot_leaves_out_the_folders_a_restore_moved_aside(tmp_path):
+    """C-128 review (low): restore_agent_data.py moves each volume's live data into .pre-restore-<UTC>/ at the top of
+    conversations, chroma_db and data, kept until the owner decides. The daily snapshot walked into them, so every later
+    snapshot the laptop pulls carried a second, stale copy (one more per restore). Top-level '.pre-restore-*' folders
+    of each root stay out now, the rule of backup_vps.sh's agent step (services/utils/agent_volumes.ASIDE_PREFIX); a
+    folder of that name deeper down is ordinary data."""
+    import io  # pylint: disable=import-outside-toplevel
+    import tarfile  # pylint: disable=import-outside-toplevel
+
+    from services.utils import agent_volumes as av  # pylint: disable=import-outside-toplevel
+    from services.utils import backup_crypto as bc  # pylint: disable=import-outside-toplevel
+
+    key = bc.generate_private_key()
+    for root in svc_mod.SNAPSHOT_ROOTS:
+        aside = tmp_path / root / ".pre-restore-20261022T000000Z"
+        (aside / "deeper").mkdir(parents=True)
+        (aside / "old.json").write_text(MARKER, encoding="utf-8")
+        (aside / "deeper" / "older.json").write_text(MARKER, encoding="utf-8")
+    (tmp_path / "conversations" / "live.json").write_text("{}", encoding="utf-8")
+    nested = tmp_path / "data" / "notes" / ".pre-restore-not-the-top"
+    nested.mkdir(parents=True)
+    (nested / "kept.json").write_text("{}", encoding="utf-8")
+    info = svc_mod.SnapshotWriter(root=tmp_path, out_dir=tmp_path / "snapshots",
+                                  recipient_text=bc.public_key_hex(key)).write()
+    plain = bc.open_bytes((tmp_path / "snapshots" / info["name"]).read_bytes(), key)
+    with tarfile.open(fileobj=io.BytesIO(plain), mode="r:") as tar:
+        names = sorted(tar.getnames())
+    assert names == ["conversations/live.json", "data/notes/.pre-restore-not-the-top/kept.json"], names
+    assert info["files"] == 2 and MARKER.encode() not in plain
+    assert svc_mod.RESTORE_ASIDE_PREFIX == av.ASIDE_PREFIX == ".pre-restore-"
+
+
 # ---------------------------------------------------------------- the ledger and log hygiene
 
 

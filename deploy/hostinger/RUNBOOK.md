@@ -11,6 +11,7 @@ How to operate the JARVIS stack on the Hostinger VPS and the Windows PC.
 | [Maintenance window checklist](#maintenance-window-checklist) | C-12 (OP-08) |
 | [Adding a JARVIS service](#adding-a-jarvis-service) | C-12 (OP-08) |
 | [Agent image](#agent-image) | C-126 |
+| [VPS brain operations](#vps-brain-operations-c-128): [agent operations](#agent-operations), [brain switch](#brain-switch), [data restore](#data-restore), [monitoring thresholds](#monitoring-thresholds), [retention](#retention-report-only) | C-128 |
 | [Secrets split (V2a, V2b, push)](#secrets-split-v2a-v2b-push), including [the PC copies before V4](#before-v4-pc-copies-of-the-vps-env-files), [the PC fallback secrets](#the-pc-fallback-secrets-vps-mode) and [the PC fallback's LiveKit pair](#v6-the-pc-fallbacks-livekit-pair) | C-127 |
 | [Testing the deploy tooling](#testing-the-deploy-tooling) | C-12 (OP-08) |
 | [Room ops](#room-ops) | C-23 (OP-22) |
@@ -54,15 +55,16 @@ bash deploy/hostinger/deploy_from_pc.sh --check --services ui-bridge       # 2. 
 bash deploy/hostinger/deploy_from_pc.sh --services ui-bridge [--nginx]     # 3. deploy
 ```
 
-- `--services` is required. List compose service names, separated by spaces or commas (`ui-bridge`, `livekit`, `frontend`, later `agent` and `agent-svc`), or give `none` to ship the code only.
+- `--services` is required. List compose service names, separated by spaces or commas (`ui-bridge`, `livekit`, `frontend`, `agent`, `agent-svc`), or give `none` to ship the code only.
   - Only the named services are pulled or built and recreated, always with `docker compose -p jarvis up -d --no-deps --no-build --pull never <services>`.
   - No other container is touched: not JARVIS's own, and not anyone else's.
+  - `agent` and `agent-svc` (the VPS brain) get a strict manifest check on the PC first, an idle gate, their own health gate and, afterwards, `agent_ctl node update` on the PC: [Agent operations](#agent-operations). `--now` and `--no-node-update` belong to them.
 - `--nginx` also installs `deploy/hostinger/jarvis.conf` as `/etc/nginx/conf.d/jarvis.conf`, runs `nginx -t`, then `systemctl reload nginx`. If the test fails, the old file goes back and nothing is reloaded. An unchanged file is not reloaded.
 - Only commit `HEAD` is shipped (`git archive`, never the working tree, with LF line endings forced).
   - `HEAD` is read once at the start. The archive, the file list and the service check all use that commit id, so a commit Cursor makes meanwhile is never shipped under the recorded SHA.
   - Uncommitted changes in the shipped paths make it refuse.
   - `--allow-dirty` ships HEAD anyway and lists those files as NOT deployed. Cursor's work in progress in `stonix_ui/` often needs it; read the list.
-- Shipped paths: `deploy`, `src`, `services`, `stonix_ui`, `scripts`, `.dockerignore` and the root `requirements*.txt`.
+- Shipped paths: `deploy` (with the `deploy/hostinger` requirements and constraints files the images are built from), `src`, `services`, `stonix_ui`, `scripts` (the backup, restore and model tools among them), `.dockerignore` and the root `requirements*.txt`.
   - Files on the VPS that the commit does not have are kept, and listed in `<backup>/extra-files.txt`.
   - Env files are never shipped or overwritten.
 
@@ -79,7 +81,7 @@ The live frontend is an older build that still logs in with the legacy token. Th
 `deploy_from_pc.sh` uploads the archive to `/root/jarvis-backups/runs/<run>/` and checks its sha256. It then runs the `deploy.sh` from that upload, which is the new version (the copy in `/opt/jarvis-agent` can be older). Before anything changes, the preflight:
 
 - validates the new compose file against the live env files and refuses unknown service names;
-- refuses an image build with less than 5 GB free;
+- refuses an image build with less than 5 GB free (a deploy of `agent` or `agent-svc`: below 15 GB, and it warns below 30 GB, K-75);
 - before a `livekit` deploy, checks that `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` in `.env` match the `keys:` entry of the live `livekit.yaml`. A recreated LiveKit takes its keys from `LIVEKIT_KEYS`. The values are compared, never shown.
 
 | Step | What | On failure |
@@ -107,7 +109,8 @@ Health gate:
 | ui-bridge | healthy within 120 s | `127.0.0.1:5101/health` 200, `https://<domain>/vortex/health` 200 |
 | frontend | healthy within 90 s | `127.0.0.1:5100/` 200, `https://<domain>/` 200 or 401 |
 | livekit | running steadily within 60 s (it has no healthcheck) | `127.0.0.1:7880/` 200, `https://<domain>/rtc/validate` 401 |
-| any other service | healthy within 120 s (240 s for `agent` and `agent-svc`); steadily running if it has no healthcheck | none yet |
+| agent, agent-svc | healthy within 180 s | the VPS brain's checks: [Agent operations](#agent-operations) |
+| any other service | healthy within 120 s; steadily running if it has no healthcheck | none yet |
 
 Probes through nginx use `--resolve <domain>:443:127.0.0.1`. The JARVIS services that were not deployed get quick checks that only warn.
 
@@ -131,8 +134,8 @@ Exit codes of `deploy.sh` and `deploy_from_pc.sh`:
 | 1 | refused, or failed before any live change: the running services were not changed |
 | 2 | a gate failed, and the automatic rollback restored the pre-deploy state |
 | 3 | the rollback failed or was disabled: act now (the command is printed) |
-| 5 | (PC only) the connection was lost; the deploy goes on on the VPS |
-| 6 | (PC only) deployed, but the PC-side checks failed |
+| 5 | (PC only) the connection was lost; the deploy goes on on the VPS (the `--attach` command is printed, and for an agent deploy the node update too) |
+| 6 | (PC only) deployed, but a PC-side step failed: the PC checks (check the site from the PC again), or the `agent_ctl node update` after an agent deploy (run the printed command again). Both run whatever the other gives, and each failure is listed |
 | 64 | usage error |
 
 ### Following a deploy, and a dropped connection
@@ -143,6 +146,8 @@ The run on the VPS is detached from the ssh session. Ctrl-C or a dropped link st
 bash deploy/hostinger/deploy_from_pc.sh --attach <run id>     # the run id is printed at the start
 $VPS 'R=/root/jarvis-backups/runs/<run id>; tail -n +1 -f --pid=$(cat $R/pid) $R/run.log; cat $R/rc'
 ```
+
+`--attach` ends the way the deploy itself would have: after a healthy end it runs the PC checks and, for an agent deploy (its log names the services and `AGENT_IMAGE_SHA`), `agent_ctl node update` (`--no-node-update` prints it instead); its exit codes are the deploy's, 6 included. It follows a run this process did not check (also one `deploy.sh` started on the VPS, `<UTC>-manual-<hex>`, whose commit comes from the log's `sha` line), so the commit it pins the node to always gets the strict manifest check first; a stale manifest there leaves the node as it is (exit 6). The plain `$VPS` line above only shows the log: then run the node update by hand ([Agent operations](#agent-operations)).
 
 To stop a running deploy on purpose, run `$VPS 'kill $(cat /root/jarvis-backups/runs/<run id>/pid)'`. It then rolls back whatever it had changed.
 
@@ -204,7 +209,12 @@ $VPS 'bash /root/jarvis-backups/tools/rollback.sh <backup folder>'    # back to 
 $VPS 'bash /root/jarvis-backups/tools/rollback.sh --tag rollback-<backup> --services ui-bridge'              # images only
 $VPS 'bash /root/jarvis-backups/tools/rollback.sh --tag rollback-<backup> --services ui-bridge --with-env'   # image + compose + env
 $VPS 'bash /root/jarvis-backups/tools/rollback.sh <backup folder> --services ui-bridge --with-env --dry-run'    # env plan + checks
+$VPS 'bash /root/jarvis-backups/tools/rollback.sh <backup folder> --data'          # prints the PC-side agent data restore
 ```
+
+- **`--data` (C-128).** The VPS brain's data is never restored on the VPS: `agent-volumes.tar.enc` is sealed to the PC backup key, so `--data` prints the command that decrypts it on the PC and streams it back (`scripts/ops/restore_agent_data.py <backup>`, [Data restore](#data-restore)). On its own it only prints (no lock, no backup, nothing changed); with `--services`, `--code`, `--nginx` or `--with-env` the rollback runs and the command comes at its end. A backup without agent data is refused (exit 1).
+- **agent and agent-svc** both run `jarvis-agent:hostinger`. When a backup recorded different images for them, the rollback runs in rounds (the tag goes back, then that service's `up`; the agent's round first), so each container gets its own image. At the end the shared tag names the agent's image again, so the next plain `up` of `agent` (`agent_ctl brain vps`, a deploy) keeps it; `agent-svc` keeps running its own image, and a warning says that a plain `up` of it would move it onto the agent's. `backup_vps.sh` tags the images as `jarvis-agent:rollback-<backup>` (the agent's) and, when agent-svc ran another one, `jarvis-agent:rollback-<backup>-agent-svc`; `--tag` takes `<image>:<tag>-<service>` first for that service.
+- **The laptop's Desktop Node after an agent rollback.** A rollback that recreates `agent` or `agent-svc` prints `AGENT_IMAGE_SHA=<the revision the agent runs now>` and the command for the PC: `.venv_312/Scripts/python.exe scripts/agent_ctl.py node update --sha <it> --by claude --reason C-128-rollback-<backup>` (add `--canary` while the pinned node runs in canary mode). Run it: the last agent deploy pinned the node to the newer commit, and until the node matches the restored image every laptop tool whose schema changed between the two answers `MANIFEST_MISMATCH` (K-71). The dry run names this step on its `node` line.
 
 - **The default (`--last`)** uses `/root/jarvis-backups/LAST_DEPLOY`. It names the backup that the last deploy took before it changed anything. That backup's `deploy.env` says which services, and whether the code, nginx and env files, go back.
 - **A named backup made by deploy.sh or rollback.sh** puts back exactly what that run changed.
@@ -219,7 +229,7 @@ $VPS 'bash /root/jarvis-backups/tools/rollback.sh <backup folder> --services ui-
 - Every rollback first runs `backup_vps.sh pre-rollback` and prints the command that undoes the rollback.
 - Only the JARVIS services, `/opt/jarvis-agent` and `jarvis.conf` are touched, always with `up -d --no-deps --no-build`. The health gate and the smoke check run as in a deploy.
 - Exit codes: 0 ok, 1 nothing changed, 3 failed after the changes started (act now), 64 usage error.
-- Always run the copy in `/root/jarvis-backups/tools/`. A code rollback can bring back an old `deploy.sh` in `/opt`, and `rollback.sh` refuses to load anything but the v2 library.
+- Always run the copy in `/root/jarvis-backups/tools/`. A code rollback can bring back an old `deploy.sh` in `/opt`, and `rollback.sh` refuses to load anything but the v3 library (C-128: the agent gate and the image rounds).
 
 ## Other-apps smoke check
 
@@ -256,7 +266,7 @@ Use this before a change that recreates `livekit`, changes `jarvis.conf` or depl
 
 1. Tell the user. Live voice drops for about a minute when LiveKit restarts, and the PC agent must be restarted after it.
 2. Run the dry run, then `--check`.
-3. Check the disk. Builds are refused below 5 GB free and warned about below 10 GB. Never prune on this shared server; ask the user.
+3. Check the disk. Builds are refused below 5 GB free and warned about below 10 GB; a deploy of the VPS brain needs 15 GB and warns below 30 GB. Never prune on this shared server; ask the user.
 4. Deploy. Watch `RESULT=ok`, the gate and the smoke result.
 5. If LiveKit was recreated, run `$PY scripts/agent_ctl.py restart --by claude --reason <task>`.
 6. The user opens the UI, presses Voice and hears a reply.
@@ -264,7 +274,7 @@ Use this before a change that recreates `livekit`, changes `jarvis.conf` or depl
 
 ## Adding a JARVIS service
 
-This is for the VPS-brain services such as `agent` and `agent-svc` (planned contract K-75).
+This is for services such as the VPS brain's `agent` and `agent-svc` (contract K-75).
 
 1. Record the service in `docs/CONTRACTS.md` before it is deployed.
 2. Add it to `docker-compose.yml` with image `jarvis-<name>:hostinger`, container `jarvis-<name>` and a Docker healthcheck. A profile is fine: naming a service on the command line enables its profile.
@@ -272,8 +282,8 @@ This is for the VPS-brain services such as `agent` and `agent-svc` (planned cont
    - the generic gate waits for the healthcheck;
    - `deploy.sh` makes the `jarvis-<name>:rollback-<backup>` tag;
    - a failed first deploy stops the new container.
-4. Optional, in `deploy.sh`: a longer wait in `gate_timeout` (`agent` and `agent-svc` already get 240 s), HTTP probes in `gate_probes`, and any bind-mounted config file in `HOLD_FILES`.
-5. `backup_vps.sh` still tags only the bridge and the frontend, and backs up only the bridge volumes (and, since C-127, `.env.agent`). The task that adds the service extends it (its volumes; C-128 for the agent services).
+4. Optional, in `deploy.sh`: a longer wait in `gate_timeout` (`agent` and `agent-svc` get 180 s and their own checks, C-128), HTTP probes in `gate_probes`, and any bind-mounted config file in `HOLD_FILES`.
+5. `backup_vps.sh` tags the bridge, frontend and agent images and backs up the bridge volumes, the env files (`env/`) and, sealed, the agent volumes (C-128). The task that adds another service with data extends it (its volumes).
 6. Run the full tests below.
 
 ## Agent image
@@ -359,6 +369,129 @@ docker compose -p jarvis run --rm --no-deps --user 0 --cap-add CHOWN --entrypoin
 ```
 
 After the first `up` (C-128/C-131), the same `docker inspect` line on the running `jarvis-agent` must print the same values. Nothing in `/root/jarvis-backups/builds` or the builder is ever pruned without the user's OK.
+
+## VPS brain operations (C-128)
+
+Plan C-128, contracts K-72, K-75 and K-77. The VPS brain is the compose services `agent` (`jarvis-agent`, the LiveKit worker `jarvis`) and `agent-svc` (`jarvis-agent-svc`, the always-on service), both in the profile `vps-brain`, both running `jarvis-agent:hostinger`, which only the dedicated builder makes ([Agent image](#agent-image)).
+
+### Agent operations
+
+Build the image from the commit you deploy first (the [build window](#build-window-announced-about-10-15-min-the-first-time-then-only-the-changed-layers)), then:
+
+```bash
+bash deploy/hostinger/deploy_from_pc.sh --dry-run --services agent          # 1. offline: the strict manifest check runs here too
+bash deploy/hostinger/deploy_from_pc.sh --check --services agent            # 2. dry run on the VPS: plan, idle gate, image revision
+bash deploy/hostinger/deploy_from_pc.sh --services agent                    # 3. deploy, gate, then 'agent_ctl node update' on the PC
+bash deploy/hostinger/deploy_from_pc.sh --services 'agent agent-svc' --now  # vps mode without the idle wait: a 60 s notice first
+```
+
+- **Only what you name.** `up -d --no-deps --no-build --pull never agent` recreates `jarvis-agent` alone; the dry run's plan marks that one line `<- deploy` and every other service `(not touched)`. agent-svc, the bridge, LiveKit and the frontend are never recreated by an agent deploy. In pc mode a deployed agent starts (the V4/V5 canary needs it); `agent_ctl brain pc` or `$C stop agent agent-svc` stops it again.
+- **Before anything changes, on the PC.** `JARVIS_MANIFEST_STRICT=1 scripts/desktop/export_manifest.py --check` must pass (K-71, C-118): the desktop manifest is baked into the image and the Desktop Node compares it, so a stale committed manifest refuses the deploy. It runs in a scratch copy of the shipped commit (`git archive` into a temp folder, removed afterwards; it only reads the repo), so it compares that commit's registry with that commit's manifest whatever the working tree holds: a regenerated `desktop_manifest.json` that is not committed yet does not pass it, and Cursor's uncommitted tool edits do not fail it (both are common with `--allow-dirty`). A check whose output says it read uncommitted files counts as not verified and refuses too. `JARVIS_MANIFEST_STRICT=1` in the environment runs the check before every deploy.
+- **Before anything changes, on the VPS.** 15 GB free on the disk of `/opt` (a warning below 30 GB); the revision label of `jarvis-agent:hostinger` is printed, with a warning when it is another commit than the one deployed (the agent then runs that commit's code); the idle gate.
+- **Idle gate (K-72).** In vps mode an `agent` recreate waits until the bridge recorded no speech, typed chat or tool call for 10 minutes (its kv `last_activity_ts`, the newest message and the newest tool event, read from `bridge.db` inside `jarvis-bridge`, read-only). The preflight refuses (exit 1, nothing changed) and the check runs again right before the recreate. `--now` skips it after a 60 s notice, which is printed only: a spoken notice needs a bridge say route that does not exist yet (the same as `agent_ctl brain --now`). In pc mode the VPS agent serves no session, so there is no gate; `agent-svc` alone never has one. `JARVIS_BRAIN` is read the way compose reads it (quotes, an inline `# comment`); a value that reads as neither `vps` nor `pc` is gated as `vps`. The dry run (and so `--check`) ends with `VERDICT: a real run would REFUSE now: idle gate: ...` and exit 1 while the owner is active, the same answer the real run would give.
+- **Backup first.** The deploy's `backup_vps.sh` run must seal the agent data (MANIFEST `agent_data: sealed ...`) or find none yet (`agent_data: none ...`); `SKIPPED` (for example no `BACKUP_RECIPIENT_PUBLIC_KEY` in `.env.agent`) or `FAILED` refuses the deploy (exit 1, nothing changed).
+- **The gate.** Each check inside a container runs under `env -i` with only non-secret names of its environment (the URLs, `JARVIS_AGENT_NAME`, the `JARVIS_NET_GUARD*` and Hugging Face settings), as the healthchecks do, so no dumpable process holds an `.env.agent` secret.
+
+  | Check | agent | agent-svc |
+  |---|---|---|
+  | Docker healthy | within 180 s (worker health on 8081) | within 180 s (8083/health) |
+  | `/worker` shows its agent name (`JARVIS_AGENT_NAME`, default `jarvis`) | yes | - |
+  | LiveKit logged `worker registered` for that name since the recreate | yes | - |
+  | offline model check, `scripts/models/check_models.py --expect-uid 10001` prints `MODELS_OK` | yes | - |
+  | `python -m services.utils.net_guard --self-test` | yes | yes |
+  | agent_hello on the bridge's `:5002` (bridge log `Desktop link: agent:<id> connected (internal listener)`) | a refused hello fails; none yet only warns in vps mode (the link opens with the first session), skipped in pc mode | the same |
+  | other-apps smoke | identical: a change that survives the 20 s re-check fails too, not only a regression | the same |
+
+- **On a failed gate** the automatic rollback puts the previous image back (exit 2) and the summary names both ways back: `bash /root/jarvis-backups/tools/rollback.sh <backup>` and, on the PC, `.venv_312/Scripts/python.exe scripts/agent_ctl.py brain pc --now`. With `--no-auto-rollback`, or when the rollback fails, the exit is 3: act now.
+- **After a healthy deploy** `deploy.sh` prints `AGENT_IMAGE_SHA=<revision of the agent image>` and `deploy_from_pc.sh` runs `.venv_312/Scripts/python.exe scripts/agent_ctl.py node update --sha <it> --by claude --reason ...` (with `--canary` while the pinned node runs in canary mode), so the laptop's Desktop Node runs the commit the agent image was built from. That commit gets the same strict manifest check first on a scratch copy of it (the node is pinned to it, so its manifest is the one the node compares), unless the same run already checked it: the shipped commit before the deploy is, so the check runs again only for an image built from another commit, and always after `--attach`. A stale manifest there, or a commit this repo does not have, leaves the node on its current commit and is exit 6 (also with `--no-node-update`); build the image from a commit whose manifest is current and deploy again. `--no-node-update` prints that command instead. It runs whatever the PC checks give (a moment of 502 or 000 from the PC leaves `jarvis-agent` on the new image all the same). A failed node update is exit 6; the deploy is live, so run the printed command again. After a dropped link (exit 5, which prints the command with `<AGENT_IMAGE_SHA>`), `--attach <run id>` runs it once the run ends healthy. A rollback that recreates the agent prints the command for its image ([Rollback](#rollback)).
+
+Read-only state:
+
+```bash
+$VPS "docker ps --filter name=jarvis- --format '{{.Names}} {{.Status}}'"
+$VPS "docker logs --since 15m jarvis-agent 2>&1 | tail -n 50"
+$VPS "docker logs --since 15m jarvis-livekit 2>&1 | grep -E 'worker registered|assigned job'"
+$VPS 'bash /root/jarvis-backups/tools/deploy.sh --gate-only --services agent'   # a plain --gate-only skips stopped agent containers only when JARVIS_BRAIN reads exactly pc, and otherwise fails on a missing one
+```
+
+### Brain switch
+
+- `JARVIS_BRAIN=vps|pc` in `/opt/jarvis-agent/deploy/hostinger/.env` is the source of truth (K-72), and only `agent_ctl brain` writes it (and the laptop's root `.env` line):
+
+  ```bash
+  $PY scripts/agent_ctl.py brain vps --by claude --reason <task>   # waits for 10 idle minutes; --now: a 60 s notice
+  $PY scripts/agent_ctl.py brain pc --by claude --reason <task>    # back to the PC brain, the fallback
+  ```
+
+- The states are PREFLIGHT, BACKUP, STOP_OLD, SYNC_DATA, FLIP_ENV, START_NEW, ENSURE and VERIFY, journalled in `run/brain_switch.json`; a failure restores the previous brain. PREFLIGHT refuses until the VPS checkout has the switch helpers `deploy/hostinger/backup.sh`, `sync_brain_data.sh` and `set_env.py` (C-126..C-129).
+- In pc mode `agent` and `agent-svc` are stopped and stay stopped (`restart: unless-stopped`); every rollback keeps the live `JARVIS_BRAIN` and `COMPOSE_PROFILES` lines.
+- The way out of a VPS brain that does not answer is `brain pc --now`; a failed agent gate prints it.
+
+### Data restore
+
+The agent data sits in each `backup_vps.sh` folder as `agent-volumes.tar.enc`: a tar of `/app/conversations`, `/app/chroma_db` and `/app/data` (every SQLite file an online copy, `AGENT-BACKUP.json` with the counts last), made by the agent image's own code (`python -m services.utils.agent_volumes`) and sealed with `services/utils/backup_crypto.py` (X25519, HKDF-SHA256, ChaCha20-Poly1305 in 1 MiB records): the format and the key pair of agent-svc's daily snapshot (K-77). Only this PC opens it, so it is restored from the PC, never on the VPS, and it reaches the VPS only as a stream over ssh into a one-off agent container.
+
+There is one backup key pair for the snapshots and the backups. Once, before the first snapshot or backup with agent data, make it with `scripts/ops/backup_key.py` (the private key DPAPI-wrapped for this Windows user in `%LOCALAPPDATA%\JARVIS\backup\backup_key.dpapi`); the restore tool only reads it:
+
+```bash
+$PY scripts/ops/backup_key.py keygen                                   # prints BACKUP_RECIPIENT_PUBLIC_KEY=<hex>, a public key (an existing key is kept)
+$PY scripts/ops/env_set.py BACKUP_RECIPIENT_PUBLIC_KEY=<that hex> --env-file .env
+$PY scripts/ops/push_agent_env.py --dry-run; $PY scripts/ops/push_agent_env.py   # .env.agent gets it (PC_NAMES)
+$PY scripts/ops/backup_key.py export /e/jarvis-backup-key.json         # the offline copy: unwrapped, keep it off this PC; prints ACL=<what it got>
+$PY scripts/ops/backup_key.py public                                   # the public key and its fingerprint again
+```
+
+The wrapped key opens only for this Windows user on this PC: without the offline copy a lost profile loses every snapshot and agent backup. Keep that copy offline, never in the repo, a chat or a synced folder; `--key-file <copy>` (both tools) opens them anywhere. `export` sets a one-user ACL while the new file is still empty and prints the result: `ACL=this user only`, or `ACL=none` on a FAT or exFAT stick (no ACLs there: whoever holds the stick can read it). When the ACL fails on a drive that keeps ACLs (pywin32 not importable, an NTFS error), the export refuses with nothing written (exit 2); `--allow-open-acl` writes it anyway with the folder's permissions (`ACL=NOT restricted` and a `WARN=` line). `keygen --rotate` makes a new pair and renames the old file `.bak` (older snapshots and backups still need it: `--key-file <that .bak>`). The backup's MANIFEST `agent_data:` line ends with `recipient=<fingerprint>`, the key it was sealed to, as `backup_key.py public` prints it. `$PY scripts/ops/backup_key.py decrypt "$PCB/vps/<TS>/agent-volumes.tar.enc"` opens a mirrored backup into a tar next to it (`KIND=agent-volumes`), the same as a snapshot; the restore below never writes the plain tar to disk.
+
+Restore (the VPS brain stopped first; in vps mode `brain pc` keeps the owner served):
+
+```bash
+$VPS 'bash /root/jarvis-backups/tools/rollback.sh <TS> --data'    # prints the commands below, changes nothing
+$PY scripts/agent_ctl.py brain pc --by claude --reason <task>     # vps mode only
+$PY scripts/ops/restore_agent_data.py <TS> --dry-run              # fetch, decrypt and check here: counts only, nothing changes
+$PY scripts/ops/restore_agent_data.py <TS>                        # pre-data-restore backup, then stream the data back
+```
+
+- The dry run fetches the sealed file (it stays encrypted on disk, in a temp folder removed at the end), checks its size and sha256 against the VPS copy, decrypts it and reads it through: every chunk authenticated up to the final one, every member a folder or file under `conversations/`, `chroma_db/` or `data/`, the `AGENT-BACKUP.json` record last. It prints counts, never a name or a byte of content.
+- Free disk (step 1, read-only, and the dry run says it): a restore writes a whole `pre-data-restore` backup and then a second copy of the data while the old one stays aside, on a disk the other apps share. It refuses, nothing changed, when Docker's root dir or `/root/jarvis-backups` has less free space than 15 GB (deploy.sh's floor for the VPS brain) or 3 x the sealed file, whichever is more; the backup step checks again under the lock. Free space it cannot read is printed as a `WARN` line.
+- Time caps: step 1 600 s, the download 600 s plus 1 s per 256 KiB of the sealed file (a 1.5 GB backup over 2 MB/s fits; a dead link ends within ssh's 120 s ServerAlive window), the backup `--backup-timeout` (default 1800 s). A step that runs out stops its ssh and ends with exit 1, nothing moved; a backup cut off that way may still run on the VPS and hold the deploy lock until it ends.
+- The real run refuses while `jarvis-agent` or `jarvis-agent-svc` runs or while a deploy or rollback holds `/root/jarvis-backups/.deploy.lock`. It holds that lock itself while it backs up and again while it extracts (the agent containers are checked again under it), so no deploy or rollback recreates an agent meanwhile. `agent_ctl brain` does not take that lock: never switch the brain while a restore runs. It then takes `backup_vps.sh pre-data-restore`, which must seal the live agent data (`agent-volumes.tar.enc`) or find no agent volume (`agent_data: none`): a `SKIPPED` or `FAILED` one (for example no `BACKUP_RECIPIENT_PUBLIC_KEY` in `.env.agent` after a `--with-env` rollback) refuses with nothing moved, because the restore could not be undone. Then it streams the checked tar into `docker compose -p jarvis run --rm --no-deps -T --entrypoint env agent -i ... sh -c ...` (uid 10001, no secret in it), which gets the tar's byte count: in each volume the live content is first moved into `.pre-restore-<UTC>/` (never deleted; later backups and agent-svc's daily snapshots leave those folders out), then `dd` counts the stream while `tar -xf - --no-same-owner --no-overwrite-dir` extracts it. `EXTRACTED` comes only when tar exits 0 and the whole tar arrived; a stream cut short (the PC stopped sending, was interrupted or killed, or the link broke) prints `INCOMPLETE <got> of <want> bytes arrived` and exits 4, even with nobody left to read it (GNU tar alone exits 0 when its input ends between two members). The script prints `ASIDE_MADE <volume>` as soon as that folder exists, before the first move, and `MOVED_ASIDE <volume> <count>` once the volume is done. Any failure after an `ASIDE_MADE` line is exit 3 (ACT NOW) and names the folder to move back: a move that failed half-way leaves part of the live data there and the rest in place. A failure the VPS did not report (the connection broke off: no `RESTORE_RC=` line) is exit 3 too, and so are an error reading or decrypting the local sealed file while it streams and a Ctrl-C (or any other error of the PC) once the stream began: look for `.pre-restore-<UTC>/` in the three volumes first.
+- Undo: the data of before is in `.pre-restore-<UTC>/` and, sealed, in the `pre-data-restore` backup; restore that backup the same way.
+- A mirrored backup checks on the PC without the VPS: `$PY scripts/ops/restore_agent_data.py --check-file "$PCB/vps/<TS>/agent-volumes.tar.enc"`.
+- Start the VPS brain again the way it was stopped. A `brain vps` switch syncs data first (SYNC_DATA, C-129), so check the restored data after it.
+
+### Monitoring thresholds
+
+From the architecture (section 19) and K-75. C-134 turns them into alerts (system_alert, an audit row, a laptop toast); until then read them by hand.
+
+| What | Warning | Critical, or refused |
+|---|---|---|
+| free disk on the Docker disk | below 30 GB (agent deploys warn) | below 15 GB (agent deploys refuse); downloads refused below 20 GB |
+| memory of an agent container | above 4 GiB | above 6 GiB |
+| restarts of an agent container | more than 3 per hour (a burn-in stop criterion) | |
+| signature or approval failures (bridge C-116, node C-121) | | any |
+| clock skew, manifest drift, duplicate agents, desktop_replaced or a new node_id, rate-limit trips | yes | |
+| agent gate | healthy within 180 s | |
+
+```bash
+$VPS "docker stats --no-stream --format '{{.Name}} {{.MemUsage}} {{.CPUPerc}}' jarvis-agent jarvis-agent-svc"
+$VPS "docker inspect -f '{{.Name}} restarts={{.RestartCount}} started={{.State.StartedAt}}' jarvis-agent jarvis-agent-svc"
+$VPS 'df -h "$(docker info -f "{{.DockerRootDir}}")"'
+```
+
+### Retention (report only)
+
+- Nothing is deleted automatically: backups, the rollback tags (`jarvis-{bridge,frontend,agent}:rollback-<backup>`, `jarvis-agent:rollback-<backup>-agent-svc`), build records, media (D7) and `.pre-restore-*` folders stay until the user decides. The `.pre-restore-*` folders are in no later backup or daily snapshot, so they are only on the VPS (and in the `pre-data-restore` backup of their restore).
+- Report, never prune:
+
+  ```bash
+  $VPS 'du -sh /root/jarvis-backups; ls -1d /root/jarvis-backups/2*/MANIFEST.txt | wc -l'
+  $VPS "docker image ls --format '{{.Repository}}:{{.Tag}} {{.Size}}' | grep -E '^jarvis-[a-z-]+:rollback-'"
+  $VPS "docker exec jarvis-bridge du -sh /app/Jarvis_Shared/Downloads /app/Jarvis_Outputs"
+  ```
+
+- Downloads (`Jarvis_Shared/Downloads`) are kept and only reported; `backup_vps.sh` leaves them out unless `--with-media`.
+- Pruning old backups needs the user's OK ([Prune old VPS backups](#prune-old-vps-backups-only-with-the-users-ok)); it also removes the agent rollback tags of a pruned folder, never forced.
 
 ## Secrets split (V2a, V2b, push)
 
@@ -519,10 +652,12 @@ Plan step 6: the PC fallback gets its own LiveKit pair, so it can be revoked wit
 
 ```bash
 $PY -m pytest tests/unit/test_deploy_tooling.py -q -p no:cacheprovider                       # fast offline set
-JARVIS_DEPLOY_E2E=1 $PY -m pytest tests/unit/test_deploy_tooling.py -q -p no:cacheprovider   # plus full runs, about 5 min
+JARVIS_DEPLOY_E2E=1 $PY -m pytest tests/unit/test_deploy_tooling.py -q -p no:cacheprovider   # plus full runs, about 10 min
+$PY -m pytest tests/infrastructure/test_agent_deploy.py tests/infrastructure/test_restore_agent_data.py tests/unit/test_backup_crypto.py -q -p no:cacheprovider   # C-128
+JARVIS_DEPLOY_E2E=1 $PY -m pytest tests/infrastructure/test_agent_deploy.py -q -p no:cacheprovider   # plus the agent's full runs
 ```
 
-The tests run the real scripts under Git Bash in a scratch sandbox, with fake docker, nginx, systemctl, curl, ss and ssh. Nothing reaches the VPS or the local Docker. Run the full set after any change to these scripts.
+The tests run the real scripts under Git Bash in a scratch sandbox, with fake docker, nginx, systemctl, curl, ss and ssh. Nothing reaches the VPS or the local Docker. The agent tests give the agent and bridge containers a scratch file system, so the sealing of the agent data and the bridge's SQLite copy really run (to a test key). Run the full set after any change to these scripts, from Git Bash (some tests need its `sed` and `awk` on PATH).
 
 ## Room ops
 
@@ -604,25 +739,26 @@ Rollback: `$VPS /root/jarvis-backups/tools/rollback.sh --last`. That is one more
 
 ### What gets backed up
 
-**VPS:** `deploy/hostinger/backup_vps.sh [label]` writes `/root/jarvis-backups/<YYYY-MM-DD_HHMMZ>[-label]/`. The time is UTC. The folder is mode 700 and every file in it is mode 600.
+**VPS:** `deploy/hostinger/backup_vps.sh [--with-media] [label]` (v2 since C-128) writes `/root/jarvis-backups/<YYYY-MM-DD_HHMMZ>[-label]/`. The time is UTC. The folders are mode 700 and every file in them is mode 600.
 
 | File | Source | Notes |
 |---|---|---|
-| `opt-jarvis-agent.tgz` | `/opt/jarvis-agent` without `stonix_ui/node_modules` | Members are `jarvis-agent/...`, so extract with `-C /opt`. Also holds `livekit.yaml` and the env files except `.env.agent` (C-127: the agent's secrets are only in `env.agent`, which the PC mirror leaves out). |
+| `opt-jarvis-agent.tgz` | `/opt/jarvis-agent` without `stonix_ui/node_modules` | Members are `jarvis-agent/...`, so extract with `-C /opt`. Also holds `livekit.yaml` and the env files except `.env.agent` (C-127: the agent's secrets are only in `env/env.agent`, which the PC mirror leaves out). |
 | `jarvis.conf` | `/etc/nginx/conf.d/jarvis.conf` | |
 | `jarvis.htpasswd` | `/etc/nginx/jarvis.htpasswd` | Copied only when present. |
-| `hostinger.env` | `/opt/jarvis-agent/deploy/hostinger/.env` | Compose interpolation and the bridge `env_file`. |
-| `bridge.env` | `/opt/jarvis-agent/deploy/hostinger/bridge.env` | Copied only when present (after C-ENV-1). |
-| `env.agent` | `/opt/jarvis-agent/deploy/hostinger/.env.agent` | Copied only when present (C-127; the VPS brain's secrets, the agent's link private key among them, K-70). It stays on the VPS: the PC mirror below leaves it out. |
-| `root.env` | `/opt/jarvis-agent/.env` | Copied only when present. |
+| `env/hostinger.env` | `/opt/jarvis-agent/deploy/hostinger/.env` | Compose interpolation and the bridge `env_file`. The env copies sit in their own folder `env/` since v2 (C-128); a v1 backup has them next to the other files, and `rollback.sh` reads both layouts. |
+| `env/bridge.env` | `/opt/jarvis-agent/deploy/hostinger/bridge.env` | Copied only when present (after C-ENV-1). |
+| `env/env.agent` | `/opt/jarvis-agent/deploy/hostinger/.env.agent` | Copied only when present (C-127; the VPS brain's secrets, the agent's link private key among them, K-70). It stays on the VPS: the PC mirror below leaves it out. |
+| `env/root.env` | `/opt/jarvis-agent/.env` | Copied only when present. |
 | `DEPLOYED_SHA` | `/opt/jarvis-agent/DEPLOYED_SHA` | Copied only when present (after C-12). |
-| `volumes.tgz` | `/app/logs`, `/app/Jarvis_Outputs`, `/app/Jarvis_Shared`, `/app/data` of the bridge | Made by `docker exec jarvis-bridge tar`. If the bridge is down, a one-off `compose run` container makes it instead. The live SQLite files are left out when `bridge.db` was captured. |
+| `volumes.tgz` | `/app/logs`, `/app/Jarvis_Outputs`, `/app/Jarvis_Shared`, `/app/data` of the bridge | Made by `docker exec jarvis-bridge tar`. If the bridge is down, a one-off `compose run` container makes it instead. The live SQLite files are left out when `bridge.db` was captured. `Jarvis_Shared/Downloads` is left out unless `--with-media` (media is kept and only reported, K-75). |
 | `bridge.db` | `/app/data/bridge.db` | Present only when that DB exists. Taken online with the SQLite backup API, passes `integrity_check`, then `docker cp`. |
+| `agent-volumes.tar.enc` | `/app/conversations`, `/app/chroma_db`, `/app/data` of the `jarvis_agent_*` volumes | C-128. Made by the image's own code (`python -m services.utils.agent_volumes /app <key>`, run from `/app`) inside the running `jarvis-agent` (else `jarvis-agent-svc`, else a one-off `compose run` of `agent`) as uid 10001 under `env -i`: every SQLite file an online copy, the other files read whole, all sealed as they are read to `BACKUP_RECIPIENT_PUBLIC_KEY` (`.env.agent`, the PC backup key) with `services/utils/backup_crypto.py`, the format and the key pair of agent-svc's daily snapshot (K-77), so no plain byte is written anywhere. A container whose image predates that module fails the exec (`No module named ...`) and a one-off container of `jarvis-agent:hostinger` takes over. Without that key, or without an agent image to read the volumes with, it is skipped with a warning; with no agent volume at all MANIFEST says `none`. A container that cannot take the exec (a restart loop) is replaced by a one-off container; a sealing that still fails is a warning too (`agent_data: FAILED`): the rest of the backup stands, so a bridge deploy goes on, and an agent deploy refuses it. Only the PC opens it: [Data restore](#data-restore). |
 | `images.txt` | Docker | Rollback tags with their image ids, plus the LiveKit image ref and id. |
 | `docker-ps.txt`, `containers.txt` | Docker | State of project `jarvis`: image, health and mounts. No env values. |
-| `MANIFEST.txt`, `SHA256SUMS` | | Summary with any warnings and errors, the env layout (`env_layout:` lines: each env file the containers read, present or absent, and its names, never a value; [Rollback](#rollback) compares it), plus checksums for `sha256sum -c`. |
+| `MANIFEST.txt`, `SHA256SUMS` | | Summary with any warnings and errors; `brain:` (JARVIS_BRAIN, vps or pc); the env layout (`env_dir:` where the env copies are, and `env_layout:` lines: each env file the containers read, present or absent, and its names, never a value; [Rollback](#rollback) compares it); `agent_data:` (sealed with its counts, none, SKIPPED or FAILED) and `media:`; plus checksums of every file, `env/` included, for `sha256sum -c`. |
 
-The script also tags the images that the `jarvis-bridge` and `jarvis-frontend` containers are running as `jarvis-bridge:rollback-<folder>` and `jarvis-frontend:rollback-<folder>`. These are normally the `:hostinger` images.
+The script also tags the images that the `jarvis-bridge`, `jarvis-frontend` and `jarvis-agent` containers are running as `jarvis-{bridge,frontend,agent}:rollback-<folder>` (normally the `:hostinger` images), and, when `jarvis-agent-svc` runs another image than `jarvis-agent`, that one as `jarvis-agent:rollback-<folder>-agent-svc`. Before the VPS brain exists there is no agent tag and no error.
 
 The script never deletes or changes an older backup. It prints `BACKUP_DIR=<folder>` as its last line, and it exits with 1 if any step failed. A failed run still keeps its partial folder.
 
@@ -632,7 +768,7 @@ The script never deletes or changes an older backup. It prints `BACKUP_DIR=<fold
 - `--full-tree` writes `tree_<ts>.tar.gz`: the whole repo, including `.git`, without `.venv_312`, `stonix_ui/node_modules`, `pretrained_models` and caches. Add `--no-git` to also leave out `.git`. Rotation never deletes these archives.
 - `--list` shows the local backups, the older one-off archives in `JARVIS-backups\` and the VPS mirrors in `JARVIS-backups\vps\`.
 
-The VPS mirrors and the PC backups contain secrets (env files, htpasswd, tokens inside the tarballs). Keep them in `JARVIS-backups`, which is outside the repo, and never commit or share them. The mirror never holds `.env.agent` (C-127): K-70 keeps the agent's link private key on the VPS, and in vps mode the PC holds its AI keys only DPAPI-wrapped (D13). Encrypting the other env copies to the PC backup key is C-128.
+The VPS mirrors and the PC backups contain secrets (env files, htpasswd, tokens inside the tarballs). Keep them in `JARVIS-backups`, which is outside the repo, and never commit or share them. The mirror never holds `.env.agent` (C-127): K-70 keeps the agent's link private key on the VPS, and in vps mode the PC holds its AI keys only DPAPI-wrapped (D13). The VPS brain's data travels only sealed to the PC backup key (`agent-volumes.tar.enc`, C-128); the other env copies stay plain, root-only, in `env/`.
 
 ### Known snapshots
 
@@ -651,24 +787,27 @@ $VPS 'bash /opt/jarvis-agent/deploy/hostinger/backup_vps.sh pre-deploy'
 ```
 
 - The label is optional: 1-40 characters from `A-Z a-z 0-9 . _ -`. Two runs in the same minute get a `-2`, `-3`, ... suffix.
+- `--with-media` also puts `Jarvis_Shared/Downloads` into `volumes.tgz` (left out by default).
+- The agent data needs `BACKUP_RECIPIENT_PUBLIC_KEY` in `.env.agent` ([Data restore](#data-restore)); check the result with `$VPS 'D=$(cat /root/jarvis-backups/LAST_DEPLOY); grep -E "^(brain|env_dir|env_layout|agent_data|media):" /root/jarvis-backups/$D/MANIFEST.txt'`.
 - `deploy_from_pc.sh` ships this script with every deploy. `deploy.sh` runs the shipped copy and keeps another in `/root/jarvis-backups/tools/`. C-11 copied it to the VPS once by hand; from C-12 on no manual copy is needed.
 
 ### Mirror VPS backups to the PC
 
-The mirror takes only `backup_vps.sh` folders (they hold `MANIFEST.txt`; the env tools' backups in `/root/jarvis-backups/env/` and other tools' folders are never copied) and streams each one through tar without its `env.agent` (C-127), so that file never reaches the PC, not even for a moment. Copy a single snapshot and check it (`SHA256SUMS` without its `env.agent` line):
+The mirror takes only `backup_vps.sh` folders (they hold `MANIFEST.txt`; the env tools' backups in `/root/jarvis-backups/env/` and other tools' folders are never copied) and streams each one through tar without its `env.agent` (C-127; `env/env.agent` since v2, `env.agent` in a v1 folder), so that file never reaches the PC, not even for a moment. `agent-volumes.tar.enc` comes along: it is sealed, and only this PC's backup key opens it. Copy a single snapshot and check it (`SHA256SUMS` without its `env.agent` line):
 
 ```bash
 mkdir -p "$PCB/vps"
 TS=2026-10-01_0826Z-verify
-$VPS "tar -C /root/jarvis-backups --exclude=$TS/env.agent -cf - $TS" | tar -C "$PCB/vps" -xf -
-(cd "$PCB/vps/$TS" && grep -v '  env\.agent$' SHA256SUMS | sha256sum -c --quiet - && echo MIRROR_OK)
+$VPS "tar -C /root/jarvis-backups --exclude=$TS/env.agent --exclude=$TS/env/env.agent -cf - $TS" | tar -C "$PCB/vps" -xf -
+(cd "$PCB/vps/$TS" && grep -v -E '  (env/)?env\.agent$' SHA256SUMS | sha256sum -c --quiet - && echo MIRROR_OK)
+[ ! -f "$PCB/vps/$TS/agent-volumes.tar.enc" ] || $PY scripts/ops/restore_agent_data.py --check-file "$PCB/vps/$TS/agent-volumes.tar.enc"
 ```
 
 Copy every snapshot that is not on the PC yet. This never overwrites or deletes anything:
 
 ```bash
 for TS in $($VPS 'cd /root/jarvis-backups && ls -1d 2*/MANIFEST.txt | cut -d/ -f1'); do
-  [ -e "$PCB/vps/$TS" ] || $VPS "tar -C /root/jarvis-backups --exclude=$TS/env.agent -cf - $TS" | tar -C "$PCB/vps" -xf -
+  [ -e "$PCB/vps/$TS" ] || $VPS "tar -C /root/jarvis-backups --exclude=$TS/env.agent --exclude=$TS/env/env.agent -cf - $TS" | tar -C "$PCB/vps" -xf -
 done
 ```
 
@@ -683,7 +822,7 @@ $VPS 'D=$(ls -1d /root/jarvis-backups/2*/MANIFEST.txt | tail -1); D=${D%/MANIFES
 $VPS 'D=$(ls -1d /root/jarvis-backups/2*/MANIFEST.txt | tail -1); D=${D%/MANIFEST.txt}; cd $D && sha256sum -c --quiet SHA256SUMS && tar -tzf volumes.tgz >/dev/null && echo ARCHIVES_OK'
 ```
 
-`D` is the newest `backup_vps.sh` folder: only those hold `MANIFEST.txt`, so another tool's `2*` folder is never taken. If nothing is printed before `RESTORE_DRILL_DONE`, the live `/opt/jarvis-agent` matches the backup. Right after a deploy, a list of differences is expected.
+`D` is the newest `backup_vps.sh` folder: only those hold `MANIFEST.txt`, so another tool's `2*` folder is never taken. If nothing is printed before `RESTORE_DRILL_DONE`, the live `/opt/jarvis-agent` matches the backup. Right after a deploy, a list of differences is expected. The agent data is checked on the PC, the only place it opens: mirror the folder, then `restore_agent_data.py --check-file` as above (or `restore_agent_data.py <TS> --dry-run`, which fetches and checks it without changing anything).
 
 ### Restore (restore only what is broken)
 
@@ -697,7 +836,7 @@ docker tag jarvis-frontend:rollback-<snapshot> jarvis-frontend:hostinger
 $C up -d --no-build --no-deps ui-bridge frontend
 ```
 
-If the bad deploy also changed `docker-compose.yml`, restore the code (step 2) first.
+If the bad deploy also changed `docker-compose.yml`, restore the code (step 2) first. The VPS brain by hand: `docker tag jarvis-agent:rollback-<snapshot> jarvis-agent:hostinger`, then `$C up -d --no-build --no-deps agent`; when the snapshot has `jarvis-agent:rollback-<snapshot>-agent-svc`, tag that one next and `up` agent-svc alone (one shared tag, so one service at a time; `rollback.sh` does these rounds by itself).
 
 LiveKit has no rollback tag. `images.txt` records its image ref and id (`livekit<TAB>ref<TAB>id`). To go back:
 
@@ -732,7 +871,7 @@ nginx -t && systemctl reload nginx
 
 For the `2026-09-30_2340` snapshot, use `nginx-jarvis.conf.live` instead. It has no htpasswd.
 
-**4. Env files.** With `rollback.sh` (C-127), dry run first. It puts the env files back together with the image and the compose file they belong to, and only the env files that the services it recreates read. It checks the env layout and the shared values first, keeps the live `JARVIS_BRAIN`, `COMPOSE_PROFILES` and Desktop Link key lines, and moves a live `bridge.env` that the backup never had aside ([Rollback](#rollback)):
+**4. Env files.** The copies are in `$B/env/` since `backup_vps.sh` v2 (C-128), in `$B/` in an older folder; `rollback.sh` reads both. With `rollback.sh` (C-127), dry run first. It puts the env files back together with the image and the compose file they belong to, and only the env files that the services it recreates read. It checks the env layout and the shared values first, keeps the live `JARVIS_BRAIN`, `COMPOSE_PROFILES` and Desktop Link key lines, and moves a live `bridge.env` that the backup never had aside ([Rollback](#rollback)):
 
 ```bash
 bash $T/rollback.sh ${B##*/} --services ui-bridge --with-env --dry-run   # each env file it replaces, keeps or moves aside
@@ -761,6 +900,8 @@ $C run --rm --no-deps -T --entrypoint sh ui-bridge -c 'set -e; cd /app/data; ts=
 
 For the `2026-09-30_2340` snapshot, copy its folders while the bridge is running, for example `docker cp $B/bridge-logs/. jarvis-bridge:/app/logs/`. Use the same pattern for `bridge-Jarvis_Outputs` and `bridge-Jarvis_Shared`.
 
+**6. Agent data** (the VPS brain's memory, Chroma and data). Never by hand on the VPS: `agent-volumes.tar.enc` opens only on the PC. `bash $T/rollback.sh ${B##*/} --data` prints the command; [Data restore](#data-restore) has the steps.
+
 #### Health check after a restore
 
 ```bash
@@ -781,7 +922,7 @@ Prune follows these rules:
 
 - It only looks at folders the script made (`YYYY-MM-DD_HHMMZ[-label]`). Hand-made snapshots such as `2026-09-30_2340` are never touched.
 - The newest 3 scripted backups are always kept.
-- The `rollback-<folder>` tags of a pruned folder are removed with `docker image rm`, never forced. A tag that a container still uses is kept.
+- The `rollback-<folder>` tags of a pruned folder (`jarvis-{bridge,frontend,agent}`, and `jarvis-agent:rollback-<folder>-agent-svc`) are removed with `docker image rm`, never forced. A tag that a container still uses is kept.
 
 ### PC backups and restore
 

@@ -6,7 +6,7 @@
 #   bash deploy/hostinger/deploy_from_pc.sh --services LIST [--nginx] [--allow-dirty] [--no-auto-rollback]
 #   bash deploy/hostinger/deploy_from_pc.sh --dry-run [--services LIST] [--nginx]   offline: no ssh at all
 #   bash deploy/hostinger/deploy_from_pc.sh --check --services LIST [--nginx]       ship, then a dry run on the VPS
-#   bash deploy/hostinger/deploy_from_pc.sh --attach RUN_ID                          follow a run after a dropped link
+#   bash deploy/hostinger/deploy_from_pc.sh --attach RUN_ID [--no-node-update]       follow a run after a dropped link
 #
 #   --services LIST     compose services to rebuild and recreate (required), e.g. 'ui-bridge' or 'ui-bridge,livekit';
 #                       'none' ships the code only. Only the named services are touched ('up -d --no-deps'); the
@@ -14,9 +14,34 @@
 #   --nginx             also install deploy/hostinger/jarvis.conf on the VPS (nginx -t, then reload)
 #   --allow-dirty       deploy although the shipped paths have uncommitted changes (they are listed as NOT deployed)
 #   --no-auto-rollback  passed to deploy.sh: after a failed gate print the rollback command instead of running it
+#   --now               passed to deploy.sh: recreate 'agent' in vps mode without waiting for 10 idle minutes, after a
+#                       60 s notice (K-72)
+#   --no-node-update    after an agent deploy, print the 'agent_ctl node update' command instead of running it
 #
-# Only a commit is shipped, never the working tree: 'git archive' of deploy src services stonix_ui scripts
-# .dockerignore and the root requirements*.txt, with core.autocrlf=false and core.eol=lf so shell scripts stay LF.
+# The VPS brain (C-128): a deploy that names 'agent' or 'agent-svc'
+#   - runs the K-71 manifest check first, strict: JARVIS_MANIFEST_STRICT=1 scripts/desktop/export_manifest.py --check
+#     (on this PC; C-118) in a scratch copy of the shipped commit ('git archive', read-only on the repo: no worktree,
+#     no hook), so the commit's registry is compared with the commit's manifest whatever the working tree holds (an
+#     uncommitted regenerated manifest, Cursor's uncommitted tool edits). It refuses when that manifest is stale, cannot
+#     be checked, or the exporter says it read uncommitted files (not verified). JARVIS_MANIFEST_STRICT=1 in the
+#     environment runs it before every deploy;
+#   - once deploy.sh exited 0, runs '<python> scripts/agent_ctl.py node update --sha <AGENT_IMAGE_SHA> --by claude' (with
+#     --canary while the pinned node runs in canary mode), so the laptop's Desktop Node runs the commit the agent image
+#     was built from (deploy.sh reports it; normally the deployed commit). That commit (the one the node is pinned to)
+#     gets the same strict manifest check first on a scratch copy of it, unless this run already checked it (the shipped
+#     commit, before the deploy): so an image built from another commit, and every '--attach RUN_ID', which follows a
+#     run this process did not check (also one deploy.sh started on the VPS, <UTC>-manual-<hex>, whose commit comes
+#     from the log's 'sha' line). A stale manifest there, or a commit this repo does not have, leaves the node as it is
+#     and ends in exit 6 (--no-node-update too). It runs whatever the PC checks give (the container runs the new image
+#     either way); after a dropped link '--attach RUN_ID' runs it once the run ends healthy, and the exit-5 message
+#     prints it. deploy.sh's agent gate is described there.
+#   Env: JARVIS_PY (default .venv_312/Scripts/python.exe in the repo), JARVIS_AGENT_CTL (a test hook: the agent_ctl
+#   command line to call instead).
+#
+# Only a commit is shipped, never the working tree: 'git archive' of deploy (the deploy/hostinger scripts and their
+# requirements and constraints files among them) src services stonix_ui scripts (scripts/ops, scripts/desktop and
+# scripts/models: the backup, restore and agent tools) .dockerignore and the root requirements*.txt, with
+# core.autocrlf=false and core.eol=lf so shell scripts stay LF.
 # HEAD is resolved once at the start; the archive, the file list and the service list all come from that commit,
 # so a commit that lands meanwhile (Cursor works in the same tree) is not shipped under the recorded SHA.
 # The VPS keeps it in /root/jarvis-backups/runs/<run>/; deploy.sh runs from there (the new version, never the old
@@ -25,8 +50,11 @@
 #   JARVIS_DOMAIN (default jarvis.srv1802669.hstgr.cloud).
 # Exit codes: those of deploy.sh (0 deployed and healthy, 1 refused or nothing live changed, 2 rolled back
 #   automatically, 3 act now), plus 5 = connection lost while the run goes on (the attach command is printed),
-#   6 = deployed but the PC-side checks failed, 64 = usage error. --dry-run: 0 = a real run would go ahead,
-#   1 = it would refuse.
+#   6 = deployed but a PC-side step failed (the checks, or after an agent deploy the node update or the manifest check
+#   of AGENT_IMAGE_SHA before it; both steps always run),
+#   64 = usage error. --attach ends the same way (the PC checks and the node update after a healthy end).
+#   --dry-run: 0 = a real run would go ahead, 1 = it would refuse. --check: deploy.sh's dry run on the VPS, 0 = a real
+#   run would go ahead now, 1 = it would refuse now (deploy.sh's VERDICT line says why, e.g. the idle gate).
 set -euo pipefail
 
 readonly VPS_HOST="${JARVIS_VPS_HOST:-root@187.127.123.235}"
@@ -46,6 +74,8 @@ SERVICES_GIVEN=0
 NGINX=0
 ALLOW_DIRTY=0
 AUTO_ROLLBACK=1
+NOW=0
+NODE_UPDATE=1
 DRY_RUN=0
 CHECK=0
 ATTACH=""
@@ -53,7 +83,13 @@ SHA=""
 SHA_FULL=""
 SHIP=()
 REFUSE=()
+NODE_ARGV=()
+NODE_FAILED=""
+MANIFEST_PROBLEM=""
+MANIFEST_FIX=""
+MANIFEST_CHECKED=()   # the full commit ids whose desktop manifest this run checked and found current (K-71)
 ARCHIVE=""
+MANIFEST_SCRATCH=""
 LOCAL_LOG=""
 
 log() { printf '[deploy_from_pc] %s\n' "$*"; }
@@ -88,6 +124,8 @@ parse_args() {
       --nginx) NGINX=1; shift ;;
       --allow-dirty) ALLOW_DIRTY=1; shift ;;
       --no-auto-rollback) AUTO_ROLLBACK=0; shift ;;
+      --now) NOW=1; shift ;;
+      --no-node-update) NODE_UPDATE=0; shift ;;
       --dry-run) DRY_RUN=1; shift ;;
       --check) CHECK=1; shift ;;
       --attach) (( $# >= 2 )) || usage_error "--attach needs a run id"; ATTACH="$2"; shift 2 ;;
@@ -112,11 +150,115 @@ head_services() {  # top-level service keys of the committed docker-compose.yml
     s && /^  [A-Za-z0-9][A-Za-z0-9_.-]*:[[:space:]]*$/ { sub(/^  /, ""); sub(/:.*/, ""); print }'
 }
 
+agent_named() { in_list agent "${SERVICES[@]}" || in_list agent-svc "${SERVICES[@]}"; }
+
+python_cmd() {  # the project venv's python on this PC (JARVIS_PY overrides); '' when none is found
+  if [[ -n ${JARVIS_PY:-} ]]; then printf '%s\n' "$JARVIS_PY"; return 0; fi
+  if [[ -x $ROOT/.venv_312/Scripts/python.exe ]]; then printf '%s\n' "$ROOT/.venv_312/Scripts/python.exe"; return 0; fi
+  if [[ -x $ROOT/.venv_312/bin/python ]]; then printf '%s\n' "$ROOT/.venv_312/bin/python"; return 0; fi
+  return 0
+}
+
+manifest_strict() {  # an agent deploy, or JARVIS_MANIFEST_STRICT=1 (also true/yes/on) in the environment
+  agent_named && return 0
+  case "${JARVIS_MANIFEST_STRICT:-}" in 1|true|TRUE|True|yes|on) return 0 ;; esac
+  return 1
+}
+
+remove_manifest_scratch() {  # this run's own scratch copy of the commit (never anything else)
+  if [[ -n $MANIFEST_SCRATCH && -d $MANIFEST_SCRATCH && $(basename "$MANIFEST_SCRATCH") == jarvis-manifest.* ]]; then
+    rm -rf -- "$MANIFEST_SCRATCH" || true
+  fi
+  MANIFEST_SCRATCH=""
+}
+
+manifest_check_commit() {  # <commit> <label>: the strict K-71 check (JARVIS_MANIFEST_STRICT=1
+  # scripts/desktop/export_manifest.py --check) in a scratch copy of that commit, so the working tree (an uncommitted
+  # regenerated manifest, Cursor's uncommitted tool edits; --allow-dirty ships past both) can neither pass nor fail it.
+  # 'git archive' only reads the repo: no worktree entry, no hook, nothing in the tree. 0 when the commit's manifest
+  # matches its registry (its full id then joins MANIFEST_CHECKED); 1 otherwise, with MANIFEST_PROBLEM (and
+  # MANIFEST_FIX for a stale one) set
+  local commit="$1" label="$2" py out rc=0 full
+  MANIFEST_PROBLEM=""
+  MANIFEST_FIX=""
+  py="$(python_cmd)"
+  if [[ -z $py ]]; then
+    MANIFEST_PROBLEM="the desktop manifest check needs the project python (.venv_312 in the repo, or JARVIS_PY)"
+    return 1
+  fi
+  if ! full="$(git -C "$ROOT" rev-parse --quiet --verify "$commit^{commit}" 2> /dev/null)" || [[ -z $full ]]; then
+    MANIFEST_PROBLEM="the desktop manifest of commit $label could not be checked: this repo has no such commit (K-71)"
+    return 1
+  fi
+  if ! MANIFEST_SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/jarvis-manifest.XXXXXX")" \
+      || ! git -C "$ROOT" -c core.autocrlf=false -c core.eol=lf archive --format=tar "$commit" \
+        | tar -xf - -C "$MANIFEST_SCRATCH"; then
+    remove_manifest_scratch
+    MANIFEST_PROBLEM="the desktop manifest of commit $label could not be checked: the commit did not copy into a scratch folder (K-71)"
+    return 1
+  fi
+  log "manifest: JARVIS_MANIFEST_STRICT=1 scripts/desktop/export_manifest.py --check in a scratch copy of commit $label (git archive): its registry against its manifest, whatever the working tree holds"
+  out="$(cd "$MANIFEST_SCRATCH" && JARVIS_MANIFEST_STRICT=1 "$py" scripts/desktop/export_manifest.py --check 2>&1)" || rc=$?
+  remove_manifest_scratch
+  printf '%s\n' "$out" | tail -n 12 | sed 's/^/    /'
+  if (( rc != 0 )); then
+    MANIFEST_PROBLEM="the desktop manifest of commit $label is stale or could not be checked (export_manifest.py --check exit $rc)"
+    MANIFEST_FIX="run scripts/desktop/export_manifest.py and commit services/ai_core/desktop_manifest.json first (K-71)"
+    return 1
+  fi
+  if grep -qF 'uncommitted changes' <<< "$out"; then
+    # the scratch copy has nothing uncommitted, so this would be a check of other files than the commit's
+    MANIFEST_PROBLEM="the desktop manifest of commit $label was not verified: the exporter says it read uncommitted files, not the commit (K-71)"
+    return 1
+  fi
+  MANIFEST_CHECKED+=("$full")
+  return 0
+}
+
+manifest_checked() {  # <commit>: this run checked that commit's desktop manifest and found it current
+  local full
+  full="$(git -C "$ROOT" rev-parse --quiet --verify "$1^{commit}" 2> /dev/null || true)"
+  [[ -n $full ]] && in_list "$full" "${MANIFEST_CHECKED[@]}"
+}
+
+manifest_check() {  # K-71 / C-118: a stale committed desktop manifest never ships with the VPS brain. The check runs on
+  # commit SHA_FULL, the one that ships and that the builder bakes into the agent image built from it
+  if ! manifest_strict; then
+    log "manifest: not checked (no agent service named; JARVIS_MANIFEST_STRICT=1 checks every deploy)"
+    return 0
+  fi
+  if ! manifest_check_commit "$SHA_FULL" "$SHA"; then
+    REFUSE+=("$MANIFEST_PROBLEM${MANIFEST_FIX:+: $MANIFEST_FIX}")
+  fi
+}
+
+node_run_mode() {  # 'canary' while the pinned Desktop Node runs in canary mode (run/node_current.json), else 'active'
+  local f="${JARVIS_RUN_DIR:-$ROOT/run}/node_current.json"
+  if [[ -f $f ]] && grep -Eq '"run_mode"[[:space:]]*:[[:space:]]*"canary"' "$f"; then echo canary; else echo active; fi
+}
+
+node_update_argv() {  # <sha>: NODE_ARGV, the agent_ctl call that pins the laptop's Desktop Node to that commit (C-123)
+  local py
+  local -a ctl=()
+  if [[ -n ${JARVIS_AGENT_CTL:-} ]]; then
+    read -r -a ctl <<< "$JARVIS_AGENT_CTL"
+  else
+    py="$(python_cmd)"
+    ctl=("${py:-.venv_312/Scripts/python.exe}" "$ROOT/scripts/agent_ctl.py")
+  fi
+  NODE_ARGV=("${ctl[@]}" node update --sha "$1" --by claude --reason "C-128-deploy-${SHA:-$1}")
+  if [[ $(node_run_mode) == canary ]]; then NODE_ARGV+=(--canary); fi
+}
+
+find_root() {
+  ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel 2>/dev/null)" || die "not inside the JARVIS git repo"
+  [[ -f $ROOT/deploy/hostinger/deploy.sh ]] || die "$ROOT is not the JARVIS repo"
+}
+
 local_checks() {
   local p dirty branch ahead svc
   local -a known=() top=()
-  ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel 2>/dev/null)" || die "not inside the JARVIS git repo"
-  [[ -f $ROOT/deploy/hostinger/deploy.sh ]] || die "$ROOT is not the JARVIS repo"
+  find_root
   # HEAD is resolved once: Cursor commits in the same working tree, so every later read uses this commit id
   SHA_FULL="$(git -C "$ROOT" rev-parse HEAD)"
   SHA="$(git -C "$ROOT" rev-parse --short "$SHA_FULL")"
@@ -150,6 +292,7 @@ local_checks() {
     in_list "$svc" "${known[@]}" || REFUSE+=("'$svc' is not a service in HEAD's docker-compose.yml (${known[*]})")
   done
   if [[ ! -f $SSH_KEY ]] && (( ! DRY_RUN )); then REFUSE+=("ssh key $SSH_KEY not found"); fi
+  manifest_check
 }
 
 new_run_id() { printf '%s-%s-%s' "$(date -u +%Y%m%dT%H%M%SZ)" "$SHA" "$(od -An -N2 -tx1 /dev/urandom | tr -d ' \n')"; }
@@ -167,6 +310,7 @@ remote_deploy_cmd() {  # <run dir> <deploy.sh mode flags...>
   cmd+=" --services '${SERVICES[*]:-none}'"
   if (( NGINX )); then cmd+=" --nginx"; fi
   if (( ! AUTO_ROLLBACK )); then cmd+=" --no-auto-rollback"; fi
+  if (( NOW )); then cmd+=" --now"; fi
   if (( $# )); then cmd+=" $*"; fi
   printf '%s' "$cmd"
 }
@@ -200,6 +344,16 @@ print_dry_run() {
   printf '       (deploy.sh: lock, backup_vps.sh, smoke pre, install, %s, gate, smoke post, rollback on failure)\n' \
     "$( (( ${#SERVICES[@]} )) && echo "build + up -d --no-deps ${SERVICES[*]}" || echo 'no container touched')"
   printf '    3. PC checks: https://%s/vortex/health = 200, https://%s/ = 401 (basic auth) or 200\n' "$DOMAIN" "$DOMAIN"
+  if agent_named; then
+    node_update_argv "<AGENT_IMAGE_SHA>"
+    printf '    4. after a healthy agent deploy (%s): %s\n' "$( ((NODE_UPDATE)) && echo 'run' || echo 'print only, --no-node-update')" \
+      "${NODE_ARGV[*]}"
+    printf '       (AGENT_IMAGE_SHA: the commit the agent image was built from, which deploy.sh reports; normally %s)\n' "$SHA"
+    printf '       (another commit than %s: the strict manifest check runs on a scratch copy of it first; stale or missing: no node update, exit 6)\n' "$SHA"
+    printf '       (whatever the PC checks give, as the container runs the new image either way; after a dropped link, --attach <run id> runs it)\n'
+    printf '       agent gate on the VPS: healthy within 180 s, /worker agent_name, LiveKit worker registered, models, net_guard, agent_hello on :5002, smoke diff identical; restarts idle-gated%s\n' \
+      "$( ((NOW)) && echo ' (--now: a 60 s notice instead)' || echo ' (10 min without activity in vps mode; --now skips it after a notice)')"
+  fi
 }
 
 # ------------------------------------------------------------------ VPS steps
@@ -239,20 +393,117 @@ report_end() {  # <deploy exit code> <run id>
       0|3) log "rollback: ${SSH[*]} 'bash $REMOTE_TOOLS/rollback.sh $backup'" ;;
     esac
   fi
+  if agent_named && (( rc != 0 )); then
+    log "if the VPS brain does not answer: .venv_312/Scripts/python.exe scripts/agent_ctl.py brain pc --now (the PC brain serves the owner)"
+  fi
 }
 
-attach() {  # <run id>
+node_update_after_deploy() {  # pins the laptop's Desktop Node to the commit the agent image runs (C-128 step 2)
+  local rev rc=0
+  NODE_FAILED=""
+  rev="$(sed -n 's/^\[deploy\] AGENT_IMAGE_SHA=//p' "$LOCAL_LOG" | tail -n 1 | tr -d '\r')"
+  if [[ ! $rev =~ ^[0-9a-f]{7,40}$ ]]; then
+    if [[ ! $SHA =~ ^[0-9a-f]{7,40}$ ]]; then
+      log "the deploy is live, but neither the agent image's revision (AGENT_IMAGE_SHA=${rev:-none}) nor the deployed commit is known: pin the node by hand, on this PC: .venv_312/Scripts/python.exe scripts/agent_ctl.py node update --sha <the agent image's commit> --by claude --reason C-128-deploy"
+      return 1
+    fi
+    log "note: deploy.sh reported no agent image revision (AGENT_IMAGE_SHA=${rev:-none}); the node is pinned to $SHA"
+    rev="$SHA"
+  elif [[ $rev != "$SHA"* && $SHA != "$rev"* ]]; then
+    log "note: the agent image was built from $rev, not $SHA: the node is pinned to $rev, so it matches the image"
+  fi
+  # K-71: a node pinned to a commit whose committed manifest is not its registry answers MANIFEST_MISMATCH for every
+  # changed laptop tool, so the commit the node is pinned to gets the strict scratch-copy check first, unless this run
+  # already checked it (the shipped commit, before the deploy): an image built from another commit, and every
+  # '--attach', which follows a run this process did not check (deploy.sh may even have started it on the VPS,
+  # <UTC>-manual-<hex>, its commit from the log). A stale one, or one this repo cannot check, is never pinned
+  if ! manifest_checked "$rev" && ! manifest_check_commit "$rev" "$rev"; then
+    node_update_argv "$rev"
+    log "node: NOT updated (the laptop's Desktop Node keeps its current commit): $MANIFEST_PROBLEM. Build the agent image from a commit whose desktop manifest is current (RUNBOOK, 'Agent image') and deploy agent again; or, once 'JARVIS_MANIFEST_STRICT=1 scripts/desktop/export_manifest.py --check' passes on $rev, pin the node by hand: ${NODE_ARGV[*]}"
+    NODE_FAILED="the desktop manifest check of commit $rev, which the agent image runs (see above): the node was not updated"
+    return 1
+  fi
+  node_update_argv "$rev"
+  if (( ! NODE_UPDATE )); then
+    log "node: not updated (--no-node-update); run it on this PC: ${NODE_ARGV[*]}"
+    return 0
+  fi
+  log "node: ${NODE_ARGV[*]}"
+  (cd "$ROOT" && "${NODE_ARGV[@]}") || rc=$?
+  if (( rc != 0 )); then
+    log "the deploy is live, but 'agent_ctl node update' failed (exit $rc); run it again: ${NODE_ARGV[*]}"
+    return 1
+  fi
+  log "node: pinned to $rev"
+}
+
+node_hint_after_drop() {  # <run id>: a dropped link leaves the node update of an agent deploy to --attach (or to you)
+  node_update_argv "<AGENT_IMAGE_SHA>"
+  log "an agent deploy: once the run ends healthy, '--attach $1' also pins the laptop's Desktop Node to the agent image, after the strict manifest check of its commit (with --no-node-update it prints the call instead); by hand, with the '[deploy] AGENT_IMAGE_SHA=' line of the run's log, once 'JARVIS_MANIFEST_STRICT=1 scripts/desktop/export_manifest.py --check' passes on that commit: ${NODE_ARGV[*]}"
+}
+
+after_deploy() {  # deploy.sh exited 0: the PC checks, and after an agent deploy the node update (C-128 step 2). Both run
+  # whatever the other gives (a moment of 000 or 502 from this PC leaves jarvis-agent on the new image all the same);
+  # exit 6 when either failed
+  local -a failed=()
+  if ! pc_checks; then
+    failed+=("the PC checks (check https://$DOMAIN/vortex/health and https://$DOMAIN/ from this PC again)")
+  fi
+  if agent_named && ! node_update_after_deploy; then
+    failed+=("${NODE_FAILED:-the node update (run the command printed above)}")
+  fi
+  if (( ${#failed[@]} )); then
+    log "the deploy is live (deploy.sh exit 0), but a PC-side step failed:"
+    printf '[deploy_from_pc]   - %s\n' "${failed[@]}"
+    exit 6
+  fi
+  log "DONE: $SHA is deployed (${SERVICES[*]:-code only})"
+}
+
+attached_run() {  # <run id>: SERVICES and SHA of a run this PC follows again: deploy.sh's services line from its log,
+  # and the commit from the run id (<UTC>-<sha>-<n>, new_run_id), else from the log's 'sha' line
+  local line tok sha
+  local -a toks=()
+  line="$({ sed -n 's/^\[deploy\] \{1,3\}services: \([^;]*\);.*$/\1/p' "$LOCAL_LOG" 2>/dev/null || true; } | tail -n 1 | tr -d '\r')"
+  read -r -a toks <<< "$line"
+  SERVICES=()
+  for tok in "${toks[@]}"; do
+    if [[ $tok != none && $tok =~ $SERVICE_RE ]] && ! in_list "$tok" "${SERVICES[@]}"; then SERVICES+=("$tok"); fi
+  done
+  sha="${1#*Z-}"
+  sha="${sha%-*}"
+  if [[ ! $sha =~ ^[0-9a-f]{7,40}$ ]]; then
+    sha="$({ sed -n 's/^\[deploy\]   sha \([0-9a-f]\{7,40\}\) .*$/\1/p' "$LOCAL_LOG" 2>/dev/null || true; } | tail -n 1)"
+  fi
+  SHA="$sha"
+}
+
+attach() {  # <run id>: follow a run again; it ends like the deploy itself (report, PC checks, node update)
   local rc=0
+  find_root
   LOCAL_LOG="${TMPDIR:-/tmp}/jarvis-deploy-$1.log"
   follow_remote "$(remote_attach_cmd "$REMOTE_RUNS/$1")" || rc=$?
-  if (( rc == 255 )); then log "connection lost again; the run goes on: $0 --attach $1"; exit 5; fi
+  attached_run "$1"
+  if (( rc == 255 )); then
+    log "connection lost again; the run goes on: $0 --attach $1"
+    if agent_named; then node_hint_after_drop "$1"; fi
+    exit 5
+  fi
   report_end "$rc" "$1"
-  exit "$rc"
+  if (( rc != 0 )); then exit "$rc"; fi
+  after_deploy
+  exit 0
+}
+
+cleanup() {  # EXIT: this run's archive and scratch copy
+  if [[ -n $ARCHIVE ]]; then rm -f -- "$ARCHIVE" || true; fi
+  remove_manifest_scratch
 }
 
 main() {
   local id rc=0 run
   parse_args "$@"
+  trap cleanup EXIT
   if [[ -n $ATTACH ]]; then attach "$ATTACH"; fi
   local_checks
   if (( DRY_RUN )); then
@@ -269,7 +520,6 @@ main() {
     printf '[deploy_from_pc] REFUSED: %s\n' "${REFUSE[@]}" >&2
     exit 1
   fi
-  trap '[[ -z $ARCHIVE ]] || rm -f -- "$ARCHIVE"' EXIT
   build_archive
   id="$(new_run_id)"
   run="$REMOTE_RUNS/$id"
@@ -288,12 +538,12 @@ main() {
   follow_remote "$(remote_deploy_cmd "$run")" || rc=$?
   if (( rc == 255 )); then
     log "connection lost; the deploy goes on on the VPS. Follow it: bash $0 --attach $id"
+    if agent_named; then node_hint_after_drop "$id"; fi
     exit 5
   fi
   report_end "$rc" "$id"
   if (( rc != 0 )); then exit "$rc"; fi
-  if ! pc_checks; then log "the deploy finished but the PC-side checks failed"; exit 6; fi
-  log "DONE: $SHA is deployed (${SERVICES[*]:-code only})"
+  after_deploy
 }
 
 main "$@"

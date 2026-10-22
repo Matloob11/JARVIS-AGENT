@@ -1,9 +1,11 @@
 """
 # services/utils/backup_crypto.py
-Sealed snapshots of the VPS brain (plan task C-125 step 6; contract K-77 'Snapshot').
+Sealed snapshots and backups of the VPS brain (plan tasks C-125 step 6 and C-128; contracts K-77 'Snapshot', K-75).
 
-jarvis-agent-svc seals its daily snapshot to one X25519 public key, BACKUP_RECIPIENT_PUBLIC_KEY; only the PC holds
-the private key (scripts/ops/backup_key.py keeps it DPAPI-wrapped and decrypts a pulled snapshot). The scheme uses the
+One sealed format and one key pair for both: jarvis-agent-svc seals its daily snapshot, and backup_vps.sh's in-container
+step (services/utils/agent_volumes.py) seals the backup's agent-volumes.tar.enc, to one X25519 public key,
+BACKUP_RECIPIENT_PUBLIC_KEY; only the PC holds the private key (scripts/ops/backup_key.py keeps it DPAPI-wrapped and
+decrypts either file; scripts/ops/restore_agent_data.py streams a backup back with iter_open). The scheme uses the
 `cryptography` library's primitives only (X25519, HKDF-SHA256, ChaCha20-Poly1305); nothing is hand-rolled:
 
 - every file gets a fresh ephemeral X25519 key; HKDF-SHA256 over the shared secret (salt: 16 random bytes; info:
@@ -27,6 +29,7 @@ import io
 import os
 import re
 import struct
+from collections.abc import Iterator
 from typing import BinaryIO
 
 from cryptography.exceptions import InvalidTag
@@ -220,14 +223,27 @@ def open_stream(src: BinaryIO, dst: BinaryIO, private_key: X25519PrivateKey) -> 
     """Opens a sealed stream into dst, chunk by chunk, and returns the plaintext size. Raises SnapshotCryptoError when
     the header, a chunk or the end does not verify: dst may then hold a verified prefix, so a caller writes it to a
     temporary file and keeps it only after this returns (scripts/ops/backup_key.py does)."""
+    total = 0
+    for plain in iter_open(src, private_key):
+        dst.write(plain)
+        total += len(plain)
+    return total
+
+
+def iter_open(src: BinaryIO, private_key: X25519PrivateKey) -> Iterator[bytes]:
+    """Opens a sealed stream chunk by chunk: yields each chunk's plaintext once it verified, and raises
+    SnapshotCryptoError when the header, a chunk or the end does not verify. Only a generator run to its end has
+    checked the final flag and that nothing follows it, so whatever was yielded before an error is a verified prefix,
+    never the whole: a consumer keeps nothing until the iteration ends (scripts/ops/restore_agent_data.py streams an
+    agent backup into ssh with it and calls anything that broke off a failure)."""
     header = _read_exact(src, HEADER_BYTES)
     if len(header) != HEADER_BYTES:
-        raise SnapshotCryptoError("not a JARVIS snapshot (too short)")
+        raise SnapshotCryptoError("not a JARVIS sealed file (too short)")
     magic, version, eph_public, salt, chunk = _HEADER.unpack(header)
     if magic != MAGIC:
-        raise SnapshotCryptoError("not a JARVIS snapshot")
+        raise SnapshotCryptoError("not a JARVIS sealed file")
     if version != VERSION:
-        raise SnapshotCryptoError("unknown snapshot version")
+        raise SnapshotCryptoError("unknown sealed format version")
     if not 1 <= chunk <= MAX_CHUNK_SIZE:
         raise SnapshotCryptoError("bad chunk size")
     try:
@@ -236,17 +252,16 @@ def open_stream(src: BinaryIO, dst: BinaryIO, private_key: X25519PrivateKey) -> 
         raise SnapshotCryptoError("bad ephemeral key") from None
     aead = _derive(shared, salt, eph_public, public_bytes(private_key))
     counter = 0
-    total = 0
     while True:
         length_raw = _read_exact(src, _LENGTH.size)
         if len(length_raw) != _LENGTH.size:
-            raise SnapshotCryptoError("truncated snapshot (no final chunk)")
+            raise SnapshotCryptoError("truncated (no final chunk)")
         (length,) = _LENGTH.unpack(length_raw)
         if not TAG_BYTES <= length <= chunk + TAG_BYTES:
             raise SnapshotCryptoError("bad chunk length")
         sealed = _read_exact(src, length)
         if len(sealed) != length:
-            raise SnapshotCryptoError("truncated snapshot")
+            raise SnapshotCryptoError("truncated (inside a chunk)")
         plain: bytes | None = None
         final = False
         for flag in (False, True):
@@ -258,13 +273,12 @@ def open_stream(src: BinaryIO, dst: BinaryIO, private_key: X25519PrivateKey) -> 
             break
         if plain is None:
             raise SnapshotCryptoError("a chunk does not verify (wrong key or damaged file)")
-        dst.write(plain)
-        total += len(plain)
         counter += 1
+        yield plain
         if final:
             if src.read(1):
                 raise SnapshotCryptoError("data after the final chunk")
-            return total
+            return
 
 
 def open_bytes(blob: bytes, private_key: X25519PrivateKey) -> bytes:

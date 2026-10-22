@@ -134,7 +134,7 @@ Poori tafseel: architecture page v2, `C:\Users\Matloob\AppData\Local\Temp\claude
 
 ## 4. Contracts
 
-**Canonical copy: `docs/CONTRACTS.md` (v51, 2026-10-21).** Asal wahi hai; yeh section us ki copy hai. Tabdeeli sirf Claude karega, section 11 me `REQ-CONTRACT <contract> <proposal>` ke baad (naya version + Changelog line + yahan copy).
+**Canonical copy: `docs/CONTRACTS.md` (v52, 2026-10-22).** Asal wahi hai; yeh section us ki copy hai. Tabdeeli sirf Claude karega, section 11 me `REQ-CONTRACT <contract> <proposal>` ke baad (naya version + Changelog line + yahan copy).
 
 #### K-01 · DASH-UI-RUNTIME (config+http-client) · owner: Claude
 Owner: Cursor (UI), built on Claude's C-AUTH-1 / C-SOCK-1 / C-ORIGIN-1 (infra). Browser base BRIDGE_BASE = VITE_BRIDGE_BASE || VITE_VORTEX_URL || '/vortex' (relative, same origin; the bundle never contains a secret). Every fetch uses credentials 'include': POST /auth/login {password, totp} | {password, recovery_code}; GET /auth/me; POST /auth/logout; GET /livekit/token (a NEW token before every connect and reconnect); GET /messages?before=&cursor=&limit= (K-41 v5); GET /media/<id> and /media/<id>/sign; POST /feedback. Socket.IO: io(origin, {path: BRIDGE_BASE + '/socket.io', withCredentials: true, transports: ['websocket','polling'], tryAllTransports: true, reconnectionAttempts: Infinity, reconnectionDelayMax: 10000}) with no auth payload. Session expiry: on any connect_error or a 'session_expired' {reason} event the UI calls /auth/me, and a 401 shows the login screen, so it never depends on the refusal text. Dev: Vite proxies /vortex (http + ws) to VITE_DEV_BRIDGE: the mock on 5199, the local bridge on 5001 with VITE_DEV_BRIDGE_STRIP=1, or the VPS with the Origin header rewritten. Electron loads JARVIS_UI_URL (default https://jarvis.srv1802669.hstgr.cloud); file:// dist only with JARVIS_ELECTRON_BACKEND=local or JARVIS_UI_OFFLINE=1.
@@ -578,6 +578,18 @@ v41 (C-127, as built):
   - Only 'agent_ctl brain pc' (K-72 v41) and 'fallback_env.py --restore' put the values back into the env files.
   - In-process readers (same Windows user; values stay in memory and are never printed or written elsewhere): the pre-commit hook's ENV_VALUE check (a store it cannot unwrap: names and the way out on stderr, every other check still runs), livekit_pc_pair.py verify/activate (find_values), and the writers through put_values (fallback_env.py --set, rotate_env_secret.py, rotate_livekit_keys.py, livekit_pc_pair.py create/activate). push_agent_env.py and --status read only the plaintext header.
   - A store that exists but that this Windows user cannot use is refused everywhere, with the way out (load_store raises StoreUnusable). 'fallback_env.py --discard --confirm' (--dry-run checks first; refused while the store can be unwrapped) renames it to run/fallback.env.dpapi.unreadable-<UTC>, never deleting it and never over an earlier file. The values are then entered again from their VPS copies (--set, or rotate_env_secret.py) and, in vps mode, wrapped again.
+v52 (C-128, as built): BACKUP_RECIPIENT_PUBLIC_KEY is a public key: 64 hex digits; its fingerprint is the 8 hex digits that 'backup_key.py public' prints. It seals two things: the daily snapshot of jarvis-agent-svc (K-77) and the agent-volumes.tar.enc of every backup_vps.sh run (K-75 v52).
+- backup_vps.sh reads it from .env.agent, and JARVIS_BRAIN from the compose .env (for MANIFEST 'brain:'), the way compose reads a line: the last assignment wins, a UTF-8 BOM is read past, blanks are trimmed, outer quotes are dropped, and an unquoted value is cut before ' #'.
+- The private key exists only on the PC, and only scripts/ops/backup_key.py makes or writes it:
+  - 'keygen' writes it DPAPI-wrapped for the current Windows user (CRYPTPROTECT_UI_FORBIDDEN) to %LOCALAPPDATA%\JARVIS\backup\backup_key.dpapi, through a temp file and an atomic rename. An existing key is kept unless --rotate, which renames the old file <name>.<YYYYmmdd-HHMMSS>-<4 hex>.bak; that file still opens what was sealed to it.
+  - 'public' prints BACKUP_RECIPIENT_PUBLIC_KEY and FINGERPRINT.
+  - 'export DEST' writes the key document unwrapped into a NEW file outside the repo, never over an existing file. It sets a one-user ACL while the file is still empty and prints ACL=<result>:
+    - 'this user only' when the ACL is set;
+    - 'none' on a drive that keeps no ACLs (the volume lacks FILE_PERSISTENT_ACLS: FAT, exFAT);
+    - on any other drive, an ACL that cannot be set refuses with nothing written (exit 2), unless --allow-open-acl, which writes the file with its inherited permissions and prints 'ACL=NOT restricted (<error type>)' plus a WARN line.
+  - 'decrypt' opens a snapshot or an agent-volumes.tar.enc into a tar next to it and prints KIND=snapshot or KIND=agent-volumes.
+- scripts/ops/restore_agent_data.py reads the key only through backup_key.load_key: the store, or an offline copy given with --key-file.
+- The private key is never printed, never logged, never sent to the VPS and never stored there.
 
 #### K-48 · C-NET-1 (network) · owner: Claude
 Public on 187.127.123.235 for JARVIS: 80/443 (nginx), 7881/tcp and 50000-50050/udp (LiveKit media). Loopback only: 5100 (frontend, done 30 Sep), 5101 (bridge) and 7880 (LiveKit signaling/API) from OP-13. /etc/nginx/conf.d/jarvis.conf, server jarvis.srv1802669.hstgr.cloud: 'location /' -> 127.0.0.1:5100 (temporary basic auth until OP-21, then the lines stay commented for emergency re-enable); 'location /vortex/' -> 127.0.0.1:5101/ (prefix stripped, WebSocket upgrade, read timeout 86400, never basic auth); 'location /rtc' -> 127.0.0.1:7880 (ws); 'location = /agent' -> 127.0.0.1:7880 (ws, worker registration); 'location /twirp/' -> 127.0.0.1:7880 (LiveKit server API); 'location = /vortex/livekit/webhook' -> 404; 'location = /vortex/auth/login' -> limit_req zone jarvis_login 10r/m burst 5 (zone declared at the top of jarvis.conf); the port-80 server keeps /.well-known/acme-challenge from /var/www/html. Headers on '/' after OP-21: HSTS max-age=31536000, X-Content-Type-Options nosniff, Referrer-Policy strict-origin-when-cross-origin, X-Frame-Options DENY, Permissions-Policy camera=(self) microphone=(self), CSP report-only (enforcing in OP-38). The PC agent uses only https/wss on the domain after OP-13. The PC worker health server binds 127.0.0.1:8081. UFW stays inactive (user decision); Docker-published ports bypass UFW anyway, so JARVIS relies only on loopback binds and jarvis.conf. v4 (VPS brain): the bridge also listens on :5002 on jarvis-network only (never published; agent role and /internal/*). The agent containers publish no port and use ws://jarvis-livekit:7880 and http://jarvis-bridge:5002. jarvis.conf adds 'location = /vortex/desktop/blob' (client_max_body_size 30m, proxy_request_buffering off), 'location /vortex/internal/' -> 404, and limit_conn 20 per IP plus limit_req 120r/m burst 60 on /vortex/socket.io (zones declared at the top of jarvis.conf). The 5101/7880 loopback binds land in the V6 LiveKit window. The Desktop Node only connects out (wss on the domain) and serves health on 127.0.0.1:8082.
@@ -624,6 +636,12 @@ v9 (C-23):
 
 #### K-54 · COORD-4 (process) · owner: Claude
 VPS rules (Claude only; Cursor never runs ssh, scp or docker against the VPS). Allowed scope ONLY: Docker project jarvis (always 'docker compose -p jarvis'; code dir /opt/jarvis-agent, containers jarvis-* (v4: including jarvis-agent and jarvis-agent-svc), volumes jarvis_* (v4: including jarvis_agent_*), network jarvis-network, images jarvis-* (v4: including jarvis-agent:hostinger)), the dedicated buildx builder 'jarvis-builder' (v4, D19: its buildkit container and state volume, created once with 'docker buildx create --name jarvis-builder --driver docker-container'; never pruned without the user's OK), /etc/nginx/conf.d/jarvis.conf, /etc/nginx/jarvis.htpasswd and /root/jarvis-backups (backups, deploy lock, deploy.log, scratch). Not allowed: enabling or changing UFW (stays inactive), any other app, container, volume, network, vhost, cert or config, /etc/nginx/snippets, /etc/letsencrypt (read-only checks only), new systemd units, docker system/image/volume/builder prune, 'docker compose down' without -p jarvis, apt upgrade, reboot, restarting nginx or the docker daemon (only 'nginx -t && systemctl reload nginx'), deleting files or backups on the server without the user's explicit OK. Every change: backup_vps.sh -> change -> nginx -t before reload -> health gate + smoke_other_apps.sh pre/post diff -> done_highlight.md entry with the rollback command. Deploys only through deploy/hostinger/deploy_from_pc.sh from the committed HEAD. Verify commands use VPS='ssh -i ~/.ssh/id_ed25519_hostinger -o BatchMode=yes root@187.127.123.235'.
+v52 (C-128, as built): the VPS brain's data goes back only from the PC.
+- scripts/ops/restore_agent_data.py (K-75 v52) decrypts on the PC and streams the checked tar into a one-off container of the compose service agent of project jarvis.
+- On the VPS it only reads (docker inspect, docker info, df, the backup folder), takes /root/jarvis-backups/.deploy.lock for its backup and for its extraction, and runs backup_vps.sh pre-data-restore.
+- It never deletes anything: each volume's live content is moved into .pre-restore-<UTC>/ and stays there until the user decides.
+- It refuses, with nothing changed, when Docker's root dir or /root/jarvis-backups has less than 15 GB free or less than 3 x the sealed backup, whichever is more.
+- 'rollback.sh <backup> --data' only prints that command. 'deploy.sh --gate-only' and 'deploy_from_pc.sh --attach' change nothing on the VPS.
 
 #### K-55 · COORD-5 (process) · owner: Claude
 Progress protocol (keeps the existing CLAUDE.md / .cursor/rules/jarvis-collab.mdc / done_highlight.md conventions). plan.md is generated by Claude; each agent claims a task by setting its status line to 'DOING (<agent>, <YYYY-MM-DD HH:MM PKT>)' and sets DONE only after verify passes. Requests go to plan.md section 11 'Handoff' as one line: 'REQ-DEPLOY <task> <sha> <what to verify>' | 'REQ-DEP python <pkg>==<ver> <why>' | 'REQ-RESTART <reason>' | 'REQ-CONTRACT <contract> <proposal>' | 'REQ-VPS <what>'; Claude answers in the same section (ACK / DEPLOYED <sha>) in the same working session. done_highlight.md is shared and append-only: re-read it right before appending, add one entry at the very end using the template at the top of that file, never edit or reorder existing lines. docs/CONTRACTS.md (canonical, versioned, changelog) changes only by Claude after a REQ-CONTRACT. Secrets and non-JARVIS server details are never written to plan.md, done_highlight.md, docs or commits.
@@ -1154,6 +1172,16 @@ v42 (C-119, as built, services/ai_core/desktop_proxy.py):
   - attach_session runs after every session start. It wires the process's link, the link's late and event listeners on the job's loop, the stop phrases on final voice transcripts and as the router's typed hook, function_tools_executed, and the dashboard Stop (chained once);
   - node window_context events reach assistant.vision_handler.on_window_context({title, ts}) (C-112);
   - end_job, called as the job ends, retires the link once no other job of the process uses it; a late session start of an ended job builds no link.
+v52 (C-128, as built): Drift, the strict check on the PC.
+- Before a deploy: deploy_from_pc.sh runs 'JARVIS_MANIFEST_STRICT=1 scripts/desktop/export_manifest.py --check' before every deploy that names agent or agent-svc. It also runs before every other deploy when JARVIS_MANIFEST_STRICT is 1, true, yes or on in its environment.
+- Scratch copy: the check runs in a scratch copy of the shipped commit made with 'git archive', which only reads the repo (no worktree entry, no hook). So neither an uncommitted regenerated manifest nor uncommitted tool edits can pass or fail it.
+- Refusals: the deploy is refused when that manifest is stale, when it cannot be checked (no project python, no such commit, no scratch copy), or when the exporter says it read uncommitted files.
+- Node pin: after a healthy agent deploy, the laptop's Desktop Node is pinned to the commit the agent image was built from, with 'agent_ctl node update --sha <AGENT_IMAGE_SHA> --by claude --reason C-128-deploy-<sha>' (plus --canary while the pinned node runs in canary mode). deploy.sh prints AGENT_IMAGE_SHA; when it does not, the deployed commit is used.
+- Check before the pin: that commit gets the same scratch-copy check first, unless the same deploy_from_pc.sh run already found it current. In practice the check runs:
+  - for an image built from another commit than the shipped one;
+  - after every '--attach RUN_ID', which follows a run this process did not check. This includes a run that deploy.sh started on the VPS (<UTC>-manual-<hex>), whose commit comes from the 'sha' line of its log.
+- A stale manifest there, or a commit the repo does not have, leaves the node on its current commit and ends in exit 6, also with --no-node-update.
+- Rollback: a rollback that recreates agent or agent-svc prints AGENT_IMAGE_SHA=<the revision the agent then runs> and that node update command for the PC.
 
 #### K-72 · BRAIN-SWITCH + PLACEMENT-ENV + COMPAT (env+process) · owner: Claude
 Brain switch
@@ -1421,6 +1449,98 @@ v41 (C-127, as built):
 - The env tools keep their backups in /root/jarvis-backups/env/<UTC>-<label>/ (folder 700, files 600), never in a 2* folder beside backup_vps.sh's.
 - V6, the announced LiveKit window: livekit's environment becomes LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}\n${LIVEKIT_PC_API_KEY:?run livekit_pc_pair.py create}: ${LIVEKIT_PC_API_SECRET:?run livekit_pc_pair.py create}" (two keys, one per line), deployed with --services livekit. Until then compose names one pair. The PC pair is revoked on its own (livekit_pc_pair.py revoke, then a livekit recreate); the bridge, the VPS agent and the browsers keep the main pair.
 v48 (C-129, as built): data migration uses only one-off containers of the service agent in project jarvis, run from /opt/jarvis-agent/deploy/hostinger with 'docker compose -p jarvis run --rm --no-deps -T --user 10001'. Extraction: '--entrypoint tar agent -xzf - --no-same-owner --no-overwrite-dir -C /app', tar's exit code checked; the archive has plain relative members, no './', no entries for the volume mount points, files 600 and folders 700. Programs: '--entrypoint python agent -c <loader>', with the program and its JSON arguments on stdin: prepare (checks + renames), inventory (sha256 + counts, decrypted with the container's own key) and pack (online copies in the container's /tmp, tar on stdout, report on stderr). They use the service's volumes and env (.env.agent's JARVIS_ENCRYPTION_KEY, compose's JARVIS_USER_ID), hold C-124's chroma_db/.jarvis.lock for their run (exit 3 while another process holds it) and never start, stop or recreate a service.
+v52 (C-128, as built): backup, deploy, rollback and restore of the VPS brain.
+
+Backup (backup_vps.sh v2; MANIFEST 'script: backup_vps.sh v2'):
+- Env copies: they sit in env/ (env/hostinger.env, env/bridge.env, env/env.agent, env/root.env, mode 600). rollback.sh also reads the v1 layout, where they sat next to the other files.
+- MANIFEST records:
+  - brain: JARVIS_BRAIN of the compose .env (vps, pc or unknown);
+  - env_dir;
+  - one env_layout line per env file the containers read: present or absent, with the names it assigns, never a value;
+  - agent_data and media.
+- Media: Jarvis_Shared/Downloads stays out of volumes.tgz unless --with-media. SHA256SUMS covers env/ too.
+- agent-volumes.tar.enc: services/utils/agent_volumes.py, the agent image's own code, runs as 'python -m services.utils.agent_volumes /app <BACKUP_RECIPIENT_PUBLIC_KEY>' from /app, as uid 10001, under 'env -i' (no secret in that process).
+  - Where it runs: inside the running jarvis-agent, else inside jarvis-agent-svc, else (or when the exec fails) in a one-off 'docker compose -p jarvis run --rm --no-deps -T' of agent.
+  - Output: a tar of /app/{conversations,chroma_db,data} on stdout, sealed while it is made in K-77's format, so no plain byte ever reaches stdout or a file.
+  - SQLite: every SQLite file goes in as an online copy from a read-only connection, checked with PRAGMA integrity_check and kept in memory; its -wal, -shm and -journal files stay out. When no online copy can be made, the raw files go in, recorded with copy 'raw'.
+  - Other files are read whole, and read once more when they changed meanwhile.
+  - Links and special files are counted and never followed. A file or folder that vanished meanwhile is counted. Any other read error fails the step.
+  - The '.pre-restore-*' folders at the top of a volume stay out.
+  - The last member is AGENT-BACKUP.json (kind jarvis_agent_volumes, v 1): created_utc, the counts, files and bytes per root, the SQLite copies and the missing roots.
+  - stderr ends with 'AGENT_SEAL aside=.. bytes=.. changed=.. dirs=.. files=.. links=.. special=.. sqlite=.. sqlite_bad=.. sqlite_raw=.. vanished=.. sealed=<bytes> recipient=<fingerprint>', or with 'AGENT_SEAL_ERROR <reason>'.
+  - Exit codes: 0 sealed, 1 failed, 2 no usable key.
+- MANIFEST agent_data takes one of these forms:
+  - 'sealed via <runner>: <counts> recipient=<fingerprint>';
+  - 'none (no jarvis_agent_* volume ...)';
+  - 'SKIPPED: <why>': no key in .env.agent, no agent image, or no .env.agent;
+  - 'FAILED via <runner> (exit n): <reason>'.
+  A skipped or failed agent step is only a warning: the rest of the backup stands, and a bridge deploy goes on. Agent data is never written in plain text.
+- Rollback tags: the image that jarvis-agent runs is tagged jarvis-agent:rollback-<backup>. When jarvis-agent-svc runs another image, that one is tagged jarvis-agent:rollback-<backup>-agent-svc. Both go into images.txt.
+
+Deploys that name agent or agent-svc (deploy.sh v3, DEPLOY_LIB_VERSION 3):
+- Image: built beforehand by jarvis-builder, never by deploy.sh. The preflight prints the agent image's revision label and warns when it is another commit than the one shipped.
+- Disk: 15 GB free on the disk of /opt, with a warning below 30 GB. Other deploys keep the 5 GB floor for builds.
+- Idle gate: an 'agent' recreate in vps mode waits for 10 min without speech, typed chat or a tool call, read from the bridge's kv last_activity_ts, newest message and newest tool event.
+  - The preflight refuses before that, with nothing changed.
+  - JARVIS_BRAIN is read as compose reads it, and a value that reads as neither vps nor pc is gated as vps.
+  - --now replaces the wait with a 60 s notice right before the recreate. The notice is only printed until the bridge serves a say route.
+  - The dry run's VERDICT and exit code follow the idle gate: exit 1 when a real run would refuse now.
+- Backup check: the pre-deploy backup must hold the agent data sealed, or record agent_data none. SKIPPED or FAILED refuses, with nothing changed.
+- The gate (within 180 s):
+  - agent: /worker shows its JARVIS_AGENT_NAME. LiveKit logged 'worker registered' for that name since its container started; this is required for a container this run started, and only a warning for one an 'up' left running or under --gate-only, because LiveKit's log rotates. scripts/models/check_models.py --expect-uid 10001 prints MODELS_OK.
+  - agent and agent-svc: the net_guard self-test, and agent_hello on the bridge's :5002 (a refused hello fails; no hello yet only warns in vps mode and is skipped in pc mode).
+  - Every in-container check runs under 'env -i' with only these non-secret names: UI_BRIDGE_URL, LIVEKIT_URL, JARVIS_AGENT_NAME, JARVIS_ROLE, JARVIS_DESKTOP_MODE, JARVIS_BRAIN, JARVIS_NET_GUARD*, HF_HOME, HF_HUB_OFFLINE, TRANSFORMERS_OFFLINE, TZ, PYTHONPATH.
+  - The other-apps smoke must stay identical: a change that survives the 20 s re-check fails the gate, not only a regression.
+- Failed gate: the automatic rollback runs (exit 2; exit 3 when it fails or with --no-auto-rollback), and the run prints 'rollback.sh <backup>' and '.venv_312/Scripts/python.exe scripts/agent_ctl.py brain pc --now'.
+- Healthy gate: the run prints AGENT_IMAGE_SHA=<revision of the agent image> (K-71 v52).
+- deploy.sh --gate-only without --services:
+  - it checks every jarvis container that exists;
+  - a stopped agent or agent-svc is skipped only while JARVIS_BRAIN reads exactly pc (K-72);
+  - with any other value, an agent or agent-svc that the compose file defines but that has no container at all fails the gate ('no jarvis-<svc> container while JARVIS_BRAIN reads ...'). So a dead VPS brain never reads GATE=ok.
+
+deploy_from_pc.sh:
+- It ships 'git archive' of the committed HEAD: deploy, src, services, stonix_ui, scripts, .dockerignore and the root requirements*.txt.
+- For an agent deploy it runs the K-71 v52 checks.
+- After a healthy agent deploy it runs both the PC checks and the node update, whatever the other gives, and exits 6 when either failed.
+- After a dropped link (exit 5), '--attach RUN_ID' ends the run the same way.
+
+Rollback (rollback.sh, which sources deploy.sh v3):
+- agent and agent-svc share jarvis-agent:hostinger. When their recorded images differ, each service's tag goes back right before its own 'up', in rounds with the agent first, and the shared tag names the agent's image at the end. A warning says that a plain 'up' of agent-svc would move it onto that image.
+- With --tag, <image>:<tag>-<service> wins over <image>:<tag>.
+- A rollback that recreates either service prints AGENT_IMAGE_SHA and the node update command.
+- '--data' prints the PC-side restore command for the backup's agent data. On its own it takes no lock and makes no backup. It is refused (exit 1) when the backup has no agent-volumes.tar.enc.
+
+Restore: scripts/ops/restore_agent_data.py <backup> [--dry-run] [--key-file F] [--host H] [--ssh-key K] [--backup-timeout S]
+- '--check-file F' checks a PC mirror of a backup instead.
+- Exit codes: 0 ok; 1 refused or failed with nothing on the VPS changed; 2 usage or key; 3 ACT NOW (the output names the folder).
+- Each step is one ssh run:
+  1. Read-only: the sealed file's size and sha256; the backup's agent_data and brain lines; the state of the agent containers; whether the jarvis-agent:hostinger image exists; the brain now; and the free KiB of Docker's root dir and of /root/jarvis-backups, printed as DISK lines.
+  2. On the PC:
+     - The sealed file comes to the PC and stays encrypted on disk, in a temp folder removed at the end. Its size and sha256 are checked.
+     - It is decrypted and read through: every chunk authenticated up to the final one, every member a folder or regular file under conversations/, chroma_db/ or data/, AGENT-BACKUP.json last.
+     - It refuses (and the dry run's VERDICT says a real run would) while an agent container runs, without the agent image, or when a disk read has less free space than 15 GB or 3 x the sealed file, whichever is more. Free space it cannot read is a WARN line.
+     - --dry-run stops here.
+  3. Under /root/jarvis-backups/.deploy.lock, which is taken before the container check and held to the end (a busy lock refuses):
+     - refused while an agent container runs, or when a disk is short of that need (checked again here);
+     - then 'backup_vps.sh pre-data-restore' runs; it must seal the live agent data or record agent_data none, otherwise the restore is refused with nothing moved.
+  4. Under the lock again, with the containers checked again:
+     - The decrypted tar streams over ssh stdin into a one-off agent container, started from /opt/jarvis-agent/deploy/hostinger with 'docker compose -p jarvis run --rm --no-deps -T --entrypoint env agent -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/tmp LANG=C.UTF-8 sh -c <script> sh <UTC stamp> /app <tar bytes>' (uid 10001, no secret).
+     - Without the byte count the script refuses before anything moves.
+     - In each volume the live content moves into .pre-restore-<UTC>/, never deleted. The script prints ASIDE_MADE <volume> as soon as that folder exists, before the first move, and MOVED_ASIDE <volume> <n> when the volume is done.
+     - Then dd counts the stream while 'tar -xf - --no-same-owner --no-overwrite-dir -C /app conversations chroma_db data' extracts it.
+     - EXTRACTED is printed only when tar exits 0 and exactly the checked byte count arrived. Otherwise the script prints 'INCOMPLETE <got> of <want> bytes arrived' and exits 4, because GNU tar itself exits 0 when its input ends at a member boundary.
+     - RESTORE_RC=<exit> is the last line.
+     - The PC calls the run ACT NOW (exit 3, naming .pre-restore-<UTC>/ and the pre-data-restore backup) in these cases:
+       - after any ASIDE_MADE line;
+       - for INCOMPLETE;
+       - for a result the VPS did not report;
+       - for an error reading or decrypting the local sealed file while it streams (recorded; only a failed write into ssh's stdin counts as the VPS having stopped reading);
+       - for Ctrl-C or any other error on the PC once step 4 began (ssh is stopped first).
+     - RESTORED is printed only after EXTRACTED with exit 0.
+- Time caps: step 1 600 s; the download 600 s plus 1 s per 256 KiB of the sealed file; step 3 --backup-timeout (default 1800 s). A step that runs out kills and reaps its ssh and ends with exit 1, nothing moved; a backup cut off that way may still run on the VPS and hold the lock until it ends.
+- agent_ctl's brain switch does not take the deploy lock: never switch the brain while a restore runs.
+- The plain tar exists only in the PC process's memory, inside ssh and inside that container. The output shows counts, sizes, fingerprints and paths, never a file name or a byte of content.
+Known gaps (C-128 review, low): the restore's agent check sees the containers jarvis-agent and jarvis-agent-svc only, not a one-off 'compose run' of agent; it does not check that the pre-data-restore backup was sealed to the key in use; its disk floor follows the restored file, not the live data; 'backup_key.py export' refuses only destinations inside the repo.
 
 #### K-76 · DESKTOP-POLICY + APPROVALS + STOPS (policy) · owner: Claude
 Authority
@@ -1629,6 +1749,12 @@ v51 (C-60, as built):
 - With none, or while the room owner holds a pause, nothing is sent and the answer is {status:'no_agent', agents: 0}, so agent-svc settles the attempt at once and goes on to the laptop.
 - 'agents' in the announce answer counts the owner-room agents that take commands.
 - ui_clients (svc_poll, svc_heartbeat, the step 3 answer) and ui_connects count dashboard sockets only (role 'ui', and legacy sockets that are not legacy agents, K-38 v51). A legacy agent's connect is not a UI connect.
+v52 (C-128, as built): Snapshot.
+- One sealed format and one key pair (K-47 v52) serve both the snapshot and backup_vps.sh's agent-volumes.tar.enc (K-75 v52).
+  - The format is services/utils/backup_crypto.py; its error messages say 'JARVIS sealed file'.
+  - iter_open yields each chunk's plaintext only once that chunk verified, and raises at a missing final chunk or at data after it. Whatever a broken stream yielded is therefore a verified prefix, which a consumer never keeps.
+  - 'backup_key.py decrypt' opens either file.
+- The snapshot leaves out the '.pre-restore-*' folders at the top of conversations, data and chroma_db: live data a restore moved aside, kept until the owner decides. This is the same rule as the backup's agent step (services/utils/agent_volumes.ASIDE_PREFIX). A folder with that name deeper down is ordinary data.
 
 #### K-78 · HANDOVER (reserved) · owner: Claude
 Reserved for the brain handover protocol between the VPS brain and the PC brain; defined by a later task.

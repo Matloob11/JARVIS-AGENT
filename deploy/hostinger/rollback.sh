@@ -7,8 +7,25 @@
 #   rollback.sh [--last]                        undo the last deploy: back to its pre-deploy backup (default)
 #   rollback.sh <backup>                        back to that folder of /root/jarvis-backups
 #   rollback.sh --tag <tag> --services LIST     images only, from <image>:<tag> (e.g. rollback-<backup>)
+#   rollback.sh [<backup>] --data               print the PC-side restore of that backup's agent data (changes nothing)
 #   options: --services LIST  --code | --no-code  --nginx | --no-nginx  --with-env  --shared-values-differ-ok
-#            --layout-unknown-ok  --dry-run  --foreground
+#            --layout-unknown-ok  --data  --dry-run  --foreground
+#
+#   --data           (C-128) the VPS brain's data is never restored on the VPS: its backup (agent-volumes.tar.enc) is
+#                    sealed to the PC backup key, so this prints the command that decrypts it on the PC and streams it
+#                    back ('scripts/ops/restore_agent_data.py <backup>', which refuses while jarvis-agent or
+#                    jarvis-agent-svc runs and moves the live data aside first, never deleting it). On its own (no
+#                    --services, --code, --nginx or --with-env) it only prints, with no lock and no backup; with them,
+#                    the rollback runs and the command is printed at its end. Refused (exit 1) when the backup holds
+#                    no agent data.
+#   agent, agent-svc (C-128): both run jarvis-agent:hostinger. When their recorded images differ, each service's tag
+#                    goes back right before its own 'up' (rounds, the agent's first), so each container gets its own
+#                    image, and at the end the shared tag names the agent's image again (a plain 'up' of agent keeps it;
+#                    one of agent-svc would move it, which a warning says); with --tag,
+#                    <image>:<tag>-<service> (backup_vps.sh's jarvis-agent:rollback-<backup>-agent-svc) wins over
+#                    <image>:<tag> for that service. A rollback that recreates either prints AGENT_IMAGE_SHA=<the
+#                    revision the agent runs> and the 'agent_ctl node update --sha <it>' command for the PC, so the
+#                    laptop's Desktop Node matches the restored image (K-71: else MANIFEST_MISMATCH).
 #
 #   A backup made by deploy.sh or rollback.sh (it has deploy.env): the services it changed, and its code, nginx and
 #   env choices, are the defaults. Any other backup_vps.sh folder: the services whose running image differs from its
@@ -68,8 +85,8 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # After a code rollback /opt/jarvis-agent can hold the old deploy.sh, which must never be sourced (it would deploy).
-if ! grep -qx 'readonly DEPLOY_LIB_VERSION=2' "$HERE/deploy.sh" 2>/dev/null; then
-  printf '[rollback] ERROR: %s is not the deploy.sh v2 library; use /root/jarvis-backups/tools/rollback.sh\n' \
+if ! grep -qx 'readonly DEPLOY_LIB_VERSION=3' "$HERE/deploy.sh" 2>/dev/null; then
+  printf '[rollback] ERROR: %s is not the deploy.sh v3 library (C-128: the agent gate and the image rounds); use /root/jarvis-backups/tools/rollback.sh\n' \
     "$HERE/deploy.sh" >&2
   exit 1
 fi
@@ -96,8 +113,11 @@ LAYOUT_NOTE=""
 LAYOUT_UNKNOWN_OK=0
 SHARED_OK=0       # --shared-values-differ-ok
 SHARED_NOTE=""
+DATA_OPT=0        # --data: print the PC-side restore of the target's agent data (C-128)
+DATA_ONLY=0       # --data without --services/--code/--nginx/--with-env: print only, change nothing
+DATA_TB=""        # the backup whose agent-volumes.tar.enc --data names
 ENV_READERS=()    # the env files the services of this rollback read: compared, and with --with-env put back
-ENV_PUT=()        # --with-env: '<file>:<copy in the backup>' to install ('root' is /opt/jarvis-agent/.env)
+ENV_PUT=()        # --with-env: '<file>:<copy in the backup, relative to it>' to install ('root' is /opt/jarvis-agent/.env)
 ENV_ASIDE=()      # --with-env: live files moved aside (bridge.env that the target never had)
 ENV_KEPT=()       # --with-env: live files left as they are, with the reason
 # The env files the containers read (C-127), and their names in a backup folder
@@ -127,6 +147,7 @@ parse_rollback_args() {
       --with-env|--env) ENV_OPT=1; shift ;;
       --shared-values-differ-ok) SHARED_OK=1; shift ;;
       --layout-unknown-ok) LAYOUT_UNKNOWN_OK=1; shift ;;
+      --data) DATA_OPT=1; shift ;;
       --dry-run) DRY_RUN=1; shift ;;
       --foreground) FOREGROUND=1; shift ;;
       --run-dir) (( $# >= 2 )) || usage_error "--run-dir needs a folder"; RUN="$2"; shift 2 ;;
@@ -143,6 +164,8 @@ parse_rollback_args() {
   # C-127: the images of one state with the env layout and env files of another is the mix that crashes a bridge
   [[ -z $TARGET || -z $TAG ]] || usage_error "name a backup folder or --tag, not both (--tag rollback-<backup> takes the images, env layout and env files of that backup)"
   if [[ -n $RUN ]]; then validate_run_dir "$RUN"; fi
+  # --data on its own only prints the PC-side restore command (C-128): no lock, no backup, nothing changed
+  if (( DATA_OPT && ! SERVICES_GIVEN )) && [[ $CODE_OPT != 1 && $NGINX_OPT != 1 && $ENV_OPT != 1 ]]; then DATA_ONLY=1; fi
 }
 
 svc_container() {  # <service>: its container name (from the project, else the usual jarvis-* name)
@@ -206,7 +229,9 @@ build_image_record() {  # IMG_LINES: service, container, ref, image id to restor
       [[ -n $ref ]] || die "$svc: cannot tell its image name (is it a service in docker-compose.yml?)"
       # rollback and snapshot tags exist only for JARVIS's own images; a third-party tag is never re-pointed
       own_image "$ref" || die "$svc runs $ref: --tag takes only images JARVIS builds (jarvis-*); name a backup folder"
-      id="$(docker image inspect -f '{{.Id}}' "${ref%%:*}:$TAG" 2>/dev/null || true)"
+      # a service's own tag first (jarvis-agent:rollback-<backup>-agent-svc beside the agent's), then the shared one
+      id="$(docker image inspect -f '{{.Id}}' "${ref%%:*}:$TAG-$svc" 2>/dev/null || true)"
+      [[ -n $id ]] || id="$(docker image inspect -f '{{.Id}}' "${ref%%:*}:$TAG" 2>/dev/null || true)"
       [[ -n $id ]] || die "$svc: there is no image ${ref%%:*}:$TAG"
     elif [[ -f $TB/deploy-images.txt ]]; then
       line="$({ awk -F'\t' -v s="$svc" '$1 == s' "$TB/deploy-images.txt" || true; } | tail -n 1)"
@@ -271,6 +296,11 @@ layout_copy_name() {  # <env file>: its name in a backup folder
   esac
 }
 
+env_copy() {  # <backup dir> <copy name>: the copy's path relative to the backup: env/<name> (backup_vps.sh v2, C-128),
+  # else <name> (the v1 layout, where the env copies sat next to the other files)
+  if [[ -f $1/env/$2 ]]; then printf 'env/%s\n' "$2"; else printf '%s\n' "$2"; fi
+}
+
 live_layout() {  # '<file> <present|absent> <names>' for each env file the containers read, from the live files
   local f
   for f in "${LAYOUT_FILES[@]}"; do
@@ -284,9 +314,9 @@ target_layout() {  # <backup dir>: its recorded layout (MANIFEST.txt), else the 
     awk '$1 == "env_layout:" { print $2, $3, ($4 == "" ? "-" : $4) }' "$b/MANIFEST.txt"
     return 0
   fi
-  [[ -f $b/hostinger.env ]] || return 0
+  [[ -f $b/$(env_copy "$b" hostinger.env) ]] || return 0
   for f in "${LAYOUT_FILES[@]}"; do
-    c="$(layout_copy_name "$f")"
+    c="$(env_copy "$b" "$(layout_copy_name "$f")")"
     if [[ -f $b/$c ]]; then printf '%s present %s\n' "$f" "$(env_names "$b/$c")"; else printf '%s absent -\n' "$f"; fi
   done
 }
@@ -467,6 +497,15 @@ resolve_plan() {
     TB="$BASE/$TARGET"
     [[ -d $TB ]] || die "no backup folder $TB"
   fi
+  if (( DATA_OPT )); then
+    resolve_env_folder   # a rollback-<backup> tag names its folder
+    DATA_TB="${TB:-$ENV_TB}"
+    [[ -n $DATA_TB ]] || usage_error "--data needs a backup folder: name it, or use a rollback-<backup> tag whose folder still exists"
+    if [[ ! -f $DATA_TB/agent-volumes.tar.enc ]]; then
+      die "$(basename "$DATA_TB") holds no agent data (no agent-volumes.tar.enc; its MANIFEST says agent_data: $({ sed -n 's/^agent_data: *//p' "$DATA_TB/MANIFEST.txt" 2>/dev/null || true; } | head -n 1)): nothing to restore"
+    fi
+    if (( DATA_ONLY )); then return 0; fi
+  fi
   if [[ -n $TB && -f $TB/deploy.env ]]; then
     kind="$(record_get "$TB/deploy.env" KIND)"
     rsvcs="$(record_get "$TB/deploy.env" SERVICES)"
@@ -520,7 +559,7 @@ resolve_plan() {
   check_env_layout
   if (( NGINX_OPT )); then [[ -f $TB/jarvis.conf ]] || die "$TB has no jarvis.conf (needed for --nginx)"; fi
   if (( ENV_OPT )); then
-    [[ -f $ENV_TB/hostinger.env ]] || die "$ENV_TB has no hostinger.env (needed for --with-env)"
+    [[ -f $ENV_TB/$(env_copy "$ENV_TB" hostinger.env) ]] || die "$ENV_TB has no hostinger.env (needed for --with-env)"
     plan_env_files "$ENV_TB"
     check_shared_values
   fi
@@ -531,9 +570,31 @@ resolve_plan() {
   fi
 }
 
+print_data_plan() {  # --data: the command that restores the agent data from the PC, which decrypts it
+  local ts
+  ts="$(basename "$DATA_TB")"
+  log "data         the agent data of $ts goes back from the PC, which decrypts it (never on the VPS); on the PC, in the repo:"
+  log "               .venv_312/Scripts/python.exe scripts/ops/restore_agent_data.py $ts --dry-run"
+  log "               .venv_312/Scripts/python.exe scripts/ops/restore_agent_data.py $ts"
+  log "             it refuses while jarvis-agent or jarvis-agent-svc runs (vps mode: 'agent_ctl brain pc' first) and moves the live data aside into .pre-restore-<UTC>/, never deleting it"
+}
+
+recreates_agent() {  # the plan brings agent or agent-svc back onto a recorded image (IMG_LINES)
+  local svc name ref id
+  while IFS=$'\t' read -r svc name ref id; do
+    if [[ ( $svc == agent || $svc == agent-svc ) && -n $id && $id != - ]]; then return 0; fi
+  done <<< "$IMG_LINES"
+  return 1
+}
+
 print_rollback_plan() {
   local svc name ref id cur
   step "rollback plan"
+  if (( DATA_ONLY )); then
+    log "target       $DATA_TB (agent data only: --data prints, nothing changes on the VPS)"
+    print_data_plan
+    return 0
+  fi
   if [[ -n $TB ]]; then log "target       $TB ($TARGET_NOTE)"; else log "target       images tagged :$TAG"; fi
   while IFS=$'\t' read -r svc name ref id; do
     [[ -n $svc ]] || continue
@@ -551,6 +612,10 @@ print_rollback_plan() {
   log "env layout   $LAYOUT_NOTE"
   if (( ENV_OPT )); then log "env values   $SHARED_NOTE"; fi
   log "first        backup_vps.sh pre-rollback, smoke check (pre); after: health gate, smoke check (post)"
+  if recreates_agent; then
+    log "node         after the recreate: AGENT_IMAGE_SHA=<the revision the agent runs then> and '$PC_NODE_UPDATE --sha <it>' for the PC: the laptop's Desktop Node must match the restored image (K-71)"
+  fi
+  if (( DATA_OPT )); then print_data_plan; fi
 }
 
 env_dest() {  # <env file of ENV_PUT ('root' for the root .env)>: the live path it is installed to
@@ -566,7 +631,7 @@ plan_env_files() {  # <backup dir>: ENV_PUT, ENV_ASIDE and ENV_KEPT for --with-e
   ENV_ASIDE=()
   ENV_KEPT=()
   for f in "${LAYOUT_FILES[@]}"; do
-    c="$(layout_copy_name "$f")"
+    c="$(env_copy "$b" "$(layout_copy_name "$f")")"
     if ! in_list "$f" "${ENV_READERS[@]}"; then
       if [[ -f $H/$f ]]; then ENV_KEPT+=("$f (no service of this rollback reads it)"); fi
     elif [[ -f $b/$c ]]; then
@@ -574,21 +639,28 @@ plan_env_files() {  # <backup dir>: ENV_PUT, ENV_ASIDE and ENV_KEPT for --with-e
     elif [[ $f == bridge.env && -f $H/$f ]]; then
       ENV_ASIDE+=("$f")   # bridge.env wins over .env: a live one the target never had would shadow the restored .env
     elif [[ -f $H/$f ]]; then
-      ENV_KEPT+=("$f (the backup has no $c)")   # .env.agent: the agent services need one
+      ENV_KEPT+=("$f (the backup has no ${c#env/})")   # .env.agent: the agent services need one
     fi
   done
-  if [[ -f $b/root.env ]]; then ENV_PUT+=("root:root.env"); fi
+  c="$(env_copy "$b" root.env)"
+  if [[ -f $b/$c ]]; then ENV_PUT+=("root:$c"); fi
   return 0
+}
+
+env_put_has() {  # <env file of ENV_PUT ('root' for the root .env)>: true when the plan puts it back
+  local item
+  for item in "${ENV_PUT[@]}"; do [[ ${item%%:*} == "$1" ]] && return 0; done
+  return 1
 }
 
 print_env_plan() {  # every file --with-env replaces, moves aside or keeps
   local item f note="" link=""
   plan_env_files "$ENV_TB"
-  if in_list ".env:hostinger.env" "${ENV_PUT[@]}"; then
+  if env_put_has .env; then
     note="; the live JARVIS_BRAIN and COMPOSE_PROFILES lines are written back into .env"
   fi
-  if in_list "bridge.env:bridge.env" "${ENV_PUT[@]}"; then link="bridge.env"; fi
-  if in_list ".env.agent:env.agent" "${ENV_PUT[@]}"; then link+="${link:+ and }.env.agent"; fi
+  if env_put_has bridge.env; then link="bridge.env"; fi
+  if env_put_has .env.agent; then link+="${link:+ and }.env.agent"; fi
   if [[ -n $link ]]; then note+="; the live Desktop Link key lines are written back into $link"; fi
   log "env          from $ENV_TB (mode 600$note)"
   for item in "${ENV_PUT[@]}"; do log "  replace    $(env_dest "${item%%:*}") <- ${item#*:}"; done
@@ -717,10 +789,10 @@ run_rollback() {
   for svc in "${SERVICES[@]}"; do in_list "$svc" "${NEW_SVCS[@]}" || up+=("$svc"); done
   if (( ${#up[@]} )); then
     step "images and recreate: ${up[*]}"
-    restore_images "$B/restore-images.txt" "${up[@]}"
     GIT_SHA_ENV="$TARGET_SHA"
     TOUCHED=("${up[@]}")
-    compose up -d --no-deps --no-build --pull never "${up[@]}" || fail "docker compose up failed"
+    # each service's tag goes back right before its own 'up' (rounds: agent and agent-svc share jarvis-agent:hostinger)
+    recreate_in_rounds "$B/restore-images.txt" "docker compose up failed" "${up[@]}"
   fi
   PHASE=verify
   run_gates "${up[@]}"
@@ -735,6 +807,12 @@ run_rollback() {
     finish ok 0
     log "undo this rollback with: $undo"
   fi
+  # C-128: the node update after an agent deploy pinned the laptop's Desktop Node to the image this rollback replaced
+  if in_list agent "${up[@]}" || in_list agent-svc "${up[@]}"; then
+    step "the laptop's Desktop Node (K-71)"
+    node_pin_hint "C-128-rollback-$BNAME"
+  fi
+  if (( DATA_OPT )); then step "agent data (--data)"; print_data_plan; fi
 }
 
 rollback_main() {
@@ -742,6 +820,13 @@ rollback_main() {
   local rc=0
   parse_rollback_args "$@"
   require_host
+  if (( DATA_ONLY )); then
+    resolve_plan
+    print_rollback_plan
+    log "VERDICT: nothing changed (--data on its own only prints the PC-side restore command)"
+    FINAL_RC=0
+    return 0
+  fi
   if (( DRY_RUN )); then
     resolve_plan
     print_rollback_plan

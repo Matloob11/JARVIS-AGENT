@@ -78,8 +78,9 @@ Active duties (K-77):
   copies plus every other file of conversations, data and chroma_db, as one tar sealed to
   BACKUP_RECIPIENT_PUBLIC_KEY (services.utils.backup_crypto: X25519 + HKDF-SHA256 + ChaCha20-Poly1305), written to
   /app/snapshots/jarvis_snapshot_<PKT date>.tar.enc (JARVIS_SNAPSHOTS_DIR; the jarvis_agent_snapshots volume, whose
-  newest file the bridge serves to the laptop, K-73). Env files, keys, locks and temp files are never inside; nothing
-  is ever deleted. Without a usable recipient key there is no snapshot and one warning.
+  newest file the bridge serves to the laptop, K-73). Env files, keys, locks and temp files are never inside, nor the
+  '.pre-restore-*' folders at the top of a root (live data a C-128 restore moved aside, kept until the owner decides);
+  nothing is ever deleted. Without a usable recipient key there is no snapshot and one warning.
 - Heartbeat to the bridge every 30 s: notify svc_heartbeat with the K-68/K-77 counts (GET /status 'svc').
 Logs carry ids, kinds, steps and counts, never reminder, task, message or location text, or secrets (K-29).
 """
@@ -139,6 +140,9 @@ DEFAULT_TZ = "Asia/Karachi"
 SNAPSHOT_AT = (3, 30)  # 03:30 PKT
 SNAPSHOT_PREFIX, SNAPSHOT_SUFFIX = "jarvis_snapshot_", ".tar.enc"
 SNAPSHOT_ROOTS = ("conversations", "data", "chroma_db")
+# The folders at the top of a root that scripts/ops/restore_agent_data.py (C-128) moves the live data into, kept until
+# the owner decides: never in a snapshot (services/utils/agent_volumes.ASIDE_PREFIX, the backup's own rule)
+RESTORE_ASIDE_PREFIX = ".pre-restore-"
 SNAPSHOT_CATCHUP_AGE_S = 26 * 3600.0
 STATE_ACTIVE, STATE_STANDBY, STATE_CONFIG_ERROR = "active", "standby", "config_error"
 CH_ANNOUNCE, CH_LAPTOP, CH_UI = "announce", "laptop", "ui"
@@ -847,8 +851,10 @@ class SnapshotWriter:
             base = self.root / name
             if not base.is_dir():
                 continue
+            top = os.fspath(base)
             for dirpath, dirnames, filenames in os.walk(base, followlinks=False):
-                dirnames[:] = sorted(d for d in dirnames if d != "__pycache__" and not d.startswith(".env"))
+                dirnames[:] = sorted(d for d in dirnames if d != "__pycache__" and not d.startswith(".env")
+                                     and not (dirpath == top and d.startswith(RESTORE_ASIDE_PREFIX)))
                 for filename in sorted(filenames):
                     if stop is not None and stop.is_set():
                         raise SnapshotAborted()

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# deploy/hostinger/deploy.sh v2 - deploy JARVIS services on the Hostinger VPS without touching the other apps
-# (plan C-12 / OP-08, contract K-54 COORD-4). deploy_from_pc.sh starts it with the committed HEAD; rollback.sh
-# sources this file for the shared functions.
+# deploy/hostinger/deploy.sh v3 - deploy JARVIS services on the Hostinger VPS without touching the other apps
+# (plan C-12 / OP-08, contract K-54 COORD-4; v3 C-128: the VPS brain's gate). deploy_from_pc.sh starts it with the
+# committed HEAD; rollback.sh sources this file for the shared functions.
 #
 # Usage (as root on the VPS):
 #   deploy.sh --services LIST [--nginx] [--run-dir DIR --sha SHA] [--dry-run] [--foreground] [--no-auto-rollback]
@@ -18,12 +18,41 @@
 #                       deploy_from_pc.sh) that code is installed into /opt/jarvis-agent after the backup; without
 #                       it the code already in /opt/jarvis-agent is deployed.
 #   --sha SHA           the commit being deployed (required for a staged run; written to /opt/jarvis-agent/DEPLOYED_SHA)
-#   --dry-run           validate and print the plan; change nothing
+#   --dry-run           validate and print the plan; change nothing (exit 1 when a real run would refuse now, as for
+#                       the idle gate; the VERDICT line says why)
 #   --foreground        stay attached: Ctrl-C (or the hang-up of a terminal session) stops the run, which then rolls
 #                       back what it changed. By default the run continues detached from this ssh session and its log
 #                       is streamed here, so Ctrl-C or a dropped connection stops only the view, never the deploy.
 #                       Either way the run writes to runs/<run>/run.log, so a closed output never stops it half-way.
 #   --no-auto-rollback  after a failed gate print the rollback command instead of running it
+#   --now               an 'agent' recreate in vps mode without the idle gate, after a 60 s notice (below)
+#
+# The VPS brain (C-128, K-75): a deploy that names 'agent' or 'agent-svc' (their image is built beforehand with the
+#   dedicated builder, RUNBOOK 'Agent image'; deploy.sh never builds it) also
+#   - needs 15 GB free on the disk of /opt (warning below 30 GB);
+#   - recreates 'agent' in vps mode only after 10 min without speech, typed chat or a tool call (the bridge's records;
+#     preflight refuses earlier, nothing changed), unless --now, which prints a 60 s notice first (spoken once the
+#     bridge serves a say route; today it does not, as for 'agent_ctl brain --now'). JARVIS_BRAIN is read from the .env
+#     as compose reads it (quotes, an inline ' # comment'); a value that is neither vps nor pc counts as vps (the gate
+#     applies). The dry run's VERDICT and exit code follow the gate: 1 when a real run would refuse now;
+#   - refuses to go on when its pre-deploy backup could not seal the agent data (MANIFEST agent_data SKIPPED/FAILED);
+#   - gate: healthy within 180 s; agent: /worker shows its agent name, LiveKit logged 'worker registered' for it since
+#     its container started (required when this run started it; an 'up' that left the container running, or
+#     --gate-only, only warns without it: LiveKit's log rotates), the
+#     offline model check; both: the net_guard self-test, agent_hello on the bridge's :5002 (a refused hello fails;
+#     none yet only warns in vps mode: the link opens with the first session); the other-apps smoke must stay
+#     identical (a change that survives the re-check fails it, not only a regression);
+#   - on a failed gate prints 'rollback.sh <backup>' and 'agent_ctl brain pc' beside the automatic rollback (exit 2);
+#   - on success prints AGENT_IMAGE_SHA=<commit the agent image was built from>, which deploy_from_pc.sh pins the
+#     laptop's Desktop Node to ('agent_ctl node update --sha'); a rollback.sh run that recreates agent or agent-svc
+#     prints it too, with that command for the PC (node_pin_hint).
+#   --gate-only without --services checks every jarvis container that exists; a stopped agent or agent-svc is skipped
+#   only while JARVIS_BRAIN reads exactly 'pc' (they stay stopped there, K-72). Any other value, one that reads as
+#   neither vps nor pc included, checks them as in vps mode, and an agent or agent-svc that the compose file defines
+#   but that has no container at all fails the gate there, so a dead VPS brain never reads GATE=ok.
+#   agent and agent-svc share jarvis-agent:hostinger: a rollback whose records differ recreates them in rounds (the
+#   agent's first) and points the shared tag back at the agent's image at the end, so the next plain 'up' of agent
+#   keeps it; agent-svc keeps running its own image, with a warning that such an 'up' of it would move it.
 #
 # Steps: lock -> tools copy -> backup_vps.sh -> record + rollback tags -> smoke (pre) -> install code -> perms
 #   -> compose config -> pull/build -> nginx -> up -d --no-deps <services> -> health gate -> smoke (post)
@@ -35,12 +64,13 @@
 #   runs/<run>/ (run.log, rc, shipped.tar.gz).
 # Exit codes: 0 deployed and healthy; 1 refused or failed before any live change (the running services were not
 #   changed); 2 a gate failed and the automatic rollback restored the pre-deploy state; 3 the rollback failed or
-#   was disabled (act now: the command is printed); 64 usage error.
+#   was disabled (act now: the command is printed); 64 usage error. --dry-run: 0 a real run would proceed, 1 it would
+#   refuse (now).
 set -euo pipefail
 umask 077
 
 # shellcheck disable=SC2034  # rollback.sh greps for this line before it sources the file
-readonly DEPLOY_LIB_VERSION=2
+readonly DEPLOY_LIB_VERSION=3
 # JARVIS_DEPLOY_SANDBOX: test hook only (tests/unit/test_deploy_tooling.py). It moves every absolute path below into
 # a scratch folder and skips the root/Linux checks; docker, nginx, systemctl, curl, certbot and flock must then be
 # fakes inside that folder. Never set it on the VPS.
@@ -67,7 +97,19 @@ readonly -a VIA_NGINX=(-k --resolve "$DOMAIN:443:127.0.0.1")
 readonly -a TOOL_FILES=(deploy.sh rollback.sh smoke_other_apps.sh backup_vps.sh)
 readonly DISK_FAIL_GB=5        # no build below this: a full disk hurts every app on the server
 readonly DISK_WARN_GB=10
+readonly AGENT_DISK_FAIL_GB=15 # K-75: a deploy of the VPS brain fails below 15 GB and warns below 30 GB
+readonly AGENT_DISK_WARN_GB=30
 readonly CERT_WARN_DAYS=14
+readonly BRIDGE_CONTAINER=jarvis-bridge
+readonly LIVEKIT_CONTAINER=jarvis-livekit
+readonly IDLE_GATE_S=600       # K-72: no speech, typed chat or tool call for 10 min before an agent restart
+# The exact command that gives the owner the PC brain back (agent_ctl's BRAIN_PC_COMMAND, run on the PC)
+readonly PC_BRAIN_COMMAND='.venv_312/Scripts/python.exe scripts/agent_ctl.py brain pc --now'
+# The call (on the PC, in the repo) that pins the laptop's Desktop Node to a commit (C-123; deploy_from_pc.sh runs it)
+readonly PC_NODE_UPDATE='.venv_312/Scripts/python.exe scripts/agent_ctl.py node update'
+# The names an agent check may take from the container's environment (non-secret URLs and settings): every check
+# runs under 'env -i' with only these, as the healthchecks do, so no dumpable process holds an .env.agent secret
+readonly AGENT_ENV_RE='^(UI_BRIDGE_URL|LIVEKIT_URL|JARVIS_AGENT_NAME|JARVIS_ROLE|JARVIS_DESKTOP_MODE|JARVIS_BRAIN|JARVIS_NET_GUARD[A-Z_]*|HF_HOME|HF_HUB_OFFLINE|TRANSFORMERS_OFFLINE|TZ|PYTHONPATH)=[A-Za-z0-9_.:/,;@+=-]*$'
 readonly NAME_RE='^[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{4}Z?(-[A-Za-z0-9._-]+)?$'   # backup folders (+ the 2340 one)
 readonly RUN_ID_RE='^[0-9]{8}T[0-9]{6}Z-[A-Za-z0-9.-]{1,60}$'
 readonly SERVICE_RE='^[a-z0-9][a-z0-9_.-]{0,62}$'
@@ -78,20 +120,21 @@ readonly INSPECT_FMT='{{.Name}}|{{.Config.Image}}|{{.Image}}|{{.State.Status}}|{
 # livekit.yaml has no keys: line; only a recreated livekit gets LIVEKIT_KEYS from the compose file).
 declare -A HOLD_FILES=([livekit]="deploy/hostinger/livekit.yaml")
 if [[ -n $SANDBOX ]]; then
-  POLL_S=0.2; STABLE_S=0; GATE_CAP_S=3; RECHECK_S=0
+  POLL_S=0.2; STABLE_S=0; GATE_CAP_S=3; RECHECK_S=0; NOTICE_S=0; AGENT_LOG_TRIES=2
 else
   POLL_S=3; STABLE_S=10; GATE_CAP_S=0; RECHECK_S=20   # a smoke regression must survive a 20 s re-check
+  NOTICE_S=60; AGENT_LOG_TRIES=20                     # --now: the notice before an agent restart; LiveKit log: 60 s
 fi
 
 # Health gate per service. A service without an entry gets the generic gate: its container must be running and,
-# when it has a Docker healthcheck, healthy within 120 s. A new compose service (for example agent / agent-svc
-# from the VPS-brain plan) needs no change here unless it wants a longer wait or HTTP probes.
+# when it has a Docker healthcheck, healthy within 120 s. agent and agent-svc (the VPS brain, K-75) get 180 s and the
+# agent checks below.
 gate_timeout() {
   case "$1" in
     ui-bridge) echo 120 ;;
     frontend) echo 90 ;;
     livekit) echo 60 ;;
-    agent|agent-svc) echo 240 ;;
+    agent|agent-svc) echo 180 ;;
     *) echo 120 ;;
   esac
 }
@@ -109,6 +152,9 @@ gate_probes() {  # <service> <FAIL|WARN> <tries>
     livekit)
       expect_http "$2" "livekit $LIVEKIT_URL" '200' "$3" "$LIVEKIT_URL"
       expect_http "$2" "nginx /rtc/validate" '401' "$3" "${VIA_NGINX[@]}" "https://$DOMAIN/rtc/validate"
+      ;;
+    agent|agent-svc)
+      agent_probes "$1" "$2"
       ;;
   esac
 }
@@ -129,6 +175,14 @@ DRY_RUN=0
 FOREGROUND=0
 AUTO_ROLLBACK=1
 GATE_ONLY=0
+NOW=0
+RECREATE_TS=""
+# service -> '<container id>|<its .State.StartedAt>' right before an 'up' of this run (C-128): the agent gate asks for a
+# fresh LiveKit registration only from a container that this run started; an 'up' leaves an unchanged one running
+declare -A PRE_UP=()
+SMOKE_STRICT=0
+PLAN_REFUSALS=()   # the dry run: what a real run would refuse now (the idle gate); its VERDICT and exit code follow
+PLAN_RC=0
 GIT_SHA_ENV=unknown
 B=""
 BNAME=""
@@ -399,6 +453,247 @@ run_gates() {  # <services at FAIL level...>; the other JARVIS services that exi
   host_checks
 }
 
+# ------------------------------------------------------------------ the VPS brain (C-128, K-75)
+agent_deploy() { in_list agent "${SERVICES[@]}" || in_list agent-svc "${SERVICES[@]}"; }
+
+env_brain() {  # JARVIS_BRAIN of the compose .env (vps or pc: a name and a non-secret value, K-72), else unknown. Read
+  # the way compose reads it (rollback.sh's env_value_digest does the same): the last assignment, a UTF-8 BOM in front
+  # of the first line read past, blanks trimmed, outer quotes dropped, an unquoted value cut before ' #' (an inline
+  # comment, as in 'JARVIS_BRAIN=vps   # set by agent_ctl'). Callers that gate on it treat unknown like vps.
+  local v bom=$'\xef\xbb\xbf'
+  v="$({ awk -v bom="$bom" '
+    NR == 1 && index($0, bom) == 1 { $0 = substr($0, length(bom) + 1) }
+    { sub(/\r$/, "") }
+    match($0, /^[ \t]*(export[ \t]+)?JARVIS_BRAIN[ \t]*=/) { v = substr($0, RLENGTH + 1); found = 1 }
+    END {
+      if (!found) exit
+      sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v)
+      q = substr(v, 1, 1)
+      if (q == "\"" || q == "\047") { v = substr(v, 2); e = index(v, q); if (e) v = substr(v, 1, e - 1) }
+      else if (match(v, /[ \t]+#/)) v = substr(v, 1, RSTART - 1)
+      print v
+    }' "$ENV_FILE" 2>/dev/null || true; } | tail -n 1)"
+  case "$v" in vps|pc) printf '%s\n' "$v" ;; *) printf 'unknown\n' ;; esac
+}
+
+agent_exec() {  # <container> <command...>: run it in the container with only the AGENT_ENV_RE names of its environment
+  local ctr="$1" line
+  local -a envs=(PATH=/usr/local/jarvis-bin:/usr/local/bin:/usr/bin:/bin HOME=/tmp LANG=C.UTF-8)
+  shift
+  while IFS= read -r line; do
+    if [[ $line =~ $AGENT_ENV_RE ]]; then envs+=("$line"); fi
+  done < <(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$ctr" 2>/dev/null || true)
+  docker exec "$ctr" env -i "${envs[@]}" "$@"
+}
+
+agent_name_of() {  # <container>: the name its worker registers (JARVIS_AGENT_NAME of its environment, else jarvis)
+  local name
+  name="$({ docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$1" 2>/dev/null || true; } \
+    | sed -n 's/^JARVIS_AGENT_NAME=\([A-Za-z0-9_.-]*\)$/\1/p' | tail -n 1)"
+  printf '%s\n' "${name:-jarvis}"
+}
+
+ctr_started() {  # <service>: '<container id>|<its .State.StartedAt>' (running or not), '' when it has no container
+  local id
+  id="$(ctr_id "$1" all)"
+  [[ -n $id ]] || return 0
+  printf '%s|%s\n' "$id" "$(docker inspect -f '{{.State.StartedAt}}' "$id" 2>/dev/null || true)"
+}
+
+note_pre_up() {  # <services...>: their containers right before an 'up' (PRE_UP), so the gate can tell what it started
+  local svc
+  for svc in "$@"; do PRE_UP[$svc]="$(ctr_started "$svc")"; done
+}
+
+started_by_this_run() {  # <service>: an 'up' of this run created, recreated or started its container
+  [[ -n ${PRE_UP[$1]+x} && ${PRE_UP[$1]} != "$(ctr_started "$1")" ]]
+}
+
+livekit_registered() {  # <service> <container> <agent name> <FAIL|WARN>: LiveKit logged 'worker registered' for that
+  # agent since its container started (docker logs --since <its .State.StartedAt>). A container that an 'up' of this run
+  # started must show it at <level> within AGENT_LOG_TRIES looks. One that runs on from before (an 'up' that changed
+  # nothing, --gate-only) registered when it started, maybe days ago: one look, and a missing line only warns, as
+  # LiveKit keeps 3 x 10 MB of log (C-16) and may have rotated it away; /worker above shows that its worker runs
+  local svc="$1" ctr="$2" want="$3" level="$4" i tries=1 fresh=0 since lines named
+  if started_by_this_run "$svc"; then fresh=1; tries=$AGENT_LOG_TRIES; fi
+  for (( i = 1; i <= tries; i++ )); do
+    since="$(docker inspect -f '{{.State.StartedAt}}' "$ctr" 2>/dev/null || true)"
+    [[ $since =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z$ ]] || since="${RECREATE_TS:-15m}"
+    lines="$({ docker logs --since "$since" "$LIVEKIT_CONTAINER" 2>&1 || true; } | grep -F 'worker registered' || true)"
+    if [[ -n $lines ]]; then
+      if grep -qF "\"$want\"" <<< "$lines"; then
+        log "  ok   livekit: worker registered (agent $want)"
+        return 0
+      fi
+      named="$(grep -ciE 'agent_?name' <<< "$lines" || true)"
+      if [[ ${named:-0} == 0 ]]; then
+        warn "livekit: a worker registered since $svc started, but its log line names no agent; counted as $want"
+        return 0
+      fi
+    fi
+    if (( i < tries )); then sleep "$POLL_S"; fi
+  done
+  if (( fresh )); then
+    report "$level" "livekit: no 'worker registered' for agent $want since this run started $svc"
+  else
+    warn "livekit: no 'worker registered' for agent $want since $svc started ($since); this run did not start it, so LiveKit's log may have rotated the line away (/worker answers)"
+  fi
+}
+
+agent_hello_check() {  # <service> <FAIL|WARN>: the bridge accepted an agent hello on its internal listener :5002
+  local svc="$1" level="$2" logs brain
+  logs="$({ docker logs --since "${RECREATE_TS:-15m}" "$BRIDGE_CONTAINER" 2>&1 || true; } | grep -F 'Desktop link: ' || true)"
+  if grep -qE 'Desktop link: refused [A-Za-z_]*hello from agent' <<< "$logs"; then
+    report "$level" "$svc: the bridge refused an agent hello on :5002 since the recreate (Desktop Link keys or clock: docker logs $BRIDGE_CONTAINER)"
+    return 0
+  fi
+  if grep -qE 'Desktop link: agent:[^ ]+ connected \(internal listener\)' <<< "$logs"; then
+    log "  ok   $svc: agent_hello accepted on :5002"
+    return 0
+  fi
+  brain="$(env_brain)"
+  if [[ $brain == pc ]]; then
+    log "  skip $svc: agent_hello on :5002 (brain pc: no session reaches the VPS brain, and its link opens with one)"
+  else   # vps, or a JARVIS_BRAIN that reads as neither: counted as vps
+    warn "$svc: no agent_hello on :5002 since the recreate yet (brain $brain; the link opens with the first session: check the bridge log after one voice or chat turn)"
+  fi
+}
+
+agent_probes() {  # <service> <FAIL|WARN>: the K-75 checks of a VPS brain container after it is healthy
+  local svc="$1" level="$2" id ctr want out
+  id="$(ctr_id "$svc")"
+  if [[ -z $id ]]; then report "$level" "$svc: no running container to check"; return 0; fi
+  ctr="$(docker inspect -f '{{.Name}}' "$id" 2>/dev/null || true)"
+  ctr="${ctr#/}"
+  [[ -n $ctr ]] || ctr="$id"
+  if [[ $svc == agent ]]; then
+    want="$(agent_name_of "$ctr")"
+    out="$(agent_exec "$ctr" curl -fsS -m 5 http://127.0.0.1:8081/worker 2>/dev/null || true)"
+    if [[ $out =~ \"agent_name\"[[:space:]]*:[[:space:]]*\"$want\" ]]; then
+      log "  ok   agent: /worker shows agent_name $want"
+    else
+      report "$level" "agent: /worker does not show agent_name $want"
+    fi
+    livekit_registered "$svc" "$ctr" "$want" "$level"
+    if out="$(agent_exec "$ctr" python scripts/models/check_models.py --expect-uid 10001 2>&1)" && [[ $out == *MODELS_OK* ]]; then
+      log "  ok   agent: offline model check (MODELS_OK)"
+    else
+      report "$level" "agent: offline model check failed ($({ grep -E 'FAIL' <<< "$out" || true; } | head -n 1 | cut -c1-120))"
+    fi
+  fi
+  if out="$(agent_exec "$ctr" python -m services.utils.net_guard --self-test 2>&1)" && [[ $out == *'"ok": true'* ]]; then
+    log "  ok   $svc: net_guard self-test"
+  else
+    report "$level" "$svc: net_guard self-test failed"
+  fi
+  agent_hello_check "$svc" "$level"
+}
+
+# Runs inside jarvis-bridge, read-only: seconds since the newest owner activity the bridge recorded (kv
+# last_activity_ts, the newest message: speech or typed chat, the newest tool event), or 'unknown'.
+IDLE_PY='import json, sqlite3, sys, time
+newest = []
+try:
+    con = sqlite3.connect("file:" + sys.argv[1] + "?mode=ro", uri=True, timeout=5)
+    row = con.execute("SELECT value FROM kv WHERE key = ?", ("last_activity_ts",)).fetchone()
+    if row is not None:
+        newest.append(float(json.loads(row[0])))
+    for sql, args in (("SELECT MAX(updated_ts) FROM messages", ()), ("SELECT MAX(ts) FROM events WHERE kind = ?", ("tool",))):
+        value = con.execute(sql, args).fetchone()[0]
+        if value is not None:
+            newest.append(float(value))
+except (sqlite3.Error, ValueError, TypeError):
+    pass
+print(int(max(0, time.time() - max(newest))) if newest else "unknown")'
+
+last_activity_age() {
+  local age
+  age="$({ docker exec "$BRIDGE_CONTAINER" python -c "$IDLE_PY" /app/data/bridge.db 2>/dev/null || true; } | tail -n 1)"
+  if [[ $age =~ ^[0-9]+$ ]]; then printf '%s\n' "$age"; else printf 'unknown\n'; fi
+}
+
+idle_gate() {  # <preflight|change|plan>: an 'agent' recreate in vps mode waits for IDLE_GATE_S without activity (K-72).
+  # Only pc mode skips it: a JARVIS_BRAIN that reads as neither vps nor pc is gated like vps (it fails closed)
+  local when="$1" brain age why
+  in_list agent "${SERVICES[@]}" || return 0
+  brain="$(env_brain)"
+  if [[ $brain == pc ]]; then
+    if [[ $when != change ]]; then log "  idle gate    not needed (brain pc: the VPS agent serves no session)"; fi
+    return 0
+  fi
+  if [[ $brain != vps && $when != change ]]; then
+    log "  idle gate    JARVIS_BRAIN in $ENV_FILE reads as neither vps nor pc (as compose reads it): gated as in vps mode"
+  fi
+  if (( NOW )); then
+    if [[ $when == change ]]; then
+      log "NOTICE: the VPS agent restarts in ${NOTICE_S} s (deploy ${SHA:-?}, --now). It is printed only: a spoken notice needs a bridge say route, which the bridge does not serve yet"
+      sleep "$NOTICE_S"
+    else
+      log "  idle gate    skipped (--now: a ${NOTICE_S} s notice comes before the agent restart)"
+    fi
+    return 0
+  fi
+  age="$(last_activity_age)"
+  if [[ $age != unknown ]] && (( age >= IDLE_GATE_S )); then
+    if [[ $when != change ]]; then log "  idle gate    ok: the last activity was ${age} s ago (needs ${IDLE_GATE_S} s)"; fi
+    return 0
+  fi
+  why="the last speech, typed chat or tool call was ${age} s ago"
+  if [[ $age == unknown ]]; then why="the bridge cannot tell when the owner was last active"; fi
+  case "$when" in
+    plan)
+      log "  idle gate    NOT idle: $why; a real run would refuse (or add --now)"
+      PLAN_REFUSALS+=("idle gate: $why (an agent restart waits for ${IDLE_GATE_S} s without activity, K-72; --now: a ${NOTICE_S} s notice instead)")
+      return 0
+      ;;
+    preflight) die "idle gate: $why; an agent restart waits for ${IDLE_GATE_S} s without activity (K-72): try again later, or add --now (a ${NOTICE_S} s notice first)" ;;
+  esac
+  fail "idle gate: $why (activity began during the deploy): try again later, or add --now"
+  return 1
+}
+
+agent_image_revision() {  # the commit the agent containers' image was built from (its revision label), else unknown
+  local svc id img rev
+  for svc in agent agent-svc; do
+    id="$(ctr_id "$svc")"
+    [[ -n $id ]] || continue
+    img="$(docker inspect -f '{{.Image}}' "$id" 2>/dev/null || true)"
+    rev="$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$img" 2>/dev/null || true)"
+    if [[ $rev =~ $SHA_RE ]]; then printf '%s\n' "$rev"; return 0; fi
+  done
+  printf 'unknown\n'
+}
+
+node_pin_hint() {  # <reason>: agent or agent-svc were recreated onto other images (a rollback). The commit the agent
+  # image runs, and the call (on the PC) that pins the laptop's Desktop Node to it: a node pinned to another commit
+  # answers MANIFEST_MISMATCH for every laptop tool whose schema changed between the two (K-71 'Drift')
+  local rev
+  rev="$(agent_image_revision)"
+  log "AGENT_IMAGE_SHA=$rev"
+  if [[ $rev == unknown ]]; then
+    log "  the running agent image has no revision label: pin the laptop's Desktop Node to the commit it was built from, on the PC, in the repo: $PC_NODE_UPDATE --sha <that commit> --by claude --reason $1"
+    return 0
+  fi
+  log "  the laptop's Desktop Node must run the same commit: on the PC, in the repo: $PC_NODE_UPDATE --sha $rev --by claude --reason $1   (add --canary while the pinned node runs in canary mode)"
+}
+
+agent_ref_revision() {  # the revision label of the image the compose file names for agent (what a recreate starts)
+  local ref rev
+  ref="$(service_image "${TREE:-$APP_DIR}/deploy/hostinger/docker-compose.yml" agent)"
+  [[ -n $ref ]] || ref="$(service_image "${TREE:-$APP_DIR}/deploy/hostinger/docker-compose.yml" agent-svc)"
+  rev="$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "${ref:-jarvis-agent:hostinger}" 2>/dev/null || true)"
+  if [[ $rev =~ $SHA_RE ]]; then printf '%s\n' "$rev"; else printf 'unknown\n'; fi
+}
+
+agent_backup_check() {  # an agent deploy needs its pre-deploy backup to hold the agent data, or to record that none exists
+  local line
+  line="$({ sed -n 's/^agent_data: *//p' "$B/MANIFEST.txt" 2>/dev/null || true; } | head -n 1)"
+  case "$line" in
+    ''|sealed*|none*) ;;   # '' = a backup tool without that record; 'none' = no agent volume yet
+    *) die "the pre-deploy backup holds no agent data ($line): nothing was changed; fix that first (RUNBOOK, 'Data restore')" ;;
+  esac
+}
+
 # ------------------------------------------------------------------ backup, records, smoke
 run_backup() {  # <label> -> B, BNAME
   local tmp rc dir
@@ -431,16 +726,21 @@ record_images() {  # <file> <services...>: container, image ref and image id of 
   done
 }
 
-tag_rollback_images() {  # <record file>: our own images (jarvis-*) also get a :rollback-<backup> tag
-  local svc name ref img repo
+tag_rollback_images() {  # <record file>: our own images (jarvis-*) also get a :rollback-<backup> tag. A second service of
+  # the same repository that runs another image (agent-svc beside agent, both jarvis-agent) gets :rollback-<backup>-<svc>,
+  # so the first tag is never moved and both images stay referenced (backup_vps.sh names them the same way)
+  local svc name ref img repo tag have
   while IFS=$'\t' read -r svc name ref img; do
     [[ $svc == \#* || $img == - || -z $img ]] && continue
     repo="${ref%%:*}"
     [[ $repo == jarvis-* ]] || continue
-    if docker tag "$img" "$repo:rollback-$BNAME"; then
-      log "  $svc: $repo:rollback-$BNAME -> ${img:7:12}"
+    tag="$repo:rollback-$BNAME"
+    have="$(docker image inspect -f '{{.Id}}' "$tag" 2>/dev/null || true)"
+    if [[ -n $have && $have != "$img" ]]; then tag="$tag-$svc"; fi
+    if docker tag "$img" "$tag"; then
+      log "  $svc: $tag -> ${img:7:12}"
     else
-      warn "could not tag $repo:rollback-$BNAME"
+      warn "could not tag $tag"
     fi
   done < "$1"
 }
@@ -458,26 +758,35 @@ smoke_snapshot() {  # <file>
   return 1
 }
 
-smoke_verify() {  # <backup dir>: compare smoke-pre.txt with now; a regression must survive one re-check
+smoke_verify() {  # <backup dir>: compare smoke-pre.txt with now; a regression must survive one re-check. With
+  # SMOKE_STRICT (an agent deploy, K-75: the smoke diff identical) a change without a regression is re-checked the same way
   local b="$1" rc=0
   step "other apps: smoke check (post)"
   if ! smoke_snapshot "$b/smoke-post.txt"; then fail "smoke_other_apps.sh failed (post)"; return 0; fi
   bash "$SCRIPT_DIR/smoke_other_apps.sh" --compare "$b/smoke-pre.txt" "$b/smoke-post.txt" || rc=$?
   case $rc in
     0) log "  ok   other apps: identical before and after"; return 0 ;;
-    1) warn "other apps: something changed (no regression; see the lines above)"; return 0 ;;
+    1)
+      if (( ! SMOKE_STRICT )); then warn "other apps: something changed (no regression; see the lines above)"; return 0; fi
+      ;;
     2) ;;
     *) fail "smoke compare failed (exit $rc)"; return 0 ;;
   esac
-  log "  regression seen; re-checking in ${RECHECK_S}s (one flapping app should not roll JARVIS back)"
+  if (( rc == 2 )); then
+    log "  regression seen; re-checking in ${RECHECK_S}s (one flapping app should not roll JARVIS back)"
+  else
+    log "  a change seen (an agent deploy needs the smoke diff identical); re-checking in ${RECHECK_S}s"
+  fi
   sleep "$RECHECK_S"
   if ! smoke_snapshot "$b/smoke-post2.txt"; then fail "smoke_other_apps.sh failed (re-check)"; return 0; fi
   rc=0
   bash "$SCRIPT_DIR/smoke_other_apps.sh" --compare "$b/smoke-pre.txt" "$b/smoke-post2.txt" || rc=$?
   if (( rc == 2 )); then
     fail "other apps regressed after the change (confirmed by the re-check)"
+  elif (( rc == 1 && SMOKE_STRICT )); then
+    fail "other apps changed during the agent deploy (K-75: the smoke diff must stay identical; confirmed by the re-check)"
   else
-    log "  ok   the regression did not persist (re-check exit $rc)"
+    log "  ok   the difference did not persist (re-check exit $rc)"
   fi
 }
 
@@ -670,6 +979,10 @@ pull_and_build() {
 start_services() {
   step "recreate: docker compose -p $PROJECT up -d --no-deps ${SERVICES[*]}"
   TOUCHED=("${SERVICES[@]}")
+  # the agent gate reads the bridge log from here on (docker logs --since), and asks LiveKit for a fresh registration
+  # only from a container this 'up' started (an unchanged one keeps running)
+  RECREATE_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  note_pre_up "${SERVICES[@]}"
   compose up -d --no-deps --no-build --pull never "${SERVICES[@]}" || { fail "docker compose up failed"; return 1; }
 }
 
@@ -679,14 +992,83 @@ apply_changes() {
   compose config -q || { fail "docker compose config rejected the installed compose file"; return 1; }
   if (( ${#SERVICES[@]} )); then pull_and_build || return 1; fi
   if (( NGINX )); then nginx_apply || return 1; fi
-  if (( ${#SERVICES[@]} )); then start_services || return 1; fi
+  if (( ${#SERVICES[@]} )); then
+    idle_gate change || return 1   # an agent recreate in vps mode (the backup and pulls took time since preflight)
+    start_services || return 1
+  fi
   return 0
+}
+
+image_rounds() {  # <record file> <services...>: the services as rounds, one line each. Services that the compose file
+  # gives the same image (agent and agent-svc share jarvis-agent:hostinger) but whose recorded images differ go into
+  # different rounds, so each round can point the shared tag at its own image before its 'up'; one round otherwise.
+  # agent is placed first, so round 0 holds it (recreate_in_rounds points the shared tag back at round 0's image).
+  local rec="$1" svc line id ref r key
+  local -a rounds=() order=()
+  local -A taken=()
+  shift
+  if in_list agent "$@"; then order=(agent); fi
+  for svc in "$@"; do [[ $svc == agent ]] || order+=("$svc"); done
+  for svc in "${order[@]}"; do
+    line="$({ awk -F'\t' -v s="$svc" '$1 == s' "$rec" 2>/dev/null || true; } | tail -n 1)"
+    id=""
+    if [[ -n $line ]]; then IFS=$'\t' read -r _ _ _ id <<< "$line"; fi
+    ref="$(service_image "$COMPOSE_FILE" "$svc")"
+    for (( r = 0; ; r++ )); do
+      key="$r|${ref:-$svc}"
+      if [[ -z ${taken[$key]+x} || ${taken[$key]} == "${id:--}" ]]; then
+        taken[$key]="${id:--}"
+        rounds[r]="${rounds[r]:+${rounds[r]} }$svc"
+        break
+      fi
+    done
+  done
+  if (( ${#rounds[@]} )); then printf '%s\n' "${rounds[@]}"; fi
+}
+
+recreate_in_rounds() {  # <record file> <failure text> <services...>: per round, its image tags back, then 'up -d --no-deps'.
+  # A shared tag that a later round moved goes back to round 0's image at the end: round 0 holds agent, so
+  # jarvis-agent:hostinger names the agent's image again and the next plain 'up' of agent (agent_ctl brain vps, a
+  # deploy of it) keeps it there. agent-svc keeps running its own image; a warning says that such an 'up' of it would
+  # move it onto the tag's image.
+  local rec="$1" what="$2" line svc ref
+  local -a group=() rounds=() later=() back=()
+  local -A first=()
+  shift 2
+  mapfile -t rounds < <(image_rounds "$rec" "$@")
+  # the gate after a rollback reads the logs from this recreate on, never the failed deploy's ones
+  RECREATE_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  for line in "${rounds[@]}"; do
+    read -r -a group <<< "$line"
+    restore_images "$rec" "${group[@]}"
+    note_pre_up "${group[@]}"
+    compose up -d --no-deps --no-build --pull never "${group[@]}" || fail "$what"
+  done
+  (( ${#rounds[@]} > 1 )) || return 0
+  read -r -a group <<< "${rounds[0]}"
+  for svc in "${group[@]}"; do
+    ref="$(service_image "$COMPOSE_FILE" "$svc")"
+    if [[ -n $ref ]]; then first[$ref]="$svc"; fi
+  done
+  for line in "${rounds[@]:1}"; do
+    read -r -a later <<< "$line"
+    for svc in "${later[@]}"; do
+      ref="$(service_image "$COMPOSE_FILE" "$svc")"
+      [[ -n $ref && -n ${first[$ref]+x} ]] || continue
+      in_list "${first[$ref]}" "${back[@]}" || back+=("${first[$ref]}")
+      warn "$svc runs its own recorded image, while $ref names ${first[$ref]}'s again: a plain 'up' of $svc (agent_ctl brain vps, a deploy that names it) recreates it on that image"
+    done
+  done
+  if (( ${#back[@]} )); then
+    log "  the shared tag back to the image of ${back[*]} (the next plain 'up' of ${back[*]} keeps it)"
+    restore_images "$rec" "${back[@]}"
+  fi
 }
 
 # ------------------------------------------------------------------ rollback after a failed deploy
 auto_rollback() {  # back to $B: code, nginx, image tags, then the touched services; 0 when healthy again
   local svc
-  local -a new=() again=()
+  local -a new=() again=() retag=()
   set +e   # recovery is best effort: every step runs and records its own failure
   for svc in "${TOUCHED[@]}"; do
     if record_is_new "$B/deploy-images.txt" "$svc"; then new+=("$svc"); else again+=("$svc"); fi
@@ -698,10 +1080,19 @@ auto_rollback() {  # back to $B: code, nginx, image tags, then the touched servi
   fi
   if (( CODE_CHANGED )); then restore_code "$B" || true; fi
   if (( NGINX_CHANGED )); then restore_nginx_conf "$B" 1 || fail "nginx restore failed"; fi
-  if (( ${#SERVICES[@]} )); then restore_images "$B/deploy-images.txt" "${SERVICES[@]}"; fi
+  # The tags of the named services this run did not recreate go back now (a failure after the build and before the
+  # 'up': the nginx reload, the certbot bootstrap, the idle gate), so no rebuilt jarvis-* tag is left on an image that
+  # never passed a gate, for the next 'up -d --no-build' to start. agent and agent-svc keep theirs, as in the
+  # failed-before-live path: deploy.sh never moves it before a recreate
+  for svc in "${SERVICES[@]}"; do
+    in_list "$svc" "${again[@]}" && continue
+    case $svc in agent|agent-svc) ;; *) retag+=("$svc") ;; esac
+  done
+  if (( ${#retag[@]} )); then restore_images "$B/deploy-images.txt" "${retag[@]}"; fi
   GIT_SHA_ENV="$PREV_SHA"
+  # each service's image tag goes back right before its own 'up' (rounds: agent and agent-svc share one tag)
   if (( ${#again[@]} )); then
-    compose up -d --no-deps --no-build --pull never "${again[@]}" || fail "docker compose up (rollback) failed"
+    recreate_in_rounds "$B/deploy-images.txt" "docker compose up (rollback) failed" "${again[@]}"
   fi
   run_gates "${again[@]}"
   (( ${#FAILS[@]} == 0 ))
@@ -710,12 +1101,16 @@ auto_rollback() {  # back to $B: code, nginx, image tags, then the touched servi
 rollback_command() { printf 'bash %s/rollback.sh %s' "$TOOLS_DIR" "$BNAME"; }
 
 rollback_after_failure() {  # sets RESULT and FINAL_RC
-  local -a first=("${FAILS[@]}")
+  local -a first=("${FAILS[@]}") retag=()
+  local svc
   set +e
   if (( ${#TOUCHED[@]} == 0 && ! NGINX_CHANGED )); then
     step "failed before any live change: putting the code and image tags back"
     if (( CODE_CHANGED )); then restore_code "$B" || true; fi
-    if (( ${#SERVICES[@]} )); then restore_images "$B/deploy-images.txt" "${SERVICES[@]}"; fi
+    # agent and agent-svc keep their tag: deploy.sh never moves it before a recreate (no build section; 'pull --policy
+    # missing' keeps an existing tag), and it names the image the dedicated builder made for this deploy
+    for svc in "${SERVICES[@]}"; do case $svc in agent|agent-svc) ;; *) retag+=("$svc") ;; esac; done
+    if (( ${#retag[@]} )); then restore_images "$B/deploy-images.txt" "${retag[@]}"; fi
     FAILS=("${first[@]}")
     finish failed-before-live 1
     return 0
@@ -761,6 +1156,17 @@ finish() {  # <result> <exit code>: records the outcome; does not exit
     if [[ $MODE == deploy && $RESULT != rolled-back && $RESULT != failed-before-live ]]; then
       log "rollback: $(rollback_command)"
     fi
+  fi
+  if [[ $MODE == deploy ]] && agent_deploy; then
+    case "$RESULT" in
+      ok) log "AGENT_IMAGE_SHA=$(agent_image_revision)" ;;
+      rolled-back|rollback-failed|failed-no-rollback|failed)
+        # C-128: the VPS brain may not answer now. The automatic rollback (when on) already ran; these are the ways back
+        log "AGENT GATE FAILED: if the VPS brain does not answer, go back with"
+        log "  rollback: $(rollback_command)"
+        log "  PC brain: $PC_BRAIN_COMMAND   (on the PC, in the repo; it serves the owner from the laptop)"
+        ;;
+    esac
   fi
   log "RESULT=$RESULT"
 }
@@ -854,6 +1260,7 @@ parse_deploy_args() {
       --foreground) FOREGROUND=1; shift ;;
       --no-auto-rollback) AUTO_ROLLBACK=0; shift ;;
       --gate-only) GATE_ONLY=1; shift ;;
+      --now) NOW=1; shift ;;
       *) usage_error "unknown argument: $(safe "$1")" ;;
     esac
   done
@@ -867,7 +1274,7 @@ parse_deploy_args() {
 }
 
 preflight() {
-  local cf free svc id ref cur
+  local cf free="" svc id ref cur rev
   step "preflight"
   [[ -d $APP_DIR ]] || die "$APP_DIR not found"
   [[ -f $ENV_FILE ]] || die "$ENV_FILE not found"
@@ -897,6 +1304,20 @@ preflight() {
     if [[ -n $free ]] && (( free < DISK_FAIL_GB )); then
       die "only ${free} GB free: no image build below ${DISK_FAIL_GB} GB on this shared server"
     fi
+  fi
+  if agent_deploy; then
+    if [[ -n $free ]] && (( free < AGENT_DISK_FAIL_GB )); then
+      die "only ${free} GB free: a deploy of the VPS brain needs ${AGENT_DISK_FAIL_GB} GB (K-75; nothing is pruned on this shared server)"
+    fi
+    if [[ -n $free ]] && (( free < AGENT_DISK_WARN_GB )); then
+      warn "only ${free} GB free: the VPS brain wants ${AGENT_DISK_WARN_GB} GB (K-75; nothing is pruned on this shared server, ask the user)"
+    fi
+    rev="$(agent_ref_revision)"
+    log "  agent image: built from $rev"
+    if [[ $rev != unknown && $rev != "$SHA"* && $SHA != "$rev"* ]]; then
+      warn "the agent image was built from $rev, while this deploy ships $SHA: the agent keeps running $rev's code and the laptop node is pinned to $rev; build from $SHA first to run this commit (RUNBOOK, 'Agent image')"
+    fi
+    if (( ! DRY_RUN )); then idle_gate preflight; fi
   fi
   # A recreated livekit takes its credentials from LIVEKIT_KEYS (.env), no longer from a keys: line in the live
   # livekit.yaml; if the two differ, every client and the PC agent would lose LiveKit.
@@ -937,6 +1358,9 @@ print_plan() {
   log "1  lock         flock -n $LOCK_FILE"
   log "2  tools        copy ${TOOL_FILES[*]} -> $TOOLS_DIR/"
   log "3  backup       bash $SCRIPT_DIR/backup_vps.sh pre-deploy-${SHA:0:12}"
+  if agent_deploy; then
+    log "                its agent data must be sealed (agent-volumes.tar.enc) or absent (no agent volume yet), else refuse"
+  fi
   log "4  record       deploy.env, deploy-images.txt and :rollback-<backup> tags for the jarvis-* images"
   log "5  smoke (pre)  bash $SCRIPT_DIR/smoke_other_apps.sh > <backup>/smoke-pre.txt"
   if (( STAGED )); then
@@ -962,13 +1386,21 @@ print_plan() {
     log "10 nginx        not touched (no --nginx)"
   fi
   if (( ${#SERVICES[@]} )); then
+    if in_list agent "${SERVICES[@]}"; then idle_gate plan; fi
     log "11 recreate     $cmd up -d --no-deps --no-build --pull never ${SERVICES[*]}"
   else
     log "11 recreate     none"
   fi
   log "12 gate         ${SERVICES[*]:-no service}: healthy + HTTP probes; other JARVIS services: quick checks (WARN)"
-  log "13 smoke (post) compare with smoke-pre.txt; a regression is re-checked after ${RECHECK_S}s"
+  if agent_deploy; then
+    log "                agent/agent-svc: healthy within $(gate_timeout agent)s$(in_list agent "${SERVICES[@]}" && echo "; agent: /worker agent_name, LiveKit 'worker registered' since its container started (only a warning for one the 'up' left running), offline model check (check_models.py)"); net_guard self-test; agent_hello on :5002 (bridge log); all under 'env -i'"
+  fi
+  log "13 smoke (post) compare with smoke-pre.txt; a regression is re-checked after ${RECHECK_S}s$(agent_deploy && echo '; an agent deploy needs it identical (a change that survives the re-check fails too)')"
   log "14 on failure   $([[ $AUTO_ROLLBACK == 1 ]] && echo 'automatic rollback to the backup (code, nginx, image tags)' || echo 'print the rollback command (--no-auto-rollback)')"
+  if agent_deploy; then
+    log "                agent: also print 'rollback.sh <backup>' and '$PC_BRAIN_COMMAND' (exit 2 after the automatic rollback)"
+    log "15 agent image  AGENT_IMAGE_SHA=<the agent image's revision> after a healthy deploy (deploy_from_pc.sh pins the laptop node to it); now: $(agent_ref_revision)"
+  fi
   step "current state of the jarvis services"
   mapfile -t all < <({ compose_file "${TREE:-$APP_DIR}/deploy/hostinger/docker-compose.yml" --profile '*' \
     config --services 2>/dev/null || true; })
@@ -981,11 +1413,18 @@ print_plan() {
       log "  $svc: no container$(in_list "$svc" "${SERVICES[@]}" && echo '  <- deploy (new)' || echo '')"
     fi
   done
+  # the verdict follows what a real run would do now (the idle gate refuses in its preflight): PLAN_RC, the exit code
+  if (( ${#PLAN_REFUSALS[@]} )); then
+    log "VERDICT: a real run would REFUSE now: ${PLAN_REFUSALS[*]}"
+    PLAN_RC=1
+    return 0
+  fi
   log "VERDICT: a real run would proceed"
 }
 
 gate_only_main() {
-  local -a svcs=("${SERVICES[@]}")
+  local -a svcs=("${SERVICES[@]}") defined=()
+  local brain said svc
   # A compose file that does not interpolate (C-126: JARVIS_BRAIN missing from .env) hides every container from
   # 'compose ps', so the gate below would check nothing and still say GATE=ok.
   if ! compose config -q >/dev/null 2>&1; then
@@ -993,6 +1432,33 @@ gate_only_main() {
   fi
   if (( ${#svcs[@]} == 0 )); then
     mapfile -t svcs < <({ compose ps -a --format '{{.Service}}' 2>/dev/null || true; } | LC_ALL=C sort -u)
+    # C-128: in pc mode the VPS brain's containers are stopped by design (K-72), so a stopped one is not a failure. Only
+    # a JARVIS_BRAIN that reads exactly 'pc' skips them: one that reads as neither vps nor pc (an unexpanded
+    # '${BRAIN:-vps}', a 'JARVIS_BRAIN: vps' line) is checked as in vps mode, as the idle gate does, so a dead VPS
+    # brain never reads healthy
+    brain="$(env_brain)"
+    if [[ $brain == pc ]]; then
+      local -a kept=()
+      for svc in "${svcs[@]}"; do
+        if [[ $svc == agent || $svc == agent-svc ]] && [[ -z $(ctr_id "$svc") ]]; then
+          log "  skip $svc: stopped, as it stays in pc mode"
+          continue
+        fi
+        kept+=("$svc")
+      done
+      svcs=("${kept[@]}")
+    else
+      # ...and the list above holds only the containers that exist: a vps-brain service of the compose file with no
+      # container at all (removed, or an 'up' that failed before it made one) is a dead VPS brain too
+      said=vps
+      [[ $brain == vps ]] || said="as neither vps nor pc (gated as vps)"
+      mapfile -t defined < <({ compose --profile '*' config --services 2>/dev/null || true; })
+      for svc in agent agent-svc; do
+        if in_list "$svc" "${defined[@]}" && ! in_list "$svc" "${svcs[@]}"; then
+          fail "$svc: no jarvis-$svc container while JARVIS_BRAIN reads $said: the VPS brain is not running (on the PC, '$PC_BRAIN_COMMAND' gives the owner the PC brain)"
+        fi
+      done
+    fi
   fi
   run_gates "${svcs[@]}"
   if (( ${#FAILS[@]} )); then log "GATE=fail (${#FAILS[@]} failure(s))"; FINAL_RC=1; else log "GATE=ok"; FINAL_RC=0; fi
@@ -1006,6 +1472,10 @@ run_deploy() {
   PHASE=backup
   run_backup "pre-deploy-${SHA:0:12}" || die "backup_vps.sh failed: nothing was changed"
   log "BACKUP=$BNAME"
+  if agent_deploy; then
+    SMOKE_STRICT=1   # K-75: an agent deploy needs the other-apps smoke diff identical
+    agent_backup_check
+  fi
   record_write "$B/deploy.env" KIND=deploy "SHA=$SHA" "SHA_FULL=$SHA_FULL" "PREV_SHA=$PREV_SHA" \
     "SERVICES=${SERVICES[*]}" "NGINX=$NGINX" "CODE=$STAGED" "RUN=$RUN" "STARTED=$(now_utc)" RESULT=running
   record_images "$B/deploy-images.txt" "${SERVICES[@]}"
@@ -1041,7 +1511,7 @@ deploy_main() {
     trap cleanup_tree EXIT
     preflight
     print_plan
-    FINAL_RC=0
+    FINAL_RC=$PLAN_RC   # 1 when a real run would refuse now (deploy_from_pc.sh --check reports it)
     return 0
   fi
   if (( ! FOREGROUND )) && [[ -z ${JARVIS_DETACHED:-} ]]; then

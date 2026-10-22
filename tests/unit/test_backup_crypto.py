@@ -8,6 +8,7 @@ import importlib.util
 import io
 import sqlite3
 import struct
+import sys
 import tarfile
 import threading
 from pathlib import Path
@@ -288,3 +289,124 @@ def test_latest_picks_the_newest_sealed_file(tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     assert tool.newest_snapshot(tool.default_backup_dir()) == sealed
     assert tool.default_output(sealed).name == "jarvis_snapshot_2026-10-20.tar"
+
+
+# ---------------------------------------------------------------- one key for snapshots and backups (C-128)
+
+
+def test_one_backup_key_opens_the_snapshot_and_the_agent_backup(tmp_path, capsys):
+    """K-77: agent-svc's daily snapshot and backup_vps.sh's agent-volumes.tar.enc (services/utils/agent_volumes.py)
+    are sealed in the one format to the one key; 'backup_key.py decrypt' opens both from the same key file and names
+    each kind."""
+    from services.utils import agent_volumes as av  # pylint: disable=import-outside-toplevel
+
+    key_file = tmp_path / "keys" / "backup_key.dpapi"
+    assert tool.main(["keygen", "--key-file", str(key_file)], wrap=_wrap, unwrap=_unwrap) == 0
+    public = capsys.readouterr().out.split("BACKUP_RECIPIENT_PUBLIC_KEY=")[1].split()[0]
+    db = _sample_tree(tmp_path / "vps")
+    try:
+        info = SnapshotWriter(root=tmp_path / "vps", out_dir=tmp_path / "pulled", recipient_text=public).write()
+        backup = tmp_path / "mirror" / "2026-10-21_0900Z-c128" / av.ARCHIVE
+        backup.parent.mkdir(parents=True)
+        with backup.open("wb") as out:
+            counts = av.seal_volumes(str(tmp_path / "vps"), bc.parse_public_key(public), out)
+    finally:
+        db.close()
+    assert counts["sqlite"] == 1 and counts["sealed"] == backup.stat().st_size
+    assert SECRET_TEXT not in backup.read_bytes() and backup.read_bytes()[:len(bc.MAGIC)] == bc.MAGIC
+    for sealed, kind in ((tmp_path / "pulled" / info["name"], "snapshot"), (backup, "agent-volumes")):
+        assert tool.main(["decrypt", str(sealed), "--key-file", str(key_file)], wrap=_wrap, unwrap=_unwrap) == 0
+        out = capsys.readouterr().out
+        assert f"KIND={kind}\n" in out and "DECRYPTED=" in out and SECRET_TEXT.decode() not in out, out
+    with tarfile.open(backup.with_name("agent-volumes.tar")) as tar:
+        assert tar.getnames()[-1] == av.META and "conversations/tasks.db" in tar.getnames()
+
+
+def test_export_writes_an_offline_copy_that_opens_without_dpapi(tmp_path, capsys):
+    """'backup_key.py export': the key document unwrapped in a NEW file outside the repo (the ACL set while it is still
+    empty); every command reads it with --key-file, never through DPAPI. The private key is never printed."""
+    store = tmp_path / "backup_key.dpapi"
+    tool.keygen(store, wrap=_wrap, unwrap=_unwrap)
+    key = tool.load_key(store, _unwrap)
+    capsys.readouterr()
+    restricted: list[tuple[Path, int]] = []
+    dest = tmp_path / "usb" / "jarvis-backup-key.json"
+    public = tool.export_key(store, dest, unwrap=_unwrap, restrict=lambda p: restricted.append((p, p.stat().st_size)))
+    out = capsys.readouterr().out
+    assert public == bc.public_key_hex(key) and restricted == [(dest, 0)]
+    assert f"EXPORTED={dest.resolve()}" in out and bc.private_key_hex(key) not in out
+    assert dest.read_bytes().startswith(b"{") and bc.private_key_hex(key).encode() in dest.read_bytes()
+
+    def no_dpapi(_blob: bytes) -> bytes:
+        raise AssertionError("an offline copy is read as it is")
+
+    assert bc.private_key_hex(tool.load_key(dest, no_dpapi)) == bc.private_key_hex(key)
+    assert tool.main(["public", "--key-file", str(dest)], unwrap=no_dpapi) == 0
+    assert f"FINGERPRINT={bc.fingerprint(key)}" in capsys.readouterr().out
+    with pytest.raises(tool.BackupKeyError, match="never overwrites"):
+        tool.export_key(store, dest, unwrap=_unwrap, restrict=lambda p: None)
+    with pytest.raises(tool.BackupKeyError, match="inside the repo"):
+        tool.export_key(store, ROOT / "jarvis-backup-key.json", unwrap=_unwrap, restrict=lambda p: None)
+    assert not (ROOT / "jarvis-backup-key.json").exists()
+    assert tool.main(["export", str(tmp_path / "second.json"), "--key-file", str(store)], unwrap=_unwrap) == 0
+    assert bc.public_key_hex(tool.load_key(tmp_path / "second.json", no_dpapi)) == public
+    assert tool.main(["export", str(tmp_path / "second.json"), "--key-file", str(store)], unwrap=_unwrap) == 2
+
+
+def test_export_says_which_acl_the_copy_got_and_refuses_an_unrestricted_one(tmp_path, capsys, monkeypatch):
+    """C-128 review (low): restrict_to_user swallowed every error (pywin32 not importable, SetNamedSecurityInfo failing
+    on NTFS), so the unwrapped key that opens every snapshot and backup could land with its folder's inherited
+    permissions under a plain EXPORTED. The export now prints its ACL line: on a drive that keeps ACLs a failed one-user
+    ACL refuses with nothing written, unless --allow-open-acl (then ACL=NOT restricted and a WARN line); a FAT or exFAT
+    drive, which keeps no ACLs, gets ACL=none and goes on."""
+    from src.core.desktop import health  # pylint: disable=import-outside-toplevel
+
+    store = tmp_path / "backup_key.dpapi"
+    tool.keygen(store, wrap=_wrap, unwrap=_unwrap)
+    capsys.readouterr()
+
+    def broken(_path):
+        raise OSError("SetNamedSecurityInfo failed")
+
+    monkeypatch.setattr(health, "restrict_to_current_user", broken)
+    monkeypatch.setattr(tool, "volume_keeps_acls", lambda _path: True, raising=False)
+    dest = tmp_path / "usb" / "copy.json"
+    assert tool.main(["export", str(dest), "--key-file", str(store)], unwrap=_unwrap) == 2
+    captured = capsys.readouterr()
+    assert "the one-user ACL could not be set" in captured.err and "--allow-open-acl" in captured.err, captured
+    assert "EXPORTED=" not in captured.out and not dest.exists()
+    assert tool.main(["export", str(dest), "--key-file", str(store), "--allow-open-acl"], unwrap=_unwrap) == 0
+    out = capsys.readouterr().out
+    assert "ACL=NOT restricted (OSError)" in out and "\nWARN=" in out and dest.exists(), out
+    monkeypatch.setattr(tool, "volume_keeps_acls", lambda _path: False)   # FAT or exFAT
+    fat = tmp_path / "fat" / "copy.json"
+    assert tool.main(["export", str(fat), "--key-file", str(store)], unwrap=_unwrap) == 0
+    out = capsys.readouterr().out
+    assert "ACL=none: this drive keeps no ACLs (FAT or exFAT)" in out and "WARN=" not in out and fat.exists(), out
+    monkeypatch.setattr(tool, "volume_keeps_acls", lambda _path: True)
+    monkeypatch.setattr(health, "restrict_to_current_user", lambda _path: None)
+    ok = tmp_path / "ok" / "copy.json"
+    assert tool.main(["export", str(ok), "--key-file", str(store)], unwrap=_unwrap) == 0
+    out = capsys.readouterr().out
+    assert "ACL=this user only" in out and "WARN=" not in out, out
+    monkeypatch.undo()
+    if sys.platform == "win32":   # this PC's temp folder is on NTFS
+        assert tool.volume_keeps_acls(tmp_path) is True
+
+
+def test_iter_open_yields_only_verified_chunks_and_fails_at_a_missing_end():
+    """restore_agent_data.py streams a backup chunk by chunk (iter_open): each yielded chunk verified, the whole
+    stream only once the final chunk and the end verified; a cut stream yields a verified prefix, then fails."""
+    key = bc.generate_private_key()
+    data = bytes(range(256)) * 20
+    sealed = bc.seal_bytes(data, key.public_key(), chunk_size=1000)
+    chunks = list(bc.iter_open(io.BytesIO(sealed), key))
+    assert b"".join(chunks) == data and len(chunks) == 6 and all(len(c) <= 1000 for c in chunks)
+    header, records = _records(sealed)
+    got = []
+    with pytest.raises(bc.SnapshotCryptoError, match="no final chunk"):
+        for chunk in bc.iter_open(io.BytesIO(header + b"".join(records[:-1])), key):
+            got.append(chunk)
+    assert b"".join(got) == data[:5000]   # a verified prefix, never the whole: a consumer keeps nothing of it
+    with pytest.raises(bc.SnapshotCryptoError, match="not a JARVIS sealed file"):
+        list(bc.iter_open(io.BytesIO(b"PK\x03\x04" + sealed[4:]), key))
