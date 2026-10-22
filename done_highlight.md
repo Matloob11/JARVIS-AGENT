@@ -2963,3 +2963,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** same as prior entry
 - **Commit:** `c4ca586` · **Deploy:** no
 - **Doosre agent ke liye:** —
+
+### ✅ 🚀 [claude] Frontend deploy (Cursor REQ-FIX-3 + C-60 UI) + pre-commit byte check · 2026-10-22 15:50 PKT
+- **Kya kiya:** Cursor ke c4ca586 (REQ-FIX-3 ke 11 nukte + C-60 UI ke 5) ka review: 34 findings confirm. Kuch medium regressions kam istemal hone wale raaston par the ('/swarm' Retry, socket drop par Retry, camera agent_offline, settings error, bell order), aur deployed e52ad45 naye bridge (C-60, routes) ke saath purana ho chuka tha, isliye deploy kiya aur baqi REQ-FIX-4 mein. c4ca586 ne done_highlight ki 7 purani lines ke cp1252 bytes U+FFFD bana diye the; hook unhein pakad nahi saka kyunke wo dono taraf decode(errors='replace') se milata tha: ab committed bytes milata hai (surrogateescape) aur test hai. Woh 7 lines theek karna hook ke append-only rule ki wajah se mumkin nahi; waisi hi rahengi (3 symbols).
+- **Files:** `scripts/coord/precommit.py`, `tests/unit/test_check_lane.py`, `plan.md` (REQ-FIX-4)
+- **Verify:** lane/hook tests 98 passed (naya test fix ke baghair fail); frontend deploy health gate green
+- **Commit:** `33d6569` · **Deploy:** frontend 33d6569 15:40 PKT 🚀 (RESULT=ok, other apps identical, backup /root/jarvis-backups/2026-10-22_1038Z-pre-deploy-33d6569)
+- **Doosre agent ke liye:** section 11 ki REQ-FIX-4 (15:50) agla REQ-DEPLOY se pehle.
