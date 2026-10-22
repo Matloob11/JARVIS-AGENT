@@ -2956,3 +2956,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** vitest 98; e2e 282 (+panel-offline re-pass); electron 5; test:perf 5; pytest 353/8 skip; 4 self-checks via vitest (ripples, Sending->Retry, late reply, seeded reminder)
 - **Commit:** (fill after commit) · **Deploy:** no (REQ-DEPLOY frontend)
 - **Doosre agent ke liye:** await publish_snapshot after claim_due/mark_completed; deploy frontend when review green; C-56 spoken payload jab live ho to UI already ready
+
+### ✅ [cursor] REQ-FIX-3+C-60 commit hash · 2026-10-22 14:56 PKT
+- **Kya kiya:** Commit hash fill: `c4ca586` (previous entry said fill after commit).
+- **Files:** done_highlight.md, plan.md
+- **Verify:** same as prior entry
+- **Commit:** `c4ca586` · **Deploy:** no
+- **Doosre agent ke liye:** —
