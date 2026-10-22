@@ -78,6 +78,12 @@ describe('fieldStatusLabel', () => {
   it('passes through error text', () => {
     expect(fieldStatusLabel('error', { error: 'Voice x nahi mili' })).toBe('Voice x nahi mili');
   });
+
+  it('shows queued copy when server pending is queued', () => {
+    expect(
+      fieldStatusLabel('pending', { serverPending: 'queued' }),
+    ).toBe('queued (agent aane par lagega)');
+  });
 });
 
 describe('truncateFieldError', () => {

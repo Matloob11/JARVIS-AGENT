@@ -42,6 +42,8 @@ sibling within 45 s (settle window re-checks exactly-once).
 
 ```bash
 $env:JARVIS_LIVE_SMOKE='1'; $env:JARVIS_LIVE_SMOKE_LOGOUT='1'; npm run test:e2e:live
+# or when E2E_STORAGE_STATE points at a disposable storageState file:
+$env:JARVIS_LIVE_SMOKE='1'; $env:E2E_STORAGE_STATE='path\to\storageState.json'; npm run test:e2e:live
 ```
 
 **Warning:** logout revokes the saved `storageState` session. Re-run

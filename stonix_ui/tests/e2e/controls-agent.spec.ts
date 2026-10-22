@@ -66,7 +66,7 @@ test('offline message queues then sends once after Wake and agent online', async
 
   await page.getByPlaceholder(/Message JARVIS|Message ANNA/i).fill(unique);
   await page.getByTitle('Send command').click();
-  await expect(page.getByText('Queued (agent offline)')).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByText('agent ka intezar')).toBeVisible({ timeout: 5_000 });
 
   const chatAfterOffline = (await uiCommands(page)).filter(
     cmd => cmd.type === 'chat' && cmd.payload?.text === unique,
@@ -80,17 +80,19 @@ test('offline message queues then sends once after Wake and agent online', async
 
   await page.request.post(`${MOCK}/__mock/agent`, { data: { online: true } });
 
+  // C-60: bridge keeps the queued chat; UI must not emit a second chat.
   await expect
     .poll(
       async () =>
         (await uiCommands(page)).filter(
           cmd => cmd.type === 'chat' && cmd.payload?.text === unique,
         ).length,
-      { timeout: 15_000 },
+      { timeout: 5_000 },
     )
-    .toBe(chatBefore + 2);
+    .toBe(chatBefore + 1);
 
   await expect(page.getByText(/Acknowledged|Mock agent response/i).first()).toBeVisible({
     timeout: 15_000,
   });
+  await expect(page.getByText('agent ka intezar')).toHaveCount(0);
 });

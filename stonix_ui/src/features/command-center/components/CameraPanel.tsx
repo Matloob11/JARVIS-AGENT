@@ -11,6 +11,12 @@ import {
   type CameraBadge,
   type CameraState,
 } from './cameraState';
+import {
+  nextCaptureScale,
+  nextJpegQuality,
+  shouldStopCameraShare,
+  type VisionFrameAck,
+} from './cameraVisionAck';
 
 interface CameraPanelProps {
   embedded?: boolean;
@@ -45,6 +51,8 @@ const CameraPanel = ({ embedded = false, onCameraStateChange }: CameraPanelProps
   const [shareWithAgent, setShareWithAgent] = useState(false);
   const [fallbackActive, setFallbackActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const jpegQualityRef = useRef(0.8);
+  const captureScaleRef = useRef(1);
 
   const liveKitReady = voice.roomState === 'connected' && !voice.voiceUnavailable;
 
@@ -122,24 +130,48 @@ const CameraPanel = ({ embedded = false, onCameraStateChange }: CameraPanelProps
 
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
+    let stopped = false;
 
     const emitFrame = () => {
+      if (stopped) return;
       const video = captureVideoRef.current ?? videoRef.current;
       if (!video || !context || video.videoWidth <= 0 || video.videoHeight <= 0) return;
-      canvas.width = 640;
-      canvas.height = 480;
+      const scale = captureScaleRef.current;
+      canvas.width = Math.max(160, Math.round(640 * scale));
+      canvas.height = Math.max(120, Math.round(480 * scale));
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const frameData = canvas.toDataURL('image/jpeg', 0.8);
+      const frameData = canvas.toDataURL('image/jpeg', jpegQualityRef.current);
       const socket = getSocket();
-      if (socket.connected) {
-        socket.emit('vision_frame', { frame: frameData, ts: Date.now() });
-      }
+      if (!socket.connected) return;
+      socket.emit(
+        'vision_frame',
+        { frame: frameData, ts: Date.now() },
+        (ack?: VisionFrameAck) => {
+          if (shouldStopCameraShare(ack)) {
+            stopped = true;
+            setShareWithAgent(false);
+            setError('Agent offline');
+            return;
+          }
+          const q = nextJpegQuality(jpegQualityRef.current, ack);
+          if (q != null) jpegQualityRef.current = q;
+          const s = nextCaptureScale(
+            captureScaleRef.current,
+            jpegQualityRef.current,
+            ack,
+          );
+          if (s != null) captureScaleRef.current = s;
+        },
+      );
     };
 
     emitFrame();
     const frameInterval = window.setInterval(emitFrame, 2000);
 
-    return () => window.clearInterval(frameInterval);
+    return () => {
+      stopped = true;
+      window.clearInterval(frameInterval);
+    };
   }, [fallbackActive, isCameraOn, liveKitReady, shareWithAgent]);
 
   const badge: CameraBadge = useMemo(() => {

@@ -181,13 +181,25 @@ const TasksPanel = ({
               >
                 <p>{note.description}</p>
                 <time>{formatNotifTime(note.ts)}</time>
-                <div className="tasks-reminder-history__tags">
-                  {note.spoken === true ? (
-                    <span className="task-pill task-pill--reminder">Spoken aloud</span>
-                  ) : (
-                    <span className="task-pill task-pill--muted">Screen only</span>
-                  )}
-                </div>
+                {typeof note.spoken === 'boolean' ? (
+                  <div className="tasks-reminder-history__tags">
+                    {note.spoken ? (
+                      <span
+                        className="task-pill task-pill--reminder"
+                        data-testid="reminder-spoken"
+                      >
+                        Spoken aloud
+                      </span>
+                    ) : (
+                      <span
+                        className="task-pill task-pill--muted"
+                        data-testid="reminder-screen-only"
+                      >
+                        Screen only
+                      </span>
+                    )}
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>

@@ -2468,19 +2468,19 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Commit:** `86ff8a1` Â· **Deploy:** PC worker restart 00:26 PKT ğŸ”
 - **Doosre agent ke liye:** â€”
 
-### ? [cursor] UI-H15 · Overview overlap + voice enroll + Agents/Settings polish · 2026-10-09 00:35 PKT
+### ? [cursor] UI-H15 ï¿½ Overview overlap + voice enroll + Agents/Settings polish ï¿½ 2026-10-09 00:35 PKT
 - **Kya kiya:** Phone/960 pe hero helper buttons pe nahi charhta; enroll Commit/Cancel readable; enroll success late progress se wipe nahi hota; Voice off pill, Agents wrap, Settings tabs scroll, location time sane.
 - **Files:** stonix_ui/src/assets/styles/neon/overview.css, dialogs.css, shell.css, settings.css, agents.css, base.css; HeroCard.tsx, VoiceEnrollDialog.tsx, VoiceWakeCard.tsx, LaptopCard.tsx, StatusShape.tsx, persona.ts, time.ts; tests/mock-bridge/server.mjs; tests/e2e/voice-settings.spec.ts; docs/UI_HARDENING_PLAN.md
 - **Verify:** product overview layout 7/7 pass (incl 960); voice-settings + voiceid enroll success pass
-- **Commit:** (pending) · **Deploy:** no (REQ-DEPLOY in §11)
+- **Commit:** (pending) ï¿½ **Deploy:** no (REQ-DEPLOY in ï¿½11)
 - **Doosre agent ke liye:** REQ-DEPLOY frontend when free
 
-### ? [cursor] UI-H15 · commit hash · 2026-10-09 00:33 PKT
+### ? [cursor] UI-H15 ï¿½ commit hash ï¿½ 2026-10-09 00:33 PKT
 - **Kya kiya:** previous UI-H15 entry ka commit 5b27c0b
-- **Files:** —
-- **Verify:** —
-- **Commit:** 5b27c0b · **Deploy:** no
-- **Doosre agent ke liye:** —
+- **Files:** ï¿½
+- **Verify:** ï¿½
+- **Commit:** 5b27c0b ï¿½ **Deploy:** no
+- **Doosre agent ke liye:** ï¿½
 
 ### âœ… [claude] C-126 (files) Â· Agent image and vps-brain compose services written, nothing built yet Â· 2026-10-09 12:00 PKT
 - **Kya kiya:** VPS brain ke liye agent image (Dockerfile.agent: pinned base, CPU torch, models baked aur uid 10001 ke, healthcheck env -i, media wrappers) aur compose services agent/agent-svc 'vps-brain' profile mein (bina naam ke kabhi start nahi hote, init false taake secrets /proc/1/environ mein na rahein, koi CPU/RAM limit nahi). agent_ctl ka brain switch ab bridge ko akela recreate karta hai, chalte container ke GIT_SHA ke saath. rollback.sh --env purane backup par live JARVIS_BRAIN rakhta hai; deploy.sh --gate-only compose config fail par fail hota hai. Pre-commit ab koi bhi *.env aur .env.agent block/scan karta hai.
@@ -2949,3 +2949,10 @@ Plan aur tasks `plan.md` me hain. Nayi entry hamesha file ke **aakhir** me jati 
 - **Verify:** full suite 6317 passed; VPS par: naye tools se ui-bridge deploy (RESULT=ok, other apps identical), backup key PC par bani (public key .env.agent mein, push_agent_env --check equal), backup ne agent data seal kiya (recipient 6621bdcc) aur PC ne restore_agent_data.py --dry-run se khola (CHECK=ok), rollback dry run (VERDICT proceed)
 - **Commit:** `e7df144` Â· **Deploy:** ui-bridge e7df144 13:13 PKT ğŸš€ (backup /root/jarvis-backups/2026-10-22_0813Z-pre-deploy-e7df144); agent image dobara bani (e7df144, IMPORT_OK, MODELS_OK), jarvis-agent aur jarvis-agent-svc containers sirf create (start nahi) taake image bahar ke prune se na mite
 - **Doosre agent ke liye:** owner ke liye: backup ki private key sirf is laptop ke Windows user ke DPAPI mein hai; `scripts/ops/backup_key.py export <USB par nayi file>` se ek offline copy rakh lein, warna Windows profile kharab hone par sealed backups nahi khulenge.
+
+### âœ… [cursor] REQ-FIX-3 + C-60 Â· Saaf frontend deploy ship Â· 2026-10-22 14:55 PKT
+- **Kya kiya:** REQ-FIX-3 (1)-(11): orb ripples animT; stopAwaiting/stoppedIdsRef; late reply clears Retry; seeded reminder present-then-ack; notification_ack callback+rate limit; async publish_snapshot; orbPhases wired; perf >=16 + canvas.width/CDP; memories <10; matrix fail-closed; X-60 DOING. C-60: queued agent ka intezar; bridge settings sync; mock offline/revision/vision; GET /settings; camera ack. C-56 spoken UI ready (Claude line abhi nahi).
+- **Files:** stonix_ui (chat/settings/tasks/notifications/orb/camera/memory/contracts), tests/e2e, mock-bridge, tests/live, jarvis_task_manager.py, test_task_manager_publish_snapshot.py, plan.md
+- **Verify:** vitest 98; e2e 282 (+panel-offline re-pass); electron 5; test:perf 5; pytest 353/8 skip; 4 self-checks via vitest (ripples, Sending->Retry, late reply, seeded reminder)
+- **Commit:** (fill after commit) Â· **Deploy:** no (REQ-DEPLOY frontend)
+- **Doosre agent ke liye:** await publish_snapshot after claim_due/mark_completed; deploy frontend when review green; C-56 spoken payload jab live ho to UI already ready

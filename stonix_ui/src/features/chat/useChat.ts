@@ -14,11 +14,13 @@ const MAX_MESSAGES = 300;
 const DELIVERY_TIMEOUT_MS = 20_000;
 const REPLY_WAIT_MS = 60_000;
 const REPLY_TIMEOUT_HINT = 'Jawab nahi aaya — Retry';
+const QUEUED_HINT = 'agent ka intezar';
 const CAPTION_CLEAR_AFTER_FINAL_MS = 10_000;
 
 type UiCommandAck = {
   status: 'sent' | 'queued' | 'agent_offline' | 'no_agent' | 'rejected';
   reason?: string;
+  field?: string;
 };
 
 function rawToChatMessage(raw: unknown, existing?: ChatMessage): ChatMessage {
@@ -56,6 +58,25 @@ function trimMessages(map: Map<string, ChatMessage>): ChatMessage[] {
   return sortMessages([...map.values()]);
 }
 
+function isReplyTimeoutRow(row: ChatMessage | undefined): boolean {
+  if (!row || row.role !== 'user' || row.status !== 'failed') return false;
+  return (
+    row.statusHint === REPLY_TIMEOUT_HINT ||
+    Boolean(row.statusHint?.startsWith('Jawab nahi aaya'))
+  );
+}
+
+/** Non-user reply (not typed_no_reply) that resolves a REPLY_TIMEOUT user row. */
+export function shouldClearReplyTimeout(
+  incoming: { role: string; turn_id?: string; kind?: string },
+  userRow: ChatMessage | undefined,
+): boolean {
+  if (incoming.role === 'user') return false;
+  if (incoming.kind === 'typed_no_reply') return false;
+  if (!incoming.turn_id) return false;
+  return isReplyTimeoutRow(userRow) && userRow?.id === incoming.turn_id;
+}
+
 export function useChat() {
   const mapRef = useRef(new Map<string, ChatMessage>());
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -69,12 +90,12 @@ export function useChat() {
   const pendingDeliveryRef = useRef(new Map<string, number>());
   const awaitingReplyRef = useRef(new Set<string>());
   const replyTimersRef = useRef(new Map<string, number>());
+  /** Stop: pending-ack ids must not armAwaiting when 'sent' finally arrives. */
+  const stoppedIdsRef = useRef(new Set<string>());
   const [awaitingReply, setAwaitingReply] = useState(false);
   const resendWhenOnlineRef = useRef(new Set<string>());
   const captionTimersRef = useRef(new Map<'user' | 'assistant', number>());
   const agentOnlineRef = useRef(true);
-  /** Stop pressed: later 'sent' ack / echo marks delivered but must not armAwaiting. */
-  const stoppedRef = useRef(false);
   const voice = useLiveKit();
   const { persona } = useSettings();
   const personaRef = useRef(persona);
@@ -105,8 +126,8 @@ export function useChat() {
     [syncAwaitingFlag],
   );
 
+  /** init_state / refetch: only drop awaiting-reply state — leave pending Sending alone. */
   const clearAllAwaiting = useCallback(() => {
-    stoppedRef.current = true;
     for (const id of awaitingReplyRef.current) {
       const row = mapRef.current.get(id);
       if (row?.statusHint && row.status !== 'failed') {
@@ -117,26 +138,34 @@ export function useChat() {
     replyTimersRef.current.clear();
     awaitingReplyRef.current.clear();
     setAwaitingReply(false);
-    // Rows still waiting for ack: clear timers; mark delivered without arming reply wait.
-    for (const [id, timer] of pendingDeliveryRef.current) {
-      window.clearTimeout(timer);
+    syncFromMap();
+  }, [syncFromMap]);
+
+  /**
+   * Stop speaking: clear awaiting replies; remember pending-ack ids so a late
+   * 'sent' marks delivered but does not armAwaiting. Do not rewrite row status.
+   */
+  const stopAwaiting = useCallback(() => {
+    for (const id of pendingDeliveryRef.current.keys()) {
+      stoppedIdsRef.current.add(id);
+    }
+    for (const id of awaitingReplyRef.current) {
       const row = mapRef.current.get(id);
-      if (row && row.status !== 'failed') {
-        mapRef.current.set(id, {
-          ...row,
-          status: 'delivered',
-          statusHint: undefined,
-        });
+      if (row?.statusHint && row.status !== 'failed') {
+        mapRef.current.set(id, { ...row, statusHint: undefined });
       }
     }
-    pendingDeliveryRef.current.clear();
+    for (const timer of replyTimersRef.current.values()) window.clearTimeout(timer);
+    replyTimersRef.current.clear();
+    awaitingReplyRef.current.clear();
+    setAwaitingReply(false);
     syncFromMap();
   }, [syncFromMap]);
 
   useEffect(() => {
-    registerAwaitingClearer(clearAllAwaiting);
+    registerAwaitingClearer(stopAwaiting);
     return () => registerAwaitingClearer(null);
-  }, [clearAllAwaiting]);
+  }, [stopAwaiting]);
 
   const armAwaiting = useCallback(
     (id: string) => {
@@ -192,6 +221,22 @@ export function useChat() {
     [clearCaptionTimer, clearLiveCaption],
   );
 
+  const resolveReplyTimeoutForTurn = useCallback(
+    (turnId: string, kind?: string) => {
+      if (kind === 'typed_no_reply') return;
+      const userRow = mapRef.current.get(turnId);
+      if (!shouldClearReplyTimeout({ role: 'assistant', turn_id: turnId, kind }, userRow)) {
+        return;
+      }
+      mapRef.current.set(turnId, {
+        ...userRow!,
+        status: 'delivered',
+        statusHint: undefined,
+      });
+    },
+    [],
+  );
+
   const upsertRaw = useCallback(
     (raw: unknown) => {
       const n = normalizeMessage(raw);
@@ -211,6 +256,20 @@ export function useChat() {
         };
       }
 
+      // Queued row: agent echo (same id) starts the 60 s reply wait (C-60).
+      if (
+        next.role === 'user' &&
+        existing?.status === 'queued' &&
+        existing.statusHint === QUEUED_HINT
+      ) {
+        next = {
+          ...next,
+          status: 'delivered',
+          statusHint: replyStatusHint(personaRef.current),
+        };
+        if (!stoppedIdsRef.current.has(next.id)) armAwaiting(next.id);
+      }
+
       if (next.role === 'user' && pendingDeliveryRef.current.has(next.id)) {
         window.clearTimeout(pendingDeliveryRef.current.get(next.id));
         pendingDeliveryRef.current.delete(next.id);
@@ -219,11 +278,16 @@ export function useChat() {
           status: 'delivered',
           statusHint: replyStatusHint(personaRef.current),
         };
-        if (!stoppedRef.current) armAwaiting(next.id);
+        // Echo path: only arm if not Stop-marked (delete happens on ack / reject / delivery timeout).
+        if (!stoppedIdsRef.current.has(next.id)) armAwaiting(next.id);
       }
 
       if (next.role !== 'user' && next.turn_id && awaitingReplyRef.current.has(next.turn_id)) {
         clearAwaiting(next.turn_id);
+      }
+
+      if (next.role !== 'user' && next.turn_id) {
+        resolveReplyTimeoutForTurn(next.turn_id, next.kind);
       }
 
       mapRef.current.set(next.id, { ...existing, ...next, text: next.text || existing?.text || '' });
@@ -232,7 +296,7 @@ export function useChat() {
       }
       syncFromMap();
     },
-    [armAwaiting, clearAwaiting, clearLiveCaption, syncFromMap],
+    [armAwaiting, clearAwaiting, clearLiveCaption, resolveReplyTimeoutForTurn, syncFromMap],
   );
 
   const mergeHistory = useCallback(
@@ -241,15 +305,18 @@ export function useChat() {
         const n = normalizeMessage(row);
         if (!n.id) continue;
         const existing = mapRef.current.get(n.id);
-        if (!existing) {
-          mapRef.current.set(n.id, rawToChatMessage(row));
-        } else {
-          mapRef.current.set(n.id, rawToChatMessage(row, existing));
+        const next = rawToChatMessage(row, existing);
+        mapRef.current.set(n.id, existing ? { ...existing, ...next } : next);
+        if (next.role !== 'user' && next.turn_id) {
+          resolveReplyTimeoutForTurn(next.turn_id, next.kind);
+          if (awaitingReplyRef.current.has(next.turn_id) && next.kind !== 'typed_no_reply') {
+            clearAwaiting(next.turn_id);
+          }
         }
       }
       syncFromMap();
     },
-    [syncFromMap],
+    [clearAwaiting, resolveReplyTimeoutForTurn, syncFromMap],
   );
 
   const fetchPage = useCallback(
@@ -266,13 +333,8 @@ export function useChat() {
         next_cursor?: string | null;
       };
       mergeHistory(body.messages ?? []);
-      if (!cursor) {
-        setHasMore(Boolean(body.has_more));
-        setNextCursor(body.next_cursor ?? null);
-      } else {
-        setHasMore(Boolean(body.has_more));
-        setNextCursor(body.next_cursor ?? null);
-      }
+      setHasMore(Boolean(body.has_more));
+      setNextCursor(body.next_cursor ?? null);
     },
     [mergeHistory],
   );
@@ -303,12 +365,13 @@ export function useChat() {
       if (caps.user?.final) scheduleCaptionClear('user');
       if (caps.assistant?.final) scheduleCaptionClear('assistant');
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- stable voice hook slices; full `voice` retriggers every render
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stable voice hook slices
   }, [voice.roomState, voice.identity, voice.getRoom, scheduleCaptionClear]);
 
   const markFailed = useCallback(
     (id: string, hint: string) => {
       clearAwaiting(id);
+      stoppedIdsRef.current.delete(id);
       const row = mapRef.current.get(id);
       if (!row) return;
       mapRef.current.set(id, { ...row, status: 'failed', statusHint: hint });
@@ -334,6 +397,7 @@ export function useChat() {
       const timer = window.setTimeout(() => {
         if (pendingDeliveryRef.current.has(id)) {
           pendingDeliveryRef.current.delete(id);
+          stoppedIdsRef.current.delete(id);
           markFailed(id, 'Not delivered — Retry');
         }
       }, DELIVERY_TIMEOUT_MS);
@@ -354,7 +418,8 @@ export function useChat() {
               status: 'delivered',
               statusHint: 'Delivered ✓',
             });
-            if (!stoppedRef.current) armAwaiting(id);
+            // Delete from stopped set; only arm if it was not Stop-marked.
+            if (!stoppedIdsRef.current.delete(id)) armAwaiting(id);
             syncFromMap();
             return;
           }
@@ -362,10 +427,12 @@ export function useChat() {
           if (ack?.status === 'queued') {
             pendingDeliveryRef.current.delete(id);
             window.clearTimeout(timer);
+            stoppedIdsRef.current.delete(id);
+            // C-60: bridge holds ≤10 min — show wait, do not fail / do not arm 60 s yet.
             mapRef.current.set(id, {
               ...row,
               status: 'queued',
-              statusHint: 'Queued (agent offline)',
+              statusHint: QUEUED_HINT,
             });
             syncFromMap();
             return;
@@ -374,11 +441,12 @@ export function useChat() {
           if (ack?.status === 'agent_offline' || ack?.status === 'no_agent') {
             pendingDeliveryRef.current.delete(id);
             window.clearTimeout(timer);
+            stoppedIdsRef.current.delete(id);
             resendWhenOnlineRef.current.add(id);
             mapRef.current.set(id, {
               ...row,
-              status: 'queued',
-              statusHint: 'Queued (agent offline)',
+              status: 'failed',
+              statusHint: 'Not delivered — Retry',
             });
             syncFromMap();
             return;
@@ -387,11 +455,18 @@ export function useChat() {
           if (ack?.status === 'rejected') {
             pendingDeliveryRef.current.delete(id);
             window.clearTimeout(timer);
+            stoppedIdsRef.current.delete(id);
             resendWhenOnlineRef.current.delete(id);
+            const hint =
+              ack.reason === 'too_large'
+                ? 'Failed — too_large'
+                : ack.reason
+                  ? `Failed — ${ack.reason}`
+                  : 'Not delivered — Retry';
             mapRef.current.set(id, {
               ...row,
               status: 'failed',
-              statusHint: ack.reason ? `Failed — ${ack.reason}` : 'Not delivered — Retry',
+              statusHint: hint,
             });
             syncFromMap();
           }
@@ -405,7 +480,7 @@ export function useChat() {
     if (!agentOnlineRef.current) return;
     for (const id of [...resendWhenOnlineRef.current]) {
       const row = mapRef.current.get(id);
-      if (!row || row.status !== 'queued') {
+      if (!row || (row.status !== 'queued' && row.status !== 'failed')) {
         resendWhenOnlineRef.current.delete(id);
         continue;
       }
@@ -428,7 +503,6 @@ export function useChat() {
     (text: string) => {
       const trimmed = text.trim();
       if (!trimmed) return;
-      stoppedRef.current = false;
       sendInternal(crypto.randomUUID(), trimmed);
     },
     [sendInternal],
@@ -438,7 +512,6 @@ export function useChat() {
     (id: string) => {
       const row = mapRef.current.get(id);
       if (!row || row.role !== 'user') return;
-      stoppedRef.current = false;
       // K-59 dedupe: reply-timeout retries need a fresh id; delivery failures keep the same id.
       if (row.statusHint === REPLY_TIMEOUT_HINT || row.statusHint?.startsWith('Jawab nahi aaya')) {
         mapRef.current.delete(id);
@@ -462,6 +535,7 @@ export function useChat() {
     clearAllAwaiting();
     pendingDeliveryRef.current.forEach(t => window.clearTimeout(t));
     pendingDeliveryRef.current.clear();
+    stoppedIdsRef.current.clear();
     resendWhenOnlineRef.current.clear();
     await fetchPage();
   }, [clearAllAwaiting, fetchPage]);
@@ -496,3 +570,4 @@ export function useChat() {
 }
 
 export type { ChatMessage };
+export { REPLY_TIMEOUT_HINT, QUEUED_HINT };

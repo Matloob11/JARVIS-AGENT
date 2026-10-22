@@ -48,6 +48,9 @@ type FastCache = {
   back: Bitmap;
 };
 
+/** Integrated animation phases (REQ-FIX-3): advance with dt in the renderer. */
+export type DrawPhases = { spin: number; ring: number; swirl: number };
+
 export type DrawEnv = {
   phone: boolean;
   sphereCache: { cv: HTMLCanvasElement; S: number; k: number } | null;
@@ -57,6 +60,8 @@ export type DrawEnv = {
   fastCache: FastCache | null;
   fastKey: string;
   rimGrad: CanvasGradient | null;
+  /** When set, swirl/spin use these instead of wall-derived t*rate (still = frozen, no wobble). */
+  phases?: DrawPhases | null;
 };
 
 const OCX = 260.6;
@@ -261,7 +266,13 @@ export function drawOrbExact(ctx: CanvasRenderingContext2D, k: number, t: number
   const swz = swirlCache.S / swirlCache.k;
   ctx.save();
   const swirlSpeed = mode === 'thinking' ? .6 : 1;
-  ctx.rotate(still || !live && mode !== 'idle' && mode !== 'mic-off' ? 0 : Math.sin(t * .11) * .05 + t * (L * .02 + (mode === 'thinking' ? .05 * swirlSpeed : 0)));
+  // Phases: still = frozen swirl (no sin wobble); animated adds light wobble on top.
+  const swirlAngle = env.phases
+    ? (still ? env.phases.swirl : Math.sin(t * .11) * .05 + env.phases.swirl)
+    : (still || (!live && mode !== 'idle' && mode !== 'mic-off')
+      ? 0
+      : Math.sin(t * .11) * .05 + t * (L * .02 + (mode === 'thinking' ? .05 * swirlSpeed : 0)));
+  ctx.rotate(swirlAngle);
   const swA = dim * Math.min(1.4, .85 + .5 * L);
   if (OP.swglow > .02) { ctx.filter = `blur(${1.6 * k}px)`; ctx.globalAlpha = Math.min(1, OP.swglow * swA); ctx.drawImage(swirlCache.cv, -swz / 2, -swz / 2, swz, swz); ctx.filter = 'none'; }
   ctx.globalAlpha = Math.min(1, swA);
@@ -351,8 +362,9 @@ export function drawOrbExact(ctx: CanvasRenderingContext2D, k: number, t: number
 
 
 /* ---------------------------------------------------------------- the orb, fast path (every animated frame)
-   Budget (carried over from the earlier spec): <= 1.5 ms of script per frame, breathing <= 16 draws/s, >= 50 fps at 4x CPU
-   throttling, DPR capped at 2 (1.5 on phones), no frames while the orb is off-screen or the tab is hidden.
+   Budget: orb+wave paint (drawMs) ≤1.5 ms/frame; breathing ≤16 draws/s; unthrottled speaking ≥58 fps;
+   CDP 4× CPU interim liveness floor ≥16 fps at real DPR2 (product target ≥50; full-page trace follow-up).
+   DPR capped at 2 (1.5 on phones), no frames while the orb is off-screen or the tab is hidden.
    How: every layer that does not change between frames is rendered once per palette / grey look / pixel size into an
    offscreen bitmap (glow + light lobes, particle halo, each orbit ring, glass + inner ring, swirl + its blurred copy,
    streak, rim line + rim glow). A frame is then ~20 drawImage calls with transforms and alphas: no gradient is created
@@ -501,7 +513,8 @@ function drawOrbFast(ctx: CanvasRenderingContext2D, k: number, t: number, L: num
   if (L > .3 && mode === 'speaking') { const j = (L - .3) * .03 * R * (persona === 'anna' ? .6 : 1); jx = (Math.random() - .5) * 2 * j; jy = (Math.random() - .5) * 2 * j; }
   ctx.save();
   ctx.translate(OCX + jx, OCY + jy);
-  const spin = live ? t * .012 : 0, spinR = t * (mode === 'speaking' || mode === 'thinking' ? .5 : live ? .03 : 0);
+  const spin = env.phases ? env.phases.spin : (live ? t * .012 : 0);
+  const spinR = env.phases ? env.phases.ring : t * (mode === 'speaking' || mode === 'thinking' ? .5 : live ? .03 : 0);
   if (!live && L < .01) {
     blit(ctx, C.back, dim);                                   // breathing: the whole back layer in one draw
   } else {
@@ -521,7 +534,9 @@ function drawOrbFast(ctx: CanvasRenderingContext2D, k: number, t: number, L: num
   ctx.globalAlpha = dim;
   blit(ctx, C.glass, dim, pulse);
   ctx.save(); ctx.scale(pulse, pulse); ctx.beginPath(); ctx.arc(0, 0, R - 1.5, 0, TAU); ctx.clip();
-  const sa = (mode === 'idle' || mode === 'mic-off' || live) ? Math.sin(t * .11) * .05 + t * (L * .02 + (mode === 'thinking' ? .03 : 0)) : 0;
+  const sa = env.phases
+    ? env.phases.swirl + ((mode === 'idle' || mode === 'mic-off' || live) ? Math.sin(t * .11) * .05 : 0)
+    : ((mode === 'idle' || mode === 'mic-off' || live) ? Math.sin(t * .11) * .05 + t * (L * .02 + (mode === 'thinking' ? .03 : 0)) : 0);
   const swA = dim * Math.min(1.4, .85 + .5 * L);
   // Same swirl layers on fast + exact paths (speaking must keep the blur copy — no flicker on pause).
   if (OP.swglow > .02) blit(ctx, C.swirlBlur, Math.min(1, OP.swglow * swA), 1, sa, 'lighter');

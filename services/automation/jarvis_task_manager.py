@@ -427,9 +427,9 @@ class TaskManager:
             asyncio.run_coroutine_threadsafe(_post_task_sync(snapshot), loop)
 
     async def publish_snapshot(self) -> None:
-        """Public async publish for the agent loop (same payload as _publish)."""
+        """Async publish for agent-svc / agent_core: read SQLite off the event loop."""
         try:
-            snapshot = self.list_pending_tasks()
+            snapshot = await asyncio.to_thread(self.list_pending_tasks)
         except Exception:  # pylint: disable=broad-exception-caught
             snapshot = []
         await _post_task_sync(snapshot)

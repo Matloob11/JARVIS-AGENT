@@ -14,6 +14,7 @@ import {
   normalizeSettings,
   omitSettingsMetaKeys,
 } from '@/shared/contracts/events';
+import { bridgeUrl } from '@/shared/config/runtime';
 import { getSocket } from '@/shared/realtime/socket';
 import { useSocketEvent } from '@/shared/realtime/subscriptions';
 import {
@@ -30,6 +31,7 @@ import {
   voiceFromSettingsSync,
   type FieldApplyState,
 } from '@/features/settings/settingsApplyState';
+import { shouldApplySettingsRevision } from '@/features/settings/settingsRevision';
 
 export type Persona = 'jarvis' | 'anna';
 
@@ -359,6 +361,8 @@ interface SettingsContextValue {
   fieldError: (field: string) => string | undefined;
   /** Raw settings_sync.applied value for the field (applied|pending_restart|unsupported). */
   fieldAppliedRaw: (field: string) => string | undefined;
+  /** Bridge pending map value for the field (e.g. 'queued'). */
+  fieldServerPending: (field: string) => unknown;
   isFieldPending: (field: string) => boolean;
   isPersonaPending: boolean;
   isWakeWordPending: boolean;
@@ -377,6 +381,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [serverPending, setServerPending] = useState<Record<string, unknown>>({});
   const [restartRequired, setRestartRequired] = useState<string[]>([]);
   const [savedFields, setSavedFields] = useState<string[]>([]);
+  const revisionRef = useRef<{ revision?: number; revision_epoch?: number }>({});
   const [updatedTs, setUpdatedTs] = useState(0);
   const [availableVoices, setAvailableVoices] = useState<readonly string[]>(GEMINI_VOICES);
   const [enforcedRaw, setEnforcedRaw] = useState<unknown>(undefined);
@@ -432,6 +437,28 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   const applySettingsObject = useCallback(
     (settings: Record<string, unknown>, syncMeta?: ReturnType<typeof normalizeSettings>) => {
+      if (syncMeta) {
+        if (
+          !shouldApplySettingsRevision(
+            {
+              revision: syncMeta.revision,
+              revision_epoch: syncMeta.revision_epoch,
+            },
+            revisionRef.current,
+          )
+        ) {
+          return;
+        }
+        if (
+          typeof syncMeta.revision === 'number' &&
+          typeof syncMeta.revision_epoch === 'number'
+        ) {
+          revisionRef.current = {
+            revision: syncMeta.revision,
+            revision_epoch: syncMeta.revision_epoch,
+          };
+        }
+      }
       // settings_sync is source of truth (K-61): do not invent voice/persona locally.
       const persona =
         'persona' in settings
@@ -470,6 +497,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
       if (syncMeta) {
         recordSettingsSyncKeys(syncMeta, seenSyncKeysRef.current);
+        const fromBridge = syncMeta.source === 'bridge';
         if (Array.isArray(syncMeta.guarded_tools)) {
           setGuardedTools(syncMeta.guarded_tools.map(String).filter(Boolean));
         } else if (syncMeta.guarded_tools == null && syncMeta.settings?.guarded_tools != null) {
@@ -479,26 +507,57 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         if (syncMeta.available_voices != null) {
           setAvailableVoices(resolveVoiceList(syncMeta.available_voices));
         }
-        setEnforcedRaw(syncMeta.enforced);
+        if (!fromBridge) setEnforcedRaw(syncMeta.enforced);
 
-        const applied = syncMeta.applied;
-        if (applied && typeof applied === 'object') {
-          setAppliedMap(applied as Record<string, string>);
-          setSyncAppliedAll(false);
-        } else if (applied === true) {
-          setAppliedMap({});
-          setSyncAppliedAll(true);
+        // C-60: bridge sync must not wipe agent applied/errors; merge refusal errors only.
+        if (!fromBridge) {
+          const applied = syncMeta.applied;
+          if (applied && typeof applied === 'object') {
+            setAppliedMap(applied as Record<string, string>);
+            setSyncAppliedAll(false);
+          } else if (applied === true) {
+            setAppliedMap({});
+            setSyncAppliedAll(true);
+          }
+          const errors = syncMeta.errors;
+          setErrorsMap(
+            errors && typeof errors === 'object' ? (errors as Record<string, string>) : {},
+          );
+        } else if (syncMeta.errors && typeof syncMeta.errors === 'object') {
+          setErrorsMap(prev => ({
+            ...prev,
+            ...(syncMeta.errors as Record<string, string>),
+          }));
         }
 
-        const errors = syncMeta.errors;
-        setErrorsMap(errors && typeof errors === 'object' ? (errors as Record<string, string>) : {});
-
         const pending = syncMeta.pending;
-        setServerPending(pending && typeof pending === 'object' ? (pending as Record<string, unknown>) : {});
+        if (pending && typeof pending === 'object') {
+          const pendingObj = pending as Record<string, unknown>;
+          setServerPending(prev => (fromBridge ? { ...prev, ...pendingObj } : pendingObj));
+          // Stop 5 s local revert for fields the bridge queued.
+          for (const key of Object.keys(pendingObj)) {
+            const field =
+              fieldFromPayloadKey(key) ??
+              automationFieldFromPayloadKey(key) ??
+              key;
+            clearRevertTimer(field);
+            setLocalPending(prev => {
+              if (!prev.has(field) && !prev.has(key)) return prev;
+              const next = new Set(prev);
+              next.delete(field);
+              next.delete(key);
+              return next;
+            });
+          }
+        } else if (!fromBridge) {
+          setServerPending({});
+        }
 
-        const restart =
-          syncMeta.restart_required ?? syncMeta.pending_restart;
-        setRestartRequired(Array.isArray(restart) ? restart.map(String) : []);
+        if (!fromBridge) {
+          const restart =
+            syncMeta.restart_required ?? syncMeta.pending_restart;
+          setRestartRequired(Array.isArray(restart) ? restart.map(String) : []);
+        }
 
         if (Array.isArray(syncMeta.savedFields)) {
           setSavedFields(syncMeta.savedFields);
@@ -508,7 +567,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [],
+    [clearRevertTimer],
   );
 
   const resolvePendingFields = useCallback(
@@ -552,9 +611,33 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     [clearRevertTimer],
   );
 
+  const fetchSettingsHttp = useCallback(async () => {
+    try {
+      const res = await fetch(bridgeUrl('/settings'), { credentials: 'include' });
+      if (!res.ok) return;
+      const body = (await res.json()) as Record<string, unknown>;
+      const normalized = normalizeSettings(body);
+      applySettingsObject(normalized.settings, normalized);
+    } catch {
+      // Optional fallback; socket sync remains authoritative when present.
+    }
+  }, [applySettingsObject]);
+
   useSocketEvent('init_state', (state: unknown) => {
     if (!state || typeof state !== 'object') return;
-    applySettingsObject(extractSettingsBlock(state as Record<string, unknown>));
+    const row = state as Record<string, unknown>;
+    const degraded = Array.isArray(row.degraded) ? row.degraded.map(String) : [];
+    const missingSettings = !('settings' in row) || row.settings == null;
+    if (missingSettings || degraded.includes('store')) {
+      void fetchSettingsHttp();
+      if (missingSettings) return;
+    }
+    const normalized = normalizeSettings(
+      row.settings && typeof row.settings === 'object'
+        ? { settings: row.settings, ...(typeof row.revision === 'number' ? { revision: row.revision } : {}), ...(typeof row.revision_epoch === 'number' ? { revision_epoch: row.revision_epoch } : {}) }
+        : extractSettingsBlock(row),
+    );
+    applySettingsObject(normalized.settings, normalized);
   });
 
   useSocketEvent('settings_sync', (payload: unknown) => {
@@ -808,6 +891,14 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     [errorsMap],
   );
 
+  const fieldServerPending = useCallback(
+    (field: string) => {
+      const payloadKey = payloadKeyForField(field);
+      return serverPending[payloadKey] ?? serverPending[field];
+    },
+    [serverPending],
+  );
+
   const isFieldPending = useCallback(
     (field: string) => fieldStatus(field) === 'pending',
     [fieldStatus],
@@ -879,6 +970,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       fieldStatus,
       fieldError,
       fieldAppliedRaw,
+      fieldServerPending,
       isFieldPending,
       isPersonaPending: isFieldPending('persona'),
       isWakeWordPending: isFieldPending('wakeWord'),
@@ -903,6 +995,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       fieldStatus,
       fieldError,
       fieldAppliedRaw,
+      fieldServerPending,
       isFieldPending,
     ],
   );

@@ -72,14 +72,18 @@ function formatExpiry(expires_at: number): string {
 }
 
 function FieldStatusBadge({ field, label }: { field: string; label?: string }) {
-  const { fieldStatus, fieldError, fieldAppliedRaw } = useSettings();
+  const { fieldStatus, fieldError, fieldAppliedRaw, fieldServerPending } = useSettings();
   const [errorExpanded, setErrorExpanded] = useState(false);
   const status = fieldStatus(field);
   if (status === 'idle') return null;
 
   const appliedRaw = fieldAppliedRaw(field);
   const error = fieldError(field);
-  const baseText = fieldStatusLabel(status, { appliedRaw, error });
+  const baseText = fieldStatusLabel(status, {
+    appliedRaw,
+    error,
+    serverPending: fieldServerPending(field),
+  });
 
   let body: ReactNode = baseText;
   if (status === 'error' && error) {

@@ -15,7 +15,9 @@ const LIVE_DIR = dirname(fileURLToPath(import.meta.url));
 
 const LIVE = process.env.JARVIS_LIVE_SMOKE === '1';
 const LIVE_CHAT = process.env.JARVIS_LIVE_SMOKE_CHAT === '1';
-const LIVE_LOGOUT = process.env.JARVIS_LIVE_SMOKE_LOGOUT === '1';
+const LIVE_LOGOUT =
+  process.env.JARVIS_LIVE_SMOKE_LOGOUT === '1' ||
+  Boolean(process.env.E2E_STORAGE_STATE);
 const STORAGE =
   process.env.E2E_STORAGE_STATE ||
   resolve(LIVE_DIR, '.auth/storageState.json');
@@ -175,13 +177,33 @@ test.describe('X-60 live smoke (VPS)', () => {
   });
 
   test('chat history renders after hydration', async ({ page }) => {
+    let messagesGet = 0;
+    let initState = false;
+    page.on('response', res => {
+      if (res.url().includes('/vortex/messages') && res.request().method() === 'GET') {
+        messagesGet += 1;
+      }
+    });
+    page.on('websocket', ws => {
+      ws.on('framereceived', frame => {
+        const data = typeof frame.payload === 'string' ? frame.payload : '';
+        if (data.includes('init_state')) initState = true;
+      });
+    });
+
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId('app-ready')).toBeVisible({ timeout: 45_000 });
     await expect(
       page.getByTestId('chat-panel'),
       'FAIL: chat history — chat-panel missing',
     ).toBeVisible({ timeout: 30_000 });
-    // Wait past the first empty-state paint until history or empty settles.
+    // Wait for hydration (GET /messages or init_state), not the first empty paint.
+    await expect
+      .poll(async () => messagesGet > 0 || initState, {
+        timeout: 45_000,
+        message: 'FAIL: chat history — no GET /vortex/messages or init_state yet',
+      })
+      .toBe(true);
     await expect
       .poll(
         async () => {
@@ -190,7 +212,7 @@ test.describe('X-60 live smoke (VPS)', () => {
           return msgs > 0 || empty;
         },
         {
-          timeout: 45_000,
+          timeout: 30_000,
           message: 'FAIL: chat history — neither chat-msg rows nor chat-empty after hydration',
         },
       )
@@ -238,14 +260,14 @@ test.describe('X-60 live smoke (VPS)', () => {
   });
 
   test('3 mic toggles keep the same LiveKit identity (?debug=1)', async ({ page }) => {
-    const wsFrames: string[] = [];
+    let rtcCloses = 0;
     page.on('websocket', ws => {
-      ws.on('framesent', frame => {
-        const data = typeof frame.payload === 'string' ? frame.payload : '';
-        if (data.includes('ui_command') || data.includes('settings_update')) {
-          wsFrames.push(data);
-        }
-      });
+      const url = ws.url();
+      if (url.includes('/rtc')) {
+        ws.on('close', () => {
+          rtcCloses += 1;
+        });
+      }
     });
 
     await page.goto('/?debug=1', { waitUntil: 'domcontentloaded' });
@@ -271,6 +293,7 @@ test.describe('X-60 live smoke (VPS)', () => {
         (window as unknown as { __jarvisDebug?: { identity?: string } }).__jarvisDebug?.identity ??
         '',
     );
+    const closesBefore = rtcCloses;
 
     await page.getByTestId('chip-voice').click();
     const mic = page.getByTestId('topbar-mic-toggle');
@@ -295,17 +318,17 @@ test.describe('X-60 live smoke (VPS)', () => {
         '',
     );
     expect(after, 'FAIL: mic identity — identity changed after 3 toggles').toBe(before);
-    // Signalling should not thrash with settings_update on mic toggles.
+    // Churn = LiveKit /rtc reconnect (close), not settings_update.
     expect(
-      wsFrames.filter(f => f.includes('settings_update')),
-      'FAIL: mic toggles should not emit settings_update',
-    ).toHaveLength(0);
+      rtcCloses - closesBefore,
+      'FAIL: mic toggles must not reconnect LiveKit /rtc',
+    ).toBe(0);
   });
 
   test('logout returns to the login form (opt-in)', async ({ page }) => {
     test.skip(
       !LIVE_LOGOUT,
-      'SKIP: set JARVIS_LIVE_SMOKE_LOGOUT=1 (revokes storageState session — re-run live:auth after)',
+      'SKIP: set JARVIS_LIVE_SMOKE_LOGOUT=1 or E2E_STORAGE_STATE (revokes session — re-run live:auth after)',
     );
 
     await page.goto('/', { waitUntil: 'domcontentloaded' });

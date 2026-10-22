@@ -63,12 +63,12 @@ test('reload keeps conversation from bridge history', async ({ page }) => {
   await expect(page.getByText(/Acknowledged|Mock agent response/i).first()).toBeVisible({ timeout: 10_000 });
 });
 
-test('agent_offline ack queues user message for resend', async ({ page }) => {
+test('queued ack shows agent ka intezar (C-60)', async ({ page }) => {
   await page.request.post('http://127.0.0.1:5199/__mock/agent', { data: { online: false } });
   const input = page.getByPlaceholder(/Message JARVIS|Message ANNA/i);
   await input.fill('offline-check');
   await page.getByTitle('Send command').click();
-  await expect(page.getByText('Queued (agent offline)')).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByText('agent ka intezar')).toBeVisible({ timeout: 5_000 });
   await page.request.post('http://127.0.0.1:5199/__mock/agent', { data: { online: true } });
 });
 

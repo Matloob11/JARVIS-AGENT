@@ -148,8 +148,9 @@ export function useMemories(emitCommand: (type: string, payload?: unknown) => vo
       setRows([]);
       return;
     }
-    // Interim: a non-empty seed ≤ INIT_MEMORIES is the bridge's full set — replace, don't merge.
-    if (seeded.length <= INIT_MEMORIES) {
+    // Interim: a seed smaller than INIT_MEMORIES (10) is the bridge's full set — replace.
+    // Exactly 10 is only the last page of a larger store — merge.
+    if (seeded.length < INIT_MEMORIES) {
       setRows(dedupeMemoriesById(seeded));
     } else {
       setRows(prev => mergeSeed(prev, seeded));

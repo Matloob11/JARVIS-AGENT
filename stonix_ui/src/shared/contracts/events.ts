@@ -69,6 +69,10 @@ export interface NormalizedSettings {
   savedFields?: string[];
   /** Agent's last save epoch seconds (0 when none). */
   updated_ts?: number;
+  /** C-60: 'bridge' | 'agent' — bridge sync must not wipe applied/errors. */
+  source?: string;
+  revision?: number;
+  revision_epoch?: number;
   applied?: unknown;
   enforced?: unknown;
   available_voices?: unknown;
@@ -162,13 +166,32 @@ export function normalizeMessage(raw: unknown): NormalizedMessage {
 export function normalizeSettings(raw: unknown): NormalizedSettings {
   const data = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   if (data.settings && typeof data.settings === 'object') {
-    const stripped = stripSettingsMeta(data.settings as Record<string, unknown>);
+    const block = data.settings as Record<string, unknown>;
+    const revision =
+      typeof block.revision === 'number'
+        ? block.revision
+        : typeof data.revision === 'number'
+          ? data.revision
+          : undefined;
+    const revision_epoch =
+      typeof block.revision_epoch === 'number'
+        ? block.revision_epoch
+        : typeof data.revision_epoch === 'number'
+          ? data.revision_epoch
+          : undefined;
+    const stripped = stripSettingsMeta(block);
+    // revision / revision_epoch are view meta, not settings fields.
+    delete stripped.settings.revision;
+    delete stripped.settings.revision_epoch;
     return {
       ...data,
       settings: stripped.settings,
       savedFields: stripped.savedFields,
       updated_ts: stripped.updated_ts,
       applied: data.applied,
+      source: data.source != null ? String(data.source) : undefined,
+      revision,
+      revision_epoch,
     };
   }
   // Flat settings object
@@ -183,9 +206,14 @@ export function normalizeSettings(raw: unknown): NormalizedSettings {
     pending,
     pending_restart,
     restart_required,
+    source,
+    revision,
+    revision_epoch,
     ...rest
   } = data;
   const stripped = stripSettingsMeta(rest);
+  delete stripped.settings.revision;
+  delete stripped.settings.revision_epoch;
   return {
     settings: stripped.settings,
     savedFields: stripped.savedFields,
@@ -200,6 +228,9 @@ export function normalizeSettings(raw: unknown): NormalizedSettings {
     pending,
     pending_restart,
     restart_required,
+    source: source != null ? String(source) : undefined,
+    revision: typeof revision === 'number' ? revision : undefined,
+    revision_epoch: typeof revision_epoch === 'number' ? revision_epoch : undefined,
   };
 }
 

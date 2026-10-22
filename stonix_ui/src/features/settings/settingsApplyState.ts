@@ -42,9 +42,12 @@ export function resolveFieldApplyState(opts: {
 
 export function fieldStatusLabel(
   status: FieldApplyState,
-  opts?: { appliedRaw?: string; error?: string },
+  opts?: { appliedRaw?: string; error?: string; serverPending?: unknown },
 ): string {
   if (status === 'unsupported') return 'Saved · abhi active nahi';
+  if (status === 'pending' && opts?.serverPending === 'queued') {
+    return 'queued (agent aane par lagega)';
+  }
   if (status === 'pending' && opts?.appliedRaw === 'pending_restart') {
     return 'Saved · restart ke baad';
   }

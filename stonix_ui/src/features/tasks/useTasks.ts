@@ -42,11 +42,8 @@ export function normalizeTaskItem(raw: unknown): TaskItem | null {
   const description =
     String(data.description ?? data.text ?? '').trim() || '(no description)';
   const dueRaw = data.due_at ?? data.dueAt ?? data.scheduled_time;
-  // null/missing → no due (never coerce to Date.now() / "Due now").
   const due_at =
-    dueRaw == null || dueRaw === ''
-      ? null
-      : toEpochMs(dueRaw) ?? null;
+    dueRaw == null || dueRaw === '' ? null : toEpochMs(dueRaw) ?? null;
   const source = normalizeSource(data.source ?? data.kind);
   const kind = String(data.kind ?? source).toLowerCase();
   const status = data.status != null ? String(data.status) : undefined;
@@ -121,13 +118,33 @@ function maybeBrowserNotification(note: TaskNotification) {
   }
 }
 
+/**
+ * Present a notification once per page session (toast + browser + unread), then ack.
+ * Re-delivery of an already-shown id only re-acks — no second toast (REQ-FIX-3 (4)).
+ */
+export function presentNotificationOnce(
+  note: TaskNotification,
+  shownIds: Set<string>,
+  onFirstShow: (note: TaskNotification) => void,
+): 'shown' | 'suppressed' {
+  if (shownIds.has(note.id)) {
+    sendNotificationAck(note.id);
+    return 'suppressed';
+  }
+  shownIds.add(note.id);
+  onFirstShow(note);
+  showTaskToast(note);
+  maybeBrowserNotification(note);
+  sendNotificationAck(note.id);
+  return 'shown';
+}
+
 export function useTasks(emitCommand: (type: string, payload?: unknown) => void) {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [notifications, setNotifications] = useState<TaskNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  // C-125 B5: known / acked reminder ids must not re-toast or bump unread.
-  const knownNotifIdsRef = useRef(new Set<string>());
-  const seededPendingAckRef = useRef(new Set<string>());
+  /** Ids shown (toast/unread) or acked in this page session — suppress re-toast. */
+  const shownNotifIdsRef = useRef(new Set<string>());
 
   const applyTaskSync = useCallback((raw: unknown) => {
     const normalized = normalizeTasks(raw);
@@ -137,47 +154,38 @@ export function useTasks(emitCommand: (type: string, payload?: unknown) => void)
     setTasks(sortByDueAsc(list));
   }, []);
 
-  const applyNotification = useCallback((raw: unknown) => {
-    const note = normalizeTaskNotification(raw);
-    if (!note) return;
-    const known = knownNotifIdsRef.current.has(note.id);
-    if (known) {
-      // Re-delivery of same id: ack again, no toast / browser / unread.
-      sendNotificationAck(note.id);
-      return;
-    }
-    knownNotifIdsRef.current.add(note.id);
+  const onFirstShow = useCallback((note: TaskNotification) => {
     setNotifications(prev => prependNotification(prev, note));
     setUnreadCount(c => c + 1);
-    showTaskToast(note);
-    maybeBrowserNotification(note);
-    sendNotificationAck(note.id);
   }, []);
 
-  const seedFromInit = useCallback((state: Record<string, unknown>) => {
-    if (Array.isArray(state.tasks)) {
-      applyTaskSync({ tasks: state.tasks });
-    }
-    const seedNotes = state.notifications;
-    if (!Array.isArray(seedNotes) || seedNotes.length === 0) return;
-    const seeded = seedNotes
-      .map(raw => normalizeTaskNotification(raw))
-      .filter((row): row is TaskNotification => row != null)
-      .slice(0, MAX_NOTIFICATIONS);
-    if (seeded.length) {
-      for (const row of seeded) {
-        knownNotifIdsRef.current.add(row.id);
-        seededPendingAckRef.current.add(row.id);
+  const applyNotification = useCallback(
+    (raw: unknown) => {
+      const note = normalizeTaskNotification(raw);
+      if (!note) return;
+      presentNotificationOnce(note, shownNotifIdsRef.current, onFirstShow);
+    },
+    [onFirstShow],
+  );
+
+  const seedFromInit = useCallback(
+    (state: Record<string, unknown>) => {
+      if (Array.isArray(state.tasks)) {
+        applyTaskSync({ tasks: state.tasks });
       }
-      setNotifications(prev => {
-        const byId = new Map<string, TaskNotification>();
-        for (const row of [...seeded, ...prev]) {
-          if (!byId.has(row.id)) byId.set(row.id, row);
-        }
-        return [...byId.values()].slice(0, MAX_NOTIFICATIONS);
-      });
-    }
-  }, [applyTaskSync]);
+      const seedNotes = state.notifications;
+      if (!Array.isArray(seedNotes) || seedNotes.length === 0) return;
+      const seeded = seedNotes
+        .map(raw => normalizeTaskNotification(raw))
+        .filter((row): row is TaskNotification => row != null)
+        .slice(0, MAX_NOTIFICATIONS);
+      // Unacked bridge seeds: show once (toast + unread + ack), not silently mark known.
+      for (const row of seeded) {
+        presentNotificationOnce(row, shownNotifIdsRef.current, onFirstShow);
+      }
+    },
+    [applyTaskSync, onFirstShow],
+  );
 
   const cancelTask = useCallback(
     (id: string, source: TaskSource) => {
@@ -197,11 +205,6 @@ export function useTasks(emitCommand: (type: string, payload?: unknown) => void)
   const openTaskBell = useCallback(() => {
     if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
       void Notification.requestPermission();
-    }
-    // C-125 B5: ack seeded init_state.notifications when the bell (toast surface) opens.
-    for (const id of [...seededPendingAckRef.current]) {
-      sendNotificationAck(id);
-      seededPendingAckRef.current.delete(id);
     }
     clearUnread();
   }, [clearUnread]);

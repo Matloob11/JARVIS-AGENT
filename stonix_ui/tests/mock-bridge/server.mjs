@@ -23,6 +23,10 @@ const receivedUiCommands = [];
 let agentOnline = true;
 let agentPaused = false;
 let agentRestarting = false;
+/** @type {{ socket: import('socket.io').Socket, payload: unknown }[]} */
+const pendingOfflineChat = [];
+let settingsRevision = 1;
+const settingsRevisionEpoch = Math.floor(Date.now() / 1000);
 /** @type {string | null} */
 let pendingShutdownConfirmId = null;
 let suppressSettingsSync = false;
@@ -119,7 +123,11 @@ function buildSettingsSync(applied = {}, errors = {}) {
     String(values.turn_mode) !== runningTurnMode ? ['turn_mode'] : [];
   const gated = runningTurnMode === 'gated';
   return {
-    settings: values,
+    settings: {
+      ...values,
+      revision: settingsRevision,
+      revision_epoch: settingsRevisionEpoch,
+    },
     applied: { ...applied },
     errors: { ...errors },
     pending_restart: pending,
@@ -131,6 +139,7 @@ function buildSettingsSync(applied = {}, errors = {}) {
     available_voices: [...GEMINI_VOICES],
     available_languages: [...LANGUAGES],
     guarded_tools: loadFixture('settings_sync').guarded_tools || [],
+    source: 'agent',
     ts: Date.now() / 1000,
   };
 }
@@ -363,8 +372,14 @@ function buildInitState() {
   const city = typeof loc.city === 'string' && loc.city ? loc.city : 'Karachi';
   const lat = typeof loc.lat === 'number' ? loc.lat : 24.8607;
   const lng = typeof loc.lng === 'number' ? loc.lng : 67.0011;
+  const settings = {
+    ...(init.settings && typeof init.settings === 'object' ? init.settings : {}),
+    revision: settingsRevision,
+    revision_epoch: settingsRevisionEpoch,
+  };
   return {
     ...init,
+    settings,
     location: { ...loc, city, lat, lng, ts: now - 90 },
     map_focus: {
       ...(init.map_focus && typeof init.map_focus === 'object' ? init.map_focus : {
@@ -598,7 +613,45 @@ function handleUiCommand(socket, cmd, cb) {
     return;
   }
 
-  if (!agentOnline && type !== 'request_state' && type !== 'start') {
+  // C-60 offline semantics (K-10 parity with live bridge).
+  if (!agentOnline && type !== 'request_state') {
+    const queuedTypes = new Set([
+      'chat',
+      'settings_update',
+      'persona_change',
+      'wake_word_toggle',
+      'clear_memory',
+    ]);
+    const sentTypes = new Set(['start', 'desktop_stop', 'notification_ack']);
+    if (queuedTypes.has(type)) {
+      ackUi(socket, cb, 'queued');
+      if (type === 'settings_update') {
+        const pending = {};
+        for (const key of Object.keys(payload || {})) {
+          if (key === 'automation' && payload.automation && typeof payload.automation === 'object') {
+            for (const sub of Object.keys(payload.automation)) pending[sub] = 'queued';
+          } else {
+            pending[key] = 'queued';
+          }
+        }
+        socket.emit('settings_sync', {
+          settings: { ...(payload || {}), revision: 1, revision_epoch: Date.now() / 1000 },
+          source: 'bridge',
+          pending,
+          errors: {},
+          ts: Date.now() / 1000,
+        });
+      }
+      if (type === 'chat') {
+        // Hold in queue; scripted agent connect drains later via /__mock/agent.
+        pendingOfflineChat.push({ socket, payload });
+      }
+      return;
+    }
+    if (sentTypes.has(type)) {
+      ackUi(socket, cb, 'sent');
+      return;
+    }
     ackUi(socket, cb, 'agent_offline');
     return;
   }
@@ -823,6 +876,13 @@ async function handleMockControl(req, res, pathname, method) {
       in_room: agentOnline && !agentPaused,
     };
     emitToUi('agent_status', statusPayload);
+    // Drain queued chats in order when agent connects (C-60).
+    if (agentOnline && pendingOfflineChat.length) {
+      const queued = pendingOfflineChat.splice(0, pendingOfflineChat.length);
+      for (const item of queued) {
+        handleChat(item.socket, item.payload, () => {});
+      }
+    }
     json(res, 200, { ok: true, online: agentOnline, paused: agentPaused });
     return true;
   }
@@ -967,6 +1027,20 @@ async function handleVortex(req, res, subPath, method, url) {
     return;
   }
 
+  if (subPath === '/settings' && method === 'GET') {
+    if (!hasSession(req)) {
+      json(res, 401, { error: 'unauthorized' });
+      return;
+    }
+    const sync = buildSettingsSync();
+    json(res, 200, {
+      settings: sync.settings,
+      revision: settingsRevision,
+      revision_epoch: settingsRevisionEpoch,
+    });
+    return;
+  }
+
   if (subPath === '/auth/logout' && method === 'POST') {
     ownerSessionActive = false;
     clearSessionCookie(res);
@@ -1095,10 +1169,27 @@ io.on('connection', socket => {
     }
   });
 
-  socket.on('vision_frame', payload => {
-    if (payload && typeof payload.frame === 'string' && payload.frame.startsWith('data:image/')) {
-      visionFrameCount += 1;
+  socket.on('vision_frame', (payload, cb) => {
+    if (!agentOnline) {
+      if (typeof cb === 'function') cb({ status: 'agent_offline' });
+      return;
     }
+    const frame = payload && typeof payload.frame === 'string' ? payload.frame : '';
+    if (!frame.startsWith('data:image/')) {
+      if (typeof cb === 'function') cb({ status: 'rejected', reason: 'bad_payload' });
+      return;
+    }
+    if (frame.length > 900_000) {
+      if (typeof cb === 'function') cb({ status: 'rejected', reason: 'too_large' });
+      return;
+    }
+    visionFrameCount += 1;
+    // Every 20th frame → rate_limited (C-60 ack surface).
+    if (visionFrameCount % 20 === 0) {
+      if (typeof cb === 'function') cb({ status: 'rejected', reason: 'rate_limited' });
+      return;
+    }
+    if (typeof cb === 'function') cb({ status: 'sent' });
   });
 
   socket.on('disconnect', () => {

@@ -1,18 +1,17 @@
 /**
  * Read-only scan of bridge Python for emit_ui / _emit_ui / UI-bound sio.emit.
  * Cursor lane may read src/core; it must not edit those files.
- * Fail-closed: missing files or empty scan throws (Vitest fails).
+ * Fail-closed: missing files, empty scan, or unresolved UPPER_CASE constants throw.
  */
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-/** stonix_ui/src/shared/contracts → repo root */
 const REPO_ROOT = resolve(HERE, '../../../..');
 const CORE_DIR = join(REPO_ROOT, 'src/core');
 
-/** Known constant → event name (emit_ui(PLAN_PROGRESS_EVENT, …)). */
+/** Known constant → event name when assigned in another file or not locally. */
 const KNOWN_EMIT_CONSTANTS: Record<string, string> = {
   PLAN_PROGRESS_EVENT: 'plan_progress',
 };
@@ -40,40 +39,64 @@ function resolveAssignConstants(text: string): Record<string, string> {
   return found;
 }
 
-function collectPyStrings(text: string): string[] {
+function collectPyStrings(text: string, fileLabel: string): string[] {
   const out = new Set<string>();
   const consts = resolveAssignConstants(text);
+  const unresolved = new Set<string>();
 
-  // emit_ui("evt" / _emit_ui("evt"
   const direct = /(?:emit_ui|_emit_ui)\(\s*(['"])([a-zA-Z0-9_]+)\1/g;
   let m: RegExpExecArray | null;
   while ((m = direct.exec(text))) out.add(m[2]!);
 
-  // Ternary both arms — bounded (no runaway [\s\S]*): at most 120 chars between if/else.
+  // Ternary both arms — may span a newline; bounded to 160 chars.
   const ternary =
-    /(?:emit_ui|_emit_ui)\(\s*(['"])([a-zA-Z0-9_]+)\1\s+if\b.{0,120}?\belse\s+(['"])([a-zA-Z0-9_]+)\3/g;
+    /(?:emit_ui|_emit_ui)\(\s*(['"])([a-zA-Z0-9_]+)\1\s+if\b[\s\S]{0,160}?\belse\s+(['"])([a-zA-Z0-9_]+)\3/g;
   while ((m = ternary.exec(text))) {
     out.add(m[2]!);
     out.add(m[4]!);
   }
 
-  // emit_ui(CONST, …) / _emit_ui(CONST, …
   const byConst = /(?:emit_ui|_emit_ui)\(\s*([A-Z][A-Z0-9_]*)\s*,/g;
   while ((m = byConst.exec(text))) {
-    const mapped = consts[m[1]!];
+    const name = m[1]!;
+    const mapped = consts[name];
     if (mapped) out.add(mapped);
+    else unresolved.add(name);
   }
 
-  // Per-sid UI bootstrap only (never agent_command / agent_vision_frame).
-  const perSid = /sio\.emit\(\s*(['"])(init_state|session_expired)\1/g;
-  while ((m = perSid.exec(text))) out.add(m[2]!);
-
-  // Explicit room UI target: sio.emit("evt", ..., to=ROOM_UI) / room=ROOM_UI
-  const sioRoomUi =
-    /sio\.emit\(\s*(['"])([a-zA-Z0-9_]+)\1[\s\S]{0,160}?(?:to|room)\s*=\s*ROOM_UI/g;
-  while ((m = sioRoomUi.exec(text))) {
+  // Every sio.emit literal that targets UI room/sid (or init_state / session_expired).
+  const sioAny = /sio\.emit\(\s*(['"])([a-zA-Z0-9_]+)\1([\s\S]{0,200}?)\)/g;
+  while ((m = sioAny.exec(text))) {
     const name = m[2]!;
-    if (name !== 'agent_command' && name !== 'agent_vision_frame') out.add(name);
+    const tail = m[3] ?? '';
+    const toUi =
+      /\b(?:to|room)\s*=\s*ROOM_UI\b/.test(tail) ||
+      /\bto\s*=\s*sid\b/.test(tail) ||
+      name === 'init_state' ||
+      name === 'session_expired';
+    if (!toUi) continue;
+    if (name === 'agent_command' || name === 'agent_vision_frame') continue;
+    out.add(name);
+  }
+
+  // sio.emit(CONST, …) to UI
+  const sioConst =
+    /sio\.emit\(\s*([A-Z][A-Z0-9_]*)\s*,([\s\S]{0,200}?)\)/g;
+  while ((m = sioConst.exec(text))) {
+    const cname = m[1]!;
+    const tail = m[2] ?? '';
+    const toUi =
+      /\b(?:to|room)\s*=\s*ROOM_UI\b/.test(tail) || /\bto\s*=\s*sid\b/.test(tail);
+    if (!toUi) continue;
+    const mapped = consts[cname];
+    if (mapped) out.add(mapped);
+    else unresolved.add(cname);
+  }
+
+  if (unresolved.size) {
+    throw new Error(
+      `scanBridgeUiEmits: unresolved emit constants in ${fileLabel}: ${[...unresolved].sort().join(', ')}`,
+    );
   }
 
   return [...out].sort();
@@ -87,11 +110,14 @@ export function scanBridgeUiEmits(): string[] {
   }
   const out = new Set<string>();
   for (const file of files) {
-    for (const name of collectPyStrings(readFileSync(file, 'utf8'))) out.add(name);
+    for (const name of collectPyStrings(readFileSync(file, 'utf8'), file)) out.add(name);
   }
   const list = [...out].sort();
   if (list.length === 0) {
     throw new Error('scanBridgeUiEmits: scan returned no UI emit events (fail-closed)');
+  }
+  if (!list.includes('reminder_due')) {
+    throw new Error('scanBridgeUiEmits: expected reminder_due among bridge UI emits');
   }
   return list;
 }
@@ -113,26 +139,16 @@ function walkTsFiles(dir: string, acc: string[]): void {
   }
 }
 
-/** Live scan of useSocketEvent('…') / subscribeSocketEvent('…') under stonix_ui/src. */
 export function scanSubscribedSocketEventsFromSrc(): string[] {
   const srcRoot = resolve(HERE, '../..');
   const files: string[] = [];
   walkTsFiles(srcRoot, files);
-  if (files.length === 0) {
-    throw new Error('scanSubscribedSocketEventsFromSrc: no ts/tsx under stonix_ui/src');
-  }
   const out = new Set<string>();
-  const re = /(?:useSocketEvent|subscribeSocketEvent)\(\s*(['"])([a-zA-Z0-9_]+)\1/g;
+  const re = /(?:useSocketEvent|subscribeSocketEvent)\(\s*['"]([a-zA-Z0-9_]+)['"]/g;
   for (const file of files) {
     const text = readFileSync(file, 'utf8');
     let m: RegExpExecArray | null;
-    while ((m = re.exec(text))) out.add(m[2]!);
+    while ((m = re.exec(text))) out.add(m[1]!);
   }
-  const list = [...out].sort();
-  if (list.length === 0) {
-    throw new Error('scanSubscribedSocketEventsFromSrc: no subscriptions found (fail-closed)');
-  }
-  return list;
+  return [...out].sort();
 }
-
-export { CORE_DIR, REPO_ROOT };

@@ -10,10 +10,12 @@ import {
   drawOrbExact,
   setupOrbCanvas,
   type DrawEnv,
+  type DrawPhases,
   type OrbLook,
   type Persona,
   type Ripple,
 } from './orbDraw';
+import { orbPhaseRates, stepOrbPhases } from './orbPhases';
 import {
   drawWave,
   invalidateWaveColorCache,
@@ -84,6 +86,8 @@ export class OrbRenderer {
   private userL = 0;
   /** Integrated animation clock (only advances on animated frames — not wall age). */
   private animT = 0;
+  /** Ring/halo/swirl phases — stepped with dt; still frames freeze these. */
+  private phases: DrawPhases = { spin: 0, ring: 0, swirl: 0 };
   private ripples: Ripple[] = [];
   private look: OrbLook = {};
   private env: DrawEnv = {
@@ -95,6 +99,7 @@ export class OrbRenderer {
     fastCache: null,
     fastKey: '',
     rimGrad: null,
+    phases: null,
   };
 
   constructor(
@@ -223,14 +228,15 @@ export class OrbRenderer {
     return this.visible && !document.hidden;
   }
 
-  private settling(t: number) {
-    return this.L > 0.01 || this.ripples.some(r => t - r.t0 < r.dur);
+  /** Settling uses the draw clock (animT), same as ripple t0 stamps. */
+  private settling() {
+    return this.L > 0.01 || this.ripples.some(r => this.animT - r.t0 < r.dur);
   }
 
-  private computeLoopMode(t: number): 'full' | 'breath' | 'stop' {
+  private computeLoopMode(): 'full' | 'breath' | 'stop' {
     if (this.reducedMotion || !this.orbOnScreen()) return 'stop';
     const s = this.state;
-    if (this.settling(t)) return 'full';
+    if (this.settling()) return 'full';
     if (s === 'speaking') {
       const lvl = audioEngine.readAgent().level;
       if (lvl > 0.02 || this.L > 0.02) return 'full';
@@ -248,7 +254,7 @@ export class OrbRenderer {
 
   private schedule() {
     if (this.reducedMotion || !this.orbOnScreen()) return;
-    const mode = this.computeLoopMode(performance.now() / 1000);
+    const mode = this.computeLoopMode();
     if (mode === 'stop') {
       this.frame(performance.now());
       return;
@@ -326,7 +332,7 @@ export class OrbRenderer {
     }
 
     const t = now / 1000;
-    const mode = this.computeLoopMode(t);
+    const mode = this.computeLoopMode();
     this.loopMode = mode;
 
     if (mode === 'stop') {
@@ -350,8 +356,8 @@ export class OrbRenderer {
 
     if (levelStill && (this.state === 'speaking' || this.state === 'listening')) {
       // Freeze on integrated phases (not wall t=0) so pause does not yank rings/swirl.
-      // Clear ripples so settling() does not keep us on full RAF while quiet.
       this.ripples.length = 0;
+      this.env.phases = { ...this.phases };
       audioEngine.setRate('coarse');
       const { ctx, k } = setupOrbCanvas(this.orb, 520, 520, this.orbCssPx, this.phone);
       drawOrbExact(
@@ -377,6 +383,20 @@ export class OrbRenderer {
     this.lastDraw = now;
     this.animT += dt;
 
+    const live =
+      this.state === 'speaking' || this.state === 'listening' || this.state === 'thinking';
+    this.phases = stepOrbPhases(
+      this.phases,
+      dt,
+      orbPhaseRates({
+        live,
+        speakingOrThinking: this.state === 'speaking' || this.state === 'thinking',
+        thinking: this.state === 'thinking',
+        L: this.L,
+      }),
+    );
+    this.env.phases = { ...this.phases };
+
     stepPalette(dt);
     audioEngine.setRate(mode === 'full' ? 'frame' : 'coarse');
     if (mode === 'full') audioEngine.tickFrame(dt);
@@ -399,9 +419,10 @@ export class OrbRenderer {
 
     const release = L <= 0.02 && this.state === 'speaking' ? 0.45 : L > this.L ? 0.6 : 0.18;
     this.L += (L - this.L) * release;
+    // Stamp on animT (draw clock), never wall `t` — otherwise age is always negative.
     if (this.L - this.prevL > 0.035 && this.L > 0.24 && agent.onset) {
       this.ripples.push({
-        t0: t,
+        t0: this.animT,
         dur: this.persona === 'anna' ? 1.25 : 0.9,
         a: 0.22 + 0.5 * this.L,
         inward: this.state === 'listening',
@@ -410,9 +431,15 @@ export class OrbRenderer {
     if (
       this.state === 'listening' &&
       this.userL > 0.14 &&
-      (!this.ripples.length || t - this.ripples[this.ripples.length - 1]!.t0 > 0.35)
+      (!this.ripples.length ||
+        this.animT - this.ripples[this.ripples.length - 1]!.t0 > 0.35)
     ) {
-      this.ripples.push({ t0: t, dur: 1.1, a: 0.3 + 0.4 * this.userL, inward: true });
+      this.ripples.push({
+        t0: this.animT,
+        dur: 1.1,
+        a: 0.3 + 0.4 * this.userL,
+        inward: true,
+      });
     }
     while (this.ripples.length > 6) this.ripples.shift();
     this.prevL = this.L;
